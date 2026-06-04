@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
     if (status === 'COMPLETED') {
       // Fetch the result from the EXACT response_url — NEVER manipulate the string.
-      const res2 = await fetch(responseUrl, {
+      const res2 = await fetch(responseUrl!, {
         headers: { 'Authorization': `Key ${FAL_KEY}` },
         signal: AbortSignal.timeout(10000),
       })

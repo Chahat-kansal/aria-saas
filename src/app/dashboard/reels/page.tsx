@@ -711,6 +711,7 @@ export default function ReelStudioPage() {
                 sessionId={latestSessionId ?? sessions[0]?.id ?? ''}
                 businessId={bid ?? ''}
                 onPublish={(editedUrl) => setLatestVideo(editedUrl)}
+                onCaptionChosen={(text) => { setPublishCaption(text); setTab('editor') }}
               />
             ) : (
               <>
@@ -880,16 +881,25 @@ export default function ReelStudioPage() {
                     </div>
                     <p style={{ fontSize: 10, color: T.textDim, margin: 0 }}>{s.style} · {s.duration_seconds}s</p>
                     {s.video_url && (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <a href={s.video_url} download style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, background: T.accentBg, color: T.accent, textAlign: 'center', fontSize: 10, fontWeight: 700, textDecoration: 'none', minHeight: 30 }}><Download size={10} />Download</a>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <a href={s.video_url} download style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, background: T.accentBg, color: T.accent, textAlign: 'center', fontSize: 10, fontWeight: 700, textDecoration: 'none', minHeight: 30 }}><Download size={10} />Download</a>
+                          <button
+                            onClick={() => publishFromHistory(s)}
+                            disabled={historyPublishing.has(s.id)}
+                            aria-label="Publish to Instagram"
+                            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: historyPublishing.has(s.id) ? 'wait' : 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
+                          >
+                            {historyPublishing.has(s.id) ? <Loader2 size={10} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={10} />}
+                            Publish
+                          </button>
+                        </div>
                         <button
-                          onClick={() => publishFromHistory(s)}
-                          disabled={historyPublishing.has(s.id)}
-                          aria-label="Publish to Instagram"
-                          style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: historyPublishing.has(s.id) ? 'wait' : 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
+                          onClick={() => { setLatestVideo(s.video_url!); setLatestSessionId(s.id); setTab('editor') }}
+                          aria-label="Edit in Studio"
+                          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', background: 'rgba(127,184,151,0.12)', color: T.accent, fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
                         >
-                          {historyPublishing.has(s.id) ? <Loader2 size={10} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={10} />}
-                          Publish
+                          <Edit3 size={10} />Edit in Studio
                         </button>
                       </div>
                     )}

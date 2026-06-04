@@ -5,6 +5,8 @@ import {
   type EditSpec,
   type Filter,
   type TextLayer,
+  type TextAnim,
+  type SpeedSegment,
   FILTER_CSS,
 } from '@/remotion/types'
 
@@ -22,11 +24,54 @@ const T = {
   red:     '#e06060',
 }
 
-const FILTERS: Filter[] = ['none','brightness','contrast','saturate','grayscale','sepia','warm','cool','dramatic']
+const FILTERS: Filter[] = [
+  'none','brightness','contrast','saturate','grayscale','sepia',
+  'warm','cool','dramatic','vivid','noir','golden',
+]
 const FILTER_LABELS: Record<Filter, string> = {
   none: 'Original', brightness: 'Bright', contrast: 'Contrast',
   saturate: 'Vivid', grayscale: 'B&W', sepia: 'Sepia',
   warm: 'Warm', cool: 'Cool', dramatic: 'Dramatic',
+  vivid: 'Super Vivid', noir: 'Noir', golden: 'Golden',
+}
+
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
+
+const TEXT_PRESETS: Array<{ label: string; patch: Partial<TextLayer> }> = [
+  {
+    label: 'Bold White',
+    patch: { fontSize: 64, color: '#ffffff', bold: true, shadow: true, background: false, fontFamily: 'Inter', anim: 'fade' },
+  },
+  {
+    label: 'Caption Bar',
+    patch: { fontSize: 36, color: '#ffffff', bold: true, shadow: false, background: true, backgroundColor: 'rgba(0,0,0,0.65)', fontFamily: 'Inter', y: 85, anim: 'slide-up' },
+  },
+  {
+    label: 'Title',
+    patch: { fontSize: 80, color: '#7FB897', bold: true, shadow: true, background: false, fontFamily: 'Inter', y: 20, anim: 'pop' },
+  },
+  {
+    label: 'Subtitle',
+    patch: { fontSize: 32, color: '#e8f0ea', bold: false, shadow: true, background: false, fontFamily: 'Inter', y: 30, anim: 'fade' },
+  },
+  {
+    label: 'Neon',
+    patch: { fontSize: 56, color: '#39ff80', bold: true, shadow: true, background: false, fontFamily: 'Inter', anim: 'pop' },
+  },
+  {
+    label: 'Handwritten',
+    patch: { fontSize: 52, color: '#fffde7', bold: false, shadow: true, background: false, fontFamily: 'Georgia, serif', anim: 'fade' },
+  },
+]
+
+interface SocialCaption {
+  caption: string
+  hashtags: string[]
+}
+
+interface CaptionSuggestions {
+  onVideo: string[]
+  social: SocialCaption[]
 }
 
 interface Props {
@@ -34,13 +79,14 @@ interface Props {
   sessionId: string
   businessId: string
   onPublish: (editedUrl: string) => void
+  onCaptionChosen?: (text: string) => void
 }
 
 function nanoid() {
   return Math.random().toString(36).slice(2, 10)
 }
 
-export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: Props) {
+export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onCaptionChosen }: Props) {
   const DEFAULT_FRAMES = 300
   const FPS = 30
 
@@ -57,25 +103,27 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
     outputFps: FPS,
     outputWidth: 1080,
     outputHeight: 1920,
+    speedSegments: [],
   })
 
   const [tab, setTab] = useState<'trim'|'filter'|'text'|'export'>('trim')
-  const [renderState, setRenderState] = useState<
-    'idle'|'submitting'|'rendering'|'done'|'error'
-  >('idle')
+  const [renderState, setRenderState] = useState<'idle'|'submitting'|'rendering'|'done'|'error'>('idle')
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderUrl, setRenderUrl] = useState<string|null>(null)
   const [renderError, setRenderError] = useState<string|null>(null)
   const [editingText, setEditingText] = useState<TextLayer|null>(null)
+  const [selectedSegment, setSelectedSegment] = useState<number|null>(null)
+  const [showSafeZone, setShowSafeZone] = useState(false)
+  const [captionSuggestions, setCaptionSuggestions] = useState<CaptionSuggestions|null>(null)
+  const [captionLoading, setCaptionLoading] = useState(false)
   const pollRef = useRef<ReturnType<typeof setTimeout>|null>(null)
-  const [jobIds, setJobIds] = useState<{sandboxId:string;cmdId:string}|null>(null)
 
-  // ── Update spec.videoUrl when prop changes ────────────────────────────────
+  // ── Update spec.videoUrl when prop changes ──────────────────────────────────
   useEffect(() => {
     setSpec(s => ({ ...s, videoUrl }))
   }, [videoUrl])
 
-  // ── TrimBar component ─────────────────────────────────────────────────────
+  // ── TrimBar refs ────────────────────────────────────────────────────────────
   const trimBarRef = useRef<HTMLDivElement>(null)
   const dragging = useRef<'start'|'end'|null>(null)
 
@@ -100,7 +148,58 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
     dragging.current = null
   }, [])
 
-  // ── Render flow ───────────────────────────────────────────────────────────
+  // ── Speed segment helpers ───────────────────────────────────────────────────
+  function initSpeedSegments() {
+    const seg: SpeedSegment = {
+      startFrame: spec.trimStartFrame,
+      endFrame: spec.trimEndFrame,
+      speed: spec.speed,
+    }
+    setSpec(s => ({ ...s, speedSegments: [seg] }))
+    setSelectedSegment(0)
+  }
+
+  function splitSegment(segIndex: number) {
+    const seg = spec.speedSegments[segIndex]
+    const mid = Math.round((seg.startFrame + seg.endFrame) / 2)
+    if (mid <= seg.startFrame + 5 || mid >= seg.endFrame - 5) return
+    const newSegs = [...spec.speedSegments]
+    newSegs.splice(segIndex, 1,
+      { ...seg, endFrame: mid },
+      { ...seg, startFrame: mid },
+    )
+    setSpec(s => ({ ...s, speedSegments: newSegs }))
+    setSelectedSegment(segIndex + 1)
+  }
+
+  function setSegmentSpeed(segIndex: number, speed: number) {
+    setSpec(s => ({
+      ...s,
+      speedSegments: s.speedSegments.map((seg, i) => i === segIndex ? { ...seg, speed } : seg),
+    }))
+  }
+
+  function deleteSegment(segIndex: number) {
+    if (spec.speedSegments.length <= 1) { resetSegments(); return }
+    const newSegs = [...spec.speedSegments]
+    if (segIndex > 0) {
+      // extend previous to cover removed segment's range
+      newSegs[segIndex - 1] = { ...newSegs[segIndex - 1], endFrame: newSegs[segIndex].endFrame }
+    } else {
+      // extend next to cover removed segment's range
+      newSegs[segIndex + 1] = { ...newSegs[segIndex + 1], startFrame: newSegs[segIndex].startFrame }
+    }
+    newSegs.splice(segIndex, 1)
+    setSpec(s => ({ ...s, speedSegments: newSegs }))
+    setSelectedSegment(Math.max(0, segIndex - 1))
+  }
+
+  function resetSegments() {
+    setSpec(s => ({ ...s, speedSegments: [] }))
+    setSelectedSegment(null)
+  }
+
+  // ── Render flow ─────────────────────────────────────────────────────────────
   async function startRender() {
     setRenderState('submitting')
     setRenderError(null)
@@ -113,7 +212,6 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Render failed to start')
-      setJobIds({ sandboxId: data.sandboxId, cmdId: data.cmdId })
       setRenderState('rendering')
       pollRender(data.sandboxId, data.cmdId)
     } catch (e: any) {
@@ -127,7 +225,7 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
       try {
         const res = await fetch(
           '/api/reels/render-status?sandboxId=' + sandboxId + '&cmdId=' + cmdId +
-          '&session_id=' + sessionId
+          '&session_id=' + sessionId,
         )
         const data = await res.json()
         if (data.stage === 'done') {
@@ -151,9 +249,28 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
 
   useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current) }, [])
 
-  // ── Text layer editor ────────────────────────────────────────────────────
-  function addTextLayer() {
-    const layer: TextLayer = {
+  // ── Caption suggestions ─────────────────────────────────────────────────────
+  async function suggestCaptions() {
+    if (!businessId || captionLoading) return
+    setCaptionLoading(true)
+    setCaptionSuggestions(null)
+    try {
+      const res = await fetch('/api/reels/captions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId, session_id: sessionId }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setCaptionSuggestions(data)
+      }
+    } catch { /* non-fatal */ }
+    setCaptionLoading(false)
+  }
+
+  // ── Text layer helpers ──────────────────────────────────────────────────────
+  function addTextLayer(preset?: Partial<TextLayer>) {
+    const base: TextLayer = {
       id: nanoid(),
       text: 'Your text here',
       startFrame: 0,
@@ -167,7 +284,9 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
       shadow: true,
       background: false,
       backgroundColor: 'rgba(0,0,0,0.5)',
+      anim: 'fade',
     }
+    const layer = preset ? { ...base, ...preset, id: nanoid() } : base
     setSpec(s => ({ ...s, textLayers: [...s.textLayers, layer] }))
     setEditingText(layer)
   }
@@ -185,11 +304,23 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
     if (editingText?.id === id) setEditingText(null)
   }
 
-  // ── Styles ────────────────────────────────────────────────────────────────
+  // ── Computed values ─────────────────────────────────────────────────────────
+  const trimStartPct = (spec.trimStartFrame / DEFAULT_FRAMES) * 100
+  const trimEndPct   = (spec.trimEndFrame   / DEFAULT_FRAMES) * 100
+
+  const durationSec = spec.speedSegments.length > 0
+    ? (spec.speedSegments.reduce((sum, seg) =>
+        sum + Math.ceil((seg.endFrame - seg.startFrame) / seg.speed), 0) / FPS).toFixed(1)
+    : ((spec.trimEndFrame - spec.trimStartFrame) / FPS / spec.speed).toFixed(1)
+
+  const totalSourceFrames = spec.trimEndFrame - spec.trimStartFrame
+
+  // ── Styles ──────────────────────────────────────────────────────────────────
   const tabStyle = (active: boolean): React.CSSProperties => ({
     flex: 1, padding: '8px 4px', fontSize: 12, fontWeight: 600,
     color: active ? T.accent : T.muted, background: 'transparent',
-    border: 'none', cursor: 'pointer', borderBottom: '2px solid ' + (active ? T.accent : 'transparent'),
+    border: 'none', cursor: 'pointer',
+    borderBottom: '2px solid ' + (active ? T.accent : 'transparent'),
     transition: 'all 0.15s',
   })
 
@@ -211,14 +342,17 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
     color: variant === 'primary' ? '#0b0f0c' : T.text,
   })
 
-  const trimStartPct = (spec.trimStartFrame / DEFAULT_FRAMES) * 100
-  const trimEndPct   = (spec.trimEndFrame   / DEFAULT_FRAMES) * 100
-  const durationSec  = ((spec.trimEndFrame - spec.trimStartFrame) / FPS / spec.speed).toFixed(1)
+  const chipStyle = (active: boolean): React.CSSProperties => ({
+    padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+    cursor: 'pointer', border: '1px solid ' + (active ? T.accent : T.border),
+    background: active ? T.accentD : T.surface,
+    color: active ? T.accent : T.textSub,
+  })
 
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', minHeight: 600 }}>
 
-      {/* ── Left: phone preview ─────────────────────────────────────────── */}
+      {/* ── Left: phone preview ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, flexShrink: 0 }}>
         <div style={{
           width: 270, height: 480, background: '#0d0d0d', borderRadius: 36,
@@ -226,6 +360,7 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
           boxShadow: '0 0 0 1px #2a2a2a, 0 24px 60px rgba(0,0,0,0.85)',
           position: 'relative', overflow: 'hidden', flexShrink: 0,
         }}>
+          {/* Notch */}
           <div style={{
             position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
             width: 72, height: 20, background: '#0d0d0d',
@@ -233,28 +368,73 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
           }} />
           <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden' }}>
             <RemotionPreview spec={spec} width={254} />
+            {/* 9:16 safe-zone overlay */}
+            {showSafeZone && (
+              <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 }}>
+                {/* top unsafe zone (Instagram UI ~12%) */}
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, right: 0,
+                  height: '12%',
+                  background: 'rgba(255,80,80,0.18)',
+                  borderBottom: '1px dashed rgba(255,80,80,0.6)',
+                }} />
+                {/* bottom unsafe zone (TikTok/IG buttons ~20%) */}
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '20%',
+                  background: 'rgba(255,80,80,0.18)',
+                  borderTop: '1px dashed rgba(255,80,80,0.6)',
+                }} />
+                {/* centre safe label */}
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%,-50%)',
+                  fontSize: 9, color: 'rgba(127,184,151,0.8)',
+                  fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+                  pointerEvents: 'none',
+                }}>
+                  Safe Zone
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <div style={{ fontSize: 12, color: T.muted }}>
-          {durationSec}s &nbsp;·&nbsp; {spec.outputWidth}&times;{spec.outputHeight} &nbsp;·&nbsp; {FPS}fps
+
+        {/* Preview meta + safe-zone toggle */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 12, color: T.muted }}>
+            {durationSec}s &nbsp;·&nbsp; {spec.outputWidth}&times;{spec.outputHeight} &nbsp;·&nbsp; {FPS}fps
+          </div>
+          <button
+            onClick={() => setShowSafeZone(z => !z)}
+            style={{
+              fontSize: 10, color: showSafeZone ? T.accent : T.muted,
+              background: 'none', border: '1px solid ' + (showSafeZone ? T.accent : T.border),
+              borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            {showSafeZone ? 'Hide' : 'Show'} safe zone
+          </button>
         </div>
       </div>
 
-      {/* ── Right: editor panel ─────────────────────────────────────────── */}
+      {/* ── Right: editor panel ──────────────────────────────────────────────── */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid ' + T.border, marginBottom: 16 }}>
           {(['trim','filter','text','export'] as const).map(t => (
             <button key={t} style={tabStyle(tab === t)} onClick={() => setTab(t)}>
-              {t === 'trim' ? 'Trim' : t === 'filter' ? 'Filter' : t === 'text' ? 'Text' : 'Export'}
+              {t === 'trim' ? 'Trim & Speed' : t === 'filter' ? 'Filter' : t === 'text' ? 'Text' : 'Export'}
             </button>
           ))}
         </div>
 
-        {/* ── TRIM TAB ─────────────────────────────────────────────────── */}
+        {/* ── TRIM & SPEED TAB ─────────────────────────────────────────────── */}
         {tab === 'trim' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Trim bar */}
             <div>
               <div style={labelStyle}>Timeline trim</div>
               <div
@@ -267,30 +447,28 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
                   cursor: 'default', userSelect: 'none',
                 }}
               >
-                {/* filled range */}
                 <div style={{
                   position: 'absolute', top: 0, bottom: 0,
                   left: trimStartPct + '%',
                   width: (trimEndPct - trimStartPct) + '%',
-                  background: T.accentD + '80',
-                  borderRadius: 6,
+                  background: T.accentD + '80', borderRadius: 6,
                 }} />
-                {/* start handle */}
                 <div
                   onPointerDown={e => onTrimPointerDown(e, 'start')}
                   style={{
                     position: 'absolute', top: 0, bottom: 0,
                     left: 'calc(' + trimStartPct + '% - 6px)',
-                    width: 12, background: T.accent, borderRadius: 4, cursor: 'ew-resize', zIndex: 2,
+                    width: 12, background: T.accent, borderRadius: 4,
+                    cursor: 'ew-resize', zIndex: 2,
                   }}
                 />
-                {/* end handle */}
                 <div
                   onPointerDown={e => onTrimPointerDown(e, 'end')}
                   style={{
                     position: 'absolute', top: 0, bottom: 0,
                     left: 'calc(' + trimEndPct + '% - 6px)',
-                    width: 12, background: T.accent, borderRadius: 4, cursor: 'ew-resize', zIndex: 2,
+                    width: 12, background: T.accent, borderRadius: 4,
+                    cursor: 'ew-resize', zIndex: 2,
                   }}
                 />
               </div>
@@ -301,26 +479,119 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
               </div>
             </div>
 
-            <div>
-              <div style={labelStyle}>Speed</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[0.5, 1, 1.5, 2].map(s => (
-                  <button key={s} onClick={() => setSpec(sp => ({ ...sp, speed: s }))}
-                    style={{
-                      padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', border: '1px solid ' + (spec.speed === s ? T.accent : T.border),
-                      background: spec.speed === s ? T.accentD : T.surface,
-                      color: spec.speed === s ? T.accent : T.textSub,
-                    }}>
-                    {s}x
+            {/* ── Variable speed ── */}
+            {spec.speedSegments.length === 0 ? (
+              // Global speed mode
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={labelStyle}>Speed (global)</div>
+                  <button
+                    onClick={initSpeedSegments}
+                    style={{ fontSize: 11, color: T.accent, background: 'none', border: '1px solid ' + T.accent, borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    + Variable speed
                   </button>
-                ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[0.5, 1, 1.5, 2].map(s => (
+                    <button key={s} onClick={() => setSpec(sp => ({ ...sp, speed: s }))}
+                      style={chipStyle(spec.speed === s)}>
+                      {s}x
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              // Per-segment speed mode
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={labelStyle}>Variable speed — {spec.speedSegments.length} segment{spec.speedSegments.length > 1 ? 's' : ''}</div>
+                  <button
+                    onClick={resetSegments}
+                    style={{ fontSize: 11, color: T.red, background: 'none', border: '1px solid ' + T.red, borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                {/* Visual segment track */}
+                <div style={{ position: 'relative', height: 44, display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid ' + T.border, marginBottom: 10 }}>
+                  {spec.speedSegments.map((seg, i) => {
+                    const segWidth = totalSourceFrames > 0
+                      ? ((seg.endFrame - seg.startFrame) / totalSourceFrames) * 100
+                      : (100 / spec.speedSegments.length)
+                    const isSelected = selectedSegment === i
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => setSelectedSegment(isSelected ? null : i)}
+                        style={{
+                          width: segWidth + '%',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: isSelected ? T.accentD : (i % 2 === 0 ? T.surface : T.card),
+                          borderRight: i < spec.speedSegments.length - 1 ? '2px solid ' + T.border : 'none',
+                          cursor: 'pointer',
+                          flexDirection: 'column', gap: 2,
+                          boxShadow: isSelected ? 'inset 0 0 0 2px ' + T.accent : 'none',
+                          transition: 'background 0.12s',
+                        }}
+                      >
+                        <span style={{ fontSize: 11, fontWeight: 700, color: isSelected ? T.accent : T.textSub }}>{seg.speed}x</span>
+                        <span style={{ fontSize: 9, color: T.muted }}>
+                          {((seg.endFrame - seg.startFrame) / FPS).toFixed(1)}s
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Selected segment controls */}
+                {selectedSegment !== null && spec.speedSegments[selectedSegment] && (
+                  <div style={{ background: T.card, borderRadius: 8, padding: '12px 14px', border: '1px solid ' + T.accent + '60', marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, marginBottom: 8 }}>
+                      Segment {selectedSegment + 1} of {spec.speedSegments.length} &nbsp;·&nbsp;
+                      {((spec.speedSegments[selectedSegment].endFrame - spec.speedSegments[selectedSegment].startFrame) / FPS).toFixed(1)}s source
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={labelStyle}>Playback speed</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {SPEED_OPTIONS.map(s => (
+                          <button key={s}
+                            onClick={() => setSegmentSpeed(selectedSegment, s)}
+                            style={chipStyle(spec.speedSegments[selectedSegment].speed === s)}>
+                            {s}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => splitSegment(selectedSegment)}
+                        style={{ ...btnStyle('ghost'), fontSize: 12, padding: '6px 12px' }}
+                      >
+                        Split in half
+                      </button>
+                      {spec.speedSegments.length > 1 && (
+                        <button
+                          onClick={() => deleteSegment(selectedSegment)}
+                          style={{ ...btnStyle('danger'), fontSize: 12, padding: '6px 12px' }}
+                        >
+                          Delete segment
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.5 }}>
+                  Click a segment to select it, then adjust its speed. &quot;Split in half&quot; divides it into two equal segments.
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── FILTER TAB ───────────────────────────────────────────────── */}
+        {/* ── FILTER TAB ───────────────────────────────────────────────────── */}
         {tab === 'filter' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
@@ -352,15 +623,32 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
           </div>
         )}
 
-        {/* ── TEXT TAB ─────────────────────────────────────────────────── */}
+        {/* ── TEXT TAB ─────────────────────────────────────────────────────── */}
         {tab === 'text' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <button style={btnStyle('primary')} onClick={addTextLayer}>
-              + Add text layer
+
+            {/* Presets */}
+            <div>
+              <div style={labelStyle}>Quick presets</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {TEXT_PRESETS.map(preset => (
+                  <button key={preset.label}
+                    onClick={() => addTextLayer(preset.patch)}
+                    style={{ ...chipStyle(false), fontSize: 11 }}>
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button style={btnStyle('primary')} onClick={() => addTextLayer()}>
+              + Add custom text layer
             </button>
+
             {spec.textLayers.length === 0 && (
               <div style={{ color: T.muted, fontSize: 13 }}>No text layers yet.</div>
             )}
+
             {spec.textLayers.map(layer => (
               <div key={layer.id} style={{
                 background: T.card, borderRadius: 10, padding: '12px 14px',
@@ -391,7 +679,8 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
                       </div>
                       <div>
                         <div style={labelStyle}>Color</div>
-                        <input type="color" value={layer.color} style={{ ...inputStyle, padding: '2px', height: 36, cursor: 'pointer' }}
+                        <input type="color" value={layer.color}
+                          style={{ ...inputStyle, padding: '2px', height: 36, cursor: 'pointer' }}
                           onChange={e => updateText(layer.id, { color: e.target.value })} />
                       </div>
                     </div>
@@ -419,6 +708,17 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
                           onChange={e => updateText(layer.id, { endFrame: parseInt(e.target.value) || 90 })} />
                       </div>
                     </div>
+                    <div>
+                      <div style={labelStyle}>Entrance animation</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {(['none','fade','slide-up','pop'] as TextAnim[]).map(anim => (
+                          <button key={anim} onClick={() => updateText(layer.id, { anim })}
+                            style={chipStyle(layer.anim === anim)}>
+                            {anim === 'slide-up' ? 'Slide up' : anim.charAt(0).toUpperCase() + anim.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div style={{ display: 'flex', gap: 16 }}>
                       {([['bold', 'Bold'], ['shadow', 'Shadow'], ['background', 'BG']] as const).map(([k, label]) => (
                         <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: T.text }}>
@@ -430,17 +730,17 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
                     </div>
                   </div>
                 )}
-                {!editingText || editingText.id !== layer.id ? (
+                {(!editingText || editingText.id !== layer.id) && (
                   <div style={{ fontSize: 13, color: T.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {layer.text}
                   </div>
-                ) : null}
+                )}
               </div>
             ))}
           </div>
         )}
 
-        {/* ── EXPORT TAB ───────────────────────────────────────────────── */}
+        {/* ── EXPORT TAB ───────────────────────────────────────────────────── */}
         {tab === 'export' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
@@ -449,12 +749,7 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
                 {([{w:1080,h:1920,label:'1080p'},{w:720,h:1280,label:'720p'},{w:540,h:960,label:'540p'}] as const).map(r => (
                   <button key={r.label}
                     onClick={() => setSpec(s => ({ ...s, outputWidth: r.w, outputHeight: r.h }))}
-                    style={{
-                      padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', border: '1px solid ' + (spec.outputWidth === r.w ? T.accent : T.border),
-                      background: spec.outputWidth === r.w ? T.accentD : T.surface,
-                      color: spec.outputWidth === r.w ? T.accent : T.textSub,
-                    }}>
+                    style={chipStyle(spec.outputWidth === r.w)}>
                     {r.label}
                   </button>
                 ))}
@@ -483,26 +778,21 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
             {renderState === 'rendering' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 14, color: T.text }}>Rendering… {renderProgress}%</div>
-                <div style={{
-                  height: 6, background: T.border, borderRadius: 3, overflow: 'hidden',
-                }}>
+                <div style={{ height: 6, background: T.border, borderRadius: 3, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', width: renderProgress + '%',
                     background: T.accent, transition: 'width 0.5s',
                   }} />
                 </div>
-                <div style={{ fontSize: 12, color: T.muted }}>This may take 1-3 minutes. You can leave this page.</div>
+                <div style={{ fontSize: 12, color: T.muted }}>This may take 1–3 minutes. You can leave this page.</div>
               </div>
             )}
 
             {renderState === 'done' && renderUrl && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ color: T.accent, fontSize: 14, fontWeight: 600 }}>Export complete!</div>
-                <a
-                  href={renderUrl}
-                  download="reel.mp4"
-                  style={{ ...btnStyle('primary'), textDecoration: 'none', textAlign: 'center' }}
-                >
+                <a href={renderUrl} download="reel.mp4"
+                  style={{ ...btnStyle('primary'), textDecoration: 'none', textAlign: 'center' }}>
                   Download MP4
                 </a>
                 <button style={btnStyle('ghost')} onClick={() => {
@@ -526,6 +816,64 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
                 </button>
               </div>
             )}
+
+            {/* Caption suggestions */}
+            <div style={{ borderTop: '1px solid ' + T.border, paddingTop: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={labelStyle}>Aria caption suggestions</div>
+                <button
+                  onClick={suggestCaptions}
+                  disabled={captionLoading}
+                  style={{
+                    fontSize: 11, color: T.accent, background: 'none',
+                    border: '1px solid ' + T.accent, borderRadius: 6,
+                    padding: '4px 12px', cursor: captionLoading ? 'wait' : 'pointer', fontWeight: 600,
+                  }}
+                >
+                  {captionLoading ? 'Generating…' : 'Suggest captions'}
+                </button>
+              </div>
+
+              {captionSuggestions && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {captionSuggestions.social.map((item, i) => (
+                    <div key={i} style={{
+                      background: T.card, borderRadius: 8, padding: '10px 12px',
+                      border: '1px solid ' + T.border,
+                    }}>
+                      <p style={{ fontSize: 12, color: T.text, margin: '0 0 6px', lineHeight: 1.5 }}>
+                        {item.caption}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                        {item.hashtags.map(h => (
+                          <span key={h} style={{ fontSize: 10, color: T.accent, background: T.accentD + '60', borderRadius: 4, padding: '2px 6px' }}>
+                            #{h}
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(item.caption + '\n\n' + item.hashtags.map(h => '#' + h).join(' '))}
+                          style={{ ...chipStyle(false), fontSize: 10, padding: '4px 10px' }}>
+                          Copy
+                        </button>
+                        {onCaptionChosen && (
+                          <button
+                            onClick={() => onCaptionChosen(item.caption + '\n\n' + item.hashtags.map(h => '#' + h).join(' '))}
+                            style={{
+                              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                              cursor: 'pointer', border: 'none',
+                              background: T.accent, color: '#0b0f0c',
+                            }}>
+                            Use in publish
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

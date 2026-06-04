@@ -16,13 +16,15 @@ const DEFAULT_SPEC: EditSpec = {
   outputFps: 30,
   outputWidth: 1080,
   outputHeight: 1920,
+  speedSegments: [],
 }
 
 export function RemotionRoot() {
   return (
     <Composition
       id="ReelComposition"
-      component={ReelComposition}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      component={ReelComposition as any}
       durationInFrames={300}
       fps={30}
       width={1080}
@@ -32,7 +34,10 @@ export function RemotionRoot() {
         const spec = props.spec as EditSpec
         const fps = spec.outputFps || 30
         let durationFrames = 300
-        if (spec.trimEndFrame >= 0 && spec.trimStartFrame >= 0) {
+        if (spec.speedSegments && spec.speedSegments.length > 0) {
+          durationFrames = Math.max(1, spec.speedSegments.reduce((sum, seg) =>
+            sum + Math.ceil((seg.endFrame - seg.startFrame) / seg.speed), 0))
+        } else if (spec.trimEndFrame >= 0 && spec.trimStartFrame >= 0) {
           const rawFrames = spec.trimEndFrame - spec.trimStartFrame
           durationFrames = Math.max(1, Math.round(rawFrames / (spec.speed || 1)))
         }

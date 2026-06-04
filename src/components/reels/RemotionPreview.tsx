@@ -14,12 +14,16 @@ export function RemotionPreview({ spec, width = 270 }: Props) {
   const fps = spec.outputFps || 30
 
   const durationInFrames = useMemo(() => {
+    if (spec.speedSegments && spec.speedSegments.length > 0) {
+      return Math.max(1, spec.speedSegments.reduce((sum, seg) =>
+        sum + Math.ceil((seg.endFrame - seg.startFrame) / seg.speed), 0))
+    }
     if (spec.trimEndFrame >= 0 && spec.trimStartFrame >= 0) {
       const rawFrames = spec.trimEndFrame - spec.trimStartFrame
       return Math.max(1, Math.round(rawFrames / (spec.speed || 1)))
     }
     return 300
-  }, [spec.trimStartFrame, spec.trimEndFrame, spec.speed])
+  }, [spec.trimStartFrame, spec.trimEndFrame, spec.speed, spec.speedSegments])
 
   return (
     <Player
