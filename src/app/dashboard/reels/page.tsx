@@ -284,41 +284,6 @@ export default function ReelStudioPage() {
     } catch { pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 8000) }
   }, [bid])
 
-  // Call Higgsfield directly from browser (Vercel AWS IPs are blocked with 522)
-  async function callHiggsfield(body: Record<string, any>): Promise<{ job_id: string; session_id: string; estimated_cost_aud: number }> {
-    // Step 1: Vercel creates DB session, returns key + payload
-    const prep = await fetch(REEL_GENERATE, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).then(r => r.json())
-    if (prep.error) throw new Error(prep.error)
-
-    // Step 2: Browser calls Higgsfield directly (no IP block)
-    const hfRes = await fetch(prep.hf_endpoint, {
-      method: 'POST',
-      headers: { 'Authorization': prep.hf_key, 'Content-Type': 'application/json' },
-      body: JSON.stringify(prep.payload),
-    })
-    const hfText = await hfRes.text()
-    if (!hfRes.ok) {
-      const msg = hfText.startsWith('<') ? 'Higgsfield unavailable — try again in 30 seconds.' : `Higgsfield ${hfRes.status}: ${hfText.slice(0, 120)}`
-      throw new Error(msg)
-    }
-    const hf = JSON.parse(hfText)
-    const job_id = hf.id ?? hf.job_id ?? hf.request_id
-    if (!job_id) throw new Error('No job ID from Higgsfield: ' + hfText.slice(0, 100))
-
-    // Step 3: Save job_id to DB
-    await fetch(REEL_GENERATE, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: prep.session_id, job_id, status: 'processing' }),
-    })
-    return { job_id, session_id: prep.session_id, estimated_cost_aud: prep.estimated_cost_aud }
-  }
-
-
   async function generate() {
     if (!bid || !userToken || generating) return
     setGenerating(true); setLatestVideo(null); setGenProgress(5); setClipProgress(0)
@@ -329,8 +294,8 @@ export default function ReelStudioPage() {
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
       try {
-        const d = await callHiggsfield({ ...base, prompt: prompt || null, duration_seconds: duration }).then(r => r.json())
-        if (!d.job_id) throw new Error('No job_id returned')
+        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json()).then(r => r.json())
+        if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
         setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
         pollStatus(d.job_id, d.session_id, userToken)
       } catch (e: any) {
