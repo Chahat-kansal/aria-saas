@@ -81,8 +81,8 @@ const MUSIC_MOODS = [
   { id: 'cinematic', label: 'Cinematic' }, { id: 'corporate', label: 'Corporate' },
 ]
 
-function clipsNeeded(secs: number) { return Math.ceil(secs / 15) }
-function clipDuration(secs: number) { return Math.min(secs, 15) }
+function clipsNeeded(secs: number) { return Math.ceil(secs / 10) }
+function clipDuration(secs: number) { return Math.min(secs, 10) }
 
 // ─── Reusable primitives ───────────────────────────────────────────────────────
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
