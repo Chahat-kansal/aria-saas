@@ -16,54 +16,74 @@ export async function GET(req: NextRequest) {
   const sessionId = req.nextUrl.searchParams.get('session_id')
   if (!jobId) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
 
-  try {
-    // fal.ai queue status — works for any model
-    const res = await fetch(`https://queue.fal.run/fal-ai/kling-video/v1.6/pro/text-to-video/requests/${jobId}/status`, {
-      headers: { 'Authorization': `Key ${FAL_KEY}` },
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!res.ok) {
-      // Try image-to-video endpoint if text-to-video status 404s
-      const res2 = await fetch(`https://queue.fal.run/fal-ai/kling-video/v1.6/pro/image-to-video/requests/${jobId}/status`, {
+  // Get session to find the response_url we stored at submit time
+  let responseUrl: string | null = null
+  if (sessionId) {
+    const { data: session } = await supabaseAdmin.from('reel_studio_sessions')
+      .select('scene_image_url').eq('id', sessionId).maybeSingle()
+    responseUrl = session?.scene_image_url ?? null
+  }
+
+  // Build status URL — fal.ai uses the model path for status checks
+  // Try both t2v and i2v models since we don't store which was used
+  const models = [
+    'fal-ai/kling-video/v2.1/pro/text-to-video',
+    'fal-ai/kling-video/v2.1/pro/image-to-video',
+  ]
+
+  let statusData: any = null
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://queue.fal.run/${model}/requests/${jobId}/status`,
+        { headers: { 'Authorization': `Key ${FAL_KEY}` }, signal: AbortSignal.timeout(8000) }
+      )
+      if (res.ok) { statusData = await res.json(); break }
+    } catch { continue }
+  }
+
+  if (!statusData) return NextResponse.json({ status: 'IN_QUEUE' })
+
+  const status = (statusData.status ?? '').toUpperCase()
+
+  if (status === 'COMPLETED') {
+    // Fetch result from response_url or build it
+    const resultUrl = responseUrl ??
+      `https://queue.fal.run/fal-ai/kling-video/v2.1/pro/text-to-video/requests/${jobId}`
+
+    try {
+      const res = await fetch(resultUrl, {
         headers: { 'Authorization': `Key ${FAL_KEY}` },
         signal: AbortSignal.timeout(10000),
       })
-      if (!res2.ok) return NextResponse.json({ status: 'IN_QUEUE' })
-      const d2 = await res2.json()
-      return handleStatus(d2, jobId, sessionId, 'image-to-video')
-    }
-    const d = await res.json()
-    return handleStatus(d, jobId, sessionId, 'text-to-video')
-  } catch (e: any) {
-    return NextResponse.json({ status: 'IN_QUEUE' })
-  }
-}
-
-async function handleStatus(d: any, jobId: string, sessionId: string | null, variant: string) {
-  const status = (d.status ?? '').toUpperCase()
-  if (status === 'COMPLETED') {
-    // Get result
-    try {
-      const res = await fetch(`https://queue.fal.run/fal-ai/kling-video/v1.6/pro/${variant}/requests/${jobId}`, {
-        headers: { 'Authorization': `Key ${process.env.FAL_API_KEY}` },
-        signal: AbortSignal.timeout(10000),
-      })
       const result = await res.json()
-      const videoUrl = result.video?.url ?? result.video_url ?? result.output?.video?.url
+      const videoUrl = result?.video?.url
+
       if (!videoUrl) return NextResponse.json({ status: 'IN_QUEUE' })
+
       if (sessionId) {
         await supabaseAdmin.from('reel_studio_sessions').update({
-          status: 'completed', video_url: videoUrl, completed_at: new Date().toISOString(),
+          status: 'completed',
+          video_url: videoUrl,
+          completed_at: new Date().toISOString(),
+          scene_image_url: null, // clear temp storage
         }).eq('id', sessionId)
       }
+
       return NextResponse.json({ status: 'COMPLETED', video_url: videoUrl })
     } catch {
       return NextResponse.json({ status: 'IN_QUEUE' })
     }
   }
+
   if (status === 'FAILED' || status === 'ERROR') {
-    if (sessionId) await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', sessionId)
-    return NextResponse.json({ status: 'FAILED', error: d.error ?? 'Generation failed' })
+    if (sessionId) await supabaseAdmin.from('reel_studio_sessions')
+      .update({ status: 'failed' }).eq('id', sessionId)
+    return NextResponse.json({ status: 'FAILED', error: statusData.error ?? 'Generation failed' })
   }
-  return NextResponse.json({ status: 'IN_QUEUE', queue_position: d.queue_position ?? null })
+
+  return NextResponse.json({
+    status: 'IN_QUEUE',
+    queue_position: statusData.queue_position ?? null,
+  })
 }
