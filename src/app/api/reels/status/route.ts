@@ -8,8 +8,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 const HF = 'https://api.higgsfield.ai'
 
 function hfAuth() {
+  // Higgsfield v2 API: Authorization header = KEY_ID:KEY_SECRET (no Bearer prefix)
+  // See: github.com/higgsfield-ai/higgsfield-js
   const k = process.env.HIGGSFIELD_API_KEY ?? ''
-  return 'Bearer ' + k.replace(/^Bearer\s+/i, '').replace(/^Key\s+/i, '')
+  return k.replace(/^Bearer\s+/i, '').replace(/^Key\s+/i, '')
 }
 
 export async function GET(req: NextRequest) {
