@@ -1,14 +1,14 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 30
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const FAL_KEY = process.env.FAL_API_KEY ?? ''
-const FAL_URL = 'https://fal.run/fal-ai/kling-video/v1.6/pro/text-to-video'
-const FAL_URL_IMG = 'https://fal.run/fal-ai/kling-video/v1.6/pro/image-to-video'
+const FAL_MODEL_T2V = 'fal-ai/kling-video/v1.6/pro/text-to-video'
+const FAL_MODEL_I2V = 'fal-ai/kling-video/v1.6/pro/image-to-video'
 
 const STYLE_PROMPTS: Record<string, string> = {
   lifestyle:        'Warm cinematic lifestyle,',
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { business_id, influencer_id, image_url, prompt, style = 'lifestyle',
-    duration_seconds = 10, resolution = '720p' } = await req.json()
+    duration_seconds = 10 } = await req.json()
 
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
   if ((count ?? 0) >= 25)
     return NextResponse.json({ error: 'Daily reel limit reached (25/day).' }, { status: 429 })
 
-  const dur = Math.min(Math.max(Math.round(duration_seconds), 5), 10)
-  const costAud = Math.round(dur * 0.07 * 1.5 * 100) / 100 // $0.07/sec * AUD markup
+  const dur = Math.min(Math.max(Math.round(duration_seconds), 5), 10) as 5 | 10
+  const costAud = Math.round(dur * 0.07 * 1.55 * 100) / 100
 
   const stylePrefix = STYLE_PROMPTS[style] ?? STYLE_PROMPTS.lifestyle
   const videoPrompt = (stylePrefix + ' ' + (prompt ?? 'Australian small business, authentic and warm') + ', 9:16 vertical, cinematic').slice(0, 500)
@@ -56,34 +56,39 @@ export async function POST(req: NextRequest) {
     status: 'processing', cost_aud: costAud, credits_used: dur,
   }).select().single()
 
-  // Build fal.ai payload - use image-to-video if influencer image provided
-  const useImageToVideo = !!image_url
-  const falUrl = useImageToVideo ? FAL_URL_IMG : FAL_URL
+  // Submit to fal.ai queue — returns request_id in <1 second
+  const model = image_url ? FAL_MODEL_I2V : FAL_MODEL_T2V
   const falBody: Record<string, any> = {
     prompt: videoPrompt,
     duration: String(dur),
     aspect_ratio: '9:16',
   }
-  if (useImageToVideo) falBody.image_url = image_url
+  if (image_url) falBody.image_url = image_url
 
   try {
-    const res = await fetch(falUrl, {
+    const res = await fetch(`https://queue.fal.run/${model}`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(falBody),
-      signal: AbortSignal.timeout(55000),
+      signal: AbortSignal.timeout(15000), // just submitting, should be <1s
     })
     const text = await res.text()
-    console.log('[reels/generate] fal.ai ->', res.status, text.slice(0, 200))
+    console.log('[reels/generate] fal.ai submit ->', res.status, text.slice(0, 200))
     if (!res.ok) throw new Error(`fal.ai ${res.status}: ${text.slice(0, 150)}`)
     const d = JSON.parse(text)
-    const jobId = d.request_id ?? d.id
-    if (!jobId) throw new Error('No request_id from fal.ai: ' + text.slice(0, 100))
-    await supabaseAdmin.from('reel_studio_sessions').update({ higgsfield_job_id: jobId }).eq('id', session?.id)
-    return NextResponse.json({ job_id: jobId, session_id: session?.id, duration: dur, estimated_cost_aud: costAud, status: 'queued', provider: 'fal' })
+    const requestId = d.request_id
+    if (!requestId) throw new Error('No request_id from fal.ai: ' + text.slice(0, 100))
+    await supabaseAdmin.from('reel_studio_sessions')
+      .update({ higgsfield_job_id: requestId, status: 'processing' }).eq('id', session?.id)
+    return NextResponse.json({
+      job_id: requestId,
+      session_id: session?.id,
+      duration: dur,
+      estimated_cost_aud: costAud,
+      status: 'queued',
+      provider: 'fal',
+      model,
+    })
   } catch (e: any) {
     await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
     return NextResponse.json({ error: e.message }, { status: 502 })
