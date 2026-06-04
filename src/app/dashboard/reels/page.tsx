@@ -11,6 +11,7 @@ import {
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const EDGE = '/api/reels/generate'
+const STATUS = '/api/reels/status'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Inf = { id: string; name: string; description: string; image_url: string; higgsfield_job_id: string; soul_id: string | null; soul_status: string | null }
@@ -252,7 +253,7 @@ export default function ReelStudioPage() {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 5000))
       try {
-        const d = await fetch(EDGE + '?job_id=' + jobId + '&session_id=' + sessionId, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json())
+        const d = await fetch(STATUS + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
         if (d.status === 'COMPLETED' && d.video_url) return d.video_url as string
         if (d.status === 'FAILED') return null
       } catch {}
@@ -262,7 +263,7 @@ export default function ReelStudioPage() {
 
   const pollStatus = useCallback(async (jobId: string, sessionId: string, token: string) => {
     try {
-      const d = await fetch(EDGE + '?job_id=' + jobId + '&session_id=' + sessionId, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json())
+      const d = await fetch(STATUS + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
       if (d.status === 'COMPLETED') {
         setLatestVideo(d.video_url); setGenerating(false); setGenProgress(100)
         setGenMsg('Reel ready!'); setActiveJob(null); setTab('edit')
