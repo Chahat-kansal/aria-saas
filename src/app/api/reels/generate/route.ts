@@ -88,24 +88,27 @@ export async function POST(req: NextRequest) {
     const keyRaw = process.env.HIGGSFIELD_API_KEY ?? ''
     console.log('[reels/generate] key present:', !!keyRaw, 'key length:', keyRaw.length, 'has colon:', keyRaw.includes(':'), 'payload model:', genPayload.model)
 
+    const authHeader = hfAuth()
+    console.log('[reels/generate] auth header length:', authHeader.length, 'starts with Bearer:', authHeader.startsWith('Bearer'), 'has colon:', authHeader.includes(':'))
+    
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 50000) // 50s timeout
+    const timeout = setTimeout(() => controller.abort(), 50000)
     const res = await fetch(`${HF}/v1/video/generate`, {
       method: 'POST',
-      headers: { Authorization: hfAuth(), 'Content-Type': 'application/json' },
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
       body: JSON.stringify(genPayload),
       signal: controller.signal,
     })
     clearTimeout(timeout)
     const text = await res.text()
+    console.log('[reels/generate] Higgsfield response status:', res.status, 'body:', text.slice(0, 300))
     if (!res.ok) {
-      // Detect HTML error pages
-      if (text.trim().startsWith('<')) throw new Error('Higgsfield API temporarily unavailable. Please try again in 30 seconds.')
-      throw new Error(`Higgsfield ${res.status}: ${text.slice(0, 150)}`)
+      if (text.trim().startsWith('<')) throw new Error('Higgsfield API temporarily unavailable (522). Try again in 30 seconds.')
+      throw new Error(`Higgsfield ${res.status}: ${text.slice(0, 200)}`)
     }
     const d = JSON.parse(text)
     jobId = d.id ?? d.job_id ?? d.request_id
-    if (!jobId) throw new Error('No job ID returned: ' + text.slice(0, 150))
+    if (!jobId) throw new Error('No job ID returned: ' + text.slice(0, 200))
   } catch (e: any) {
     await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
     const msg = e.name === 'AbortError'
