@@ -67,6 +67,10 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
   const [renderUrl, setRenderUrl] = useState<string|null>(null)
   const [renderError, setRenderError] = useState<string|null>(null)
   const [editingText, setEditingText] = useState<TextLayer|null>(null)
+  const [capLoading, setCapLoading] = useState(false)
+  const [capOnVideo, setCapOnVideo] = useState<string[]>([])
+  const [capSocial, setCapSocial] = useState<{ caption: string; hashtags: string[] }[]>([])
+  const [capError, setCapError] = useState<string|null>(null)
   const pollRef = useRef<ReturnType<typeof setTimeout>|null>(null)
   const [jobIds, setJobIds] = useState<{sandboxId:string;cmdId:string}|null>(null)
 
@@ -152,10 +156,26 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
   useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current) }, [])
 
   // ── Text layer editor ────────────────────────────────────────────────────
-  function addTextLayer() {
+  async function suggestCaptions() {
+    if (!businessId || capLoading) return
+    setCapLoading(true); setCapError(null)
+    try {
+      const r = await fetch('/api/reels/captions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error ?? 'Could not get suggestions')
+      setCapOnVideo(d.onVideo ?? [])
+      setCapSocial(d.social ?? [])
+    } catch (e: any) { setCapError(e.message) }
+    setCapLoading(false)
+  }
+
+  function addTextLayer(text?: string) {
     const layer: TextLayer = {
       id: nanoid(),
-      text: 'Your text here',
+      text: text ?? 'Your text here',
       startFrame: 0,
       endFrame: 90,
       fontSize: 48,
@@ -355,7 +375,53 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish }: P
         {/* ── TEXT TAB ─────────────────────────────────────────────────── */}
         {tab === 'text' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <button style={btnStyle('primary')} onClick={addTextLayer}>
+            {/* Aria caption suggestions */}
+            <div style={{ background: T.card, borderRadius: 10, padding: '12px 14px', border: '1px solid ' + T.border }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.accent }}>✨ Aria caption suggestions</span>
+                <button onClick={suggestCaptions} disabled={capLoading}
+                  style={{ fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 8, border: '1px solid ' + T.accent, background: 'transparent', color: T.accent, cursor: capLoading ? 'wait' : 'pointer' }}>
+                  {capLoading ? 'Thinking…' : (capOnVideo.length || capSocial.length ? 'Regenerate' : 'Suggest')}
+                </button>
+              </div>
+              {capError && <div style={{ color: T.red, fontSize: 12, marginBottom: 8 }}>{capError}</div>}
+              {!capLoading && !capOnVideo.length && !capSocial.length && !capError && (
+                <div style={{ color: T.muted, fontSize: 12 }}>Tap Suggest — Aria writes on-video text and social captions from your business data.</div>
+              )}
+              {capOnVideo.length > 0 && (
+                <div style={{ marginBottom: capSocial.length ? 12 : 0 }}>
+                  <div style={{ ...labelStyle, marginBottom: 6 }}>On-video text — tap to add</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {capOnVideo.map((t, i) => (
+                      <button key={i} onClick={() => addTextLayer(t)}
+                        style={{ textAlign: 'left', fontSize: 13, color: T.text, background: T.bg, border: '1px solid ' + T.border, borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
+                        + {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {capSocial.length > 0 && (
+                <div>
+                  <div style={{ ...labelStyle, marginBottom: 6 }}>Social post captions — tap to copy</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {capSocial.map((s, i) => {
+                      const full = s.caption + (s.hashtags?.length ? '\n\n' + s.hashtags.map(h => '#' + h).join(' ') : '')
+                      return (
+                        <button key={i} onClick={() => { navigator.clipboard?.writeText(full).catch(() => {}) }}
+                          style={{ textAlign: 'left', fontSize: 12, color: T.textSub, background: T.bg, border: '1px solid ' + T.border, borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
+                          <div style={{ color: T.text }}>{s.caption}</div>
+                          {s.hashtags?.length > 0 && <div style={{ color: T.accent, marginTop: 4 }}>{s.hashtags.map(h => '#' + h).join(' ')}</div>}
+                          <div style={{ color: T.muted, fontSize: 10, marginTop: 4 }}>Tap to copy</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button style={btnStyle('primary')} onClick={() => addTextLayer()}>
               + Add text layer
             </button>
             {spec.textLayers.length === 0 && (
