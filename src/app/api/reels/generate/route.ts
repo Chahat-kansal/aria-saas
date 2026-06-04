@@ -91,11 +91,19 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { 'Authorization': `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(falBody),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(12000),
     })
 
-    const data = await res.json()
-    console.log('[reels/generate] fal submit:', res.status, 'model:', model, JSON.stringify(data).slice(0, 200))
+    // Read as text first — fal.ai sometimes returns non-JSON error pages (e.g. 504 HTML)
+    const raw = await res.text()
+    console.log('[reels/generate] fal submit:', res.status, 'model:', model, raw.slice(0, 200))
+
+    let data: any
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      throw new Error(`fal.ai returned non-JSON (${res.status}): ${raw.slice(0, 80)}`)
+    }
 
     if (!res.ok) throw new Error(`fal.ai ${res.status}: ${data.detail ?? JSON.stringify(data).slice(0, 100)}`)
 
