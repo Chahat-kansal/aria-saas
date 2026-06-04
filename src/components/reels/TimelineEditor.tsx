@@ -1047,6 +1047,35 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
           </div>
         )}
       </div>
+
+      {/* V2V cost confirm modal — position:fixed so it overlays regardless of parent */}
+      {v2vConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: T.surface, border: '1px solid ' + T.border, borderRadius: 12, padding: 20, width: 300 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 10 }}>
+              {v2vConfirm.op === 'restyle' ? 'Restyle clip' : 'Remove background'}
+            </div>
+            <div style={{ fontSize: 13, color: T.textSub, lineHeight: 1.6, marginBottom: 14 }}>
+              {v2vConfirm.op === 'restyle'
+                ? 'AI re-generates every frame in a new style. Takes 60–90 seconds.'
+                : 'Removes the background, keeps your subject and audio. Takes ~30 seconds.'}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 12px', background: T.card, borderRadius: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 13, color: T.textSub }}>Estimated cost</span>
+              <span style={{ fontSize: 14, color: T.accent, fontWeight: 600 }}>{'~$' + v2vConfirm.cost.toFixed(2) + ' AUD'}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={btnStyle('ghost')} onClick={() => setV2vConfirm(null)}>Cancel</button>
+              <button
+                style={{ ...btnStyle('primary'), opacity: v2vLoading ? 0.6 : 1 }}
+                disabled={v2vLoading}
+                onClick={doV2V}>
+                {v2vLoading ? 'Starting…' : ('Confirm $' + v2vConfirm.cost.toFixed(2))}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
