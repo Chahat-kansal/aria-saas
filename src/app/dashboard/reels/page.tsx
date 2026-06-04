@@ -22,6 +22,7 @@ type Inf = {
 type Session = {
   id: string; status: string; video_url: string | null; cost_aud: number
   created_at: string; style: string; duration_seconds: number; prompt: string
+  higgsfield_job_id: string | null
 }
 type ReelIdea = { title: string; why: string; style: string; prompt: string; hook: string; hashtags: string[]; urgency: 'high' | 'medium' | 'low' }
 type Track = { id: number; title: string; duration: number; url: string; preview: string | null; bpm: number | null; artist: string }
