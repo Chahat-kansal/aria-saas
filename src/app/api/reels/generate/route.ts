@@ -48,6 +48,15 @@ export async function POST(req: NextRequest) {
   const hfKey = process.env.HIGGSFIELD_API_KEY ?? ''
   if (!hfKey) return NextResponse.json({ error: 'Higgsfield not configured' }, { status: 503 })
 
+  // Rate limit: max 10 reels per business per day
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0)
+  const { count } = await supabaseAdmin.from('reel_studio_sessions')
+    .select('*', { count: 'exact', head: true })
+    .eq('business_id', business_id)
+    .gte('created_at', dayStart.toISOString())
+  if ((count ?? 0) >= 10)
+    return NextResponse.json({ error: 'Daily reel limit reached (10/day). Resets at midnight.' }, { status: 429 })
+
   const dur = Math.min(Math.max(Math.round(duration_seconds), 3), 15)
   const credits = dur <= 10 ? 10 : 20
   const costAud = Math.round(credits * 0.095 * 100) / 100
