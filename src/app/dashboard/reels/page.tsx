@@ -236,6 +236,7 @@ export default function ReelStudioPage() {
 
   // ── History publish state
   const [historyPublishing, setHistoryPublishing] = useState<Set<string>>(new Set())
+  const [historyPlatform, setHistoryPlatform] = useState<Record<string, 'instagram' | 'facebook' | 'tiktok'>>({})
   const [historyMsg, setHistoryMsg] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -451,10 +452,11 @@ export default function ReelStudioPage() {
   async function publishFromHistory(session: Session) {
     if (!session.video_url || !bid) return
     const key = session.id
+    const platform = historyPlatform[key] ?? 'instagram'
     setHistoryPublishing(prev => { const n = new Set(prev); n.add(key); return n })
     setHistoryMsg(prev => ({ ...prev, [key]: '' }))
     try {
-      const cd = await fetch('/api/social/posts/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, platform: 'instagram', caption: session.prompt || 'Check out our latest reel!', hashtags: ['smallbusiness', 'australia', 'reels'], post_type: 'reel', video_url: session.video_url }) }).then(r => r.json())
+      const cd = await fetch('/api/social/posts/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, platform, caption: session.prompt || 'Check out our latest reel!', hashtags: ['smallbusiness', 'australia', 'reels'], post_type: 'reel', video_url: session.video_url }) }).then(r => r.json())
       if (!cd.post?.id) throw new Error(cd.error ?? 'Could not create post')
       const pd = await fetch('/api/social/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ post_id: cd.post.id, business_id: bid, post_type_override: 'reel' }) })
       if (!pd.ok) { const e = await pd.json(); throw new Error(e.error ?? 'Publish failed') }
@@ -515,8 +517,20 @@ export default function ReelStudioPage() {
         ))}
       </nav>
 
-      {/* ── 3-PANEL LAYOUT (create + editor tabs) ───────────────────────────── */}
-      {(tab === 'create' || tab === 'editor') && (
+      {/* ── EDITOR TAB WITH VIDEO: single full-width Remotion editor ─────────── */}
+      {tab === 'editor' && latestVideo && (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#070809' }}>
+          <TimelineEditor
+            videoUrl={latestVideo}
+            sessionId={latestSessionId ?? sessions[0]?.id ?? ''}
+            businessId={bid ?? ''}
+            onPublish={(editedUrl) => setLatestVideo(editedUrl)}
+          />
+        </div>
+      )}
+
+      {/* ── 3-PANEL LAYOUT (create tab, or editor tab before a video exists) ─── */}
+      {(tab === 'create' || (tab === 'editor' && !latestVideo)) && (
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr 320px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
           {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
@@ -702,17 +716,9 @@ export default function ReelStudioPage() {
           </aside>
 
           {/* ── CENTER PANEL ───────────────────────────────────────────────── */}
-          <main style={{ display: 'flex', flexDirection: 'column', background: '#070809', overflow: tab === 'editor' && !!latestVideo ? 'auto' : 'hidden', padding: T.sp.xxl + 'px', alignItems: tab === 'editor' && !!latestVideo ? 'flex-start' : 'center', justifyContent: tab === 'editor' && !!latestVideo ? 'flex-start' : 'center', gap: T.sp.lg }}>
+          <main style={{ display: 'flex', flexDirection: 'column', background: '#070809', overflow: 'hidden', padding: T.sp.xxl + 'px', alignItems: 'center', justifyContent: 'center', gap: T.sp.lg }}>
 
-            {/* Editor tab with video: show Remotion TimelineEditor */}
-            {tab === 'editor' && latestVideo ? (
-              <TimelineEditor
-                videoUrl={latestVideo}
-                sessionId={latestSessionId ?? sessions[0]?.id ?? ''}
-                businessId={bid ?? ''}
-                onPublish={(editedUrl) => setLatestVideo(editedUrl)}
-              />
-            ) : (
+            {(
               <>
                 <PhoneFrame width={240}>
                   {latestVideo ? (
@@ -880,16 +886,26 @@ export default function ReelStudioPage() {
                     </div>
                     <p style={{ fontSize: 10, color: T.textDim, margin: 0 }}>{s.style} · {s.duration_seconds}s</p>
                     {s.video_url && (
+                      <div style={{ display: 'flex', gap: 3, marginBottom: 4 }}>
+                        {(['instagram', 'facebook', 'tiktok'] as const).map((p) => (
+                          <button key={p} onClick={() => setHistoryPlatform(prev => ({ ...prev, [s.id]: p }))} aria-pressed={(historyPlatform[s.id] ?? 'instagram') === p}
+                            style={{ flex: 1, padding: '4px 0', borderRadius: T.r.sm, border: '1px solid ' + ((historyPlatform[s.id] ?? 'instagram') === p ? '#818cf8' : T.border), background: (historyPlatform[s.id] ?? 'instagram') === p ? 'rgba(99,102,241,0.18)' : 'transparent', color: (historyPlatform[s.id] ?? 'instagram') === p ? '#818cf8' : T.textDim, fontSize: 8, fontWeight: 700, fontFamily: T.font, cursor: 'pointer', textTransform: 'capitalize' }}>
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {s.video_url && (
                       <div style={{ display: 'flex', gap: 4 }}>
                         <a href={s.video_url} download style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, background: T.accentBg, color: T.accent, textAlign: 'center', fontSize: 10, fontWeight: 700, textDecoration: 'none', minHeight: 30 }}><Download size={10} />Download</a>
                         <button
                           onClick={() => publishFromHistory(s)}
                           disabled={historyPublishing.has(s.id)}
-                          aria-label="Publish to Instagram"
-                          style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: historyPublishing.has(s.id) ? 'wait' : 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
+                          aria-label={'Publish to ' + ((historyPlatform[s.id] ?? 'instagram').charAt(0).toUpperCase() + (historyPlatform[s.id] ?? 'instagram').slice(1))}
+                          style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: historyPublishing.has(s.id) ? 'wait' : 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30, textTransform: 'capitalize' }}
                         >
                           {historyPublishing.has(s.id) ? <Loader2 size={10} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={10} />}
-                          Publish
+                          {historyPlatform[s.id] ?? 'instagram'}
                         </button>
                       </div>
                     )}
