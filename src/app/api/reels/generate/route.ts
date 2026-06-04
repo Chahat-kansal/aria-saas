@@ -1,6 +1,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
@@ -82,11 +82,15 @@ export async function POST(req: NextRequest) {
   // Call Higgsfield from Vercel (AWS Lambda — no IP block)
   let jobId: string
   try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 50000) // 50s timeout
     const res = await fetch(`${HF}/v1/video/generate`, {
       method: 'POST',
       headers: { Authorization: hfAuth(), 'Content-Type': 'application/json' },
       body: JSON.stringify(genPayload),
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
     const text = await res.text()
     if (!res.ok) {
       // Detect HTML error pages
@@ -98,7 +102,10 @@ export async function POST(req: NextRequest) {
     if (!jobId) throw new Error('No job ID returned: ' + text.slice(0, 150))
   } catch (e: any) {
     await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
-    return NextResponse.json({ error: e.message }, { status: 502 })
+    const msg = e.name === 'AbortError'
+      ? 'Higgsfield API timed out (50s). Please try again — the API may be busy.'
+      : (e.message ?? 'Generation failed')
+    return NextResponse.json({ error: msg }, { status: 502 })
   }
 
   await supabaseAdmin.from('reel_studio_sessions').update({ higgsfield_job_id: jobId }).eq('id', session?.id)
