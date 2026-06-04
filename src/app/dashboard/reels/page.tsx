@@ -294,7 +294,7 @@ export default function ReelStudioPage() {
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
       try {
-        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json()).then(r => r.json())
+        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json()).then(r => r.json()).then(r => r.json())
         if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
         setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
         pollStatus(d.job_id, d.session_id, userToken)
@@ -313,7 +313,7 @@ export default function ReelStudioPage() {
       const clipUrls: string[] = []
       for (let i = 0; i < clips; i++) {
         const clipPrompt = prompt ? (i === 0 ? prompt : prompt + ', continuation ' + (i + 1) + ' of ' + clips) : null
-        const d = await callHiggsfield({ ...base, prompt: clipPrompt || null, duration_seconds: clipSecs })
+        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: clipPrompt || null, duration_seconds: clipSecs }) }).then(r => r.json())
         if (!d.job_id) throw new Error('Clip ' + (i + 1) + ' failed: no job_id')
         setGenMsg('Clip ' + (i + 1) + '/' + clips + ' submitted, waiting…'); setGenProgress(10 + Math.floor(i * 70 / clips))
         const url = await pollClip(d.job_id, d.session_id, userToken)
