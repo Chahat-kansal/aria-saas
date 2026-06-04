@@ -312,6 +312,25 @@ export class WasteEliminationAgent extends BaseAgent {
         })
       }
 
+      // STEP 7: T-1 escalating markdowns — 20% on top waste-risk items (≥$5 exposure)
+      for (const risk of wasteRisks.slice(0, 3)) {
+        if (risk.wasteValue < 5 || !risk.prod) continue
+        try {
+          const tomorrowOpen = new Date(tomorrowStr + 'T08:00:00')
+          const tomorrowClose = new Date(tomorrowStr + 'T21:59:59')
+          await supabaseAdmin.from('pos_promotions').insert({
+            business_id,
+            name: '20% Off — ' + String(risk.prod.name) + ' (limited stock)',
+            discount_pct: 20,
+            product_ids: [risk.p.product_id],
+            valid_from: tomorrowOpen.toISOString(),
+            valid_until: tomorrowClose.toISOString(),
+            is_active: true,
+            created_by: 'waste_agent',
+          })
+        } catch { /* promo creation non-fatal */ }
+      }
+
       const saved = await this.saveDecisions(decisions)
       await this.logRun(business_id, { decisions: saved, errors, duration_ms: Date.now() - start })
       return { decisions: saved, errors, duration_ms: Date.now() - start }
@@ -357,17 +376,26 @@ export class WasteEliminationAgent extends BaseAgent {
         .maybeSingle()
 
       if (overPrepped > 3 && Number(product?.shelf_life_hours ?? 24) < 6) {
-        // Trigger flash promotion
+        // Escalate to 50% same-day (T-1 ran at 20%; noon escalation to clear remaining stock)
         try {
           const closeTime = new Date()
           closeTime.setHours(22, 0, 0, 0)
+
+          // Deactivate any existing T-1 20% promo for this product
+          await supabaseAdmin.from('pos_promotions')
+            .update({ is_active: false })
+            .eq('business_id', business_id)
+            .eq('discount_pct', 20)
+            .eq('created_by', 'waste_agent')
+            .filter('product_ids', 'cs', JSON.stringify([pred.product_id]))
+            .gte('valid_until', new Date().toISOString())
 
           const { data: promo } = await supabaseAdmin
             .from('pos_promotions')
             .insert({
               business_id,
-              name: 'Today Special — ' + (product?.name ?? 'Item'),
-              discount_pct: 20,
+              name: '50% Off — ' + (product?.name ?? 'Item') + ' TODAY ONLY',
+              discount_pct: 50,
               product_ids: [pred.product_id],
               valid_from: new Date().toISOString(),
               valid_until: closeTime.toISOString(),

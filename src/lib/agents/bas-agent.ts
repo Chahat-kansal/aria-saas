@@ -31,7 +31,10 @@ export class BasAgent extends BaseAgent {
     const errors: Error[] = []
     const q = getCurrentQuarter()
     try {
-      const { totalPayable, dueDate, quarter } = await this.generateBasDraft(business_id, q.period_start, q.period_end)
+      const settings = await this.getSettings(business_id)
+      if (!settings.enabled) return { decisions: [], errors: [], duration_ms: Date.now() - start }
+      const basConfig = settings.config as { gst_rate?: number; payg_withholding_rate?: number; super_guarantee_rate?: number }
+      const { totalPayable, dueDate, quarter, superRatePct } = await this.generateBasDraft(business_id, q.period_start, q.period_end, basConfig)
       if (totalPayable > 0) {
         const decision: AgentDecisionInput = {
           business_id,
@@ -41,8 +44,10 @@ export class BasAgent extends BaseAgent {
             quarter,
             total_payable: Math.round(totalPayable * 100) / 100,
             due_date: dueDate.toISOString().slice(0, 10),
+            super_rate_used: superRatePct,
+            super_rate_flag: 'ACTION REQUIRED: Confirm the current AU super guarantee rate (' + superRatePct + '%) is correct for this financial year with your accountant before lodging.',
           },
-          reasoning: 'BAS ' + quarter + ' draft prepared: $' + totalPayable.toFixed(0) + ' payable by ' + dueDate.toISOString().slice(0, 10) + '. Review and lodge via your accountant or the ATO business portal.',
+          reasoning: 'BAS ' + quarter + ' draft prepared: $' + totalPayable.toFixed(0) + ' payable by ' + dueDate.toISOString().slice(0, 10) + '. Super at ' + superRatePct + '% — owner must confirm rate before lodging.',
           confidence_score: 0.95,
           projected_impact_cents: Math.round(totalPayable * 100),
           expires_at: dueDate.toISOString(),
@@ -58,7 +63,11 @@ export class BasAgent extends BaseAgent {
     return { decisions: [], errors, duration_ms: Date.now() - start }
   }
 
-  async generateBasDraft(business_id: string, period_start: Date, period_end: Date): Promise<{ totalPayable: number; dueDate: Date; quarter: string }> {
+  async generateBasDraft(business_id: string, period_start: Date, period_end: Date, config: { gst_rate?: number; payg_withholding_rate?: number; super_guarantee_rate?: number } = {}): Promise<{ totalPayable: number; dueDate: Date; quarter: string; superRatePct: number }> {
+    const gstRate = Number(config.gst_rate ?? 0.10)
+    const paygRate = Number(config.payg_withholding_rate ?? 0.19)
+    const superRate = Number(config.super_guarantee_rate ?? 0.115)
+    const superRatePct = Math.round(superRate * 1000) / 10
     const startStr = period_start.toISOString()
     const endStr = new Date(period_end.getTime() + 86399000).toISOString() // include end of day
 
@@ -125,9 +134,9 @@ export class BasAgent extends BaseAgent {
       if (treatment === 'input_taxed') g4InputTaxedSales += Number(item.line_total ?? 0)
     }
 
-    // STEP 4: GST on sales
+    // STEP 4: GST on sales — GST = taxable × rate / (1 + rate)
     const taxableSales = g1TotalSales - g3GstFreeSales - g4InputTaxedSales
-    const field1aGstOnSales = taxableSales > 0 ? taxableSales / 11 : 0
+    const field1aGstOnSales = taxableSales > 0 ? taxableSales * gstRate / (1 + gstRate) : 0
 
     // STEP 5: GST credits from purchases
     let field1bGstCredits = 0
@@ -142,7 +151,7 @@ export class BasAgent extends BaseAgent {
         .neq('status', 'disputed')
 
       g11NoncapitalPurchases = (invoices ?? []).reduce((s, i) => s + Number(i.total ?? 0), 0)
-      field1bGstCredits = g11NoncapitalPurchases / 11
+      field1bGstCredits = g11NoncapitalPurchases * gstRate / (1 + gstRate)
     } catch { /* supplier_invoices may not exist */ }
 
     // STEP 6: Net GST
@@ -173,15 +182,15 @@ export class BasAgent extends BaseAgent {
       }
     }
 
-    // Approximate withholding: ~19% for sub-$87k annual workers
-    const w2AmountsWithheld = w1TotalSalaryWages * 0.19
+    // Approximate withholding from config (default 19% for sub-$87k annual workers)
+    const w2AmountsWithheld = w1TotalSalaryWages * paygRate
 
-    // STEP 8: Super obligations (11.5% of ordinary time earnings)
+    // STEP 8: Super obligations (rate from config, default 11.5% — owner must confirm for current FY)
     const quarterLabel = q
     const superDueDate = new Date(dueDate.getTime() + 28 * 86400000)
 
     for (const [staffId, staff] of Object.entries(staffEarnings)) {
-      const superOwed = staff.earnings * 0.115
+      const superOwed = staff.earnings * superRate
       await supabaseAdmin
         .from('super_obligations')
         .upsert({
@@ -192,7 +201,7 @@ export class BasAgent extends BaseAgent {
           period_start: period_start.toISOString().slice(0, 10),
           period_end: period_end.toISOString().slice(0, 10),
           ordinary_time_earnings: Math.round(staff.earnings * 100) / 100,
-          super_rate_pct: 11.5,
+          super_rate_pct: superRatePct,
           super_amount_owed: Math.round(superOwed * 100) / 100,
           payment_due_date: superDueDate.toISOString().slice(0, 10),
           status: 'unpaid',
@@ -266,6 +275,6 @@ export class BasAgent extends BaseAgent {
         handover_generated_at: handoverSummary ? new Date().toISOString() : null,
       }, { onConflict: 'business_id,period_start' })
 
-    return { totalPayable, dueDate, quarter: q }
+    return { totalPayable, dueDate, quarter: q, superRatePct }
   }
 }

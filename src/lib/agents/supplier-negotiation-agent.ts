@@ -10,8 +10,7 @@ interface NegotiationBriefResponse {
   draft_email_subject: string
   draft_email_body: string
   draft_talking_points: string[]
-  annual_saving_if_successful: number
-  monthly_saving_if_successful: number
+  // Monetary fields are computed deterministically via PPV — not from AI
 }
 
 export class SupplierNegotiationAgent extends BaseAgent {
@@ -89,6 +88,7 @@ export class SupplierNegotiationAgent extends BaseAgent {
       for (const inv of invoices) invDateMap[inv.id] = inv.invoice_date
 
       const profiles: Array<Record<string, unknown>> = []
+      const productSpendBySupplier = new Map<string, Record<string, number>>()
 
       for (const [supplierName, sup] of Object.entries(supplierMap)) {
         try {
@@ -162,6 +162,8 @@ export class SupplierNegotiationAgent extends BaseAgent {
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
             .map(([name]) => name)
+
+          productSpendBySupplier.set(supplierName, productSpend)
 
           // Cross-supplier comparison for top product
           let vsCompetitorPct = 0
@@ -282,12 +284,28 @@ export class SupplierNegotiationAgent extends BaseAgent {
             negotiation_priority: profile.negotiation_priority,
           }
 
+          // PPV — purchase price variance: deterministic saving if we negotiate back to 12m-ago prices
+          const creepProds = (profile.price_creep_products as Array<{ product_name: string; creep_pct: number }>) ?? []
+          const productSpendMap = productSpendBySupplier.get(String(profile.supplier_name)) ?? {}
+          const annualSavingPPV = Math.round(
+            creepProds.reduce((sum, cp) => {
+              const spend = productSpendMap[cp.product_name] ?? 0
+              const savingRatio = (cp.creep_pct / 100) / (1 + cp.creep_pct / 100)
+              return sum + spend * savingRatio
+            }, 0)
+          )
+          // Fallback: if no per-product data, estimate from total spend × avg creep
+          const annualSavingIfSuccessful = annualSavingPPV > 0
+            ? annualSavingPPV
+            : Math.round(Number(profile.total_spend_12m) * (Number(profile.price_creep_pct) / 100) / (1 + Number(profile.price_creep_pct) / 100))
+          const monthlySavingIfSuccessful = Math.round(annualSavingIfSuccessful / 12)
+
           const brief = await this.claudeStructured<NegotiationBriefResponse>({
-            system: 'You are an expert procurement negotiator for Australian small businesses. Generate a complete supplier negotiation package. Respond with valid JSON only, no markdown.',
-            user: 'Generate a negotiation brief for this supplier context:\n' + JSON.stringify(context, null, 2) +
+            system: 'You are an expert procurement negotiator for Australian small businesses. Generate a supplier negotiation package. Monetary savings are already computed — focus on narrative, arguments, and email copy. Respond with valid JSON only, no markdown.',
+            user: 'Generate a negotiation brief for this supplier context:\n' + JSON.stringify({ ...context, ppv_annual_saving: annualSavingIfSuccessful }, null, 2) +
               '\n\nRespond with JSON matching this schema exactly:\n' +
-              '{"negotiation_goal":"string","leverage_arguments":[{"argument":"string","data_point":"string","strength":"strong|medium|weak"}],"expected_outcome":"string","success_probability":0.0,"draft_email_subject":"string","draft_email_body":"string","draft_talking_points":["string"],"annual_saving_if_successful":0,"monthly_saving_if_successful":0}',
-            maxTokens: 1500,
+              '{"negotiation_goal":"string","leverage_arguments":[{"argument":"string","data_point":"string","strength":"strong|medium|weak"}],"expected_outcome":"string","success_probability":0.0,"draft_email_subject":"string","draft_email_body":"string","draft_talking_points":["string"]}',
+            maxTokens: 1200,
             model: 'claude-sonnet-4-5-20250929',
             agent_key: 'supplier_negotiation',
             role: 'analysis',
@@ -300,8 +318,6 @@ export class SupplierNegotiationAgent extends BaseAgent {
             draft_email_subject: 'Price Review — ' + String(profile.supplier_name),
             draft_email_body: 'We would like to discuss our pricing arrangement.',
             draft_talking_points: ['Review price creep', 'Discuss contract terms'],
-            annual_saving_if_successful: 0,
-            monthly_saving_if_successful: 0,
           }
 
           const { data: profileRow } = await supabaseAdmin
@@ -326,8 +342,8 @@ export class SupplierNegotiationAgent extends BaseAgent {
               draft_email_subject: brief.draft_email_subject,
               draft_email_body: brief.draft_email_body,
               draft_talking_points: brief.draft_talking_points,
-              annual_saving_if_successful: brief.annual_saving_if_successful,
-              monthly_saving_if_successful: brief.monthly_saving_if_successful,
+              annual_saving_if_successful: annualSavingIfSuccessful,
+              monthly_saving_if_successful: monthlySavingIfSuccessful,
               status: 'pending',
             })
 
@@ -338,13 +354,14 @@ export class SupplierNegotiationAgent extends BaseAgent {
               action_type: 'negotiate_supplier',
               supplier_name: profile.supplier_name,
               negotiation_goal: brief.negotiation_goal,
-              annual_saving_if_successful: brief.annual_saving_if_successful,
+              annual_saving_if_successful: annualSavingIfSuccessful,
+              monthly_saving_if_successful: monthlySavingIfSuccessful,
               leverage_score: profile.leverage_score,
               priority: profile.negotiation_priority,
             },
             reasoning: brief.expected_outcome + ' — ' + brief.negotiation_goal,
             confidence_score: brief.success_probability,
-            projected_impact_cents: Math.round(Number(brief.annual_saving_if_successful) * 100),
+            projected_impact_cents: annualSavingIfSuccessful * 100,
             expires_at: ninetyDaysOut,
           })
         } catch (e) {
