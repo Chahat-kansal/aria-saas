@@ -65,8 +65,8 @@ Australian tone. No generic filler. Make captions specific to this business wher
   // Telemetry (best-effort, never blocks)
   try {
     await supabaseAdmin.from('aria_ai_calls').insert({
-      business_id, feature: 'reel_captions', model: 'claude-haiku-4-5-20251001',
-      success: true,
+      business_id, agent_key: 'reel_captions', model_id: 'claude-haiku-4-5-20251001',
+      provider: 'anthropic', role: 'caption_writer', success: true,
     })
   } catch { /* ignore */ }
 
