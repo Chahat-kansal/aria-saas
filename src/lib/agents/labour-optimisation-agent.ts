@@ -105,9 +105,9 @@ export class LabourOptimisationAgent extends BaseAgent {
         target_labour_pct?: number
         mode?: string
       }
-      const targetRevPerStaffHour = Number(cfg.target_revenue_per_staff_hour ?? 120)
       const minimumStaff = Number(cfg.minimum_staff ?? 1)
       const labourPctThreshold = Number(cfg.labour_pct_threshold ?? 38)
+      const targetLabourPct = Number(cfg.target_labour_pct ?? 30)
       const agentMode = String(cfg.mode ?? 'suggest')
 
       // STEP 1: Fetch business data
@@ -132,9 +132,37 @@ export class LabourOptimisationAgent extends BaseAgent {
         .eq('is_active', true)
 
       const staff: StaffMember[] = (staffRows ?? []) as StaffMember[]
-      const avgHourlyRate = staff.length > 0
-        ? staff.reduce((s, m) => s + Number(m.hourly_rate ?? 25), 0) / staff.length
-        : 25
+
+      // AU award rates from staff_pay_rates.hourly_rate_cents for accurate SPLH targeting
+      let blendedHourlyWage = 25.0
+      try {
+        const { data: payRates } = await supabaseAdmin
+          .from('staff_pay_rates')
+          .select('employee_id,hourly_rate_cents')
+          .eq('business_id', business_id)
+          .eq('is_active', true)
+        if (payRates && payRates.length > 0) {
+          // Build map: employee_id → hourly_rate_dollars
+          const payRateMap = new Map<string, number>(
+            payRates.map(r => [String(r.employee_id), Number(r.hourly_rate_cents ?? 0) / 100])
+          )
+          // Blended: average of mapped rates for active staff, fall back to staff.hourly_rate
+          const rates = staff.map(m => payRateMap.get(m.id) ?? Number(m.hourly_rate ?? 25))
+          blendedHourlyWage = rates.reduce((s, v) => s + v, 0) / Math.max(rates.length, 1)
+        } else {
+          blendedHourlyWage = staff.length > 0
+            ? staff.reduce((s, m) => s + Number(m.hourly_rate ?? 25), 0) / staff.length
+            : 25
+        }
+      } catch {
+        blendedHourlyWage = staff.length > 0
+          ? staff.reduce((s, m) => s + Number(m.hourly_rate ?? 25), 0) / staff.length
+          : 25
+      }
+      const avgHourlyRate = blendedHourlyWage
+      // SPLH target: required_staff = forecast_revenue × target_labour_pct / blended_hourly_wage
+      // (equivalent to setting targetRevPerStaffHour = blendedHourlyWage / target_labour_pct)
+      const splhDerivedRevPerStaffHour = blendedHourlyWage / (targetLabourPct / 100)
 
       // STEP 2: Weather forecast from Open-Meteo
       let hourlyWeatherCodes: number[] = []
@@ -222,7 +250,7 @@ export class LabourOptimisationAgent extends BaseAgent {
 
           const totalAdjPct = 1 + (weatherAdj + holidayAdj + eventAdj) / 100
           const adjustedRevenue = baseRevenue * Math.max(0, totalAdjPct)
-          const rawRequired = adjustedRevenue / targetRevPerStaffHour
+          const rawRequired = adjustedRevenue / splhDerivedRevPerStaffHour
           const requiredStaff = Math.max(minimumStaff, roundToHalf(rawRequired))
           const optimalCost = requiredStaff * avgHourlyRate
 

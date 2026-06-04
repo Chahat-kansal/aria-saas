@@ -2,6 +2,21 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { BaseAgent } from './base-agent'
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 
+// IQR outlier fence: flag values above Q3 + 1.5×IQR or z-score > 2.5
+function iqrFence(values: number[]): { lo: number; hi: number; mean: number; stdDev: number } {
+  if (values.length < 3) {
+    const mean = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : 0
+    return { lo: 0, hi: mean * 4, mean, stdDev: 0 }
+  }
+  const sorted = [...values].sort((a, b) => a - b)
+  const q1 = sorted[Math.floor(sorted.length * 0.25)]
+  const q3 = sorted[Math.floor(sorted.length * 0.75)]
+  const iqr = q3 - q1
+  const mean = values.reduce((s, v) => s + v, 0) / values.length
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(values.length - 1, 1)
+  return { lo: q1 - 1.5 * iqr, hi: q3 + 1.5 * iqr, mean, stdDev: Math.sqrt(variance) }
+}
+
 export class ReconciliationAgent extends BaseAgent {
   type: AgentType = 'reconciliation'
 
@@ -21,12 +36,39 @@ export class ReconciliationAgent extends BaseAgent {
       const reconDecisions = await this.dailyReconciliation(business_id, yesterday, dateStr)
       decisions.push(...reconDecisions)
 
-      // STEP 2: Supplier invoice matching
-      await this.matchSupplierInvoices(business_id)
+      // STEP 2: Supplier invoice matching — returns match-rate stats
+      const matchStats = await this.matchSupplierInvoices(business_id)
+      const matchRatePct = matchStats.total > 0
+        ? Math.round((matchStats.matched / matchStats.total) * 1000) / 10
+        : null
 
-      // STEP 3: Anomaly detection on business_expenses
-      const anomalyDecisions = await this.detectAnomalies(business_id)
+      // STEP 3: IQR/z-score anomaly detection on business_expenses
+      const { decisions: anomalyDecisions, totalAnomalyValue } = await this.detectAnomalies(business_id)
       decisions.push(...anomalyDecisions)
+
+      // Add reconciliation quality summary when there are match gaps or anomalies
+      const totalValueAtRisk = matchStats.unmatchedValue + totalAnomalyValue
+      if (totalValueAtRisk > 10 && matchStats.total > 0) {
+        decisions.push({
+          agent_type: 'reconciliation',
+          business_id,
+          decision_data: {
+            action_type: 'reconciliation_quality',
+            invoice_match_rate_pct: matchRatePct,
+            matched_invoices: matchStats.matched,
+            unmatched_invoices: matchStats.total - matchStats.matched,
+            unmatched_invoice_value: Math.round(matchStats.unmatchedValue * 100) / 100,
+            expense_anomaly_count: anomalyDecisions.length,
+            expense_anomaly_value: Math.round(totalAnomalyValue * 100) / 100,
+            total_value_at_risk: Math.round(totalValueAtRisk * 100) / 100,
+          },
+          reasoning: 'Invoice match rate: ' + (matchRatePct ?? 'N/A') + '%. Unmatched value: $' + matchStats.unmatchedValue.toFixed(0) + '. Expense anomalies: ' + anomalyDecisions.length + ' items totalling $' + totalAnomalyValue.toFixed(0) + ' above expected.',
+          confidence_score: 0.9,
+          projected_impact_cents: Math.round(totalValueAtRisk * 100),
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+          status: 'pending',
+        })
+      }
 
       // STEP 4: Monthly P&L — run on 1st of month for previous month
       const today = new Date()
@@ -152,8 +194,8 @@ export class ReconciliationAgent extends BaseAgent {
     return decisions
   }
 
-  private async matchSupplierInvoices(business_id: string): Promise<void> {
-    // Check if supplier_invoices table exists
+  private async matchSupplierInvoices(business_id: string): Promise<{ total: number; matched: number; unmatchedValue: number }> {
+    const stats = { total: 0, matched: 0, unmatchedValue: 0 }
     const { data: invoices, error } = await supabaseAdmin
       .from('supplier_invoices')
       .select('id,supplier_name,total_amount,invoice_date,status')
@@ -161,7 +203,9 @@ export class ReconciliationAgent extends BaseAgent {
       .eq('status', 'received')
       .is('reconciled_at', null)
       .limit(50)
-    if (error) return // table may not exist
+    if (error) return stats // table may not exist
+
+    stats.total = (invoices ?? []).length
 
     for (const invoice of invoices ?? []) {
       try {
@@ -179,11 +223,14 @@ export class ReconciliationAgent extends BaseAgent {
         const match = (matchingPOs ?? []).find(po => {
           const poTotal = Number(po.total_amount)
           const nameSimilar = String(po.supplier_name).toLowerCase().includes(String(invoice.supplier_name).toLowerCase().split(' ')[0])
-          const amountClose = Math.abs(poTotal - invTotal) / invTotal < 0.02
+          const amountClose = Math.abs(poTotal - invTotal) / Math.max(invTotal, 1) < 0.02
           return nameSimilar && amountClose
         })
 
-        if (!match) {
+        if (match) {
+          stats.matched++
+        } else {
+          stats.unmatchedValue += invTotal
           await supabaseAdmin.from('expense_anomalies').insert({
             business_id,
             source: 'supplier_invoice',
@@ -196,90 +243,91 @@ export class ReconciliationAgent extends BaseAgent {
         }
       } catch { /* per-invoice non-fatal */ }
     }
+    return stats
   }
 
-  private async detectAnomalies(business_id: string): Promise<AgentDecisionInput[]> {
+  private async detectAnomalies(business_id: string): Promise<{ decisions: AgentDecisionInput[]; totalAnomalyValue: number }> {
     const decisions: AgentDecisionInput[] = []
+    let totalAnomalyValue = 0
     const d90 = new Date(Date.now() - 90 * 86400000).toISOString()
     const d30 = new Date(Date.now() - 30 * 86400000).toISOString()
 
-    // Check business_expenses for anomalies
     const { data: expenses, error } = await supabaseAdmin
       .from('business_expenses')
       .select('id,label,amount,category,expense_date')
       .eq('business_id', business_id)
       .gte('expense_date', d90)
-    if (error) return decisions
+    if (error) return { decisions, totalAnomalyValue }
 
     const recent = (expenses ?? []).filter(e => String(e.expense_date) >= d30)
     const historical = (expenses ?? []).filter(e => String(e.expense_date) < d30)
 
-    // Group by category for avg
-    const catAvg: Record<string, number> = {}
-    const catCounts: Record<string, number> = {}
+    // Build per-category historical value arrays for IQR computation
+    const catValues: Record<string, number[]> = {}
     for (const exp of historical) {
       const cat = String(exp.category ?? 'other')
-      if (!catAvg[cat]) { catAvg[cat] = 0; catCounts[cat] = 0 }
-      catAvg[cat] += Number(exp.amount)
-      catCounts[cat]++
-    }
-    for (const cat of Object.keys(catAvg)) {
-      catAvg[cat] = catAvg[cat] / catCounts[cat]
+      if (!catValues[cat]) catValues[cat] = []
+      catValues[cat].push(Number(exp.amount))
     }
 
     for (const exp of recent) {
       const cat = String(exp.category ?? 'other')
-      const avg = catAvg[cat]
-      if (!avg || avg === 0) continue
+      const vals = catValues[cat]
+      if (!vals || vals.length === 0) continue
       const amount = Number(exp.amount)
-      const deviationPct = ((amount - avg) / avg) * 100
-      if (deviationPct > 100) { // 2x or more
-        // Check if already flagged
-        const { count } = await supabaseAdmin
-          .from('expense_anomalies')
-          .select('id', { count: 'exact', head: true })
-          .eq('business_id', business_id)
-          .eq('expense_description', String(exp.label) + ' $' + amount.toFixed(0))
-        if ((count ?? 0) > 0) continue
+      const fence = iqrFence(vals)
+      const zScore = fence.stdDev > 0 ? (amount - fence.mean) / fence.stdDev : 0
+      // Flag if above IQR upper fence OR z-score > 2.5
+      const isAnomaly = amount > fence.hi || zScore > 2.5
+      if (!isAnomaly) continue
+      const deviationPct = fence.mean > 0 ? ((amount - fence.mean) / fence.mean) * 100 : 0
 
-        const causes = await this.claudeStructured<string[]>({
-          system: 'Return a JSON array of 3 short possible causes for this expense anomaly.',
-          user: String(exp.label) + ' in category ' + cat + ' costs $' + amount.toFixed(0) + ' vs avg $' + avg.toFixed(0) + '. What are 3 possible causes?',
-          maxTokens: 150,
-          agent_key: 'reconciliation',
-          role: 'analysis',
+      const { count } = await supabaseAdmin
+        .from('expense_anomalies')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', business_id)
+        .eq('expense_description', String(exp.label) + ' $' + amount.toFixed(0))
+      if ((count ?? 0) > 0) continue
+
+      totalAnomalyValue += amount - fence.mean
+
+      const causes = await this.claudeStructured<string[]>({
+        system: 'Return a JSON array of 3 short possible causes for this expense anomaly.',
+        user: String(exp.label) + ' in category ' + cat + ' costs $' + amount.toFixed(0) + ' vs avg $' + fence.mean.toFixed(0) + ' (IQR fence $' + fence.hi.toFixed(0) + ', z=' + zScore.toFixed(1) + '). What are 3 possible causes?',
+        maxTokens: 150,
+        agent_key: 'reconciliation',
+        role: 'analysis',
+        business_id,
+      })
+
+      await supabaseAdmin.from('expense_anomalies').insert({
+        business_id,
+        source: 'manual',
+        expense_category: cat,
+        expense_description: String(exp.label) + ' $' + amount.toFixed(0),
+        amount,
+        expected_range_low: Math.max(0, fence.lo),
+        expected_range_high: fence.hi,
+        deviation_pct: Math.round(deviationPct),
+        possible_causes: causes ?? ['Seasonal variation', 'Price increase from supplier', 'One-off expense'],
+        status: 'open',
+      })
+
+      if (deviationPct > 100 || zScore > 2.5) {
+        decisions.push({
+          agent_type: 'reconciliation',
           business_id,
+          decision_data: { category: cat, amount, mean: fence.mean, iqr_hi: fence.hi, z_score: Math.round(zScore * 10) / 10, deviation_pct: Math.round(deviationPct) },
+          reasoning: String(exp.label) + ' is ' + Math.round(deviationPct) + '% above category average ($' + amount.toFixed(0) + ' vs $' + fence.mean.toFixed(0) + ' mean, z=' + zScore.toFixed(1) + '). IQR upper fence: $' + fence.hi.toFixed(0) + '.',
+          confidence_score: 0.85,
+          projected_impact_cents: Math.round(Math.max(0, amount - fence.mean) * 100),
+          expires_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+          status: 'pending',
         })
-
-        await supabaseAdmin.from('expense_anomalies').insert({
-          business_id,
-          source: 'manual',
-          expense_category: cat,
-          expense_description: String(exp.label) + ' $' + amount.toFixed(0),
-          amount,
-          expected_range_low: avg * 0.5,
-          expected_range_high: avg * 1.5,
-          deviation_pct: Math.round(deviationPct),
-          possible_causes: causes ?? ['Seasonal variation', 'Price increase from supplier', 'One-off expense'],
-          status: 'open',
-        })
-
-        if (deviationPct > 200) {
-          decisions.push({
-            agent_type: 'reconciliation',
-            business_id,
-            decision_data: { category: cat, amount, avg, deviation_pct: deviationPct },
-            reasoning: String(exp.label) + ' is ' + Math.round(deviationPct) + '% above the 2-month average ($' + amount.toFixed(0) + ' vs $' + avg.toFixed(0) + '). Requires review.',
-            confidence_score: 0.85,
-            projected_impact_cents: Math.round((amount - avg) * 100),
-            expires_at: new Date(Date.now() + 14 * 86400000).toISOString(),
-            status: 'pending',
-          })
-        }
       }
     }
 
-    return decisions
+    return { decisions, totalAnomalyValue }
   }
 
   async generateMonthlyPL(business_id: string, month: number, year: number): Promise<void> {
