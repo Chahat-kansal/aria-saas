@@ -109,13 +109,13 @@ export async function POST(req: NextRequest) {
     const d = await callHF('/v1/video/generate', genPayload)
     jobId = d.id ?? d.job_id ?? d.request_id
     if (!jobId) throw new Error('No job ID returned: ' + JSON.stringify(d).slice(0, 100))
-  } catch (e: any) {
+  } catch (e: unknown) {
     await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
-    return NextResponse.json({ error: e.message }, { status: 502 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Generation failed' }, { status: 502 })
   }
 
   await supabaseAdmin.from('reel_studio_sessions').update({ higgsfield_job_id: jobId }).eq('id', session?.id)
-  if (influencer_id) await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }).catch(() => {})
+  if (influencer_id) { try { await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }) } catch { /* non-fatal */ } }
 
   return NextResponse.json({
     job_id: jobId,

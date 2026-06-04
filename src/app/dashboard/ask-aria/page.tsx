@@ -351,14 +351,14 @@ export default function AskAriaPage() {
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
-    if (q && messages.length === 0) {
-      // Auto-send the briefing query from daily brief
-      const timer = setTimeout(() => {
-        send(decodeURIComponent(q))
-      }, 1200)
-      return () => clearTimeout(timer)
-    }
-  }, [messages.length, send])
+    if (!q) return
+    const t = setTimeout(() => {
+      const fn = (window as unknown as Record<string, unknown>).ariaSendPrompt as ((p: string) => void) | undefined
+      if (fn) fn(q)
+    }, 300)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const loadHistory = useCallback(async () => {
     try {

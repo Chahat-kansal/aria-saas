@@ -24,25 +24,25 @@ export async function GET(req: NextRequest) {
   // Gather POS intelligence in parallel
   const [topProducts, slowDays, lowStock, newProducts, recentReviews, recentSales] = await Promise.all([
     // Top selling products last 30 days
-    supabaseAdmin.from('pos_sale_items').select('quantity, pos_products(name, price, category)')
+    Promise.resolve(supabaseAdmin.from('pos_sale_items').select('quantity, pos_products(name, price, category)')
       .eq('pos_sales.business_id', business_id)
       .gte('pos_sales.created_at', new Date(Date.now() - 30 * 86400000).toISOString())
-      .limit(100).then(r => {
+      .limit(100)).then(r => {
         const counts: Record<string, { name: string; price: number; qty: number }> = {}
         for (const item of r.data ?? []) {
-          const p = (item as any).pos_products
+          const p = (item as Record<string, unknown>).pos_products as { name: string; price: number } | null
           if (!p) continue
           if (!counts[p.name]) counts[p.name] = { name: p.name, price: p.price, qty: 0 }
-          counts[p.name].qty += item.quantity ?? 1
+          counts[p.name].qty += (item as Record<string, unknown>).quantity as number ?? 1
         }
         return Object.values(counts).sort((a, b) => b.qty - a.qty).slice(0, 5)
-      }).catch(() => []),
+      }).catch(() => [] as { name: string; price: number; qty: number }[]),
 
     // Slowest days of week
-    supabaseAdmin.rpc('get_slow_days', { p_business_id: business_id }).then(r => r.data ?? []).catch(async () => {
+    Promise.resolve(supabaseAdmin.rpc('get_slow_days', { p_business_id: business_id })).then(r => r.data ?? []).catch(async () => {
       const { data } = await supabaseAdmin.from('pos_sales')
         .select('created_at').eq('business_id', business_id).neq('status', 'voided').limit(200)
-      if (!data?.length) return []
+      if (!data?.length) return [] as string[]
       const days: Record<string, number> = {}
       const names = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
       for (const s of data) { const d = names[new Date(s.created_at).getDay()]; days[d] = (days[d] ?? 0) + 1 }
@@ -50,28 +50,27 @@ export async function GET(req: NextRequest) {
     }),
 
     // Low stock products
-    supabaseAdmin.from('pos_products')
+    Promise.resolve(supabaseAdmin.from('pos_products')
       .select('name, stock_quantity, price').eq('business_id', business_id)
       .eq('is_active', true).not('stock_quantity', 'is', null).lt('stock_quantity', 10)
-      .order('stock_quantity').limit(3).then(r => r.data ?? []).catch(() => []),
+      .order('stock_quantity').limit(3)).then(r => r.data ?? []).catch(() => [] as { name: string; stock_quantity: number; price: number }[]),
 
     // New products added last 14 days
-    supabaseAdmin.from('pos_products')
+    Promise.resolve(supabaseAdmin.from('pos_products')
       .select('name, price, created_at').eq('business_id', business_id).eq('is_active', true)
       .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
-      .order('created_at', { ascending: false }).limit(4).then(r => r.data ?? []).catch(() => []),
+      .order('created_at', { ascending: false }).limit(4)).then(r => r.data ?? []).catch(() => [] as { name: string; price: number; created_at: string }[]),
 
     // Recent positive reviews
-    supabaseAdmin.from('reviews').select('rating, review_text, reviewer_name')
+    Promise.resolve(supabaseAdmin.from('reviews').select('rating, review_text, reviewer_name')
       .eq('business_id', business_id).gte('rating', 4)
-      .order('created_at', { ascending: false }).limit(3)
-      .then(r => r.data ?? []).catch(() => []),
+      .order('created_at', { ascending: false }).limit(3))
+      .then(r => r.data ?? []).catch(() => [] as { rating: number; review_text: string; reviewer_name: string }[]),
 
     // Revenue last 7 days vs prior 7 days
-    supabaseAdmin.from('pos_sales').select('total_amount, created_at')
+    Promise.resolve(supabaseAdmin.from('pos_sales').select('total_amount, created_at')
       .eq('business_id', business_id).neq('status', 'voided')
-      .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
-      .then(r => {
+      .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())).then(r => {
         const sales = r.data ?? []
         const cutoff = Date.now() - 7 * 86400000
         const recent = sales.filter(s => new Date(s.created_at).getTime() > cutoff)
@@ -123,7 +122,7 @@ Respond ONLY with a JSON array of exactly 5 objects. No other text. Each object:
     messages: [{ role: 'user', content: prompt }],
   })
 
-  const text = (response.content[0] as any).text ?? ''
+  const text = (response.content[0] as { type: string; text: string }).text ?? ''
   let ideas = []
   try {
     const clean = text.replace(/```json|```/g, '').trim()

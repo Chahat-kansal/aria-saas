@@ -255,11 +255,11 @@ export default function POSHomePage() {
         </div>
 
         {/* New Sale button */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+        <div style={{ marginBottom: 20 }}>
           <button
             onClick={() => router.push('/pos/terminal')}
             style={{
-              width: '100%', maxWidth: 400, height: 72, borderRadius: 20,
+              width: '100%', height: 72, borderRadius: 20,
               background: '#006AFF',
               boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 8px 32px rgba(139,92,246,0.4)',
               border: 'none', cursor: 'pointer', color: '#fff',
