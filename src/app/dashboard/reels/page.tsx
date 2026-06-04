@@ -294,7 +294,7 @@ export default function ReelStudioPage() {
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
       try {
-        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json()).then(r => r.json()).then(r => r.json())
+        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
         if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
         setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
         pollStatus(d.job_id, d.session_id, userToken)
