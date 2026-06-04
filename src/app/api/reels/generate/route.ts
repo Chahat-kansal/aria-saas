@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
   if (referenceImage) falBody.image_url = referenceImage
 
   try {
-    const res = await fetch(`https://queue.fal.run/${model}`, {
+    const webhookUrl = 'https://www.ariaos.site/api/reels/fal-webhook'
+    const res = await fetch(`https://queue.fal.run/${model}?fal_webhook=${encodeURIComponent(webhookUrl)}`, {
       method: 'POST',
       headers: { 'Authorization': `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(falBody),
