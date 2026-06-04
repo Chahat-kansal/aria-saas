@@ -106,7 +106,16 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
     speedSegments: [],
   })
 
-  const [tab, setTab] = useState<'trim'|'filter'|'text'|'export'>('trim')
+  const [tab, setTab] = useState<'trim'|'filter'|'text'|'ai'|'export'>('trim')
+  const [aiInstruction, setAiInstruction] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiMessage, setAiMessage] = useState<string|null>(null)
+  const [aiPrev, setAiPrev] = useState<EditSpec|null>(null)
+  const [v2vConfirm, setV2vConfirm] = useState<{op:'restyle'|'bg-remove'; cost: number}|null>(null)
+  const [v2vLoading, setV2vLoading] = useState(false)
+  const [v2vJobId, setV2vJobId] = useState<string|null>(null)
+  const [v2vStatus, setV2vStatus] = useState<'idle'|'processing'|'done'|'error'>('idle')
+  const v2vPollRef = useRef<ReturnType<typeof setTimeout>|null>(null)
   const [renderState, setRenderState] = useState<'idle'|'submitting'|'rendering'|'done'|'error'>('idle')
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderUrl, setRenderUrl] = useState<string|null>(null)
@@ -248,6 +257,104 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
   }
 
   useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current) }, [])
+  useEffect(() => () => { if (v2vPollRef.current) clearTimeout(v2vPollRef.current) }, [])
+
+  // ── AI edit ─────────────────────────────────────────────────────────────────
+  async function runAiEdit() {
+    if (!aiInstruction.trim() || aiLoading) return
+    setAiLoading(true)
+    setAiMessage(null)
+    setAiPrev(spec)
+    try {
+      const meta = { durationFrames: spec.trimEndFrame, fps: spec.outputFps }
+      const res = await fetch('/api/reels/ai-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId, instruction: aiInstruction, current_spec: spec, video_meta: meta }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Edit failed')
+      // V2V intent detected — open cost confirm modal
+      if (data.v2v_required) {
+        setAiPrev(null)
+        setAiMessage(data.summary)
+        setV2vConfirm({ op: data.op === 'bg-remove' ? 'bg-remove' : 'restyle', cost: data.op === 'bg-remove' ? 0.21 : 0.95 })
+        return
+      }
+      setSpec(data.spec)
+      setAiMessage(data.summary || 'Done.')
+      setAiInstruction('')
+      if (!data.changed) setAiPrev(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Edit failed'
+      setAiMessage('Error: ' + msg)
+      setAiPrev(null)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function openV2VConfirm(op: 'restyle' | 'bg-remove') {
+    setV2vConfirm({ op, cost: op === 'bg-remove' ? 0.21 : 0.95 })
+  }
+
+  async function doV2V() {
+    if (!v2vConfirm || v2vLoading) return
+    setV2vLoading(true)
+    try {
+      const res = await fetch('/api/reels/v2v', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_id: businessId,
+          session_id: sessionId,
+          video_url: spec.videoUrl,
+          op: v2vConfirm.op,
+          confirm: true,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'V2V failed')
+      setV2vConfirm(null)
+      if (data.output_url) {
+        // Synchronous result (bg-remove)
+        setSpec(s => ({ ...s, videoUrl: data.output_url }))
+        setV2vStatus('done')
+      } else if (data.job_id) {
+        // Async (restyle) — poll for completion
+        setV2vJobId(data.job_id)
+        setV2vStatus('processing')
+        pollV2V(data.job_id)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Transform failed'
+      setAiMessage('Error: ' + msg)
+      setV2vStatus('error')
+    } finally {
+      setV2vLoading(false)
+    }
+  }
+
+  function pollV2V(jobId: string) {
+    v2vPollRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/reels/v2v-status?job_id=' + jobId)
+        const data = await res.json()
+        if (data.status === 'done' && data.output_url) {
+          setSpec(s => ({ ...s, videoUrl: data.output_url }))
+          setV2vStatus('done')
+          setV2vJobId(null)
+        } else if (data.status === 'error') {
+          setV2vStatus('error')
+          setV2vJobId(null)
+        } else {
+          pollV2V(jobId)
+        }
+      } catch {
+        pollV2V(jobId)
+      }
+    }, 5000)
+  }
 
   // ── Caption suggestions ─────────────────────────────────────────────────────
   async function suggestCaptions() {
@@ -423,9 +530,9 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid ' + T.border, marginBottom: 16 }}>
-          {(['trim','filter','text','export'] as const).map(t => (
+          {(['trim','filter','text','ai','export'] as const).map(t => (
             <button key={t} style={tabStyle(tab === t)} onClick={() => setTab(t)}>
-              {t === 'trim' ? 'Trim & Speed' : t === 'filter' ? 'Filter' : t === 'text' ? 'Text' : 'Export'}
+              {t === 'trim' ? 'Trim & Speed' : t === 'filter' ? 'Filter' : t === 'text' ? 'Text' : t === 'ai' ? 'Ask Aria ✶' : 'Export'}
             </button>
           ))}
         </div>
@@ -737,6 +844,69 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── ASK ARIA TAB ─────────────────────────────────────────────────── */}
+        {tab === 'ai' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <div style={labelStyle}>Tell Aria what to change</div>
+              <textarea
+                value={aiInstruction}
+                onChange={e => setAiInstruction(e.target.value)}
+                rows={3}
+                placeholder="e.g. bold hook caption at the top, warm cinematic filter, speed up the slow middle section 2x, trim the dead first second"
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                disabled={aiLoading}
+              />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {['Bold hook caption', 'Warm cinematic look', 'Speed up middle 2x', 'Auto-captions', 'Cool filter', 'Trim dead intro'].map(chip => (
+                <button key={chip} style={chipStyle(false)}
+                  onClick={() => setAiInstruction(chip)}
+                  disabled={aiLoading}>
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <button
+              style={{ ...btnStyle('primary'), opacity: aiLoading || !aiInstruction.trim() ? 0.5 : 1 }}
+              disabled={aiLoading || !aiInstruction.trim()}
+              onClick={runAiEdit}>
+              {aiLoading ? 'Aria is editing…' : 'Apply edit ✶'}
+            </button>
+            {aiMessage && (
+              <div style={{ fontSize: 13, color: T.textSub, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span>{aiMessage}</span>
+                {aiPrev && (
+                  <button style={{ ...chipStyle(false), fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => { setSpec(aiPrev); setAiPrev(null); setAiMessage(null) }}>
+                    Undo
+                  </button>
+                )}
+              </div>
+            )}
+            {v2vStatus === 'processing' && v2vJobId && (
+              <div style={{ fontSize: 13, color: T.textSub }}>AI transform running… this takes 60–90 seconds.</div>
+            )}
+            {v2vStatus === 'done' && (
+              <div style={{ fontSize: 13, color: T.accent }}>Transform complete — video updated.</div>
+            )}
+            <div style={{ borderTop: '1px solid ' + T.border, paddingTop: 16 }}>
+              <div style={labelStyle}>Transform video (AI · uses credits)</div>
+              <div style={{ fontSize: 12, color: T.muted, marginBottom: 10 }}>
+                Re-generates the actual clip frames. Slower than instant edits above.
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button style={btnStyle('ghost')} onClick={() => openV2VConfirm('restyle')}>
+                  Restyle clip — ~$0.95
+                </button>
+                <button style={btnStyle('ghost')} onClick={() => openV2VConfirm('bg-remove')}>
+                  Remove background — ~$0.21
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
