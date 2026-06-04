@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
     .select('*', { count: 'exact', head: true })
     .eq('business_id', business_id)
     .gte('created_at', dayStart.toISOString())
-  if ((count ?? 0) >= 10)
-    return NextResponse.json({ error: 'Daily reel limit reached (10/day). Resets at midnight.' }, { status: 429 })
+  if ((count ?? 0) >= 25)
+    return NextResponse.json({ error: 'Daily reel limit reached (25/day). Resets at midnight.' }, { status: 429 })
 
   const dur = Math.min(Math.max(Math.round(duration_seconds), 3), 15)
   const credits = dur <= 10 ? 10 : 20
