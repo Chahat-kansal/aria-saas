@@ -597,7 +597,7 @@ export default function ReelStudioPage() {
               <div style={{ textAlign: 'center' }}>
                 <p style={{ fontSize: 12, color: T.accent, marginBottom: T.sp.md, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><CheckCircle2 size={14} />Reel ready — switch to Edit tab</p>
                 <div style={{ border: `2px solid ${T.borderAccent}`, borderRadius: T.r.xl, overflow: 'hidden', width: 220 }}>
-                  <video src={latestVideo} controls autoPlay loop playsInline style={{ width: '100%', display: 'block', filter: selectedFilter.css }} />
+                  <video src={latestVideo} controls loop playsInline style={{ width: '100%', display: 'block', filter: selectedFilter.css }} />
                 </div>
                 <div style={{ display: 'flex', gap: T.sp.sm, marginTop: T.sp.lg, justifyContent: 'center' }}>
                   <button onClick={() => setTab('edit')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 700, background: T.accent, color: '#0f1117', minHeight: 40 }}><Edit3 size={13} />Edit</button>
@@ -730,7 +730,7 @@ export default function ReelStudioPage() {
                 <p style={{ fontSize: 11, color: T.textDim, marginBottom: T.sp.md, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Eye size={12} />Live preview with edits applied</p>
                 <div style={{ position: 'relative', width: 220, margin: '0 auto' }}>
                   <div style={{ border: `2px solid ${T.border}`, borderRadius: T.r.xl, overflow: 'hidden' }}>
-                    <video ref={videoRef} src={latestVideo} controls autoPlay loop playsInline style={{ width: '100%', display: 'block', filter: selectedFilter.css }} />
+                    <video ref={videoRef} src={latestVideo} controls loop playsInline style={{ width: '100%', display: 'block', filter: selectedFilter.css }} />
                   </div>
                   {captionStyle !== 'none' && captionText && (
                     <div style={{ position: 'absolute', bottom: 40, left: 0, right: 0, textAlign: 'center', fontSize: captionStyle === 'bold' ? 14 : 11, fontWeight: captionStyle === 'bold' ? 900 : 600, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.9)', padding: '4px 8px', background: captionStyle === 'karaoke' ? 'rgba(0,0,0,0.7)' : 'transparent', textTransform: captionStyle === 'bold' ? 'uppercase' : 'none' }}>
@@ -759,7 +759,7 @@ export default function ReelStudioPage() {
               {sessions.map((s) => (
                 <article key={s.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r.lg, overflow: 'hidden' }}>
                   {s.video_url
-                    ? <video src={s.video_url} muted loop playsInline style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} onMouseEnter={(e) => (e.target as HTMLVideoElement).play()} onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }} />
+                    ? <video src={s.video_url} muted loop playsInline style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} onMouseEnter={(e) => { const v = e.target as HTMLVideoElement; v.play().catch(() => {}) }} onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }} />
                     : <div style={{ aspectRatio: '9/16', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {s.status === 'processing' ? <Loader2 size={24} color={T.warn} style={{ animation: 'spin 0.8s linear infinite' }} /> : s.status === 'failed' ? <AlertCircle size={24} color={T.danger} /> : <Film size={24} color={T.textFaint} />}
                       </div>
