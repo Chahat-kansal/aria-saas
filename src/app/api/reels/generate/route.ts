@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
 
     await supabaseAdmin.from('reel_studio_sessions').update({
       higgsfield_job_id: request_id,
+      fal_model: model,
     }).eq('id', session?.id)
 
     return NextResponse.json({
