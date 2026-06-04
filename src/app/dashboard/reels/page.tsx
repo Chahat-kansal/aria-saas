@@ -896,6 +896,15 @@ export default function ReelStudioPage() {
                       </div>
                     )}
                     {s.video_url && (
+                      <button
+                        onClick={() => { setLatestVideo(s.video_url!); setLatestSessionId(s.id); setUploadedVideoUrl(null); setTab('editor') }}
+                        aria-label="Edit this reel"
+                        style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '6px 0', borderRadius: T.r.sm, border: '1px solid ' + T.borderAccent, background: T.accentBg, color: T.accent, fontSize: 10, fontWeight: 700, fontFamily: T.font, cursor: 'pointer', minHeight: 30, marginBottom: 4 }}
+                      >
+                        <Edit3 size={11} />Edit in Studio
+                      </button>
+                    )}
+                    {s.video_url && (
                       <div style={{ display: 'flex', gap: 4 }}>
                         <a href={s.video_url} download style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, background: T.accentBg, color: T.accent, textAlign: 'center', fontSize: 10, fontWeight: 700, textDecoration: 'none', minHeight: 30 }}><Download size={10} />Download</a>
                         <button
