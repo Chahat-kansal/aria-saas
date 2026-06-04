@@ -282,10 +282,10 @@ export default function ReelStudioPage() {
     setGenerating(true); setLatestVideo(null); setGenProgress(5); setClipProgress(0)
     const clips = clipsNeeded(duration); setTotalClips(clips)
     const clipSecs = clipDuration(duration)
-    const base = { business_id: bid, influencer_id: selectedInf?.id ?? null, soul_id: selectedInf?.soul_status === 'ready' ? selectedInf.soul_id : null, higgsfield_job_id: selectedInf?.higgsfield_job_id ?? null, scene_image_url: sceneUrl ?? null, style, resolution, genre }
+    const base = { business_id: bid, influencer_id: selectedInf?.id ?? null, image_url: selectedInf?.image_url ?? null, scene_image_url: sceneUrl ?? null, style, resolution, genre }
 
     if (clips === 1) {
-      setGenMsg('Generating ' + duration + 's reel…')
+      setGenMsg('Reel submitted — generating in background (~3–5 min). You can navigate away and come back.')
       try {
         const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
         if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
@@ -549,7 +549,7 @@ export default function ReelStudioPage() {
               <div style={{ textAlign: 'center' }}>
                 <Loader2 size={48} color={T.accent} style={{ animation: 'spin 0.8s linear infinite', marginBottom: T.sp.lg }} />
                 <p style={{ fontSize: 14, color: T.textMid, margin: 0 }}>Generating reel…</p>
-                <p style={{ fontSize: 11, color: T.textDim, margin: `${T.sp.sm}px 0 0` }}>~60–90 seconds · Higgsfield AI</p>
+                <p style={{ fontSize: 11, color: T.textDim, margin: `${T.sp.sm}px 0 0` }}>~3–5 minutes · AI is working on your reel</p>
               </div>
             ) : (
               <div style={{ textAlign: 'center', color: T.textFaint }}>
