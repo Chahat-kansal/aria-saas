@@ -352,17 +352,13 @@ export default function AskAriaPage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
     if (q && messages.length === 0) {
-      setInput(q)
-      // Auto-send after a short delay to let the page fully mount
+      // Auto-send the briefing query from daily brief
       const timer = setTimeout(() => {
-        const sendBtn = document.querySelector('[data-aria-send]') as HTMLButtonElement | null
-        if (sendBtn && !sendBtn.disabled) {
-          sendBtn.click()
-        }
-      }, 800)
+        send(decodeURIComponent(q))
+      }, 1200)
       return () => clearTimeout(timer)
     }
-  }, [messages.length])
+  }, [messages.length, send])
 
   const loadHistory = useCallback(async () => {
     try {
