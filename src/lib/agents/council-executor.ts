@@ -19,7 +19,7 @@ async function logAutopilotAction(
       business_id: proposal.business_id,
       agent_type: proposal.agent_type,
       proposal_id: proposal.id,
-      status: success ? 'executed' : 'failed',
+      status: success ? 'executed' : 'rejected',
       outcome_data: outcome,
       executed_at: new Date().toISOString(),
     })

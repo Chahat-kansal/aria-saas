@@ -336,8 +336,8 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
     await supabaseAdmin.from('aria_autopilot_actions').insert({
       action_type: 'wholesale_invoice_generated',
       business_id: order.business_id,
-      status: 'completed',
-      payload: { order_id: params.id, invoice_id: (inv as { id: string }).id },
+      status: 'executed',
+      action_data: { order_id: params.id, invoice_id: (inv as { id: string }).id },
     })
   } catch { /* non-fatal */ }
 

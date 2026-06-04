@@ -247,7 +247,7 @@ Do NOT include the JSON block unless you have all details confirmed.`
       await supabaseAdmin.from('aria_autopilot_actions').insert({
         business_id: businessId,
         category: 'booking',
-        priority: 'high',
+        priority: 'important',
         title: 'New website booking: ' + apptData.visitor_name,
         description: apptData.booking_date + ' at ' + apptData.booking_time + (apptData.service ? ' — ' + apptData.service : ''),
         action_data: { suggested_action: 'Confirm appointment with customer' },

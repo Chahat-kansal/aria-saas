@@ -72,10 +72,15 @@ export async function ariaObserve(obs: AriaObservation): Promise<void> {
     if (!insight.title || !insight.description) return
 
     const supabase = getSupabase()
+    const rawPriority = String(insight.priority ?? '')
+    const mappedPriority: 'urgent' | 'important' | 'routine' =
+      rawPriority === 'urgent' || rawPriority === 'critical' || rawPriority === 'high' ? 'urgent'
+      : rawPriority === 'medium' || rawPriority === 'important' ? 'important'
+      : 'routine'
     await supabase.from('aria_autopilot_actions').insert({
       business_id: obs.business_id,
       category: obs.category,
-      priority: insight.priority ?? 'medium',
+      priority: mappedPriority,
       title: insight.title,
       description: insight.description,
       action_data: { ...obs.data, suggested_action: insight.suggested_action ?? null },

@@ -162,8 +162,8 @@ async function _POST(req: Request) {
     await supabaseAdmin.from('aria_autopilot_actions').insert({
       business_id: bid,
       action_type: 'xero_sync',
-      status: 'completed',
-      metadata: { preview_id, xero_journal_id: journalId, date: preview.date },
+      status: 'executed',
+      action_data: { preview_id, xero_journal_id: journalId, date: preview.date },
     })
   } catch { /* non-fatal */ }
 

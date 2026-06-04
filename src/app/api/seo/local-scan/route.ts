@@ -157,8 +157,8 @@ Return JSON only:
   if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 })
 
   waitUntil((async () => { await supabaseAdmin.from('aria_autopilot_actions').insert({
-    business_id, action_type: 'seo_local_scan', status: 'completed',
-    payload: { score, nap_consistent: napConsistent, has_schema: hasSchema, issues_count: issues.length },
+    business_id, action_type: 'seo_local_scan', status: 'executed',
+    action_data: { score, nap_consistent: napConsistent, has_schema: hasSchema, issues_count: issues.length },
   }) })())
 
   return NextResponse.json({

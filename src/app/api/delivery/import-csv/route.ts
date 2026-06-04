@@ -179,7 +179,7 @@ async function _POST(req: Request) {
   }
 
   if (imported > 0) {
-    waitUntil((async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, action_type: 'delivery_csv_imported', summary: `Imported ${imported} ${platform} orders from CSV. Commission data now available in Aria briefings.`, confidence: 1.0, status: 'completed' }) } catch {} })())
+    waitUntil((async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, action_type: 'delivery_csv_imported', summary: `Imported ${imported} ${platform} orders from CSV. Commission data now available in Aria briefings.`, confidence: 1.0, status: 'executed' }) } catch {} })())
   }
 
   return NextResponse.json({ imported, skipped, platform, errors: errors.slice(0, 10) })

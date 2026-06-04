@@ -172,8 +172,8 @@ async function _PATCH(req: Request) {
   }
 
   waitUntil((async () => { await supabaseAdmin.from('aria_autopilot_actions').insert({
-    business_id, action_type: 'seo_keyword_scan', status: 'completed',
-    payload: { keywords_scanned: results.length, results },
+    business_id, action_type: 'seo_keyword_scan', status: 'executed',
+    action_data: { keywords_scanned: results.length, results },
   }) })())
 
   return NextResponse.json({ ok: true, updated_count: results.length, results })

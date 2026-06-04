@@ -323,7 +323,7 @@ export class ReputationDefenceAgent extends BaseAgent {
             agent_type: 'reputation_defence',
             action_type: 'review_request',
             description: 'Review request sent to ' + String(customer.name) + ' via ' + channel,
-            status: 'completed',
+            status: 'executed',
           }).then(() => {}, () => {})
         }
       } catch { /* per-customer non-fatal */ }

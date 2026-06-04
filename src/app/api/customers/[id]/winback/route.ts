@@ -118,7 +118,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
     description: message,
     action_data: { customer_id: params.id, channel, sms_sent: smsSent, email_sent: emailSent },
     estimated_impact: 'Re-engage ' + customer.name,
-    status: (smsSent || emailSent) ? 'completed' : 'pending',
+    status: (smsSent || emailSent) ? 'executed' : 'pending',
   }).then(() => null, () => null)
 
   return NextResponse.json({ ok: smsSent || emailSent || !twilioOk, message, sms_sent: smsSent, email_sent: emailSent, channel })
