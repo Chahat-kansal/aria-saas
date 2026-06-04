@@ -249,11 +249,20 @@ export default function ReelStudioPage() {
     return () => clearTimeout(t)
   }, [tab, sessions, bid])
 
-  async function loadBiz(uid: string) {
+  async function loadBiz(uid: string, retry = 0) {
     try {
       const storedId = typeof window !== 'undefined' ? localStorage.getItem('aria_active_business_id') : null
-      const { data: bizList } = await supabase.from('businesses').select('id').eq('user_id', uid).eq('is_active', true).order('created_at', { ascending: false }).limit(10)
-      if (!bizList?.length) { setPageError('No active business found'); return }
+      const { data: bizList, error: bizErr } = await supabase.from('businesses').select('id').eq('user_id', uid).order('created_at', { ascending: false }).limit(10)
+      if (bizErr || !bizList?.length) {
+        // Session may not be hydrated yet — retry up to 3 times
+        if (retry < 3) {
+          await new Promise(r => setTimeout(r, 800))
+          return loadBiz(uid, retry + 1)
+        }
+        setPageError('No active business found. Please go to Dashboard first.')
+        setLoading(false)
+        return
+      }
       const biz = storedId ? (bizList.find((b) => b.id === storedId) ?? bizList[0]) : bizList[0]
       setBid(biz.id)
       const [infRes, sesRes] = await Promise.all([
