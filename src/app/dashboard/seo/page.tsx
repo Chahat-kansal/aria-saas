@@ -1146,6 +1146,112 @@ function RecommendationsTab({ businessId }: { businessId: string }) {
   )
 }
 
+// ── Command-centre Pillars strip (Addendum C — OTTO-style overview) ────────
+
+interface PillarSummary {
+  technicalScore: number   // from latest audit health_score
+  localScore: number       // from seo_local.gbp_completeness or aeo overall score
+  contentScore: number     // derived: penalise for open content issues
+  authorityScore: number   // from reviews avg × 20 capped 0–100
+  fixesThisWeek: number    // seo_issues state=verified in last 7d
+  openCritical: number     // open critical issues count
+}
+
+function SmallPillarBar({ label, score, onClick }: { label: string; score: number; onClick?: () => void }) {
+  const col = score >= 70 ? '#7FB897' : score >= 45 ? '#f59e0b' : '#ef4444'
+  return (
+    <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: onClick ? 'pointer' : 'default', minWidth: 72 }}>
+      <div style={{ position: 'relative', width: 44, height: 44 }}>
+        <svg width={44} height={44} viewBox="0 0 44 44">
+          <circle cx={22} cy={22} r={18} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={7} />
+          <circle cx={22} cy={22} r={18} fill="none" stroke={col} strokeWidth={7}
+            strokeDasharray={(score / 100) * 2 * Math.PI * 18 + ' ' + (2 * Math.PI * 18)}
+            strokeLinecap="round" transform="rotate(-90 22 22)" />
+        </svg>
+        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: col }}>{score}</span>
+      </div>
+      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center' }}>{label}</span>
+    </div>
+  )
+}
+
+function SeoPillarsStrip({ businessId, onTabChange }: { businessId: string; onTabChange: (t: string) => void }) {
+  const [s, setS] = useState<PillarSummary | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const [auditR, localR, issuesR, fixedR] = await Promise.all([
+        supabase.from('seo_audits').select('health_score,critical_count,warning_count').eq('business_id', businessId).eq('status', 'complete').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('seo_local').select('gbp_completeness,review_avg').eq('business_id', businessId).maybeSingle(),
+        supabase.from('seo_issues').select('severity,issue_type', { count: 'exact' }).eq('business_id', businessId).eq('state', 'open').in('severity', ['critical']),
+        supabase.from('seo_issues').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('state', 'verified').gte('verified_at', new Date(Date.now() - 7 * 86400000).toISOString()),
+      ])
+      const health = auditR.data?.health_score ?? 0
+      const local = localR.data?.gbp_completeness ?? 0
+      // Content score: start at health, penalise for content-type issues
+      const contentIssues = (issuesR.data ?? []).filter((i: { issue_type: string }) => ['thin_content','missing_meta_description','missing_title','missing_h1','missing_alt_text'].includes(i.issue_type)).length
+      const contentScore = Math.max(0, health - contentIssues * 8)
+      // Authority: review_avg (1–5) → multiply by 20 → 0–100
+      const authorityScore = Math.min(100, Math.round((localR.data?.review_avg ?? 0) * 20))
+      setS({
+        technicalScore: health,
+        localScore: local,
+        contentScore,
+        authorityScore,
+        fixesThisWeek: fixedR.count ?? 0,
+        openCritical: auditR.data?.critical_count ?? (issuesR.data?.length ?? 0),
+      })
+    }
+    load()
+  }, [businessId])
+
+  if (!s) return null
+
+  const overall = Math.round((s.technicalScore * 0.30 + s.localScore * 0.25 + s.contentScore * 0.25 + s.authorityScore * 0.20))
+  const overallCol = overall >= 70 ? '#7FB897' : overall >= 45 ? '#f59e0b' : '#ef4444'
+  const r = 42; const c = 2 * Math.PI * r
+
+  return (
+    <div style={{ marginBottom: 20, padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(127,184,151,0.15)', display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Grader gauge */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginRight: 8 }}>
+        <svg width={96} height={96} viewBox="0 0 96 96">
+          <circle cx={48} cy={48} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={9} />
+          <circle cx={48} cy={48} r={r} fill="none" stroke={overallCol} strokeWidth={9}
+            strokeDasharray={(overall / 100) * c + ' ' + c} strokeLinecap="round" transform="rotate(-90 48 48)" />
+          <text x={48} y={46} textAnchor="middle" fill="#fff" fontSize={22} fontWeight={800}>{overall}</text>
+          <text x={48} y={60} textAnchor="middle" fill={overallCol} fontSize={9} fontWeight={600}>GRADER</text>
+        </svg>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aria SEO</span>
+      </div>
+
+      {/* Pillar circles */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <SmallPillarBar label="Technical" score={s.technicalScore} onClick={() => onTabChange('health')} />
+        <SmallPillarBar label="Local" score={s.localScore} onClick={() => onTabChange('local')} />
+        <SmallPillarBar label="Content" score={s.contentScore} onClick={() => onTabChange('issues')} />
+        <SmallPillarBar label="Authority" score={s.authorityScore} onClick={() => onTabChange('local')} />
+      </div>
+
+      {/* Fixes this week */}
+      <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+        {s.fixesThisWeek > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'rgba(127,184,151,0.1)', borderRadius: 10, border: '1px solid rgba(127,184,151,0.2)' }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: '#7FB897', lineHeight: 1 }}>{s.fixesThisWeek}</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>fixes<br />this week</span>
+          </div>
+        )}
+        {s.openCritical > 0 && (
+          <div onClick={() => onTabChange('issues')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, color: '#fca5a5' }}>{s.openCritical} critical open</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 type TabId = 'health' | 'issues' | 'optimizer' | 'keywords' | 'local' | 'competitors' | 'recommendations' | 'technical' | 'fix_history'
@@ -1290,6 +1396,7 @@ export default function SeoPage() {
         {/* Only show tabs when connected */}
         {isConnected && (
           <>
+            <SeoPillarsStrip businessId={business.id} onTabChange={(t) => setTab(t as TabId)} />
             <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               {TABS.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
