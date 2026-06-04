@@ -47,7 +47,7 @@ export class ReorderAgent extends BaseAgent {
       // Fetch active products with stock tracking
       const { data: products } = await this.supabase.from('pos_products')
         .select('id,name,sku,case_quantity,stock_quantity,cost_price,supplier_id')
-        .eq('business_id', business_id).eq('is_active', true).eq('track_stock', true).limit(500);
+        .eq('business_id', business_id).eq('is_active', true).limit(500);
 
       if (!products?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
@@ -199,6 +199,9 @@ export class ReorderAgent extends BaseAgent {
           system: 'You are Aria, generating purchase order reasoning for an Australian bottle shop owner. Be specific with numbers. Max 2 sentences. Australian English.',
           user: `Purchase order for ${po.supplier.name}:\n${topLines}\nTotal: A$${totalCost.toFixed(2)}. Lines ordered by urgency. Explain why these items need reordering now.`,
           maxTokens: 128,
+          agent_key: 'reorder',
+          role: 'reorder',
+          business_id,
         });
 
         // Save draft PO

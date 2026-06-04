@@ -26,6 +26,25 @@ export class PricingAgent extends BaseAgent {
     if (!settings.enabled) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
     try {
+      // Fetch products and cooldown data up-front (needed by both competitor + fallback paths)
+      const { data: products } = await this.supabase.from('pos_products')
+        .select('id,name,price,cost_price,is_active')
+        .eq('business_id', business_id).eq('is_active', true).limit(500);
+
+      const productIds = (products ?? []).map(p => p.id);
+
+      const cooldownCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentApproved } = await this.supabase
+        .from('agent_decisions')
+        .select('decision_data')
+        .eq('business_id', business_id)
+        .eq('agent_type', 'pricing')
+        .eq('status', 'approved')
+        .gte('created_at', cooldownCutoff);
+      const recentlyPricedProductIds = new Set<string>(
+        (recentApproved ?? []).map(r => (r.decision_data as Record<string, unknown>)?.product_id as string).filter(Boolean)
+      );
+
       // Fetch competitor cache — one row per competitor per product
       const { data: compRows } = await this.supabase.from('competitor_price_cache')
         .select('product_name,competitor_name,competitor_price_cents,own_price_cents,own_margin_pct')
@@ -34,11 +53,90 @@ export class PricingAgent extends BaseAgent {
         .limit(2000);
 
       if (!compRows?.length) {
-        await this.logRun(business_id, { decisions: [], errors: [], duration_ms: Date.now() - started });
-        return { decisions: [], errors: [], duration_ms: Date.now() - started };
+        // Fallback: internal margin+velocity pricing when competitor cache is empty
+        const cutoff30 = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { data: velItems } = productIds.length > 0
+          ? await this.supabase.from('pos_sale_items')
+              .select('product_id,quantity')
+              .in('product_id', productIds)
+              .gte('created_at', cutoff30)
+              .limit(5000)
+          : { data: [] };
+
+        const vel30 = new Map<string, number>();
+        for (const si of velItems ?? []) vel30.set(si.product_id, (vel30.get(si.product_id) ?? 0) + Number(si.quantity));
+
+        const totalSold = Array.from(vel30.values()).reduce((s, v) => s + v, 0);
+        const avgVelocity = productIds.length > 0 ? totalSold / productIds.length : 0;
+
+        const internalDecisions: AgentDecisionInput[] = [];
+
+        for (const p of products ?? []) {
+          const price = Number(p.price ?? 0);
+          const cost = Number(p.cost_price ?? 0);
+          if (price <= 0 || cost <= 0) continue;
+          const margin = (price - cost) / price * 100;
+          const unitsSold = vel30.get(p.id) ?? 0;
+          const velRatio = avgVelocity > 0 ? unitsSold / avgVelocity : 1;
+
+          if (recentlyPricedProductIds.has(p.id)) continue;
+
+          let suggested: number | null = null;
+          let focus = '';
+
+          // Fast seller with thin margin → lift price to protect profitability
+          if (velRatio > 1.5 && margin < 25) {
+            suggested = this.roundToNearest99(price * 1.05);
+            focus = 'high-velocity-margin-lift';
+          }
+          // Slow seller with fat margin → small price cut to drive volume
+          else if (velRatio < 0.4 && margin > 50 && unitsSold < 3) {
+            suggested = this.roundToNearest99(price * 0.92);
+            focus = 'low-velocity-price-cut';
+          }
+
+          if (!suggested || Math.abs(suggested - price) < 0.10) continue;
+
+          const direction = suggested < price ? 'drop' : 'lift';
+          const projectedImpact = Math.round((suggested - price) * unitsSold * 4 * 100);
+
+          const reasoning = await this.claudeReason({
+            system: 'You are Aria, a pricing advisor for an Australian small business. Be specific with dollars. Max 2 sentences.',
+            user: 'Product: ' + p.name + '. Price: A$' + price.toFixed(2) + '. Cost: A$' + cost.toFixed(2) + '. Margin: ' + margin.toFixed(0) + '%. Sold ' + unitsSold + ' units/30d (avg: ' + avgVelocity.toFixed(1) + '). Suggesting A$' + suggested.toFixed(2) + ' (' + focus + ').',
+            maxTokens: 100,
+            agent_key: 'pricing',
+            role: 'pricing',
+            business_id,
+          });
+
+          internalDecisions.push({
+            business_id,
+            agent_type: 'pricing',
+            decision_data: {
+              product_id: p.id,
+              product_name: p.name,
+              current_price: price,
+              suggested_price: suggested,
+              direction,
+              focus,
+              margin_pct: Math.round(margin * 10) / 10,
+              units_sold_30d: unitsSold,
+              data_source: 'internal_margin_velocity',
+            },
+            reasoning,
+            confidence_score: 0.55,
+            projected_impact_cents: projectedImpact,
+            expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+          });
+        }
+
+        const saved = await this.saveDecisions(internalDecisions);
+        const result: AgentRunResult = { decisions: saved, errors, duration_ms: Date.now() - started };
+        await this.logRun(business_id, result);
+        return result;
       }
 
-      // Aggregate competitor prices per product
+      // Competitor-based pricing path
       interface CompEntry { competitor_prices: number[]; own_price_cents: number; own_margin_pct: number; comp_rows: Array<{ name: string; price: number }>; }
       const productCompMap = new Map<string, CompEntry>();
       for (const row of (compRows as Array<{ product_name: string; competitor_name: string; competitor_price_cents: number; own_price_cents: number; own_margin_pct: number }>)) {
@@ -52,15 +150,9 @@ export class PricingAgent extends BaseAgent {
         }
       }
 
-      // Get our products
-      const { data: products } = await this.supabase.from('pos_products')
-        .select('id,name,price,cost_price,is_active')
-        .eq('business_id', business_id).eq('is_active', true).limit(500);
-
       const productByName = new Map((products ?? []).map(p => [p.name.toLowerCase(), p]));
-      const productIds = (products ?? []).map(p => p.id);
 
-      // 30-day velocity — scope via product_ids (pos_sale_items has no business_id column)
+      // 30-day velocity
       const cutoff14 = new Date(Date.now() - 14 * 86400000).toISOString();
       const cutoff28 = new Date(Date.now() - 28 * 86400000).toISOString();
 
@@ -71,19 +163,6 @@ export class PricingAgent extends BaseAgent {
       const vel14Prev = new Map<string, number>();
       for (const si of (recent14 ?? [])) vel14.set(si.product_id, (vel14.get(si.product_id) ?? 0) + si.quantity);
       for (const si of (prev14 ?? [])) vel14Prev.set(si.product_id, (vel14Prev.get(si.product_id) ?? 0) + si.quantity);
-
-      // Fetch recently approved pricing decisions (7-day cooldown per product)
-      const cooldownCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: recentApproved } = await this.supabase
-        .from('agent_decisions')
-        .select('decision_data')
-        .eq('business_id', business_id)
-        .eq('agent_type', 'pricing')
-        .eq('status', 'approved')
-        .gte('created_at', cooldownCutoff);
-      const recentlyPricedProductIds = new Set<string>(
-        (recentApproved ?? []).map(r => (r.decision_data as Record<string, unknown>)?.product_id as string).filter(Boolean)
-      );
 
       const decisions: AgentDecisionInput[] = [];
 
@@ -97,7 +176,6 @@ export class PricingAgent extends BaseAgent {
         const product = productByName.get(cc.product_name.toLowerCase());
         if (!product) continue;
 
-        // Skip if this product had an approved pricing decision in the last 7 days
         if (recentlyPricedProductIds.has(product.id)) continue;
 
         const ourPrice = (product.price as number | null) ?? (cc.own_price_cents / 100);
@@ -124,12 +202,15 @@ export class PricingAgent extends BaseAgent {
         if (!suggested || Math.abs(suggested - ourPrice) < 0.10) continue;
 
         const direction = suggested < ourPrice ? 'drop' : 'lift';
-        const projectedRevenueImpact = Math.round((suggested - ourPrice) * recentSold * 4 * 100); // 4 weeks cents
+        const projectedRevenueImpact = Math.round((suggested - ourPrice) * recentSold * 4 * 100);
 
         const reasoning = await this.claudeReason({
           system: 'You are Aria, an AI pricing advisor for an Australian bottle shop. Be specific with dollars and percentages. Max 2 sentences. Australian English.',
-          user: `Product: ${product.name}. Our price: A$${ourPrice.toFixed(2)}. Market: median A$${median.toFixed(2)}, range A$${p25.toFixed(2)}-A$${p75.toFixed(2)}. Sales: ${recentSold} units/14d, trending ${velocityTrend >= 0 ? '+' : ''}${(velocityTrend * 100).toFixed(0)}%. Suggesting A$${suggested.toFixed(2)} because ${focus}. Project: ${direction === 'drop' ? 'volume recovery' : 'margin lift'}.`,
+          user: 'Product: ' + product.name + '. Our price: A$' + ourPrice.toFixed(2) + '. Market: median A$' + median.toFixed(2) + ', range A$' + p25.toFixed(2) + '-A$' + p75.toFixed(2) + '. Sales: ' + recentSold + ' units/14d, trending ' + (velocityTrend >= 0 ? '+' : '') + (velocityTrend * 100).toFixed(0) + '%. Suggesting A$' + suggested.toFixed(2) + ' because ' + focus + '. Project: ' + (direction === 'drop' ? 'volume recovery' : 'margin lift') + '.',
           maxTokens: 100,
+          agent_key: 'pricing',
+          role: 'pricing',
+          business_id,
         });
 
         decisions.push({
