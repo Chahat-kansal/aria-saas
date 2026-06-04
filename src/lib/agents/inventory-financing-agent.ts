@@ -18,6 +18,7 @@ interface WeekForecast {
   predicted_payroll: number
   predicted_rent_utilities: number
   predicted_other_fixed: number
+  predicted_bas_gst: number
   opening_cash_position: number
   closing_cash_position: number
   reorder_events: ReorderEvent[]
@@ -77,12 +78,16 @@ export class InventoryFinancingAgent extends BaseAgent {
       // STEP 4: Predict fixed outflows
       const outflows = await this.predictOutflows(business_id)
 
+      // STEP 4b: BAS/GST quarterly payment weeks (direct-method: lump-sum when due)
+      const basPaymentsByWeek = await this.predictBasPayments(business_id)
+
       // STEP 5: Build 14-week cash flow
       const weeks = this.buildCashFlow({
         currentCash,
         weeklyRevenue,
         reorderByWeek,
         outflows,
+        basPaymentsByWeek,
       })
 
       // STEP 6: Generate financing opportunities
@@ -413,13 +418,39 @@ export class InventoryFinancingAgent extends BaseAgent {
     }
   }
 
+  private async predictBasPayments(business_id: string): Promise<Map<number, number>> {
+    const byWeek = new Map<number, number>()
+    try {
+      const now = weekStart(new Date())
+      const horizon = isoDate(addWeeks(now, 14))
+      const { data: drafts } = await supabaseAdmin
+        .from('bas_drafts')
+        .select('due_date,total_payable')
+        .eq('business_id', business_id)
+        .neq('status', 'lodged')
+        .lte('due_date', horizon)
+        .gte('due_date', isoDate(now))
+        .order('due_date', { ascending: true })
+      for (const draft of drafts ?? []) {
+        const payable = Number(draft.total_payable ?? 0)
+        if (payable <= 0) continue
+        const dueDate = new Date(String(draft.due_date))
+        const msFromNow = dueDate.getTime() - now.getTime()
+        const weekNum = Math.max(1, Math.min(14, Math.ceil(msFromNow / (7 * 86400000))))
+        byWeek.set(weekNum, (byWeek.get(weekNum) ?? 0) + payable)
+      }
+    } catch { /* non-fatal — BAS data optional */ }
+    return byWeek
+  }
+
   private buildCashFlow(params: {
     currentCash: number
     weeklyRevenue: number[]
     reorderByWeek: Map<number, ReorderEvent[]>
     outflows: { weeklyPayroll: number; weeklyRentUtil: number; weeklyOther: number }
+    basPaymentsByWeek: Map<number, number>
   }): WeekForecast[] {
-    const { currentCash, weeklyRevenue, reorderByWeek, outflows } = params
+    const { currentCash, weeklyRevenue, reorderByWeek, outflows, basPaymentsByWeek } = params
     const totalWeeklyOutflow = outflows.weeklyPayroll + outflows.weeklyRentUtil + outflows.weeklyOther
     const avgWeeklyExpenses = Math.max(500, totalWeeklyOutflow)
 
@@ -432,7 +463,8 @@ export class InventoryFinancingAgent extends BaseAgent {
       const reorders = reorderByWeek.get(wk) ?? []
       const reorderCost = reorders.reduce((s, r) => s + r.estimated_cost, 0)
       const revenue = weeklyRevenue[wk] ?? 0
-      const closingCash = openingCash + revenue - reorderCost - outflows.weeklyPayroll - outflows.weeklyRentUtil - outflows.weeklyOther
+      const basGst = basPaymentsByWeek.get(wk) ?? 0
+      const closingCash = openingCash + revenue - reorderCost - outflows.weeklyPayroll - outflows.weeklyRentUtil - outflows.weeklyOther - basGst
 
       let risk_level: 'low' | 'medium' | 'high' | 'critical' = 'low'
       let risk_reason = ''
@@ -454,6 +486,13 @@ export class InventoryFinancingAgent extends BaseAgent {
         const topSupplier = reorders[0]?.supplier_name ?? 'supplier'
         risk_reason += '. Reorder for ' + topSupplier + ' ($' + Math.round(reorderCost) + ') is due this week.'
       }
+      if (basGst > 0) {
+        if (risk_level !== 'low') risk_reason += ' BAS/GST payment of $' + Math.round(basGst) + ' due this week.'
+        else if (closingCash < avgWeeklyExpenses * 3) {
+          risk_level = 'medium'
+          risk_reason = 'BAS/GST payment of $' + Math.round(basGst) + ' due week ' + wk + ' — cash narrows to $' + Math.round(closingCash) + '.'
+        }
+      }
 
       weeks.push({
         week_number: wk,
@@ -463,6 +502,7 @@ export class InventoryFinancingAgent extends BaseAgent {
         predicted_payroll: Math.round(outflows.weeklyPayroll * 100) / 100,
         predicted_rent_utilities: Math.round(outflows.weeklyRentUtil * 100) / 100,
         predicted_other_fixed: Math.round(outflows.weeklyOther * 100) / 100,
+        predicted_bas_gst: Math.round(basGst * 100) / 100,
         opening_cash_position: Math.round(openingCash * 100) / 100,
         closing_cash_position: Math.round(closingCash * 100) / 100,
         reorder_events: reorders,
@@ -646,6 +686,7 @@ export class InventoryFinancingAgent extends BaseAgent {
       predicted_payroll: w.predicted_payroll,
       predicted_rent_utilities: w.predicted_rent_utilities,
       predicted_other_fixed: w.predicted_other_fixed,
+      predicted_bas_gst: w.predicted_bas_gst,
       opening_cash_position: w.opening_cash_position,
       closing_cash_position: w.closing_cash_position,
       reorder_events: w.reorder_events as unknown as Record<string, unknown>[],
