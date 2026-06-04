@@ -259,19 +259,29 @@ export default function ReelStudioPage() {
 
   async function loadBiz(uid: string, retry = 0) {
     try {
-      const storedId = typeof window !== 'undefined' ? localStorage.getItem('aria_active_business_id') : null
-      const { data: bizList, error: bizErr } = await supabase.from('businesses').select('id').eq('user_id', uid).order('created_at', { ascending: false }).limit(10)
-      if (bizErr || !bizList?.length) {
-        // Session may not be hydrated yet — retry up to 3 times
-        if (retry < 3) {
-          await new Promise(r => setTimeout(r, 800))
+      // Use the server-side API route — avoids browser-client RLS/session timing races
+      const bizRes = await fetch('/api/businesses/current')
+      if (!bizRes.ok) {
+        // Session/cookie may not be ready yet — retry up to 5 times
+        if (retry < 5) {
+          await new Promise(r => setTimeout(r, 700))
           return loadBiz(uid, retry + 1)
         }
         setPageError('No active business found. Please go to Dashboard first.')
         setLoading(false)
         return
       }
-      const biz = storedId ? (bizList.find((b) => b.id === storedId) ?? bizList[0]) : bizList[0]
+      const { business } = await bizRes.json()
+      if (!business?.id) {
+        if (retry < 5) {
+          await new Promise(r => setTimeout(r, 700))
+          return loadBiz(uid, retry + 1)
+        }
+        setPageError('No active business found. Please go to Dashboard first.')
+        setLoading(false)
+        return
+      }
+      const biz = business
       setBid(biz.id)
       const [infRes, sesRes] = await Promise.all([
         fetch('/api/social/influencer-library'),
