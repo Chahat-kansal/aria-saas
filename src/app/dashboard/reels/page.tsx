@@ -10,10 +10,8 @@ import {
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-// Generation runs on Vercel (AWS Lambda) — Higgsfield allows these IPs
-// Supabase edge functions were blocked (522 timeout every time)
-const REEL_GENERATE = '/api/reels/generate'
-const REEL_STATUS   = '/api/reels/status'
+const EDGE = '/api/reels/generate'
+const STATUS_URL = '/api/reels/status'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Inf = { id: string; name: string; description: string; image_url: string; higgsfield_job_id: string; soul_id: string | null; soul_status: string | null }
@@ -83,8 +81,8 @@ const MUSIC_MOODS = [
   { id: 'cinematic', label: 'Cinematic' }, { id: 'corporate', label: 'Corporate' },
 ]
 
-function clipsNeeded(secs: number) { return Math.ceil(secs / 15) }
-function clipDuration(secs: number) { return Math.min(secs, 15) }
+function clipsNeeded(secs: number) { return Math.ceil(secs / 10) }
+function clipDuration(secs: number) { return Math.min(secs, 10) }
 
 // ─── Reusable primitives ───────────────────────────────────────────────────────
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -159,7 +157,6 @@ export default function ReelStudioPage() {
   const [activeJob, setActiveJob] = useState<{ jobId: string; sessionId: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([])
   const [publishing, setPublishing] = useState(false)
   const [publishMsg, setPublishMsg] = useState('')
   const [publishCaption, setPublishCaption] = useState('')
@@ -204,10 +201,6 @@ export default function ReelStudioPage() {
         setTotalSpent(done.reduce((a: number, s: Session) => a + Number(s.cost_aud ?? 0), 0))
         setMonthlyReels(sesRes.data.filter((s: Session) => new Date(s.created_at).getMonth() === new Date().getMonth()).length)
       }
-      // Load connected social platforms
-      const { data: connections } = await supabase.from('social_connections')
-        .select('platform').eq('business_id', biz.id).eq('is_active', true)
-      setConnectedPlatforms((connections ?? []).map((c: any) => c.platform))
       loadIdeasForBiz(biz.id)
     } catch (e: any) { setPageError('Failed to load: ' + e.message) }
   }
@@ -260,7 +253,7 @@ export default function ReelStudioPage() {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 5000))
       try {
-        const d = await fetch(REEL_STATUS + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
+        const d = await fetch(STATUS_URL + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
         if (d.status === 'COMPLETED' && d.video_url) return d.video_url as string
         if (d.status === 'FAILED') return null
       } catch {}
@@ -270,7 +263,7 @@ export default function ReelStudioPage() {
 
   const pollStatus = useCallback(async (jobId: string, sessionId: string, token: string) => {
     try {
-      const d = await fetch(REEL_STATUS + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
+      const d = await fetch(STATUS_URL + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
       if (d.status === 'COMPLETED') {
         setLatestVideo(d.video_url); setGenerating(false); setGenProgress(100)
         setGenMsg('Reel ready!'); setActiveJob(null); setTab('edit')
@@ -294,24 +287,12 @@ export default function ReelStudioPage() {
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
       try {
-        // Step 1: get session + key from Vercel
-        const prep = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
-        if (prep.error) throw new Error(prep.error)
-        // Step 2: call Higgsfield from browser (Vercel IPs blocked)
-        const hfRes = await fetch(prep.hf_endpoint, { method: 'POST', headers: { 'Authorization': prep.hf_key, 'Content-Type': 'application/json' }, body: JSON.stringify(prep.payload) })
-        const hfText = await hfRes.text()
-        if (!hfRes.ok) throw new Error(hfText.startsWith('<') ? 'Higgsfield temporarily unavailable. Try again in 30 seconds.' : 'Higgsfield ' + hfRes.status + ': ' + hfText.slice(0, 100))
-        const hf = JSON.parse(hfText)
-        const jobId = hf.id ?? hf.job_id ?? hf.request_id
-        if (!jobId) throw new Error('No job ID returned from Higgsfield')
-        // Step 3: save job_id to DB
-        await fetch(REEL_GENERATE, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: prep.session_id, job_id: jobId, status: 'processing' }) })
-        setGenProgress(15); setActiveJob({ jobId, sessionId: prep.session_id })
-        pollStatus(jobId, prep.session_id, userToken)
-      } catch (e: any) {
-        const msg = (e.message ?? '').replace(/<[^>]*>/g, '').slice(0, 120)
-        setGenMsg(msg || 'Generation failed'); setGenerating(false); setGenProgress(0)
-      }
+        const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
+        if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
+        setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
+        pollStatus(d.job_id, d.session_id, userToken)
+      } catch (e: any) { setGenMsg(e.message); setGenerating(false); setGenProgress(0) }
+      return
     }
 
     setGenMsg('Generating ' + clips + ' clips for ' + duration + 's reel…')
@@ -319,15 +300,8 @@ export default function ReelStudioPage() {
       const clipUrls: string[] = []
       for (let i = 0; i < clips; i++) {
         const clipPrompt = prompt ? (i === 0 ? prompt : prompt + ', continuation ' + (i + 1) + ' of ' + clips) : null
-        const prep = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: clipPrompt || null, duration_seconds: clipSecs }) }).then(r => r.json())
-        if (prep.error) throw new Error('Clip ' + (i + 1) + ' failed: ' + prep.error)
-        const hfRes2 = await fetch(prep.hf_endpoint, { method: 'POST', headers: { 'Authorization': prep.hf_key, 'Content-Type': 'application/json' }, body: JSON.stringify(prep.payload) })
-        const hfText2 = await hfRes2.text()
-        if (!hfRes2.ok) throw new Error('Clip ' + (i + 1) + ' failed: Higgsfield ' + hfRes2.status)
-        const hf2 = JSON.parse(hfText2)
-        const d = { job_id: hf2.id ?? hf2.job_id ?? hf2.request_id, session_id: prep.session_id }
-        if (!d.job_id) throw new Error('Clip ' + (i + 1) + ' failed: no job_id')
-        await fetch(REEL_GENERATE, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: prep.session_id, job_id: d.job_id, status: 'processing' }) })
+        const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: clipPrompt, duration_seconds: clipSecs }) }).then(r => r.json())
+        if (!d.job_id) throw new Error('Clip ' + (i + 1) + ' failed: ' + (d.error ?? 'No job_id'))
         setGenMsg('Clip ' + (i + 1) + '/' + clips + ' submitted, waiting…'); setGenProgress(10 + Math.floor(i * 70 / clips))
         const url = await pollClip(d.job_id, d.session_id, userToken)
         if (!url) throw new Error('Clip ' + (i + 1) + ' generation failed')
@@ -338,36 +312,21 @@ export default function ReelStudioPage() {
       setGenMsg(clipUrls.length + ' clips ready. Showing clip 1 — download all below.')
       setTab('edit')
       if (bid) loadBiz(bid)
-    } catch (e: any) {
-      const msg = (e.message ?? '').replace(/<[^>]*>/g, '').slice(0, 120)
-      const friendly = msg.includes('522') || msg.includes('timeout') || msg.includes('DOCTYPE')
-        ? 'Higgsfield API is temporarily unavailable. Please try again in 30 seconds.'
-        : msg || 'Generation failed'
-      setGenMsg(friendly); setGenerating(false); setGenProgress(0)
-    }
+    } catch (e: any) { setGenMsg(e.message); setGenerating(false); setGenProgress(0) }
   }
 
-  async function publishReelTo(platform: string) {
+  async function publishReel() {
     if (!latestVideo || !bid || publishing) return
     setPublishing(true); setPublishMsg('')
     try {
-      const cd = await fetch('/api/social/posts/create', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ business_id: bid, platform, caption: publishCaption || 'Check out our latest reel! 🎬', hashtags: ['smallbusiness', 'australia', 'reels'], post_type: 'reel', video_url: latestVideo }),
-      }).then(r => r.json())
+      const cd = await fetch('/api/social/posts/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, platform: publishPlatform, caption: publishCaption || 'Check out our latest reel!', hashtags: ['smallbusiness', 'australia', 'reels'], post_type: 'reel', video_url: latestVideo }) }).then(r => r.json())
       if (!cd.post?.id) throw new Error(cd.error ?? 'Could not create post')
-      const pd = await fetch('/api/social/publish', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post_id: cd.post.id, business_id: bid, post_type_override: 'reel' }),
-      })
+      const pd = await fetch('/api/social/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ post_id: cd.post.id, business_id: bid, post_type_override: 'reel' }) })
       if (!pd.ok) { const e = await pd.json(); throw new Error(e.error ?? 'Publish failed') }
-      setPublishMsg('Published to ' + platform.charAt(0).toUpperCase() + platform.slice(1) + ' Reels!')
+      setPublishMsg('Published to ' + publishPlatform + ' Reels!')
     } catch (e: any) { setPublishMsg(e.message) }
     setPublishing(false)
   }
-
-  // Keep old publishReel for backward compat
-  async function publishReel() { return publishReelTo(publishPlatform) }
 
   const selectedFilter = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
   const selectedDur = DURATIONS.find((d) => d.secs === duration)
@@ -679,33 +638,17 @@ export default function ReelStudioPage() {
             {latestVideo && (
               <Card>
                 <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Send size={10} />Publish to social</span></SectionLabel>
-
-                {/* Caption */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: T.sp.sm }}>
+                  {(['instagram', 'facebook'] as const).map((p) => (
+                    <button key={p} onClick={() => setPublishPlatform(p)} aria-pressed={publishPlatform === p} style={{ flex: 1, padding: '9px 0', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 600, background: publishPlatform === p ? T.accentDim : 'rgba(255,255,255,0.04)', boxShadow: publishPlatform === p ? `inset 0 0 0 1.5px ${T.borderAccent}` : `inset 0 0 0 1px ${T.border}`, color: publishPlatform === p ? T.accent : T.textMid, transition: 'all 120ms', minHeight: 40 }}>
+                      {p === 'instagram' ? 'Instagram' : 'Facebook'}
+                    </button>
+                  ))}
+                </div>
                 <textarea value={publishCaption} onChange={(e) => setPublishCaption(e.target.value)} rows={3} placeholder="Caption (blank = auto-generated)" aria-label="Social media caption" style={{ width: '100%', padding: '10px 12px', borderRadius: T.r.sm, background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, resize: 'none', outline: 'none', boxSizing: 'border-box', marginBottom: T.sp.sm, lineHeight: 1.6 }} />
-
-                {/* 1-click per connected platform */}
-                {connectedPlatforms.length === 0 ? (
-                  <div style={{ fontSize: 12, color: T.textDim, padding: '8px 0' }}>
-                    No social accounts connected. Connect them in <a href="/dashboard/social" style={{ color: T.accent }}>Social settings</a>.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {connectedPlatforms.map(platform => (
-                      <button key={platform} onClick={() => { setPublishPlatform(platform as 'instagram' | 'facebook'); publishReelTo(platform) }}
-                        disabled={publishing} aria-label={'Publish to ' + platform}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderRadius: T.r.sm, border: 'none', cursor: publishing ? 'wait' : 'pointer', fontFamily: T.font, fontSize: 13, fontWeight: 700, minHeight: 44, transition: 'opacity 150ms',
-                          background: platform === 'instagram' ? 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)'
-                            : platform === 'facebook' ? 'linear-gradient(135deg,#1877f2,#1651b5)'
-                            : platform === 'tiktok' ? 'linear-gradient(135deg,#000,#333)'
-                            : 'linear-gradient(135deg,#6366f1,#4f46e5)',
-                          color: '#fff', opacity: publishing ? 0.5 : 1 }}>
-                        <Send size={14} />
-                        Publish to {platform.charAt(0).toUpperCase() + platform.slice(1)} Reels
-                      </button>
-                    ))}
-                  </div>
-                )}
-
+                <PrimaryBtn onClick={publishReel} loading={publishing} style={{ background: publishing ? 'rgba(99,102,241,0.25)' : 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
+                  <Send size={14} />Publish to {publishPlatform === 'instagram' ? 'Instagram' : 'Facebook'} Reels
+                </PrimaryBtn>
                 {publishMsg && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: T.sp.sm, padding: '8px 12px', borderRadius: T.r.sm, background: 'rgba(255,255,255,0.03)', color: publishMsg.includes('Published') ? T.accent : T.danger }}>
                     {publishMsg.includes('Published') ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
