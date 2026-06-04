@@ -1,14 +1,14 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-// Higgsfield blocks Vercel AWS Lambda IPs (522 timeout every time)
-// Solution: return the API key + payload to browser, browser calls Higgsfield directly
-// Only DB session creation/updates go through Vercel (no IP block for those)
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const PROXY = `${SUPABASE_URL}/functions/v1/higgsfield-proxy`
 
 const STYLE_PROMPTS: Record<string, string> = {
   lifestyle:        'Warm cinematic lifestyle,',
@@ -19,6 +19,25 @@ const STYLE_PROMPTS: Record<string, string> = {
   flash_sale:       'Energetic fast-cut, bold colours, urgent,',
   testimonial:      'Warm authentic customer moment, genuine emotion,',
   day_in_life:      'Documentary day-in-the-life, real moments,',
+}
+
+async function callHF(endpoint: string, payload?: object, method = 'POST') {
+  const res = await fetch(PROXY, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ endpoint, payload, method }),
+    signal: AbortSignal.timeout(55000),
+  })
+  const text = await res.text()
+  console.log('[reels/generate] proxy ->', endpoint, res.status, text.slice(0, 200))
+  if (!res.ok) {
+    if (text.trim().startsWith('<')) throw new Error('Higgsfield temporarily unavailable. Try again in 30 seconds.')
+    throw new Error(`Higgsfield ${res.status}: ${text.slice(0, 150)}`)
+  }
+  return JSON.parse(text)
 }
 
 export async function POST(req: NextRequest) {
@@ -45,11 +64,8 @@ export async function POST(req: NextRequest) {
   if (prefs && prefs.reels_enabled === false)
     return NextResponse.json({ error: 'reels_not_enabled' }, { status: 403 })
 
-  const hfKey = process.env.HIGGSFIELD_API_KEY ?? ''
-  if (!hfKey) return NextResponse.json({ error: 'Higgsfield not configured' }, { status: 503 })
-
   // Rate limit: max 10 reels per business per day
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0)
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
   const { count } = await supabaseAdmin.from('reel_studio_sessions')
     .select('*', { count: 'exact', head: true })
     .eq('business_id', business_id)
@@ -79,40 +95,33 @@ export async function POST(req: NextRequest) {
     if (scene_image_url) genPayload.medias.push({ value: scene_image_url, role: 'end_image' })
   }
 
-  // Create DB session (pending) — job_id will be set after browser calls Higgsfield
+  // Create DB session
   const { data: session } = await supabaseAdmin.from('reel_studio_sessions').insert({
     business_id, influencer_id: influencer_id ?? null, soul_id: soul_id ?? null,
     scene_image_url: scene_image_url ?? null, prompt: videoPrompt,
-    style, duration_seconds: dur, status: 'pending',
+    style, duration_seconds: dur, status: 'processing',
     cost_aud: costAud, credits_used: credits,
   }).select().single()
 
-  // Return key + payload to browser — browser calls Higgsfield directly (bypasses IP block)
+  // Call Higgsfield via Supabase edge function proxy (key stays in Supabase secrets)
+  let jobId: string
+  try {
+    const d = await callHF('/v1/video/generate', genPayload)
+    jobId = d.id ?? d.job_id ?? d.request_id
+    if (!jobId) throw new Error('No job ID returned: ' + JSON.stringify(d).slice(0, 100))
+  } catch (e: any) {
+    await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
+    return NextResponse.json({ error: e.message }, { status: 502 })
+  }
+
+  await supabaseAdmin.from('reel_studio_sessions').update({ higgsfield_job_id: jobId }).eq('id', session?.id)
+  if (influencer_id) await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }).catch(() => {})
+
   return NextResponse.json({
+    job_id: jobId,
     session_id: session?.id,
-    hf_key: hfKey,
-    hf_endpoint: 'https://api.higgsfield.ai/v1/video/generate',
-    payload: genPayload,
     duration: dur,
     estimated_cost_aud: costAud,
-    mode: 'client_side',
+    status: 'queued',
   })
-}
-
-// After browser gets the job_id from Higgsfield, it POSTs it here to save to DB
-export async function PATCH(req: NextRequest) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { session_id, job_id, status, video_url } = await req.json()
-  if (!session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 })
-
-  const updates: Record<string, any> = {}
-  if (job_id) updates.higgsfield_job_id = job_id
-  if (status) updates.status = status
-  if (video_url) { updates.video_url = video_url; updates.completed_at = new Date().toISOString() }
-
-  await supabaseAdmin.from('reel_studio_sessions').update(updates).eq('id', session_id)
-  return NextResponse.json({ ok: true })
 }
