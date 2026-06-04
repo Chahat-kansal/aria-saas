@@ -7,7 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const FAL_KEY = process.env.FAL_API_KEY ?? ''
-const FAL_T2V = 'fal-ai/kling-video/v2.1/pro/text-to-video'
+const FAL_T2V = 'fal-ai/kling-video/v2.1/master/text-to-video'
 const FAL_I2V = 'fal-ai/kling-video/v2.1/pro/image-to-video'
 
 const STYLE_PROMPTS: Record<string, string> = {
@@ -87,15 +87,24 @@ export async function POST(req: NextRequest) {
   if (referenceImage) falBody.image_url = referenceImage
 
   try {
-    const res = await fetch(`https://queue.fal.run/${model}`, {
+    const webhookUrl = 'https://www.ariaos.site/api/reels/fal-webhook'
+    const res = await fetch(`https://queue.fal.run/${model}?fal_webhook=${encodeURIComponent(webhookUrl)}`, {
       method: 'POST',
       headers: { 'Authorization': `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(falBody),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(12000),
     })
 
-    const data = await res.json()
-    console.log('[reels/generate] fal submit:', res.status, 'model:', model, JSON.stringify(data).slice(0, 200))
+    // Read as text first — fal.ai sometimes returns non-JSON error pages (e.g. 504 HTML)
+    const raw = await res.text()
+    console.log('[reels/generate] fal submit:', res.status, 'model:', model, raw.slice(0, 200))
+
+    let data: any
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      throw new Error(`fal.ai returned non-JSON (${res.status}): ${raw.slice(0, 80)}`)
+    }
 
     if (!res.ok) throw new Error(`fal.ai ${res.status}: ${data.detail ?? JSON.stringify(data).slice(0, 100)}`)
 

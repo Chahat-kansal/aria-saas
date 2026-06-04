@@ -28,6 +28,7 @@ type Inf = {
 type Session = {
   id: string; status: string; video_url: string | null; cost_aud: number
   created_at: string; style: string; duration_seconds: number; prompt: string
+  higgsfield_job_id: string | null
 }
 type ReelIdea = { title: string; why: string; style: string; prompt: string; hook: string; hashtags: string[]; urgency: 'high' | 'medium' | 'low' }
 type Track = { id: number; title: string; duration: number; url: string; preview: string | null; bpm: number | null; artist: string }
@@ -247,21 +248,47 @@ export default function ReelStudioPage() {
     return () => { if (pollRef.current) clearTimeout(pollRef.current) }
   }, [])
 
-  // Auto-poll history when any session is processing
+  // Auto-poll history: actively resolve any processing job against fal.ai, then refresh
   useEffect(() => {
     if (tab !== 'history' || !bid) return
-    const hasProcessing = sessions.some(s => s.status === 'processing')
-    if (!hasProcessing) return
-    const t = setTimeout(() => loadBiz(bid), 10000)
+    const processingJobs = sessions.filter(s => s.status === 'processing' && s.higgsfield_job_id)
+    if (!processingJobs.length) return
+    const t = setTimeout(async () => {
+      // Hit the status endpoint for each processing job — this checks fal.ai and updates the DB
+      await Promise.all(processingJobs.map(s =>
+        fetch(STATUS_URL + '?job_id=' + s.higgsfield_job_id + '&session_id=' + s.id)
+          .then(r => r.json()).catch(() => null)
+      ))
+      if (bid) loadBiz(bid)
+    }, 6000)
     return () => clearTimeout(t)
   }, [tab, sessions, bid])
 
-  async function loadBiz(uid: string) {
+  async function loadBiz(uid: string, retry = 0) {
     try {
-      const storedId = typeof window !== 'undefined' ? localStorage.getItem('aria_active_business_id') : null
-      const { data: bizList } = await supabase.from('businesses').select('id').eq('user_id', uid).eq('is_active', true).order('created_at', { ascending: false }).limit(10)
-      if (!bizList?.length) { setPageError('No active business found'); return }
-      const biz = storedId ? (bizList.find((b) => b.id === storedId) ?? bizList[0]) : bizList[0]
+      // Use the server-side API route — avoids browser-client RLS/session timing races
+      const bizRes = await fetch('/api/businesses/current')
+      if (!bizRes.ok) {
+        // Session/cookie may not be ready yet — retry up to 5 times
+        if (retry < 5) {
+          await new Promise(r => setTimeout(r, 700))
+          return loadBiz(uid, retry + 1)
+        }
+        setPageError('No active business found. Please go to Dashboard first.')
+        setLoading(false)
+        return
+      }
+      const { business } = await bizRes.json()
+      if (!business?.id) {
+        if (retry < 5) {
+          await new Promise(r => setTimeout(r, 700))
+          return loadBiz(uid, retry + 1)
+        }
+        setPageError('No active business found. Please go to Dashboard first.')
+        setLoading(false)
+        return
+      }
+      const biz = business
       setBid(biz.id)
       const [infRes, sesRes] = await Promise.all([
         fetch('/api/social/influencer-library'),
