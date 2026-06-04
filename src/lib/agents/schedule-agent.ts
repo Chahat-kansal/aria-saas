@@ -2,6 +2,15 @@ import { BaseAgent } from './base-agent';
 import type { AgentType, AgentDecisionInput, AgentRunResult } from './types';
 
 const REVENUE_PER_CASHIER_PER_HOUR = 200; // AUD
+const DAYPART_LABELS: Record<string, string> = {
+  morning: '9–12', lunch: '12–14', arvo: '14–17', evening: '17–22',
+};
+function getDaypart(hour: number): string {
+  if (hour < 12) return 'morning';
+  if (hour < 14) return 'lunch';
+  if (hour < 17) return 'arvo';
+  return 'evening';
+}
 
 // Australian public holidays 2026 (AEST) — excluded from baseline avg to avoid skew
 const AU_PUBLIC_HOLIDAYS_2026 = new Set([
@@ -87,6 +96,10 @@ export class ScheduleAgent extends BaseAgent {
         const shifts: ShiftAssignment[] = [];
         const staffHours: Record<string, number> = {};
         const eligibleStaff = (staff as StaffRow[]).filter(s => isRSAValid(s));
+        // Daypart coverage gap tracking
+        const daypartGapRevenue: Record<string, number> = { morning: 0, lunch: 0, arvo: 0, evening: 0 };
+        const daypartCoveredRevenue: Record<string, number> = { morning: 0, lunch: 0, arvo: 0, evening: 0 };
+        let salesProtected = 0;
 
         for (let d = 0; d < 7; d++) {
           const date = new Date(weekStart);
@@ -105,6 +118,13 @@ export class ScheduleAgent extends BaseAgent {
               .sort((a, b) => (a.hourly_rate_cents ?? 2500) - (b.hourly_rate_cents ?? 2500));
 
             const assigned = available.slice(0, targetStaff);
+            const dp = getDaypart(h);
+            if (assigned.length >= targetStaff) {
+              daypartCoveredRevenue[dp] = (daypartCoveredRevenue[dp] ?? 0) + avgRevenue;
+              salesProtected += avgRevenue;
+            } else {
+              daypartGapRevenue[dp] = (daypartGapRevenue[dp] ?? 0) + avgRevenue;
+            }
             for (const s of assigned) {
               staffHours[s.id] = (staffHours[s.id] ?? 0) + 1;
               shifts.push({ staff_id: s.id, staff_name: s.name, hour: h, day: dateStr, hourly_rate_cents: 2500, reasoning: `${s.name} assigned — predicted A$${avgRevenue.toFixed(0)} revenue this hour` });
@@ -144,6 +164,11 @@ export class ScheduleAgent extends BaseAgent {
           generated_by_agent: true, published: false,
         }, { onConflict: 'business_id,outlet_id,week_start' });
 
+        // Coverage gap summary per daypart
+        const coverageGaps = Object.keys(daypartGapRevenue)
+          .filter(dp => daypartGapRevenue[dp] > 0)
+          .map(dp => ({ daypart: dp, label: DAYPART_LABELS[dp], gap_revenue: Math.round(daypartGapRevenue[dp] * 100) / 100 }));
+
         decisions.push({
           business_id, agent_type: 'schedule',
           decision_data: {
@@ -151,9 +176,14 @@ export class ScheduleAgent extends BaseAgent {
             week_start: weekStart.toISOString().split('T')[0],
             shift_count: shifts.length, total_hours: totalHours,
             total_cost_cents: totalCostCents,
+            sales_protected: Math.round(salesProtected * 100) / 100,
+            coverage_gaps: coverageGaps,
+            daypart_covered: Object.fromEntries(
+              Object.keys(daypartCoveredRevenue).map(dp => [dp, Math.round(daypartCoveredRevenue[dp] * 100) / 100])
+            ),
           },
           reasoning, confidence_score: 0.72,
-          projected_impact_cents: totalCostCents,
+          projected_impact_cents: Math.round(salesProtected * 100),
           expires_at: weekStart.toISOString(),
         });
       }
