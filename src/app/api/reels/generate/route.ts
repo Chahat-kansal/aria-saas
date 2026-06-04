@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   const {
     business_id, influencer_id,
     image_url,        // influencer image_url from DB
+    background_url,   // user-uploaded background (cafe/shop photo)
     scene_image_url,  // user-uploaded scene photo
     prompt, style = 'lifestyle', duration_seconds = 10,
   } = await req.json()
@@ -72,8 +73,13 @@ export async function POST(req: NextRequest) {
   const referenceImage = image_url ?? scene_image_url ?? null
   const model = referenceImage ? FAL_I2V : FAL_T2V
 
+  // If background provided, enrich the prompt with it
+  const enrichedPrompt = background_url
+    ? videoPrompt + ', set in the uploaded background location'
+    : videoPrompt
+
   const falBody: Record<string, any> = {
-    prompt: videoPrompt,
+    prompt: enrichedPrompt.slice(0, 500),
     duration: dur,
     aspect_ratio: '9:16',
     negative_prompt: 'blur, distort, low quality, text, watermark',
