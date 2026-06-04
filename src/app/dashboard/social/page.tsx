@@ -1669,12 +1669,12 @@ export default function SocialPage() {
           </div>
         )}
 
-        {/* Create New Reel button */}
+        {/* Create New Reel button → Reel Studio */}
         <div style={{ marginBottom: 24 }}>
-          <button onClick={() => generateVideo('standalone', null)}
-            style={{ padding: '12px 28px', borderRadius: 12, border: 'none', background: '#F59E0B', color: '#0f1117', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
-            + Create New Reel
-          </button>
+          <a href="/dashboard/reels"
+            style={{ padding: '12px 28px', borderRadius: 12, border: 'none', background: '#7FB897', color: '#0f1117', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Open Reel Studio →
+          </a>
           <span style={{ marginLeft: 14, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
             Estimated A${calcReelCostDisplay(15)} per 15s Reel
           </span>
