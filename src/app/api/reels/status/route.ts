@@ -5,13 +5,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-const HF = 'https://api.higgsfield.ai'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const PROXY = `${SUPABASE_URL}/functions/v1/higgsfield-proxy`
 
-function hfAuth() {
-  // Higgsfield v2 API: Authorization header = KEY_ID:KEY_SECRET (no Bearer prefix)
-  // See: github.com/higgsfield-ai/higgsfield-js
-  const k = process.env.HIGGSFIELD_API_KEY ?? ''
-  return k.replace(/^Bearer\s+/i, '').replace(/^Key\s+/i, '')
+async function callHF(endpoint: string) {
+  const res = await fetch(PROXY, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint, method: 'GET' }),
+    signal: AbortSignal.timeout(15000),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(`Higgsfield ${res.status}: ${text.slice(0, 100)}`)
+  return JSON.parse(text)
 }
 
 export async function GET(req: NextRequest) {
@@ -24,15 +31,7 @@ export async function GET(req: NextRequest) {
   if (!jobId) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
 
   try {
-    const res = await fetch(`${HF}/v1/video/${jobId}`, {
-      headers: { Authorization: hfAuth() },
-    })
-    const text = await res.text()
-    if (!res.ok) {
-      if (text.trim().startsWith('<')) return NextResponse.json({ status: 'IN_QUEUE' })
-      return NextResponse.json({ status: 'error', error: `Higgsfield ${res.status}` })
-    }
-    const d = JSON.parse(text)
+    const d = await callHF(`/v1/video/${jobId}`)
     const status = (d.status ?? '').toLowerCase()
 
     if (status === 'completed') {
