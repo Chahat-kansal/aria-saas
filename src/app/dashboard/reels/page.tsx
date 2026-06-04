@@ -179,21 +179,27 @@ export default function ReelStudioPage() {
   const [ideasLoaded, setIdeasLoaded] = useState(false)
   const [expandedIdea, setExpandedIdea] = useState<number | null>(null)
 
+  const mountedRef = useRef(true)
   useEffect(() => {
+    mountedRef.current = true
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mountedRef.current) return
       if (!session) { setPageError('Not logged in'); setLoading(false); return }
       setUserToken(session.access_token)
       await loadBiz(session.user.id)
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     })
-    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
+    return () => { 
+      mountedRef.current = false
+      if (pollRef.current) clearTimeout(pollRef.current) 
+    }
   }, [])
 
   async function loadBiz(uid: string) {
     try {
       const storedId = typeof window !== 'undefined' ? localStorage.getItem('aria_active_business_id') : null
       const { data: bizList } = await supabase.from('businesses').select('id').eq('user_id', uid).eq('is_active', true).order('created_at', { ascending: false }).limit(10)
-      if (!bizList?.length) { setPageError('No active business found'); return }
+      if (!bizList?.length) { setPageError('No active business found. Please go to Dashboard first.'); setLoading(false); return }
       const biz = storedId ? (bizList.find((b) => b.id === storedId) ?? bizList[0]) : bizList[0]
       setBid(biz.id)
       const [infRes, sesRes] = await Promise.all([
@@ -208,7 +214,7 @@ export default function ReelStudioPage() {
         setMonthlyReels(sesRes.data.filter((s: Session) => new Date(s.created_at).getMonth() === new Date().getMonth()).length)
       }
       loadIdeasForBiz(biz.id)
-    } catch (e: any) { setPageError('Failed to load: ' + e.message) }
+    } catch (e: any) { setPageError('Failed to load: ' + e.message); setLoading(false) }
   }
 
   async function loadIdeasForBiz(businessId: string) {
@@ -295,19 +301,31 @@ export default function ReelStudioPage() {
   }
 
   const pollStatus = useCallback(async (jobId: string, sessionId: string, token: string) => {
+    if (!mountedRef.current) return
     try {
-      const d = await fetch(STATUS_URL + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
+      const r = await fetch(STATUS_URL + '?job_id=' + jobId + '&session_id=' + sessionId)
+      if (!r.ok) {
+        // Non-200 — keep polling silently
+        if (mountedRef.current) pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 8000)
+        return
+      }
+      const d = await r.json()
+      if (!mountedRef.current) return
       if (d.status === 'COMPLETED') {
         setLatestVideo(d.video_url); setGenerating(false); setGenProgress(100)
-        setGenMsg('Reel ready!'); setActiveJob(null); setTab('edit')
+        setGenMsg('Reel ready! 🎉'); setActiveJob(null); setTab('edit')
         if (bid) loadBiz(bid)
       } else if (d.status === 'FAILED') {
-        setGenMsg(d.error ?? 'Generation failed'); setGenerating(false); setGenProgress(0); setActiveJob(null)
+        setGenMsg('Generation failed: ' + (d.error ?? 'Unknown error'))
+        setGenerating(false); setGenProgress(0); setActiveJob(null)
       } else {
-        setGenProgress((p) => Math.min(p + 8, 88))
-        pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 5000)
+        setGenProgress((p) => Math.min(p + 5, 88))
+        pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 6000)
       }
-    } catch { pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 8000) }
+    } catch {
+      // Network error — keep polling silently
+      if (mountedRef.current) pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 10000)
+    }
   }, [bid])
 
   async function generate() {
