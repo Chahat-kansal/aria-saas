@@ -198,7 +198,7 @@ export default function ReelStudioPage() {
   async function loadBiz(uid: string) {
     try {
       const storedId = typeof window !== 'undefined' ? localStorage.getItem('aria_active_business_id') : null
-      const { data: bizList } = await supabase.from('businesses').select('id').eq('user_id', uid).eq('is_active', true).order('created_at', { ascending: false }).limit(10)
+      const { data: bizList } = await supabase.from('businesses').select('id').eq('user_id', uid).order('created_at', { ascending: false }).limit(10)
       if (!bizList?.length) { setPageError('No active business found. Please go to Dashboard first.'); setLoading(false); return }
       const biz = storedId ? (bizList.find((b) => b.id === storedId) ?? bizList[0]) : bizList[0]
       setBid(biz.id)
