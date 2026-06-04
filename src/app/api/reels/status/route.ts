@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   // Fallback: build URL from job_id if not stored
   if (!statusUrl) {
-    statusUrl = `https://queue.fal.run/fal-ai/kling-video/v2.1/pro/image-to-video/requests/${jobId}/status`
+    statusUrl = `https://queue.fal.run/fal-ai/kling-video/requests/${jobId}/status`
   }
 
   try {
