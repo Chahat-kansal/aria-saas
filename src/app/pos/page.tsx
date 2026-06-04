@@ -237,29 +237,29 @@ export default function POSHomePage() {
         </button>
       </div>
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 24px', position: 'relative', zIndex: 1 }}>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 16px', position: 'relative', zIndex: 1 }}>
         {/* KPI strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
           {[
             { label: 'Revenue today',       value: `A$${todayRevenue.toFixed(2)}`, sub: `${txCount} transaction${txCount !== 1 ? 's' : ''}` },
             { label: 'Avg basket',          value: `A$${avgBasket.toFixed(2)}`,    sub: 'per transaction' },
             { label: 'Est. cash in drawer', value: `A$${estCash.toFixed(2)}`,      sub: 'float + cash sales' },
             { label: 'Best seller today',   value: topProduct ?? '—',              sub: 'by volume', isText: true },
           ].map(kpi => (
-            <div key={kpi.label} style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', borderRadius: 16, padding: '16px 20px' }}>
+            <div key={kpi.label} style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', borderRadius: 14, padding: '14px 14px' }}>
               <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-tertiary)', marginBottom: 8 }}>{kpi.label}</p>
-              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: kpi.isText ? 18 : 28, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kpi.value}</p>
+              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: kpi.isText ? 16 : 22, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kpi.value}</p>
               <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{kpi.sub}</p>
             </div>
           ))}
         </div>
 
         {/* New Sale button */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
           <button
             onClick={() => router.push('/pos/terminal')}
             style={{
-              width: 280, height: 72, borderRadius: 20,
+              width: '100%', maxWidth: 400, height: 72, borderRadius: 20,
               background: '#006AFF',
               boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 8px 32px rgba(139,92,246,0.4)',
               border: 'none', cursor: 'pointer', color: '#fff',
@@ -294,7 +294,7 @@ export default function POSHomePage() {
         </a>
 
         {/* Aria insight */}
-        <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+        <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 14, padding: '14px 14px', marginBottom: 16 }}>
           {insightText ? (
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
               <span style={{ color: '#006AFF', fontWeight: 600 }}>Aria: </span>{insightText}
