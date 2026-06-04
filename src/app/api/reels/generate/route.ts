@@ -7,8 +7,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const FAL_KEY = process.env.FAL_API_KEY ?? ''
-const FAL_MODEL_T2V = 'fal-ai/kling-video/v1.6/pro/text-to-video'
-const FAL_MODEL_I2V = 'fal-ai/kling-video/v1.6/pro/image-to-video'
+const FAL_T2V = 'fal-ai/kling-video/v2.1/pro/text-to-video'
+const FAL_I2V = 'fal-ai/kling-video/v2.1/pro/image-to-video'
 
 const STYLE_PROMPTS: Record<string, string> = {
   lifestyle:        'Warm cinematic lifestyle,',
@@ -26,8 +26,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { business_id, influencer_id, image_url, prompt, style = 'lifestyle',
-    duration_seconds = 10 } = await req.json()
+  if (!FAL_KEY) return NextResponse.json({ error: 'FAL_API_KEY not configured' }, { status: 503 })
+
+  const {
+    business_id, influencer_id, image_url,
+    prompt, style = 'lifestyle', duration_seconds = 10,
+  } = await req.json()
 
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
@@ -35,8 +39,7 @@ export async function POST(req: NextRequest) {
     .eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  if (!FAL_KEY) return NextResponse.json({ error: 'FAL_API_KEY not configured' }, { status: 503 })
-
+  // Rate limit
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
   const { count } = await supabaseAdmin.from('reel_studio_sessions')
     .select('*', { count: 'exact', head: true })
@@ -44,50 +47,71 @@ export async function POST(req: NextRequest) {
   if ((count ?? 0) >= 25)
     return NextResponse.json({ error: 'Daily reel limit reached (25/day).' }, { status: 429 })
 
-  const dur = Math.min(Math.max(Math.round(duration_seconds), 5), 10) as 5 | 10
-  const costAud = Math.round(dur * 0.07 * 1.55 * 100) / 100
+  // fal.ai: duration must be string "5" or "10"
+  const dur = duration_seconds >= 10 ? '10' : '5'
+  const durNum = parseInt(dur)
+  const costAud = Math.round(durNum * 0.07 * 1.55 * 100) / 100
 
   const stylePrefix = STYLE_PROMPTS[style] ?? STYLE_PROMPTS.lifestyle
-  const videoPrompt = (stylePrefix + ' ' + (prompt ?? 'Australian small business, authentic and warm') + ', 9:16 vertical, cinematic').slice(0, 500)
+  const videoPrompt = (stylePrefix + ' ' + (prompt ?? 'Australian small business, authentic and warm') + ', 9:16 vertical').slice(0, 500)
 
+  // Create session first
   const { data: session } = await supabaseAdmin.from('reel_studio_sessions').insert({
-    business_id, influencer_id: influencer_id ?? null,
-    prompt: videoPrompt, style, duration_seconds: dur,
-    status: 'processing', cost_aud: costAud, credits_used: dur,
+    business_id,
+    influencer_id: influencer_id ?? null,
+    prompt: videoPrompt,
+    style,
+    duration_seconds: durNum,
+    status: 'processing',
+    cost_aud: costAud,
+    credits_used: durNum,
   }).select().single()
 
-  // Submit to fal.ai queue — returns request_id in <1 second
-  const model = image_url ? FAL_MODEL_I2V : FAL_MODEL_T2V
+  // Submit to fal.ai queue — returns immediately with request_id
+  const model = image_url ? FAL_I2V : FAL_T2V
   const falBody: Record<string, any> = {
     prompt: videoPrompt,
-    duration: String(dur),
+    duration: dur,
     aspect_ratio: '9:16',
+    negative_prompt: 'blur, distort, low quality',
   }
   if (image_url) falBody.image_url = image_url
 
   try {
     const res = await fetch(`https://queue.fal.run/${model}`, {
       method: 'POST',
-      headers: { 'Authorization': `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(falBody),
-      signal: AbortSignal.timeout(15000), // just submitting, should be <1s
+      signal: AbortSignal.timeout(15000),
     })
-    const text = await res.text()
-    console.log('[reels/generate] fal.ai submit ->', res.status, text.slice(0, 200))
-    if (!res.ok) throw new Error(`fal.ai ${res.status}: ${text.slice(0, 150)}`)
-    const d = JSON.parse(text)
-    const requestId = d.request_id
-    if (!requestId) throw new Error('No request_id from fal.ai: ' + text.slice(0, 100))
-    await supabaseAdmin.from('reel_studio_sessions')
-      .update({ higgsfield_job_id: requestId, status: 'processing' }).eq('id', session?.id)
+
+    const data = await res.json()
+    console.log('[reels/generate] fal submit status:', res.status, JSON.stringify(data).slice(0, 200))
+
+    if (!res.ok) {
+      throw new Error(`fal.ai error ${res.status}: ${data.detail ?? JSON.stringify(data).slice(0, 100)}`)
+    }
+
+    const { request_id, status_url, response_url } = data
+    if (!request_id) throw new Error('No request_id returned from fal.ai')
+
+    // Save request_id and response_url to DB
+    await supabaseAdmin.from('reel_studio_sessions').update({
+      higgsfield_job_id: request_id,
+      // store response_url in scene_image_url temporarily for result fetching
+      scene_image_url: response_url ?? null,
+    }).eq('id', session?.id)
+
     return NextResponse.json({
-      job_id: requestId,
+      job_id: request_id,
       session_id: session?.id,
-      duration: dur,
+      status_url,
+      response_url,
+      duration: durNum,
       estimated_cost_aud: costAud,
-      status: 'queued',
-      provider: 'fal',
-      model,
     })
   } catch (e: any) {
     await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
