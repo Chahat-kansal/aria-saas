@@ -223,23 +223,32 @@ export async function fetchRankedData(
       .neq('status', 'voided')
       .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Revenue', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
+      return { rows: [], valueLabel: 'Avg revenue/day', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
     }
     const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    const buckets: Record<number, { rev: number; count: number }> = {}
+    // Normalize by distinct date count so 6 Fridays vs 5 Sundays doesn't skew the ranking
+    const buckets: Record<number, { rev: number; count: number; dates: Set<string> }> = {}
     for (const s of data) {
-      const dow = new Date(s.created_at).getDay()
-      if (!buckets[dow]) buckets[dow] = { rev: 0, count: 0 }
+      const d = new Date(s.created_at)
+      const dow = d.getDay()
+      const dateStr = String(s.created_at).slice(0, 10)
+      if (!buckets[dow]) buckets[dow] = { rev: 0, count: 0, dates: new Set() }
       buckets[dow].rev += Number(s.total_amount ?? 0)
       buckets[dow].count += 1
+      buckets[dow].dates.add(dateStr)
     }
     const isCount = metric === 'count'
     const rows = Object.entries(buckets)
-      .sort((a, b) => asc
-        ? (isCount ? a[1].count - b[1].count : a[1].rev - b[1].rev)
-        : (isCount ? b[1].count - a[1].count : b[1].rev - a[1].rev))
-      .map(([d, v]) => ({ label: DOW[Number(d)], value: isCount ? v.count : v.rev, sub: v.count + ' tx' }))
-    return { rows, valueLabel: isCount ? 'Transactions' : 'Revenue', subject, metric }
+      .map(([d, v]) => {
+        const numDays = v.dates.size
+        return {
+          label: DOW[Number(d)],
+          value: isCount ? v.count / numDays : v.rev / numDays,
+          sub: numDays + (numDays === 1 ? ' day' : ' days') + ' in period · ' + v.count + ' tx',
+        }
+      })
+      .sort((a, b) => asc ? a.value - b.value : b.value - a.value)
+    return { rows, valueLabel: isCount ? 'Avg tx/day' : 'Avg revenue/day', subject, metric }
   }
 
   // ── hours ──────────────────────────────────────────────────────────────────
@@ -251,30 +260,33 @@ export async function fetchRankedData(
       .neq('status', 'voided')
       .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Activity', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
+      return { rows: [], valueLabel: 'Avg revenue/day', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
     }
-    const buckets: Record<number, { rev: number; count: number }> = {}
+    // Normalize each hour by the number of distinct dates that had sales at that hour
+    const buckets: Record<number, { rev: number; count: number; dates: Set<string> }> = {}
     for (const s of data) {
-      const hour = new Date(s.created_at).getHours()
-      if (!buckets[hour]) buckets[hour] = { rev: 0, count: 0 }
+      const d = new Date(s.created_at)
+      const hour = d.getHours()
+      const dateStr = String(s.created_at).slice(0, 10)
+      if (!buckets[hour]) buckets[hour] = { rev: 0, count: 0, dates: new Set() }
       buckets[hour].rev += Number(s.total_amount ?? 0)
       buckets[hour].count += 1
+      buckets[hour].dates.add(dateStr)
     }
     const isCount = metric === 'count' || metric === 'none'
     const rows = Object.entries(buckets)
-      .sort((a, b) => asc
-        ? (isCount ? a[1].count - b[1].count : a[1].rev - b[1].rev)
-        : (isCount ? b[1].count - a[1].count : b[1].rev - a[1].rev))
       .map(([h, v]) => {
+        const numDays = v.dates.size
         const hr = Number(h)
         const label = (hr % 12 || 12) + (hr < 12 ? 'am' : 'pm')
         return {
           label,
-          value: isCount ? v.count : v.rev,
-          sub: isCount ? undefined : v.count + ' tx',
+          value: isCount ? v.count / numDays : v.rev / numDays,
+          sub: v.count + ' tx total',
         }
       })
-    return { rows, valueLabel: isCount ? 'Transactions' : 'Revenue', subject, metric }
+      .sort((a, b) => asc ? a.value - b.value : b.value - a.value)
+    return { rows, valueLabel: isCount ? 'Avg tx/day' : 'Avg revenue/day', subject, metric }
   }
 
   // ── categories ─────────────────────────────────────────────────────────────

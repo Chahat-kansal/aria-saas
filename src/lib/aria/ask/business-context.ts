@@ -328,38 +328,51 @@ export async function buildAskAriaContext(
     .order('created_at', { ascending: false })
     .limit(200)
 
-  const dayTotals: Record<number, number[]> = {}
-  const hourTotals: Record<number, number[]> = {}
+  // Group revenue by day-of-week and individual date so we can compute avg daily revenue per DOW
+  // (not avg transaction value — 6 Fridays vs 5 Sundays must be normalised)
+  const dayRevByDate: Record<number, Record<string, number>> = {}
+  const hourRevByDate: Record<number, Record<string, number>> = {}
   for (const s of salesPattern ?? []) {
     const d = new Date(String(s.created_at))
     const day = d.getDay()
     const hour = d.getHours()
-    if (!dayTotals[day]) dayTotals[day] = []
-    dayTotals[day].push(Number(s.total_amount) || 0)
-    if (!hourTotals[hour]) hourTotals[hour] = []
-    hourTotals[hour].push(Number(s.total_amount) || 0)
+    const dateStr = String(s.created_at).slice(0, 10)
+    const amt = Number(s.total_amount) || 0
+    if (!dayRevByDate[day]) dayRevByDate[day] = {}
+    dayRevByDate[day][dateStr] = (dayRevByDate[day][dateStr] ?? 0) + amt
+    if (!hourRevByDate[hour]) hourRevByDate[hour] = {}
+    hourRevByDate[hour][dateStr] = (hourRevByDate[hour][dateStr] ?? 0) + amt
   }
 
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
   const todayDow = now.getDay()
   const tomorrowDow = (todayDow + 1) % 7
-  const todayAvg = dayTotals[todayDow] ? dayTotals[todayDow].reduce((a,b) => a+b,0) / dayTotals[todayDow].length : 0
-  const tomorrowAvg = dayTotals[tomorrowDow] ? dayTotals[tomorrowDow].reduce((a,b) => a+b,0) / dayTotals[tomorrowDow].length : 0
+  const avgDailyForDow = (dow: number) => {
+    const dateMap = dayRevByDate[dow]
+    if (!dateMap) return 0
+    const vals = Object.values(dateMap)
+    return vals.reduce((a, b) => a + b, 0) / vals.length
+  }
+  const todayAvg = avgDailyForDow(todayDow)
+  const tomorrowAvg = avgDailyForDow(tomorrowDow)
   const prediction = {
     today_predicted: Math.round(todayAvg),
     tomorrow_predicted: Math.round(tomorrowAvg),
     today_dow: dayNames[todayDow],
     tomorrow_dow: dayNames[tomorrowDow],
-    pattern: Object.fromEntries(Object.entries(dayTotals).map(([day, amounts]) => [
-      dayNames[Number(day)],
-      Math.round(amounts.reduce((a,b) => a+b,0) / amounts.length)
-    ]))
+    pattern: Object.fromEntries(
+      Object.entries(dayRevByDate).map(([day, dateMap]) => {
+        const vals = Object.values(dateMap)
+        return [dayNames[Number(day)], Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)]
+      })
+    ),
   }
 
-  // Compute busiest hour from sales pattern
+  // Compute busiest hour from sales pattern — avg daily revenue at each hour
   let busiestHour = { hour: 'unknown', avg_revenue: 0 }
-  for (const [hr, amounts] of Object.entries(hourTotals)) {
-    const avg = amounts.reduce((a,b) => a+b,0) / amounts.length
+  for (const [hr, dateMap] of Object.entries(hourRevByDate)) {
+    const vals = Object.values(dateMap)
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length
     if (avg > busiestHour.avg_revenue) {
       const h = Number(hr)
       const ampm = h >= 12 ? 'pm' : 'am'
