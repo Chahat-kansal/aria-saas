@@ -37,10 +37,17 @@ export default function LandingShell() {
   useEffect(() => {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+    // Cache a STABLE viewport height. On mobile the address bar shows/hides during
+    // scroll, which changes window.innerHeight continuously and shifts every scene
+    // boundary mid-scroll (causing pages to skip/jump). We lock the height and only
+    // recompute on a real resize/orientation change, not on every scroll frame.
+    let vh = window.innerHeight
+    const recomputeVh = () => { vh = window.innerHeight }
+
     const update = () => {
       const scrollY   = window.scrollY
-      const heroEndPx = window.innerHeight * HERO_VIEWPORTS
-      const docH      = document.documentElement.scrollHeight - window.innerHeight
+      const heroEndPx = vh * HERO_VIEWPORTS
+      const docH      = document.documentElement.scrollHeight - vh
       const tp        = docH > 0 ? Math.max(0, Math.min(1, scrollY / docH)) : 0
 
       if (progressRef.current) progressRef.current.style.width = (tp * 100) + '%'
@@ -87,6 +94,11 @@ export default function LandingShell() {
       if (rafId.current === null) rafId.current = requestAnimationFrame(update)
     }
 
+    const onResize = () => {
+      recomputeVh()
+      if (rafId.current === null) rafId.current = requestAnimationFrame(update)
+    }
+
     const onKey = (e: KeyboardEvent) => {
       const step = window.innerHeight
       if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); window.scrollBy({ top: step, behavior: 'smooth' }) }
@@ -96,13 +108,13 @@ export default function LandingShell() {
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll, { passive: true })
+    window.addEventListener('resize', onResize, { passive: true })
     window.addEventListener('keydown', onKey)
     update()
 
     return () => {
       window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onScroll)
+      window.removeEventListener('resize', onResize)
       window.removeEventListener('keydown', onKey)
       if (rafId.current) cancelAnimationFrame(rafId.current)
     }
