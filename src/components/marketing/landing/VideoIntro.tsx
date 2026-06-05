@@ -6,6 +6,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<'video' | 'caption' | 'text'>('video')
   const [captionStep, setCaptionStep] = useState(0) // 0 hidden, 1 "hard", 2 "Meet Aria", 3 fading
+  const [vidPlaying, setVidPlaying] = useState(false)
   const firedRef  = useRef(false)
 
   useEffect(() => {
@@ -31,6 +32,11 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     vid.addEventListener('canplaythrough', play, { once: true })
     play()
 
+    // Stuck-face fix: only reveal the video once it's ACTUALLY playing (not the frozen
+    // poster). Until then we show a gentle pulsing poster so it never looks broken.
+    const onPlaying = () => setVidPlaying(true)
+    vid.addEventListener('playing', onPlaying)
+
     // Hard fallback: only if the video never plays at all. Must be LONGER than the
     // video (8s) + end sequence, so it never cuts off the door-open climax.
     const fallback = setTimeout(dismiss, 11000)
@@ -40,13 +46,13 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     //  ~2.0s: "We get it." (the empathy)
     //  ~3.4s: "Aria's here to help." (the reassurance + reveal, large + glowing)
     //  ~5.4s: whole caption clears before the door-open headline
-    const cap1 = setTimeout(() => { setPhase(p => (p === 'video' ? 'caption' : p)); setCaptionStep(1) }, 600)
-    const cap2 = setTimeout(() => setCaptionStep(s => (s === 1 ? 2 : s)), 2000)
-    const cap3 = setTimeout(() => setCaptionStep(s => (s === 2 ? 3 : s)), 3400)
+    const cap1 = setTimeout(() => { setPhase(p => (p === 'video' ? 'caption' : p)); setCaptionStep(1) }, 800)
+    const cap2 = setTimeout(() => setCaptionStep(s => (s === 1 ? 2 : s)), 3000)
+    const cap3 = setTimeout(() => setCaptionStep(s => (s === 2 ? 3 : s)), 5200)
     const captionOut = setTimeout(() => {
       setPhase(p => (p === 'caption' ? 'video' : p))
       setCaptionStep(0)
-    }, 5400)
+    }, 7200)
 
     function dismiss() {
       clearTimeout(fallback)
@@ -82,6 +88,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       vid.removeEventListener('timeupdate', onTimeUpdate)
       vid.removeEventListener('loadeddata', play)
       vid.removeEventListener('canplaythrough', play)
+      vid.removeEventListener('playing', onPlaying)
       clearTimeout(fallback)
       clearTimeout(cap1)
       clearTimeout(cap2)
@@ -100,7 +107,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         overflow: 'hidden',
       }}
     >
-      {/* Fullscreen video */}
+      {/* Fullscreen video — fades in once it's actually playing (not the frozen poster) */}
       <video
         ref={vidRef}
         muted
@@ -112,8 +119,25 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
           position: 'absolute', inset: 0,
           width: '100%', height: '100%',
           objectFit: 'contain',
+          opacity: vidPlaying ? 1 : 0,
+          transition: 'opacity 0.5s ease',
         }}
       />
+
+      {/* Pulsing poster — shown only until the video actually starts, so a slow load
+          looks like a calm breathing image instead of a stuck/broken frame */}
+      {!vidPlaying && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'url(/videos/aria-intro-poster.jpg)',
+          backgroundSize: 'contain',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          animation: 'ariaIntroPulse 2s ease-in-out infinite',
+        }} />
+      )}
+
+      <style>{`@keyframes ariaIntroPulse { 0%,100% { opacity: 0.78 } 50% { opacity: 1 } }`}</style>
 
       {/* Vignette */}
       <div style={{
