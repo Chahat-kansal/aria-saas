@@ -1,9 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { parseLLMJson } from '@/lib/ai-json'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
 
-export type DeliverableKind = 'dashboard' | 'comparison' | 'ranked_list' | 'scorecard'
+export type DeliverableKind = 'dashboard' | 'comparison' | 'ranked_list' | 'scorecard' | 'trend' | 'single_answer'
+export type RankSubject = 'customers' | 'products' | 'staff' | 'days' | 'hours' | 'categories' | 'payment_methods'
+export type RankMetric = 'revenue' | 'spend' | 'units' | 'count' | 'margin_pct' | 'avg_ticket' | 'none'
+export type RankDirection = 'top' | 'bottom'
 
 export interface DeliverableResult {
   outputId: string
@@ -13,42 +17,102 @@ export interface DeliverableResult {
   data_snapshot: Record<string, unknown>
 }
 
-// ─── Subject detection for ranked lists ──────────────────────────────────────
-export type RankSubject = 'customers' | 'products' | 'staff' | 'days' | 'categories' | 'payment_methods'
+export interface DeliverableIntent {
+  deliverable: string
+  subject: string
+  metric: RankMetric
+  direction: RankDirection
+  timeframe_days: number
+  title: string
+}
 
+// ─── LLM intent extraction ────────────────────────────────────────────────────
+const INTENT_SYSTEM = `You are an intent classifier for a business analytics system. Given a user's question, return STRICT JSON only — no prose, no markdown, no explanation.
+
+Schema: {"deliverable":"dashboard|ranked_list|scorecard|comparison|trend|single_answer","subject":"customers|products|staff|days|hours|categories|payment_methods|revenue|margin|none","metric":"revenue|spend|units|count|margin_pct|avg_ticket|none","direction":"top|bottom","timeframe_days":30,"title":"<4-6 word human title>"}
+
+Rules:
+- deliverable: ranked_list=ranked table, dashboard=overview charts, scorecard=KPIs, comparison=period vs period, single_answer=one stat card
+- subject: entity being ranked; "none" for dashboards/comparisons/scorecards
+- metric: revenue=dollar sales, spend=customer spend, units=quantity, count=transaction count, margin_pct=profit margin%, avg_ticket=avg sale value
+- direction: top=highest first, bottom=lowest first (worst/slowest/least/stop selling = bottom)
+- timeframe_days: 7=week, 30=month, 90=quarter, 365=year; default 30
+
+Examples:
+"who are my best customers" -> {"deliverable":"ranked_list","subject":"customers","metric":"spend","direction":"top","timeframe_days":30,"title":"Top Customers by Spend"}
+"show me top products" -> {"deliverable":"ranked_list","subject":"products","metric":"revenue","direction":"top","timeframe_days":30,"title":"Best Selling Products"}
+"who sold the most" -> {"deliverable":"ranked_list","subject":"staff","metric":"revenue","direction":"top","timeframe_days":30,"title":"Top Staff by Sales"}
+"what are my busiest days" -> {"deliverable":"ranked_list","subject":"days","metric":"revenue","direction":"top","timeframe_days":30,"title":"Busiest Days of Week"}
+"what hours are busiest" -> {"deliverable":"ranked_list","subject":"hours","metric":"count","direction":"top","timeframe_days":30,"title":"Busiest Hours of Day"}
+"rank categories by revenue" -> {"deliverable":"ranked_list","subject":"categories","metric":"revenue","direction":"top","timeframe_days":30,"title":"Top Categories by Revenue"}
+"which products should I stop selling" -> {"deliverable":"ranked_list","subject":"products","metric":"units","direction":"bottom","timeframe_days":30,"title":"Worst Selling Products"}
+"show me a dashboard" -> {"deliverable":"dashboard","subject":"none","metric":"none","direction":"top","timeframe_days":7,"title":"Business Overview Dashboard"}
+"how am I doing" -> {"deliverable":"scorecard","subject":"none","metric":"none","direction":"top","timeframe_days":7,"title":"Business Performance Scorecard"}
+"what is my average ticket" -> {"deliverable":"single_answer","subject":"revenue","metric":"avg_ticket","direction":"top","timeframe_days":7,"title":"Average Transaction Value"}`
+
+export async function extractDeliverableIntent(message: string): Promise<DeliverableIntent | null> {
+  try {
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      system: INTENT_SYSTEM,
+      messages: [{ role: 'user', content: message }],
+    })
+    const raw = res.content[0].type === 'text' ? res.content[0].text : null
+    if (!raw) return null
+    const parsed = parseLLMJson<DeliverableIntent>(raw)
+    if (!parsed.ok || !parsed.data?.deliverable) return null
+    const intent = parsed.data
+    intent.timeframe_days = Math.max(1, Math.min(365, Number(intent.timeframe_days) || 30))
+    return intent
+  } catch {
+    return null
+  }
+}
+
+// ─── Regex fallback subject detector ─────────────────────────────────────────
 export function detectRankSubject(message: string): RankSubject {
   const m = message.toLowerCase()
   if (/\b(customer|client|buyer|spender|loyal|who spent|who bought|top buyer)\b/.test(m)) return 'customers'
   if (/\b(staff|employee|server|barista|team member|who sold|who served|cashier)\b/.test(m)) return 'staff'
+  if (/\b(hour|time of day|busiest hour|slowest hour|what hour|by hour)\b/.test(m)) return 'hours'
   if (/\b(day|weekday|busiest day|slowest day|day of week|which day)\b/.test(m)) return 'days'
   if (/\b(categor(?:y|ies)|department|section|type of product)\b/.test(m)) return 'categories'
   if (/\b(payment|card|cash|method|how (people|customers) pay)\b/.test(m)) return 'payment_methods'
-  // products is the safe default — catches item/seller/dish/drink/menu/product
   return 'products'
 }
 
-// Normalised shape returned by fetchRankedData
+// ─── Normalised ranked data shape ─────────────────────────────────────────────
 export interface RankedRow { label: string; value: number; sub?: string }
 export interface RankedData {
   rows: RankedRow[]
   valueLabel: string
   subject: RankSubject
-  emptyReason?: string  // set when no data available for this subject
+  metric: RankMetric
+  emptyReason?: string
 }
 
-export async function fetchRankedData(businessId: string, subject: RankSubject): Promise<RankedData> {
-  const since30d = new Date(Date.now() - 30 * 86400000).toISOString()
+export async function fetchRankedData(
+  businessId: string,
+  subject: RankSubject,
+  metric: RankMetric = 'revenue',
+  direction: RankDirection = 'top',
+  timeframe_days: number = 30,
+): Promise<RankedData> {
+  const sinceXd = new Date(Date.now() - timeframe_days * 86400000).toISOString()
+  const asc = direction === 'bottom'
 
+  // ── customers ──────────────────────────────────────────────────────────────
   if (subject === 'customers') {
     const { data } = await supabaseAdmin
       .from('pos_customers')
       .select('name, total_spend, visit_count')
       .eq('business_id', businessId)
       .gt('total_spend', 0)
-      .order('total_spend', { ascending: false })
+      .order('total_spend', { ascending: asc })
       .limit(10)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Total spent', subject, emptyReason: 'No customer spend data recorded yet.' }
+      return { rows: [], valueLabel: 'Total spent', subject, metric, emptyReason: 'No customer spend data recorded yet.' }
     }
     return {
       rows: data.map(c => ({
@@ -58,17 +122,49 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       })),
       valueLabel: 'Total spent',
       subject,
+      metric,
     }
   }
 
+  // ── products ───────────────────────────────────────────────────────────────
   if (subject === 'products') {
+    if (metric === 'margin_pct') {
+      const { data } = await supabaseAdmin
+        .from('pos_sale_items')
+        .select('product_name, quantity, unit_price, cost_price')
+        .eq('business_id', businessId)
+        .gte('created_at', sinceXd)
+      if (!data || data.length === 0) {
+        return { rows: [], valueLabel: 'Margin %', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
+      }
+      const prodData: Record<string, { revenue: number; cost: number }> = {}
+      for (const item of data) {
+        const name = String(item.product_name ?? 'Unknown')
+        const qty = Number(item.quantity ?? 1)
+        const rev = qty * Number(item.unit_price ?? 0)
+        const cost = qty * Number((item as Record<string, unknown>)['cost_price'] ?? 0)
+        if (!prodData[name]) prodData[name] = { revenue: 0, cost: 0 }
+        prodData[name].revenue += rev
+        prodData[name].cost += cost
+      }
+      const withCost = Object.entries(prodData).filter(([, v]) => v.revenue > 0 && v.cost > 0)
+      if (withCost.length === 0) {
+        return { rows: [], valueLabel: 'Margin %', subject, metric, emptyReason: 'No cost price data found. Add cost prices to your products to enable margin analysis.' }
+      }
+      const rows = withCost
+        .map(([name, v]) => ({ label: name, value: (v.revenue - v.cost) / v.revenue * 100, sub: '$' + (v.revenue - v.cost).toFixed(2) + ' profit' }))
+        .sort((a, b) => asc ? a.value - b.value : b.value - a.value)
+        .slice(0, 10)
+      return { rows, valueLabel: 'Margin %', subject, metric }
+    }
+
     const { data } = await supabaseAdmin
       .from('pos_sale_items')
       .select('product_name, quantity, unit_price')
       .eq('business_id', businessId)
-      .gte('created_at', since30d)
+      .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Revenue', subject, emptyReason: 'No sales recorded in the last 30 days.' }
+      return { rows: [], valueLabel: metric === 'units' ? 'Units sold' : 'Revenue', subject, metric, emptyReason: 'No sales recorded in the last ' + timeframe_days + ' days.' }
     }
     const totals: Record<string, { rev: number; qty: number }> = {}
     for (const item of data) {
@@ -77,13 +173,19 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       totals[name].rev += Number(item.quantity ?? 1) * Number(item.unit_price ?? 0)
       totals[name].qty += Number(item.quantity ?? 1)
     }
+    const isUnits = metric === 'units'
     const rows = Object.entries(totals)
-      .sort((a, b) => b[1].rev - a[1].rev)
+      .sort((a, b) => asc
+        ? (isUnits ? a[1].qty - b[1].qty : a[1].rev - b[1].rev)
+        : (isUnits ? b[1].qty - a[1].qty : b[1].rev - a[1].rev))
       .slice(0, 10)
-      .map(([name, t]) => ({ label: name, value: t.rev, sub: t.qty + ' sold' }))
-    return { rows, valueLabel: 'Revenue', subject }
+      .map(([name, t]) => isUnits
+        ? { label: name, value: t.qty, sub: '$' + t.rev.toFixed(2) + ' revenue' }
+        : { label: name, value: t.rev, sub: t.qty + ' sold' })
+    return { rows, valueLabel: isUnits ? 'Units sold' : 'Revenue', subject, metric }
   }
 
+  // ── staff ──────────────────────────────────────────────────────────────────
   if (subject === 'staff') {
     const { data } = await supabaseAdmin
       .from('pos_sales')
@@ -91,9 +193,9 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       .eq('business_id', businessId)
       .neq('status', 'voided')
       .not('served_by', 'is', null)
-      .gte('created_at', since30d)
+      .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Sales', subject, emptyReason: 'No staff attribution recorded on sales yet.' }
+      return { rows: [], valueLabel: 'Sales revenue', subject, metric, emptyReason: 'No staff attribution recorded on sales yet.' }
     }
     const totals: Record<string, { rev: number; count: number }> = {}
     for (const s of data) {
@@ -102,43 +204,88 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       totals[name].rev += Number(s.total_amount ?? 0)
       totals[name].count += 1
     }
+    const isCount = metric === 'count'
     const rows = Object.entries(totals)
-      .sort((a, b) => b[1].rev - a[1].rev)
+      .sort((a, b) => asc
+        ? (isCount ? a[1].count - b[1].count : a[1].rev - b[1].rev)
+        : (isCount ? b[1].count - a[1].count : b[1].rev - a[1].rev))
       .slice(0, 10)
-      .map(([name, t]) => ({ label: name, value: t.rev, sub: t.count + ' sale' + (t.count !== 1 ? 's' : '') }))
-    return { rows, valueLabel: 'Sales revenue', subject }
+      .map(([name, t]) => ({ label: name, value: isCount ? t.count : t.rev, sub: t.count + ' sale' + (t.count !== 1 ? 's' : '') }))
+    return { rows, valueLabel: isCount ? 'Transactions' : 'Sales revenue', subject, metric }
   }
 
+  // ── days ───────────────────────────────────────────────────────────────────
   if (subject === 'days') {
     const { data } = await supabaseAdmin
       .from('pos_sales')
       .select('total_amount, created_at')
       .eq('business_id', businessId)
       .neq('status', 'voided')
-      .gte('created_at', since30d)
+      .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Revenue', subject, emptyReason: 'No sales data for the last 30 days.' }
+      return { rows: [], valueLabel: 'Revenue', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
     }
-    const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-    const totals: Record<number, number> = {}
+    const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    const buckets: Record<number, { rev: number; count: number }> = {}
     for (const s of data) {
       const dow = new Date(s.created_at).getDay()
-      totals[dow] = (totals[dow] ?? 0) + Number(s.total_amount ?? 0)
+      if (!buckets[dow]) buckets[dow] = { rev: 0, count: 0 }
+      buckets[dow].rev += Number(s.total_amount ?? 0)
+      buckets[dow].count += 1
     }
-    const rows = Object.entries(totals)
-      .sort((a, b) => b[1] - a[1])
-      .map(([d, v]) => ({ label: DOW[Number(d)], value: v }))
-    return { rows, valueLabel: 'Revenue', subject }
+    const isCount = metric === 'count'
+    const rows = Object.entries(buckets)
+      .sort((a, b) => asc
+        ? (isCount ? a[1].count - b[1].count : a[1].rev - b[1].rev)
+        : (isCount ? b[1].count - a[1].count : b[1].rev - a[1].rev))
+      .map(([d, v]) => ({ label: DOW[Number(d)], value: isCount ? v.count : v.rev, sub: v.count + ' tx' }))
+    return { rows, valueLabel: isCount ? 'Transactions' : 'Revenue', subject, metric }
   }
 
+  // ── hours ──────────────────────────────────────────────────────────────────
+  if (subject === 'hours') {
+    const { data } = await supabaseAdmin
+      .from('pos_sales')
+      .select('total_amount, created_at')
+      .eq('business_id', businessId)
+      .neq('status', 'voided')
+      .gte('created_at', sinceXd)
+    if (!data || data.length === 0) {
+      return { rows: [], valueLabel: 'Activity', subject, metric, emptyReason: 'No sales data for the last ' + timeframe_days + ' days.' }
+    }
+    const buckets: Record<number, { rev: number; count: number }> = {}
+    for (const s of data) {
+      const hour = new Date(s.created_at).getHours()
+      if (!buckets[hour]) buckets[hour] = { rev: 0, count: 0 }
+      buckets[hour].rev += Number(s.total_amount ?? 0)
+      buckets[hour].count += 1
+    }
+    const isCount = metric === 'count' || metric === 'none'
+    const rows = Object.entries(buckets)
+      .sort((a, b) => asc
+        ? (isCount ? a[1].count - b[1].count : a[1].rev - b[1].rev)
+        : (isCount ? b[1].count - a[1].count : b[1].rev - a[1].rev))
+      .map(([h, v]) => {
+        const hr = Number(h)
+        const label = (hr % 12 || 12) + (hr < 12 ? 'am' : 'pm')
+        return {
+          label,
+          value: isCount ? v.count : v.rev,
+          sub: isCount ? undefined : v.count + ' tx',
+        }
+      })
+    return { rows, valueLabel: isCount ? 'Transactions' : 'Revenue', subject, metric }
+  }
+
+  // ── categories ─────────────────────────────────────────────────────────────
   if (subject === 'categories') {
     const { data } = await supabaseAdmin
       .from('pos_sale_items')
       .select('product_name, line_total, pos_products(pos_categories(name))')
       .eq('business_id', businessId)
-      .gte('created_at', since30d)
+      .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Revenue', subject, emptyReason: 'No category data found.' }
+      return { rows: [], valueLabel: 'Revenue', subject, metric, emptyReason: 'No category data found.' }
     }
     const totals: Record<string, number> = {}
     for (const item of data) {
@@ -147,13 +294,13 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       totals[catName] = (totals[catName] ?? 0) + Number(item.line_total ?? 0)
     }
     const rows = Object.entries(totals)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => asc ? a[1] - b[1] : b[1] - a[1])
       .slice(0, 10)
       .map(([name, v]) => ({ label: name, value: v }))
-    return { rows, valueLabel: 'Revenue', subject }
+    return { rows, valueLabel: 'Revenue', subject, metric }
   }
 
-  // payment_methods
+  // ── payment_methods ────────────────────────────────────────────────────────
   {
     const { data } = await supabaseAdmin
       .from('pos_sales')
@@ -161,9 +308,9 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       .eq('business_id', businessId)
       .neq('status', 'voided')
       .not('payment_method', 'is', null)
-      .gte('created_at', since30d)
+      .gte('created_at', sinceXd)
     if (!data || data.length === 0) {
-      return { rows: [], valueLabel: 'Revenue', subject: 'payment_methods', emptyReason: 'No payment method data recorded.' }
+      return { rows: [], valueLabel: 'Revenue', subject: 'payment_methods', metric, emptyReason: 'No payment method data recorded.' }
     }
     const totals: Record<string, number> = {}
     for (const s of data) {
@@ -171,23 +318,25 @@ export async function fetchRankedData(businessId: string, subject: RankSubject):
       totals[method] = (totals[method] ?? 0) + Number(s.total_amount ?? 0)
     }
     const rows = Object.entries(totals)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => asc ? a[1] - b[1] : b[1] - a[1])
       .map(([name, v]) => ({ label: name.charAt(0).toUpperCase() + name.slice(1), value: v }))
-    return { rows, valueLabel: 'Revenue', subject: 'payment_methods' }
+    return { rows, valueLabel: 'Revenue', subject: 'payment_methods', metric }
   }
 }
 
-// ─── Kind classifier ──────────────────────────────────────────────────────────
+// ─── Kind classifier (kept for gating / fallback) ─────────────────────────────
 export function classifyDeliverableKind(message: string): DeliverableKind | null {
   const m = message.toLowerCase()
   if (/\b(show me|build|create|give me|dashboard|overview chart|visuali[sz]e)\b/.test(m)) return 'dashboard'
   if (/\b(compare|vs|versus|side.by.side|against|benchmark)\b/.test(m)) return 'comparison'
   if (/\b(rank|top \d+|best|worst|highest|lowest|list of)\b/.test(m)) return 'ranked_list'
   if (/\b(scorecard|kpi|performance card|how (am|are) (i|we) (doing|performing))\b/.test(m)) return 'scorecard'
+  if (/\b(trend|over time|week by week|month by month|growth rate)\b/.test(m)) return 'trend'
+  if (/\b(what'?s?|what is|how much|how many)\b.{0,40}\b(revenue|sales|transactions?|ticket|average|today)\b/.test(m)) return 'single_answer'
   return null
 }
 
-// ─── Data fetcher (dashboard/scorecard/comparison) ────────────────────────────
+// ─── Dashboard data fetcher ────────────────────────────────────────────────────
 async function fetchDashboardData(businessId: string) {
   const since7d = new Date(Date.now() - 7 * 86400000).toISOString()
   const since30d = new Date(Date.now() - 30 * 86400000).toISOString()
@@ -222,11 +371,31 @@ async function fetchDashboardData(businessId: string) {
   return { rev7, rev30, byDay, topProducts, lowStock, txCount7: txn7Data.length }
 }
 
+// ─── Single-answer data fetcher ───────────────────────────────────────────────
+async function fetchSingleAnswer(businessId: string, intent: DeliverableIntent): Promise<{ answer: string; label: string; sub: string }> {
+  const since = new Date(Date.now() - intent.timeframe_days * 86400000).toISOString()
+  const { data: sales } = await supabaseAdmin
+    .from('pos_sales')
+    .select('total_amount')
+    .eq('business_id', businessId)
+    .neq('status', 'voided')
+    .gte('created_at', since)
+  const arr = sales ?? []
+  const totalRev = arr.reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+  const count = arr.length
+  if (intent.metric === 'avg_ticket') {
+    const avg = count > 0 ? totalRev / count : 0
+    return { answer: '$' + avg.toFixed(2), label: 'Average transaction value', sub: 'Based on ' + count + ' sales in last ' + intent.timeframe_days + ' days' }
+  }
+  if (intent.metric === 'count') {
+    return { answer: String(count), label: 'Total transactions', sub: 'Last ' + intent.timeframe_days + ' days' }
+  }
+  return { answer: '$' + totalRev.toFixed(2), label: 'Total revenue', sub: 'Last ' + intent.timeframe_days + ' days' }
+}
+
 type DashboardData = Awaited<ReturnType<typeof fetchDashboardData>>
 
-// ─── HTML generators ──────────────────────────────────────────────────────────
-
-// Shared CSS foundation for all deliverables — luxury dark theme
+// ─── Shared CSS ───────────────────────────────────────────────────────────────
 const SHARED_CSS = `*{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0f0d;color:#f0f0f5;font-family:'Outfit',Inter,system-ui,sans-serif;padding:20px}
 .card{background:#111916;border:1px solid rgba(127,184,151,0.12);border-radius:12px;padding:18px;margin-bottom:14px}
@@ -241,6 +410,8 @@ td{padding:7px 6px;font-size:13px;border-top:1px solid rgba(255,255,255,0.05)}
 .filter-btn.active{background:rgba(127,184,151,0.14);border-color:#7FB897;color:#7FB897}
 .tooltip{position:fixed;background:#0c1411;border:1px solid rgba(127,184,151,0.25);border-radius:7px;padding:5px 10px;font-size:12px;color:#f0f0f5;pointer-events:none;display:none;white-space:nowrap;z-index:100}
 .bar-wrap{position:relative}`
+
+// ─── HTML generators ──────────────────────────────────────────────────────────
 
 function generateDashboardHTML(data: DashboardData, title: string): string {
   const byDayJson = JSON.stringify(data.byDay)
@@ -284,7 +455,7 @@ function generateDashboardHTML(data: DashboardData, title: string): string {
     + '</script>'
     + '</head><body>'
     + '<div id="tooltip" class="tooltip"></div>'
-    + '<div style="font-size:15px;font-weight:600;color:#f0f0f5;margin-bottom:14px;font-family:Cormorant,Georgia,serif;font-style:italic;font-size:20px">' + title + '</div>'
+    + '<div style="font-family:Cormorant,Georgia,serif;font-style:italic;font-size:20px;color:#f0f0f5;margin-bottom:14px">' + title + '</div>'
     + '<div class="grid">'
     + '<div class="card"><div class="label">7-day revenue</div><div class="val">$' + data.rev7.toFixed(2) + '</div></div>'
     + '<div class="card"><div class="label">30-day revenue</div><div class="val">$' + data.rev30.toFixed(2) + '</div></div>'
@@ -305,23 +476,22 @@ function generateDashboardHTML(data: DashboardData, title: string): string {
     + '</body></html>'
 }
 
-// Subject label for ranked list title
 function subjectLabel(subject: RankSubject): string {
   switch (subject) {
-    case 'customers': return 'customers by spend'
-    case 'products':  return 'products by revenue'
-    case 'staff':     return 'staff by sales'
-    case 'days':      return 'days by revenue'
-    case 'categories':return 'categories by revenue'
+    case 'customers':       return 'customers by spend'
+    case 'products':        return 'products by revenue'
+    case 'staff':           return 'staff by sales'
+    case 'days':            return 'days by revenue'
+    case 'hours':           return 'hours by activity'
+    case 'categories':      return 'categories by revenue'
     case 'payment_methods': return 'payment methods'
   }
 }
 
 function generateRankedListHTML(ranked: RankedData, title: string): string {
   const date = new Date().toLocaleDateString('en-AU')
-  const { rows, valueLabel, subject, emptyReason } = ranked
+  const { rows, valueLabel, subject, metric, emptyReason } = ranked
 
-  // Honest fallback — empty data
   if (rows.length === 0) {
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + SHARED_CSS + '</style></head><body>'
       + '<div style="font-family:Cormorant,Georgia,serif;font-style:italic;font-size:20px;color:#f0f0f5;margin-bottom:14px">' + title + '</div>'
@@ -333,7 +503,11 @@ function generateRankedListHTML(ranked: RankedData, title: string): string {
   }
 
   const rowsJson = JSON.stringify(rows)
-  const isMonetary = subject !== 'days'
+  const fmtExpr = metric === 'margin_pct'
+    ? 'item.value.toFixed(1)+"%"'
+    : (metric === 'units' || metric === 'count')
+    ? 'item.value.toFixed(0)'
+    : '"$"+item.value.toFixed(2)'
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8">'
     + '<style>' + SHARED_CSS
@@ -353,14 +527,13 @@ function generateRankedListHTML(ranked: RankedData, title: string): string {
     + '  const topVal=items[0]?.value||1;'
     + '  const medals=["rgba(127,184,151,1)","rgba(127,184,151,0.65)","rgba(127,184,151,0.4)"];'
     + '  document.getElementById("list").innerHTML=items.map((item,i)=>{'
-    + '    const pct=(item.value/topVal*100).toFixed(0);'
-    + '    const fmt=' + (isMonetary ? '"$"+item.value.toFixed(2)' : 'item.value.toFixed(2)') + ';'
+    + '    const fmt=' + fmtExpr + ';'
     + '    return \'<div class="row\'+(selected===i?" selected":"")+\'" onclick="sel(\'+i+\')">\''
     + '      +\'<div style="width:28px;height:28px;border-radius:9px;background:\'+(medals[i]||"rgba(127,184,151,0.12)")+\';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:\'+(i<3?"#0a0f0d":"rgba(255,255,255,0.45)")+\';flex-shrink:0">\'+(i+1)+\'</div>\''
     + '      +\'<div style="flex:1;min-width:0">\''
     + '      +\'<div style="font-size:14px;color:#f0f0f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\'+item.label+\'</div>\''
     + '      +(item.sub?\'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px">\'+item.sub+\'</div>\':"")'
-    + '      +\'<div style="margin-top:5px;height:3px;border-radius:2px;background:rgba(127,184,151,0.12);overflow:hidden"><div style="height:100%;width:\'+pct+\'%;background:rgba(127,184,151,0.5);border-radius:2px"></div></div>\''
+    + '      +\'<div style="margin-top:5px;height:3px;border-radius:2px;background:rgba(127,184,151,0.12);overflow:hidden"><div style="height:100%;width:\'+(item.value/topVal*100).toFixed(0)+\'%;background:rgba(127,184,151,0.5);border-radius:2px"></div></div>\''
     + '      +\'</div>\''
     + '      +\'<div style="font-size:18px;font-weight:700;color:#7FB897;font-family:Cormorant,Georgia,serif;font-style:italic;flex-shrink:0">\'+fmt+\'</div>\''
     + '      +\'</div>\''
@@ -369,12 +542,12 @@ function generateRankedListHTML(ranked: RankedData, title: string): string {
     + '}'
     + 'function setSort(m){sortMode=m;render();}'
     + 'function sel(i){selected=selected===i?-1:i;render();}'
-    + 'function dlCSV(){const rows=[["Rank","Name","' + valueLabel + '"],...RAW.map((r,i)=>[i+1,r.label,r.value.toFixed(2)])];const csv=rows.map(r=>r.map(v=>\'"\'+v+\'"\').join(",")).join("\\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="ranked-' + subject + '.csv";a.click();}'
+    + 'function dlCSV(){const rows=[["Rank","Name","' + valueLabel + '"],...RAW.map((r,i)=>[i+1,r.label,r.value])];const csv=rows.map(r=>r.map(v=>\'"\'+v+\'"\').join(",")).join("\\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="ranked-' + subject + '.csv";a.click();}'
     + 'window.onload=render;'
     + '</script>'
     + '</head><body>'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">'
-    + '<div style="font-family:Cormorant,Georgia,serif;font-style:italic;font-size:20px;color:#f0f0f5">Top ' + subjectLabel(subject) + '</div>'
+    + '<div style="font-family:Cormorant,Georgia,serif;font-style:italic;font-size:20px;color:#f0f0f5">' + title + '</div>'
     + '<button onclick="dlCSV()" style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid rgba(127,184,151,0.3);background:rgba(127,184,151,0.08);color:#7FB897;cursor:pointer;font-family:inherit">CSV</button>'
     + '</div>'
     + '<div style="display:flex;gap:7px;margin-bottom:14px">'
@@ -382,6 +555,19 @@ function generateRankedListHTML(ranked: RankedData, title: string): string {
     + '<button id="s_label" class="sort-btn" onclick="setSort(\'label\')">By Name</button>'
     + '</div>'
     + '<div class="card" style="padding:14px 18px"><div id="list"></div></div>'
+    + '<div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:10px;text-align:right">Generated by Aria OS · ' + date + '</div>'
+    + '</body></html>'
+}
+
+function generateSingleAnswerHTML(answer: string, label: string, sub: string, title: string): string {
+  const date = new Date().toLocaleDateString('en-AU')
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + SHARED_CSS + '</style></head><body>'
+    + '<div style="font-family:Cormorant,Georgia,serif;font-style:italic;font-size:20px;color:#f0f0f5;margin-bottom:14px">' + title + '</div>'
+    + '<div class="card" style="text-align:center;padding:40px 20px">'
+    + '<div style="font-size:11px;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">' + label + '</div>'
+    + '<div style="font-size:52px;font-weight:700;color:#7FB897;font-family:Cormorant,Georgia,serif;font-style:italic;line-height:1.1">' + answer + '</div>'
+    + (sub ? '<div style="font-size:13px;color:rgba(255,255,255,0.4);margin-top:14px">' + sub + '</div>' : '')
+    + '</div>'
     + '<div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:10px;text-align:right">Generated by Aria OS · ' + date + '</div>'
     + '</body></html>'
 }
@@ -490,6 +676,9 @@ function generateComparisonHTML(data: DashboardData, title: string): string {
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
+const VALID_KINDS: DeliverableKind[] = ['dashboard', 'comparison', 'ranked_list', 'scorecard', 'trend', 'single_answer']
+const VALID_SUBJECTS: RankSubject[] = ['customers', 'products', 'staff', 'days', 'hours', 'categories', 'payment_methods']
+
 export async function generateDeliverable(
   businessId: string,
   conversationId: string | null,
@@ -499,46 +688,73 @@ export async function generateDeliverable(
 ): Promise<DeliverableResult> {
   const start = Date.now()
 
-  // Detect subject for ranked_list so we fetch the right data and title correctly
-  const rankSubject = kind === 'ranked_list' ? detectRankSubject(taskPrompt) : 'products'
+  // Step 1: LLM intent extraction (primary path)
+  const intent = await extractDeliverableIntent(taskPrompt)
 
-  const [dashData, rankedData] = await Promise.all([
-    (kind !== 'ranked_list') ? fetchDashboardData(businessId) : Promise.resolve(null),
-    (kind === 'ranked_list') ? fetchRankedData(businessId, rankSubject) : Promise.resolve(null),
+  // Step 2: Resolve kind, subject, metric, direction — LLM wins, regex fallback
+  const resolvedKind: DeliverableKind = (intent?.deliverable && VALID_KINDS.includes(intent.deliverable as DeliverableKind))
+    ? (intent.deliverable as DeliverableKind)
+    : kind
+
+  const resolvedSubject: RankSubject = (intent?.subject && VALID_SUBJECTS.includes(intent.subject as RankSubject))
+    ? (intent.subject as RankSubject)
+    : detectRankSubject(taskPrompt)
+
+  const resolvedMetric: RankMetric = intent?.metric ?? 'revenue'
+  const resolvedDirection: RankDirection = intent?.direction ?? 'top'
+  const resolvedTimeframe: number = intent?.timeframe_days ?? 30
+
+  // Step 3: Fetch data in parallel
+  const needsRanked = resolvedKind === 'ranked_list'
+  const needsSingle = resolvedKind === 'single_answer'
+  const needsDash = !needsRanked && !needsSingle
+
+  const [dashData, rankedData, singleData] = await Promise.all([
+    needsDash ? fetchDashboardData(businessId) : Promise.resolve(null),
+    needsRanked ? fetchRankedData(businessId, resolvedSubject, resolvedMetric, resolvedDirection, resolvedTimeframe) : Promise.resolve(null),
+    needsSingle && intent ? fetchSingleAnswer(businessId, intent) : Promise.resolve(null),
   ])
 
-  const subjectHint = kind === 'ranked_list'
-    ? '. Subject: ' + subjectLabel(rankSubject)
-    : ''
-
-  const titleRes = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 60,
-    messages: [{ role: 'user', content: 'Write a short 4-6 word title for this deliverable. Task: "' + taskPrompt + '". Kind: ' + kind + subjectHint + '. Return only the title, no quotes.' }],
-  })
-  const title = titleRes.content[0].type === 'text' ? titleRes.content[0].text.trim() : 'Business Overview'
-
-  let html = ''
-  if (kind === 'dashboard' && dashData) {
-    html = generateDashboardHTML(dashData, title)
-  } else if (kind === 'ranked_list' && rankedData) {
-    html = generateRankedListHTML(rankedData, title)
-  } else if (kind === 'scorecard' && dashData) {
-    html = generateScorecardHTML(dashData, title)
-  } else if (kind === 'comparison' && dashData) {
-    html = generateComparisonHTML(dashData, title)
+  // Step 4: Title — from intent if available, else Haiku call
+  let resolvedTitle = intent?.title && intent.title.length > 2 ? intent.title : ''
+  if (!resolvedTitle) {
+    const titleRes = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 60,
+      messages: [{ role: 'user', content: 'Write a short 4-6 word title for this deliverable. Task: "' + taskPrompt + '". Kind: ' + resolvedKind + '. Return only the title, no quotes.' }],
+    })
+    resolvedTitle = titleRes.content[0].type === 'text' ? titleRes.content[0].text.trim() : 'Business Overview'
   }
 
-  const snapshot = kind === 'ranked_list'
-    ? { subject: rankSubject, rows: rankedData?.rows ?? [], emptyReason: rankedData?.emptyReason }
+  // Step 5: Generate HTML
+  let html = ''
+  if (resolvedKind === 'ranked_list' && rankedData) {
+    html = generateRankedListHTML(rankedData, resolvedTitle)
+  } else if (resolvedKind === 'single_answer' && singleData) {
+    html = generateSingleAnswerHTML(singleData.answer, singleData.label, singleData.sub, resolvedTitle)
+  } else if ((resolvedKind === 'dashboard' || resolvedKind === 'trend') && dashData) {
+    html = generateDashboardHTML(dashData, resolvedTitle)
+  } else if (resolvedKind === 'scorecard' && dashData) {
+    html = generateScorecardHTML(dashData, resolvedTitle)
+  } else if (resolvedKind === 'comparison' && dashData) {
+    html = generateComparisonHTML(dashData, resolvedTitle)
+  } else if (dashData) {
+    html = generateDashboardHTML(dashData, resolvedTitle)
+  }
+
+  // Step 6: Persist output
+  const snapshot = needsRanked
+    ? { subject: resolvedSubject, metric: resolvedMetric, direction: resolvedDirection, rows: rankedData?.rows ?? [], emptyReason: rankedData?.emptyReason }
+    : needsSingle
+    ? { metric: resolvedMetric, ...singleData }
     : dashData as unknown as Record<string, unknown>
 
   const { data: inserted, error } = await supabaseAdmin.from('aria_task_outputs').insert({
     business_id: businessId,
     conversation_id: conversationId,
-    title,
+    title: resolvedTitle,
     task_prompt: taskPrompt,
-    output_kind: kind,
+    output_kind: resolvedKind,
     render_html: html,
     data_snapshot: snapshot as Record<string, unknown>,
     status: 'ready',
@@ -555,14 +771,20 @@ export async function generateDeliverable(
     model_id: 'claude-haiku-4-5-20251001',
     model_provider: 'anthropic',
     role: 'analysis',
-    input_tokens: titleRes.usage?.input_tokens ?? 0,
-    output_tokens: titleRes.usage?.output_tokens ?? 0,
+    input_tokens: 0,
+    output_tokens: 0,
     cost_usd_cents: 1,
     latency_ms: Date.now() - start,
     success: true,
-    request_summary: 'deliverable/' + kind,
-    response_summary: title,
+    request_summary: 'deliverable/' + resolvedKind + (needsRanked ? '/' + resolvedSubject : ''),
+    response_summary: resolvedTitle,
   })
 
-  return { outputId: (inserted as { id: string }).id, html, kind, title, data_snapshot: snapshot as Record<string, unknown> }
+  return {
+    outputId: (inserted as { id: string }).id,
+    html,
+    kind: resolvedKind,
+    title: resolvedTitle,
+    data_snapshot: snapshot as Record<string, unknown>,
+  }
 }
