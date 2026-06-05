@@ -31,8 +31,9 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     vid.addEventListener('canplaythrough', play, { once: true })
     play()
 
-    // Hard fallback: if video never plays after 7s, dismiss anyway
-    const fallback = setTimeout(dismiss, 7000)
+    // Hard fallback: only if the video never plays at all. Must be LONGER than the
+    // video (8s) + end sequence, so it never cuts off the door-open climax.
+    const fallback = setTimeout(dismiss, 11000)
 
     // Caption — three-beat empathy arc. The end-headline ('text' phase) always wins.
     //  ~0.6s: "Running a business is hard." (the pain)
@@ -63,14 +64,16 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     const onTimeUpdate = () => {
       if (!vid.duration || firedRef.current) return
       const rem = vid.duration - vid.currentTime
-      if (rem < 0.9) {
+      // Let the door-open + green-light climax fully play. Only start the headline
+      // hand-off in the final ~0.35s, when the green flood already fills the frame.
+      if (rem < 0.35) {
         firedRef.current = true
         clearTimeout(fallback)
         setPhase('text')
         setTimeout(() => {
           if (vid) { vid.style.transition = 'opacity 0.6s'; vid.style.opacity = '0' }
-        }, 400)
-        setTimeout(dismiss, 2200)
+        }, 300)
+        setTimeout(dismiss, 2000)
       }
     }
 
@@ -108,7 +111,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         style={{
           position: 'absolute', inset: 0,
           width: '100%', height: '100%',
-          objectFit: 'cover',
+          objectFit: 'contain',
         }}
       />
 
