@@ -49,6 +49,14 @@ interface ConvSummary {
   has_escalated: boolean
 }
 
+interface DeliverableRecord {
+  id: string
+  title: string
+  output_kind: string
+  created_at: string
+  render_html: string | null
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -313,6 +321,8 @@ export default function AskAriaPage() {
   const [briefingCollapsed, setBriefingCollapsed] = useState(false)
   const [avatarMounted, setAvatarMounted] = useState(false)
   const [ariaResponseText, setAriaResponseText] = useState<string>('')
+  const [deliverables, setDeliverables] = useState<DeliverableRecord[]>([])
+  const [selectedDeliverable, setSelectedDeliverable] = useState<DeliverableRecord | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Delay greeting text until avatar finishes waving (7.27s greeting animation)
@@ -370,7 +380,18 @@ export default function AskAriaPage() {
     } catch { /* non-fatal */ }
   }, [])
 
+  const loadDeliverables = useCallback(async () => {
+    try {
+      const res = await fetch('/api/aria/deliverables')
+      if (res.ok) {
+        const data = await res.json() as { deliverables?: DeliverableRecord[] }
+        setDeliverables(data.deliverables ?? [])
+      }
+    } catch { /* non-fatal */ }
+  }, [])
+
   useEffect(() => { loadHistory() }, [loadHistory])
+  useEffect(() => { loadDeliverables() }, [loadDeliverables])
 
 
   const loadConversation = useCallback(async (id: string) => {
@@ -506,6 +527,7 @@ export default function AskAriaPage() {
       })
 
       loadHistory()
+      if (data.intent === 'deliverable') loadDeliverables()
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error'
       setMessages(prev => {
@@ -521,7 +543,7 @@ export default function AskAriaPage() {
       setCouncilThinking(false)
       inputRef.current?.focus()
     }
-  }, [input, sending, conversationId, loadHistory])
+  }, [input, sending, conversationId, loadHistory, loadDeliverables])
 
   useEffect(() => {
     ;(window as unknown as Record<string, unknown>).ariaSendPrompt = (prompt: string) => { send(prompt) }
@@ -669,6 +691,9 @@ export default function AskAriaPage() {
             >
               + New conversation
             </button>
+            {history.length === 0 && (
+              <p className="px-4 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>No conversations yet</p>
+            )}
             {history.map(c => (
               <div
                 key={c.id}
@@ -703,6 +728,58 @@ export default function AskAriaPage() {
                 </button>
               </div>
             ))}
+          {/* Recent deliverables section */}
+          {deliverables.length > 0 && (
+            <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>Recent Deliverables</p>
+              {deliverables.map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => setSelectedDeliverable(d)}
+                  className="w-full text-left px-4 py-2.5 border-b transition-colors hover:bg-white/5"
+                  style={{ borderColor: 'rgba(255,255,255,0.04)' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>
+                      {d.output_kind.replace('_', ' ')}
+                    </span>
+                    <p className="text-xs text-white truncate flex-1">{d.title}</p>
+                  </div>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    {new Date(d.created_at).toLocaleDateString()}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+          </div>
+        </div>
+      )}
+
+      {/* Deliverable viewer modal */}
+      {selectedDeliverable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setSelectedDeliverable(null)}>
+          <div className="w-full max-w-3xl mx-4 rounded-2xl overflow-hidden shadow-2xl" style={{ background: '#161b22', border: '1px solid rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="flex items-center gap-3">
+                <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>
+                  {selectedDeliverable.output_kind.replace('_', ' ')}
+                </span>
+                <p className="text-sm font-medium text-white">{selectedDeliverable.title}</p>
+              </div>
+              <button onClick={() => setSelectedDeliverable(null)} className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>✕</button>
+            </div>
+            {selectedDeliverable.render_html ? (
+              <iframe
+                srcDoc={selectedDeliverable.render_html}
+                sandbox="allow-scripts"
+                className="w-full"
+                style={{ height: 480, border: 'none', display: 'block' }}
+                title={selectedDeliverable.title}
+              />
+            ) : (
+              <div className="px-5 py-8 text-center text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>No preview available</div>
+            )}
           </div>
         </div>
       )}

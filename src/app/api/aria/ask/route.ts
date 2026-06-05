@@ -30,6 +30,7 @@ import { extractAndStoreMemories, maybeWriteOutcome } from '@/lib/aria/memory/ex
 import { summariseConversation } from '@/lib/aria/memory/summarize'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
+import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -327,6 +328,36 @@ async function _POST(req: Request) {
     } catch (err) {
       console.error('[aria/ask] multi-domain parallel failed, falling back:', (err as Error).message)
       // Non-fatal — fall through to single-call path
+    }
+  }
+
+  // 2b-deliverable. Deliverable classifier — generates inline HTML dashboard/chart for visual requests
+  const deliverableKind = classifyDeliverableKind(message)
+  if (deliverableKind && !isMultiDomain) {
+    try {
+      const { data: bizInfoD } = await supabaseAdmin.from('businesses').select('industry').eq('id', bid).maybeSingle()
+      const result = await generateDeliverable(bid, conversationId ?? null, message, deliverableKind, (bizInfoD as { industry?: string } | null)?.industry ?? 'retail')
+      const responseText = 'Here\'s your ' + result.title + ':\n\n[DELIVERABLE:' + result.outputId + ']'
+      let savedConvId = conversationId
+      try {
+        savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'deliverable')
+      } catch (e) {
+        console.error('[aria/ask] upsertConversation failed (deliverable):', (e as Error).message)
+      }
+      return NextResponse.json({
+        response: responseText,
+        conversation_id: savedConvId ?? conversationId,
+        intent: 'deliverable',
+        action: null,
+        cost_usd_cents: 1,
+        downloads: null,
+        tool_calls: [],
+        used_council: false,
+        deliverable: { id: result.outputId, kind: result.kind, title: result.title, html: result.html },
+      })
+    } catch (err) {
+      console.error('[aria/ask] deliverable generation failed, falling back to text:', (err as Error).message)
+      // RULE 0: fall through to normal text response — never break the conversation
     }
   }
 
