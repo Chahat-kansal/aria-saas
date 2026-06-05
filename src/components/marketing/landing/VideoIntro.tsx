@@ -37,29 +37,11 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     const onPlaying = () => setVidPlaying(true)
     vid.addEventListener('playing', onPlaying)
 
-    // Hard fallback: only if the video never plays at all. Must be LONGER than the
-    // video (8s) + end sequence, so it never cuts off the door-open climax.
-    const fallback = setTimeout(dismiss, 11000)
-
-    // Caption — three-beat empathy arc. The end-headline ('text' phase) always wins.
-    //  ~0.6s: "Running a business is hard." (the pain)
-    //  ~2.0s: "We get it." (the empathy)
-    //  ~3.4s: "Aria's here to help." (the reassurance + reveal, large + glowing)
-    //  ~5.4s: whole caption clears before the door-open headline
-    const cap1 = setTimeout(() => { setPhase(p => (p === 'video' ? 'caption' : p)); setCaptionStep(1) }, 800)
-    const cap2 = setTimeout(() => setCaptionStep(s => (s === 1 ? 2 : s)), 3000)
-    const cap3 = setTimeout(() => setCaptionStep(s => (s === 2 ? 3 : s)), 5200)
-    const captionOut = setTimeout(() => {
-      setPhase(p => (p === 'caption' ? 'video' : p))
-      setCaptionStep(0)
-    }, 7200)
+    // Hard fallback: only if the video never plays at all. Longer than the 10s clip.
+    const fallback = setTimeout(dismiss, 14000)
 
     function dismiss() {
       clearTimeout(fallback)
-      clearTimeout(cap1)
-      clearTimeout(cap2)
-      clearTimeout(cap3)
-      clearTimeout(captionOut)
       const el = overlayRef.current
       if (!el) { onDone(); return }
       el.style.transition = 'opacity 0.7s ease'
@@ -67,19 +49,41 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       setTimeout(onDone, 750)
     }
 
+    // Captions are driven by the video's ACTUAL playback time (currentTime), not by
+    // mount timers — so on a slow load they never run ahead of a frozen frame.
+    // Video beats (10s clip):  0-4s wave · 4-7s walk · 7-9.5s reach+open · 9.5-10s green flood
+    //   caption 1 "pain"        @ ~1.0s
+    //   caption 2 "empathy"     @ ~3.0s
+    //   caption 3 "Aria helps"  @ ~4.8s  (lands during the walk)
+    //   captions clear          @ ~6.8s  (before he opens the door — door sequence plays clean)
     const onTimeUpdate = () => {
-      if (!vid.duration || firedRef.current) return
-      const rem = vid.duration - vid.currentTime
-      // Let the door-open + green-light climax fully play. Only start the headline
-      // hand-off in the final ~0.35s, when the green flood already fills the frame.
-      if (rem < 0.35) {
-        firedRef.current = true
-        clearTimeout(fallback)
-        setPhase('text')
-        setTimeout(() => {
-          if (vid) { vid.style.transition = 'opacity 0.6s'; vid.style.opacity = '0' }
-        }, 300)
-        setTimeout(dismiss, 2000)
+      if (!vid.duration) return
+      const t = vid.currentTime
+
+      // staged captions
+      if (t >= 1.0 && t < 6.8) {
+        setPhase(p => (p === 'video' ? 'caption' : p))
+        if (t >= 4.8) setCaptionStep(s => (s < 3 ? 3 : s))
+        else if (t >= 3.0) setCaptionStep(s => (s < 2 ? 2 : s))
+        else setCaptionStep(s => (s < 1 ? 1 : s))
+      } else if (t >= 6.8 && !firedRef.current) {
+        setPhase(p => (p === 'caption' ? 'video' : p))
+        setCaptionStep(0)
+      }
+
+      // end hand-off: wait until the green flood truly fills the frame (final ~0.25s)
+      if (!firedRef.current) {
+        const rem = vid.duration - t
+        if (rem < 0.25) {
+          firedRef.current = true
+          clearTimeout(fallback)
+          setPhase('text')
+          setCaptionStep(0)
+          setTimeout(() => {
+            if (vid) { vid.style.transition = 'opacity 0.6s'; vid.style.opacity = '0' }
+          }, 400)
+          setTimeout(dismiss, 2200)
+        }
       }
     }
 
@@ -90,10 +94,6 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       vid.removeEventListener('canplaythrough', play)
       vid.removeEventListener('playing', onPlaying)
       clearTimeout(fallback)
-      clearTimeout(cap1)
-      clearTimeout(cap2)
-      clearTimeout(cap3)
-      clearTimeout(captionOut)
     }
   }, [onDone])
 
