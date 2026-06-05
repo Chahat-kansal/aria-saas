@@ -25,6 +25,13 @@ interface ExecutionResultAction { type: 'execution_result'; ok: boolean; affecte
 interface DocumentAction { type: 'document'; document: DocumentReadResult }
 type MessageAction = ExportAction | EscalateAction | ErrorAction | PreviewAction | ExecutionResultAction | DocumentAction | null
 
+interface DeliverableInfo {
+  id: string
+  kind: string
+  title: string
+  html: string
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string
@@ -38,6 +45,7 @@ interface Message {
   followups?: string[]
   used_council?: boolean
   model_used?: string
+  deliverable?: DeliverableInfo
 }
 
 interface ConvSummary {
@@ -303,6 +311,162 @@ function AriaMarkdown({ text }: { text: string }) {
   )
 }
 
+function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
+  const [view, setView] = useState<'chart' | 'summary'>('chart')
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [schedFreq, setSchedFreq] = useState<'daily' | 'weekly'>('weekly')
+  const [schedEmail, setSchedEmail] = useState('')
+  const [schedSaving, setSchedSaving] = useState(false)
+  const [status, setStatus] = useState('')
+
+  async function downloadPdf() {
+    setPdfLoading(true)
+    setStatus('')
+    try {
+      const res = await fetch('/api/aria/deliverable-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outputId: deliverable.id }),
+      })
+      const data = await res.json() as { pdf_url?: string; error?: string }
+      if (data.pdf_url) {
+        window.open(data.pdf_url, '_blank')
+        setStatus('PDF ready')
+      } else {
+        setStatus(data.error ?? 'PDF export failed')
+      }
+    } catch (e) {
+      setStatus((e as Error).message)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  async function sendEmail() {
+    setEmailLoading(true)
+    setStatus('')
+    try {
+      const res = await fetch('/api/aria/deliverable-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outputId: deliverable.id }),
+      })
+      const data = await res.json() as { sent?: boolean; error?: string }
+      setStatus(data.sent ? 'Email sent' : (data.error ?? 'Failed'))
+    } catch (e) {
+      setStatus((e as Error).message)
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  async function saveSchedule() {
+    if (!schedEmail.trim()) return
+    setSchedSaving(true)
+    try {
+      const res = await fetch('/api/aria/intelligence/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: deliverable.title,
+          report_type: 'deliverable',
+          frequency: schedFreq,
+          recipients: [schedEmail.trim()],
+          deliverable_spec: { task_prompt: deliverable.title, output_kind: deliverable.kind },
+        }),
+      })
+      if (res.ok) {
+        setStatus('Scheduled')
+        setScheduleOpen(false)
+      } else {
+        setStatus('Schedule failed')
+      }
+    } catch {
+      setStatus('Schedule failed')
+    } finally {
+      setSchedSaving(false)
+    }
+  }
+
+  const btnBase = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors'
+  const btnStyle = { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.08)' }
+  const btnActiveStyle = { background: 'rgba(127,184,151,0.12)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.25)' }
+
+  return (
+    <div className="mt-3">
+      {/* Inline chart view */}
+      {view === 'chart' && deliverable.html && (
+        <div className="rounded-xl overflow-hidden mb-2" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+          <iframe
+            srcDoc={deliverable.html}
+            sandbox="allow-scripts"
+            className="w-full"
+            style={{ height: 340, border: 'none', display: 'block' }}
+            title={deliverable.title}
+          />
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-2">
+        <button className={btnBase} style={view === 'chart' ? btnActiveStyle : btnStyle} onClick={() => setView('chart')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><rect x="3" y="3" width="18" height="18" rx="2"/><path strokeLinecap="round" d="M7 16l4-4 4 4"/></svg>
+          Chart
+        </button>
+        <button className={btnBase} style={view === 'summary' ? btnActiveStyle : btnStyle} onClick={() => setView('summary')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><path strokeLinecap="round" d="M4 6h16M4 10h16M4 14h10"/></svg>
+          Summary
+        </button>
+        <button className={btnBase} style={pdfLoading ? btnActiveStyle : btnStyle} onClick={downloadPdf} disabled={pdfLoading}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><path strokeLinecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          {pdfLoading ? 'Exporting…' : 'Download PDF'}
+        </button>
+        <button className={btnBase} style={emailLoading ? btnActiveStyle : btnStyle} onClick={sendEmail} disabled={emailLoading}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><path strokeLinecap="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          {emailLoading ? 'Sending…' : 'Email'}
+        </button>
+        <button className={btnBase} style={scheduleOpen ? btnActiveStyle : btnStyle} onClick={() => setScheduleOpen(v => !v)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><rect x="3" y="4" width="18" height="18" rx="2"/><path strokeLinecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Schedule
+        </button>
+      </div>
+
+      {/* Schedule modal */}
+      {scheduleOpen && (
+        <div className="mt-2 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <p className="text-xs font-medium text-white mb-2">Schedule recurring delivery</p>
+          <div className="flex gap-2 mb-2">
+            {(['daily', 'weekly'] as const).map(f => (
+              <button key={f} onClick={() => setSchedFreq(f)}
+                className="px-3 py-1.5 rounded-lg text-xs capitalize"
+                style={schedFreq === f ? btnActiveStyle : btnStyle}>
+                {f}
+              </button>
+            ))}
+          </div>
+          <input
+            type="email"
+            placeholder="Recipient email"
+            value={schedEmail}
+            onChange={e => setSchedEmail(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg text-xs mb-2 outline-none"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+          />
+          <button onClick={saveSchedule} disabled={schedSaving || !schedEmail.trim()}
+            className="px-4 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40"
+            style={{ background: '#2D5240', color: '#fff' }}>
+            {schedSaving ? 'Saving…' : 'Save schedule'}
+          </button>
+        </div>
+      )}
+
+      {status && <p className="mt-1.5 text-xs" style={{ color: status.includes('fail') || status.includes('error') ? '#fca5a5' : '#7FB897' }}>{status}</p>}
+    </div>
+  )
+}
+
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -484,6 +648,7 @@ export default function AskAriaPage() {
         followups?: string[]
         used_council?: boolean
         model_used?: string
+        deliverable?: DeliverableInfo
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)
@@ -521,6 +686,7 @@ export default function AskAriaPage() {
             followups: data.followups ?? undefined,
             used_council: data.used_council ?? false,
             model_used: data.model_used,
+            deliverable: data.deliverable ?? undefined,
           }
         }
         return updated
@@ -975,6 +1141,9 @@ export default function AskAriaPage() {
                       : m.content}
                 </div>
                 {m.role === 'assistant' && m.action && <ActionCard action={m.action} />}
+                {m.role === 'assistant' && !m.streaming && m.deliverable && (
+                  <DeliverableToolbar deliverable={m.deliverable} />
+                )}
                 {m.role === 'assistant' && m.downloads && m.downloads.length > 0 && (
                   <div className="mt-2 space-y-2">
                     {m.downloads.map((dl, di) => (
