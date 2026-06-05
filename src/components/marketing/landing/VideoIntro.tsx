@@ -5,6 +5,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
   const vidRef    = useRef<HTMLVideoElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<'video' | 'caption' | 'text'>('video')
+  const [captionStep, setCaptionStep] = useState(0) // 0 hidden, 1 "hard", 2 "Meet Aria", 3 fading
   const firedRef  = useRef(false)
 
   useEffect(() => {
@@ -33,18 +34,23 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     // Hard fallback: if video never plays after 7s, dismiss anyway
     const fallback = setTimeout(dismiss, 7000)
 
-    // Caption: appears during the wave (~0.6s), fades out before the door opens (~5s).
-    // The end-headline ('text' phase) is set directly by onTimeUpdate and always wins.
-    const captionIn = setTimeout(() => {
-      setPhase(p => (p === 'video' ? 'caption' : p))
-    }, 600)
+    // Caption — staged for drama. The end-headline ('text' phase, set by onTimeUpdate) always wins.
+    //  ~0.7s: line 1 "Running a business is hard." rises in (sets the tension)
+    //  ~2.4s: line 1 dims, line 2 "Meet Aria." punches in larger + glowing (the payoff)
+    //  ~5.0s: whole caption clears before the door-open headline
+    const cap1 = setTimeout(() => { setPhase(p => (p === 'video' ? 'caption' : p)); setCaptionStep(1) }, 700)
+    const cap2 = setTimeout(() => setCaptionStep(s => (s === 1 ? 2 : s)), 2400)
+    const cap3 = setTimeout(() => setCaptionStep(s => (s === 2 ? 3 : s)), 4600)
     const captionOut = setTimeout(() => {
       setPhase(p => (p === 'caption' ? 'video' : p))
+      setCaptionStep(0)
     }, 5000)
 
     function dismiss() {
       clearTimeout(fallback)
-      clearTimeout(captionIn)
+      clearTimeout(cap1)
+      clearTimeout(cap2)
+      clearTimeout(cap3)
       clearTimeout(captionOut)
       const el = overlayRef.current
       if (!el) { onDone(); return }
@@ -73,7 +79,9 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       vid.removeEventListener('loadeddata', play)
       vid.removeEventListener('canplaythrough', play)
       clearTimeout(fallback)
-      clearTimeout(captionIn)
+      clearTimeout(cap1)
+      clearTimeout(cap2)
+      clearTimeout(cap3)
       clearTimeout(captionOut)
     }
   }, [onDone])
@@ -117,29 +125,50 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         transition: 'opacity 0.3s ease',
       }} />
 
-      {/* Intro caption — readable since there's no audio */}
+      {/* Intro caption — staged two-beat reveal (no audio, so it carries the message) */}
       <div style={{
-        position: 'absolute', zIndex: 3, left: 0, right: 0, bottom: '14%',
+        position: 'absolute', zIndex: 3, left: 0, right: 0, bottom: '13%',
         textAlign: 'center', padding: '0 32px',
-        opacity: phase === 'caption' ? 1 : 0,
-        transform: phase === 'caption' ? 'translateY(0)' : 'translateY(16px)',
-        transition: 'opacity 0.6s ease, transform 0.6s ease',
+        opacity: phase === 'caption' && captionStep > 0 && captionStep < 3 ? 1 : 0,
+        transition: 'opacity 0.7s ease',
         pointerEvents: 'none',
       }}>
-        <p style={{
-          display: 'inline-block',
+        {/* Line 1 — the tension */}
+        <div style={{
+          fontFamily: 'var(--font-body, sans-serif)',
+          fontWeight: 400,
+          fontSize: 'clamp(0.95rem, 2vw, 1.4rem)',
+          letterSpacing: '0.01em',
+          color: 'rgba(255,255,255,0.82)',
+          textShadow: '0 2px 20px rgba(0,0,0,0.6)',
+          opacity: captionStep >= 1 ? (captionStep >= 2 ? 0.45 : 1) : 0,
+          transform: captionStep >= 1 ? 'translateY(0)' : 'translateY(14px)',
+          transition: 'opacity 0.7s ease, transform 0.7s cubic-bezier(.2,.7,.2,1)',
+          marginBottom: 'clamp(8px, 1.4vh, 16px)',
+        }}>
+          Running a business is hard.
+        </div>
+        {/* Line 2 — the payoff */}
+        <div style={{
           fontFamily: 'var(--font-display, serif)',
           fontWeight: 300,
-          fontSize: 'clamp(1.5rem, 3.6vw, 3rem)',
-          letterSpacing: '-0.02em',
-          lineHeight: 1.15,
+          fontSize: 'clamp(2.4rem, 6vw, 5.2rem)',
+          letterSpacing: '-0.03em',
+          lineHeight: 1.0,
           color: '#fff',
-          margin: 0,
-          textShadow: '0 2px 24px rgba(0,0,0,0.55)',
+          opacity: captionStep >= 2 ? 1 : 0,
+          transform: captionStep >= 2 ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.94)',
+          transition: 'opacity 0.6s ease, transform 0.7s cubic-bezier(.16,.84,.3,1)',
+          textShadow: '0 4px 40px rgba(0,0,0,0.5)',
         }}>
-          Running a business is hard.{' '}
-          <em style={{ color: '#7FB897', fontStyle: 'italic' }}>Meet Aria.</em>
-        </p>
+          Meet{' '}
+          <em style={{
+            color: '#7FB897',
+            fontStyle: 'italic',
+            textShadow: captionStep >= 2 ? '0 0 36px rgba(127,184,151,0.65)' : 'none',
+            transition: 'text-shadow 0.9s ease 0.2s',
+          }}>Aria.</em>
+        </div>
       </div>
 
       {/* Hero text */}
