@@ -517,7 +517,7 @@ export default function ReelStudioPage() {
 
       {/* ── 3-PANEL LAYOUT (create + editor tabs) ───────────────────────────── */}
       {(tab === 'create' || tab === 'editor') && (
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr 320px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: tab === 'editor' ? '340px 1fr' : '340px 1fr 320px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
           {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
           <aside style={{ borderRight: '1px solid ' + T.border, overflowY: 'auto', padding: T.sp.lg + 'px ' + T.sp.md + 'px', display: 'flex', flexDirection: 'column', gap: T.sp.sm }}>
@@ -752,7 +752,7 @@ export default function ReelStudioPage() {
             )}
           </main>
 
-          {/* ── RIGHT PANEL ────────────────────────────────────────────────── */}
+          {tab !== 'editor' && (
           <aside style={{ borderLeft: '1px solid ' + T.border, overflowY: 'auto', padding: T.sp.lg + 'px ' + T.sp.md + 'px', display: 'flex', flexDirection: 'column', gap: T.sp.sm }}>
 
             {!latestVideo && <p style={{ padding: '40px 0', textAlign: 'center', color: T.textFaint, fontSize: 13 }}>Generate or upload a reel to edit</p>}
@@ -852,6 +852,7 @@ export default function ReelStudioPage() {
               </Card>
             )}
           </aside>
+          )}
         </div>
       )}
 
