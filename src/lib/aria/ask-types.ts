@@ -49,6 +49,7 @@ export type AskBlock =
       title?: string
       downloadable?: boolean
       download_filename?: string
+      outputId?: string
     }
   | {
       type: 'styled_chart'
@@ -118,6 +119,45 @@ export type AskBlock =
       title: string
       body: string
       buttons: Array<{ label: string; href: string }>
+    }
+  | {
+      type: 'slides'
+      title: string
+      slides: Array<{
+        heading: string
+        subheading?: string
+        body: string
+        layout: 'title' | 'content' | 'metric' | 'chart' | 'split'
+        metrics?: Array<{ label: string; value: string; color?: string }>
+        chart_data?: Array<{ name: string; value: number }>
+        accent_color?: string
+      }>
+      theme?: 'dark' | 'light'
+      downloadable?: boolean
+    }
+  | {
+      type: 'infographic'
+      title: string
+      subtitle?: string
+      sections: Array<{
+        heading: string
+        icon: string
+        stat?: string
+        stat_label?: string
+        body: string
+        color?: string
+      }>
+      footer?: string
+    }
+  | {
+      type: 'task_plan'
+      title: string
+      steps: Array<{
+        label: string
+        status: 'pending' | 'running' | 'done' | 'failed'
+        detail?: string
+      }>
+      estimated_seconds?: number
     }
 
 export interface AskResponse {

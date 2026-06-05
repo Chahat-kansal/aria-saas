@@ -361,6 +361,56 @@ async function _POST(req: Request) {
     }
   }
 
+  // 2b-bg. Background task detection — queue long-running tasks and return immediately
+  const BACKGROUND_TRIGGERS = /\b(analyse (all|every|my entire|my full)|research (all|every)|when (you'?re|you are) done|let me know when|notify me when|run in the background|come back to me|i.?ll check later)\b/i
+  const isBackgroundTask = intent.complexity === 'complex' && BACKGROUND_TRIGGERS.test(message)
+  if (isBackgroundTask) {
+    try {
+      const { data: taskRow } = await supabaseAdmin.from('aria_user_tasks').insert({
+        business_id: bid,
+        title: message.slice(0, 120),
+        task_prompt: message,
+        status: 'queued',
+        notify_email: true,
+      }).select('id').maybeSingle()
+      const taskId = taskRow?.id
+      if (taskId) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+        const cronSec = process.env.CRON_SECRET ?? ''
+        waitUntil(
+          fetch(appUrl + '/api/aria/process-user-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-cron-secret': cronSec },
+            body: JSON.stringify({ task_id: taskId, business_id: bid }),
+          }).catch(() => {}),
+        )
+      }
+      const bgPlanBlock: import('@/lib/aria/ask-types').AskBlock = {
+        type: 'task_plan',
+        title: 'Working on it in the background',
+        steps: [
+          { label: message.slice(0, 100), status: 'running', detail: 'Aria is processing this — check back in a few minutes' },
+        ],
+        estimated_seconds: 120,
+      }
+      const bgConvId = await upsertConversation(bid, user.id, conversationId, message, 'Working on it in the background — I\'ll notify you when done.', 'background_task').catch(() => conversationId)
+      return NextResponse.json({
+        response: 'Working on it in the background — I\'ll notify you when done.',
+        conversation_id: bgConvId ?? conversationId,
+        intent: 'background_task',
+        blocks: [bgPlanBlock],
+        followups: [],
+        used_council: false,
+        cost_usd_cents: 0,
+        downloads: null,
+        action: null,
+        tool_calls: [],
+      })
+    } catch (bgErr) {
+      console.error('[aria/ask] background task queue failed, falling through:', (bgErr as Error).message)
+    }
+  }
+
   // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests
   if (isStrategicQuestion) {
     try {
@@ -953,6 +1003,12 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     systemPrompt += '\n\n## REASONING PROTOCOL\nFor complex questions, reason step-by-step before answering:\n1. What are the key business factors at play?\n2. What does the data reveal?\n3. What are the main risks or tradeoffs?\nThen give a specific, actionable recommendation.'
   }
 
+  // Phase 9.1: Force web research for questions about market/industry/current data
+  const RESEARCH_TRIGGERS = /\b(what are the (latest|current|recent)|look up|find out|what is the (current|going rate|average|market|industry)|industry (average|benchmark|standard|rate)|market (rate|price|average|data)|trends? in|how does .{1,30} compare|benchmark|competitor analysis)\b/i
+  if (RESEARCH_TRIGGERS.test(message)) {
+    systemPrompt += '\n\n## WEB RESEARCH REQUIRED\nThis question requires current market or industry data. You MUST use the web_search tool before answering. Search for the most recent relevant data. Do not guess or hallucinate statistics — look them up and reference the source.'
+  }
+
   // Haiku does not support extended thinking — only enable it for Sonnet/Opus.
   const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
   const thinkingBudget = 4000 // all tiers capped at 4000 until first paying customers are live
@@ -1168,6 +1224,19 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
 
   // Extract rich blocks from the response if Aria included them
   const richBlocks = extractBlocks(rawResponse)
+  // Phase 5.3: Prepend a task_plan block for complex analytical queries to show analysis steps
+  if (intent.complexity === 'complex' && richBlocks && richBlocks.length > 0) {
+    const analysisPlanBlock: import('@/lib/aria/ask-types').AskBlock = {
+      type: 'task_plan',
+      title: 'Aria analysed your business',
+      steps: [
+        { label: 'Loaded live business data', status: 'done' },
+        { label: 'Identified patterns and trends', status: 'done' },
+        { label: 'Formed recommendation', status: 'done' },
+      ],
+    }
+    richBlocks.unshift(analysisPlanBlock)
+  }
   const finalResponse = richBlocks ? stripBlocks(cleanResponse) : cleanResponse
 
   return NextResponse.json({

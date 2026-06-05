@@ -13,6 +13,12 @@ const VARIANT_ACCENT: Record<string, string> = {
   danger: '#F87171', warning: '#F59E0B', default: 'var(--violet)',
 }
 
+const navBtn: React.CSSProperties = {
+  padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+  background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.7)',
+  cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', fontWeight: 500,
+}
+
 function stripScripts(html: string): string {
   return html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/ on\w+="[^"]*"/gi, '')
 }
@@ -24,11 +30,11 @@ function ActionCard({ icon, title, sub, prompt, accent, onAction }: {
     <button
       type="button"
       onClick={() => onAction?.(prompt)}
-      aria-label={`Ask Aria: ${title}`}
+      aria-label={'Ask Aria: ' + title}
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left',
         padding: '12px 14px', borderRadius: 10, border: '1px solid var(--divider)',
-        borderLeft: `3px solid ${accent}`, background: 'var(--bg-surface)', cursor: 'pointer',
+        borderLeft: '3px solid ' + accent, background: 'var(--bg-surface)', cursor: 'pointer',
         fontFamily: 'inherit', color: 'var(--text-primary)',
       }}
       onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--violet)')}
@@ -45,15 +51,15 @@ function ActionCard({ icon, title, sub, prompt, accent, onAction }: {
 
 function fmtCell(val: unknown, fmt?: string): string {
   if (val == null) return '—'
-  if (fmt === 'currency') return `$${Number(val).toFixed(2)}`
-  if (fmt === 'percent') return `${Number(val).toFixed(1)}%`
+  if (fmt === 'currency') return '$' + Number(val).toFixed(2)
+  if (fmt === 'percent') return Number(val).toFixed(1) + '%'
   if (fmt === 'number') return Number(val).toLocaleString()
   if (fmt === 'date') return new Date(String(val)).toLocaleDateString('en-AU')
   return String(val)
 }
 
 function downloadCSV(filename: string, headers: string[], rows: string[][]) {
-  const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\n')
+  const csv = [headers.join(','), ...rows.map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(','))].join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
@@ -78,7 +84,7 @@ function DataTableBlock({ block }: { block: DataTableBlock }) {
     <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--divider)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--divider)' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{block.title}</span>
-        {block.downloadable && <button onClick={() => downloadCSV(`${block.title.toLowerCase().replace(/\s+/g, '-')}.csv`, block.columns.map(c => c.label), csvRows)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>Export CSV</button>}
+        {block.downloadable && <button onClick={() => downloadCSV(block.title.toLowerCase().replace(/\s+/g, '-') + '.csv', block.columns.map(c => c.label), csvRows)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>Export CSV</button>}
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -106,35 +112,311 @@ function DataTableBlock({ block }: { block: DataTableBlock }) {
 
 function SpreadsheetBlock({ block }: { block: SpreadsheetBlock }) {
   const triggered = useRef(false)
+  const [expanded, setExpanded] = useState(false)
+  const [sortCol, setSortCol] = useState<number | null>(null)
+  const [sortAsc, setSortAsc] = useState(true)
+
   useEffect(() => {
     if (block.auto_download && !triggered.current) {
       triggered.current = true
       downloadCSV(block.filename, block.headers, block.rows)
     }
   }, [block.auto_download, block.filename, block.headers, block.rows])
-  const preview = block.rows.slice(0, 5)
+
+  const sorted = sortCol !== null
+    ? [...block.rows].sort((a, b) => {
+        const va = a[sortCol] ?? '', vb = b[sortCol] ?? ''
+        const numA = parseFloat(String(va).replace(/[$,%]/g, ''))
+        const numB = parseFloat(String(vb).replace(/[$,%]/g, ''))
+        const cmp = !isNaN(numA) && !isNaN(numB) ? numA - numB : String(va).localeCompare(String(vb))
+        return sortAsc ? cmp : -cmp
+      })
+    : block.rows
+
+  const preview = expanded ? sorted : sorted.slice(0, 6)
+
   return (
     <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--divider)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--divider)' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{block.filename}</span>
-        <button onClick={() => downloadCSV(block.filename, block.headers, block.rows)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--divider)', background: '#d9f54e', color: '#0a0a0a', cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit' }}>Download spreadsheet</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--divider)', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>📊</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{block.filename}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{block.rows.length} rows × {block.headers.length} cols</span>
+        </div>
+        <button
+          onClick={() => downloadCSV(block.filename, block.headers, block.rows)}
+          style={{ fontSize: 11, padding: '5px 14px', borderRadius: 8, border: '1px solid var(--divider)', background: '#7FB897', color: '#04120a', cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}
+        >
+          ⬇ Download CSV
+        </button>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr>{block.headers.map(h => <th key={h} style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--text-tertiary)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--divider)' }}>{h}</th>)}</tr>
+            <tr>
+              {block.headers.map((h, i) => (
+                <th
+                  key={h}
+                  onClick={() => { setSortCol(i); setSortAsc(sortCol === i ? !sortAsc : true) }}
+                  style={{ padding: '7px 12px', textAlign: 'left', color: 'var(--text-tertiary)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid var(--divider)', cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}
+                >
+                  {h}{sortCol === i ? (sortAsc ? ' ↑' : ' ↓') : ' ↕'}
+                </th>
+              ))}
+            </tr>
           </thead>
           <tbody>
             {preview.map((row, i) => (
               <tr key={i} style={{ borderBottom: '1px solid var(--divider)' }}>
-                {row.map((cell, j) => <td key={j} style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>{cell}</td>)}
+                {row.map((cell, j) => (
+                  <td key={j} style={{ padding: '7px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{cell}</td>
+                ))}
               </tr>
             ))}
-            {block.rows.length > 5 && <tr><td colSpan={block.headers.length} style={{ padding: '6px 12px', color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 11 }}>+{block.rows.length - 5} more rows in download</td></tr>}
           </tbody>
         </table>
       </div>
+      {block.rows.length > 6 && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          style={{ width: '100%', padding: '8px', fontSize: 11, color: 'var(--text-tertiary)', background: 'transparent', border: 'none', borderTop: '1px solid var(--divider)', cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          {expanded ? 'Show less ↑' : 'Show all ' + block.rows.length + ' rows ↓'}
+        </button>
+      )}
     </div>
+  )
+}
+
+function LiveRenderBlock({ block, onAction }: { block: Extract<AskBlock, { type: 'live_render' }>; onAction?: (prompt: string) => void }) {
+  const [editMode, setEditMode] = useState(false)
+  const [editHtml, setEditHtml] = useState(block.html)
+  const [displayHtml, setDisplayHtml] = useState(block.html)
+  const [shareStatus, setShareStatus] = useState('')
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'aria_share') {
+        onAction?.('Share this output')
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [onAction])
+
+  const sanitized = displayHtml
+    .replace(/<script[^>]+src=["'][^"']*["'][^>]*>/gi, '')
+    .replace(/fetch\s*\(\s*["']https?:\/\/(?!ariaos\.site)/gi, 'void(')
+  const srcDoc = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,-apple-system,sans-serif;background:transparent}</style></head><body>' + sanitized + '</body></html>'
+
+  async function handleShare() {
+    if (!block.outputId) {
+      onAction?.('Share this output')
+      return
+    }
+    try {
+      setShareStatus('Generating link...')
+      const res = await fetch('/api/aria/task-outputs/' + block.outputId + '/share', { method: 'POST' })
+      const { share_url } = await res.json() as { share_url: string }
+      await navigator.clipboard.writeText(share_url)
+      setShareStatus('Link copied!')
+      setTimeout(() => setShareStatus(''), 3000)
+    } catch {
+      setShareStatus('Failed to generate link')
+      setTimeout(() => setShareStatus(''), 3000)
+    }
+  }
+
+  return (
+    <div style={{ margin: '12px 0' }}>
+      {block.title && (
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+          {block.title}
+        </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        srcDoc={srcDoc}
+        style={{ width: '100%', height: block.height ?? 400, border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, background: '#fafafa' }}
+        sandbox="allow-scripts allow-same-origin"
+        title={block.title ?? 'Aria output'}
+      />
+      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {block.downloadable && (
+          <button
+            onClick={() => {
+              const blob = new Blob([displayHtml], { type: 'text/html' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = block.download_filename ?? 'aria-output.html'; a.click()
+              URL.revokeObjectURL(url)
+            }}
+            style={{ ...navBtn, background: '#d9f54e', color: '#0a0a0a', fontWeight: 700, border: 'none' }}
+          >
+            Download
+          </button>
+        )}
+        <button onClick={handleShare} style={navBtn}>
+          🔗 Share link
+        </button>
+        <button onClick={() => setEditMode(e => !e)} style={navBtn}>
+          {editMode ? 'Done editing' : '✏ Edit'}
+        </button>
+        {shareStatus && <span style={{ fontSize: 11, color: '#7FB897' }}>{shareStatus}</span>}
+      </div>
+      {editMode && (
+        <div style={{ marginTop: 10 }}>
+          <textarea
+            value={editHtml}
+            onChange={e => setEditHtml(e.target.value)}
+            style={{ width: '100%', height: 200, background: 'rgba(0,0,0,0.3)', color: '#f0f0f4', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 10, fontSize: 11, fontFamily: 'monospace', resize: 'vertical' }}
+          />
+          <button
+            onClick={() => { setDisplayHtml(editHtml); setEditMode(false) }}
+            style={{ marginTop: 6, padding: '5px 14px', borderRadius: 8, background: '#7FB897', color: '#04120a', fontWeight: 700, fontSize: 11, cursor: 'pointer', border: 'none', fontFamily: 'inherit' }}
+          >
+            Apply changes
+          </button>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+        {['Change the colour', 'Download this', 'Show me a different time period', 'Explain what this means', 'Show me as a table instead'].map((chip) => (
+          <button
+            key={chip}
+            onClick={() => onAction?.(chip)}
+            style={{ padding: '4px 11px', borderRadius: 99, fontSize: 11, fontWeight: 500, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', fontFamily: 'inherit' }}
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SlidesBlock({ block }: { block: Extract<AskBlock, { type: 'slides' }> }) {
+  const [current, setCurrent] = useState(0)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [editIdx, setEditIdx] = useState<number | null>(null)
+  const [editBodies, setEditBodies] = useState<string[]>(block.slides.map(s => s.body))
+
+  const slide = block.slides[current]
+  const accent = slide.accent_color ?? '#7FB897'
+  const bg = block.theme === 'light' ? '#fff' : '#0d1117'
+  const text = block.theme === 'light' ? '#111' : '#f0f0f4'
+  const sub = block.theme === 'light' ? '#555' : '#9da3aa'
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') setCurrent(c => Math.min(c + 1, block.slides.length - 1))
+      if (e.key === 'ArrowLeft') setCurrent(c => Math.max(c - 1, 0))
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [block.slides.length])
+
+  function downloadSlides() {
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + block.title + '</title>'
+      + '<style>*{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}'
+      + '.slide{width:960px;height:540px;background:' + bg + ';color:' + text + ';display:flex;flex-direction:column;justify-content:center;padding:64px;page-break-after:always}'
+      + '.heading{font-size:36px;font-weight:800;margin-bottom:12px}'
+      + '.body{font-size:18px;color:' + sub + ';line-height:1.7}'
+      + '@media print{.slide{page-break-after:always}}'
+      + '</style></head><body>'
+      + block.slides.map((s, i) => '<div class="slide"><div class="heading">' + s.heading + '</div><div class="body">' + editBodies[i].replace(/\n/g, '<br>') + '</div></div>').join('')
+      + '</body></html>'
+    const blob = new Blob([html], { type: 'text/html' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = block.title.toLowerCase().replace(/\s+/g, '-') + '-slides.html'
+    a.click()
+  }
+
+  const SlideContent = ({ fscreen }: { fscreen: boolean }) => (
+    <div style={{ background: bg, borderRadius: fscreen ? 0 : 12, aspectRatio: '16/9', width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8%', position: 'relative', border: fscreen ? 'none' : '1px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: accent, borderRadius: '12px 12px 0 0' }} />
+      <div style={{ position: 'absolute', top: 16, right: 20, fontSize: 11, color: sub }}>{current + 1} / {block.slides.length}</div>
+      {slide.layout === 'title' ? (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 'clamp(24px,4vw,42px)', fontWeight: 800, color: text, lineHeight: 1.2, marginBottom: 16 }}>{slide.heading}</div>
+          {slide.subheading && <div style={{ fontSize: 'clamp(14px,2vw,20px)', color: sub }}>{slide.subheading}</div>}
+        </div>
+      ) : slide.layout === 'metric' && slide.metrics ? (
+        <>
+          <div style={{ fontSize: 'clamp(16px,2.5vw,24px)', fontWeight: 700, color: text, marginBottom: 24 }}>{slide.heading}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + Math.min(slide.metrics.length, 3) + ', 1fr)', gap: 16 }}>
+            {slide.metrics.map((m, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '20px 16px', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'center' }}>
+                <div style={{ fontSize: 'clamp(20px,3vw,32px)', fontWeight: 800, color: m.color ?? accent }}>{m.value}</div>
+                <div style={{ fontSize: 11, color: sub, marginTop: 4, textTransform: 'uppercase', letterSpacing: '.5px' }}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 'clamp(16px,2.5vw,26px)', fontWeight: 700, color: text, marginBottom: 16, lineHeight: 1.3 }}>{slide.heading}</div>
+          {slide.subheading && <div style={{ fontSize: 'clamp(12px,1.5vw,16px)', color: accent, marginBottom: 12, fontWeight: 500 }}>{slide.subheading}</div>}
+          <div style={{ fontSize: 'clamp(12px,1.8vw,16px)', color: sub, lineHeight: 1.8 }}>
+            {editIdx === current ? (
+              <textarea
+                value={editBodies[current]}
+                onChange={e => setEditBodies(prev => { const n = [...prev]; n[current] = e.target.value; return n })}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: text, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, padding: '6px 8px', fontSize: 'inherit', fontFamily: 'inherit', resize: 'none', minHeight: 80 }}
+              />
+            ) : (
+              editBodies[current].split('\n').map((line, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <span style={{ color: accent, flexShrink: 0 }}>•</span>
+                  <span>{line}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            onClick={e => { e.stopPropagation(); setEditIdx(editIdx === current ? null : current) }}
+            style={{ position: 'absolute', bottom: 14, right: 60, fontSize: 9, color: sub, background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.6 }}
+          >
+            {editIdx === current ? 'Done' : '✏ Edit'}
+          </button>
+        </>
+      )}
+      <div style={{ position: 'absolute', bottom: 14, left: 20, fontSize: 9, color: sub, opacity: .5 }}>Aria OS for {block.title}</div>
+    </div>
+  )
+
+  return (
+    <>
+      {fullscreen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setFullscreen(false)}>
+          <div style={{ width: '100%', maxWidth: 960 }} onClick={e => e.stopPropagation()}>
+            <SlideContent fscreen={true} />
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 16 }}>
+              <button onClick={() => setCurrent(c => Math.max(c - 1, 0))} disabled={current === 0} style={navBtn}>← Prev</button>
+              <button onClick={() => setCurrent(c => Math.min(c + 1, block.slides.length - 1))} disabled={current === block.slides.length - 1} style={navBtn}>Next →</button>
+              <button onClick={() => setFullscreen(false)} style={{ ...navBtn, background: 'rgba(255,255,255,0.1)' }}>✕ Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{ margin: '8px 0' }}>
+        {block.title && <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{block.title} · {block.slides.length} slides</div>}
+        <SlideContent fscreen={false} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => setCurrent(c => Math.max(c - 1, 0))} disabled={current === 0} style={navBtn}>← Prev</button>
+          <button onClick={() => setCurrent(c => Math.min(c + 1, block.slides.length - 1))} disabled={current === block.slides.length - 1} style={navBtn}>Next →</button>
+          <button onClick={() => setFullscreen(true)} style={navBtn}>⛶ Fullscreen</button>
+          {block.downloadable !== false && <button onClick={downloadSlides} style={{ ...navBtn, background: '#7FB897', color: '#04120a', fontWeight: 700 }}>⬇ Download</button>}
+        </div>
+        <div style={{ display: 'flex', gap: 5, marginTop: 8, justifyContent: 'center' }}>
+          {block.slides.map((_, i) => (
+            <button key={i} onClick={() => setCurrent(i)} style={{ width: i === current ? 20 : 7, height: 7, borderRadius: 99, background: i === current ? '#7FB897' : 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', padding: 0, transition: 'all .2s' }} />
+          ))}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -150,7 +432,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
       const data = block.labels.map((label, i) => ({ label, value: block.values[i] ?? 0 }))
       const unit = block.unit ?? ''
       return (
-        <figure style={{ margin: 0, background: 'var(--bg-elevated)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--divider)' }} role="img" aria-label={block.title ? `Bar chart: ${block.title}` : 'Bar chart'}>
+        <figure style={{ margin: 0, background: 'var(--bg-elevated)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--divider)' }} role="img" aria-label={block.title ? 'Bar chart: ' + block.title : 'Bar chart'}>
           {block.title && <figcaption style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>{block.title}</figcaption>}
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -158,7 +440,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} width={44} />
               <Tooltip
-                formatter={(v) => [`${unit === '$' ? '$' : ''}${Number(v ?? 0).toLocaleString()}${unit && unit !== '$' ? ' ' + unit : ''}`, '']}
+                formatter={(v) => [(unit === '$' ? '$' : '') + Number(v ?? 0).toLocaleString() + (unit && unit !== '$' ? ' ' + unit : ''), '']}
                 contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12 }}
               />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
@@ -182,7 +464,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
 
     case 'metric_row':
       return (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(120px, 1fr))`, gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
           {block.items.map((m, i) => {
             const trendCol = m.trend === 'up' ? '#00B140' : m.trend === 'down' ? '#F87171' : 'var(--text-tertiary)'
             const trendArrow = m.trend === 'up' ? '▲' : m.trend === 'down' ? '▼' : ''
@@ -205,7 +487,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {block.items.map((it, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 14px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderLeft: `3px solid ${ROLE_COLOR[it.role] ?? 'var(--violet)'}` }}>
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 14px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderLeft: '3px solid ' + (ROLE_COLOR[it.role] ?? 'var(--violet)') }}>
               <span style={{ fontSize: 16, flexShrink: 0 }} aria-hidden>{it.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: ROLE_COLOR[it.role] ?? 'var(--violet)', marginBottom: 2 }}>{it.role}</div>
@@ -258,52 +540,8 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
         </div>
       )
 
-    case 'live_render': {
-      const sanitized = block.html
-        .replace(/<script[^>]+src=["'][^"']*["'][^>]*>/gi, '')
-        .replace(/fetch\s*\(\s*["']https?:\/\/(?!ariaos\.site)/gi, 'void(')
-      const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,-apple-system,sans-serif;background:transparent}</style></head><body>${sanitized}</body></html>`
-      return (
-        <div style={{ margin: '12px 0' }}>
-          {block.title && (
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-              {block.title}
-            </div>
-          )}
-          <iframe
-            srcDoc={srcDoc}
-            style={{ width: '100%', height: block.height ?? 400, border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, background: '#fafafa' }}
-            sandbox="allow-scripts allow-same-origin"
-            title={block.title ?? 'Aria output'}
-          />
-          {block.downloadable && (
-            <button
-              onClick={() => {
-                const blob = new Blob([block.html], { type: 'text/html' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url; a.download = block.download_filename ?? 'aria-output.html'; a.click()
-                URL.revokeObjectURL(url)
-              }}
-              style={{ marginTop: 8, padding: '5px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: '#d9f54e', fontWeight: 700, fontSize: 11, cursor: 'pointer', color: '#0a0a0a' }}
-            >
-              Download
-            </button>
-          )}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-            {['Change the colour', 'Download this', 'Show me a different time period', 'Explain what this means', 'Show me as a table instead'].map((chip) => (
-              <button
-                key={chip}
-                onClick={() => onAction?.(chip)}
-                style={{ padding: '4px 11px', borderRadius: 99, fontSize: 11, fontWeight: 500, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', fontFamily: 'inherit' }}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        </div>
-      )
-    }
+    case 'live_render':
+      return <LiveRenderBlock block={block} onAction={onAction} />
 
     case 'styled_chart': {
       const color = block.color ?? 'var(--violet)'
@@ -333,7 +571,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
             ) : block.chart_type === 'pie' ? (
               <PieChart>
                 <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill={color} label={(e) => e.name}>
-                  {data.map((_, i) => <Cell key={i} fill={i === 0 ? color : `${color}88`} />)}
+                  {data.map((_, i) => <Cell key={i} fill={i === 0 ? color : color + '88'} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12 }} />
               </PieChart>
@@ -366,18 +604,18 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
       const kpiFmt = block.format
       function fmtKpi(v: string | number): string {
         if (typeof v === 'string') return v
-        if (kpiFmt === 'currency') return `$${v.toFixed(2)}`
-        if (kpiFmt === 'percent') return `${v.toFixed(1)}%`
+        if (kpiFmt === 'currency') return '$' + v.toFixed(2)
+        if (kpiFmt === 'percent') return v.toFixed(1) + '%'
         return v.toLocaleString()
       }
       return (
-        <div style={{ background: 'var(--bg-elevated)', borderRadius: 14, padding: '20px 22px', border: `1px solid var(--divider)`, borderLeft: `3px solid ${acc}` }}>
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 14, padding: '20px 22px', border: '1px solid var(--divider)', borderLeft: '3px solid ' + acc }}>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>{block.label}</div>
           <div style={{ fontSize: 32, fontWeight: 800, color: acc, lineHeight: 1 }}>{fmtKpi(block.value)}</div>
           {block.trend != null && (
             <div style={{ fontSize: 12, color: trendColor, marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span>{trendUp ? '▲' : trendDown ? '▼' : '—'}</span>
-              <span>{Math.abs(block.trend).toFixed(1)}%{block.trend_label ? ` ${block.trend_label}` : ''}</span>
+              <span>{Math.abs(block.trend).toFixed(1) + '%' + (block.trend_label ? ' ' + block.trend_label : '')}</span>
             </div>
           )}
         </div>
@@ -400,7 +638,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
             <tbody>
               {block.rows.map((row, i) => {
                 const delta = row.right !== 0 ? ((row.left - row.right) / Math.abs(row.right)) * 100 : 0
-                const fmt = (v: number) => row.format === 'currency' ? `$${v.toFixed(2)}` : row.format === 'percent' ? `${v.toFixed(1)}%` : v.toLocaleString()
+                const fmt = (v: number) => row.format === 'currency' ? '$' + v.toFixed(2) : row.format === 'percent' ? v.toFixed(1) + '%' : v.toLocaleString()
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid var(--divider)' }}>
                     <td style={{ padding: '7px 12px', color: 'var(--text-secondary)' }}>{row.metric}</td>
@@ -477,6 +715,80 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
               </a>
             ))}
           </div>
+        </div>
+      )
+    }
+
+    case 'slides':
+      return <SlidesBlock block={block} />
+
+    case 'infographic': {
+      return (
+        <div style={{ background: 'linear-gradient(135deg, #0d1117 0%, #111820 100%)', borderRadius: 14, border: '0.5px solid rgba(127,184,151,0.25)', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 22px 14px', borderBottom: '0.5px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#f0f0f4', lineHeight: 1.2 }}>{block.title}</div>
+            {block.subtitle && <div style={{ fontSize: 13, color: '#8fd3ab', marginTop: 4 }}>{block.subtitle}</div>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: block.sections.length > 2 ? 'repeat(auto-fit, minmax(180px, 1fr))' : '1fr 1fr', gap: 0 }}>
+            {block.sections.map((s, i) => (
+              <div key={i} style={{ padding: '18px 22px', borderBottom: '0.5px solid rgba(255,255,255,0.05)', borderRight: (i + 1) % 2 === 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 22 }}>{s.icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: s.color ?? '#7FB897', textTransform: 'uppercase', letterSpacing: '.5px' }}>{s.heading}</span>
+                </div>
+                {s.stat && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: s.color ?? '#7FB897', lineHeight: 1 }}>{s.stat}</div>
+                    {s.stat_label && <div style={{ fontSize: 11, color: '#7a8290', marginTop: 2 }}>{s.stat_label}</div>}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, color: '#9da3aa', lineHeight: 1.6 }}>{s.body}</div>
+              </div>
+            ))}
+          </div>
+          {block.footer && (
+            <div style={{ padding: '10px 22px', borderTop: '0.5px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#4a5568', textAlign: 'right' }}>
+              {block.footer}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    case 'task_plan': {
+      const STATUS_ICON = { pending: '○', running: '⟳', done: '✓', failed: '✗' }
+      const STATUS_COLOR = { pending: '#4a5568', running: '#7FB897', done: '#7FB897', failed: '#F87171' }
+      return (
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid rgba(127,184,151,0.2)', padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 14 }}>🔄</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{block.title}</span>
+            {block.estimated_seconds && <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>~{block.estimated_seconds}s</span>}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {block.steps.map((step, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontSize: 13, color: STATUS_COLOR[step.status], flexShrink: 0, fontFamily: 'monospace', marginTop: 1 }}>
+                  {STATUS_ICON[step.status]}
+                </span>
+                <div>
+                  <span style={{ fontSize: 13, color: step.status === 'pending' ? 'var(--text-tertiary)' : 'var(--text-primary)', fontWeight: step.status === 'running' ? 600 : 400 }}>{step.label}</span>
+                  {step.detail && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{step.detail}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    case 'pushback': {
+      const sevColor = block.severity === 'high' ? '#F87171' : block.severity === 'medium' ? '#F59E0B' : 'var(--violet)'
+      return (
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--divider)', borderLeft: '3px solid ' + sevColor, padding: '14px 16px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: sevColor, marginBottom: 6 }}>{block.decision}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.5 }}>{block.tension}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{block.question}</div>
         </div>
       )
     }
