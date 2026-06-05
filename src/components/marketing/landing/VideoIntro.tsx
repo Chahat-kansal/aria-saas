@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 export default function VideoIntro({ onDone }: { onDone: () => void }) {
   const vidRef    = useRef<HTMLVideoElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
-  const [phase, setPhase] = useState<'video' | 'text'>('video')
+  const [phase, setPhase] = useState<'video' | 'caption' | 'text'>('video')
   const firedRef  = useRef(false)
 
   useEffect(() => {
@@ -33,8 +33,19 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     // Hard fallback: if video never plays after 7s, dismiss anyway
     const fallback = setTimeout(dismiss, 7000)
 
+    // Caption: appears during the wave (~0.6s), fades out before the door opens (~5s).
+    // The end-headline ('text' phase) is set directly by onTimeUpdate and always wins.
+    const captionIn = setTimeout(() => {
+      setPhase(p => (p === 'video' ? 'caption' : p))
+    }, 600)
+    const captionOut = setTimeout(() => {
+      setPhase(p => (p === 'caption' ? 'video' : p))
+    }, 5000)
+
     function dismiss() {
       clearTimeout(fallback)
+      clearTimeout(captionIn)
+      clearTimeout(captionOut)
       const el = overlayRef.current
       if (!el) { onDone(); return }
       el.style.transition = 'opacity 0.7s ease'
@@ -62,6 +73,8 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       vid.removeEventListener('loadeddata', play)
       vid.removeEventListener('canplaythrough', play)
       clearTimeout(fallback)
+      clearTimeout(captionIn)
+      clearTimeout(captionOut)
     }
   }, [onDone])
 
@@ -81,6 +94,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         muted
         playsInline
         preload="auto"
+        poster="/videos/aria-intro-poster.jpg"
         src="/videos/aria-intro.mp4"
         style={{
           position: 'absolute', inset: 0,
@@ -102,6 +116,31 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         opacity: phase === 'text' ? 1 : 0,
         transition: 'opacity 0.3s ease',
       }} />
+
+      {/* Intro caption — readable since there's no audio */}
+      <div style={{
+        position: 'absolute', zIndex: 3, left: 0, right: 0, bottom: '14%',
+        textAlign: 'center', padding: '0 32px',
+        opacity: phase === 'caption' ? 1 : 0,
+        transform: phase === 'caption' ? 'translateY(0)' : 'translateY(16px)',
+        transition: 'opacity 0.6s ease, transform 0.6s ease',
+        pointerEvents: 'none',
+      }}>
+        <p style={{
+          display: 'inline-block',
+          fontFamily: 'var(--font-display, serif)',
+          fontWeight: 300,
+          fontSize: 'clamp(1.5rem, 3.6vw, 3rem)',
+          letterSpacing: '-0.02em',
+          lineHeight: 1.15,
+          color: '#fff',
+          margin: 0,
+          textShadow: '0 2px 24px rgba(0,0,0,0.55)',
+        }}>
+          Running a business is hard.{' '}
+          <em style={{ color: '#7FB897', fontStyle: 'italic' }}>Meet Aria.</em>
+        </p>
+      </div>
 
       {/* Hero text */}
       <div style={{
