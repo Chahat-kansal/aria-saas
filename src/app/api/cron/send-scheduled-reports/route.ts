@@ -266,5 +266,84 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, total: due.length })
+  // ── aria_scheduled_reports (scheduled by day-of-week/hour, not next_send_at) ──
+  const todayStr = now.toISOString().slice(0, 10)
+  const todayDow = now.getUTCDay() || 7 // 1=Mon … 7=Sun
+
+  const { data: ariaSched } = await supabaseAdmin
+    .from('aria_scheduled_reports')
+    .select('id, business_id, name, report_type, frequency, send_on_days, recipients, last_sent_at')
+    .eq('is_active', true)
+
+  for (const sched of ariaSched ?? []) {
+    try {
+      // Skip if already sent today
+      if (sched.last_sent_at && String(sched.last_sent_at).slice(0, 10) === todayStr) continue
+
+      // Check day-of-week: send_on_days uses 1=Mon…7=Sun
+      const sendOnDays = Array.isArray(sched.send_on_days)
+        ? (sched.send_on_days as unknown[]).map(Number)
+        : [1, 2, 3, 4, 5, 6, 7]
+      if (!sendOnDays.includes(todayDow)) continue
+
+      // For weekly/monthly, enforce minimum interval to prevent double-sends across crons
+      if (sched.frequency === 'weekly' && sched.last_sent_at) {
+        const daysSince = (now.getTime() - new Date(String(sched.last_sent_at)).getTime()) / 86400000
+        if (daysSince < 7) continue
+      }
+      if (sched.frequency === 'monthly' && sched.last_sent_at) {
+        const daysSince = (now.getTime() - new Date(String(sched.last_sent_at)).getTime()) / 86400000
+        if (daysSince < 28) continue
+      }
+
+      const recipients = Array.isArray(sched.recipients)
+        ? (sched.recipients as unknown[]).map(String).filter(Boolean)
+        : []
+      if (recipients.length === 0) continue
+
+      const [bizRes, ytdRes, monthRes] = await Promise.all([
+        supabaseAdmin.from('businesses').select('id, name, trading_name, city').eq('id', String(sched.business_id)).maybeSingle(),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).neq('status', 'voided').gte('created_at', `${yday}T00:00:00Z`).lte('created_at', `${yday}T23:59:59Z`),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).neq('status', 'voided').gte('created_at', thirtyDaysAgo),
+      ])
+
+      const biz = bizRes.data
+      if (!biz) continue
+
+      const ytdSales2 = ytdRes.data ?? []
+      const monthSales2 = monthRes.data ?? []
+      const yrev = ytdSales2.reduce((s: number, r: { total_amount?: unknown }) => s + Number(r.total_amount ?? 0), 0)
+      const mrev = monthSales2.reduce((s: number, r: { total_amount?: unknown }) => s + Number(r.total_amount ?? 0), 0)
+      const ycnt = ytdSales2.length
+
+      const reportLabel = String(sched.name)
+      const reportFreq = String(sched.frequency ?? 'daily')
+
+      const reportHtml = buildReportHtml(
+        biz as { name: string | null; trading_name: string | null; city: string | null },
+        { label: reportLabel, pages_allowed: [], frequency: reportFreq },
+        { yesterday_revenue: yrev, monthly_revenue: mrev, yesterday_count: ycnt }
+      )
+      const pdfBuffer = await generatePDF(reportHtml)
+
+      const bizName = (biz.trading_name ?? biz.name) as string ?? 'Business'
+      const month = now.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })
+      const emailHtml = buildEmailHtml(bizName, reportLabel, reportFreq, null)
+      const filename = 'aria-report-' + reportLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.pdf'
+      const subject = reportLabel + ' — ' + month
+
+      const recips = recipients.map((e: string) => ({ name: 'Report Recipient', email: e }))
+      const ok = await sendEmail(recips, subject, emailHtml, pdfBuffer, filename)
+
+      await supabaseAdmin.from('aria_scheduled_reports').update({
+        last_sent_at: now.toISOString(),
+      }).eq('id', String(sched.id))
+
+      if (ok) sent++
+    } catch (e) {
+      console.error('[send-scheduled-reports] aria_sched ' + String(sched.id) + ':', (e as Error).message)
+    }
+  }
+
+  return NextResponse.json({ ok: true, sent, total: due.length + (ariaSched?.length ?? 0) })
 }

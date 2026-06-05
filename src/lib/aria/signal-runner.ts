@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeAllSignalsForBusiness } from './signal-engine'
 import { persistSignals } from './signal-store'
 import { synthesizeFromSignals } from './anomaly-synth'
+import { checkConditionAlerts } from './intelligence/alerts'
 
 export async function runSignalsForBusiness(businessId: string): Promise<{ signal_count: number; alert_count: number }> {
   const signals = await computeAllSignalsForBusiness(businessId)
@@ -28,5 +29,11 @@ export async function runSignalsForBusiness(businessId: string): Promise<{ signa
     if (newAlerts.length) await synthesizeFromSignals(businessId, newAlerts)
   }
 
-  return { signal_count: signals.length, alert_count: alerts.length }
+  // Evaluate user-configured condition alerts (reads aria_condition_alerts via admin)
+  let conditionsFired = 0
+  try {
+    conditionsFired = await checkConditionAlerts(businessId)
+  } catch { /* non-fatal — don't let alert failure block signal reporting */ }
+
+  return { signal_count: signals.length, alert_count: alerts.length + conditionsFired }
 }

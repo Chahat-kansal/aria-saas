@@ -1,4 +1,3 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -36,7 +35,7 @@ export async function checkComplianceExpiry(businessId: string): Promise<number>
 }
 
 export interface AlertConditionConfig {
-  type: 'stock_below' | 'revenue_below' | 'no_sales'
+  type?: 'stock_below' | 'revenue_below' | 'no_sales' | 'negative_review_unanswered'
   product_id?: string
   product_name?: string
   category?: string
@@ -45,40 +44,42 @@ export interface AlertConditionConfig {
 }
 
 export async function checkConditionAlerts(businessId: string): Promise<number> {
-  const supabase = createServerSupabaseClient()
   let fired = 0
 
-  const { data: alerts } = await supabase.from('aria_condition_alerts')
+  // Use supabaseAdmin so cron context bypasses RLS and gets real rows
+  const { data: alerts } = await supabaseAdmin.from('aria_condition_alerts')
     .select('*').eq('business_id', businessId).eq('is_active', true)
 
   for (const alert of alerts ?? []) {
     const config = alert.condition_config as AlertConditionConfig
+    // condition_type column is authoritative; condition_config.type is a fallback for legacy rows
+    const conditionType = String(alert.condition_type || config.type || '')
     let shouldFire = false
     let message = ''
 
-    switch (config.type) {
+    switch (conditionType) {
       case 'stock_below': {
-        let q = supabase.from('pos_products')
+        let q = supabaseAdmin.from('pos_products')
           .select('name,stock_quantity').eq('business_id', businessId).eq('is_active', true)
         if (config.product_id) q = q.eq('id', config.product_id)
         else if (config.product_name) q = q.ilike('name', `%${config.product_name}%`)
         else if (config.category) q = q.eq('category', config.category)
         const { data: prods } = await q.limit(20)
-        const low = (prods ?? []).filter((p: Record<string,unknown>) =>
+        const low = (prods ?? []).filter((p: Record<string, unknown>) =>
           (Number(p.stock_quantity) || 0) < (Number(config.threshold) || 10)
         )
         if (low.length > 0) {
           shouldFire = true
-          message = `Stock alert: ${(low as Array<Record<string,unknown>>).map(p => `${String(p.name)} (${Number(p.stock_quantity) || 0} left)`).join(', ')}`
+          message = `Stock alert: ${(low as Array<Record<string, unknown>>).map(p => `${String(p.name)} (${Number(p.stock_quantity) || 0} left)`).join(', ')}`
         }
         break
       }
       case 'revenue_below': {
         const hours = Number(config.period_hours) || 24
         const since = new Date(Date.now() - hours * 3600_000).toISOString()
-        const { data: sales } = await supabase.from('pos_sales')
+        const { data: sales } = await supabaseAdmin.from('pos_sales')
           .select('total_amount').eq('business_id', businessId).gte('created_at', since)
-        const revenue = (sales ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_amount) || 0), 0)
+        const revenue = (sales ?? []).reduce((s, x: Record<string, unknown>) => s + (Number(x.total_amount) || 0), 0)
         if (revenue < (Number(config.threshold) || 0)) {
           shouldFire = true
           message = `Revenue alert: only $${revenue.toFixed(2)} in last ${hours}h (target: $${(Number(config.threshold) || 0).toFixed(2)})`
@@ -88,12 +89,28 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
       case 'no_sales': {
         const hours = Number(config.period_hours) || 4
         const since = new Date(Date.now() - hours * 3600_000).toISOString()
-        const { count } = await supabase.from('pos_sales')
+        const { count } = await supabaseAdmin.from('pos_sales')
           .select('id', { count: 'exact', head: true })
           .eq('business_id', businessId).gte('created_at', since)
         if ((count ?? 0) === 0) {
           shouldFire = true
           message = `No sales in the last ${hours} hours — is the POS running?`
+        }
+        break
+      }
+      case 'negative_review_unanswered': {
+        const hours = Number(config.period_hours) || 48
+        const since = new Date(Date.now() - hours * 3600_000).toISOString()
+        const { data: reviews } = await supabaseAdmin.from('business_reviews')
+          .select('id,rating,reviewer_name')
+          .eq('business_id', businessId)
+          .lte('rating', 2)
+          .is('response_text', null)
+          .gte('review_date', since)
+          .limit(10)
+        if ((reviews ?? []).length > 0) {
+          shouldFire = true
+          message = `${(reviews ?? []).length} negative review(s) unanswered for over ${hours}h`
         }
         break
       }
@@ -115,7 +132,7 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
       status: 'pending',
       source: 'aria_intelligence:alert',
       priority: 'high',
-      payload: { alert_id: alert.id, condition_type: config.type, message },
+      payload: { alert_id: alert.id, condition_type: conditionType, message },
     })
 
     await supabaseAdmin.from('aria_condition_alerts').update({
@@ -123,7 +140,7 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
       trigger_count: (Number(alert.trigger_count) || 0) + 1,
     }).eq('id', String(alert.id))
 
-    // Send SMS via Twilio if owner has phone + alerts enabled
+    // Send SMS via owner phone if configured
     try {
       const { data: biz } = await supabaseAdmin.from('businesses')
         .select('phone,owner_phone,alert_sms_enabled,name').eq('id', businessId).maybeSingle()
