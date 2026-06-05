@@ -11,7 +11,7 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
-import { buildAskAriaContext } from '@/lib/aria/ask/business-context'
+import { buildAskAriaContext, type ContextScope } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
 import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
 import { checkCostCeiling } from '@/lib/aria-cost-guard'
@@ -26,7 +26,7 @@ import { runAriaCouncil } from '@/lib/aria/council'
 import type { CouncilOutput } from '@/lib/aria/council'
 import { getBusinessContext } from '@/lib/aria/get-business-context'
 import { maybeWriteMemory } from '@/lib/aria/ask/memory-writer'
-import { extractAndStoreMemories } from '@/lib/aria/memory/extract'
+import { extractAndStoreMemories, maybeWriteOutcome } from '@/lib/aria/memory/extract'
 import { summariseConversation } from '@/lib/aria/memory/summarize'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -339,7 +339,10 @@ async function _POST(req: Request) {
   // Image requests are handled by the fast-path below after context is built
 
   // 2. Build context — only reached for non-strategic questions
-  const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
+  const ctxScope: ContextScope = intent.type === 'escalate' ? 'full'
+    : intent.complexity === 'complex' ? 'standard'
+    : 'quick'
+  const ctx = await buildAskAriaContext(bid, conversationId ?? undefined, ctxScope)
 
   // 3. Build system prompt
   let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
@@ -865,9 +868,14 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     complexity: intent.complexity,
   })
 
+  // Phase 5: chain-of-thought forcing for complex strategy questions
+  if (intent.complexity === 'complex' && intent.type === 'question' && routedModel !== 'haiku') {
+    systemPrompt += '\n\n## REASONING PROTOCOL\nFor complex questions, reason step-by-step before answering:\n1. What are the key business factors at play?\n2. What does the data reveal?\n3. What are the main risks or tradeoffs?\nThen give a specific, actionable recommendation.'
+  }
+
   // Haiku does not support extended thinking — only enable it for Sonnet/Opus.
   const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
-  const thinkingBudget = intent.type === 'escalate' ? 4000 : 2000
+  const thinkingBudget = 4000 // all tiers capped at 4000 until first paying customers are live
 
   // Add Anthropic's native web_search tool to give Aria internet access
   const allTools = [
@@ -952,6 +960,29 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   const rawResponse = toolResult.raw
   const action = extractAction(rawResponse)
   const cleanResponse = stripAction(rawResponse)
+
+  // Phase 6: Haiku verification pass for complex Sonnet/Opus responses
+  if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && cleanResponse.length > 100) {
+    waitUntil((async () => {
+      try {
+        const verifierResult = await callAnthropic<{ verdict: string }>(
+          {
+            model: 'haiku',
+            systemPrompt: 'You are a factual accuracy reviewer for an AI business assistant. Given the business context, question, and response — check only for clear numerical errors or invented facts. If accurate, respond "OK". If you find an error, respond "CORRECTION: [brief description]". Be lenient — only flag obvious factual errors.',
+            userPrompt: 'Context: revenue this month AUD ' + Math.round(ctx.revenue_month_cents / 100) + ', top products: ' + (ctx.top_products_month ?? []).slice(0, 3).map((p: { name: string }) => p.name).join(', ') + '\nQuestion: ' + message.slice(0, 200) + '\nResponse: ' + cleanResponse.slice(0, 800),
+            maxTokens: 150,
+            businessId: bid,
+            agentKey: 'ask_aria_verifier',
+            role: 'classify',
+          },
+          { verdict: 'OK' },
+        )
+        if (verifierResult.raw.startsWith('CORRECTION:')) {
+          console.warn('[aria/verifier] factual correction flagged:', verifierResult.raw, 'for question:', message.slice(0, 80))
+        }
+      } catch { /* non-fatal — verifier must never block the main response */ }
+    })())
+  }
   // Tool call context is logged separately, NOT appended to user-visible message
   if (toolResult.tool_calls.length > 0) {
     console.log('[aria/ask] tool_calls completed:', toolResult.tool_calls.map(t =>
@@ -1005,9 +1036,10 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
 
-  // Write any new memories from this conversation — non-blocking (both regex and AI extraction)
+  // Write any new memories from this conversation — non-blocking (regex, AI extraction, outcome)
   maybeWriteMemory(bid, message, historyContent).catch(() => {})
   extractAndStoreMemories(bid, message, historyContent, savedConvId).catch(() => {})
+  maybeWriteOutcome(bid, message, historyContent, savedConvId).catch(() => {})
   // Summarise conversation for multi-session context — fire-and-forget
   if (savedConvId) {
     const _scid = savedConvId

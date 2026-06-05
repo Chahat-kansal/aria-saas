@@ -67,6 +67,8 @@ Return ONLY valid JSON. No prose. No code fences.`
     long_doc_map:    `Schema: { "type": "insight", "title": "document section", "description": "extracted content", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     long_doc_reduce: `Schema: { "type": "insight", "title": "document synthesis", "description": "synthesised answer", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     conversation_summarizer: `Schema: { "summary": "string", "key_decisions": [], "key_concerns": [], "followup_promised": [] }`,
+    ask_aria_verifier: `Schema: { "verdict": "OK"|"CORRECTION: ...", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
+    action_planner: `Schema: { "type": "plan", "title": "action plan", "description": "planned action steps", "rationale": "1 sentence", "confidence": "high"|"medium"|"low", "estimated_impact_dollars": 0, "payload": {} }`,
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -111,6 +113,7 @@ export async function runAgent(
     marketing_ai_generate: 'sonnet', review_reputation: 'haiku',
     long_doc_map: 'haiku', long_doc_reduce: 'sonnet',
     conversation_summarizer: 'haiku',
+    ask_aria_verifier: 'haiku', action_planner: 'sonnet',
   }
 
   const result = await callAnthropic<Recommendation>({

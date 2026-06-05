@@ -8,6 +8,8 @@ export interface ConversationSummary {
   last_intent: string | null
 }
 
+export type ContextScope = 'quick' | 'standard' | 'full'
+
 export interface AskAriaContext {
   business_id: string
   business_name: string
@@ -59,7 +61,9 @@ export interface AskAriaContext {
 export async function buildAskAriaContext(
   businessId: string,
   conversationId?: string,
+  scope: ContextScope = 'standard',
 ): Promise<AskAriaContext> {
+  const isQuick = scope === 'quick'
   const now = new Date()
   const todayStart = new Date(now); todayStart.setHours(0,0,0,0)
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)
@@ -239,7 +243,7 @@ export async function buildAskAriaContext(
   const subscriptionTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
 
   // ── Fetch current BAS quarter draft (non-blocking, best-effort) ──────────
-  const { data: basRow } = await supabaseAdmin
+  const { data: basRow } = isQuick ? { data: null } : await supabaseAdmin
     .from('bas_drafts')
     .select('period_start,period_end,due_date,status,net_gst,w2_payg_withholding')
     .eq('business_id', businessId)
@@ -259,7 +263,7 @@ export async function buildAskAriaContext(
 
   // ── Fetch today's council plan_narrative (non-blocking) ──────────────────
   const todayStr = new Date().toISOString().split('T')[0]
-  const { data: councilRow } = await supabaseAdmin
+  const { data: councilRow } = isQuick ? { data: null } : await supabaseAdmin
     .from('agent_council_sessions')
     .select('plan_narrative, projected_revenue_impact')
     .eq('business_id', businessId)
@@ -315,8 +319,8 @@ export async function buildAskAriaContext(
     })()
   }
 
-  // Sales prediction — last 30 days pattern by day of week + busiest hour
-  const { data: salesPattern } = await supabaseAdmin
+  // Sales prediction — last 30 days pattern by day of week + busiest hour (skip on quick)
+  const { data: salesPattern } = isQuick ? { data: null } : await supabaseAdmin
     .from('pos_sales')
     .select('total_amount, created_at')
     .eq('business_id', businessId)

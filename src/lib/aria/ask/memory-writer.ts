@@ -24,22 +24,26 @@ export async function maybeWriteMemory(
     if (content.length < 10) continue
 
     const { data: existing } = await supabaseAdmin
-      .from('aria_memories')
+      .from('aria_business_memory')
       .select('id')
       .eq('business_id', businessId)
       .eq('kind', trigger.kind)
       .eq('topic', trigger.topic)
+      .eq('is_active', true)
       .ilike('content', '%' + content.slice(0, 30) + '%')
       .maybeSingle()
 
     if (!existing) {
-      void supabaseAdmin.from('aria_memories').insert({
+      void supabaseAdmin.from('aria_business_memory').insert({
         business_id: businessId,
         kind: trigger.kind,
         topic: trigger.topic,
         content,
-        importance: 0.7,
+        importance: 7,
+        confidence: 0.70,
         source: 'ask_aria_conversation',
+        source_type: 'conversation',
+        is_active: true,
       })
     }
   }

@@ -108,6 +108,29 @@ export async function extractAndStoreMemories(
   } catch { /* non-fatal fire-and-forget */ }
 }
 
+export async function maybeWriteOutcome(
+  businessId: string,
+  userMessage: string,
+  ariaResponse: string,
+  conversationId?: string | null,
+): Promise<void> {
+  const isStrategyQuestion = /should i|what.*best|recommend|advice|strategy|help me decide|how do i improve|what would you do/i.test(userMessage)
+  if (!isStrategyQuestion) return
+
+  const recommendationMatch = ariaResponse.match(/(?:I recommend|My recommendation|You should|Consider|I suggest|The best[^.!?]*is)[^.!?]*[.!?]/i)
+  if (!recommendationMatch) return
+  const recommendation = recommendationMatch[0].trim()
+  if (recommendation.length < 30) return
+
+  await persistMemories(businessId, [{
+    kind: 'decision',
+    content: recommendation,
+    topic: 'advice',
+    importance: 7,
+    confidence: 0.80,
+  }], conversationId ?? null).catch(() => {})
+}
+
 export async function persistMemories(
   businessId: string,
   memories: ExtractedMemory[],
