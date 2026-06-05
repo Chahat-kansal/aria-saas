@@ -7,6 +7,14 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<'video' | 'caption' | 'text'>('video')
   const [captionStep, setCaptionStep] = useState(0) // 0 hidden, 1 "hard", 2 "Meet Aria", 3 fading
   const [vidPlaying, setVidPlaying] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.matchMedia('(max-width: 600px)').matches)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
   const firedRef  = useRef(false)
 
   useEffect(() => {
@@ -121,7 +129,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         style={{
           position: 'absolute', inset: 0,
           width: '100%', height: '100%',
-          objectFit: 'cover',
+          objectFit: isMobile ? 'contain' : 'cover',
           objectPosition: 'center 38%',
           opacity: vidPlaying ? 1 : 0,
           transition: 'opacity 0.5s ease',
@@ -134,7 +142,7 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: 'url(/videos/aria-intro-poster.jpg)',
-          backgroundSize: 'cover',
+          backgroundSize: isMobile ? 'contain' : 'cover',
           backgroundPosition: 'center 38%',
           backgroundRepeat: 'no-repeat',
           animation: 'ariaIntroPulse 2s ease-in-out infinite',
