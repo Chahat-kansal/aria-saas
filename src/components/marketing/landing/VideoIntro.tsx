@@ -44,11 +44,11 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       clearTimeout(fallback)
       const el = overlayRef.current
       if (!el) { onDone(); return }
-      // Fly THROUGH the green doorway into the page: the overlay scales up and fades,
-      // as if the camera pushes forward through the door and the landing page flies in.
-      el.style.transition = 'opacity 0.85s ease, transform 0.85s cubic-bezier(.5,0,.4,1)'
-      el.style.transformOrigin = '58% 46%' // matches the doorway position in the frame
-      el.style.transform = 'scale(2.6)'
+      // Clean reveal: the solid green flash (rendered below) has already washed the whole
+      // screen to one colour, hiding the busy video frame. Now simply fade the overlay
+      // out so the Aria landing page appears underneath — a clean cut, no zoom on the
+      // messy green pixels of the video itself.
+      el.style.transition = 'opacity 0.8s ease'
       el.style.opacity = '0'
       setTimeout(onDone, 820)
     }
@@ -75,17 +75,17 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         setCaptionStep(0)
       }
 
-      // end hand-off: as the green flood fills the frame (final ~0.5s), bloom green
-      // then fly through the doorway into the page — one continuous forward motion.
+      // end hand-off: as the green flood fills the frame (final ~0.5s), wash the whole
+      // screen to solid green, then fade the overlay so the Aria page appears cleanly.
       if (!firedRef.current) {
         const rem = vid.duration - t
         if (rem < 0.5) {
           firedRef.current = true
           clearTimeout(fallback)
-          setPhase('text')          // full-screen green bloom appears over the frame
+          setPhase('text')          // solid green flash washes over the frame
           setCaptionStep(0)
-          // brief hold on the green bloom, then fly through into the landing page
-          setTimeout(dismiss, 650)
+          // hold on the green wash, then fade the overlay to reveal the landing page
+          setTimeout(dismiss, 550)
         }
       }
     }
@@ -149,12 +149,13 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         background: 'linear-gradient(to bottom, rgba(6,9,8,0.15) 0%, transparent 10%, transparent 75%, rgba(6,9,8,1) 100%)',
       }} />
 
-      {/* Green door bloom — fills the whole screen as the door opens, into the fly-through */}
+      {/* Green flash wash — at the end, the screen washes to a solid sage-green, hiding
+          the busy video frame so the page reveal underneath is a clean cut (no lettuce). */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(circle at 58% 46%, rgba(127,184,151,0.98) 0%, rgba(92,200,140,0.85) 35%, rgba(40,150,95,0.5) 70%, rgba(40,150,95,0.2) 100%)',
+        background: '#7FB897',
         opacity: phase === 'text' ? 1 : 0,
-        transition: 'opacity 0.6s ease',
+        transition: 'opacity 0.5s ease',
       }} />
 
       {/* Intro caption — three-beat empathy arc (no audio, so it carries the message) */}
