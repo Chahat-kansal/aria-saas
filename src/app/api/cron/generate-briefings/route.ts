@@ -7,6 +7,8 @@ import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendSlackMessage } from '@/lib/integrations/slack'
+import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
+import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 
 function authOk(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
@@ -122,6 +124,21 @@ async function generateMorning(
       { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open Aria' }, url: appUrl + '/dashboard' }] },
     ]
     sendSlackMessage(biz.slack_access_token, biz.slack_channel_id, 'Morning briefing for ' + bizName, blocks).catch(() => {})
+  }
+
+  // Parallel agent briefing — runs alongside existing briefing, non-fatal
+  try {
+    const tasks = buildBriefingTasks(biz.id, 'retail')
+    const parallelResult = await runParallelAriaAgents(biz.id, tasks, 'starter')
+    await supabaseAdmin.from('aria_daily_briefings').upsert({
+      business_id: biz.id,
+      briefing_date: today,
+      content: parallelResult.merged,
+      source: 'parallel',
+      generated_at: new Date().toISOString(),
+    }, { onConflict: 'business_id,briefing_date' })
+  } catch (err) {
+    console.error('[generate-briefings] parallel briefing failed:', (err as Error).message)
   }
 }
 

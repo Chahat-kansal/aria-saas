@@ -28,6 +28,8 @@ import { getBusinessContext } from '@/lib/aria/get-business-context'
 import { maybeWriteMemory } from '@/lib/aria/ask/memory-writer'
 import { extractAndStoreMemories, maybeWriteOutcome } from '@/lib/aria/memory/extract'
 import { summariseConversation } from '@/lib/aria/memory/summarize'
+import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
+import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -291,6 +293,40 @@ async function _POST(req: Request) {
         action: { action: 'preview', planned },
         cost_usd_cents: 0,
       })
+    }
+  }
+
+  // 2b-pre. Multi-domain path — parallel agents for broad business overview questions
+  const MULTI_DOMAIN_TRIGGERS = /\b(weekly review|full summary|how (is|are) (everything|my business)|give me (an? )?overview|how (did|am) (i|we) (do|doing)|complete briefing|all (of )?my metrics|overall (performance|status))\b/i
+  const isMultiDomain = intent.type === 'question' && MULTI_DOMAIN_TRIGGERS.test(message)
+
+  if (isMultiDomain) {
+    try {
+      const { data: bizInfo } = await supabaseAdmin.from('businesses').select('industry, subscription_tier').eq('id', bid).maybeSingle()
+      const tasks = buildBriefingTasks(bid, (bizInfo as { industry?: string } | null)?.industry ?? 'retail')
+      const parallelResult = await runParallelAriaAgents(bid, tasks, (bizInfo as { subscription_tier?: string } | null)?.subscription_tier ?? 'starter')
+      const responseText = 'Here\'s your full business overview:\n\n' + parallelResult.merged
+      let savedConvId = conversationId
+      try {
+        savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'multi_domain')
+      } catch (e) {
+        console.error('[aria/ask] upsertConversation failed (multi_domain):', (e as Error).message)
+      }
+      return NextResponse.json({
+        response: responseText,
+        conversation_id: savedConvId ?? conversationId,
+        intent: 'multi_domain',
+        action: null,
+        cost_usd_cents: parallelResult.total_cost_cents,
+        downloads: null,
+        tool_calls: [],
+        used_council: false,
+        ai_mode: 'parallel',
+        model_used: 'parallel',
+      })
+    } catch (err) {
+      console.error('[aria/ask] multi-domain parallel failed, falling back:', (err as Error).message)
+      // Non-fatal — fall through to single-call path
     }
   }
 
