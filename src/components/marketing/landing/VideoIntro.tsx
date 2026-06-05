@@ -44,9 +44,13 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
       clearTimeout(fallback)
       const el = overlayRef.current
       if (!el) { onDone(); return }
-      el.style.transition = 'opacity 0.7s ease'
+      // Fly THROUGH the green doorway into the page: the overlay scales up and fades,
+      // as if the camera pushes forward through the door and the landing page flies in.
+      el.style.transition = 'opacity 0.85s ease, transform 0.85s cubic-bezier(.5,0,.4,1)'
+      el.style.transformOrigin = '58% 46%' // matches the doorway position in the frame
+      el.style.transform = 'scale(2.6)'
       el.style.opacity = '0'
-      setTimeout(onDone, 750)
+      setTimeout(onDone, 820)
     }
 
     // Captions are driven by the video's ACTUAL playback time (currentTime), not by
@@ -71,18 +75,17 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         setCaptionStep(0)
       }
 
-      // end hand-off: wait until the green flood truly fills the frame (final ~0.25s)
+      // end hand-off: as the green flood fills the frame (final ~0.5s), bloom green
+      // then fly through the doorway into the page — one continuous forward motion.
       if (!firedRef.current) {
         const rem = vid.duration - t
-        if (rem < 0.25) {
+        if (rem < 0.5) {
           firedRef.current = true
           clearTimeout(fallback)
-          setPhase('text')
+          setPhase('text')          // full-screen green bloom appears over the frame
           setCaptionStep(0)
-          setTimeout(() => {
-            if (vid) { vid.style.transition = 'opacity 0.6s'; vid.style.opacity = '0' }
-          }, 400)
-          setTimeout(dismiss, 2200)
+          // brief hold on the green bloom, then fly through into the landing page
+          setTimeout(dismiss, 650)
         }
       }
     }
@@ -146,12 +149,12 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         background: 'linear-gradient(to bottom, rgba(6,9,8,0.15) 0%, transparent 10%, transparent 75%, rgba(6,9,8,1) 100%)',
       }} />
 
-      {/* Green door flash */}
+      {/* Green door bloom — fills the whole screen as the door opens, into the fly-through */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse 65% 85% at 58% 50%, rgba(92,230,168,0.9) 0%, rgba(40,180,110,0.4) 40%, transparent 68%)',
+        background: 'radial-gradient(circle at 58% 46%, rgba(127,184,151,0.98) 0%, rgba(92,200,140,0.85) 35%, rgba(40,150,95,0.5) 70%, rgba(40,150,95,0.2) 100%)',
         opacity: phase === 'text' ? 1 : 0,
-        transition: 'opacity 0.3s ease',
+        transition: 'opacity 0.6s ease',
       }} />
 
       {/* Intro caption — three-beat empathy arc (no audio, so it carries the message) */}
@@ -214,12 +217,13 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         </div>
       </div>
 
-      {/* Hero text */}
+      {/* Hero text — kept for the codebase but hidden now: the fly-through reveals the
+          real landing page underneath which already carries this exact headline. */}
       <div style={{
         position: 'relative', zIndex: 2, textAlign: 'center',
         padding: '0 40px',
-        opacity: phase === 'text' ? 1 : 0,
-        transform: phase === 'text' ? 'translateY(0)' : 'translateY(24px)',
+        opacity: 0,
+        transform: 'translateY(24px)',
         transition: 'opacity 0.5s ease, transform 0.5s ease',
         pointerEvents: 'none',
       }}>
