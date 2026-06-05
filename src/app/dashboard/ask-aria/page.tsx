@@ -580,6 +580,7 @@ export default function AskAriaPage() {
         const cleanContent = m.role === 'assistant'
           ? m.content
             .replace(/\n\n\[Context from data lookup:[\s\S]*?\]$/g, '')
+            .replace(/\s*\[DELIVERABLE:[^\]]+\]\s*/g, '')
             .replace(/!\[[^\]]*\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
             .replace(/\[([^\]]+)\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
             .replace(/https?:\/\/[^\s]*supabase[^\s]*/g, '')
@@ -676,7 +677,9 @@ export default function AskAriaPage() {
         if (last?.role === 'assistant') {
           updated[updated.length - 1] = {
             ...last,
-            content: data.response ?? '',
+            // Strip the [DELIVERABLE:id] sentinel — the deliverable renders via its
+            // own field/toolbar below, so the raw token must never show as text.
+            content: (data.response ?? '').replace(/\s*\[DELIVERABLE:[^\]]+\]\s*/g, '').trim(),
             streaming: false,
             action: msgAction,
             intent: data.intent,
