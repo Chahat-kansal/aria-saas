@@ -168,3 +168,11 @@ no placeholders, no "coming soon" stubs shipped as if complete.
 
 ## The prime directive
 **Aria only ever gets better. Build up, never tear down.**
+
+## VERIFICATION STANDARD — RENDERED OUTPUT, NOT JUST COMPILATION (mandatory)
+A task is NOT done when it compiles. For anything user-facing, you must verify the ACTUAL rendered output:
+- Hit the real endpoint (dev server or a service-role script) and paste the JSON/HTML response as evidence.
+- Confirm the output is free of raw sentinels/tokens (e.g. `[DELIVERABLE:...]`, `[BRACKETS]`), `undefined`, `null` text, empty arrays where content is expected, or placeholder fallbacks.
+- For UI components: confirm the component renders the intended content, not a degraded fallback path.
+- The user should NEVER be the one to discover that the output is broken. If you cannot render/inspect the output in this environment, say so explicitly and list exactly what the user must check — do not silently mark done.
+- "It builds" and "the DB row exists" are necessary but NOT sufficient. The rendered result is the deliverable.
