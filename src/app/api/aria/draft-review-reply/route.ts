@@ -21,7 +21,7 @@ async function _POST(req: Request) {
   if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
 
   try {
-    const prompt = `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.text ?? review.review_text ?? review.content ?? 'No text provided'}"`
+    const prompt = `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.content ?? review.text ?? 'No text provided'}"`
     const _Anthropic2 = (await import('@anthropic-ai/sdk')).default
     const _client2 = new _Anthropic2({ apiKey: process.env.ANTHROPIC_API_KEY })
     const _msg2 = await _client2.messages.create({

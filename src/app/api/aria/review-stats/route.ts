@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const [sentRes, reviewsRes] = await Promise.all([
     supabase.from('aria_autopilot_actions').select('id', { count: 'exact', head: true })
       .eq('business_id', businessId).eq('action_type', 'review_request').gte('created_at', weekAgo),
-    supabase.from('pos_reviews').select('id', { count: 'exact', head: true })
+    supabase.from('reviews').select('id', { count: 'exact', head: true })
       .eq('business_id', businessId).gte('created_at', weekAgo),
   ])
 

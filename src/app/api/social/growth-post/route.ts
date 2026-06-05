@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       .eq('business_id', business_id).gte('created_at', weekAgo)
       .order('quantity', { ascending: false }).limit(5),
     // Best recent review
-    supabase.from('pos_reviews').select('rating,review_text,reviewer_name')
+    supabase.from('reviews').select('rating,content,text,reviewer_name')
       .eq('business_id', business_id).eq('rating', 5)
       .order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ])
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   // Determine post angle based on available data
   let angle = 'general'
   if (topProductName) angle = 'top_product'
-  else if (bestReview?.review_text) angle = 'social_proof'
+  else if (bestReview?.content ?? bestReview?.text) angle = 'social_proof'
   else if (weekRevenue > 0) angle = 'week_celebration'
 
   const INDUSTRY_VOICE: Record<string, string> = {
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 Tone: ${voice}
 
 ${angle === 'top_product' ? `Their best-selling item this week: ${topProductName} at $${topProductPrice}.` : ''}
-${angle === 'social_proof' && bestReview ? `Recent 5-star review: "${bestReview.review_text}" — from ${bestReview.reviewer_name ?? 'a happy customer'}.` : ''}
+${angle === 'social_proof' && bestReview ? `Recent 5-star review: "${bestReview.content ?? (bestReview as any).text ?? ''}" — from ${bestReview.reviewer_name ?? 'a happy customer'}.` : ''}
 ${angle === 'week_celebration' ? `They had $${weekRevenue.toFixed(0)} in sales this week.` : ''}
 
 Write ONE ${targetPlatform} post. Requirements:

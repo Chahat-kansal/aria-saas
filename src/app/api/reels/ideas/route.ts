@@ -62,10 +62,14 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false }).limit(4)).then(r => r.data ?? []).catch(() => [] as { name: string; price: number; created_at: string }[]),
 
     // Recent positive reviews
-    Promise.resolve(supabaseAdmin.from('reviews').select('rating, review_text, reviewer_name')
+    Promise.resolve(supabaseAdmin.from('reviews').select('rating, content, text, reviewer_name')
       .eq('business_id', business_id).gte('rating', 4)
       .order('created_at', { ascending: false }).limit(3))
-      .then(r => r.data ?? []).catch(() => [] as { rating: number; review_text: string; reviewer_name: string }[]),
+      .then(r => (r.data ?? []).map((rv: { rating: number; content?: string; text?: string; reviewer_name: string }) => ({
+        rating: rv.rating,
+        review_text: rv.content ?? rv.text ?? '',
+        reviewer_name: rv.reviewer_name,
+      }))).catch(() => [] as { rating: number; review_text: string; reviewer_name: string }[]),
 
     // Revenue last 7 days vs prior 7 days
     Promise.resolve(supabaseAdmin.from('pos_sales').select('total_amount, created_at')

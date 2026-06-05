@@ -124,7 +124,7 @@ async function _POST(req: NextRequest) {
   const [salesRes, topProductRes, reviewRes] = await Promise.all([
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bizId).eq('status','completed').gte('created_at', weekAgo),
     supabaseAdmin.from('pos_sale_items').select('quantity,pos_products(name,price)').eq('business_id', bizId).gte('created_at', weekAgo).order('quantity',{ascending:false}).limit(3),
-    supabaseAdmin.from('pos_reviews').select('rating,review_text,reviewer_name').eq('business_id', bizId).eq('rating',5).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    supabaseAdmin.from('reviews').select('rating,content,text,reviewer_name').eq('business_id', bizId).eq('rating',5).order('created_at',{ascending:false}).limit(1).maybeSingle(),
   ])
 
   const weekRevenue = (salesRes.data ?? []).reduce((s,r) => s + (r.total_amount ?? 0), 0)
@@ -139,7 +139,7 @@ The post features Aria, our AI ambassador, visiting ${biz.name} (a ${biz.industr
 Real data this week:
 ${topProductName ? `- Best seller: ${topProductName}` : ''}
 ${weekRevenue > 0 ? `- Revenue this week: A$${weekRevenue.toFixed(0)}` : ''}
-${bestReview?.review_text ? `- Latest 5-star review: "${bestReview.review_text}"` : ''}
+${(bestReview as any)?.content ?? (bestReview as any)?.text ? `- Latest 5-star review: "${(bestReview as any)?.content ?? (bestReview as any)?.text}"` : ''}
 
 Write a SHORT Instagram caption (2-3 sentences max). Tone: warm, genuine, proud of small businesses.
 Mention that Aria (the AI) helped power results. Tag the business concept.
