@@ -45,6 +45,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   top: 0; left: 0; right: 0; bottom: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   z-index: 1;
   background: var(--bg-base);
@@ -558,6 +559,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   align-items: center;
   padding: 60px 0 60px;
   min-height: 100vh;
+  min-height: 100dvh;
   justify-content: center;
 }
 .landing-v3 .scene.active .scene-inner { transform: translateY(0); opacity: 1; }
