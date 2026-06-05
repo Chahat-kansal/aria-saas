@@ -116,6 +116,10 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
   const [v2vJobId, setV2vJobId] = useState<string|null>(null)
   const [v2vStatus, setV2vStatus] = useState<'idle'|'processing'|'done'|'error'>('idle')
   const v2vPollRef = useRef<ReturnType<typeof setTimeout>|null>(null)
+  const [publishState, setPublishState] = useState<'idle'|'loading'|'done'|'error'>('idle')
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram'])
+  const [publishCaption, setPublishCaption] = useState('')
+  const [showPublishPanel, setShowPublishPanel] = useState(false)
   const [renderState, setRenderState] = useState<'idle'|'submitting'|'rendering'|'done'|'error'>('idle')
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderUrl, setRenderUrl] = useState<string|null>(null)
@@ -291,6 +295,39 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
       setAiPrev(null)
     } finally {
       setAiLoading(false)
+    }
+  }
+
+  async function publishToMarketer() {
+    if (!renderUrl || publishState === 'loading') return
+    setPublishState('loading')
+    try {
+      const res = await fetch('/api/reels/publish-marketer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId, session_id: sessionId, video_url: renderUrl, caption: publishCaption }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setPublishState('done')
+    } catch {
+      setPublishState('error')
+    }
+  }
+
+  async function publishToSocials() {
+    if (!renderUrl || publishState === 'loading') return
+    setPublishState('loading')
+    try {
+      const res = await fetch('/api/reels/publish-social', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId, video_url: renderUrl, caption: publishCaption, platforms: selectedPlatforms }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setPublishState('done')
+      setShowPublishPanel(false)
+    } catch {
+      setPublishState('error')
     }
   }
 
@@ -972,6 +1009,56 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
                 }}>
                   Re-export
                 </button>
+
+                {/* Publish section — only shown after render complete */}
+                <div style={{ borderTop: '1px solid ' + T.border, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={labelStyle}>Publish</div>
+                  <button
+                    style={{ ...btnStyle('ghost'), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    onClick={() => setShowPublishPanel(p => !p)}>
+                    Publish to socials (Instagram · TikTok · Facebook)
+                  </button>
+                  <button
+                    style={{ ...btnStyle('primary'), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: publishState === 'loading' ? 0.6 : 1 }}
+                    onClick={publishToMarketer}
+                    disabled={publishState === 'loading'}>
+                    {publishState === 'loading' ? 'Adding to plan…' : 'Send to Aria Marketer'}
+                  </button>
+                  {publishState === 'done' && (
+                    <div style={{ fontSize: 13, color: T.accent }}>Added to Aria Marketer</div>
+                  )}
+                  {publishState === 'error' && (
+                    <div style={{ fontSize: 13, color: T.red }}>Publish failed — try again</div>
+                  )}
+                </div>
+
+                {showPublishPanel && (
+                  <div style={{ background: T.card, border: '1px solid ' + T.border, borderRadius: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={labelStyle}>Platforms</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {(['instagram', 'tiktok', 'facebook', 'youtube'] as const).map(p => (
+                        <button key={p} style={chipStyle(selectedPlatforms.includes(p))}
+                          onClick={() => setSelectedPlatforms(prev =>
+                            prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={labelStyle}>Caption</div>
+                    <textarea rows={3} value={publishCaption}
+                      onChange={e => setPublishCaption(e.target.value)}
+                      placeholder="Write a caption or use Aria's suggestions below…"
+                      style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                    <button style={{ ...btnStyle('primary'), opacity: publishState === 'loading' || selectedPlatforms.length === 0 ? 0.5 : 1 }}
+                      onClick={publishToSocials}
+                      disabled={publishState === 'loading' || selectedPlatforms.length === 0}>
+                      Queue for publishing
+                    </button>
+                    <div style={{ fontSize: 11, color: T.muted }}>
+                      Platform connections (OAuth) are set up in Aria Settings. Posts are queued and sent when your account is connected.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
