@@ -17,6 +17,26 @@ import type { AskBlock } from '@/lib/aria/ask-types'
 const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const T = {
+  bg:         '#0a0f0d',
+  surface:    '#0c1411',
+  surfaceEl:  '#111916',
+  sidebarBg:  '#0b100e',
+  border:     'rgba(127,184,151,0.12)',
+  borderMd:   'rgba(127,184,151,0.22)',
+  sage:       '#7FB897',
+  forest:     '#2D5240',
+  textPri:    '#f0f0f5',
+  textSec:    'rgba(255,255,255,0.55)',
+  textMut:    'rgba(255,255,255,0.3)',
+  textDim:    'rgba(255,255,255,0.15)',
+  red:        '#E24B4A',
+  amber:      '#BA7517',
+  display:    'var(--font-display), Cormorant, Georgia, serif',
+  body:       'var(--font-body), Outfit, Inter, sans-serif',
+} as const
+
 interface ExportAction { type: 'export'; url: string; filename: string; format: string; row_count: number }
 interface EscalateAction { type: 'escalate'; ticket_id: string }
 interface ErrorAction { type: 'export_error' | 'escalate_error'; message: string }
@@ -65,49 +85,72 @@ interface DeliverableRecord {
   render_html: string | null
 }
 
-function CopyButton({ text }: { text: string }) {
+interface Vitals { revenue_today: number | null; tx_count_today: number | null }
+
+// ── Helper components ─────────────────────────────────────────────────────────
+
+function MessageActions({
+  msg,
+  onRegenerate,
+}: {
+  msg: Message
+  onRegenerate?: () => void
+}) {
   const [copied, setCopied] = useState(false)
   return (
-    <button
-      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-      className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] flex items-center gap-1 mt-1"
-      style={{ color: 'rgba(255,255,255,0.3)' }}
-    >
-      {copied ? '✓ Copied' : 'Copy'}
-    </button>
+    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 mt-2">
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(msg.content)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        }}
+        style={{ padding: '3px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + T.border, fontSize: 11, color: T.textMut, cursor: 'pointer', fontFamily: T.body }}
+      >
+        {copied ? '✓ Copied' : 'Copy'}
+      </button>
+      {onRegenerate && (
+        <button
+          onClick={onRegenerate}
+          style={{ padding: '3px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + T.border, fontSize: 11, color: T.textMut, cursor: 'pointer', fontFamily: T.body }}
+        >
+          Regenerate
+        </button>
+      )}
+    </div>
   )
 }
 
 function DocumentResultCard({ doc }: { doc: DocumentReadResult }) {
   const TYPE_LABEL: Record<string, string> = { invoice: 'Invoice', receipt: 'Receipt', product_list: 'Product List', unknown: 'Document' }
   return (
-    <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.05)' }}>
-      <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(127,184,151,0.15)' }}>
-        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(127,184,151,0.2)', color: '#7FB897' }}>
+    <div className="mt-3 rounded-xl overflow-hidden" style={{ border: '1px solid ' + T.borderMd, background: 'rgba(127,184,151,0.04)' }}>
+      <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid ' + T.border }}>
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(127,184,151,0.15)', color: T.sage }}>
           {TYPE_LABEL[doc.type] ?? 'Document'}
         </span>
-        {doc.supplier && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{doc.supplier}</span>}
-        {doc.date && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{doc.date}</span>}
-        {doc.total != null && <span className="text-xs ml-auto font-medium text-white">${doc.total.toFixed(2)}</span>}
+        {doc.supplier && <span className="text-xs" style={{ color: T.textSec }}>{doc.supplier}</span>}
+        {doc.date && <span className="text-xs" style={{ color: T.textMut }}>{doc.date}</span>}
+        {doc.total != null && <span className="text-xs ml-auto font-medium" style={{ color: T.textPri, fontFamily: T.display, fontStyle: 'italic', fontSize: 14 }}>${doc.total.toFixed(2)}</span>}
       </div>
       {doc.line_items.length > 0 && (
         <div className="px-4 py-2">
-          <table className="w-full text-xs">
+          <table className="w-full" style={{ fontSize: 13 }}>
             <thead>
-              <tr style={{ color: 'rgba(255,255,255,0.4)' }}>
-                <th className="text-left pb-1.5 font-normal">Item</th>
-                <th className="text-right pb-1.5 font-normal">Qty</th>
-                <th className="text-right pb-1.5 font-normal">Unit</th>
-                <th className="text-right pb-1.5 font-normal">Total</th>
+              <tr style={{ color: T.textMut }}>
+                <th className="text-left pb-2 font-normal">Item</th>
+                <th className="text-right pb-2 font-normal">Qty</th>
+                <th className="text-right pb-2 font-normal">Unit</th>
+                <th className="text-right pb-2 font-normal">Total</th>
               </tr>
             </thead>
             <tbody>
               {doc.line_items.slice(0, 10).map((item, i) => (
-                <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: '#e5e7eb' }}>
-                  <td className="py-1 pr-2">{item.name}</td>
-                  <td className="py-1 text-right">{item.quantity ?? '—'}</td>
-                  <td className="py-1 text-right">{item.unit_price != null ? `$${item.unit_price.toFixed(2)}` : '—'}</td>
-                  <td className="py-1 text-right">{item.total != null ? `$${item.total.toFixed(2)}` : '—'}</td>
+                <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: T.textPri }}>
+                  <td className="py-1.5 pr-2">{item.name}</td>
+                  <td className="py-1.5 text-right">{item.quantity ?? '—'}</td>
+                  <td className="py-1.5 text-right">{item.unit_price != null ? `$${item.unit_price.toFixed(2)}` : '—'}</td>
+                  <td className="py-1.5 text-right">{item.total != null ? `$${item.total.toFixed(2)}` : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -115,7 +158,7 @@ function DocumentResultCard({ doc }: { doc: DocumentReadResult }) {
         </div>
       )}
       <div className="px-4 pb-3 pt-1">
-        <p className="text-xs italic" style={{ color: 'rgba(255,255,255,0.4)' }}>{doc.suggested_action}</p>
+        <p className="text-xs italic" style={{ color: T.textMut }}>{doc.suggested_action}</p>
       </div>
     </div>
   )
@@ -126,32 +169,32 @@ function ActionCard({ action }: { action: MessageAction }) {
   if (action.type === 'export') {
     return (
       <a href={action.url} download={action.filename}
-        className="mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-opacity hover:opacity-80"
-        style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897', textDecoration: 'none' }}>
+        className="mt-3 flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-opacity hover:opacity-80"
+        style={{ background: 'rgba(45,82,64,0.2)', border: '1px solid rgba(45,82,64,0.4)', color: T.sage, textDecoration: 'none' }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4 flex-shrink-0">
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
-        <span>Download {action.filename} <span className="opacity-60">({action.row_count} rows)</span></span>
+        <span>Download {action.filename} <span style={{ opacity: 0.5 }}>({action.row_count} rows)</span></span>
       </a>
     )
   }
   if (action.type === 'escalate') {
     return (
-      <div className="mt-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm"
-        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
+      <div className="mt-3 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm"
+        style={{ background: 'rgba(226,75,74,0.07)', border: '1px solid rgba(226,75,74,0.18)', color: '#fca5a5' }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4 flex-shrink-0">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
-        Support ticket created (#{action.ticket_id.slice(0,8)})
+        Support ticket created (#{action.ticket_id.slice(0, 8)})
       </div>
     )
   }
   if (action.type === 'execution_result') {
     return (
-      <div className="mt-2 px-4 py-2.5 rounded-xl text-xs"
+      <div className="mt-3 px-4 py-2.5 rounded-xl text-xs"
         style={{
-          background: action.ok ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-          border: `1px solid ${action.ok ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+          background: action.ok ? 'rgba(34,197,94,0.06)' : 'rgba(226,75,74,0.06)',
+          border: '1px solid ' + (action.ok ? 'rgba(34,197,94,0.18)' : 'rgba(226,75,74,0.18)'),
           color: action.ok ? '#86efac' : '#fca5a5',
         }}>
         {action.ok
@@ -217,33 +260,36 @@ function AriaSpeechBubble({ business, show }: { business: { name?: string; tradi
   const [visible, setVisible] = useState(false)
   const name = business?.trading_name ?? business?.name ?? null
 
-  // Only become visible once show=true (after avatar wave completes)
   useEffect(() => {
     if (!show) return
     setVisible(true)
-    // Auto-hide after 30 seconds
     const t = setTimeout(() => setVisible(false), 30000)
     return () => clearTimeout(t)
   }, [show])
 
   return (
     <div style={{
-      maxWidth: 180, background: 'rgba(20,20,30,0.96)',
-      border: '1px solid rgba(127,184,151,0.35)', borderRadius: '14px 14px 4px 14px',
-      padding: '10px 13px', fontSize: 12, color: 'rgba(255,255,255,0.9)',
-      lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+      maxWidth: 180,
+      background: 'rgba(12,20,17,0.97)',
+      border: '1px solid ' + T.borderMd,
+      borderRadius: '14px 14px 4px 14px',
+      padding: '10px 13px',
+      fontSize: 12,
+      color: T.textPri,
+      lineHeight: 1.55,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0) scale(1)' : 'translateY(6px) scale(0.96)',
       transition: 'opacity 0.5s ease, transform 0.5s ease',
       pointerEvents: visible ? 'auto' : 'none',
+      fontFamily: T.body,
     }}>
-      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
+      <span style={{ color: T.sage, fontWeight: 600 }}>Hi{name ? `, ${name}` : ''}!</span>
       {' '}I&apos;m Aria — your AI business co-operator. What can I help you with today?
     </div>
   )
 }
 
-// Aria's voice before the first message — personalised by time and business
 function AriaGreeting({ business }: { business: { name?: string; trading_name?: string; industry?: string | null } | null }) {
   const hour = new Date().getHours()
   const name = business?.trading_name ?? business?.name ?? 'your business'
@@ -262,19 +308,17 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
   ]
   const opener = openers[new Date().getDay() % openers.length]
   return (
-    <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.82)', lineHeight: 1.65, margin: 0, maxWidth: 500 }}>
+    <p style={{ fontSize: 16, color: T.textSec, lineHeight: 1.65, margin: 0, maxWidth: 500, fontFamily: T.body }}>
       {opener}
     </p>
   )
 }
 
-// Renders Aria's plain-text responses — handles bold/italic/lists cleanly
 function AriaMarkdown({ text }: { text: string }) {
   const lines = text.split('\n')
   return (
     <span className="whitespace-pre-wrap">
       {lines.map((line, li) => {
-        // Render inline: **bold** and *italic* — strip the markers, apply styling
         const parts: React.ReactNode[] = []
         let remaining = line
         let key = 0
@@ -282,7 +326,6 @@ function AriaMarkdown({ text }: { text: string }) {
         while (remaining.length > 0) {
           const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*/)
           const italicMatch = remaining.match(/^(.*?)\*(.+?)\*/)
-
           const bIdx = boldMatch ? boldMatch[0].indexOf('**') : Infinity
           const iIdx = italicMatch ? italicMatch[0].indexOf('*') : Infinity
 
@@ -292,7 +335,7 @@ function AriaMarkdown({ text }: { text: string }) {
             remaining = remaining.slice(boldMatch[0].length)
           } else if (italicMatch && iIdx < Infinity) {
             if (italicMatch[1]) parts.push(<span key={key++}>{italicMatch[1]}</span>)
-            parts.push(<em key={key++} style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.8)' }}>{italicMatch[2]}</em>)
+            parts.push(<em key={key++} style={{ fontStyle: 'italic', color: T.textSec }}>{italicMatch[2]}</em>)
             remaining = remaining.slice(italicMatch[0].length)
           } else {
             parts.push(<span key={key++}>{remaining}</span>)
@@ -331,17 +374,10 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
         body: JSON.stringify({ outputId: deliverable.id }),
       })
       const data = await res.json() as { pdf_url?: string; error?: string }
-      if (data.pdf_url) {
-        window.open(data.pdf_url, '_blank')
-        setStatus('PDF ready')
-      } else {
-        setStatus(data.error ?? 'PDF export failed')
-      }
-    } catch (e) {
-      setStatus((e as Error).message)
-    } finally {
-      setPdfLoading(false)
-    }
+      if (data.pdf_url) { window.open(data.pdf_url, '_blank'); setStatus('PDF ready') }
+      else setStatus(data.error ?? 'PDF export failed')
+    } catch (e) { setStatus((e as Error).message) }
+    finally { setPdfLoading(false) }
   }
 
   async function sendEmail() {
@@ -355,11 +391,8 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
       })
       const data = await res.json() as { sent?: boolean; error?: string }
       setStatus(data.sent ? 'Email sent' : (data.error ?? 'Failed'))
-    } catch (e) {
-      setStatus((e as Error).message)
-    } finally {
-      setEmailLoading(false)
-    }
+    } catch (e) { setStatus((e as Error).message) }
+    finally { setEmailLoading(false) }
   }
 
   async function saveSchedule() {
@@ -377,39 +410,29 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
           deliverable_spec: { task_prompt: deliverable.title, output_kind: deliverable.kind },
         }),
       })
-      if (res.ok) {
-        setStatus('Scheduled')
-        setScheduleOpen(false)
-      } else {
-        setStatus('Schedule failed')
-      }
-    } catch {
-      setStatus('Schedule failed')
-    } finally {
-      setSchedSaving(false)
-    }
+      if (res.ok) { setStatus('Scheduled'); setScheduleOpen(false) }
+      else setStatus('Schedule failed')
+    } catch { setStatus('Schedule failed') }
+    finally { setSchedSaving(false) }
   }
 
   const btnBase = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors'
-  const btnStyle = { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.08)' }
-  const btnActiveStyle = { background: 'rgba(127,184,151,0.12)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.25)' }
+  const btnStyle = { background: 'rgba(255,255,255,0.04)', color: T.textMut, border: '1px solid ' + T.border }
+  const btnActiveStyle = { background: 'rgba(127,184,151,0.1)', color: T.sage, border: '1px solid ' + T.borderMd }
 
   return (
     <div className="mt-3">
-      {/* Inline chart view */}
       {view === 'chart' && deliverable.html && (
-        <div className="rounded-xl overflow-hidden mb-2" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="rounded-xl overflow-hidden mb-3" style={{ border: '1px solid ' + T.border }}>
           <iframe
             srcDoc={deliverable.html}
             sandbox="allow-scripts"
             className="w-full"
-            style={{ height: 340, border: 'none', display: 'block' }}
+            style={{ height: 360, border: 'none', display: 'block' }}
             title={deliverable.title}
           />
         </div>
       )}
-
-      {/* Toolbar */}
       <div className="flex flex-wrap gap-2">
         <button className={btnBase} style={view === 'chart' ? btnActiveStyle : btnStyle} onClick={() => setView('chart')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><rect x="3" y="3" width="18" height="18" rx="2"/><path strokeLinecap="round" d="M7 16l4-4 4 4"/></svg>
@@ -421,7 +444,7 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
         </button>
         <button className={btnBase} style={pdfLoading ? btnActiveStyle : btnStyle} onClick={downloadPdf} disabled={pdfLoading}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><path strokeLinecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-          {pdfLoading ? 'Exporting…' : 'Download PDF'}
+          {pdfLoading ? 'Exporting…' : 'PDF'}
         </button>
         <button className={btnBase} style={emailLoading ? btnActiveStyle : btnStyle} onClick={sendEmail} disabled={emailLoading}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><path strokeLinecap="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -432,11 +455,9 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
           Schedule
         </button>
       </div>
-
-      {/* Schedule modal */}
       {scheduleOpen && (
-        <div className="mt-2 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <p className="text-xs font-medium text-white mb-2">Schedule recurring delivery</p>
+        <div className="mt-2 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid ' + T.border }}>
+          <p className="text-xs font-medium mb-2" style={{ color: T.textPri }}>Schedule recurring delivery</p>
           <div className="flex gap-2 mb-2">
             {(['daily', 'weekly'] as const).map(f => (
               <button key={f} onClick={() => setSchedFreq(f)}
@@ -452,21 +473,25 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
             value={schedEmail}
             onChange={e => setSchedEmail(e.target.value)}
             className="w-full px-3 py-2 rounded-lg text-xs mb-2 outline-none"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid ' + T.border, color: T.textPri, fontFamily: T.body }}
           />
           <button onClick={saveSchedule} disabled={schedSaving || !schedEmail.trim()}
             className="px-4 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40"
-            style={{ background: '#2D5240', color: '#fff' }}>
+            style={{ background: T.forest, color: '#fff' }}>
             {schedSaving ? 'Saving…' : 'Save schedule'}
           </button>
         </div>
       )}
-
-      {status && <p className="mt-1.5 text-xs" style={{ color: status.includes('fail') || status.includes('error') ? '#fca5a5' : '#7FB897' }}>{status}</p>}
+      {status && (
+        <p className="mt-1.5 text-xs" style={{ color: status.includes('fail') || status.includes('error') ? T.red : T.sage }}>
+          {status}
+        </p>
+      )}
     </div>
   )
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -487,19 +512,25 @@ export default function AskAriaPage() {
   const [ariaResponseText, setAriaResponseText] = useState<string>('')
   const [deliverables, setDeliverables] = useState<DeliverableRecord[]>([])
   const [selectedDeliverable, setSelectedDeliverable] = useState<DeliverableRecord | null>(null)
+  const [vitals, setVitals] = useState<Vitals | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
-  // Delay greeting text until avatar finishes waving (7.27s greeting animation)
   useEffect(() => {
     const t = setTimeout(() => setGreetingReady(true), 7500)
     return () => clearTimeout(t)
   }, [])
 
-  // Tiny delay to avoid 1-frame flash on dynamic import
   useEffect(() => {
     const t = setTimeout(() => setAvatarMounted(true), 150)
     return () => clearTimeout(t)
   }, [])
+
+  // Load today's live vitals for context strip
+  useEffect(() => {
+    fetch('/api/aria/vitals').then(r => r.json()).then((d: Vitals) => setVitals(d)).catch(() => {})
+  }, [])
+
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -507,7 +538,6 @@ export default function AskAriaPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Video avatar: ONLY active when streaming message has actual content (not during brain thinking)
   const isAriaActive = messages.some(m => m.streaming && m.content && m.content.length > 0)
   useEffect(() => {
     const vid = videoRef.current
@@ -557,7 +587,6 @@ export default function AskAriaPage() {
   useEffect(() => { loadHistory() }, [loadHistory])
   useEffect(() => { loadDeliverables() }, [loadDeliverables])
 
-
   const loadConversation = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/aria/ask/history?id=${id}&messages=true`)
@@ -565,10 +594,8 @@ export default function AskAriaPage() {
       const data = await res.json() as { conversation: { id: string; title: string; messages: Array<{ role: string; content: string; downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }> }> } | null }
       if (!data.conversation) return
       const msgs = (data.conversation.messages ?? []).map((m, i) => {
-        // Use stored downloads if available, otherwise extract from markdown
         let downloads: Array<{ filename: string; download_url: string; rows: number; format: string }> = m.downloads ?? []
         if (downloads.length === 0 && m.role === 'assistant') {
-          // Fallback: extract supabase image URLs from markdown
           const imgMatches = m.content.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)]+supabase[^)]+\.(?:png|jpg|jpeg|webp))\)/g)
           for (const match of imgMatches) {
             const url = match[1]
@@ -618,6 +645,9 @@ export default function AskAriaPage() {
     const isStrategicMsg = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize|revenue|crisis|urgent|help|fix|problem|doing|perform|week|today/i.test(msg)
     setCouncilThinking(isStrategicMsg)
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
       let res: Response
       if (filesToSend.length > 0) {
@@ -625,18 +655,19 @@ export default function AskAriaPage() {
         fd.append('message', msg || 'Please analyse the attached file(s).')
         if (conversationId) fd.append('conversation_id', conversationId)
         for (const f of filesToSend) fd.append('files', f)
-        res = await fetch('/api/aria/ask', { method: 'POST', body: fd })
+        res = await fetch('/api/aria/ask', { method: 'POST', body: fd, signal: controller.signal })
       } else {
         res = await fetch('/api/aria/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: msg, conversation_id: conversationId }),
+          signal: controller.signal,
         })
       }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(errData.error ?? 'Request failed')
+        throw new Error(errData.error ?? `Request failed (${res.status})`)
       }
 
       const data = await res.json() as {
@@ -654,12 +685,10 @@ export default function AskAriaPage() {
 
       if (data.conversation_id) setConversationId(data.conversation_id)
 
-      // Detect action preview — show ActionPreviewCard
       if (data.action?.action === 'preview' && data.action.planned) {
         setPendingAction(data.action.planned as PlannedAction)
       }
 
-      // Detect execution result
       const msgAction: MessageAction = (() => {
         const a = data.action
         if (!a) return null
@@ -677,8 +706,6 @@ export default function AskAriaPage() {
         if (last?.role === 'assistant') {
           updated[updated.length - 1] = {
             ...last,
-            // Strip the [DELIVERABLE:id] sentinel — the deliverable renders via its
-            // own field/toolbar below, so the raw token must never show as text.
             content: (data.response ?? '').replace(/\s*\[DELIVERABLE:[^\]]+\]\s*/g, '').trim(),
             streaming: false,
             action: msgAction,
@@ -698,18 +725,30 @@ export default function AskAriaPage() {
       loadHistory()
       if (data.intent === 'deliverable') loadDeliverables()
     } catch (err: unknown) {
+      if (err instanceof Error && (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))) {
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.role === 'assistant' && last.streaming) {
+            updated[updated.length - 1] = { ...last, content: last.content || '— stopped —', streaming: false }
+          }
+          return updated
+        })
+        return
+      }
       const errMsg = err instanceof Error ? err.message : 'Unknown error'
       setMessages(prev => {
         const updated = [...prev]
         const last = updated[updated.length - 1]
         if (last?.role === 'assistant') {
-          updated[updated.length - 1] = { ...last, content: `Sorry, something went wrong: ${errMsg}`, streaming: false }
+          updated[updated.length - 1] = { ...last, content: `Something went wrong: ${errMsg}`, streaming: false }
         }
         return updated
       })
     } finally {
       setSending(false)
       setCouncilThinking(false)
+      abortRef.current = null
       inputRef.current?.focus()
     }
   }, [input, sending, conversationId, loadHistory, loadDeliverables])
@@ -718,6 +757,18 @@ export default function AskAriaPage() {
     ;(window as unknown as Record<string, unknown>).ariaSendPrompt = (prompt: string) => { send(prompt) }
     return () => { delete (window as unknown as Record<string, unknown>).ariaSendPrompt }
   }, [send])
+
+  const regenerate = useCallback(() => {
+    const msgs = messages
+    let lastUserIdx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') { lastUserIdx = i; break }
+    }
+    if (lastUserIdx === -1) return
+    const userText = msgs[lastUserIdx].content
+    setMessages(msgs.slice(0, lastUserIdx + 1))
+    send(userText)
+  }, [messages, send])
 
   const uploadFile = useCallback(async (file: File) => {
     if (uploading) return
@@ -760,10 +811,8 @@ export default function AskAriaPage() {
   const confirmAction = useCallback(async () => {
     if (!pendingAction || !conversationId) return
     setConfirmingAction(true)
-    // Add user "yes" message immediately
     setMessages(prev => [...prev, { role: 'user', content: 'Yes, go ahead.', timestamp: new Date() }])
     try {
-      // Send "yes" through the main ask route — it handles isConfirmation() and executes
       const res = await fetch('/api/aria/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -821,62 +870,87 @@ export default function AskAriaPage() {
   }
 
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.key === 'Enter') {
+      if (e.shiftKey) return
+      if (e.metaKey || e.ctrlKey) { e.preventDefault(); send(); return }
+      e.preventDefault()
+      send()
+    }
   }
+
+  void briefingCollapsed
+  void setBriefingCollapsed
+  void ariaResponseText
+  void setAriaResponseText
+  void ChartBlock
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: '#0d0d14' }}>
-        <div className="w-6 h-6 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
+      <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: T.bg }}>
+        <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: T.sage + ' transparent transparent transparent' }} />
       </div>
     )
   }
 
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
-      {/* Avatar keyframes only — avatar is inside chat col below */}
+    <div style={{ display: 'flex', height: '100dvh', background: T.bg, overflow: 'hidden', fontFamily: T.body }}>
       <style>{`
         @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
         @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }
         @keyframes ariaBar2 { from { height: 5px; opacity: 0.5; } to { height: 8px; opacity: 0.9; } }
         @keyframes ariaBar3 { from { height: 7px; opacity: 0.6; } to { height: 4px; opacity: 0.4; } }
+        @keyframes blinkCaret { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes msgIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .msg-reveal { animation: none !important; } }
       `}</style>
+
       {/* Mobile backdrop */}
       {showHistory && (
-        <div className="fixed inset-0 bg-black/60 z-10 md:hidden" onClick={() => setShowHistory(false)} />
+        <div className="fixed inset-0 bg-black/70 z-10 md:hidden" onClick={() => setShowHistory(false)} />
       )}
-      {/* History sidebar */}
+
+      {/* ── History sidebar ───────────────────────────────────────────────── */}
       {showHistory && (
-        <div className="w-64 flex-shrink-0 flex flex-col border-r" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a', position: 'relative', zIndex: 20 }}>
-          <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-            <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>Recent chats</p>
-            <button onClick={() => setShowHistory(false)} className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>✕</button>
+        <div className="w-72 flex-shrink-0 flex flex-col border-r" style={{ borderColor: T.border, background: T.sidebarBg, position: 'relative', zIndex: 20 }}>
+          {/* Wordmark */}
+          <div style={{ padding: '22px 20px 16px', borderBottom: '1px solid ' + T.border }}>
+            <div style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 26, color: T.sage, letterSpacing: '-0.02em', lineHeight: 1 }}>aria</div>
+            <div style={{ fontSize: 11, color: T.textMut, marginTop: 3 }}>AI business co-operator</div>
           </div>
           <div className="flex-1 overflow-y-auto">
             <button
               onClick={newConversation}
-              className="w-full text-left px-4 py-3 text-sm border-b transition-colors hover:bg-white/5"
-              style={{ borderColor: 'rgba(255,255,255,0.04)', color: '#7FB897' }}
+              className="w-full text-left px-5 py-3.5 border-b transition-colors hover:bg-white/5 flex items-center gap-2"
+              style={{ borderColor: T.border, color: T.sage, fontSize: 13 }}
             >
-              + New conversation
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 flex-shrink-0">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              New conversation
             </button>
             {history.length === 0 && (
-              <p className="px-4 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>No conversations yet</p>
+              <p className="px-5 py-4" style={{ fontSize: 12, color: T.textDim }}>No conversations yet</p>
             )}
             {history.map(c => (
               <div
                 key={c.id}
                 className="group relative border-b"
-                style={{ borderColor: 'rgba(255,255,255,0.04)', background: conversationId === c.id ? 'rgba(127,184,151,0.08)' : 'transparent' }}
+                style={{ borderColor: T.border, background: conversationId === c.id ? 'rgba(127,184,151,0.06)' : 'transparent' }}
               >
                 <button
                   onClick={() => loadConversation(c.id)}
-                  className="w-full text-left px-4 py-3 pr-8 transition-colors hover:bg-white/5"
+                  className="w-full text-left px-5 py-3 pr-10 transition-colors hover:bg-white/5"
                 >
-                  <p className="text-xs font-medium text-white truncate">{c.title ?? 'Untitled'}</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: T.textPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.title ?? 'Untitled'}
+                  </p>
+                  <p style={{ fontSize: 11, marginTop: 2, color: T.textMut }}>
                     {new Date(c.last_message_at).toLocaleDateString()} · {c.message_count} msgs
-                    {c.has_escalated && <span className="ml-1 text-red-400">↗</span>}
+                    {c.has_escalated && <span style={{ marginLeft: 4, color: T.red }}>↗</span>}
                   </p>
                 </button>
                 <button
@@ -887,225 +961,247 @@ export default function AskAriaPage() {
                     if (conversationId === c.id) { setMessages([]); setConversationId(null) }
                     loadHistory()
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg"
+                  style={{ color: T.textMut }}
                   title="Delete chat"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
               </div>
             ))}
-          {/* Recent deliverables section */}
-          {deliverables.length > 0 && (
-            <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>Recent Deliverables</p>
-              {deliverables.map(d => (
-                <button
-                  key={d.id}
-                  onClick={() => setSelectedDeliverable(d)}
-                  className="w-full text-left px-4 py-2.5 border-b transition-colors hover:bg-white/5"
-                  style={{ borderColor: 'rgba(255,255,255,0.04)' }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>
-                      {d.output_kind.replace('_', ' ')}
-                    </span>
-                    <p className="text-xs text-white truncate flex-1">{d.title}</p>
-                  </div>
-                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {new Date(d.created_at).toLocaleDateString()}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
+            {deliverables.length > 0 && (
+              <div style={{ borderTop: '1px solid ' + T.border }}>
+                <p style={{ padding: '12px 20px 6px', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.textMut }}>
+                  Recent outputs
+                </p>
+                {deliverables.map(d => (
+                  <button
+                    key={d.id}
+                    onClick={() => setSelectedDeliverable(d)}
+                    className="w-full text-left px-5 py-2.5 border-b transition-colors hover:bg-white/5"
+                    style={{ borderColor: T.border }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(127,184,151,0.12)', color: T.sage, fontWeight: 500 }}>
+                        {d.output_kind.replace('_', ' ')}
+                      </span>
+                      <p style={{ fontSize: 12, color: T.textPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{d.title}</p>
+                    </div>
+                    <p style={{ fontSize: 10, marginTop: 2, color: T.textMut }}>
+                      {new Date(d.created_at).toLocaleDateString()}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Deliverable viewer modal */}
+      {/* ── Deliverable viewer modal ──────────────────────────────────────── */}
       {selectedDeliverable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setSelectedDeliverable(null)}>
-          <div className="w-full max-w-3xl mx-4 rounded-2xl overflow-hidden shadow-2xl" style={{ background: '#161b22', border: '1px solid rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.88)' }} onClick={() => setSelectedDeliverable(null)}>
+          <div className="w-full max-w-3xl mx-4 rounded-2xl overflow-hidden shadow-2xl" style={{ background: T.surfaceEl, border: '1px solid ' + T.border }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid ' + T.border }}>
               <div className="flex items-center gap-3">
-                <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: 'rgba(127,184,151,0.12)', color: T.sage, fontWeight: 500 }}>
                   {selectedDeliverable.output_kind.replace('_', ' ')}
                 </span>
-                <p className="text-sm font-medium text-white">{selectedDeliverable.title}</p>
+                <p style={{ fontSize: 14, fontWeight: 500, color: T.textPri }}>{selectedDeliverable.title}</p>
               </div>
-              <button onClick={() => setSelectedDeliverable(null)} className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>✕</button>
+              <button onClick={() => setSelectedDeliverable(null)} style={{ fontSize: 13, color: T.textMut, cursor: 'pointer', background: 'none', border: 'none' }}>✕</button>
             </div>
             {selectedDeliverable.render_html ? (
               <iframe
                 srcDoc={selectedDeliverable.render_html}
                 sandbox="allow-scripts"
                 className="w-full"
-                style={{ height: 480, border: 'none', display: 'block' }}
+                style={{ height: 500, border: 'none', display: 'block' }}
                 title={selectedDeliverable.title}
               />
             ) : (
-              <div className="px-5 py-8 text-center text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>No preview available</div>
+              <div className="px-5 py-8 text-center" style={{ fontSize: 13, color: T.textMut }}>No preview available</div>
             )}
           </div>
         </div>
       )}
 
-      {/* Main chat — subtle mood tint based on time of day */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: (() => { const h = new Date().getHours(); if (h < 6) return '#0a0a12'; if (h < 12) return '#0d0f14'; if (h < 17) return '#0d0d14'; if (h < 20) return '#0e0c13'; return '#0b0b14'; })() }}>
-        {/* Aria floating avatar — absolute inside chat col, bottom-right corner
-            Opposite side from Briefing button (top-right in header).
-            Hidden when idle (opacity 0), visible + looping only while text streams. */}
+      {/* ── Main chat column ──────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: T.bg }}>
+        {/* Floating avatar video */}
         {ariaVideoUrl && (
           <div style={{
-            position: 'absolute',
-            bottom: 80,
-            right: 20,
-            width: 96,
-            height: 130,
-            zIndex: 20,
+            position: 'absolute', bottom: 84, right: 20, width: 96, height: 130, zIndex: 20,
             pointerEvents: 'none',
-            opacity: isAriaActive ? 1 : 0.35,
-            transition: 'opacity 0.25s ease',
+            opacity: isAriaActive ? 1 : 0.3,
+            transition: 'opacity 0.3s ease',
             WebkitMaskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
             maskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
           }}>
-            <video
-              ref={videoRef}
-              src={ariaVideoUrl}
-              muted
-              playsInline
-              loop
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', display: 'block' }}
-            />
+            <video ref={videoRef} src={ariaVideoUrl} muted playsInline loop
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', display: 'block' }} />
           </div>
         )}
-        {/* Sound bars above avatar, only while speaking */}
+        {/* Sound bars */}
         {ariaVideoUrl && isAriaActive && (
-          <div style={{
-            position: 'absolute',
-            bottom: 68,
-            right: 36,
-            zIndex: 21,
-            display: 'flex',
-            gap: 2,
-            alignItems: 'flex-end',
-            height: 10,
-            pointerEvents: 'none',
-          }}>
+          <div style={{ position: 'absolute', bottom: 72, right: 36, zIndex: 21, display: 'flex', gap: 2, alignItems: 'flex-end', height: 10, pointerEvents: 'none' }}>
             {[0,1,2,3].map(i => (
               <div key={i} style={{
-                width: 2,
-                borderRadius: 2,
-                background: '#7FB897',
-                height: [5,9,7,8][i],
-                animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
-                animationDelay: `${i * 0.12}s`,
+                width: 2, borderRadius: 2, background: T.sage, height: [5,9,7,8][i],
+                animation: 'ariaBar' + i + ' 0.5s ease-in-out infinite alternate',
+                animationDelay: (i * 0.12) + 's',
               }} />
             ))}
           </div>
         )}
-        {/* Header */}
-        <div className="border-b px-6 py-4 flex items-center justify-between flex-shrink-0"
-          style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowHistory(v => !v)}
-              title="Chat history"
-              aria-label="Toggle chat history"
-            className="w-11 h-11 rounded-lg flex items-center justify-center transition-colors"
-              style={{ background: showHistory ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', color: showHistory ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-            </button>
-            <div>
-              <h1 className="font-semibold text-lg leading-tight" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
-            <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(127,184,151,0.13)', border: '1px solid rgba(127,184,151,0.28)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: '#7FB897', flexShrink: 0 }}>A</span>
-            Aria
-          </h1>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>
-                AI advisor for {business?.name ?? 'your business'}
-                {' · '}
-                <span className="text-[#7FB897]">{business?.data_source === 'square' ? 'Square data' : 'Aria POS data'}</span>
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/ask-aria/intelligence"
-              className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
-              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)', minHeight: 36 }}
-              title="Intelligence settings">
-              ✦ Intel
-            </Link>
-            {messages.length > 0 && (
-              <button onClick={newConversation}
-                className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
-                style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)', minHeight: 36 }}>
-                New chat
+
+        {/* ── Header ────────────────────────────────────────────────────── */}
+        <div style={{ borderBottom: '1px solid ' + T.border, background: T.surface, flexShrink: 0 }}>
+          <div className="px-5 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowHistory(v => !v)}
+                title="Chat history"
+                aria-label="Toggle chat history"
+                className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
+                style={{ background: showHistory ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.04)', color: showHistory ? T.sage : T.textMut, border: '1px solid ' + T.border }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
               </button>
-            )}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(127,184,151,0.1)', border: '1px solid ' + T.borderMd, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: T.display, fontStyle: 'italic', fontSize: 14, color: T.sage, flexShrink: 0 }}>A</div>
+                  <span style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 20, color: T.textPri, letterSpacing: '-0.01em' }}>Aria</span>
+                  <span style={{ fontSize: 11, color: T.textMut, marginLeft: 2 }}>for {business?.name ?? 'your business'}</span>
+                </div>
+                {/* Context strip: live vitals */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 3 }}>
+                  {vitals?.revenue_today != null && (
+                    <span style={{ fontSize: 11, color: T.textMut }}>
+                      Today{' '}
+                      <span style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 13, color: T.sage }}>
+                        ${vitals.revenue_today.toFixed(0)}
+                      </span>
+                    </span>
+                  )}
+                  {vitals?.tx_count_today != null && (
+                    <span style={{ fontSize: 11, color: T.textMut }}>
+                      {vitals.tx_count_today} sale{vitals.tx_count_today !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: T.textMut }}>
+                    {business?.data_source === 'square' ? 'Square' : 'Aria POS'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/dashboard/ask-aria/intelligence"
+                className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
+                style={{ color: T.textMut, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + T.border, minHeight: 32, fontFamily: T.body }}>
+                ✦ Intel
+              </Link>
+              {messages.length > 0 && (
+                <button onClick={newConversation}
+                  className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
+                  style={{ color: T.textMut, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + T.border, minHeight: 32, fontFamily: T.body }}>
+                  New chat
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+        {/* ── Messages ──────────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto" style={{ padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Empty state */}
           {messages.length === 0 && input.length === 0 && (
-            <div className="max-w-2xl mx-auto">
-              <div className="text-center mb-8">
-                <div className="w-12 h-12 rounded-full bg-[rgba(127,184,151,0.15)] flex items-center justify-center mx-auto mb-3">
-                  <span className="text-[#7FB897] font-bold text-lg">A</span>
+            <div style={{ maxWidth: 680, margin: '0 auto', width: '100%' }}>
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(127,184,151,0.1)', border: '1px solid ' + T.borderMd, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: T.display, fontStyle: 'italic', fontSize: 24, color: T.sage, flexShrink: 0 }}>A</div>
+                  <div>
+                    <div style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 22, color: T.textPri, lineHeight: 1 }}>Aria</div>
+                    <div style={{ fontSize: 11, color: T.textMut, marginTop: 3 }}>Your business co-operator · always on</div>
+                  </div>
                 </div>
-                <div style={{ opacity: greetingReady ? 1 : 0, transition: 'opacity 0.8s ease', transform: greetingReady ? 'translateY(0)' : 'translateY(8px)', transitionProperty: 'opacity, transform' }}>
-                <p className="text-white font-medium mb-1">
-                  Hi {business?.owner_name?.split(' ')[0] ?? 'there'} — what can I help you with?
-                </p>
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  I use connected business data when it exists, and I will say exactly what is missing when it does not.
-                </p>
-                </div>
-              </div>
-              {messages.length === 0 && (
-            <div style={{ paddingBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 22, color: '#7FB897', flexShrink: 0 }}>A</div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>Aria</div>
-                  <div style={{ fontSize: 11, color: 'rgba(127,184,151,0.75)', marginTop: 1 }}>Your business co-operator · always on</div>
+                <div style={{ opacity: greetingReady ? 1 : 0, transform: greetingReady ? 'translateY(0)' : 'translateY(8px)', transition: 'opacity 0.8s ease, transform 0.8s ease' }}>
+                  <p style={{ fontSize: 16, fontWeight: 500, color: T.textPri, marginBottom: 6, fontFamily: T.body }}>
+                    {greeting}, {business?.owner_name?.split(' ')[0] ?? 'there'}.
+                  </p>
+                  <AriaGreeting business={business} />
                 </div>
               </div>
-              <div style={{ opacity: greetingReady ? 1 : 0, transition: 'opacity 0.8s ease', transform: greetingReady ? 'translateY(0)' : 'translateY(8px)', transitionProperty: 'opacity, transform' }}>
-                <AriaGreeting business={business} />
-              </div>
-            </div>
-          )}
-          <ChatSuggestions onSelect={send} disabled={sending} />
+              <ChatSuggestions onSelect={send} disabled={sending} />
             </div>
           )}
 
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} group`}>
-              <div className="w-full md:max-w-3xl">
-                <div className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
-                  style={m.role === 'user'
-                    ? { background: '#2D5240', color: '#fff', borderRadius: '18px 18px 4px 18px' }
-                    : { background: 'rgba(255,255,255,0.05)', color: '#e5e7eb', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px 18px 18px 4px' }}>
+          {/* Message list */}
+          {messages.map((m, i) => {
+            const isUser = m.role === 'user'
+            const isLastMsg = i === messages.length - 1
+
+            return (
+              <div
+                key={i}
+                className="msg-reveal group"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: isUser ? 'flex-end' : 'flex-start',
+                  animation: 'msgIn 0.22s ease forwards',
+                  maxWidth: 720,
+                  width: '100%',
+                  margin: isUser ? '0 0 0 auto' : '0',
+                }}
+              >
+                {/* Aria avatar label */}
+                {!isUser && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 7, background: 'rgba(127,184,151,0.1)', border: '1px solid ' + T.borderMd, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: T.display, fontStyle: 'italic', fontSize: 12, color: T.sage, flexShrink: 0 }}>A</div>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: T.textSec, fontFamily: T.body }}>Aria</span>
+                    {m.model_used && !m.streaming && (
+                      <span style={{ fontSize: 10, color: T.textDim }}>
+                        {m.model_used === 'haiku' ? '⚡ fast' : m.model_used === 'sonnet' ? '🧠 deep' : '🔬 expert'}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Message bubble */}
+                <div style={{
+                  padding: isUser ? '12px 18px' : '16px 20px',
+                  background: isUser ? 'rgba(127,184,151,0.08)' : T.surfaceEl,
+                  border: '1px solid ' + (isUser ? 'rgba(127,184,151,0.18)' : T.border),
+                  borderRadius: isUser ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
+                  fontSize: 15,
+                  lineHeight: 1.65,
+                  color: T.textPri,
+                  width: '100%',
+                  fontFamily: T.body,
+                }}>
                   {m.streaming && !m.content
                     ? councilThinking
                       ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '4px 0' }}>
-                          {['Growth brain reading...', 'Risk brain checking...', 'Strategy brain weighing...', 'Synthesising...'].map((step, si) => (
-                            <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: 'rgba(255,255,255,0.4)' }}>
-                              <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid #7FB897', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '2px 0' }}>
+                          {['Growth brain reading…', 'Risk brain checking…', 'Strategy brain weighing…', 'Synthesising…'].map((step, si) => (
+                            <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.textMut }}>
+                              <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid ' + T.sage, borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
                               {step}
                             </div>
                           ))}
                         </div>
                       )
-                      : <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
+                      : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.textMut }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.sage, animation: 'blinkCaret 1s step-end infinite', display: 'inline-block' }} />
+                          <span style={{ fontSize: 14 }}>Thinking…</span>
+                        </span>
+                      )
                     : m.blocks && m.blocks.length > 0
                       ? (
                         <div>
@@ -1113,10 +1209,10 @@ export default function AskAriaPage() {
                             <BlockRenderer key={bi} block={block} onChoice={(prompt) => { send(prompt) }} />
                           ))}
                           {(m.followups ?? []).length > 0 && (
-                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
                               {(m.followups ?? []).map((fup, fi) => (
                                 <button key={fi} onClick={() => { send(fup) }}
-                                  style={{ padding: '6px 10px', minHeight: 32, borderRadius: 14, border: '0.5px solid rgba(127,184,151,0.2)', background: 'rgba(127,184,151,0.05)', color: '#7FB897', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  style={{ padding: '6px 12px', minHeight: 32, borderRadius: 16, border: '1px solid ' + T.borderMd, background: 'rgba(127,184,151,0.05)', color: T.sage, fontSize: 12, cursor: 'pointer', fontFamily: T.body }}>
                                   {fup}
                                 </button>
                               ))}
@@ -1125,77 +1221,82 @@ export default function AskAriaPage() {
                         </div>
                       )
                     : m.role === 'assistant' && m.content
-                      ? parseAriaResponse(
-                          // Always strip raw supabase storage URLs and markdown links pointing to them
-                          // They show as download cards instead
-                          m.content
-                            .replace(/\[([^\]]+)\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
-                            .replace(/https?:\/\/[^\s]*supabase[^\s]*/g, '')
-                            .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, (_, txt) =>
-                              // Keep non-storage links as clickable text
-                              txt.includes('Download') || txt.includes('download') ? '' : txt
-                            )
-                            .replace(/\n\s*\n\s*\n/g, '\n\n').trim()
-                        ).map((seg, si) =>
-                          seg.kind === 'text'
-                            ? <AriaMarkdown key={si} text={seg.content} />
-                            : <AriaArtifact key={si} type={seg.type} title={seg.title} data={seg.data} />
-                        )
-                      : m.content}
+                      ? (
+                        <>
+                          {parseAriaResponse(
+                            m.content
+                              .replace(/\[([^\]]+)\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
+                              .replace(/https?:\/\/[^\s]*supabase[^\s]*/g, '')
+                              .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, (_, txt) =>
+                                txt.includes('Download') || txt.includes('download') ? '' : txt
+                              )
+                              .replace(/\n\s*\n\s*\n/g, '\n\n').trim()
+                          ).map((seg, si) =>
+                            seg.kind === 'text'
+                              ? <AriaMarkdown key={si} text={seg.content} />
+                              : <AriaArtifact key={si} type={seg.type} title={seg.title} data={seg.data} />
+                          )}
+                          {/* Streaming caret while still streaming */}
+                          {m.streaming && (
+                            <span style={{ display: 'inline-block', width: 7, height: 14, background: T.sage, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'blinkCaret 1s step-end infinite' }} />
+                          )}
+                        </>
+                      )
+                    : m.content}
                 </div>
+
+                {/* Per-message actions */}
+                {!isUser && !m.streaming && m.content && (
+                  <MessageActions msg={m} onRegenerate={isLastMsg ? regenerate : undefined} />
+                )}
+
+                {/* ActionCard, deliverable toolbar, downloads, tool calls */}
                 {m.role === 'assistant' && m.action && <ActionCard action={m.action} />}
                 {m.role === 'assistant' && !m.streaming && m.deliverable && (
                   <DeliverableToolbar deliverable={m.deliverable} />
                 )}
                 {m.role === 'assistant' && m.downloads && m.downloads.length > 0 && (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-2 space-y-2 w-full">
                     {m.downloads.map((dl, di) => (
                       dl.format === 'png' || dl.format === 'jpg' || dl.format === 'jpeg' ? (
-                        // Image preview
-                        <div key={di} className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(127,184,151,0.3)' }}>
+                        <div key={di} className="rounded-xl overflow-hidden" style={{ border: '1px solid ' + T.borderMd }}>
                           <img src={dl.download_url} alt={dl.filename} className="w-full max-w-md" />
-                          <a href={dl.download_url} download={dl.filename} className="block px-3 py-2 text-xs flex justify-between items-center"
-                            style={{ background: 'rgba(127,184,151,0.08)', color: '#7FB897', textDecoration: 'none' }}>
+                          <a href={dl.download_url} download={dl.filename}
+                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(127,184,151,0.06)', color: T.sage, textDecoration: 'none', fontSize: 12 }}>
                             <span>🖼 {dl.filename}</span>
-                            <span className="px-2 py-1 rounded text-[10px]" style={{ background: 'rgba(127,184,151,0.15)' }}>↓ Download</span>
+                            <span style={{ padding: '2px 8px', borderRadius: 5, background: 'rgba(127,184,151,0.12)', fontSize: 11 }}>↓ Download</span>
                           </a>
                         </div>
                       ) : (
                         <a key={di} href={dl.download_url} download={dl.filename} target="_blank" rel="noopener"
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:scale-[1.01]"
-                          style={{ background: 'rgba(127,184,151,0.08)', borderColor: 'rgba(127,184,151,0.3)', color: '#7FB897', textDecoration: 'none' }}>
-                          <span className="text-xl">{dl.format === 'csv' ? '📄' : dl.format === 'html' || dl.format === 'pdf' ? '📑' : '📊'}</span>
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold">{dl.filename}</p>
-                            <p className="text-xs opacity-70">{dl.rows > 0 ? `${dl.rows} rows · ` : ''}click to {dl.format === 'html' ? 'open' : 'download'}</p>
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 12, border: '1px solid ' + T.borderMd, background: 'rgba(127,184,151,0.06)', color: T.sage, textDecoration: 'none', fontSize: 13 }}>
+                          <span style={{ fontSize: 18 }}>{dl.format === 'csv' ? '📄' : dl.format === 'html' || dl.format === 'pdf' ? '📑' : '📊'}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 500 }}>{dl.filename}</div>
+                            <div style={{ fontSize: 11, opacity: 0.6, marginTop: 1 }}>{dl.rows > 0 ? `${dl.rows} rows · ` : ''}{dl.format === 'html' ? 'open' : 'download'}</div>
                           </div>
-                          <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(127,184,151,0.15)' }}>↓</span>
+                          <span style={{ fontSize: 12, padding: '3px 8px', borderRadius: 5, background: 'rgba(127,184,151,0.12)' }}>↓</span>
                         </a>
                       )
                     ))}
                   </div>
                 )}
                 {m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0 && !m.streaming && (
-                  <p className="text-[10px] mt-1 px-1 opacity-40">
+                  <p style={{ fontSize: 10, marginTop: 4, color: T.textDim }}>
                     🔧 {m.tool_calls.map(t => t.name).join(', ')}
                   </p>
                 )}
-                {m.role === 'assistant' && !m.streaming && m.model_used && (
-                  <p className="text-[9px] mt-1 px-1 opacity-50">
-                    {m.model_used === 'haiku' ? '⚡ Fast response' : m.model_used === 'sonnet' ? '🧠 Deep analysis' : '🔬 Expert analysis'}
-                  </p>
-                )}
-                {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
-                <p className="text-[9px] mt-1 px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                <p style={{ fontSize: 10, marginTop: 4, color: T.textDim }}>
                   {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {m.intent && m.role === 'assistant' && <span className="ml-2 opacity-50">{m.intent}</span>}
+                  {m.intent && m.role === 'assistant' && <span style={{ marginLeft: 6, opacity: 0.5 }}>{m.intent}</span>}
                 </p>
               </div>
-            </div>
-          ))}
-          {/* Pending action confirmation card */}
+            )
+          })}
+
+          {/* Action confirmation card */}
           {pendingAction && (
-            <div className="max-w-2xl w-full mx-auto">
+            <div style={{ maxWidth: 680, width: '100%', margin: '0 auto' }}>
               <ActionPreviewCard
                 action={pendingAction}
                 onConfirm={confirmAction}
@@ -1204,32 +1305,30 @@ export default function AskAriaPage() {
               />
             </div>
           )}
-
           <div ref={bottomRef} />
         </div>
 
-        {/* Audit log collapsible */}
+        {/* Audit log */}
         {messages.length > 0 && (
-          <div className="px-6 border-t flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          <div style={{ padding: '0 24px', borderTop: '1px solid ' + T.border, flexShrink: 0 }}>
             <button
               onClick={() => setShowAudit(v => !v)}
-              className="w-full flex items-center justify-between py-2 text-xs transition-colors"
-              style={{ color: 'rgba(255,255,255,0.3)' }}
+              className="w-full flex items-center justify-between py-2 transition-colors"
+              style={{ fontSize: 11, color: T.textDim, fontFamily: T.body }}
             >
               <span>Recent actions</span>
               <span>{showAudit ? '▲' : '▼'}</span>
             </button>
             {showAudit && (
-              <div className="pb-3">
+              <div style={{ paddingBottom: 12 }}>
                 <AuditLogCard />
               </div>
             )}
           </div>
         )}
 
-        {/* Input */}
-        <div className="px-6 py-4 border-t flex-shrink-0"
-          style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
+        {/* ── Composer ──────────────────────────────────────────────────── */}
+        <div style={{ padding: '12px 20px 16px', borderTop: '1px solid ' + T.border, background: T.surface, flexShrink: 0, position: 'relative' }}>
           <input
             ref={fileInputRef}
             type="file"
@@ -1243,44 +1342,49 @@ export default function AskAriaPage() {
             }}
           />
 
-        {/* Aria avatar */}
-        <div style={{ position: 'fixed', bottom: 0, right: 0, width: 120, zIndex: 50, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, overflow: 'visible' }}>
-          <AriaSpeechBubble business={business} show={greetingReady} />
-          <div style={{ width: 120, height: 160, opacity: avatarMounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'visible' }}>
-            <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
+          {/* Talking head */}
+          <div style={{ position: 'fixed', bottom: 0, right: 0, width: 120, zIndex: 50, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, overflow: 'visible' }}>
+            <AriaSpeechBubble business={business} show={greetingReady} />
+            <div style={{ width: 120, height: 160, opacity: avatarMounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'visible' }}>
+              <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
+            </div>
           </div>
-        </div>
+
+          {/* Attached file chips */}
           {attachedFiles.length > 0 && (
             <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-2">
               {attachedFiles.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.25)', color: '#7FB897' }}>
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(127,184,151,0.08)', border: '1px solid ' + T.borderMd, color: T.sage, fontSize: 12 }}>
                   <span>{f.type.startsWith('image/') ? '🖼' : f.type === 'application/pdf' ? '📄' : f.name.match(/\.(xlsx|xls|csv)$/i) ? '📊' : '📎'}</span>
-                  <span className="truncate max-w-[200px]">{f.name}</span>
-                  <button onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))} className="opacity-60 hover:opacity-100">✕</button>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{f.name}</span>
+                  <button onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ opacity: 0.6, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit' }}>✕</button>
                 </div>
               ))}
             </div>
           )}
-          {/* Skill picker — chip strip + modal. Active skills stack into Aria's system prompt. */}
+
+          {/* Skill picker */}
           <div className="w-full md:max-w-3xl md:mx-auto mb-2">
             <SkillPicker />
           </div>
+
+          {/* Input row */}
           <div className="flex gap-2 w-full md:max-w-3xl md:mx-auto items-end">
-            <VoiceInput onTranscript={t => { setInput(p => p ? `${p} ${t}` : t) }} disabled={sending} />
+            <VoiceInput onTranscript={t => { setInput(p => p ? p + ' ' + t : t) }} disabled={sending} />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={sending}
-              title="Attach files (images, PDFs, spreadsheets) — Aria will analyse them"
+              title="Attach files (images, PDFs, spreadsheets)"
               aria-label="Attach files"
-            className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 relative"
-              style={{ background: attachedFiles.length > 0 ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.06)', border: `1px solid ${attachedFiles.length > 0 ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, color: attachedFiles.length > 0 ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
+              className="flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 relative"
+              style={{ width: 42, height: 42, background: attachedFiles.length > 0 ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.05)', border: '1px solid ' + (attachedFiles.length > 0 ? T.borderMd : T.border), color: attachedFiles.length > 0 ? T.sage : T.textMut }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
               </svg>
               {attachedFiles.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#7FB897', color: '#13131a' }}>
+                <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: T.sage, color: T.surface, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {attachedFiles.length}
                 </span>
               )}
@@ -1290,24 +1394,35 @@ export default function AskAriaPage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Ask anything… (Enter to send, Shift+Enter for new line)"
+              placeholder="Ask anything… (⌘↵ to send)"
               rows={1}
-              className="flex-1 px-4 py-3 rounded-xl text-sm outline-none resize-none"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', maxHeight: '120px' }}
+              className="flex-1 px-4 py-2.5 rounded-xl outline-none resize-none"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid ' + T.border, color: T.textPri, maxHeight: '120px', fontSize: 15, lineHeight: 1.55, fontFamily: T.body }}
             />
+            {/* Stop button — visible only while streaming */}
+            {sending && (
+              <button
+                onClick={() => { abortRef.current?.abort() }}
+                className="flex-shrink-0 px-4 rounded-xl flex items-center justify-center transition-colors"
+                style={{ height: 42, background: 'rgba(226,75,74,0.1)', border: '1px solid rgba(226,75,74,0.25)', color: T.red, fontSize: 13, fontFamily: T.body }}
+              >
+                Stop
+              </button>
+            )}
+            {/* Send button */}
             <button
               onClick={() => send()}
               disabled={sending || (!input.trim() && attachedFiles.length === 0)}
-              className="px-5 py-3 rounded-xl text-sm font-medium transition-opacity disabled:opacity-40 flex-shrink-0"
-              style={{ background: '#2D5240', color: '#fff' }}
+              className="flex-shrink-0 px-5 rounded-xl font-medium transition-opacity disabled:opacity-40"
+              style={{ height: 42, background: T.forest, color: '#fff', fontSize: 14, fontFamily: T.body }}
             >
               {sending
                 ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 : 'Send'}
             </button>
           </div>
-          <p className="text-center text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
-            Aria uses connected records only. It will not invent missing sales, stock, customer, supplier or margin data.
+          <p style={{ textAlign: 'center', fontSize: 10, marginTop: 8, color: T.textDim, fontFamily: T.body }}>
+            Aria uses connected records only — it will not invent missing data
           </p>
         </div>
       </div>
