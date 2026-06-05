@@ -7,6 +7,7 @@ import { DailyBriefingModal } from '@/components/dashboard/DailyBriefingModal';
 import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
 import AnnouncementBanner from '@/components/dashboard/AnnouncementBanner';
 import ApiErrorToaster from '@/components/dashboard/ApiErrorToaster';
+import InstallPrompt from '@/components/InstallPrompt';
 
 const WarmupPinger = dynamic(() => import('@/components/dashboard/WarmupPinger'), { ssr: false })
 
@@ -51,6 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <AriaBrainPanel />
       <ApiErrorToaster />
       <WarmupPinger />
+      <InstallPrompt />
     </BusinessProvider>
   );
 }

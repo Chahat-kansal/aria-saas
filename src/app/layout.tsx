@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Cormorant, Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import '@/styles/aria-tokens.css';
@@ -6,6 +6,7 @@ import '@/styles/aria-landing.css';
 import { Providers } from './providers';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import PostHogProvider from '@/components/PostHogProvider';
+import PWARegister from '@/components/PWARegister';
 
 const cormorant = Cormorant({
   subsets: ['latin'],
@@ -52,7 +53,17 @@ export const metadata: Metadata = {
     title: 'Aria POS — AI for Australian Retail',
     description: 'The first POS with autonomous AI agents. Built for Australian retail.',
   },
-  icons: { icon: '/favicon.ico' },
+  icons: { icon: '/favicon.ico', apple: '/icons/icon-192.png' },
+  applicationName: 'Aria OS',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Aria OS' },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#7FB897',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -87,6 +98,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Providers>{children}</Providers>
           </ThemeProvider>
         </PostHogProvider>
+        <PWARegister />
       </body>
     </html>
   );
