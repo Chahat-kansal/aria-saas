@@ -53,7 +53,7 @@ interface CustomerFeatures {
   name: string;
   email: string | null;
   phone: string | null;
-  opted_in_sms: boolean;
+  marketing_consent: boolean;
   most_purchased_product_name: string | null;
   first_purchase_at: string;
   avg_basket_size: number;
@@ -116,7 +116,7 @@ export class CLVAgent extends BaseAgent {
     ] = await Promise.all([
       supabaseAdmin
         .from('pos_customers')
-        .select('id,name,email,phone,opted_in_sms,last_visit,created_at')
+        .select('id,name,email,phone,marketing_consent,last_visit,created_at')
         .eq('business_id', business_id)
         .is('deleted_at', null),
       supabaseAdmin
@@ -336,7 +336,7 @@ export class CLVAgent extends BaseAgent {
         name: customer.name ?? '',
         email: customer.email ?? null,
         phone: customer.phone ?? null,
-        opted_in_sms: !!(customer.opted_in_sms),
+        marketing_consent: !!(customer.marketing_consent),
         most_purchased_product_name: mostPurchasedProductName,
         first_purchase_at: firstPurchase,
         avg_basket_size: Math.round(avgBasket * 100) / 100,
@@ -680,7 +680,7 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
       for (const f of toSend) {
         try {
           let sent = false;
-          if (f.phone && f.opted_in_sms) {
+          if (f.phone && f.marketing_consent) {
             const result = await sendSMS(f.phone, f.recommended_message!);
             sent = result.ok;
           } else if (f.email) {
@@ -728,7 +728,7 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
                   tier: f.clv_tier,
                   priority: f.intervention_priority,
                   offer_type: f.recommended_offer_type,
-                  channel: f.phone && f.opted_in_sms ? 'sms' : 'email',
+                  channel: f.phone && f.marketing_consent ? 'sms' : 'email',
                 },
                 status: 'executed',
                 executed_at: new Date().toISOString(),

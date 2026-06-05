@@ -33,7 +33,7 @@ async function _GET(req: Request) {
 
   let query = supabaseAdmin
     .from('customer_clv_scores')
-    .select('id,customer_id,clv_tier,visit_trend,spend_trend,intervention_priority,predicted_annual_revenue,predicted_3yr_clv,avg_basket_size,visit_frequency_per_month,days_since_last_visit,recommended_offer_type,recommended_offer_value,recommended_message,intervention_rationale,intervention_sent_at,intervention_responded,scored_at,pos_customers(name,email,phone,opted_in_sms)')
+    .select('id,customer_id,clv_tier,visit_trend,spend_trend,intervention_priority,predicted_annual_revenue,predicted_3yr_clv,avg_basket_size,visit_frequency_per_month,days_since_last_visit,recommended_offer_type,recommended_offer_value,recommended_message,intervention_rationale,intervention_sent_at,intervention_responded,scored_at,pos_customers(name,email,phone,marketing_consent)')
     .eq('business_id', biz.id)
     .order('scored_at', { ascending: false });
 

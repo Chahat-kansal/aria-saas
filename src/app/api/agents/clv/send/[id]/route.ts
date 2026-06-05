@@ -18,7 +18,7 @@ async function _POST(req: Request, { params }: { params: Promise<{ id: string }>
   // Fetch the CLV score record with customer and business ownership check
   const { data: score } = await supabaseAdmin
     .from('customer_clv_scores')
-    .select('id,business_id,customer_id,recommended_message,intervention_priority,clv_tier,businesses(user_id),pos_customers(name,email,phone,opted_in_sms)')
+    .select('id,business_id,customer_id,recommended_message,intervention_priority,clv_tier,businesses(user_id),pos_customers(name,email,phone,marketing_consent)')
     .eq('id', id)
     .maybeSingle();
 
@@ -35,13 +35,13 @@ async function _POST(req: Request, { params }: { params: Promise<{ id: string }>
     return NextResponse.json({ error: 'No intervention needed for this customer' }, { status: 400 });
   }
 
-  const customer = score.pos_customers as unknown as { name: string; email: string | null; phone: string | null; opted_in_sms: boolean } | null;
+  const customer = score.pos_customers as unknown as { name: string; email: string | null; phone: string | null; marketing_consent: boolean } | null;
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
 
   let channel: 'sms' | 'email' | null = null;
   let sent = false;
 
-  if (customer.phone && customer.opted_in_sms) {
+  if (customer.phone && customer.marketing_consent) {
     const result = await sendSMS(customer.phone, score.recommended_message);
     sent = result.ok;
     channel = 'sms';

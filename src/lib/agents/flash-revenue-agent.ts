@@ -713,7 +713,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_customers')
       .select('id,name,phone')
       .eq('business_id', business_id)
-      .eq('opted_in_sms', true)
+      .eq('marketing_consent', true)
       .not('phone', 'is', null);
 
     // Apply segment filter
@@ -949,7 +949,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_customers')
       .select('email,name')
       .eq('business_id', business_id)
-      .eq('opted_in_sms', true)
+      .eq('marketing_consent', true)
       .not('email', 'is', null)
       .limit(50);
 

@@ -52,11 +52,11 @@ export async function POST(req: Request) {
   // Get customer details
   const { data: customer } = await supabaseAdmin
     .from('pos_customers')
-    .select('id, name, phone, opted_in_sms')
+    .select('id, name, phone, marketing_consent')
     .eq('id', sale.customer_id)
     .maybeSingle()
 
-  if (!customer?.phone || !customer.opted_in_sms) {
+  if (!customer?.phone || !customer.marketing_consent) {
     return NextResponse.json({ skipped: true, reason: 'no SMS consent' })
   }
 

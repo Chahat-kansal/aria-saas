@@ -294,10 +294,10 @@ export class ReputationDefenceAgent extends BaseAgent {
 
         const { data: customer } = await supabaseAdmin
           .from('pos_customers')
-          .select('name,phone,email,marketing_opt_in')
+          .select('name,phone,email,marketing_consent')
           .eq('id', sale.customer_id)
           .maybeSingle()
-        if (!customer || !customer.marketing_opt_in) continue
+        if (!customer || !customer.marketing_consent) continue
 
         const firstName = String(customer.name ?? 'there').split(' ')[0]
         const msg = 'Hi ' + firstName + '! Hope you enjoyed your visit to ' + String(bizName) + '. Mind leaving us a quick Google review? It means a lot: ' + reviewLink

@@ -18,6 +18,8 @@ const nextConfig = {
       '@remotion/renderer',
       '@remotion/vercel',
       '@vercel/sandbox',
+      '@sparticuz/chromium',
+      'puppeteer-core',
     ],
     serverSourceMaps: false,
     outputFileTracingExcludes: {
@@ -31,6 +33,7 @@ const nextConfig = {
     },
     outputFileTracingIncludes: {
       '/api/reels/render': ['./src/remotion/**/*'],
+      '/api/aria/deliverable-pdf': ['./node_modules/@sparticuz/chromium/bin/**'],
     },
   },
   typescript: {

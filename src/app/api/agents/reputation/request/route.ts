@@ -20,9 +20,9 @@ async function _POST(req: Request) {
   if (!body?.customer_id) return NextResponse.json({ error: 'customer_id required' }, { status: 400 })
 
   const { data: customer } = await supabaseAdmin
-    .from('pos_customers').select('name,phone,email,marketing_opt_in').eq('id', body.customer_id).eq('business_id', biz.id).maybeSingle()
+    .from('pos_customers').select('name,phone,email,marketing_consent').eq('id', body.customer_id).eq('business_id', biz.id).maybeSingle()
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
-  if (!customer.marketing_opt_in) return NextResponse.json({ error: 'Customer has not opted in to marketing' }, { status: 422 })
+  if (!customer.marketing_consent) return NextResponse.json({ error: 'Customer has not opted in to marketing' }, { status: 422 })
 
   const placeId = String(biz.google_place_id ?? '')
   const reviewLink = placeId ? 'https://g.page/' + placeId + '/review' : ''
