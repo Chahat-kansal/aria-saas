@@ -309,7 +309,7 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
   },
   {
     name: 'query_bank_balance',
-    description: 'Get real Australian bank balances and recent transactions via Basiq. Use when owner asks about cash balance, available money, recent large transactions, income vs expenses, or runway.',
+    description: 'Get real Australian bank balances and recent transactions via Basiq. Use when owner asks about cash balance, available money, recent large transactions, income vs expenses, or runway. Returns {connected:false} if Basiq is not set up — do not call if owner has not linked their bank.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1025,8 +1025,8 @@ interface BankTxnRow { amount: number | null; transaction_date: string | null; d
 
 async function queryBankBalance(input: { metric?: string }, businessId: string): Promise<unknown> {
   const metric = input.metric ?? 'summary';
-  const { data: biz } = await supabaseAdmin.from('businesses').select('basiq_connected').eq('id', businessId).maybeSingle();
-  if (!biz?.basiq_connected) return { connected: false, message: 'Bank not connected. Connect at /dashboard/integrations.' };
+  const { data: connectedAccts } = await supabaseAdmin.from('bank_accounts').select('id').eq('business_id', businessId).eq('is_active', true).limit(1);
+  if (!connectedAccts?.length) return { connected: false, message: 'Bank not connected. Go to Settings → Integrations to connect via Basiq.' };
 
   if (metric === 'balance') {
     const { data: accounts } = await supabaseAdmin.from('bank_accounts')

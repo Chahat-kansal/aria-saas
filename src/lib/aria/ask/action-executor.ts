@@ -22,6 +22,7 @@ export async function executeAction(
   let beforeState: Record<string, unknown> = {}
   let afterState: Record<string, unknown> = {}
   let entityIds: string[] = []
+  let entityType = 'pos_products'
 
   try {
     switch (action.type) {
@@ -141,6 +142,80 @@ export async function executeAction(
         break
       }
 
+      case 'create_roster': {
+        const { name, week_start, week_end, notes } = action.payload as {
+          name: string; week_start: string; week_end?: string; notes?: string
+        }
+        if (!name || !week_start) return { ok: false, affected_count: 0, error: 'name and week_start required', rollback_available: false }
+        entityType = 'pos_rosters'
+        const { data: roster, error: rosterErr } = await supabase.from('pos_rosters').insert({
+          business_id: businessId,
+          name,
+          week_start,
+          week_end: week_end ?? null,
+          status: 'draft',
+          published: false,
+          generated_by_agent: true,
+          notes: notes ?? null,
+          total_cost_cents: 0,
+          updated_at: new Date().toISOString(),
+        }).select('id').single()
+        if (rosterErr || !roster) return { ok: false, affected_count: 0, error: rosterErr?.message ?? 'Failed to create roster', rollback_available: false }
+        entityIds = [roster.id]
+        affectedCount = 1
+        afterState = { roster_id: roster.id, name, week_start, status: 'draft' }
+        break
+      }
+
+      case 'create_invoice': {
+        const { customer_name, customer_email, due_date, items, notes } = action.payload as {
+          customer_name: string
+          customer_email?: string
+          due_date?: string
+          items?: Array<{ description: string; quantity: number; unit_price: number }>
+          notes?: string
+        }
+        if (!customer_name) return { ok: false, affected_count: 0, error: 'customer_name required', rollback_available: false }
+        entityType = 'invoices'
+        const lineItems = (items ?? []).map(it => ({
+          description: it.description,
+          quantity: Number(it.quantity) || 1,
+          unit_price: Number(it.unit_price) || 0,
+          line_total: Math.round((Number(it.quantity) || 1) * (Number(it.unit_price) || 0) * 100) / 100,
+        }))
+        const subtotal = lineItems.reduce((s, it) => s + it.line_total, 0)
+        const taxAmount = Math.round(subtotal * 0.1 * 100) / 100
+        const total = Math.round((subtotal + taxAmount) * 100) / 100
+
+        const invoiceNumber = 'INV-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5)
+        const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
+          business_id: businessId,
+          invoice_number: invoiceNumber,
+          customer_name,
+          customer_email: customer_email ?? null,
+          due_date: due_date ?? null,
+          subtotal,
+          tax_amount: taxAmount,
+          total,
+          status: 'draft',
+          notes: notes ?? null,
+          ai_generated: true,
+          updated_at: new Date().toISOString(),
+        }).select('id').single()
+        if (invErr || !invoice) return { ok: false, affected_count: 0, error: invErr?.message ?? 'Failed to create invoice', rollback_available: false }
+
+        if (lineItems.length) {
+          await supabase.from('invoice_items').insert(
+            lineItems.map(it => ({ ...it, invoice_id: invoice.id, business_id: businessId }))
+          )
+        }
+
+        entityIds = [invoice.id]
+        affectedCount = 1
+        afterState = { invoice_id: invoice.id, invoice_number: invoiceNumber, customer_name, total, status: 'draft' }
+        break
+      }
+
       default:
         return { ok: false, affected_count: 0, error: `Action type "${action.type}" not yet supported`, rollback_available: false }
     }
@@ -149,7 +224,7 @@ export async function executeAction(
     const { data: logEntry } = await supabase.from('aria_action_log').insert({
       business_id: businessId,
       action_type: action.type,
-      entity_type: 'pos_products',
+      entity_type: entityType,
       entity_ids: entityIds,
       before_state: beforeState,
       after_state: afterState,

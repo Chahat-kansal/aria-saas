@@ -865,16 +865,6 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     complexity: intent.complexity,
   })
 
-  // Pre-fetch benchmark data for Haiku on business performance questions
-  const needsBenchmark = /revenue|sales|margin|profit|good|bad|average|normal|benchmark|industry|compare|how am i doing|is this|too (high|low)|enough/i.test(message)
-  if (needsBenchmark && routedModel === 'haiku') {
-    try {
-      const searchQuery = (ctx.industry || 'small business') + ' ' + (ctx.city ?? 'Australia') + ' average revenue benchmark 2025'
-      const searchResult = await executePOSTool('web_search', { query: searchQuery }, bid)
-      systemPrompt += '\n\nLIVE BENCHMARK DATA (just fetched):\n' + JSON.stringify(searchResult).slice(0, 800) + '\nUse these benchmarks to contextualise the owner\'s numbers. Do not say "based on the search" — weave it in naturally.'
-    } catch { /* non-fatal */ }
-  }
-
   // Haiku does not support extended thinking — only enable it for Sonnet/Opus.
   const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
   const thinkingBudget = intent.type === 'escalate' ? 4000 : 2000

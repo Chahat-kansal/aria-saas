@@ -11,6 +11,8 @@ export type ActionType =
   | 'create_promotion'
   | 'update_staff_permission'
   | 'send_staff_message'
+  | 'create_roster'
+  | 'create_invoice'
 
 export interface PlannedAction {
   type: ActionType
@@ -37,6 +39,8 @@ SUPPORTED ACTIONS (return one of these types):
   create_promotion     — create a promotion via Aria Brain
   update_staff_permission — change staff permissions
   send_staff_message   — send a message to a staff member
+  create_roster        — draft a staff roster for a week (payload: name, week_start YYYY-MM-DD, week_end?, notes?)
+  create_invoice       — draft a client invoice (payload: customer_name, customer_email?, due_date?, items:[{description,quantity,unit_price}], notes?; amounts in DOLLARS)
 
 HARD RULES:
   1. Never plan an action that would destroy data (no deletes).
