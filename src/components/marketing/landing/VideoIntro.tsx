@@ -118,7 +118,8 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         style={{
           position: 'absolute', inset: 0,
           width: '100%', height: '100%',
-          objectFit: 'contain',
+          objectFit: 'cover',
+          objectPosition: 'center 38%',
           opacity: vidPlaying ? 1 : 0,
           transition: 'opacity 0.5s ease',
         }}
@@ -130,8 +131,8 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: 'url(/videos/aria-intro-poster.jpg)',
-          backgroundSize: 'contain',
-          backgroundPosition: 'center',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 38%',
           backgroundRepeat: 'no-repeat',
           animation: 'ariaIntroPulse 2s ease-in-out infinite',
         }} />
