@@ -11,7 +11,90 @@ import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-conte
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { runAriaCouncil, insertCouncilRun } from '@/lib/aria/council'
+import type { CouncilOutput } from '@/lib/aria/council'
 import { runOrchestrator } from '@/lib/aria/agents/orchestrator'
+
+// ── Briefing recommendation builder ───────────────────────────────────────────
+// Maps the council's structured brain outputs into the modal's Recommendation type.
+type BriefingRec = {
+  id: string; priority: 'high' | 'medium' | 'low'
+  category: 'revenue' | 'customers' | 'stock' | 'marketing' | 'compliance' | 'reviews'
+  title: string; description: string
+  action_label: string; action_type: 'winback' | 'review_reply' | 'promotion' | 'reorder' | 'campaign' | 'navigate' | 'dismiss'
+  metric: string; metric_label: string; trend: null
+  action_payload: { href?: string }
+}
+
+function detectCategory(text: string): BriefingRec['category'] {
+  const t = text.toLowerCase()
+  if (/stock|inventory|reorder|supply|product|out of/i.test(t)) return 'stock'
+  if (/customer|retention|winback|lapse|loyal|churn/i.test(t)) return 'customers'
+  if (/review|rating|google|feedback/i.test(t)) return 'reviews'
+  if (/marketing|campaign|promotion|social|adverti/i.test(t)) return 'marketing'
+  if (/compliance|legal|tax|permit|licence/i.test(t)) return 'compliance'
+  return 'revenue'
+}
+
+function actionForCategory(cat: BriefingRec['category']): Pick<BriefingRec, 'action_label' | 'action_type' | 'action_payload'> {
+  switch (cat) {
+    case 'stock':       return { action_label: 'Reorder now',      action_type: 'reorder',     action_payload: { href: '/pos/products?filter=low_stock' } }
+    case 'customers':   return { action_label: 'Win them back',    action_type: 'winback',     action_payload: { href: '/dashboard/winback' } }
+    case 'reviews':     return { action_label: 'Reply to review',  action_type: 'review_reply',action_payload: { href: '/dashboard/reviews' } }
+    case 'marketing':   return { action_label: 'Start campaign',   action_type: 'campaign',    action_payload: { href: '/dashboard/winback' } }
+    case 'compliance':  return { action_label: 'View details',     action_type: 'navigate',    action_payload: { href: '/dashboard' } }
+    default:            return { action_label: 'View dashboard',   action_type: 'navigate',    action_payload: { href: '/dashboard' } }
+  }
+}
+
+function toTitle(text: string): string {
+  const words = text.trim().split(' ')
+  return words.slice(0, 7).join(' ').replace(/[,.:;!?]$/, '') + (words.length > 7 ? '…' : '')
+}
+
+function buildBriefingRecs(council: CouncilOutput): BriefingRec[] {
+  const recs: BriefingRec[] = []
+  let idx = 0
+
+  // 1. Consensus items — all brains agreed → high priority
+  for (const item of (council.consensus ?? []).slice(0, 3)) {
+    if (!item?.trim()) continue
+    const cat = detectCategory(item)
+    recs.push({ id: 'consensus-' + idx++, priority: 'high', category: cat, title: toTitle(item), description: item, ...actionForCategory(cat), metric: '', metric_label: '', trend: null })
+  }
+
+  // 2. Per-brain recommendations — map each brain role to a category
+  const brainCatMap: Record<string, BriefingRec['category']> = { growth: 'revenue', risk: 'compliance', strategy: 'marketing', context: 'customers' }
+  for (const brain of (council.raw_brain_outputs ?? [])) {
+    if (!brain?.succeeded) continue
+    const cat = brainCatMap[brain.role] ?? 'revenue'
+    for (const rec of (brain.recommendations ?? []).slice(0, 1)) {
+      if (!rec?.trim() || recs.length >= 6) break
+      const detectedCat = detectCategory(rec)
+      const finalCat = detectedCat !== 'revenue' ? detectedCat : cat
+      const confidence = brain.confidence ?? 'medium'
+      recs.push({ id: brain.role + '-' + idx++, priority: confidence === 'high' ? 'high' : confidence === 'medium' ? 'medium' : 'low', category: finalCat, title: toTitle(rec), description: rec, ...actionForCategory(finalCat), metric: '', metric_label: '', trend: null })
+    }
+  }
+
+  // 3. Contested items — brains disagreed → medium priority, worth a look
+  for (const item of (council.contested ?? []).slice(0, 2)) {
+    if (!item?.trim() || recs.length >= 7) break
+    const cat = detectCategory(item)
+    recs.push({ id: 'contested-' + idx++, priority: 'medium', category: cat, title: toTitle(item), description: item + ' (Aria advisors are split on this — worth reviewing.)', ...actionForCategory(cat), metric: '', metric_label: '', trend: null })
+  }
+
+  // 4. Fallback from final_briefing if we still have < 4 cards
+  if (recs.length < 4 && council.final_briefing) {
+    const sentences = council.final_briefing.split(/[.!?]\s+/).map(s => s.trim()).filter(s => s.length > 30)
+    const cats: BriefingRec['category'][] = ['revenue', 'customers', 'stock', 'marketing']
+    for (let i = 0; i < sentences.length && recs.length < 5; i++) {
+      const cat = detectCategory(sentences[i]) !== 'revenue' ? detectCategory(sentences[i]) : cats[i % cats.length]
+      recs.push({ id: 'brief-' + idx++, priority: 'medium', category: cat, title: toTitle(sentences[i]), description: sentences[i], ...actionForCategory(cat), metric: '', metric_label: '', trend: null })
+    }
+  }
+
+  return recs.filter(r => r.title && r.description)
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -131,8 +214,10 @@ Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{fa
         console.error('[orchestrator] failed:', (e as Error).message)
       )
     }
+    const recommendations = buildBriefingRecs(council)
     return NextResponse.json({
       briefing: council.final_briefing,
+      recommendations,
       ask_blocks: council.ask_blocks ?? [],
       consensus: council.consensus,
       contested: council.contested,

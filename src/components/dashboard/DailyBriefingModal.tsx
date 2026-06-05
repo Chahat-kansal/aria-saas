@@ -496,6 +496,15 @@ export function DailyBriefingModal() {
           {/* Footer — always shown */}
           {!briefingError && (
             <div className="px-4 py-3 border-t border-[rgba(255,255,255,0.06)]">
+              {sorted.length > 0 && (
+                <Link
+                  href="/dashboard/ask-aria?q=Give+me+the+full+detailed+daily+briefing+for+today+including+all+insights+recommendations+and+actions"
+                  onClick={dismiss}
+                  className="block text-center text-[10px] text-[rgba(255,255,255,0.35)] hover:text-[#1D9E75] transition-colors mb-2"
+                >
+                  See full analysis in Ask Aria →
+                </Link>
+              )}
               <div className="flex gap-2 mb-2">
                 <button
                   onClick={remindLater}
