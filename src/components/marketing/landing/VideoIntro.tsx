@@ -37,8 +37,8 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
     const onPlaying = () => setVidPlaying(true)
     vid.addEventListener('playing', onPlaying)
 
-    // Hard fallback: only if the video never plays at all. Longer than the 10s clip.
-    const fallback = setTimeout(dismiss, 14000)
+    // Hard fallback: only if the video never plays at all. Longer than the 8s clip.
+    const fallback = setTimeout(dismiss, 12000)
 
     function dismiss() {
       clearTimeout(fallback)
@@ -55,22 +55,22 @@ export default function VideoIntro({ onDone }: { onDone: () => void }) {
 
     // Captions are driven by the video's ACTUAL playback time (currentTime), not by
     // mount timers — so on a slow load they never run ahead of a frozen frame.
-    // Video beats (10s clip):  0-4s wave · 4-7s walk · 7-9.5s reach+open · 9.5-10s green flood
-    //   caption 1 "pain"        @ ~1.0s
-    //   caption 2 "empathy"     @ ~3.0s
-    //   caption 3 "Aria helps"  @ ~4.8s  (lands during the walk)
-    //   captions clear          @ ~6.8s  (before he opens the door — door sequence plays clean)
+    // Video beats (8s clip):  0-4s talk to camera · 4-6s turn & open door · 6-8s green flood
+    //   caption 1 "pain"        @ ~0.8s
+    //   caption 2 "empathy"     @ ~2.2s
+    //   caption 3 "Aria helps"  @ ~3.4s  (lands during the talk)
+    //   captions clear          @ ~5.3s  (before the door fully opens — door+flood play clean)
     const onTimeUpdate = () => {
       if (!vid.duration) return
       const t = vid.currentTime
 
       // staged captions
-      if (t >= 1.0 && t < 6.8) {
+      if (t >= 0.8 && t < 5.3) {
         setPhase(p => (p === 'video' ? 'caption' : p))
-        if (t >= 4.8) setCaptionStep(s => (s < 3 ? 3 : s))
-        else if (t >= 3.0) setCaptionStep(s => (s < 2 ? 2 : s))
+        if (t >= 3.4) setCaptionStep(s => (s < 3 ? 3 : s))
+        else if (t >= 2.2) setCaptionStep(s => (s < 2 ? 2 : s))
         else setCaptionStep(s => (s < 1 ? 1 : s))
-      } else if (t >= 6.8 && !firedRef.current) {
+      } else if (t >= 5.3 && !firedRef.current) {
         setPhase(p => (p === 'caption' ? 'video' : p))
         setCaptionStep(0)
       }
