@@ -21,7 +21,7 @@ export function detectRankSubject(message: string): RankSubject {
   if (/\b(customer|client|buyer|spender|loyal|who spent|who bought|top buyer)\b/.test(m)) return 'customers'
   if (/\b(staff|employee|server|barista|team member|who sold|who served|cashier)\b/.test(m)) return 'staff'
   if (/\b(day|weekday|busiest day|slowest day|day of week|which day)\b/.test(m)) return 'days'
-  if (/\b(category|department|section|type of product)\b/.test(m)) return 'categories'
+  if (/\b(categor(?:y|ies)|department|section|type of product)\b/.test(m)) return 'categories'
   if (/\b(payment|card|cash|method|how (people|customers) pay)\b/.test(m)) return 'payment_methods'
   // products is the safe default — catches item/seller/dish/drink/menu/product
   return 'products'
