@@ -22,8 +22,6 @@ const nextConfig = {
     serverSourceMaps: false,
     outputFileTracingExcludes: {
       '*': [
-        './node_modules/@sparticuz/chromium/**',
-        './node_modules/puppeteer-core/**',
         './node_modules/puppeteer/**',
         './node_modules/chromium/**',
         './node_modules/sharp/**',
@@ -33,12 +31,6 @@ const nextConfig = {
     },
     outputFileTracingIncludes: {
       '/api/reels/render': ['./src/remotion/**/*'],
-      // PDF export needs chromium + puppeteer-core bundled into THIS function only.
-      // They stay excluded from every other function (above) to keep bundles small.
-      '/api/aria/deliverable-pdf': [
-        './node_modules/@sparticuz/chromium/**',
-        './node_modules/puppeteer-core/**',
-      ],
     },
   },
   typescript: {
