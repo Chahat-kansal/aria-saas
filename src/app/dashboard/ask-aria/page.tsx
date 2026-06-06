@@ -945,6 +945,10 @@ export default function AskAriaPage() {
         @keyframes msgIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .msg-reveal { animation: none !important; } }
+        @media (max-width: 767px) {
+          .aria-avatar-float { bottom: 160px !important; z-index: 10 !important; }
+          .aria-avatar-float * { pointer-events: none !important; }
+        }
       `}</style>
 
       {/* Mobile backdrop */}
@@ -1428,8 +1432,8 @@ export default function AskAriaPage() {
             }}
           />
 
-          {/* Talking head */}
-          <div style={{ position: 'fixed', bottom: 0, right: 0, width: 120, zIndex: 50, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, overflow: 'visible' }}>
+          {/* Talking head — on mobile lifted above composer via .aria-avatar-float media query */}
+          <div className="aria-avatar-float" style={{ position: 'fixed', bottom: 0, right: 0, width: 120, zIndex: 50, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, overflow: 'visible' }}>
             <AriaSpeechBubble business={business} show={greetingReady} />
             <div style={{ width: 120, height: 160, opacity: avatarMounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'visible' }}>
               <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
@@ -1490,7 +1494,7 @@ export default function AskAriaPage() {
               <button
                 onClick={() => { abortRef.current?.abort() }}
                 className="flex-shrink-0 px-4 rounded-xl flex items-center justify-center transition-colors"
-                style={{ height: 42, background: 'rgba(226,75,74,0.1)', border: '1px solid rgba(226,75,74,0.25)', color: T.red, fontSize: 13, fontFamily: T.body }}
+                style={{ height: 42, background: 'rgba(226,75,74,0.1)', border: '1px solid rgba(226,75,74,0.25)', color: T.red, fontSize: 13, fontFamily: T.body, position: 'relative', zIndex: 60 }}
               >
                 Stop
               </button>
@@ -1500,7 +1504,7 @@ export default function AskAriaPage() {
               onClick={() => send()}
               disabled={sending || (!input.trim() && attachedFiles.length === 0)}
               className="flex-shrink-0 px-5 rounded-xl font-medium transition-opacity disabled:opacity-40"
-              style={{ height: 42, background: T.forest, color: '#fff', fontSize: 14, fontFamily: T.body }}
+              style={{ height: 42, background: T.forest, color: '#fff', fontSize: 14, fontFamily: T.body, position: 'relative', zIndex: 60 }}
             >
               {sending
                 ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
