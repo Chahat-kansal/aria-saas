@@ -354,7 +354,7 @@ function AriaMarkdown({ text }: { text: string }) {
   )
 }
 
-function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
+function DeliverableToolbar({ deliverable, summaryText }: { deliverable: DeliverableInfo; summaryText?: string }) {
   const [view, setView] = useState<'chart' | 'summary'>('chart')
   const [pdfLoading, setPdfLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
@@ -431,6 +431,13 @@ function DeliverableToolbar({ deliverable }: { deliverable: DeliverableInfo }) {
             style={{ height: 360, border: 'none', display: 'block' }}
             title={deliverable.title}
           />
+        </div>
+      )}
+      {view === 'summary' && (
+        <div className="rounded-xl p-4 mb-3 text-sm leading-relaxed" style={{ border: '1px solid ' + T.border, color: T.textSec, background: 'rgba(255,255,255,0.02)', whiteSpace: 'pre-wrap' }}>
+          {summaryText
+            ? summaryText
+            : <span style={{ color: T.textMut, fontStyle: 'italic' }}>No written summary — switch to Chart view to see the visual.</span>}
         </div>
       )}
       <div className="flex flex-wrap gap-2">
@@ -1253,7 +1260,7 @@ export default function AskAriaPage() {
                 {/* ActionCard, deliverable toolbar, downloads, tool calls */}
                 {m.role === 'assistant' && m.action && <ActionCard action={m.action} />}
                 {m.role === 'assistant' && !m.streaming && m.deliverable && (
-                  <DeliverableToolbar deliverable={m.deliverable} />
+                  <DeliverableToolbar deliverable={m.deliverable} summaryText={m.content || undefined} />
                 )}
                 {m.role === 'assistant' && m.downloads && m.downloads.length > 0 && (
                   <div className="mt-2 space-y-2 w-full">

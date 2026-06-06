@@ -683,7 +683,8 @@ BUSINESS IDENTITY — HARD RULES (non-negotiable):
 TOOLS AVAILABLE (use them — do not guess):
 You have function-calling tools that hit the live database. When the owner asks something not in LIVE BUSINESS DATA above, call a tool instead of saying "I don't have that data". Examples:
 
-- "what was my best Tuesday last quarter" → call query_sales with date_from/date_to spanning the quarter, group_by="day"
+- "what was my best Tuesday last quarter" → call query_sales with date_from/date_to spanning the quarter, group_by="day_of_week"
+- "what is my busiest day of the week" → call query_sales for the last 30 days with group_by="day_of_week" (returns avg_revenue_per_day normalized by occurrences — use that to rank, NOT raw totals)
 - "who are my top 10 customers" → call query_customers with sort_by="ltv" limit=10
 - "compare this month vs last" → call compare_periods with two date ranges
 - "any dead stock" → call query_inventory with dead_stock_only=true
@@ -722,6 +723,9 @@ For live_render, generate complete self-contained HTML with:
   "html": "<complete HTML fragment here — all data embedded as JS variables>",
   "downloadable": true
 }
+
+### CRITICAL — narrative before blocks (non-negotiable)
+ALWAYS write at least 2 full paragraphs of narrative analysis BEFORE the <json_blocks> tag. Never output a block without preceding narrative text. If you have data to show in a chart or table, explain what it means first, then add the block. A response that starts with or only contains a block is always wrong.
 
 ### Standard blocks (use for simple structured output, wrap in <json_blocks>[...]</json_blocks>)
 - "chart": simple bar/line/pie via Recharts
@@ -1243,7 +1247,13 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     }
     richBlocks.unshift(analysisPlanBlock)
   }
-  const finalResponse = richBlocks ? stripBlocks(cleanResponse) : cleanResponse
+  let finalResponse = richBlocks ? stripBlocks(cleanResponse) : cleanResponse
+  // BUG 3 guard: blocks without narrative — generate minimal description so the UI always shows text
+  if (richBlocks && richBlocks.length > 0 && !finalResponse.trim()) {
+    const firstBlock = richBlocks.find(b => b.type !== 'task_plan') as Record<string, unknown> | undefined
+    const blockTitle = (firstBlock?.title as string) ?? (firstBlock?.type as string) ?? 'data'
+    finalResponse = `Here is the ${blockTitle} you requested based on your live business data.`
+  }
 
   return NextResponse.json({
     response: finalResponse,

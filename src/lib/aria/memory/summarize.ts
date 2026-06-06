@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import Anthropic from '@anthropic-ai/sdk'
 
 interface ConversationMessage {
   role: string
@@ -47,7 +48,9 @@ export async function summariseConversation(
 
   try {
     const { callOpenAI } = await import('../providers/openai')
-    const result = await callOpenAI({
+    let rawText = ''
+
+    const openaiResult = await callOpenAI({
       systemPrompt: SUMMARIZER_SYSTEM,
       userPrompt: transcript,
       maxTokens: 400,
@@ -56,7 +59,21 @@ export async function summariseConversation(
       role: 'classify',
     })
 
-    const cleaned = result.raw
+    if (openaiResult.success && openaiResult.raw) {
+      rawText = openaiResult.raw
+    } else {
+      // OpenAI unavailable or failed — fall back to Anthropic
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const resp = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        system: SUMMARIZER_SYSTEM,
+        messages: [{ role: 'user', content: transcript }],
+      })
+      rawText = (resp.content[0] as { type: string; text: string }).text ?? ''
+    }
+
+    const cleaned = rawText
       .replace(/^```json\s*/i, '')
       .replace(/^```\s*/i, '')
       .replace(/\s*```$/, '')
@@ -75,5 +92,5 @@ export async function summariseConversation(
       key_concerns: Array.isArray(parsed.key_concerns) ? parsed.key_concerns.slice(0, 3) : [],
       followup_promised: Array.isArray(parsed.followup_promised) ? parsed.followup_promised.slice(0, 3) : [],
     }, { onConflict: 'business_id,conversation_date,mode' })
-  } catch { /* non-fatal fire-and-forget */ }
+  } catch (e) { console.error('[aria/summarise] conversation summarization failed (non-fatal):', (e as Error).message) }
 }

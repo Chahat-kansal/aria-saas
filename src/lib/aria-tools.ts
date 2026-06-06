@@ -15,7 +15,8 @@ export const ARIA_POS_TOOLS: Tool[] = [
         date_to: { type: 'string', description: 'ISO date string YYYY-MM-DD' },
         group_by: {
           type: 'string',
-          enum: ['day', 'week', 'month', 'product', 'cashier', 'payment_method'],
+          enum: ['day', 'week', 'month', 'product', 'cashier', 'payment_method', 'day_of_week'],
+          description: 'Use day_of_week to get normalized average revenue per day-of-week name (Monday, Tuesday, etc.). This is the correct option for "busiest day" or "slowest day" questions — it normalizes by how many of each weekday occurred in the period, not raw totals.',
         },
         limit: { type: 'number' },
       },
@@ -391,6 +392,33 @@ async function querySales(
     const limited = input.limit ? productRows.slice(0, input.limit) : productRows;
     return {
       rows: limited,
+      total_revenue: (Array.isArray(rows) ? rows : []).reduce((s: number, r: {total_amount?: number|null}) => s + (r.total_amount ?? 0), 0),
+      total_transactions: Array.isArray(rows) ? rows.length : 0,
+    };
+  }
+
+  // day_of_week: normalize by number of occurrences so 6-Fridays vs 5-Sundays is fair
+  if (input.group_by === 'day_of_week') {
+    const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const dowMap: Record<string, { revenue: number; transactions: number; dates: Set<string> }> = {};
+    for (const row of rows) {
+      const dayName = DAYS[new Date(row.created_at).getDay()];
+      const dateStr = row.created_at.slice(0, 10);
+      if (!dowMap[dayName]) dowMap[dayName] = { revenue: 0, transactions: 0, dates: new Set() };
+      dowMap[dayName].revenue += row.total_amount ?? 0;
+      dowMap[dayName].transactions += 1;
+      dowMap[dayName].dates.add(dateStr);
+    }
+    const dowRows = Object.entries(dowMap).map(([day, v]) => ({
+      key: day,
+      total_revenue: Math.round(v.revenue * 100) / 100,
+      transactions: v.transactions,
+      day_count: v.dates.size,
+      avg_revenue_per_day: v.dates.size > 0 ? Math.round((v.revenue / v.dates.size) * 100) / 100 : 0,
+    })).sort((a, b) => b.avg_revenue_per_day - a.avg_revenue_per_day);
+    return {
+      rows: dowRows,
+      note: 'avg_revenue_per_day is normalized by how many of that weekday occurred in the period — use this value for ranking, not total_revenue.',
       total_revenue: (Array.isArray(rows) ? rows : []).reduce((s: number, r: {total_amount?: number|null}) => s + (r.total_amount ?? 0), 0),
       total_transactions: Array.isArray(rows) ? rows.length : 0,
     };
