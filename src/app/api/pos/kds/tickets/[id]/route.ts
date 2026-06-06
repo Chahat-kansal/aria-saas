@@ -89,7 +89,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
         payload: { ticket_id: ticket.id, station: ticket.station, prep_time_seconds: ticket.prep_time_seconds },
         priority: 'low',
       })
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }
 
   return NextResponse.json({ ok: true })

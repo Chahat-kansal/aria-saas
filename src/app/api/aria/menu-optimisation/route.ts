@@ -78,7 +78,7 @@ async function _POST(req: Request) {
         model_id: 'claude-haiku-4-5-20251001', role: 'menu_insights',
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   return NextResponse.json({ analysis, insight });

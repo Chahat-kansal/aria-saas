@@ -165,7 +165,7 @@ async function _POST(req: Request) {
       status: 'executed',
       action_data: { preview_id, xero_journal_id: journalId, date: preview.date },
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true, xero_journal_id: journalId })
 }

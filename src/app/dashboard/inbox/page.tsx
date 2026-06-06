@@ -55,7 +55,7 @@ export default function InboxPage() {
       const d = await fetch(`/api/dashboard/inbox?filter=${f}`).then(r => r.json())
       setItems(d.items ?? [])
       setUnread(d.unread_count ?? 0)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [])
 
@@ -66,7 +66,7 @@ export default function InboxPage() {
     try {
       const d = await fetch(`/api/dashboard/inbox?source=${it.source}&id=${it.id}`).then(r => r.json())
       setDetail(d.detail ?? null)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setDetailLoading(false)
     if (it.has_unread) {
       setItems(prev => prev.map(x => x.id === it.id ? { ...x, has_unread: false } : x))
@@ -81,7 +81,7 @@ export default function InboxPage() {
       const r = await fetch('/api/community/owner/chats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: selected.id, text: reply.trim() }) }).then(x => x.json())
       if (r.blocked) { alert(r.reason ?? 'Message blocked'); }
       else { setReply(''); const d = await fetch(`/api/dashboard/inbox?source=marketplace_chat&id=${selected.id}`).then(x => x.json()); setDetail(d.detail ?? null) }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSending(false)
   }
 

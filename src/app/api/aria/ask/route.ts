@@ -226,7 +226,7 @@ async function _POST(req: Request) {
         if (!result.ok) {
           const errText = `Action failed: ${result.error ?? 'Unknown error'}`
           let failConvId = conversationId
-          try { failConvId = await upsertConversation(bid, user.id, conversationId, message, errText, 'action_executed') } catch {}
+          try { failConvId = await upsertConversation(bid, user.id, conversationId, message, errText, 'action_executed') } catch (e) { console.error('[silent-catch]', e) }
           return NextResponse.json({
             response: errText,
             conversation_id: failConvId ?? conversationId,
@@ -880,7 +880,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
         .join('\n')
       systemPrompt += '\n\nACTIVE SKILLS (the owner has asked you to take on these roles — stack their lenses across your reply):\n' + block
     }
-  } catch { /* skills are additive — never block the response */ }
+  } catch (e) { console.error('[aria/ask] skills execution failed (non-blocking):', e) }
 
   // 4c. Inject detected output format hint so Claude picks the right block type
   if (outputFmt.wants_download) {
@@ -1056,7 +1056,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
           lastMsg.downloads = downloads
           await supabaseAdmin.from('aria_conversations').update({ messages: msgs }).eq('id', savedConvId)
         }
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
     return NextResponse.json({ response: responseText, conversation_id: savedConvId, intent: 'generate_image', downloads })
   }
@@ -1122,7 +1122,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
         if (verifierResult.raw.startsWith('CORRECTION:')) {
           console.warn('[aria/verifier] factual correction flagged:', verifierResult.raw, 'for question:', message.slice(0, 80))
         }
-      } catch { /* non-fatal — verifier must never block the main response */ }
+      } catch (e) { console.error('[aria/ask] verifier failed (non-blocking):', e) }
     })())
   }
   // Tool call context is logged separately, NOT appended to user-visible message
@@ -1163,7 +1163,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
 
       // Mark conversation as escalated
       if (conversationId) {
-        waitUntil((async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId) } catch { /* non-fatal */ } })())
+        waitUntil((async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId) } catch (e) { console.error('[non-fatal]', e) } })())
       }
     } catch (e) {
       actionResult = { type: 'escalate_error', message: (e as Error).message }
@@ -1225,7 +1225,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   if (savedConvId && downloads.length > 0) {
     try {
       await upsertConversation(bid, user.id, savedConvId, message, historyContent, intent.type, downloads)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   // Extract rich blocks from the response if Aria included them

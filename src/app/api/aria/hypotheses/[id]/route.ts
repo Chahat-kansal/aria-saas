@@ -79,7 +79,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       try {
         const { onActionApproved } = await import('@/lib/aria/hypothesis/outcome-learning')
         await onActionApproved(actionId, h.business_id as string)
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     })())
   }
 

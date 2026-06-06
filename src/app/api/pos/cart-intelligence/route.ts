@@ -174,7 +174,7 @@ async function _POST(req: NextRequest) {
         }
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   // Sort by priority
   const order = { urgent: 0, high: 1, medium: 2, low: 3 };

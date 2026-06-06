@@ -68,7 +68,7 @@ export async function GET(req: Request) {
           priority: 'medium',
           payload: { activated: fired.length, date: new Date().toISOString().slice(0, 10) },
         })
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
   }
 

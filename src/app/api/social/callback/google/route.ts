@@ -71,7 +71,7 @@ async function _GET(req: Request) {
           const locData = await locRes.json();
           console.log('[google/callback] locations:', JSON.stringify(locData));
           locationName = locData.locations?.[0]?.name ?? null;
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
     } catch (e) {
       console.error('[google/callback] accounts API error:', e);

@@ -61,7 +61,7 @@ export default function NewCustomerPage() {
           phone: data.phone || null, email: data.email || null,
         }),
       })
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
     router.push('/pos/customers')
   }
 

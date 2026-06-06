@@ -118,7 +118,7 @@ async function _POST(req: Request) {
           alertsCreated++;
         }
       }
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }
 
   return NextResponse.json({ saved, alertsCreated, message: `Scanned ${SOURCES.length} sources` });

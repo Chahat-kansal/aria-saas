@@ -371,7 +371,7 @@ async function _POST(req: Request) {
       }
       seoKeywordDrops = seoKeywordDrops.slice(0, 3)
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   // School holidays signal (VIC 2026)
   const VIC_SCHOOL_BREAKS_2026 = [
@@ -661,7 +661,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
             : `${invoiceStats.overdueCount} overdue invoices flagged`,
           executed_at: new Date().toISOString(),
         });
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     })());
   }
 

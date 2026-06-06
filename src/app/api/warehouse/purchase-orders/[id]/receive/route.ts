@@ -103,7 +103,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       outputTokens = msg.usage.output_tokens
       claudeSuccess = true
       summary = (msg.content[0] as any).text ?? summary
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   // Log

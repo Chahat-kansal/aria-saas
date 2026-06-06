@@ -170,7 +170,7 @@ export default function CashFlowPage() {
           lyByDay[key] = (lyByDay[key] ?? 0) + (s.total_amount ?? 0)
         }
         setLastYearData(Object.entries(lyByDay).map(([date, rev]) => ({ date, lastYearRevenue: Math.round(rev) })))
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
 
       const month = new Date().getMonth()
       setSeasonalInsight(
@@ -179,7 +179,7 @@ export default function CashFlowPage() {
         : month >= 5 && month <= 7 ? 'Mid-year (June–August) can be slower for retail — watch your burn rate carefully.'
         : 'Compare your current trajectory to last year to spot seasonal patterns early.'
       )
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id, horizon, scenario, fixedDailyExpense])
 

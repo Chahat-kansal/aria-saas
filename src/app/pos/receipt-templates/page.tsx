@@ -151,7 +151,7 @@ export default function ReceiptTemplatesPage() {
         try {
           const ls = localStorage.getItem('aria-receipt-tpl')
           if (ls) { const p = JSON.parse(ls); if (Array.isArray(p.blocks)) { setBlocks(p.blocks); setName(p.name ?? 'Default Receipt') } }
-        } catch {}
+        } catch (e) { console.error('[silent-catch]', e) }
       }
       if (d.settings?.receipt_template_name) setName(d.settings.receipt_template_name)
     }).catch(() => {}).finally(() => setLoading(false))
@@ -166,7 +166,7 @@ export default function ReceiptTemplatesPage() {
       })
       const d = await r.json()
       if (!d.error) { setSavedOk(true); setTimeout(() => setSavedOk(false), 2000); return }
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
     localStorage.setItem('aria-receipt-tpl', JSON.stringify({ blocks, name }))
     setSavedOk(true); setTimeout(() => setSavedOk(false), 2000)
     setSaving(false)

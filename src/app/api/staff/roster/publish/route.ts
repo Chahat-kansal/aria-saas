@@ -111,7 +111,7 @@ async function _POST(req: Request) {
       confidence: 'high', status: 'completed', source: 'roster:publish', priority: 'medium',
       payload: { week_start: weekStart, shift_count: shifts.length, notified },
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true, notified, summary })
 }

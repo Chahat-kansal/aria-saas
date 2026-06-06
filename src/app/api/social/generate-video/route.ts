@@ -128,11 +128,11 @@ async function _POST(req: NextRequest) {
         post_type: 'reel',
         ...(influencer_id ? { influencer_id } : {}),
       }).eq('id', post_id)
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }
 
   if (influencer_id) {
-    try { await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }) } catch {}
+    try { await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }) } catch (e) { console.error('[silent-catch]', e) }
   }
 
   try {
@@ -144,7 +144,7 @@ async function _POST(req: NextRequest) {
       cost_aud: estimatedCost,
       status: 'pending',
     })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // Return credentials to browser — Vercel IPs are blocked by Higgsfield (522),
   // so the browser calls Higgsfield directly then PATCHes back the job_id.
@@ -170,13 +170,13 @@ async function _PATCH(req: NextRequest) {
   if (!job_id) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
 
   if (post_id) {
-    try { await supabaseAdmin.from('social_posts').update({ fal_request_id: job_id }).eq('id', post_id) } catch {}
+    try { await supabaseAdmin.from('social_posts').update({ fal_request_id: job_id }).eq('id', post_id) } catch (e) { console.error('[silent-catch]', e) }
     try {
       await supabaseAdmin.from('reel_usage_log')
         .update({ fal_request_id: job_id, status: 'processing' })
         .eq('social_post_id', post_id)
         .is('fal_request_id', null)
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }
 
   return NextResponse.json({ ok: true, fal_request_id: job_id })
@@ -216,15 +216,15 @@ async function _GET(req: NextRequest) {
       }
 
       if (postId) {
-        try { await supabaseAdmin.from('social_posts').update({ video_url: finalUrl, post_type: 'reel' }).eq('id', postId) } catch {}
-        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId) } catch {}
+        try { await supabaseAdmin.from('social_posts').update({ video_url: finalUrl, post_type: 'reel' }).eq('id', postId) } catch (e) { console.error('[silent-catch]', e) }
+        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId) } catch (e) { console.error('[silent-catch]', e) }
       }
 
       return NextResponse.json({ status: 'COMPLETED', video_url: finalUrl })
     }
 
     if (status === 'failed' || status === 'error') {
-      try { await supabaseAdmin.from('reel_usage_log').update({ status: 'failed' }).eq('fal_request_id', jobId) } catch {}
+      try { await supabaseAdmin.from('reel_usage_log').update({ status: 'failed' }).eq('fal_request_id', jobId) } catch (e) { console.error('[silent-catch]', e) }
       return NextResponse.json({ status: 'FAILED', error: result.error || 'Generation failed' })
     }
 

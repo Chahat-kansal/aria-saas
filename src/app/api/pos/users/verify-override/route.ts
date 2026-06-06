@@ -44,7 +44,7 @@ async function _POST(req: Request) {
       performed_by: user.id,
       metadata: { override_action: action ?? null, required_flag: required_flag ?? null },
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({
     authorized: true,

@@ -162,7 +162,7 @@ export async function generateWeeklyNarrative(
         model_id: 'claude-sonnet-4-5-20250929', role: 'promo',
         input_tokens: promoInputTokens, output_tokens: promoOutputTokens, success: promoSuccess,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })()
 
   // ── Suspicious summary paragraph ─────────────────────────────────────────

@@ -484,7 +484,7 @@ export function TimelineEditor({ videoUrl, sessionId, businessId, onPublish, onC
         const data = await res.json()
         setCaptionSuggestions(data)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setCaptionLoading(false)
   }
 

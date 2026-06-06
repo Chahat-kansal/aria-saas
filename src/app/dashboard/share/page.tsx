@@ -70,7 +70,7 @@ export default function SharePage() {
 
   async function rotateTabletKey() {
     setRotating(true)
-    try { const d = await fetch('/api/dashboard/kiosk-share', { method: 'POST' }).then(r => r.json()); if (d.tablet_api_key) setTabletKey(d.tablet_api_key) } catch { /* ignore */ }
+    try { const d = await fetch('/api/dashboard/kiosk-share', { method: 'POST' }).then(r => r.json()); if (d.tablet_api_key) setTabletKey(d.tablet_api_key) } catch (e) { console.warn('[non-fatal]', e) }
     setRotating(false)
   }
 

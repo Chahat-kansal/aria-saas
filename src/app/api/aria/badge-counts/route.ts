@@ -34,7 +34,8 @@ async function safeCount(
     const result = await query;
     if (result.error) return 0;
     return result.count ?? 0;
-  } catch {
+  } catch (e) {
+    console.error('[badge-counts] safeCount failed:', e)
     return 0;
   }
 }

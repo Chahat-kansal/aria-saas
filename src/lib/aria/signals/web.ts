@@ -47,7 +47,7 @@ export async function searchWeb(query: string, businessId?: string): Promise<Web
         expires_at: new Date(Date.now() + 4 * 3600_000).toISOString(),
         business_id: businessId ?? null,
       }, { onConflict: 'cache_key' })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     return result
   } catch { return null }
 }

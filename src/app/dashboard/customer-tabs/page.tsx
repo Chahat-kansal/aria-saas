@@ -101,7 +101,7 @@ export default function CustomerTabsPage() {
       // Show customers who have a tab (credit_limit > 0 or balance != 0)
       const tabCustomers = all.filter(c => (c.credit_limit_cents ?? 0) > 0 || (c.current_balance_cents ?? 0) !== 0)
       setCustomers(tabCustomers)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id])
 
@@ -155,7 +155,7 @@ export default function CustomerTabsPage() {
         : c))
       setAdjustAmount('')
       setAdjustNote('')
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setAdjusting(false)
   }
 

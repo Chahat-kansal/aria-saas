@@ -91,7 +91,7 @@ async function _POST(req: Request, { params }: { params: Promise<{ id: string }>
         status: 'executed',
         executed_at: new Date().toISOString(),
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ ok: true, channel, sent });

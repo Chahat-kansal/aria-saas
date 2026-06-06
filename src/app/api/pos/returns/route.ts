@@ -59,7 +59,7 @@ async function _POST(req: Request) {
     try {
       const mod = await import('@/lib/pos/manager-token')
       managerApprovedBy = mod.verifyManagerToken(manager_token)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   const result = await processReturn(supabase, {

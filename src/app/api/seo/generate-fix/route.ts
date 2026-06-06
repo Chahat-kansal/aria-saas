@@ -267,7 +267,7 @@ async function _POST(req: Request): Promise<Response> {
         output_tokens: msg.usage.output_tokens,
         success: true,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   return NextResponse.json({ suggested_fix: suggestedFix, fix_format: fixFormat });

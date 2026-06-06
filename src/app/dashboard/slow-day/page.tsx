@@ -75,7 +75,7 @@ export default function SlowDayPage() {
 
       setSlowDays(result)
       if (result.length > 0) setSelectedDay(result[0].day)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id])
 
@@ -129,7 +129,7 @@ export default function SlowDayPage() {
       })
       const d = await res.json()
       setIdeas(d.ideas ?? [])
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setGenerating(false)
   }
 

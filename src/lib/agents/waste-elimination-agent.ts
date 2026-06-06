@@ -244,7 +244,7 @@ export class WasteEliminationAgent extends BaseAgent {
           role: 'narrative',
           business_id,
         }) || narrative
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
 
       // Attach narrative to all predictions
       for (const p of predictions) {

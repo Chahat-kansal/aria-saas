@@ -92,7 +92,7 @@ async function _GET() {
         })
       )
       ariaInsight = resp.content[0].type === 'text' ? resp.content[0].text.trim() : null
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({

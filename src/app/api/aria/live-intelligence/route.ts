@@ -51,7 +51,7 @@ async function _POST(req: Request) {
       payload: { narrative, title, action },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'business_id,signal_type' })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({
     narrative: result.recommendation?.description ?? null,

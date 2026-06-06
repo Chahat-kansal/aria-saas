@@ -317,7 +317,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
         { access: 'public', contentType: 'text/html' },
       )
       pdfUrl = blob.url
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   // Update invoice with pdf_url
@@ -339,7 +339,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
       status: 'executed',
       action_data: { order_id: params.id, invoice_id: (inv as { id: string }).id },
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ invoice_id: (inv as { id: string }).id, pdf_url: pdfUrl })
 }

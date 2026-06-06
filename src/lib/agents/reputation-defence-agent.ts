@@ -75,7 +75,7 @@ export class ReputationDefenceAgent extends BaseAgent {
           review_date: new Date(r.time * 1000).toISOString(),
         }, { onConflict: 'business_id,platform,external_id', ignoreDuplicates: true })
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   private async analyseNewReviews(business_id: string): Promise<void> {
@@ -220,7 +220,7 @@ export class ReputationDefenceAgent extends BaseAgent {
             })
           }
         }
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
 
       await supabaseAdmin.from('aria_autopilot_actions').insert({
         business_id,
@@ -325,7 +325,7 @@ export class ReputationDefenceAgent extends BaseAgent {
               }),
             })
             channel = 'email'
-          } catch { /* non-fatal */ }
+          } catch (e) { console.error('[non-fatal]', e) }
         }
 
         if (channel) {
@@ -398,7 +398,7 @@ export class ReputationDefenceAgent extends BaseAgent {
           status: 'pending',
         })
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     return decisions
   }
 }

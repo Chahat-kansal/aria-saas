@@ -52,7 +52,7 @@ export default function AskVisaPage() {
                 buf += text;
                 setMessages(m => m.map((x, i) => i === m.length - 1 ? { ...x, content: buf } : x));
               }
-            } catch {}
+            } catch (e) { console.error('[silent-catch]', e) }
           }
         }
       }

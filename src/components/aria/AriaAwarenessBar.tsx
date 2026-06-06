@@ -56,7 +56,7 @@ export function AriaAwarenessBar() {
           const { data, ts } = JSON.parse(cached);
           if (Date.now() - ts < CACHE_TTL) { setInsight(data); return; }
         }
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     }
 
     setLoading(true);
@@ -71,7 +71,7 @@ export function AriaAwarenessBar() {
         if (data.insight) {
           setInsight(data);
           if (cacheKey) {
-            try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); } catch { /* ignore */ }
+            try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); } catch (e) { console.warn('[non-fatal]', e) }
           }
         }
       }

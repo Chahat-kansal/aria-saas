@@ -122,7 +122,7 @@ async function _POST(req: Request) {
       request_summary: 'Reorder from last order for customer ' + customer_id,
       response_summary: 'Created new draft order ' + (newOrder as { order_number: string }).order_number,
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   const { data: finalOrder } = await supabaseAdmin.from('wholesale_orders').select('*').eq('id', (newOrder as { id: string }).id).single()
   return NextResponse.json({ order: finalOrder }, { status: 201 })

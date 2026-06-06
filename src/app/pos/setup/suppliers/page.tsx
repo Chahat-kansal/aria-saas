@@ -75,7 +75,7 @@ export default function SuppliersPage() {
         setModal(null)
         showToast('Supplier connected ✓')
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSaving(false)
   }
 

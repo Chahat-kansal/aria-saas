@@ -86,7 +86,7 @@ Business: ${biz.name}, ${biz.industry ?? 'retail'}, ${biz.city ?? 'AU'}`
         output_tokens: outputTokens,
         success,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })())
 
   return NextResponse.json({ summary })

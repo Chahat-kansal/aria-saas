@@ -52,7 +52,7 @@ export async function GET(req: Request) {
             description: 'BAS due in ' + Math.round(daysUntilDue) + ' days (' + q.due_date.toISOString().slice(0, 10) + '). Status: ' + existing.status + '. Log in to review.',
             status: 'pending',
           })
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
 
       // Super payment alerts
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
               description: 'Super payment due in ' + Math.round(daysUntilSuperDue) + ' days for ' + superRow.staff_name + ': $' + Number(superRow.super_amount_owed).toFixed(0),
               status: 'pending',
             })
-          } catch { /* non-fatal */ }
+          } catch (e) { console.error('[non-fatal]', e) }
         }
       }
     } catch { /* per-biz errors non-fatal */ }

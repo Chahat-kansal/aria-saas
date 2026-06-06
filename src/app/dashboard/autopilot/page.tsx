@@ -91,7 +91,7 @@ export default function AutopilotPage() {
         ? { ...a, outcome_note: outcomeNote || null, outcome_revenue_cents: outcomeRevenue ? Math.round(parseFloat(outcomeRevenue) * 100) : null }
         : a))
       setEditingOutcome(null)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSavingOutcome(false)
   }
 

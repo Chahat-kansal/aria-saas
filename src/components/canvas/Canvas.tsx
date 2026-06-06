@@ -44,7 +44,7 @@ export function Canvas({ onClose, isPro }: Props) {
     try {
       const saved = JSON.parse(localStorage.getItem('aria-canvas-docs') || '[]');
       setDocs(saved);
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }, []);
 
   useEffect(() => {
@@ -144,7 +144,7 @@ export function Canvas({ onClose, isPro }: Props) {
               full += data.text;
               setStreamingText(full);
             }
-          } catch {}
+          } catch (e) { console.error('[silent-catch]', e) }
         }
       }
 

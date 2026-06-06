@@ -91,7 +91,7 @@ export default function ProfitLeaksPage() {
           .then(r => r.json())
           .then(sd => { if (sd.shifts && !cancelled) setShiftData(sd.shifts); })
           .catch(() => null);
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
       if (!cancelled) setLoading(false);
     }
     init();
@@ -111,7 +111,7 @@ export default function ProfitLeaksPage() {
       if (d.history) setHistory(d.history);
       if (d.ai_summary) setAiSummary(d.ai_summary);
       setLastRunAt(new Date().toISOString());
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setRefreshing(false);
   }
 
@@ -170,7 +170,7 @@ export default function ProfitLeaksPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: business.id, action_type: 'profit_leak_fixed', payload: { category: catKey, title: leak.title } }),
       }).catch(() => null);
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setFixingId(null);
   }
 

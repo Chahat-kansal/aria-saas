@@ -451,7 +451,7 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
           .update({ executed_at: new Date().toISOString(), outcome_data: result.outcome })
           .eq('id', p.id)
         if (result.success) executedActions++
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
     if (executedActions > 0 && completedSession) {
       await supabaseAdmin

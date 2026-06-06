@@ -26,7 +26,7 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 // Robust JSON array extractor — handles nested structures, escaped strings
 function extractJsonArray(text: string): any[] {
   const clean = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
-  try { const d = JSON.parse(clean); if (Array.isArray(d)) return d; } catch {}
+  try { const d = JSON.parse(clean); if (Array.isArray(d)) return d; } catch (e) { console.error('[silent-catch]', e) }
   let start = -1, depth = 0;
   let inStr = false, esc = false;
   for (let i = 0; i < clean.length; i++) {
@@ -39,7 +39,7 @@ function extractJsonArray(text: string): any[] {
     else if (ch === ']') {
       depth--;
       if (depth === 0 && start !== -1) {
-        try { const p = JSON.parse(clean.slice(start, i + 1)); if (Array.isArray(p)) return p; } catch {}
+        try { const p = JSON.parse(clean.slice(start, i + 1)); if (Array.isArray(p)) return p; } catch (e) { console.error('[silent-catch]', e) }
         start = -1;
       }
     }
@@ -50,7 +50,7 @@ function extractJsonArray(text: string): any[] {
 // Finds the outermost balanced JSON object
 function extractJson(text: string): any | null {
   const clean = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
-  try { const d = JSON.parse(clean); if (d && typeof d === 'object') return d; } catch {}
+  try { const d = JSON.parse(clean); if (d && typeof d === 'object') return d; } catch (e) { console.error('[silent-catch]', e) }
   let depth = 0;
   const start = clean.indexOf('{');
   if (start === -1) return null;
@@ -222,7 +222,7 @@ Be precise — these numbers update real inventory.`,
         console.warn('[receipt-scan] storage upload failed (non-fatal):', msg)
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   if (extractedLines.length === 0) {
     return NextResponse.json({
@@ -289,7 +289,7 @@ Be precise — these numbers update real inventory.`,
       grand_total: invoiceTotal,
       line_items: result,
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   // Feature 8: optionally auto-update product cost prices from matched lines
   const cost_updates: Array<{ product_id: string; product_name: string; old_cost: number; new_cost: number; margin_pct: number | null }> = []

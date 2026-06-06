@@ -61,7 +61,7 @@ export async function resolveUnitCost(
     if (product?.price && (product.price as number) > 0) {
       return (product.price as number) * 0.6
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return 0
 }

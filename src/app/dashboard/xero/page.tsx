@@ -66,7 +66,7 @@ export default function XeroPage() {
     try {
       const d = await fetch('/api/integrations/xero/status?business_id=' + business.id).then(r => r.json())
       setStatus(d)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id])
 
@@ -118,7 +118,7 @@ export default function XeroPage() {
         body: JSON.stringify({ business_id: business.id, enabled: val }),
       })
       setStatus(prev => prev ? { ...prev, auto_sync: val } : prev)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setTogglingAuto(false)
   }
 

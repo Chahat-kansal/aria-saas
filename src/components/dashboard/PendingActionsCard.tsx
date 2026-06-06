@@ -57,7 +57,7 @@ export function PendingActionsCard({ businessId }: { businessId: string }) {
         const d = await res.json() as { actions: PendingAction[] }
         setActions(d.actions ?? [])
       }
-    } catch { /* non-fatal */ } finally {
+    } catch (e) { console.error('[non-fatal]', e) } finally {
       setLoading(false)
     }
   }, [businessId])
@@ -73,7 +73,7 @@ export function PendingActionsCard({ businessId }: { businessId: string }) {
         body: JSON.stringify({ action_id: actionId, decision }),
       })
       setActions(prev => prev.filter(a => a.id !== actionId))
-    } catch { /* non-fatal */ } finally {
+    } catch (e) { console.error('[non-fatal]', e) } finally {
       setProcessing(null)
     }
   }

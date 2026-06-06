@@ -313,7 +313,7 @@ export async function POST(req: Request) {
                   }
                 }
               }
-            } catch { /* non-fatal */ }
+            } catch (e) { console.error('[non-fatal]', e) }
           }
 
           // Structured menu block — when the customer asks to see the menu/list,

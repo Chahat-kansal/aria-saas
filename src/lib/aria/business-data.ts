@@ -310,12 +310,13 @@ export async function collectBusinessData(
               message: custName + ' is due to reorder based on their usual cycle',
               customer_id: custId,
             });
-          } catch { /* table may not exist — skip */ }
+          } catch (e) { console.warn('[business-data] aria_notifications insert skipped:', e) }
         }
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[business-data] reorder_reminders fetch failed:', e) }
 
       return { revenue_this_month, outstanding_receivables, top_customers, reorder_reminders };
-    } catch {
+    } catch (e) {
+      console.error('[business-data] wholesale context fetch failed, returning empty:', e)
       return { revenue_this_month: 0, outstanding_receivables: 0, top_customers: [], reorder_reminders: [] };
     }
   })();

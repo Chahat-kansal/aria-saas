@@ -43,7 +43,7 @@ export default function ClassificationsPage() {
       });
       const d = await r.json();
       if (d.item) { setItems(prev => [...prev, d.item].sort((a, b) => a.name.localeCompare(b.name))); setNewName(''); }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setAdding(false);
   }
 

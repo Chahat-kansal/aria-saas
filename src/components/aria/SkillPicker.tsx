@@ -42,7 +42,7 @@ export function SkillPicker() {
     try {
       const r = await fetch('/api/aria/skills').then(r => r.ok ? r.json() : { skills: [] })
       setSkills(r.skills ?? [])
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setLoading(false)
   }, [])
 

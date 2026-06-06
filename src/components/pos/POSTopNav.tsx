@@ -94,13 +94,13 @@ export function POSTopNav({ children }: { children: React.ReactNode }) {
     try {
       const u = localStorage.getItem('aria_pos_user');
       if (u) setPosUser(JSON.parse(u));
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, [pathname]);
 
   function openCustomerDisplay() {
     try {
       localStorage.setItem('aria_pos_display_state', JSON.stringify({ status: 'idle', timestamp: Date.now() }));
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     const w = window.open('/pos/display', 'AriaCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
     if (w) w.focus();
   }

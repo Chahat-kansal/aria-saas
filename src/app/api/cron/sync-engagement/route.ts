@@ -130,7 +130,7 @@ export async function GET(req: Request) {
           p_reach: reach,
           p_likes: likes,
         })
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     }
   }
 

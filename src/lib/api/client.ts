@@ -30,7 +30,7 @@ function friendlyMessage(status: number): string {
 
 function emit(message: string) {
   if (typeof window === 'undefined') return
-  try { window.dispatchEvent(new CustomEvent(API_ERROR_EVENT, { detail: { message } })) } catch { /* non-fatal */ }
+  try { window.dispatchEvent(new CustomEvent(API_ERROR_EVENT, { detail: { message } })) } catch (e) { console.error('[non-fatal]', e) }
 }
 
 interface ApiFetchOptions extends RequestInit {

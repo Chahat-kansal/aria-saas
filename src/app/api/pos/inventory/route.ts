@@ -77,7 +77,7 @@ async function _PATCH(req: Request) {
       adjusted_by: user.id,
       created_at: new Date().toISOString(),
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true, data })
 }

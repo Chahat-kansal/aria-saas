@@ -343,7 +343,7 @@ export async function chatWithBusinessBrain(input: AriaBusinessData, context?: o
     try {
       const businessContext = await getBusinessContext(businessId)
       systemPromptOverride = getSystemPrompt(industry, businessContext)
-    } catch { /* fall back to generic SYSTEM_PROMPT */ }
+    } catch (e) { console.error('[business-brain] getBusinessContext failed, using generic prompt:', e) }
   }
   return analyse('chat', input, context, systemPromptOverride, WEB_SEARCH_TOOLS)
 }

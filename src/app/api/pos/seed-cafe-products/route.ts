@@ -175,7 +175,7 @@ async function _POST() {
                 .update({ image_url: url, image_source: 'owner' })
                 .eq('id', p.id).eq('business_id', biz.id)
             }
-          } catch { /* non-fatal */ }
+          } catch (e) { console.error('[non-fatal]', e) }
         })
       )
     }

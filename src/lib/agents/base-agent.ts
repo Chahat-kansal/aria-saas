@@ -112,7 +112,7 @@ export abstract class BaseAgent {
             request_summary: opts.agent_key + ' reasoning call',
             response_summary: raw.slice(0, 120),
           });
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
 
       return raw;
@@ -136,7 +136,7 @@ export abstract class BaseAgent {
             request_summary: opts.agent_key + ' reasoning call',
             response_summary: null,
           });
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
 
       return '';

@@ -134,7 +134,7 @@ Only output the JSON array. No preamble.`
         imageUrl = await getRelevantImage(p.image_query, {
           category: ['cafe', 'restaurant', 'bakery'].includes(biz.industry ?? '') ? 'food' : 'business',
         })
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
 
     const { data: newPost } = await supabase

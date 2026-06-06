@@ -67,7 +67,7 @@ export async function trackCron<T>(
           duration_ms: durationMs,
           error: error.message,
         }).eq('id', runId)
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
 
     logger.error('cron_runs failed', { route: 'cron/' + cronName, error: error.message, ms: durationMs })

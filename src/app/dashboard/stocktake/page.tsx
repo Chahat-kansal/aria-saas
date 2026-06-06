@@ -60,7 +60,7 @@ export default function StocktakePage() {
       const res = await fetch('/api/pos/stock-takes')
       const d = await res.json()
       setStocktakes(d.stock_takes ?? [])
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id])
 
@@ -95,7 +95,7 @@ export default function StocktakePage() {
         setSessionName('')
         load()
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setCreating(false)
   }
 
@@ -113,7 +113,7 @@ export default function StocktakePage() {
       }
       setCounts(initCounts)
       setView('active')
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }
 
@@ -130,7 +130,7 @@ export default function StocktakePage() {
       setItems(prev => prev.map(i => i.id === itemId
         ? { ...i, counted_qty: counted, variance: counted - i.expected_qty }
         : i))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }
 
   async function completeStocktake() {
@@ -158,7 +158,7 @@ export default function StocktakePage() {
         .then(d => { if (d.insight) setAriaInsight(d) })
         .catch(() => {})
         .finally(() => setAriaLoading(false))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSaving(false)
   }
 

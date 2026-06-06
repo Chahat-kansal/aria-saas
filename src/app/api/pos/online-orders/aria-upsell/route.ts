@@ -32,7 +32,7 @@ async function _POST(req: Request) {
   })
   const upsell = ((resp.content[0] as { type: string; text: string }).text ?? '').trim()
   await db.from('pos_online_orders').update({ aria_upsell: upsell }).eq('id', order_id as string).eq('business_id', business_id as string)
-  waitUntil((async () => { try { await db.from('aria_ai_calls').insert({ business_id, model: 'claude-haiku-4-5-20251001', prompt_summary: 'online_order_upsell', response_summary: upsell, tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch {} })())
+  waitUntil((async () => { try { await db.from('aria_ai_calls').insert({ business_id, model: 'claude-haiku-4-5-20251001', prompt_summary: 'online_order_upsell', response_summary: upsell, tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch (e) { console.error('[silent-catch]', e) } })())
   return NextResponse.json({ upsell })
 }
 

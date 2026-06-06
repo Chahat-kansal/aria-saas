@@ -571,7 +571,7 @@ export default function AskAriaPage() {
         const data = await res.json() as { conversations?: ConvSummary[] }
         setHistory(data.conversations ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }, [])
 
   const loadDeliverables = useCallback(async () => {
@@ -581,7 +581,7 @@ export default function AskAriaPage() {
         const data = await res.json() as { deliverables?: DeliverableRecord[] }
         setDeliverables(data.deliverables ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }, [])
 
   useEffect(() => { loadHistory() }, [loadHistory])
@@ -626,7 +626,7 @@ export default function AskAriaPage() {
       setConversationId(data.conversation.id)
       setShowHistory(false)
       setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, 100)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }, [])
 
   const send = useCallback(async (text?: string) => {

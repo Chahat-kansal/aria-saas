@@ -172,7 +172,7 @@ export default function DailyBriefingPage() {
       }).catch(() => null)
       setActionToast('Done!')
       setTimeout(() => setActionToast(''), 2500)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setActionFiring(prev => ({ ...prev, [key]: false }))
   }
 

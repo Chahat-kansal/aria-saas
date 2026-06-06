@@ -142,7 +142,7 @@ async function _DELETE(req: Request, { params }: Params) {
       data: { sale_id: id, reason, voided_by_role: posUser?.role ?? 'owner' },
       triggered_by: user.id,
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true })
 }

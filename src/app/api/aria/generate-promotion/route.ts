@@ -58,7 +58,7 @@ Return JSON:
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const promo = parseLLMJsonOr(raw, null, 'generate-promotion') as Record<string, string> | null;
     if (!promo) throw new Error('No JSON');
-    try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: promo.promotion_name, offer_text: promo.offer_text, sms_message: promo.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch { /* non-fatal */ }
+    try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: promo.promotion_name, offer_text: promo.offer_text, sms_message: promo.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch (e) { console.error('[non-fatal]', e) }
     return NextResponse.json(promo);
   } catch {
     const fallback = {
@@ -68,7 +68,7 @@ Return JSON:
       recommended_time_to_send: 'Monday morning 8am',
       rationale: 'Incentivise visits on your slowest day with a compelling discount.',
     };
-    try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: fallback.promotion_name, offer_text: fallback.offer_text, sms_message: fallback.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch { /* non-fatal */ }
+    try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: fallback.promotion_name, offer_text: fallback.offer_text, sms_message: fallback.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch (e) { console.error('[non-fatal]', e) }
     return NextResponse.json(fallback);
   }
 }

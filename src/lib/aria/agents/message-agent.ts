@@ -157,7 +157,7 @@ export async function messageAgent(
       }).select('id').single()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       errActionId = (row as any)?.id ?? ''
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     return { drafts: [], action_id: errActionId, needs_approval: false }
   }
 }

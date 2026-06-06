@@ -60,7 +60,7 @@ export async function getRelevantImage(
     if (!buckets?.find(b => b.name === BUCKET)) {
       await supabase.storage.createBucket(BUCKET, { public: true, fileSizeLimit: 5242880 })
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   // 3. Fetch from Pixabay
   const category = options.category ?? 'all'

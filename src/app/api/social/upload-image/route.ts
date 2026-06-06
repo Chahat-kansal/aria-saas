@@ -43,7 +43,7 @@ async function _POST(req: NextRequest) {
       type: 'image',
       size_bytes: file.size,
     })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   return NextResponse.json({ url: blob.url, ok: true })
 }

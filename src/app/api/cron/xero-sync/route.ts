@@ -122,7 +122,7 @@ async function _GET(req: Request) {
             biz.owner_phone as string,
             `Aria: Your Xero sync for ${dateStr} is ready. $${totalSales.toFixed(2)} sales, $${totalGst.toFixed(2)} GST. Review at ariaos.site/dashboard/integrations`,
           )
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
 
       logger.info('xero-sync business done', { route: 'cron/xero-sync', businessId: biz.id })

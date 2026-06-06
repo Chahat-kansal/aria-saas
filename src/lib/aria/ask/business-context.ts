@@ -315,7 +315,7 @@ export async function buildAskAriaContext(
           .from('aria_business_memory')
           .update({ last_referenced_at: new Date().toISOString() })
           .in('id', ids)
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[business-context] memory last_referenced_at update failed:', e) }
     })()
   }
 

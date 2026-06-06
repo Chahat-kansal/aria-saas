@@ -46,7 +46,7 @@ export default function BankTab({ businessId, connected }: BankTabProps) {
       const r = await fetch('/api/pos/cash-flow/analysis?period=' + period)
       const d = await r.json()
       if (!d.error) setData(d as Analysis)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [businessId, period])
 

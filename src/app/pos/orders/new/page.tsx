@@ -58,7 +58,7 @@ export default function OrderBuilderPage() {
           setShowPoResume(true)
         }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setPoRestored(true)
   }, [])
 
@@ -71,7 +71,7 @@ export default function OrderBuilderPage() {
       } else {
         sessionStorage.removeItem('aria_po_draft_v1')
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, [draft, poRestored])
 
   useEffect(() => {
@@ -213,7 +213,7 @@ export default function OrderBuilderPage() {
             <span style={{ fontSize: 13, color: 'var(--terminal-sage,#7FB897)', flex: 1 }}>
               ↩ Draft order restored — {draft.length} item{draft.length !== 1 ? 's' : ''} in cart
             </span>
-            <button onClick={() => { setDraft([]); setShowPoResume(false); try { sessionStorage.removeItem('aria_po_draft_v1') } catch { /* ignore */ } }}
+            <button onClick={() => { setDraft([]); setShowPoResume(false); try { sessionStorage.removeItem('aria_po_draft_v1') } catch (e) { console.warn('[non-fatal]', e) } }}
               style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.25)', background: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}>
               Clear
             </button>

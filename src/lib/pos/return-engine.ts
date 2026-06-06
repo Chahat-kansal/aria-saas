@@ -285,7 +285,7 @@ export async function processReturn(
         p_business_id: business_id,
         p_reason: `return:${returnNumber}`,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   // 12. Audit log (Sprint-B-aware — falls back to direct insert if check-permission not yet shipped)
@@ -316,7 +316,7 @@ export async function processReturn(
         reason_note,
       })
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return {
     ok: true,

@@ -89,14 +89,14 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
   // ── Helpers: void draft on cancel, promote on save ─────────────────
   const voidDraftAndClose = async () => {
     if (resolvedSaleId && !saleId) {
-      try { await fetch(`/api/pos/sales/draft/${resolvedSaleId}/void`, { method: 'POST' }) } catch { /* ignore */ }
+      try { await fetch(`/api/pos/sales/draft/${resolvedSaleId}/void`, { method: 'POST' }) } catch (e) { console.warn('[non-fatal]', e) }
     }
     onClose()
   }
 
   const promoteAndSave = async () => {
     if (resolvedSaleId && !saleId) {
-      try { await fetch(`/api/pos/sales/draft/${resolvedSaleId}/promote`, { method: 'POST' }) } catch { /* ignore */ }
+      try { await fetch(`/api/pos/sales/draft/${resolvedSaleId}/promote`, { method: 'POST' }) } catch (e) { console.warn('[non-fatal]', e) }
     }
     onSaved()
   }

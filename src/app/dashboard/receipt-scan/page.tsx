@@ -62,7 +62,7 @@ export default function ReceiptScanPage() {
           setState('review');
         }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, []);
 
   // Save scan state whenever results change
@@ -73,7 +73,7 @@ export default function ReceiptScanPage() {
       } else if (state === 'upload' || state === 'confirmed') {
         sessionStorage.removeItem(RECEIPT_SESSION_KEY);
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, [state, scanResult, checkedRows, newStocks, addAsNew]);
 
   const processFile = useCallback(async (file: File) => {
@@ -185,7 +185,7 @@ export default function ReceiptScanPage() {
   }
 
   function reset() {
-    try { sessionStorage.removeItem(RECEIPT_SESSION_KEY); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(RECEIPT_SESSION_KEY); } catch (e) { console.warn('[non-fatal]', e) }
     setState('upload');
     setScanResult(null);
     setPreview(null);

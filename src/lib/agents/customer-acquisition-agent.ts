@@ -43,7 +43,7 @@ export class CustomerAcquisitionAgent extends BaseAgent {
           const res = await fetch(url)
           const data = await res.json() as { result?: GBPDetails }
           gbpDetails = data.result ?? {}
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
 
       // Score: google_business_score (max 40 in weighted formula but scored out of 100)
@@ -148,7 +148,7 @@ export class CustomerAcquisitionAgent extends BaseAgent {
           business_id,
         })
         if (recs?.recommendations) recommendations = recs.recommendations
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
 
       // Upsert AEO profile
       const priceLevel = gbpDetails.price_level

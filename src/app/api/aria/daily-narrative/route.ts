@@ -73,7 +73,7 @@ async function _POST(req: Request) {
       top_products: summary?.top_products ?? null,
       generated_at: new Date().toISOString(),
     }, { onConflict: 'business_id,briefing_date' })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ narrative, summary })
 }

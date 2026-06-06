@@ -231,7 +231,7 @@ async function _PATCH(req: Request) {
       updatePayload.total_card_sales = cardTotal;
       updatePayload.total_refunds = 0;
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   const { error } = await supabase
     .from('pos_cash_sessions')

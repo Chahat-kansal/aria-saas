@@ -95,7 +95,7 @@ export default function CustomerDisplayPage() {
         if (s.status === 'complete') setPhase('paid');
         else if (s.status === 'active' && (s.items?.length ?? (s.cart?.length ?? 0)) > 0) setPhase('order');
         else setPhase('idle');
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     }, 500);
     return () => clearInterval(poll);
   }, []);

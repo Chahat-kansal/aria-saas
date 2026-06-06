@@ -34,7 +34,7 @@ export default function TimedPricesApp({ business, products, activeSchedules: in
       const r = await fetch('/api/tickets/price-schedules?suggest=1').then(r => r.json())
       setSuggestions(r.suggestions ?? [])
       setSchedules(r.schedules ?? schedules)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setSuggLoading(false)
   }
 

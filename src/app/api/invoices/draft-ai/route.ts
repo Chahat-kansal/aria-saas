@@ -68,7 +68,7 @@ Return ONLY valid JSON — no preamble, no code fences:
         model_id: 'claude-sonnet-4-5-20250929', role: 'draft',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })())
 
   return NextResponse.json({ lines })

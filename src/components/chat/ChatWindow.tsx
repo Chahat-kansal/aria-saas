@@ -385,7 +385,7 @@ export function ChatWindow({ conversationId }: Props) {
               }
               setLastAiMessage(fullContent);
             }
-          } catch {}
+          } catch (e) { console.error('[silent-catch]', e) }
         }
       }
     } catch (err: any) {

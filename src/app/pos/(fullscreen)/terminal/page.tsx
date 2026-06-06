@@ -504,7 +504,7 @@ export default function TerminalPage() {
 
   /* ── sessionStorage cart persistence ─────────────────────────── */
   useEffect(() => {
-    try { const saved = sessionStorage.getItem(CART_SESSION_KEY); if (saved) setCart(JSON.parse(saved)); } catch { /* ignore */ }
+    try { const saved = sessionStorage.getItem(CART_SESSION_KEY); if (saved) setCart(JSON.parse(saved)); } catch (e) { console.warn('[non-fatal]', e) }
     // Pre-fill served_by from logged-in POS user
     try {
       const posUser = localStorage.getItem('aria_pos_user');
@@ -513,10 +513,10 @@ export default function TerminalPage() {
         if (u.name) setServedBy(u.name);
         if (u.id && u.id !== 'owner') setPosUserId(u.id);
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, []);
   useEffect(() => {
-    try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch { /* ignore */ }
+    try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch (e) { console.warn('[non-fatal]', e) }
   }, [cart]);
 
   /* ── Keyboard shortcuts — additive ───────────────────────────── */
@@ -633,10 +633,10 @@ export default function TerminalPage() {
               if (newOrders.length > 0) {
                 setPendingOnlineOrders(newOrders);
                 setShowOnlineBell(true);
-                try { new Audio('/pos-sfx/new-order.mp3').play(); } catch { /* ignore */ }
+                try { new Audio('/pos-sfx/new-order.mp3').play(); } catch (e) { console.warn('[non-fatal]', e) }
               }
             }
-          } catch { /* non-fatal */ }
+          } catch (e) { console.error('[non-fatal]', e) }
         };
         pollOnlineOrders();
         onlineOrderInterval = setInterval(pollOnlineOrders, 30000);
@@ -656,7 +656,7 @@ export default function TerminalPage() {
     // Cleanup — correct location: useEffect return, not .then() callback
     return () => {
       if (onlineOrderInterval) clearInterval(onlineOrderInterval);
-      if (kdsChannel) { try { kdsChannel.close(); } catch { /* ignore */ } }
+      if (kdsChannel) { try { kdsChannel.close(); } catch (e) { console.warn('[non-fatal]', e) } }
     };
   }, [loadRegister]);
 
@@ -783,7 +783,7 @@ export default function TerminalPage() {
         });
         localStorage.setItem('aria_display_state', payload);
         localStorage.setItem('aria_pos_display_state', payload); // legacy
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     }, 50);
     return () => clearTimeout(timer);
   }, [cart, customer, businessName, showReceipt]);
@@ -1061,7 +1061,7 @@ export default function TerminalPage() {
     setDiscountMode(null); setDiscountVal('');
     setAgeVerified(false); setSuggestions([]);
     setAppliedDiscounts([]); setManualDiscountAmt(0);
-    try { sessionStorage.removeItem(CART_SESSION_KEY); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(CART_SESSION_KEY); } catch (e) { console.warn('[non-fatal]', e) }
     searchRef.current?.focus();
   }
 
@@ -1581,9 +1581,9 @@ export default function TerminalPage() {
           const idlePayload = JSON.stringify({ status: 'idle', business_name: capturedBusinessName, timestamp: Date.now() });
           localStorage.setItem('aria_display_state', idlePayload);
           localStorage.setItem('aria_pos_display_state', idlePayload);
-        } catch { /* ignore */ }
+        } catch (e) { console.warn('[non-fatal]', e) }
       }, 4500);
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
 
     // Background sync — API call after UI is already shown
     ;(async () => {
@@ -1821,7 +1821,7 @@ export default function TerminalPage() {
                   <button onClick={async () => {
                     try {
                       await fetch('/api/pos/product-batches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, product_id: expiryPrompt.product_id, expiry_date: expiryPrompt.pending_date, quantity_received: 1, quantity_remaining: 0, expiry_tracked: true, source: 'pos_sale' }) })
-                    } catch { /* non-fatal */ }
+                    } catch (e) { console.error('[non-fatal]', e) }
                     setExpiryPrompt(null)
                   }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Yes, Track It</button>
                   <button onClick={() => setExpiryPrompt(null)} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>No Thanks</button>
@@ -2404,7 +2404,7 @@ export default function TerminalPage() {
                       localStorage.setItem('aria_display_state', JSON.stringify({
                         status: 'idle', business_name: businessName, timestamp: Date.now(),
                       }));
-                    } catch { /* ignore */ }
+                    } catch (e) { console.warn('[non-fatal]', e) }
                     const w = window.open(
                       '/pos/display',
                       'AriaCustomerDisplay',
@@ -4260,7 +4260,7 @@ export default function TerminalPage() {
           }
           try {
             await fetch('/api/pos/scan-and-go/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, id_confirmed: idConfirmed }) });
-          } catch { /* non-fatal */ }
+          } catch (e) { console.error('[non-fatal]', e) }
         }}
       />
 

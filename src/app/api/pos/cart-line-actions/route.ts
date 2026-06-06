@@ -63,7 +63,7 @@ async function _POST(req: Request) {
       },
       triggered_by: user.id,
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true })
 }

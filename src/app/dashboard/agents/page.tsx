@@ -356,7 +356,7 @@ export default function AgentsPage() {
         setCouncil(d)
         if (d.session?.owner_priority) setPriority(d.session.owner_priority as Priority)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setLoading(false)
   }, [bid])
 
@@ -369,7 +369,7 @@ export default function AgentsPage() {
         setHistory(d.sessions ?? [])
         setHistoryTotals({ revenue: d.total_revenue_attributed, cost_saved: d.total_cost_saved })
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }, [bid])
 
   const loadSettings = useCallback(async () => {
@@ -406,7 +406,7 @@ export default function AgentsPage() {
         const d = await actionsRes.json() as { actions: typeof menuActions }
         setMenuActions(d.actions ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setMenuLoading(false)
   }, [bid]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -419,7 +419,7 @@ export default function AgentsPage() {
         const d = await r.json() as FlashData
         setFlashData(d)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setFlashLoading(false)
   }, [bid])
 
@@ -443,7 +443,7 @@ export default function AgentsPage() {
         const d = await customersRes.json() as { customers: ClvOpportunity[] }
         setClvOpportunities(d.customers ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setClvLoading(false)
   }, [bid, clvTierFilter])
 
@@ -467,7 +467,7 @@ export default function AgentsPage() {
       setIntelMemories((m as { memories: IntelMemory[] }).memories ?? [])
       setIntelRuns((r as { runs: IntelCouncilRun[] }).runs ?? [])
       setIntelSummaries((s as { summaries: IntelSummary[] }).summaries ?? [])
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setIntelLoading(false)
   }, [bid])
 
@@ -476,7 +476,7 @@ export default function AgentsPage() {
     try {
       await fetch('/api/aria/memory?id=' + id + '&reason=owner_forgotten', { method: 'DELETE' })
       setIntelMemories(ms => ms.filter(m => m.id !== id))
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setForgettingId(null)
   }
 
@@ -498,7 +498,7 @@ export default function AgentsPage() {
         const pendingSavings = (d.actions ?? []).filter((a: { staff_response: string | null; labour_cost_saving: number | null }) => a.staff_response === 'pending').reduce((s: number, a: { labour_cost_saving: number | null }) => s + Number(a.labour_cost_saving ?? 0), 0)
         setLabourPotentialSaving(pendingSavings)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setLabourLoading(false)
   }, [bid])
 
@@ -511,7 +511,7 @@ export default function AgentsPage() {
         const d = await res.json() as typeof wasteData
         setWasteData(d)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setWasteLoading(false)
   }, [bid])
 
@@ -533,7 +533,7 @@ export default function AgentsPage() {
         setNegBriefs(d.briefs ?? [])
         setNegWonSavings(d.won_savings_this_year ?? 0)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setNegLoading(false)
   }, [bid])
 
@@ -548,7 +548,7 @@ export default function AgentsPage() {
         setAcqContent(d.content ?? [])
         setAcqAeoSnaps(d.aeo_snapshots ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setAcqLoading(false)
   }, [bid])
 
@@ -575,7 +575,7 @@ export default function AgentsPage() {
         const d = await plRes.json() as { reports: typeof reconPL }
         setReconPL(d.reports ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setReconLoading(false)
   }, [bid])
 
@@ -592,7 +592,7 @@ export default function AgentsPage() {
         setRepAeoSnapshots(d.aeo_snapshots ?? [])
         setRepRequestStats(d.request_stats ?? null)
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setRepLoading(false)
   }, [bid])
 
@@ -608,7 +608,7 @@ export default function AgentsPage() {
         setFinBankConnected(d.bank_connected ?? false)
         setFinOpportunities(d.opportunities ?? [])
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setFinLoading(false)
   }, [bid]) // eslint-disable-line react-hooks/exhaustive-deps
 

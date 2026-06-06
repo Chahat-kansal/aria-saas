@@ -26,7 +26,7 @@ export function LiveRevenueTicker({ businessId }: { businessId: string }) {
       prevRef.current = rev
       setRevenue(rev)
       setCount(cnt)
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }, [today])
 
   useEffect(() => {

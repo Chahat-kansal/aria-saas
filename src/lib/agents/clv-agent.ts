@@ -733,7 +733,7 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
                 status: 'executed',
                 executed_at: new Date().toISOString(),
               });
-            } catch { /* non-fatal */ }
+            } catch (e) { console.error('[non-fatal]', e) }
           }
         } catch (err) {
           errors.push(err instanceof Error ? err : new Error(String(err)));

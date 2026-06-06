@@ -56,7 +56,7 @@ async function _GET(req: Request) {
         status: 'executed',
         action_data: { session_id: sessionId, url: progress.url },
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     return NextResponse.json({ stage: 'done', url: progress.url, progress: 1 })
   }

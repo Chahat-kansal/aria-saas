@@ -163,7 +163,7 @@ Respond with JSON only:
     const parsed = JSON.parse(text.replace(/```json|```/g,'').trim())
     if (parsed.caption) caption = parsed.caption
     if (parsed.hashtags?.length) hashtags = parsed.hashtags
-  } catch { /* use defaults */ }
+  } catch (e) { console.error('[influencer/generate] caption generation failed, using defaults:', e) }
 
   // Generate Veo Reel
   const industry = (biz.industry ?? 'other').toLowerCase()

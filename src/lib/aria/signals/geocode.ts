@@ -36,7 +36,7 @@ export async function geocodeAddress(address: string): Promise<GeocodedAddress |
               cache_key: cacheKey, signal_type: 'geocode', payload: result,
               expires_at: new Date(Date.now() + 365 * 24 * 3600_000).toISOString(),
             }, { onConflict: 'cache_key' })
-          } catch { /* non-fatal */ }
+          } catch (e) { console.error('[non-fatal]', e) }
           return result
         }
       }

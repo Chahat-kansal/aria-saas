@@ -442,7 +442,7 @@ export default function POSShell({ children, businessId, businessName }: {
         if (validTTL) setPosUser(parsed);
         else localStorage.removeItem(POS_USER_KEY);
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setReady(true);
   }, []);
 

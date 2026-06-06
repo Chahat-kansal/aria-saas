@@ -89,7 +89,7 @@ export async function POST(req: Request) {
       }
       const top3 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n]) => n)
       if (top3.length > 0) topSellersContext = 'Top sellers: ' + top3.join(', ')
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     // ── Fix 5: optional membership lookup from visitor message ────────
     let memberContext = ''

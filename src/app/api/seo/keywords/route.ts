@@ -98,7 +98,7 @@ async function _POST(req: Request) {
     try {
       const domain = new URL(biz.website as string).hostname
       currentRank = await checkGoogleRank(keyword.trim(), domain)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   const { data: kw, error: insertErr } = await supabase.from('seo_keywords').insert({
@@ -112,7 +112,7 @@ async function _POST(req: Request) {
       await supabase.from('seo_keyword_history').insert({
         keyword_id: kw.id, business_id, keyword: keyword.trim(), rank: currentRank,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ keyword: kw })

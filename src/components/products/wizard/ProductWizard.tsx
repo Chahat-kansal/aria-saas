@@ -162,7 +162,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
           setShowResumeBanner(true)
         }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setDraftRestored(true)
   }, []) // eslint-disable-line
 
@@ -188,7 +188,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
     try {
       const snapshot = { ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, savedAt: Date.now() }
       sessionStorage.setItem(DRAFT_KEY(businessId), JSON.stringify(snapshot))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, [ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, draftRestored, id, businessId])
 
   const margin = (() => {
@@ -297,7 +297,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
       const base = id ? `/pos/products/new?id=${id}&step=${step - 1}` : `/pos/products/new?step=${step - 1}`
       router.push(base)
     } else {
-      try { sessionStorage.removeItem(DRAFT_KEY(businessId)) } catch { /* ignore */ }
+      try { sessionStorage.removeItem(DRAFT_KEY(businessId)) } catch (e) { console.warn('[non-fatal]', e) }
       router.push('/pos/products')
     }
   }

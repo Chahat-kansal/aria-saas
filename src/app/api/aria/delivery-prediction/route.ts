@@ -68,7 +68,7 @@ async function _POST(req: Request) {
         model_id: 'claude-haiku-4-5-20251001', role: 'prediction',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   return NextResponse.json({ prediction, baseline_days: Math.round(avgDays * 10) / 10, sample_size: days.length });

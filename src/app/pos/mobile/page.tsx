@@ -341,7 +341,7 @@ export default function MobileTerminal() {
         product = d.product ?? null
         external = d.external ?? null
       }
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
 
     if (!product) {
       const cached = loadProductsFromCache()

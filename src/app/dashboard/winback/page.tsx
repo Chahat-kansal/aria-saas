@@ -83,7 +83,7 @@ export default function WinbackPage() {
         body: JSON.stringify({ business_id: business.id, customer_ids: ids, sms_message: composed.sms_message, email_subject: composed.email_subject, email_body: composed.email_body, channel }),
       }).then(r => r.json())
       setSendResult(res); load()
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSending(false)
   }
 

@@ -57,7 +57,7 @@ async function _POST(_req: Request) {
   try {
     const result = await ariaInvoke('ops_narrative', bid, { includeWeather: false })
     ai_summary = result.recommendation?.description ?? ''
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   const { data: leaks } = await supabaseAdmin
     .from('profit_leaks')

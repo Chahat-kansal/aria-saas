@@ -311,7 +311,7 @@ export default function ReelStudioPage() {
       const res = await fetch('/api/reels/ideas?business_id=' + businessId)
       const d = await res.json()
       if (d.ideas?.length) { setReelIdeas(d.ideas); setIdeasLoaded(true) }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setIdeasLoading(false)
   }
   async function loadIdeas() { if (!bid || ideasLoading) return; loadIdeasForBiz(bid) }
@@ -324,7 +324,7 @@ export default function ReelStudioPage() {
 
   async function loadMusicTracks(mood: string) {
     setMusicLoading(true); setMusicTracks([])
-    try { const d = await fetch('/api/social/music-search?mood=' + mood).then(r => r.json()); setMusicTracks(d.tracks ?? []) } catch { /* non-fatal */ }
+    try { const d = await fetch('/api/social/music-search?mood=' + mood).then(r => r.json()); setMusicTracks(d.tracks ?? []) } catch (e) { console.error('[non-fatal]', e) }
     setMusicLoading(false)
   }
 

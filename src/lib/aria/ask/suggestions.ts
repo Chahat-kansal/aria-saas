@@ -53,10 +53,11 @@ Generate 4 highly specific, actionable questions this business owner should ask 
     const suggestions = (parsed.suggestions ?? FALLBACK_SUGGESTIONS).slice(0, 4)
 
     // Cache for 4 hours
-    void (async () => { try { await supabaseAdmin.from('aria_suggestions').insert({ business_id: businessId, suggestions, expires_at: new Date(Date.now() + 4 * 3600_000).toISOString() }) } catch { /* non-fatal */ } })()
+    void (async () => { try { await supabaseAdmin.from('aria_suggestions').insert({ business_id: businessId, suggestions, expires_at: new Date(Date.now() + 4 * 3600_000).toISOString() }) } catch (e) { console.error('[suggestions] cache write failed:', e) } })()
 
     return suggestions
-  } catch {
+  } catch (e) {
+    console.error('[suggestions] generation failed, using fallback:', e)
     return FALLBACK_SUGGESTIONS
   }
 }

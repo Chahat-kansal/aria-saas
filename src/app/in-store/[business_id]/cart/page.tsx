@@ -133,7 +133,7 @@ export default function ScanAndGoCart() {
         const d = await fetch(`/api/public/scan-and-go/cart?token=${token}`).then(r => r.json())
         if (d.status === 'redeemed') { setPhase('paid'); clearInterval(poll); clearInterval(tick) }
         if (d.status === 'expired') { clearInterval(poll); clearInterval(tick) }
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     }, 4000)
     return () => { clearInterval(tick); clearInterval(poll) }
   }, [phase, token])

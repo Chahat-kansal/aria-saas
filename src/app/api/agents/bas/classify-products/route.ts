@@ -71,7 +71,7 @@ async function _POST() {
           result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? '{}') as ClassificationResult
         } catch {
           result = { gst_treatment: 'taxable', ato_tax_code: '1A', confidence: 0.5, reasoning: 'Parse error' }
-        }
+        } // JSON parse failure handled with default
 
         rows.push({
           business_id: biz.id,
@@ -89,7 +89,7 @@ async function _POST() {
         }
 
         classified_count++
-      } catch { /* per-product errors non-fatal */ }
+      } catch (e) { console.error('[bas/classify-products] per-product classification error:', e) }
     }
 
     if (rows.length > 0) {

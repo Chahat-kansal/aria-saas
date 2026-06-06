@@ -478,7 +478,7 @@ export default function SocialPage() {
                   channels: ['community'],
                 }),
               });
-            } catch { /* non-fatal */ }
+            } catch (e) { console.error('[non-fatal]', e) }
           }
           setMirrorToCommunity(prev => { const n = { ...prev }; delete n[postId]; return n; });
         }
@@ -730,7 +730,7 @@ export default function SocialPage() {
             setReelPolling(prev => { const n = {...prev}; delete n[postId]; return n })
             alert('Reel generation failed. Please try again.')
           }
-        } catch {}
+        } catch (e) { console.error('[silent-catch]', e) }
       }
     }, 5000)
     return () => clearInterval(interval)
@@ -2156,7 +2156,7 @@ export default function SocialPage() {
                   }}))
                   setMetricsModal(null)
                   setMetricsForm({ impressions: '', likes: '', comments: '', shares: '', saves: '' })
-                } catch { /* ignore */ }
+                } catch (e) { console.warn('[non-fatal]', e) }
                 setSavingMetrics(false)
               }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: savingMetrics ? 'default' : 'pointer', fontFamily: 'inherit', opacity: savingMetrics ? 0.6 : 1 }}>
                 {savingMetrics ? 'Saving…' : 'Save metrics'}

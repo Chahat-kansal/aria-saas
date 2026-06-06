@@ -137,7 +137,7 @@ Structure: 2-3 sentence headline insight → 2-4 bullet points → 1 suggested a
         summary: successResults.length + ' data domains analysed in parallel',
       })
       actionsQueued = 1
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return {

@@ -75,7 +75,7 @@ function speak(text: string) {
     if (auVoice) u.voice = auVoice
     window.speechSynthesis.cancel()
     window.speechSynthesis.speak(u)
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 function Confetti({ show }: { show: boolean }) {
@@ -246,7 +246,7 @@ export default function KioskClient() {
             body: JSON.stringify({ business_id, query: text }),
           }).then(r => r.json())
           if (r.recipe) recipe = r.recipe
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
 
       // Finalise the assistant message with full text + cards + recipe

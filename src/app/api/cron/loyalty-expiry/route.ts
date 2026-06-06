@@ -35,7 +35,7 @@ async function _GET() {
           points_delta: 0, reward_redeemed: `${c.points_balance} points expire in ~30 days`,
         });
         warned++;
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
 
     // Expire points for customers whose last visit is older than the full expiry window
@@ -54,7 +54,7 @@ async function _GET() {
           business_id: biz.id, customer_id: c.id, type: 'expired',
           points_delta: -balance, reward_redeemed: 'Points expired (inactivity)',
         });
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
       expired++;
     }
   }

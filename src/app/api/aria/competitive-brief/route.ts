@@ -68,7 +68,7 @@ async function _GET(req: Request) {
         model_id: 'claude-haiku-4-5-20251001', role: 'brief',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   const generated_at = new Date().toISOString();

@@ -174,7 +174,7 @@ export default function CashUpPage() {
       const cardSales = sales.filter(s => s.payment_method !== 'cash')
         .reduce((t, s) => t + Number(s.total_amount ?? 0), 0)
       setTodaySales({ cash: cashSales, card: cardSales, total: cashSales + cardSales, count: sales.length })
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id])
 
@@ -232,7 +232,7 @@ export default function CashUpPage() {
       setResult({ variance: varianceCents, expected: expectedCents, actual: actualCents })
       setOpenSession(null)
       await load()
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSubmitting(false)
   }
 

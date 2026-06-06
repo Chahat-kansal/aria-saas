@@ -73,7 +73,7 @@ async function writeMemory(businessId: string, automationType: string, outcome: 
         times_confirmed: outcome === 'executed' ? 1 : 0,
       })
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 export async function automationAgent(
@@ -162,7 +162,7 @@ export async function automationAgent(
       }).select('id').single()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       errActionId = (row as any)?.id ?? ''
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     return { triggered: [], action_id: errActionId, needs_approval: false }
   }
 }

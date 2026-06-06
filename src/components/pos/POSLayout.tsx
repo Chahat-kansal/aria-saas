@@ -108,7 +108,7 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
     try {
       const stored = localStorage.getItem(LS_KEY);
       if (stored) setExpanded(JSON.parse(stored));
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
     setMounted(true);
   }, []);
 
@@ -126,14 +126,14 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
     }
     if (changed) {
       setExpanded(autoExpand);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(autoExpand)); } catch {}
+      try { localStorage.setItem(LS_KEY, JSON.stringify(autoExpand)); } catch (e) { console.error('[silent-catch]', e) }
     }
   }, [pathname, mounted]);
 
   const toggle = useCallback((id: string) => {
     setExpanded(prev => {
       const next = { ...prev, [id]: !prev[id] };
-      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch (e) { console.error('[silent-catch]', e) }
       return next;
     });
   }, []);

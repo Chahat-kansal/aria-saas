@@ -81,7 +81,7 @@ async function _POST(req: Request) {
       }]
     })
     ariaDescription = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   // Save to media library
   const { data: media, error: dbError } = await supabaseAdmin.from('business_media').insert({

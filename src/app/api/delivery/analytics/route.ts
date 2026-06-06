@@ -51,7 +51,7 @@ async function _GET(req: Request) {
       messages: [{ role: 'user', content: `You are Aria, advisor for ${biz?.name} (Australian business). Delivery platform data last ${days} days:\n${summary}\nTotal commission paid: $${totalCommission.toFixed(2)} (${avgRate}% avg). Give 2 specific actionable insights — best margin platform and one way to reduce commission costs. Direct, Australian tone, under 80 words.` }],
     })
     ariaInsight = (resp.content[0] as { type: string; text: string }).text
-    waitUntil((async () => { try { await supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, model: 'claude-haiku-4-5-20251001', prompt_summary: 'delivery_analytics', response_summary: ariaInsight!.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch {} })())
+    waitUntil((async () => { try { await supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, model: 'claude-haiku-4-5-20251001', prompt_summary: 'delivery_analytics', response_summary: ariaInsight!.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch (e) { console.error('[silent-catch]', e) } })())
   }
 
   return NextResponse.json({

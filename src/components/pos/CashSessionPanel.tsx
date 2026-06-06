@@ -46,14 +46,14 @@ export default function CashSessionPanel({ registerId, outletId, onSessionClosed
         if (d.openingFloat) setOpeningFloat(d.openingFloat)
         if (d.openNotes) setOpenNotes(d.openNotes)
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, [])
   useEffect(() => {
     try {
       if (actualCash || closureNote || closedByName) {
         sessionStorage.setItem(CLOSE_KEY, JSON.stringify({ actualCash, closureNote, closedByName, openingFloat, openNotes, savedAt: Date.now() }))
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, [actualCash, closureNote, closedByName, openingFloat, openNotes])
 
   const load = useCallback(async () => {
@@ -78,7 +78,7 @@ export default function CashSessionPanel({ registerId, outletId, onSessionClosed
       body: JSON.stringify({ opening_float: parseFloat(openingFloat) || 0, register_id: registerId, outlet_id: outletId, notes: openNotes || null }),
     })
     setOpening(false)
-    if (r.ok) { try { sessionStorage.removeItem(CLOSE_KEY) } catch { /* ignore */ }; load() } else { const d = await r.json(); alert(d.error ?? 'Failed to open session') }
+    if (r.ok) { try { sessionStorage.removeItem(CLOSE_KEY) } catch (e) { console.warn('[non-fatal]', e) }; load() } else { const d = await r.json(); alert(d.error ?? 'Failed to open session') }
   }
 
   async function closeSession() {

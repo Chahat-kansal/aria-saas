@@ -69,7 +69,7 @@ export default function BasPage() {
       if (draftsRes.ok) { const d = await draftsRes.json() as { drafts: BasDraft[] }; setDrafts(d.drafts ?? []) }
       if (classRes.ok) { const d = await classRes.json() as { classifications: Classification[] }; setClassifications(d.classifications ?? []) }
       if (superRes.ok) { const d = await superRes.json() as { obligations: SuperObligation[] }; setSuperObligations(d.obligations ?? []) }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setLoading(false)
   }, [bid])
 

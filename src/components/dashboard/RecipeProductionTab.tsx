@@ -33,7 +33,7 @@ export default function RecipeProductionTab({ businessId, recipes }: { businessI
           buckets[r.id] = perDay.map(v => Math.round(v / 4));
         }
         setVelocity(buckets);
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
       setLoading(false);
     }
     if (businessId) go();

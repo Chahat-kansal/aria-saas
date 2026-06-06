@@ -34,7 +34,7 @@ export default function PosLoginPage() {
           localStorage.removeItem(POS_USER_KEY);
         }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
 
     // Check whether owner Supabase session is active on this device
     fetch('/api/pos/products?limit=1')
@@ -45,7 +45,7 @@ export default function PosLoginPage() {
           try {
             localStorage.setItem('pos_device_bid',  d.business_id);
             if (d.business_name) localStorage.setItem('pos_device_bname', d.business_name);
-          } catch { /* ignore */ }
+          } catch (e) { console.warn('[non-fatal]', e) }
           const bname = d.business_name
             || (() => { try { return localStorage.getItem('pos_device_bname') || 'AriaPOS'; } catch { return 'AriaPOS'; } })();
           setDevice({ businessId: d.business_id, businessName: bname });
@@ -72,7 +72,7 @@ export default function PosLoginPage() {
 
   function handleLogin(user: { id: string; name: string; role: string; permissions: Record<string, unknown> }) {
     const withTime = { ...user, loginAt: Date.now() };
-    try { localStorage.setItem(POS_USER_KEY, JSON.stringify(withTime)); } catch { /* ignore */ }
+    try { localStorage.setItem(POS_USER_KEY, JSON.stringify(withTime)); } catch (e) { console.warn('[non-fatal]', e) }
     setEmployeeCookie(user.role);
     window.location.replace('/pos');
   }
@@ -83,7 +83,7 @@ export default function PosLoginPage() {
       permissions: { can_apply_discount: true, can_refund: true, max_discount_pct: 100, can_close_register: true, can_override_price: true },
       loginAt: Date.now(),
     };
-    try { localStorage.setItem(POS_USER_KEY, JSON.stringify(owner)); } catch { /* ignore */ }
+    try { localStorage.setItem(POS_USER_KEY, JSON.stringify(owner)); } catch (e) { console.warn('[non-fatal]', e) }
     setEmployeeCookie('owner');
     window.location.replace('/pos');
   }

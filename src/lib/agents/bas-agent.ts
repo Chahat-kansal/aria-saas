@@ -248,7 +248,7 @@ export class BasAgent extends BaseAgent {
         role: 'compliance',
         business_id,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     // STEP 12: Upsert bas_drafts
     await supabaseAdmin

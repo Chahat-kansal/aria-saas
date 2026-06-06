@@ -76,7 +76,7 @@ function MarketPricesTab({ businessId }: { businessId: string }) {
         body: JSON.stringify({ id: product.product_id, price: newPrice }),
       })
       setResults(prev => prev.map(r => r.product_id === product.product_id ? { ...r, your_price_dollars: newPrice, is_overpriced: false, price_gap_cents: Math.round((newPrice - r.market_avg_dollars) * 100) } : r))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setMatchingId(null)
     setConfirmMatch(null)
   }
@@ -277,7 +277,7 @@ function PriceComparisonTable({ competitorNames }: { competitorNames: string[] }
       })
       const d = await res.json()
       if (d.prices) setPrices(d.prices)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setSearching(false)
   }
 
@@ -409,7 +409,7 @@ export default function CompetitorsPage() {
       })
       setWatches(w => [...w, { id: Date.now().toString(), competitor_name: newCompetitor.trim(), competitor_url: null, is_active: true }])
       setNewCompetitor('')
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setAddingWatch(false)
   }
 

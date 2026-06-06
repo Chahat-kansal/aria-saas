@@ -126,7 +126,7 @@ export default function LocationsPage() {
         }
         setTips(newTips.slice(0, 4))
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id, period])
 

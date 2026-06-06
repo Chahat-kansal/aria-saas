@@ -59,7 +59,7 @@ async function _POST(req: Request) {
         model_id: 'claude-haiku-4-5-20251001', role: 'sentiment',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   const negCount = tagged.filter(m => m.sentiment === 'negative').length;

@@ -74,7 +74,7 @@ export default function ExpiryPage() {
       const alertRes = await fetch(`/api/pos/expiry/alerts?business_id=${bid}`)
       const alertData = await alertRes.json() as { alerts?: Alert[] }
       setAlerts(alertData.alerts ?? [])
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [])
 

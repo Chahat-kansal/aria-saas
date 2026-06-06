@@ -213,5 +213,5 @@ export async function writeAuditLog(
       reason_note: entry.reason_note ?? null,
       metadata: entry.metadata ?? {},
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }

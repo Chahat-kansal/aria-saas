@@ -92,7 +92,7 @@ async function _POST(req: Request) {
         request_summary: 'Reel caption generation — style: ' + (style || 'promo'),
         response_summary: '3 on-video texts + 3 social captions generated',
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     // Extract JSON from response (model may wrap in markdown)
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
@@ -118,7 +118,7 @@ async function _POST(req: Request) {
         request_summary: 'Reel caption generation failed',
         response_summary: null,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

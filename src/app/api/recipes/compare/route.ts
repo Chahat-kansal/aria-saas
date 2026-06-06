@@ -63,7 +63,7 @@ async function _POST(req: Request) {
         model_id: 'claude-sonnet-4-5-20250929', role: 'compare',
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })())
 
   return NextResponse.json({ suggestions })

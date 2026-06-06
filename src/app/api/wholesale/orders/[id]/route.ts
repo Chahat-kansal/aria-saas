@@ -58,7 +58,7 @@ async function _GET(req: Request, { params }: { params: { id: string } }) {
       .eq('id', order.business_id)
       .maybeSingle()
     bizInfo = biz
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ order: { ...order, items: items ?? [], customer, business_name: bizInfo?.name ?? null, business_abn: bizInfo?.abn ?? null } })
 }

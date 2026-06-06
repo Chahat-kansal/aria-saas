@@ -139,7 +139,7 @@ export function ProjectBuilder({ onClose }: Props) {
               toast.success(`Built ${data.project.files.length} files!`);
             }
             if (data.error) toast.error(data.error);
-          } catch {}
+          } catch (e) { console.error('[silent-catch]', e) }
         }
       }
     } catch (err: any) {

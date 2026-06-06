@@ -41,7 +41,7 @@ async function logCall(params: {
       success: params.success,
       error_message: params.error_message ?? null,
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 export async function runContextBrain(

@@ -63,7 +63,7 @@ export default function ChurnPage() {
         const dates: string[] = d.daily?.time ?? [];
         const precips: number[] = d.daily?.precipitation_sum ?? [];
         setWeatherData(dates.map((date, i) => ({ date, precip: precips[i] ?? 0 })));
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     }
     fetchWeather();
   }, []);

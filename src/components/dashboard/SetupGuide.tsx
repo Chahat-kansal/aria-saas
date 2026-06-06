@@ -49,7 +49,7 @@ export function SetupGuide() {
       const required = tasks.filter(t => !t.optional);
       const done = required.every(t => data.completedTasks.includes(t.key));
       if (done) { setAllDone(true); setShowDone(true); setTimeout(() => setShowDone(false), 3000); }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }, []);
 
   useEffect(() => {

@@ -38,7 +38,7 @@ export default function NewStocktakePage() {
         const session = JSON.parse(raw) as { outlet: Outlet; startedAt: string; counts: Record<string, CountRow> };
         if (session?.outlet && session?.counts) setResumeSession(session);
       }
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }, []);
 
   function loadProducts(outletId: string, existingCounts?: Record<string, CountRow>) {
@@ -55,7 +55,7 @@ export default function NewStocktakePage() {
   const saveSession = useCallback((outlet: Outlet, updatedCounts: Record<string, CountRow>) => {
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({ outlet, startedAt: new Date().toISOString(), counts: updatedCounts }));
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }, []);
 
   function handleCountChange(productId: string, val: string, product: Product) {
@@ -107,7 +107,7 @@ export default function NewStocktakePage() {
     await fetch('/api/pos/stock-takes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ outlet_id: selectedOutlet.id, items }) }).catch(() => {});
     track('stocktake_committed', { variance_count: variances.length, total_variance_cents: variances.reduce((s, i) => s + Math.abs(i.counted_qty - i.system_qty), 0) });
     setSaving(false);
-    try { localStorage.removeItem(SESSION_KEY); } catch {}
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) { console.error('[silent-catch]', e) }
     router.push('/pos/stocktake');
   }
 
@@ -285,7 +285,7 @@ export default function NewStocktakePage() {
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => {
-                try { localStorage.removeItem(SESSION_KEY); } catch {}
+                try { localStorage.removeItem(SESSION_KEY); } catch (e) { console.error('[silent-catch]', e) }
                 setResumeSession(null);
               }} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Start fresh

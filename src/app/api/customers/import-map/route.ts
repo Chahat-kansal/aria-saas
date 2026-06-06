@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         output_tokens: outputTokens,
         success,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })())
 
   if (jobId) {

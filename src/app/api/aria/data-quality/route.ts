@@ -62,7 +62,7 @@ async function _GET(req: Request) {
       missing_critical: report.missing_critical,
       missing_helpful: report.missing_helpful,
     }, { onConflict: 'business_id,assessed_date' })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json(report)
 }

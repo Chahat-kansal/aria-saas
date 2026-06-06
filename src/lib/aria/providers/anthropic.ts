@@ -232,7 +232,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         response_summary: `tools:${toolCalls.length}/iter:${Math.max(1, toolCalls.length)}/think:${thinkingTokensTotal}`,
         cache_write_tokens: totalCachedWrite, cache_read_tokens: totalCachedRead,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return { raw, tool_calls: toolCalls, iterations: toolCalls.length, thinking_tokens: thinkingTokensTotal, cost_cents: cost, latency_ms: latency, success }

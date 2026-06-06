@@ -119,7 +119,7 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
         success,
         error_message: errorMessage,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return { raw, cost_cents: cost, latency_ms: latency, success, input_tokens: inputTokens, output_tokens: outputTokens }

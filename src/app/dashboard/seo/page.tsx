@@ -232,7 +232,7 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
       if (d.opportunities) setScanOpportunities(d.opportunities as string[])
       if (typeof d.score === 'number') setScanScore(d.score)
       await loadLocal()
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setScanning(false)
   }
 
@@ -350,7 +350,7 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
     try {
       const d = await fetch(`/api/seo/keywords?business_id=${businessId}`).then(r => r.json())
       setKeywords((d.keywords ?? []) as SeoKeyword[])
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [businessId])
 
@@ -364,7 +364,7 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
       const res = await fetch('/api/seo/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, keyword: kw }) }).then(r => r.json())
       if (res.keyword) { setKeywords(prev => [res.keyword as SeoKeyword, ...prev]); setAddInput('') }
       else if (res.error) alert(res.error)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setAdding(false)
   }
 
@@ -381,7 +381,7 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
           date: new Date(h.checked_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
         })),
       }))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }
 
   async function removeKeyword(id: string) {
@@ -390,7 +390,7 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
       await fetch(`/api/seo/keywords/${id}`, { method: 'DELETE' })
       setKeywords(prev => prev.filter(k => k.id !== id))
       if (expandedId === id) setExpandedId(null)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setRemoving(null)
   }
 
@@ -399,7 +399,7 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
     try {
       const res = await fetch('/api/seo/keyword-tracking', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) }).then(r => r.json())
       if (res.ok) await load()
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setScanning(false)
   }
 
@@ -410,7 +410,7 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
       if (seedInput.trim()) body.seed_keyword = seedInput.trim()
       const res = await fetch('/api/seo/keyword-suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json())
       if (Array.isArray(res.suggestions)) setAiSuggestions(res.suggestions)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoadingSuggestions(false)
   }
 
@@ -664,7 +664,7 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
     try {
       const d = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: id }) }).then(r => r.json())
       if (d.suggested_fix) setIssues(prev => prev.map(i => i.id === id ? { ...i, suggested_fix: d.suggested_fix, ai_fix_text: d.suggested_fix } : i))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setGeneratingId(null)
   }
 
@@ -682,7 +682,7 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
       } catch { /* continue */ }
     }
     setBulkProgress('Done! Triggering new audit…')
-    try { await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) }) } catch { /* ignore */ }
+    try { await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) }) } catch (e) { console.warn('[non-fatal]', e) }
     setBulkFixing(false)
     setBulkProgress('')
     setAllFixed(true)
@@ -696,7 +696,7 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
         setIssues(prev => prev.map(i => i.id === id ? { ...i, state: res.state, applied_at: new Date().toISOString() } : i))
         setApplyModal(null)
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setApplying(false)
   }
 

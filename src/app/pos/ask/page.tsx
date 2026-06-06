@@ -46,8 +46,8 @@ function parseChartHint(raw: string): ParsedChart | null {
   for (const line of lines) {
     if (line.startsWith('type=')) type = line.slice(5).split('|')[0].trim()
     else if (line.startsWith('title=')) title = line.slice(6).trim()
-    else if (line.startsWith('data=')) { try { data = JSON.parse(line.slice(5)) } catch {} }
-    else if (line.startsWith('compare_data=')) { try { compare_data = JSON.parse(line.slice(13)) } catch {} }
+    else if (line.startsWith('data=')) { try { data = JSON.parse(line.slice(5)) } catch (e) { console.error('[silent-catch]', e) } }
+    else if (line.startsWith('compare_data=')) { try { compare_data = JSON.parse(line.slice(13)) } catch (e) { console.error('[silent-catch]', e) } }
   }
   return data.length > 0 ? { type, title, data, compare_data } : null
 }

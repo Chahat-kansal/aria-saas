@@ -157,7 +157,7 @@ Be direct and practical. No bullet points — flowing prose only.`
         () => anthropic.messages.create({ model: MODEL, max_tokens: 400, messages: [{ role: 'user', content: prompt }] }),
       )
       aiComparison = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : ''
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   const analysis = {

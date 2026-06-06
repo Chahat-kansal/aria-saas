@@ -19,10 +19,10 @@ export function invalidateAriaInsight(businessId: string | null | undefined, pag
   try {
     sessionStorage.removeItem(CACHE_KEY(businessId ?? 'self', page))
     if (businessId) sessionStorage.removeItem(CACHE_KEY('self', page))
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
   try {
     window.dispatchEvent(new CustomEvent(REFRESH_EVENT, { detail: { page } }))
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 const COLORS: Record<Priority, { bg: string; border: string; text: string; dim: string }> = {
@@ -74,7 +74,7 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
       .then((d: InsightResult) => {
         if (cancelled) return
         setResult(d)
-        try { sessionStorage.setItem(CACHE_KEY(cacheBid, page), JSON.stringify({ at: Date.now(), data: d })) } catch { /* non-fatal */ }
+        try { sessionStorage.setItem(CACHE_KEY(cacheBid, page), JSON.stringify({ at: Date.now(), data: d })) } catch (e) { console.error('[non-fatal]', e) }
       })
       .catch(() => { if (!cancelled) setError(true) })
       .finally(() => { if (!cancelled) setLoading(false) })

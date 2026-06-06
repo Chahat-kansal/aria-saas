@@ -137,7 +137,7 @@ async function getDashboard(
       topProducts = (rpcResult as Array<{ product_name: string; revenue: number; quantity: number }>)
         .map(r => ({ name: r.product_name, revenue: Number(r.revenue), quantity: Number(r.quantity) }));
     }
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // Fallback: JS-side aggregation from fetched sales
   if (topProducts.length === 0 && rows.length > 0) {

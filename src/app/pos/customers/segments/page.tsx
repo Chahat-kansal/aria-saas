@@ -40,7 +40,7 @@ export default function SegmentsPage() {
     try {
       await fetch('/api/pos/customers/rfm-trigger', { method: 'POST' });
       await loadSegments();
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
     setCalculating(false);
   }
 

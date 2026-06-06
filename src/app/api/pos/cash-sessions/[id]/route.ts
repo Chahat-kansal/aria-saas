@@ -96,7 +96,7 @@ async function _PATCH(req: Request, { params }: Params) {
         data: { session_id: id, variance_cents, classification, total_cash_sales },
         triggered_by: user.id,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ ok: true, variance_cents, classification, expected_cash_cents })

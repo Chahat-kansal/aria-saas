@@ -49,7 +49,7 @@ async function _GET(req: Request) {
       if (d.status === 1 && d.product?.product_name) {
         external = { name: d.product.product_name, brand: d.product.brands, image_url: d.product.image_url };
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }
 
   return NextResponse.json({ product: product ?? null, barcode, external });

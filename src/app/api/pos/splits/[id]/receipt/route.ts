@@ -45,7 +45,7 @@ async function _POST(req: Request, ctx: Ctx) {
     try {
       const msg = `Hi ${split.person_label}, your split from ${biz?.name ?? 'the restaurant'}: A$${split.total_amount.toFixed(2)}. Status: ${split.status}.`
       await sendSMS(phone, msg)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   // Mark receipt as sent

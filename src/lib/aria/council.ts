@@ -98,7 +98,7 @@ async function logAICall(params: {
       success: params.success,
       error_message: params.error_message ?? null,
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 // ── Brain Prompts ──────────────────────────────────────────────────
@@ -392,7 +392,7 @@ async function writeCouncilCache(businessId: string, hash: string, result: Counc
       result: result as unknown as Record<string, unknown>,
       expires_at: expires,
     }, { onConflict: 'business_id,intent_hash' })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 // ── Contradiction / Pushback Detector ─────────────────────────────

@@ -216,7 +216,7 @@ async function _POST(req: Request) {
     }))
     try {
       await supabase.from('pos_promotion_redemptions').insert(redemptionRows)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   // Create sale items
@@ -285,7 +285,7 @@ async function _POST(req: Request) {
             notes: `Sale ${saleNumber}`,
             scanned_at: new Date().toISOString(),
           });
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       })()
     );
   }
@@ -358,7 +358,7 @@ async function _POST(req: Request) {
           await supabase.rpc('decrement_stock_quantity', { p_product_id: ing.product_id, p_amount: deduct })
         }
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })())
 
   // Aria Brain — observe sale + low stock + activity log (non-blocking dynamic import)

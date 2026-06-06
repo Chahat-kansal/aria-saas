@@ -14,7 +14,7 @@ export async function writeAriaOutcome(
       recommended_at:         new Date().toISOString(),
       acted_on:               false,
     })
-  } catch {
-    // Non-fatal — never let outcome writing break the route
+  } catch (e) {
+    console.error('[aria/write-outcome] outcome write failed (non-fatal):', e)
   }
 }

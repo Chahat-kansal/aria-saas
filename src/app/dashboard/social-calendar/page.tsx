@@ -58,7 +58,7 @@ export default function SocialCalendarPage() {
       const res = await fetch('/api/social/posts?business_id=' + business.id + '&limit=100')
       const d = await res.json()
       setPosts(d.posts ?? d.data ?? [])
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id])
 
@@ -89,7 +89,7 @@ export default function SocialCalendarPage() {
       })
       const d = await res.json()
       if (d.content) setNewPostContent(d.content)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setGenerating(false)
   }
 
@@ -111,7 +111,7 @@ export default function SocialCalendarPage() {
       setNewPostDate('')
       setShowScheduler(false)
       load()
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }
 
   const selectedDayPosts = selectedDay ? postsForDay(selectedDay) : []

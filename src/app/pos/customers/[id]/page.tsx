@@ -118,7 +118,7 @@ export default function CustomerDetailPage() {
       });
       const d = await res.json();
       if (d.message) setSmsText(d.message.slice(0, 160));
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
     setAriaSmsLoading(false);
   }
 

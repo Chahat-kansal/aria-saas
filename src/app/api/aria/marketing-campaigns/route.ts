@@ -74,7 +74,7 @@ async function _POST(req: Request) {
           const smsResult = await sendSMS(c.phone, msgText)
           if (smsResult.ok) sentCount++
           await supabaseAdmin.from('pos_campaign_sends').insert({ campaign_id: body.campaign_id, business_id: bid, customer_id: c.id, customer_name: c.name, customer_phone: c.phone, message_sent: msgText, channel: 'sms', send_status: smsResult.ok ? 'sent' : 'failed', sent_at: smsResult.ok ? new Date().toISOString() : null })
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
     }
     await supabaseAdmin.from('pos_marketing_campaigns').update({ sent_count: (campaign as any).sent_count + sentCount, last_run_at: new Date().toISOString() }).eq('id', body.campaign_id)

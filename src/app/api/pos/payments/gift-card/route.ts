@@ -119,7 +119,7 @@ async function _POST(req: Request) {
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-  waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: card.id, business_id: bid, type: 'redeem', amount: actualCharge, balance_after: newBalance, sale_id: sale_id || null }) } catch {} })())
+  waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: card.id, business_id: bid, type: 'redeem', amount: actualCharge, balance_after: newBalance, sale_id: sale_id || null }) } catch (e) { console.error('[silent-catch]', e) } })())
 
   await supabase.from('pos_sales').update({
     gift_card_id: card.id, gift_card_code: code, gift_card_amount: actualCharge,

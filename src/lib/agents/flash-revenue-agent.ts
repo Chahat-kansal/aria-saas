@@ -208,7 +208,7 @@ Return ONLY valid JSON with no markdown.`;
         p_to: new Date().toISOString(),
       });
       baselineData = _bd;
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     let revenueIn2hBefore = 0;
     if (!baselineData) {
@@ -277,7 +277,7 @@ Return ONLY valid JSON with no markdown.`;
         status: mode === 'auto' ? 'executed' : 'pending',
         executed_at: mode === 'auto' ? new Date().toISOString() : null,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     // Projected impact — deterministic from historical baseline, never from AI
     // For revenue_shortfall: use historical baseline_1h_revenue × remaining hours × recovery rate
@@ -705,7 +705,7 @@ Return ONLY valid JSON with no markdown.`;
         .eq('business_id', business_id)
         .gte('sent_at', smsGapCutoff);
       reviewSmsed = _rs as Array<{ customer_id: string }> | null;
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     const recentCustomerIds = new Set((reviewSmsed ?? []).map(r => r.customer_id));
 
@@ -968,7 +968,7 @@ Return ONLY valid JSON with no markdown.`;
           signal: AbortSignal.timeout(5000),
         });
         sent++;
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
 
     interventionData.emails_sent = sent;

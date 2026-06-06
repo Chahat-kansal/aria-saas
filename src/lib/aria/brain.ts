@@ -28,7 +28,7 @@ export async function isTracking(business_id: string, category: AriaCategory): P
       .eq('category', category)
       .maybeSingle()
     return data?.is_tracking !== false
-  } catch { return true }
+  } catch (e) { console.error('[aria/brain] isTracking failed:', e); return true }
 }
 
 export async function logActivity(
@@ -46,7 +46,7 @@ export async function logActivity(
       metadata,
       created_at: new Date().toISOString(),
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[aria/brain] logActivity failed:', e) }
 }
 
 export async function ariaObserve(obs: AriaObservation): Promise<void> {
@@ -88,5 +88,5 @@ export async function ariaObserve(obs: AriaObservation): Promise<void> {
       status: 'pending',
       created_at: new Date().toISOString(),
     })
-  } catch { /* non-fatal — never blocks a sale */ }
+  } catch (e) { console.error('[aria/brain] ariaObserve failed (non-fatal):', e) }
 }

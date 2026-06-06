@@ -52,7 +52,7 @@ async function _PATCH(request: NextRequest) {
   if (!bid) return NextResponse.json({ error: 'no_business' }, { status: 404 })
 
   let body: Record<string, unknown> = {}
-  try { body = (await request.json()) ?? {} } catch { /* ignore */ }
+  try { body = (await request.json()) ?? {} } catch (e) { console.warn('[non-fatal]', e) }
 
   const VALID_LAYOUTS = ['grid', 'shelf', 'carousel', 'masonry', 'search-first', null]
   const updatePayload: Record<string, unknown> = {}

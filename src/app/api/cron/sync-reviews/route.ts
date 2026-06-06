@@ -24,7 +24,7 @@ export async function GET(req: Request) {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${CRON_SECRET}` },
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${CRON_SECRET}` },
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ skipped: true, reason: 'GOOGLE_PLACES_API_KEY not set' })
@@ -136,7 +136,7 @@ export async function GET(req: Request) {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${CRON_SECRET}` },
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({

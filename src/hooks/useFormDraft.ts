@@ -70,7 +70,7 @@ export function useFormDraft<T extends object>(
   }
 
   const clearDraft = () => {
-    try { sessionStorage.removeItem(key) } catch { /* ignore */ }
+    try { sessionStorage.removeItem(key) } catch (e) { console.warn('[non-fatal]', e) }
     _setDraft(defaultState)
     setWasRestored(false)
   }

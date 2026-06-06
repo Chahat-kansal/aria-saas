@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     } else if (tw > 0) {
       wins.push({ icon: '💰', label: 'Revenue', value: `A$${tw.toFixed(0)} this week`, color: '#7FB897' })
     }
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // 2. Council briefings generated this week
   try {
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       .eq('business_id', businessId).eq('synthesis_succeeded', true).gte('created_at', weekAgo)
     if ((count ?? 0) > 0)
       wins.push({ icon: '🧠', label: 'AI briefings', value: `${count} this week`, color: '#a78bfa' })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // 3. CLV interventions sent
   try {
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       .eq('business_id', businessId).eq('action_type', 'clv_intervention').gte('created_at', weekAgo)
     if ((count ?? 0) > 0)
       wins.push({ icon: '💌', label: 'Customer messages', value: `${count} sent`, color: '#f472b6' })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // 4. Waste savings from prep_predictions
   try {
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
     const saved = (preds ?? []).reduce((s, r) => s + (r.waste_saved_dollars ?? 0), 0)
     if (saved > 0)
       wins.push({ icon: '🥐', label: 'Waste saved', value: `A$${saved.toFixed(0)}`, color: '#34d399' })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // 5. Labour actions (early finish offers etc)
   try {
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       .eq('business_id', businessId).eq('executed', true).gte('created_at', weekAgo)
     if ((count ?? 0) > 0)
       wins.push({ icon: '👥', label: 'Roster actions', value: `${count} executed`, color: '#60a5fa' })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // 6. Flash revenue actions
   try {
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
     const flashRev = (flash ?? []).reduce((s, r) => s + ((r.metadata as Record<string,number>)?.revenue_generated ?? 0), 0)
     if (flashRev > 0)
       wins.push({ icon: '⚡', label: 'Flash revenue', value: `A$${flashRev.toFixed(0)}`, color: '#fbbf24' })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   return NextResponse.json({ wins })
 }

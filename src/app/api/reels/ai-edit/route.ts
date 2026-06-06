@@ -190,7 +190,7 @@ async function _POST(req: Request) {
         request_summary: 'Reel AI edit — instruction: ' + instruction.slice(0, 80),
         response_summary: 'EditSpec patch generated',
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     // Extract JSON
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
@@ -251,7 +251,7 @@ async function _POST(req: Request) {
         request_summary: 'Reel AI edit failed',
         response_summary: null,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
 
     return NextResponse.json({ error: errMsg }, { status: 500 })
   }

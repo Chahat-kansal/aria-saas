@@ -86,7 +86,7 @@ export async function generateInsight(opts: InsightOpts): Promise<InsightResult>
       if (cached) {
         return { bullets: cached.bullets as string[], generated_at: cached.created_at };
       }
-    } catch {}
+    } catch (e) { console.error('[aria-insights] cache read failed:', e) }
   }
 
   try {
@@ -131,7 +131,7 @@ export async function generateInsight(opts: InsightOpts): Promise<InsightResult>
         bullets: result.bullets,
         expires_at: expires,
       }, { onConflict: 'business_id,context_hash' });
-    } catch {}
+    } catch (e) { console.error('[aria-insights] cache write failed:', e) }
 
     return result;
   } catch (e) {

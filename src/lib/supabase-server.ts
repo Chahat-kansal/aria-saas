@@ -17,7 +17,7 @@ export function createServerSupabaseClient() {
         cookiesToSet.forEach(({ name, value, options }) => {
           try {
             cookieStore.set(name, value, options);
-          } catch {}
+          } catch (e) { console.error('[silent-catch]', e) }
         });
       },
     },

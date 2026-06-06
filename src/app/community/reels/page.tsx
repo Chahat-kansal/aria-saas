@@ -32,7 +32,7 @@ export default function ReelsPage() {
         const d = await fetch('/api/community/reels').then(r => r.json())
         setReels(d.reels ?? [])
         setCursor(d.next_cursor ?? null)
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
       setLoading(false)
     })()
   }, [])
@@ -44,7 +44,7 @@ export default function ReelsPage() {
       const d = await fetch('/api/community/reels?before=' + encodeURIComponent(cursor)).then(r => r.json())
       setReels(prev => [...prev, ...(d.reels ?? [])])
       setCursor(d.next_cursor ?? null)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
     setLoadingMore(false)
   }, [cursor, loadingMore])
 

@@ -79,7 +79,7 @@ export async function lookupBarcode(code: string): Promise<BarcodeProduct | null
     if (cached && new Date(String(cached.expires_at)).getTime() > Date.now()) {
       return cached.payload as BarcodeProduct
     }
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   let result: BarcodeProduct | null = null
 
@@ -102,7 +102,7 @@ export async function lookupBarcode(code: string): Promise<BarcodeProduct | null
         payload: result,
         expires_at: new Date(Date.now() + 30 * 24 * 3600_000).toISOString(),
       }, { onConflict: 'cache_key' })
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
   }
 
   return result

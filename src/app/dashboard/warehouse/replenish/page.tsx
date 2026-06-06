@@ -61,7 +61,7 @@ export default function ReplenishPage() {
       })
       setPulled(prev => new Set(prev).add(item.id))
       setItems(prev => prev.filter(i => i.id !== item.id))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setPulling(prev => { const s = new Set(prev); s.delete(item.id); return s })
   }
 

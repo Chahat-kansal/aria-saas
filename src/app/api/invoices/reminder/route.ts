@@ -113,7 +113,7 @@ Return ONLY the reminder text, no subject line, no preamble.`
         model_id: 'claude-sonnet-4-5-20250929', role: 'draft',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })())
 
   if (!success || !reminderText) return NextResponse.json({ error: 'Failed to generate reminder' }, { status: 500 })

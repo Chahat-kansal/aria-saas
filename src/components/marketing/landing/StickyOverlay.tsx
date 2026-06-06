@@ -34,7 +34,7 @@ export default function StickyOverlay({ hasScrolled }: Props) {
             try {
               const ev = new CustomEvent('aria-landing-cta', { detail: { source: 'sticky_pill' } })
               window.dispatchEvent(ev)
-            } catch {}
+            } catch (e) { console.error('[silent-catch]', e) }
           }}
         >
           <span>Start free trial</span>

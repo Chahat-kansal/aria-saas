@@ -47,7 +47,7 @@ export function PushOptIn() {
         if (!reg) return
         const sub = await reg.pushManager.getSubscription()
         setEnabled(!!sub)
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[non-fatal]', e) }
     })()
 
     // Probe server config

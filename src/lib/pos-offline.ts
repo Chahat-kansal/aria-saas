@@ -56,7 +56,7 @@ export function loadCartFromStorage(): any[] {
 
 export function clearCartFromStorage(): void {
   if (typeof window === 'undefined') return;
-  try { sessionStorage.removeItem(KEYS.CART); } catch { /* ignore */ }
+  try { sessionStorage.removeItem(KEYS.CART); } catch (e) { console.warn('[non-fatal]', e) }
 }
 
 export function saveProductsToCache(products: any[]): void {
@@ -82,7 +82,7 @@ export function loadSessionFromCache(): any | null {
 
 export function clearSessionCache(): void {
   if (typeof window === 'undefined') return;
-  try { localStorage.removeItem(KEYS.SESSION); } catch { /* ignore */ }
+  try { localStorage.removeItem(KEYS.SESSION); } catch (e) { console.warn('[non-fatal]', e) }
 }
 
 export function queueOfflineSale(sale: Omit<OfflineSale, 'queued_at'>): void {
@@ -97,7 +97,7 @@ export function getOfflineQueue(): OfflineSale[] {
 
 export function clearOfflineQueue(): void {
   if (typeof window === 'undefined') return;
-  try { localStorage.removeItem(KEYS.OFFLINE_QUEUE); } catch { /* ignore */ }
+  try { localStorage.removeItem(KEYS.OFFLINE_QUEUE); } catch (e) { console.warn('[non-fatal]', e) }
 }
 
 export function removeFromOfflineQueue(id: string): void {

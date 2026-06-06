@@ -36,7 +36,7 @@ async function logAction(businessId: string, question: string, queryDesc: string
       executed: true,
       executed_at: new Date().toISOString(),
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[query-agent] logAction failed:', e) }
 }
 
 export async function queryAgent(question: string, businessId: string): Promise<QueryAgentResult> {
@@ -100,7 +100,7 @@ export async function queryAgent(question: string, businessId: string): Promise<
         messages: [{ role: 'user', content: JSON.stringify(rows.slice(0, 5)) }],
       })
       summary = sumRes.content.filter((b: { type: string; text?: string }) => b.type === 'text').map((b: { type: string; text?: string }) => b.text ?? '').join('').trim()
-    } catch { /* non-fatal — use row count */ }
+    } catch (e) { console.warn('[query-agent] summary generation failed, using row count:', e) }
 
     return {
       question,

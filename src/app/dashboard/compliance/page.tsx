@@ -97,7 +97,7 @@ export default function CompliancePage() {
         if (i.evidence_url) urls[i.id] = i.evidence_url
       })
       setEditNote(notes); setEditUrl(urls)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setLoading(false)
   }, [business?.id, business?.industry])
 
@@ -130,7 +130,7 @@ export default function CompliancePage() {
       const res = await fetch('/api/compliance/upload', { method: 'POST', body: form })
       const { url } = await res.json()
       if (url) setItems(prev => prev.map(i => i.id === id ? { ...i, document_url: url } : i))
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setUploading(null)
   }
 

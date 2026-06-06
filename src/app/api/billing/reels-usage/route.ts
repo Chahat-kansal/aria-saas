@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       reel_style: reel_style || null,
       fal_request_id: fal_request_id || null,
     })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // Upsert monthly invoice atomically
   try {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       p_billing_month: billing_month,
       p_cost: cost_aud || 0.56,
     })
-  } catch {}
+  } catch (e) { console.error('[silent-catch]', e) }
 
   // Stripe metered usage — billing failure never blocks Reel delivery
   if (process.env.STRIPE_SECRET_KEY) {
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
           await supabaseAdmin.from('business_subscriptions')
             .update({ reels_stripe_item_id: item.id })
             .eq('business_id', business_id)
-        } catch {}
+        } catch (e) { console.error('[silent-catch]', e) }
         await stripe.subscriptionItems.createUsageRecord(item.id, {
           quantity: 1,
           timestamp: Math.floor(Date.now() / 1000),

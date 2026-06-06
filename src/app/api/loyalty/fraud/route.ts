@@ -58,7 +58,7 @@ async function _GET() {
       await supabase.from('loyalty_fraud_flags').insert(
         ruleFlags.map(f => ({ business_id: bid, customer_id: f.customer_id, flag_type: f.flag_type, details: f.details }))
       );
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ flags: flagsWithNames });

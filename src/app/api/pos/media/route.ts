@@ -67,7 +67,7 @@ async function _DELETE(req: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   const { data: item } = await supabase.from('pos_media').select('url').eq('id', id).eq('business_id', bid).single();
   if (item?.url && process.env.BLOB_READ_WRITE_TOKEN) {
-    try { const { del } = await import('@vercel/blob'); await del(item.url); } catch { /* ignore */ }
+    try { const { del } = await import('@vercel/blob'); await del(item.url); } catch (e) { console.warn('[non-fatal]', e) }
   }
   await supabase.from('pos_media').delete().eq('id', id).eq('business_id', bid);
   return NextResponse.json({ ok: true });

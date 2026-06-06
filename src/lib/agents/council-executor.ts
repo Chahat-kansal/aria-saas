@@ -23,7 +23,7 @@ async function logAutopilotAction(
       outcome_data: outcome,
       executed_at: new Date().toISOString(),
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 }
 
 export async function executeProposal(

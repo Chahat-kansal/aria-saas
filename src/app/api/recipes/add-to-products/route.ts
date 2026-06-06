@@ -48,7 +48,7 @@ async function _POST(req: Request) {
     await supabaseAdmin.from('recipe_imports')
       .update({ status: 'added_as_product', linked_product_id: product.id })
       .eq('id', recipe_import_id)
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ product })
 }

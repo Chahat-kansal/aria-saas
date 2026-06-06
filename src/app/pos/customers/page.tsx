@@ -44,7 +44,7 @@ export default function CustomersPage() {
     try {
       const bid = localStorage.getItem('aria_business_id') || localStorage.getItem('pos_business_id') || ''
       setBusinessId(bid)
-    } catch {}
+    } catch (e) { console.error('[silent-catch]', e) }
     load()
   }, [load])
 

@@ -101,7 +101,7 @@ async function _POST(req: Request) {
         model_id: 'claude-haiku-4-5-20251001', role: 'reorder',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   return NextResponse.json({ supplier: { id: supplier.id, name: supplier.name }, draft, total_cents: totalCents, ai_note: aiNote });

@@ -19,7 +19,7 @@ export function POSAriaInsight({ page, businessId }: Props) {
         const { text, ts } = JSON.parse(cached);
         if (Date.now() - ts < 3600000) { setInsight(text); setLoading(false); return; }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
 
     fetch('/api/aria/page-insight', {
       method: 'POST',
@@ -30,7 +30,7 @@ export function POSAriaInsight({ page, businessId }: Props) {
       .then(d => {
         if (d.insight) {
           setInsight(d.insight);
-          try { sessionStorage.setItem(cacheKey, JSON.stringify({ text: d.insight, ts: Date.now() })); } catch { /* ignore */ }
+          try { sessionStorage.setItem(cacheKey, JSON.stringify({ text: d.insight, ts: Date.now() })); } catch (e) { console.warn('[non-fatal]', e) }
         }
         setLoading(false);
       })

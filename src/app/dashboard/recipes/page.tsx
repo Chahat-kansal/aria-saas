@@ -276,7 +276,7 @@ export default function RecipesPage() {
       if (res.total_cost != null) {
         setRecipes(prev => prev.map(r => r.id === id ? { ...r, total_cost: res.total_cost, margin: res.margin ?? r.margin, suggested_price: res.suggested_price } : r));
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setRecalculating(null);
   }
 
@@ -288,7 +288,7 @@ export default function RecipesPage() {
         setRecipes(prev => prev.map(r => r.id === id ? { ...r, allergens: res.allergens } : r));
         if (detailModal?.id === id) setDetailModal(prev => prev ? { ...prev, allergens: res.allergens } : null);
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setDetectingAllergens(null);
   }
 
@@ -301,7 +301,7 @@ export default function RecipesPage() {
         body: JSON.stringify({ servings }),
       }).then(r => r.json());
       if (res.ingredients) setScaleResult(res);
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setScaling(false);
   }
 

@@ -136,7 +136,7 @@ export function POSThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute('data-theme', t)
     if (t === 'light') applyLightVars()
     else removeLightVars()
-    try { localStorage.setItem('pos_theme', t) } catch { /* ignore */ }
+    try { localStorage.setItem('pos_theme', t) } catch (e) { console.warn('[non-fatal]', e) }
   }
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')

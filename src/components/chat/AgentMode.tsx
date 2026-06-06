@@ -54,7 +54,7 @@ export function AgentMode({ isPro, onClose }: Props) {
             const data = JSON.parse(line.slice(6));
             if (data.text) { full += data.text; setOutput(full); }
             if (data.done) setDone(true);
-          } catch {}
+          } catch (e) { console.error('[silent-catch]', e) }
         }
       }
     } finally {

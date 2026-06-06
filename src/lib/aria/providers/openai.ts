@@ -69,7 +69,7 @@ export async function callOpenAIChat<T = Record<string, unknown>>(
         model_id: modelId, role: params.role, input_tokens: inputTokens, output_tokens: outputTokens,
         latency_ms: latency, cost_usd_cents: cost, success, error_message: errorMessage,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return { data, raw, cost_cents: cost, latency_ms: latency, available: true }
@@ -143,7 +143,7 @@ export async function callOpenAI(params: ChatParams & { model?: string }): Promi
         input_tokens: inputTokens, output_tokens: outputTokens,
         latency_ms: latency, cost_usd_cents: cost, success, error_message: errorMessage,
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return { raw, cost_cents: cost, latency_ms: latency, success, input_tokens: inputTokens, output_tokens: outputTokens }
@@ -172,7 +172,7 @@ export async function embedText(text: string, businessId?: string): Promise<numb
           cost_usd_cents: computeCostCentsWithCache('text-embedding-3-small', inputTokens, 0),
           success: true,
         })
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
     return vec as number[]
   } catch { return null }

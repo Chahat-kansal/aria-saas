@@ -70,7 +70,7 @@ export default function KitchenPage() {
         const newOrders: KDSOrder[] = d.orders ?? [];
         // Sound alert when new orders arrive
         if (newOrders.length > prevCount.current && prevCount.current > 0) {
-          try { new Audio('/pos-sfx/new-order.mp3').play(); } catch { /* ignore */ }
+          try { new Audio('/pos-sfx/new-order.mp3').play(); } catch (e) { console.warn('[non-fatal]', e) }
         }
         prevCount.current = newOrders.length;
         setOrders(newOrders);

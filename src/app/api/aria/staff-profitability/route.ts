@@ -50,7 +50,7 @@ async function _GET(req: Request) {
       for (const s of (sm ?? []) as Array<{ id: string; first_name: string; last_name: string; pay_rate_cents: number }>) {
         staffMap[s.id] = { name: s.first_name + ' ' + s.last_name, pay_rate_cents: s.pay_rate_cents ?? 0 }
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
   }
 
   const rows: ShiftRow[] = []

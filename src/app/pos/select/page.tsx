@@ -43,7 +43,7 @@ export default function SelectOutletPage() {
 
   function select(id: string | null) {
     setSelecting(id ?? 'global');
-    try { localStorage.setItem('pos_outlet_id', id ?? ''); } catch {}
+    try { localStorage.setItem('pos_outlet_id', id ?? ''); } catch (e) { console.error('[silent-catch]', e) }
     router.push('/pos/terminal');
   }
 

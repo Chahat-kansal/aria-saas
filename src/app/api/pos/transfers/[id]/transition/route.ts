@@ -172,7 +172,7 @@ async function _POST(req: Request, { params }: Params) {
         },
         triggered_by: 'transfers/transition',
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   return NextResponse.json({ ok: true, status: to_status });

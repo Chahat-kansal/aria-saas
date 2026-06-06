@@ -97,7 +97,7 @@ export async function clockIn(
         priority: 'low',
         payload: { timesheet_id: (ts as { id: string }).id, staff_name: posStaff.name, outlet_id: outletId, clock_in: clockInTime },
       })
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })()
 
   return { timesheet_id: (ts as { id: string }).id, staff_name: String(posStaff.name), clock_in: clockInTime }
@@ -159,7 +159,7 @@ export async function clockOut(
             })
           }
         }
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     })()
   }
 

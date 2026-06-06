@@ -50,7 +50,7 @@ async function _POST(req: Request) {
         const current = Number(cust?.points_balance ?? cust?.loyalty_points ?? 0)
         await supabaseAdmin.from('pos_customers').update({ points_balance: current + pointsAwarded }).eq('id', cart.loyalty_customer_id)
         await supabaseAdmin.from('pos_loyalty_transactions').insert({ business_id: bid, customer_id: cart.loyalty_customer_id, sale_id: body.sale_id ?? null, type: 'earn', points_delta: pointsAwarded })
-      } catch { /* non-fatal */ }
+      } catch (e) { console.error('[non-fatal]', e) }
     }
   }
 

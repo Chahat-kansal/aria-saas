@@ -58,7 +58,7 @@ async function _POST() {
         model_id: 'claude-haiku-4-5-20251001', role: 'flash_promo',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   })());
 
   return NextResponse.json({ suggestion: suggestion || 'Try 20% off your slowest seller for the next 30 minutes.' });

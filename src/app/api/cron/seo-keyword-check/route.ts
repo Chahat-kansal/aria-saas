@@ -88,7 +88,7 @@ export async function GET(req: Request) {
           await supabaseAdmin.from('seo_keyword_history').insert({
             keyword_id: kw.id, business_id: bizId, keyword: kw.keyword, rank: newRank,
           })
-        } catch { /* non-fatal */ }
+        } catch (e) { console.error('[non-fatal]', e) }
       }
       keywords_checked++
     }

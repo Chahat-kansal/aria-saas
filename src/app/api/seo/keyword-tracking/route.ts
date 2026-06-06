@@ -82,7 +82,7 @@ async function _POST(req: Request) {
     try {
       const domain = new URL(website).hostname
       position = await checkRankForDomain(keyword.trim(), domain)
-    } catch { /* non-fatal */ }
+    } catch (e) { console.error('[non-fatal]', e) }
   }
 
   const now = new Date().toISOString()

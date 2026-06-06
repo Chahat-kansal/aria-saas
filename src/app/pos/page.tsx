@@ -56,7 +56,7 @@ export default function POSHomePage() {
     try {
       const stored = localStorage.getItem('aria_pos_user');
       if (stored) setPosUser(JSON.parse(stored));
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[non-fatal]', e) }
     setUserChecked(true);
   }, []);
 

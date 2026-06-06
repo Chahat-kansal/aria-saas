@@ -194,7 +194,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
       status: 'executed',
       action_data: { order_id: params.id, invoice_id: invoiceId, sent_to: toEmail },
     })
-  } catch { /* non-fatal */ }
+  } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true, sent_to: toEmail })
 }
