@@ -827,7 +827,7 @@ export default function AskAriaPage() {
       const res = await fetch('/api/aria/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'Yes, go ahead.', conversation_id: conversationId }),
+        body: JSON.stringify({ message: 'confirm', conversation_id: conversationId }),
       })
       if (!res.ok) throw new Error(`Request failed: ${res.status}`)
       const data = await res.json() as {
