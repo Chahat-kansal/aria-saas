@@ -63,8 +63,9 @@ async function _PATCH(req: Request) {
   if (body.plan) { updates.plan_override_by = user.email; updates.plan_override_at = new Date().toISOString(); }
 
   const db = getAdminClient();
-  const { data, error } = await db.from('businesses').update(updates).eq('id', id).select().single();
+  const { data, error } = await db.from('businesses').update(updates).eq('id', id).select().maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: 'Business not found or no rows updated' }, { status: 404 });
 
   await logAdminAction({ admin_email: user.email!, action: body.is_active === false ? 'disable_account' : body.plan ? 'set_plan' : 'edit_business', target_type: 'business', target_id: id, details: updates });
 

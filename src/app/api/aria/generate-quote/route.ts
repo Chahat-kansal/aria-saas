@@ -40,7 +40,7 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 });
 
   const { data: business } = await supabase
-    .from('businesses').select('*').eq('id', bid).eq('user_id', user.id).single();
+    .from('businesses').select('*').eq('id', bid).eq('user_id', user.id).maybeSingle();
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 

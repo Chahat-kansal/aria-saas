@@ -74,12 +74,12 @@ async function _POST(req: Request) {
   }
 
   // Log to activity_log
-  supabase.from('activity_log').insert({
+  await supabase.from('activity_log').insert({
     business_id,
     action_type: 'receipt_scan',
-    description: `Stock-in from receipt scan: ${updated} item${updated !== 1 ? 's' : ''} updated`,
+    description: 'Stock-in from receipt scan: ' + updated + ' item' + (updated !== 1 ? 's' : '') + ' updated',
     metadata: { updated_count: updated },
-  }).then(() => null, () => null);
+  }).then(r => { if (r.error) console.error('[receipt-scan/confirm] activity_log insert failed:', r.error) });
 
   const created = newProducts.length;
   return NextResponse.json({ ok: true, updated, created });

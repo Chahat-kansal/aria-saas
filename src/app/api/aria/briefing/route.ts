@@ -114,7 +114,7 @@ async function _GET(req: Request) {
     .select('*')
     .eq('id', businessId)
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
   if (!business) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 

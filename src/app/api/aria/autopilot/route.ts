@@ -48,7 +48,7 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
 
-  const { data: biz } = await supabase.from("businesses").select("name,industry").eq("id", bid).single();
+  const { data: biz } = await supabase.from("businesses").select("name,industry").eq("id", bid).maybeSingle();
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const [{ data: sales }, { data: products }, { data: customers }] = await Promise.all([
@@ -143,8 +143,9 @@ async function _PATCH(req: Request) {
   if (status === "approved") update.approved_at = new Date().toISOString();
   if (status === "executed") update.executed_at = new Date().toISOString();
 
-  const { data, error } = await supabase.from("aria_autopilot_actions").update(update).eq("id", id).eq("business_id", bid).select().single();
+  const { data, error } = await supabase.from("aria_autopilot_actions").update(update).eq("id", id).eq("business_id", bid).select().maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: 'Action not found' }, { status: 404 });
   return NextResponse.json({ action: data });
 }
 

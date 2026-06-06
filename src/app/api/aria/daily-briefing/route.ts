@@ -643,7 +643,8 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
 
   // Reset stale flag now that briefing is fresh
   if (shouldRefresh) {
-    void supabase.from('businesses').update({ requires_briefing_refresh: false }).eq('id', business_id)
+    supabase.from('businesses').update({ requires_briefing_refresh: false }).eq('id', business_id)
+      .then(r => { if (r.error) console.error('[daily-briefing] requires_briefing_refresh reset failed:', r.error) })
   }
 
   // Audit trail: record that Aria flagged overdue invoices in this briefing.

@@ -41,7 +41,7 @@ async function _POST(req: Request) {
     .select('*')
     .eq('id', session_id)
     .eq('business_id', business_id)
-    .single();
+    .maybeSingle();
 
   if (sessionError || !session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
@@ -50,7 +50,9 @@ async function _POST(req: Request) {
     .from('businesses')
     .select('name')
     .eq('id', business_id)
-    .single();
+    .maybeSingle();
+
+  if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
   // Fetch today's completed sales for this session
   const { data: sales } = await supabase
