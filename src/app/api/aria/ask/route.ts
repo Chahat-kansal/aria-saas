@@ -10,6 +10,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
+import type { AskBlock } from '@/lib/aria/ask-types'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { buildAskAriaContext, type ContextScope } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
@@ -60,6 +61,94 @@ function stripBlocks(text: string): string {
 
 function stripAction(text: string): string {
   return text.replace(/<json>[\s\S]*?<\/json>/g, '').trim()
+}
+
+// Builds deterministic factual sentences from VERBATIM_* fields in tool results.
+// Numbers are printed by code from SQL rows — the LLM never generates them.
+function buildFactsBlock(toolCalls: Array<{ name: string; input: unknown; result: unknown }>): string | null {
+  const parts: string[] = []
+  for (const tc of toolCalls) {
+    const r = tc.result as Record<string, unknown>
+    if (!r || typeof r !== 'object') continue
+    if (typeof r.VERBATIM_RANKING === 'string' && r.VERBATIM_RANKING) {
+      const segs = (r.VERBATIM_RANKING as string).split(' | ')
+      parts.push(
+        '**Revenue by day of week** (avg per day, normalized for occurrences in period):\n' +
+        segs.map(s => '• ' + s).join('\n')
+      )
+    }
+    if (typeof r.VERBATIM_RESULT === 'string' && r.VERBATIM_RESULT) {
+      const subject = typeof r.subject === 'string' ? r.subject : 'items'
+      const titleMap: Record<string, string> = {
+        products: 'Top products by revenue',
+        customers: 'Top customers by spend',
+        staff: 'Top staff by sales',
+        payment_methods: 'Payment methods by revenue',
+        categories: 'Top categories by revenue',
+      }
+      const label = titleMap[subject] ?? 'Top ' + subject
+      const segs = (r.VERBATIM_RESULT as string).split(' | ')
+      parts.push('**' + label + '**:\n' + segs.map(s => '• ' + s).join('\n'))
+    }
+  }
+  return parts.length > 0 ? parts.join('\n\n') : null
+}
+
+// Builds data_table AskBlocks from VERBATIM_* tool results so rows render via code, not LLM.
+function buildFactsAskBlocks(toolCalls: Array<{ name: string; input: unknown; result: unknown }>): AskBlock[] {
+  const blocks: AskBlock[] = []
+  for (const tc of toolCalls) {
+    const r = tc.result as Record<string, unknown>
+    if (!r || typeof r !== 'object' || !Array.isArray(r.rows)) continue
+    if (typeof r.VERBATIM_RANKING === 'string') {
+      blocks.push({
+        type: 'data_table',
+        title: 'Revenue by Day of Week',
+        columns: [
+          { key: 'rank', label: '#' },
+          { key: 'key', label: 'Day' },
+          { key: 'avg_revenue_per_day', label: 'Avg Revenue/Day', format: 'currency' as const },
+          { key: 'day_count', label: 'Days in Period' },
+          { key: 'total_revenue', label: 'Total Revenue', format: 'currency' as const },
+        ],
+        rows: (r.rows as Array<Record<string, unknown>>).map(row => ({
+          rank: row.rank,
+          key: row.key,
+          avg_revenue_per_day: row.avg_revenue_per_day,
+          day_count: row.day_count,
+          total_revenue: row.total_revenue,
+        })),
+        sortable: true,
+        downloadable: true,
+      })
+    }
+    if (typeof r.VERBATIM_RESULT === 'string') {
+      const subject = typeof r.subject === 'string' ? r.subject : ''
+      const titleMap: Record<string, string> = {
+        products: 'Top Products by Revenue',
+        customers: 'Top Customers by Spend',
+        staff: 'Top Staff by Sales',
+        payment_methods: 'Payment Methods',
+        categories: 'Top Categories',
+      }
+      const colMap: Record<string, Array<{ key: string; label: string; format?: 'currency' | 'number' }>> = {
+        products: [{ key: 'rank', label: '#' }, { key: 'name', label: 'Product' }, { key: 'revenue', label: 'Revenue', format: 'currency' }, { key: 'qty', label: 'Qty Sold' }],
+        customers: [{ key: 'rank', label: '#' }, { key: 'name', label: 'Customer' }, { key: 'total_spend', label: 'Spent', format: 'currency' }, { key: 'visit_count', label: 'Visits' }],
+        staff: [{ key: 'rank', label: '#' }, { key: 'name', label: 'Staff' }, { key: 'sales', label: 'Revenue', format: 'currency' }, { key: 'transactions', label: 'Sales' }],
+        payment_methods: [{ key: 'rank', label: '#' }, { key: 'method', label: 'Method' }, { key: 'revenue', label: 'Revenue', format: 'currency' }, { key: 'transactions', label: 'Txns' }],
+        categories: [{ key: 'rank', label: '#' }, { key: 'category', label: 'Category' }, { key: 'revenue', label: 'Revenue', format: 'currency' }],
+      }
+      blocks.push({
+        type: 'data_table',
+        title: titleMap[subject] ?? 'Rankings',
+        columns: colMap[subject] ?? [{ key: 'rank', label: '#' }, { key: 'name', label: 'Name' }],
+        rows: r.rows as Array<Record<string, unknown>>,
+        sortable: true,
+        downloadable: true,
+      })
+    }
+  }
+  return blocks
 }
 
 async function upsertConversation(
@@ -1170,6 +1259,34 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   const action = extractAction(rawResponse)
   const cleanResponse = stripAction(rawResponse)
 
+  // ─── DETERMINISTIC FACTS INJECTION ─────────────────────────────────────────
+  // When tool results contain VERBATIM_* fields, CODE builds the factual sentences
+  // from the SQL rows directly. The LLM is then called ONLY for prose interpretation
+  // — it is forbidden from writing any number. This structurally prevents digit drift.
+  const factsText = buildFactsBlock(toolResult.tool_calls)
+  const factsAskBlocks = buildFactsAskBlocks(toolResult.tool_calls)
+  let factsInterpretation = ''
+  if (factsText) {
+    try {
+      const interpRes = await callAnthropic<Record<string, unknown>>(
+        {
+          model: 'haiku',
+          systemPrompt: 'You are a business insight writer. The exact data figures are already shown to the user above your response. Your ONLY job: write 1-2 sentences about what this means for the business, and one action to take. ABSOLUTE RULES: (1) DO NOT write any dollar sign ($), any number, any percentage (%), or any numeric rank. (2) Words only — e.g. "your strongest day", "leads by a clear margin", "your quietest period". (3) Max 60 words. Writing a number is an error.',
+          userPrompt: 'Owner question: ' + message + '\n\nFacts already shown to user:\n' + factsText,
+          maxTokens: 150,
+          businessId: bid,
+          agentKey: 'ask_aria',
+          role: 'narrative',
+        },
+        {},
+      )
+      factsInterpretation = interpRes.raw
+    } catch (e) {
+      console.error('[aria/ask] facts interpretation failed (non-blocking):', (e as Error).message)
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   // Phase 6: Haiku verification pass for complex Sonnet/Opus responses
   if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && cleanResponse.length > 100) {
     waitUntil((async () => {
@@ -1198,7 +1315,10 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       `${t.name}(${JSON.stringify(t.input).slice(0, 80)})`
     ).join('; '))
   }
-  const historyContent = cleanResponse
+  // When facts were code-built, historyContent uses accurate figures — not the LLM's raw text
+  const historyContent = factsText
+    ? (factsText + (factsInterpretation ? '\n\n' + factsInterpretation : ''))
+    : cleanResponse
 
   // 6. Handle server-side actions
   let actionResult: Record<string, unknown> = {}
@@ -1295,11 +1415,12 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     } catch (e) { console.error('[non-fatal]', e) }
   }
 
-  // Extract rich blocks from the response if Aria included them
-  const richBlocks = extractBlocks(rawResponse)
+  // Extract rich blocks from the response if Aria included them.
+  // When factsText is set, we skip LLM blocks entirely — code-built data_table is used instead.
+  const richBlocks = factsText ? null : extractBlocks(rawResponse)
   // Phase 5.3: Prepend a task_plan block for complex analytical queries to show analysis steps
-  if (intent.complexity === 'complex' && richBlocks && richBlocks.length > 0) {
-    const analysisPlanBlock: import('@/lib/aria/ask-types').AskBlock = {
+  if (!factsText && intent.complexity === 'complex' && richBlocks && richBlocks.length > 0) {
+    const analysisPlanBlock: AskBlock = {
       type: 'task_plan',
       title: 'Aria analysed your business',
       steps: [
@@ -1310,12 +1431,24 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     }
     richBlocks.unshift(analysisPlanBlock)
   }
-  let finalResponse = richBlocks ? stripBlocks(cleanResponse) : cleanResponse
-  // BUG 3 guard: blocks without narrative — generate minimal description so the UI always shows text
-  if (richBlocks && richBlocks.length > 0 && !finalResponse.trim()) {
-    const firstBlock = richBlocks.find(b => b.type !== 'task_plan') as Record<string, unknown> | undefined
-    const blockTitle = (firstBlock?.title as string) ?? (firstBlock?.type as string) ?? 'data'
-    finalResponse = `Here is the ${blockTitle} you requested based on your live business data.`
+
+  let finalResponse: string
+  let outputBlocks: AskBlock[] | undefined
+
+  if (factsText) {
+    // Numbers are code-built from SQL rows — accurate to the cent.
+    // LLM prose (factsInterpretation) contains words only, no figures.
+    finalResponse = factsText + (factsInterpretation ? '\n\n' + factsInterpretation : '')
+    outputBlocks = factsAskBlocks.length > 0 ? factsAskBlocks : undefined
+  } else {
+    finalResponse = richBlocks ? stripBlocks(cleanResponse) : cleanResponse
+    // BUG 3 guard: blocks without narrative — generate minimal description so the UI always shows text
+    if (richBlocks && richBlocks.length > 0 && !finalResponse.trim()) {
+      const firstBlock = richBlocks.find(b => b.type !== 'task_plan') as Record<string, unknown> | undefined
+      const blockTitle = (firstBlock?.title as string) ?? (firstBlock?.type as string) ?? 'data'
+      finalResponse = 'Here is the ' + blockTitle + ' you requested based on your live business data.'
+    }
+    outputBlocks = richBlocks ?? undefined
   }
 
   return NextResponse.json({
@@ -1326,7 +1459,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     cost_usd_cents: toolResult.cost_cents,
     downloads: downloads.length > 0 ? downloads : null,
     tool_calls: toolResult.tool_calls.map(t => ({ name: t.name, ms: t.ms })),
-    blocks: richBlocks ?? undefined,
+    blocks: outputBlocks,
     used_council: false,
     ai_mode: routedModel,
     model_used: routedModel,
