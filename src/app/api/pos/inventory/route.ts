@@ -72,7 +72,7 @@ async function _PATCH(req: Request) {
   try {
     await supabase.from('pos_stock_adjustments').insert({
       business_id: bid, product_id, outlet_id,
-      adjustment_quantity: adjustment,
+      adjustment_qty: adjustment,
       reason: reason ?? null,
       adjusted_by: user.id,
       created_at: new Date().toISOString(),

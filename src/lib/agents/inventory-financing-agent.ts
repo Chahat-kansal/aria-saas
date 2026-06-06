@@ -390,7 +390,7 @@ export class InventoryFinancingAgent extends BaseAgent {
       .from('pos_timesheets')
       .select('hours_worked,staff_id')
       .eq('business_id', business_id)
-      .gte('date', cutoff.toISOString().slice(0, 10))
+      .gte('clock_in', cutoff.toISOString())
       .limit(2000)
 
     let totalPayroll = 0
