@@ -80,6 +80,22 @@ function DataTableBlock({ block }: { block: DataTableBlock }) {
       })
     : block.rows
   const csvRows = block.rows.map(row => block.columns.map(c => String(row[c.key] ?? '')))
+
+  if (block.rows.length === 0) {
+    return (
+      <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--divider)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--divider)' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{block.title}</span>
+        </div>
+        <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+            No data recorded for this period yet — once you start ringing up sales, your breakdown will appear here.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--divider)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--divider)' }}>
@@ -546,6 +562,16 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
     case 'styled_chart': {
       const color = block.color ?? 'var(--violet)'
       const data = block.data
+      if (!data || data.length === 0) {
+        return (
+          <figure style={{ margin: 0, background: 'var(--bg-elevated)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--divider)' }}>
+            {block.title && <figcaption style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>{block.title}</figcaption>}
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No chart data available for this period.</span>
+            </div>
+          </figure>
+        )
+      }
       return (
         <figure style={{ margin: 0, background: 'var(--bg-elevated)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--divider)' }}>
           {block.title && <figcaption style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>{block.title}</figcaption>}
