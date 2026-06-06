@@ -1451,6 +1451,12 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     outputBlocks = richBlocks ?? undefined
   }
 
+  // Safety net: never return an empty response
+  if (!finalResponse?.trim()) {
+    console.error('[ask-debug] finalResponse empty — factsText:', factsText !== null ? 'set' : 'null', 'cleanResponse.len:', cleanResponse?.length ?? 0, 'rawResponse.len:', rawResponse?.length ?? 0)
+    finalResponse = cleanResponse?.trim() || "I wasn't able to generate a response for that question. Please try rephrasing."
+  }
+
   return NextResponse.json({
     response: finalResponse,
     conversation_id: savedConvId ?? conversationId,
