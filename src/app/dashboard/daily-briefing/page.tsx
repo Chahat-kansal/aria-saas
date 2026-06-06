@@ -17,6 +17,31 @@ interface Rec {
   trend: 'up' | 'down' | 'flat' | null
 }
 
+interface RadarSignal {
+  id: string
+  type: string
+  title: string
+  insight: string
+  solution: string
+  estimated_monthly_loss_aud: number
+  propose_only: boolean
+  act_label?: string
+  payload: Record<string, unknown>
+}
+
+interface RadarPlan {
+  title: string
+  recommendation: string
+  steps: string[]
+  estimated_impact: string
+  risk: 'low' | 'medium' | 'high'
+  reversible: boolean
+  propose_only: boolean
+  preview_lines: string[]
+  affected_count: number
+  action_type: string
+}
+
 interface Snap {
   sales_yesterday_aud?: string
   sales_today_aud?: string
@@ -46,6 +71,7 @@ interface BriefingResponse {
   recommendations: Rec[]
   generated_at: string
   data_snapshot: Snap
+  radar_items?: RadarSignal[]
   cached: boolean
   no_data?: boolean
   no_data_message?: string
@@ -105,6 +131,11 @@ export default function DailyBriefingPage() {
   const [actionFiring, setActionFiring] = useState<Record<string, boolean>>({})
   const [actionToast, setActionToast] = useState('')
   const [weatherForecast, setWeatherForecast] = useState<WeatherDay[]>([])
+  const [radarItems, setRadarItems] = useState<RadarSignal[]>([])
+  const [radarPreview, setRadarPreview] = useState<{ signal: RadarSignal; plan: RadarPlan } | null>(null)
+  const [radarLoading, setRadarLoading] = useState<string | null>(null)
+  const [radarToast, setRadarToast] = useState('')
+  const [radarUndoId, setRadarUndoId] = useState<string | null>(null)
 
   const fetchBriefing = useCallback(async (force = false) => {
     if (!business?.id) return
@@ -120,6 +151,9 @@ export default function DailyBriefingPage() {
         setBriefing(data)
         if (Array.isArray(data.weather_forecast) && data.weather_forecast.length > 0) {
           setWeatherForecast(data.weather_forecast)
+        }
+        if (Array.isArray(data.radar_items)) {
+          setRadarItems(data.radar_items)
         }
       }
     } finally {
@@ -174,6 +208,91 @@ export default function DailyBriefingPage() {
       setTimeout(() => setActionToast(''), 2500)
     } catch (e) { console.warn('[non-fatal]', e) }
     setActionFiring(prev => ({ ...prev, [key]: false }))
+  }
+
+  async function handleRadarSavePlan(signal: RadarSignal) {
+    if (!business?.id) return
+    setRadarLoading(signal.id + '_save')
+    try {
+      const res = await fetch('/api/aria/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save', business_id: business.id, signal }),
+      })
+      if (res.ok) {
+        setRadarToast('Plan saved to your action queue')
+        setTimeout(() => setRadarToast(''), 3000)
+      } else {
+        const err = await res.json()
+        setRadarToast('Error: ' + (err.error ?? 'Failed to save plan'))
+        setTimeout(() => setRadarToast(''), 4000)
+      }
+    } catch { setRadarToast('Failed to save plan'); setTimeout(() => setRadarToast(''), 3000) }
+    setRadarLoading(null)
+  }
+
+  async function handleRadarPreview(signal: RadarSignal) {
+    if (!business?.id) return
+    setRadarLoading(signal.id + '_preview')
+    try {
+      const res = await fetch('/api/aria/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preview', business_id: business.id, signal }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setRadarPreview({ signal, plan: data.plan as RadarPlan })
+      } else {
+        setRadarToast('Failed to load preview'); setTimeout(() => setRadarToast(''), 3000)
+      }
+    } catch { setRadarToast('Failed to load preview'); setTimeout(() => setRadarToast(''), 3000) }
+    setRadarLoading(null)
+  }
+
+  async function handleRadarExecute(signal: RadarSignal) {
+    if (!business?.id) return
+    setRadarLoading(signal.id + '_exec')
+    try {
+      const res = await fetch('/api/aria/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'execute', business_id: business.id, signal }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setRadarPreview(null)
+        setRadarToast(data.detail ?? 'Done!')
+        if (data.reversible && data.log_id) setRadarUndoId(data.log_id as string)
+        setTimeout(() => { setRadarToast(''); setRadarUndoId(null) }, 6000)
+      } else {
+        setRadarToast('Error: ' + (data.error ?? 'Execution failed'))
+        setTimeout(() => setRadarToast(''), 4000)
+      }
+    } catch { setRadarToast('Execution failed'); setTimeout(() => setRadarToast(''), 3000) }
+    setRadarLoading(null)
+  }
+
+  async function handleRadarUndo() {
+    if (!business?.id || !radarUndoId) return
+    setRadarLoading('undo')
+    try {
+      const res = await fetch('/api/aria/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'undo', business_id: business.id, log_id: radarUndoId }),
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        setRadarToast('Action undone (' + (data.reverted_count as number) + ' item' + (data.reverted_count !== 1 ? 's' : '') + ' reverted)')
+        setRadarUndoId(null)
+        setTimeout(() => setRadarToast(''), 3000)
+      } else {
+        setRadarToast('Undo failed: ' + (data.error ?? 'unknown error'))
+        setTimeout(() => setRadarToast(''), 4000)
+      }
+    } catch { setRadarToast('Undo failed'); setTimeout(() => setRadarToast(''), 3000) }
+    setRadarLoading(null)
   }
 
   const snap: Snap = historyView?.data_snapshot ?? briefing?.data_snapshot ?? {}
@@ -324,6 +443,94 @@ export default function DailyBriefingPage() {
           </div>
         )}
 
+        {/* Morning Loss Radar */}
+        {!historyView && radarItems.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 6px #ef4444' }} />
+              <h2 style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Morning Loss Radar</h2>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>— top money leaks detected from live data</span>
+            </div>
+
+            {/* Preview card overlay */}
+            {radarPreview && (
+              <div style={{ background: 'rgba(15,15,25,0.96)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: BR, padding: '20px 22px', marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{radarPreview.plan.title}</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 14, lineHeight: 1.6 }}>{radarPreview.plan.recommendation}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>What this will do</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+                  {radarPreview.plan.preview_lines.map((line, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#fff' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>•</span>
+                      <span>{line}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{radarPreview.plan.affected_count > 0 ? radarPreview.plan.affected_count + ' affected' : ''}</span>
+                  <span style={{ fontSize: 12, color: '#7FB897' }}>{radarPreview.plan.estimated_impact}</span>
+                  {radarPreview.plan.reversible && <span style={{ fontSize: 11, color: '#22c55e' }}>Reversible within 1 hour</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => handleRadarExecute(radarPreview.signal)}
+                    disabled={radarLoading === radarPreview.signal.id + '_exec'}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 10, background: '#2D5240', color: '#fff', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', opacity: radarLoading === radarPreview.signal.id + '_exec' ? 0.6 : 1, fontFamily: 'inherit' }}
+                  >
+                    {radarLoading === radarPreview.signal.id + '_exec' ? 'Working…' : 'Confirm — Do it'}
+                  </button>
+                  <button
+                    onClick={() => setRadarPreview(null)}
+                    style={{ padding: '9px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p style={{ fontSize: 10, textAlign: 'center', color: 'rgba(255,255,255,0.22)', margin: '10px 0 0' }}>
+                  Nothing executes until you confirm above
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {radarItems.map(signal => (
+                <div key={signal.id} style={{ background: CARD, border: '1px solid rgba(239,68,68,0.15)', borderRadius: BR, padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{signal.title}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '2px 7px', borderRadius: 99, flexShrink: 0 }}>
+                          {'$' + signal.estimated_monthly_loss_aud + '/mo'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', margin: '0 0 4px', lineHeight: 1.55 }}>{signal.insight}</p>
+                      <p style={{ fontSize: 12, color: 'rgba(127,184,151,0.8)', margin: 0, lineHeight: 1.55 }}>{signal.solution}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 7, flexShrink: 0, alignItems: 'center' }}>
+                      <button
+                        onClick={() => handleRadarSavePlan(signal)}
+                        disabled={radarLoading === signal.id + '_save'}
+                        style={{ padding: '6px 12px', borderRadius: 9, background: 'rgba(45,82,64,0.2)', border: '1px solid rgba(127,184,151,0.25)', color: 'rgba(127,184,151,0.8)', fontSize: 12, cursor: 'pointer', opacity: radarLoading === signal.id + '_save' ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                      >
+                        {radarLoading === signal.id + '_save' ? 'Saving…' : 'Save plan'}
+                      </button>
+                      {!signal.propose_only && (
+                        <button
+                          onClick={() => handleRadarPreview(signal)}
+                          disabled={radarLoading === signal.id + '_preview' || Boolean(radarPreview)}
+                          style={{ padding: '6px 12px', borderRadius: 9, background: '#2D5240', border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (radarLoading === signal.id + '_preview' || Boolean(radarPreview)) ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        >
+                          {radarLoading === signal.id + '_preview' ? 'Loading…' : (signal.act_label ?? 'Act on it')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Predictions */}
         {!historyView && (weather.length > 0 || holidays.length > 0) && (
           <div style={{ marginBottom: 28 }}>
@@ -409,6 +616,21 @@ export default function DailyBriefingPage() {
       {actionToast && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 10, background: '#1D9E75', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 60 }}>
           ✓ {actionToast}
+        </div>
+      )}
+      {radarToast && (
+        <div style={{ position: 'fixed', bottom: 60, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', borderRadius: 10, background: '#1a1a2e', border: '1px solid rgba(127,184,151,0.4)', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 61 }}>
+          <span style={{ color: '#7FB897' }}>✓</span>
+          <span>{radarToast}</span>
+          {radarUndoId && (
+            <button
+              onClick={handleRadarUndo}
+              disabled={radarLoading === 'undo'}
+              style={{ marginLeft: 8, padding: '3px 10px', borderRadius: 7, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {radarLoading === 'undo' ? 'Undoing…' : 'Undo'}
+            </button>
+          )}
         </div>
       )}
 

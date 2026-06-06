@@ -10,6 +10,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { geminiFlash } from '@/lib/gemini'
 import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
+import { detectLosses } from '@/lib/aria/radar/loss-detector'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -125,10 +126,12 @@ async function _POST(req: Request) {
     if (cached && hasRecs && cached.generated_at > sixHoursAgo && !cached.dismissed_at) {
       const remindAt = cached.remind_at ? new Date(cached.remind_at) : null;
       if (!remindAt || remindAt <= new Date()) {
+        const cachedRadar = await detectLosses(business_id).catch(() => []);
         return NextResponse.json({
           recommendations: cached.recommendations,
           generated_at: cached.generated_at,
           data_snapshot: cached.data_snapshot,
+          radar_items: cachedRadar,
           cached: true,
         });
       }
@@ -178,6 +181,7 @@ async function _POST(req: Request) {
     unreadAlerts,
     staffVisaExpiring,
     staffRtwUnverified,
+    radarSignals,
   ] = await Promise.all([
     getBusinessSales(business_id, sevenDaysAgo, dataSource),
     getBusinessSales(business_id, prevSevenStart, dataSource).then(s => s.filter(x => x.soldAt <= prevSevenEnd)),
@@ -204,6 +208,7 @@ async function _POST(req: Request) {
       .eq('business_id', business_id)
       .eq('status', 'active')
       .eq('right_to_work_verified', false),
+    detectLosses(business_id).catch(() => []),
   ]);
 
   // Continue even with no sales — Aria can still give setup recommendations
@@ -575,6 +580,7 @@ async function _POST(req: Request) {
       recommendations: [],
       generated_at: new Date().toISOString(),
       data_snapshot: context,
+      radar_items: [],
       cached: false,
       no_data: true,
       no_data_message: 'No connected sales, product, inventory, customer, supplier, or compliance data found yet.',
@@ -670,6 +676,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
     recommendations,
     generated_at: new Date().toISOString(),
     data_snapshot: context,
+    radar_items: radarSignals,
     cached: false,
   });
 }
