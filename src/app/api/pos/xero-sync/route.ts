@@ -28,7 +28,7 @@ async function _POST(req: Request) {
 
   // Get Xero integration
   const { data: integration } = await supabaseAdmin
-    .from('pos_integrations')
+    .from('pos_oauth_integrations')
     .select('*')
     .eq('business_id', bid)
     .eq('integration_key', 'xero')
@@ -43,7 +43,7 @@ async function _POST(req: Request) {
     const refreshed = await refreshXeroToken(integration.refresh_token_encrypted as string)
     accessToken = refreshed.access_token
     // Update stored token
-    await supabaseAdmin.from('pos_integrations').update({
+    await supabaseAdmin.from('pos_oauth_integrations').update({
       access_token_encrypted: refreshed.access_token,
       refresh_token_encrypted: refreshed.refresh_token,
       token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
@@ -53,11 +53,11 @@ async function _POST(req: Request) {
   }
 
   // Get Xero tenant (organisation)
-  let tenantId = integration.external_id as string | null
+  let tenantId = integration.external_account_id as string | null
   if (!tenantId) {
     const tenants = await getXeroTenants(accessToken)
     tenantId = tenants[0]?.tenantId ?? null
-    if (tenantId) await supabaseAdmin.from('pos_integrations').update({ external_id: tenantId }).eq('id', integration.id)
+    if (tenantId) await supabaseAdmin.from('pos_oauth_integrations').update({ external_account_id: tenantId }).eq('id', integration.id)
   }
   if (!tenantId) return NextResponse.json({ error: 'No Xero organisation found' }, { status: 400 })
 
@@ -142,7 +142,7 @@ async function _POST(req: Request) {
   const journalId = xeroData.ManualJournals?.[0]?.ManualJournalID
 
   // Log sync
-  await supabaseAdmin.from('pos_integrations').update({
+  await supabaseAdmin.from('pos_oauth_integrations').update({
     last_synced_at: new Date().toISOString(),
   }).eq('id', integration.id)
 

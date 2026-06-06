@@ -42,11 +42,11 @@ async function _POST(req: Request) {
         .update({ stock_quantity: item.counted_qty })
         .eq('id', item.product_id)
         .eq('business_id', bid);
-      await supabase.from('pos_inventory').upsert({
+      await supabase.from('pos_outlet_inventory').upsert({
         product_id: item.product_id,
         outlet_id,
         business_id: bid,
-        quantity: item.counted_qty,
+        items_on_hand: item.counted_qty,
         last_counted_at: new Date().toISOString(),
       }, { onConflict: 'product_id,outlet_id' }).then(() => null);
     }

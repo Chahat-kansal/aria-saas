@@ -50,12 +50,10 @@ export class SupplierNegotiationAgent extends BaseAgent {
 
       // Get all invoice items for 12 months
       const invoiceIds = invoices.map(i => i.id)
-      const { data: allItems } = invoiceIds.length > 0
-        ? await supabaseAdmin
-            .from('supplier_invoice_items')
-            .select('invoice_id,product_name,unit_price,line_total')
-            .in('invoice_id', invoiceIds)
-        : { data: [] }
+      // supplier_invoice_items table does not exist in current schema — guard gracefully
+      console.warn('[supplier-negotiation-agent] supplier_invoice_items table not present — skipping line-item detail')
+      const allItems: Array<{ invoice_id: string; product_name: string; unit_price: number; line_total: number }> = []
+      void invoiceIds // suppress unused-var lint
 
       // Get price variances
       const { data: variances } = await supabaseAdmin

@@ -20,7 +20,7 @@ async function _GET() {
   if (!bid) return NextResponse.json({ integrations: [] })
 
   const { data } = await supabase
-    .from('pos_supplier_integrations')
+    .from('pos_oauth_integrations')
     .select('*')
     .eq('business_id', bid)
     .order('created_at', { ascending: false })
@@ -49,10 +49,10 @@ async function _POST(request: NextRequest) {
 
   if (action === 'disconnect' && supplier_key) {
     await supabase
-      .from('pos_supplier_integrations')
+      .from('pos_oauth_integrations')
       .update({ status: 'disconnected', updated_at: new Date().toISOString() })
       .eq('business_id', bid)
-      .eq('supplier_key', supplier_key)
+      .eq('integration_key', supplier_key)
     return NextResponse.json({ ok: true })
   }
 
@@ -61,14 +61,16 @@ async function _POST(request: NextRequest) {
   }
 
   const { data, error } = await supabase
-    .from('pos_supplier_integrations')
+    .from('pos_oauth_integrations')
     .upsert({
       business_id: bid,
-      supplier_key, account_number, contact_email,
-      contact_name, contact_phone, notes,
+      integration_key: supplier_key,
+      external_account_id: account_number ?? null,
+      external_account_name: contact_name ?? null,
+      config: { contact_email, contact_phone: contact_phone ?? null, notes: notes ?? null },
       status: 'connected',
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'business_id,supplier_key' })
+    }, { onConflict: 'business_id,integration_key' })
     .select()
     .single()
 

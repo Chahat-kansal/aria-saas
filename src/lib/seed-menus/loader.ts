@@ -46,7 +46,11 @@ export async function seedBusinessMenu(business_id: string, business_type: strin
       enabled: true,
     }))
 
-    await supabase.from('pos_product_modifiers').insert(modifiers)
+    // pos_modifiers requires group_id (uuid FK) which seed data doesn't supply.
+    // Skipping modifier seeding until seed format includes group_id resolution.
+    if (modifiers.length > 0) {
+      console.warn('[seed-menus/loader] modifier seeding skipped — seed data missing group_id FK for pos_modifiers')
+    }
 
     await supabase
       .from('businesses')

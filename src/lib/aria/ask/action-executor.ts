@@ -205,7 +205,7 @@ export async function executeAction(
         if (invErr || !invoice) return { ok: false, affected_count: 0, error: invErr?.message ?? 'Failed to create invoice', rollback_available: false }
 
         if (lineItems.length) {
-          await supabase.from('invoice_items').insert(
+          await supabase.from('invoice_line_items').insert(
             lineItems.map(it => ({ ...it, invoice_id: invoice.id, business_id: businessId }))
           )
         }

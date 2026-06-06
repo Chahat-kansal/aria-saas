@@ -23,7 +23,7 @@ async function _GET() {
 
   // Detect: >3 redemptions/week per customer + sudden balance spike
   const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const { data: txns } = await supabase.from('loyalty_transactions')
+  const { data: txns } = await supabase.from('pos_loyalty_transactions')
     .select('customer_id, type, points_delta, created_at')
     .eq('business_id', bid)
     .gte('created_at', weekAgo)
