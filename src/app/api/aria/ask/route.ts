@@ -538,6 +538,14 @@ WEB SEARCH — MANDATORY FOR THESE QUESTION TYPES (do not skip):
   - Need data tables from a page → extract: 'tables'
   - Following research → fetch_url with extract: 'links' then fetch the relevant link
   Chain web_search → fetch_url to go deep on any topic.
+  For deep research use search_depth: "advanced"; for quick facts use search_depth: "basic".
+
+CITATION RULES — NON-NEGOTIABLE:
+• Every fact from web_search results MUST be immediately followed by an inline citation: [Source: Title](URL)
+  Example: "Australian cafés average $4.50–$5.50 for a flat white [Source: Café Industry Report 2025](https://cafeindustry.com.au/report)."
+• Business numbers (revenue, sales, stock) must say "from your live data" at least once per paragraph.
+• NEVER state a web-derived fact without a source. NEVER fabricate URLs — only cite URLs that appear in actual web_search results.
+• If web_search returns an error or no results: say so plainly, then answer from business data only.
 
 ACTION TOOLS (do things on behalf of user — confirm first):
 • send_email_now: send email via Resend
@@ -772,6 +780,17 @@ For live_render, generate complete self-contained HTML with:
 
 ### CRITICAL — narrative before blocks (non-negotiable)
 ALWAYS write at least 2 full paragraphs of narrative analysis BEFORE the <json_blocks> tag. Never output a block without preceding narrative text. If you have data to show in a chart or table, explain what it means first, then add the block. A response that starts with or only contains a block is always wrong.
+
+### AUTONOMOUS FORMAT SELECTION — choose the right block based on question type, not just what the owner says:
+| Question type | Minimum output |
+|---|---|
+| Trend over time ("this week", "by day", "monthly change") | styled_chart (line or area) + narrative |
+| Ranking / "top N" ("top 10 products", "best customers") | data_table (match exact N rows requested) + one-sentence takeaway |
+| Single metric / KPI ("what's my revenue", "how many sales") | kpi_card + 2–3 sentence context |
+| Yes/no / advisory ("should I", "is it worth", "would you") | narrative ONLY — do NOT force a chart |
+| Custom visual explicitly requested | live_render with all data embedded as JS variables |
+| Comparison ("this week vs last") | comparison_table OR two styled_charts side-by-side |
+Rules: (1) Always choose the MINIMUM block set that answers the question. (2) Never add a chart to a yes/no question. (3) Always write narrative first, block second. (4) If the owner specifies a format ("show as a bar chart"), honour their choice.
 
 ### Standard blocks (use for simple structured output, wrap in <json_blocks>[...]</json_blocks>)
 - "chart": simple bar/line/pie via Recharts
@@ -1069,12 +1088,8 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
   const thinkingBudget = 4000 // all tiers capped at 4000 until first paying customers are live
 
-  // Add Anthropic's native web_search tool to give Aria internet access
-  const allTools = [
-    ...ARIA_POS_TOOLS,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any,
-  ]
+  // ARIA_POS_TOOLS includes the Tavily web_search tool (structured results with title+URL for citations)
+  const allTools = [...ARIA_POS_TOOLS]
 
   // ── IMAGE FAST-PATH ──────────────────────────────────────────────────────
   // Skip the entire Anthropic tool loop for image requests.

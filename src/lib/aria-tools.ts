@@ -193,6 +193,18 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
     },
   },
   {
+    name: 'web_search',
+    description: 'Search the live web for current market data, competitor pricing, industry benchmarks, news, regulations, or any external information. Use for: industry average revenue/margins, competitor prices, Fair Work award rates, current events, market trends, pricing comparisons, any benchmarking question. Returns up to 5 results each with title, URL, and snippet — cite EACH fact inline as [Source: Title](URL). Use search_depth "advanced" for deep research, "basic" for quick facts. DO NOT use web_search for questions about this business\'s own data — use query_business_data or query_sales for that.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query — be specific, include location and year if relevant (e.g. "cafe average revenue Melbourne 2025")' },
+        search_depth: { type: 'string', enum: ['basic', 'advanced'], description: 'basic = fast/quick facts (default), advanced = deeper research for complex questions' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'send_email_now',
     description: 'Send an email via Resend. Use ONLY when user explicitly says "send an email" or "email X". Always confirm recipient first.',
     input_schema: {
@@ -1491,6 +1503,33 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       return getReviews(inp as { period: string }, businessId);
     case 'get_profit_leaks':
       return getProfitLeaks(businessId);
+
+    case 'web_search': {
+      const { query, search_depth = 'basic' } = inp as { query: string; search_depth?: string }
+      const tavilyKey = process.env.TAVILY_API_KEY
+      if (!tavilyKey) {
+        return { error: 'Web search is not configured (TAVILY_API_KEY missing). Answer using your business data tools only, and note that live market benchmarks are unavailable this session.' }
+      }
+      try {
+        const res = await fetch('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: tavilyKey, query, search_depth, max_results: 5 }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (!res.ok) return { error: 'Web search failed: HTTP ' + res.status + '. Use business data tools instead.' }
+        const data = await res.json() as { results?: Array<{ title: string; url: string; content: string; published_date?: string }> }
+        const results = (data.results ?? []).slice(0, 5).map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: (r.content ?? '').slice(0, 600),
+          published_date: r.published_date ?? null,
+        }))
+        return { query, results, count: results.length }
+      } catch (e) {
+        return { error: 'Web search timed out or failed: ' + (e as Error).message + '. Use business data tools instead.' }
+      }
+    }
 
     default:
       throw new Error(`Unknown tool: ${name}`);
