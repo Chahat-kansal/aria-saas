@@ -78,13 +78,9 @@ function hasOpenRouter() {
 
 function providerOrder(task: AriaTask): Array<'anthropic' | 'openai' | 'openrouter'> {
   const order: Array<'anthropic' | 'openai' | 'openrouter'> = [];
-  if (SMART_TASKS.has(task)) {
-    if (hasAnthropic()) order.push('anthropic');
-    if (hasOpenAI()) order.push('openai');
-  } else {
-    if (hasOpenAI()) order.push('openai');
-    if (hasAnthropic()) order.push('anthropic');
-  }
+  // Anthropic-first for all tasks — avoids OpenRouter fallback errors when OPENAI_API_KEY is absent
+  if (hasAnthropic()) order.push('anthropic');
+  if (hasOpenAI()) order.push('openai');
   if (hasOpenRouter()) order.push('openrouter');
   return order;
 }

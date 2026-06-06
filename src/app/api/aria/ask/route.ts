@@ -161,6 +161,39 @@ async function _POST(req: Request) {
   if (!message && attachments.length === 0) return NextResponse.json({ error: 'message or file required' }, { status: 400 })
   if (!message) message = 'Please analyse the attached file(s).'
 
+  // ── Save-plan fast-path ────────────────────────────────────────────────────
+  // When the UI sends [ARIA_SAVE_PLAN], save the pending_action to aria_actions
+  // with status='proposed' and return immediately — no LLM call needed.
+  if (message === '[ARIA_SAVE_PLAN]' && conversationId) {
+    const { data: convRow } = await supabaseAdmin
+      .from('aria_conversations').select('pending_action')
+      .eq('id', conversationId).eq('business_id', bid).maybeSingle()
+    if (convRow?.pending_action) {
+      const plan = convRow.pending_action as import('@/lib/aria/ask/action-planner').PlannedAction
+      const impactText = (Number((plan.estimated_impact ?? '').replace(/[^0-9.]/g, '').slice(0, 10) || '0') || 0).toFixed(2)
+      await supabaseAdmin.from('aria_actions').insert({
+        business_id: bid,
+        category: 'sales',
+        title: plan.title,
+        recommendation: plan.description,
+        expected_impact: impactText,
+        confidence: plan.risk === 'low' ? 'high' : plan.risk === 'medium' ? 'medium' : 'low',
+        status: 'proposed',
+        source: 'ask_aria:plan',
+        priority: plan.risk === 'high' ? 'high' : 'medium',
+        triggered_by: 'ask_aria',
+      })
+      await supabaseAdmin.from('aria_conversations')
+        .update({ pending_action: null, pending_action_expires_at: null })
+        .eq('id', conversationId)
+    }
+    const planTitle = (convRow?.pending_action as import('@/lib/aria/ask/action-planner').PlannedAction | null)?.title ?? 'your plan'
+    const planReply = `Plan saved: "${planTitle}". You'll find it in your Actions dashboard when you're ready to execute.`
+    let planConvId = conversationId
+    try { planConvId = await upsertConversation(bid, user.id, conversationId, 'Save plan', planReply, 'plan_saved') } catch (_e) { /* non-fatal */ }
+    return NextResponse.json({ response: planReply, conversation_id: planConvId, intent: 'plan_saved', action: { type: 'plan_saved' }, cost_usd_cents: 0 })
+  }
+
   // Cost guard — check daily spend before allowing chat
   const { checkSpendAllowed, trackSpend } = await import('@/lib/aria/cost-guard')
   const spendCheck = await checkSpendAllowed(bid, 'chat', 2) // ~$0.02 estimated
@@ -271,6 +304,8 @@ async function _POST(req: Request) {
   const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase)\b/i
   const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount)\b/i
   const isStrategicQuestion = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
+  // Actions that are too risky to execute immediately — propose-only (save plan, don't execute)
+  const PROPOSE_ONLY_TYPES = new Set(['bulk_price_update', 'create_roster'])
   if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question' && !isStrategicQuestion) {
     const planned = await planAction(message, bid)
     if (planned) {
@@ -280,7 +315,10 @@ async function _POST(req: Request) {
           pending_action_expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
         }).eq('id', conversationId).eq('business_id', bid)
       }
-      const previewText = `I'll ${planned.title.toLowerCase()}. Here's exactly what I'll do — confirm to proceed:`
+      const propose_only = PROPOSE_ONLY_TYPES.has(planned.type)
+      const previewText = propose_only
+        ? `I've drafted a plan: ${planned.title}. This type of change needs your review before execution — I'll save it to your Actions dashboard.`
+        : `I can ${planned.title.toLowerCase()}. Choose how to proceed:`
       let savedConvId = conversationId
       try {
         savedConvId = await upsertConversation(bid, user.id, conversationId, message, previewText, 'action_request')
@@ -291,7 +329,7 @@ async function _POST(req: Request) {
         response: previewText,
         conversation_id: savedConvId ?? conversationId,
         intent: 'action_request',
-        action: { action: 'preview', planned },
+        action: { action: 'fork', planned, propose_only },
         cost_usd_cents: 0,
       })
     }
@@ -464,6 +502,14 @@ async function _POST(req: Request) {
   // 3. Build system prompt
   let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
 
+⛔ IRON RULES — ABSOLUTE — NEVER BREAK THESE:
+
+1. **NEVER COMPUTE NUMBERS YOURSELF.** Every revenue figure, ranking, average, or count you state MUST come from a tool result returned in this conversation. If you don't have a tool result for it, call the tool. Do not aggregate, average, or rank raw rows in your head — call query_sales with group_by="day_of_week" and use the returned avg_revenue_per_day. Do not add up totals from individual sale rows — call get_summary. The tool computes; you narrate.
+
+2. **NEVER STATE LOCATION, HOURS, CUISINE, OR BUSINESS CONCEPT** unless get_business_profile returned that field as non-null. If the business has no city set, say "your location" — never say "Melbourne", "Sydney", "CBD", "Brunswick", or any place. If hours are not set, say "your opening hours" — never invent them. If the industry is "Café" but no cuisine detail is set, never add "specialty coffee" or "brunch spot".
+
+3. **ABSTAIN OVER GUESS.** If data is absent, say so plainly. "I don't have staff performance data for this period — served_by is not recorded for these sales." Never fill silence with plausible-sounding invented numbers or facts.
+
 YOU CAN TAKE REAL ACTION using these tools. Don't just describe what could be done — DO IT.
 
 DATA TOOLS (read live business data):
@@ -592,11 +638,11 @@ PROACTIVE WEB INTELLIGENCE — DO THIS EVERY RESPONSE:
 For business questions, ALWAYS use web_search to compare against live market data. Don't just report — benchmark.
 
 Examples of proactive enrichment:
-- Revenue/sales → search "${ctx.industry} average daily revenue ${ctx.city ?? 'Australia'} 2025" to give context
+- Revenue/sales → search "${ctx.industry} average daily revenue ${ctx.city ? ctx.city : 'Australia'} 2025" to give context
 - Product pricing → search "[product] price Australia [competitor]" before advising
 - Staff costs → search "Fair Work ${ctx.industry} award rates ${new Date().getFullYear()}"
-- Slow periods → search "${ctx.city ?? 'Melbourne'} ${ctx.industry} busy periods ${new Date().toLocaleString('en-AU', { month: 'long' })}"
-- Google rating ${ctx.google_rating ? `(${ctx.google_rating}⭐)` : ''} → search "average Google rating ${ctx.industry} Australia" to benchmark
+- Slow periods → search "${ctx.city ? ctx.city : 'Australia'} ${ctx.industry} busy periods ${new Date().toLocaleString('en-AU', { month: 'long' })}"
+- Google rating ${ctx.google_rating ? '(' + ctx.google_rating + '⭐)' : ''} → search "average Google rating ${ctx.industry} Australia" to benchmark
 - Any competitor mentioned → search them to get real intel
 - Weather affecting trade → search "${ctx.city ?? 'Melbourne'} weather this week"
 
@@ -626,10 +672,10 @@ NEVER say: "try refreshing", "check your internet", "contact support", "I don't 
 ALWAYS: give specific table names, column names, route paths, and actionable SQL or code fixes when troubleshooting.
 
 CURRENT BUSINESS: ${ctx.business_name} (${ctx.industry})
-Location: ${ctx.city ?? 'Australia'}${ctx.address ? ' | ' + ctx.address : ''}
+Location: ${ctx.city ? ctx.city + (ctx.address ? ' — ' + ctx.address : '') : '[NOT SET — do not guess or invent a location]'}
 Google Rating: ${ctx.google_rating ? ctx.google_rating + '⭐ (' + ctx.google_reviews + ' reviews)' : 'not connected'}
 ABN: ${ctx.abn ?? 'not set'}
-Phone: ${ctx.phone ?? 'not set'}
+Phone: ${ctx.phone ?? '[NOT SET — do not guess]'}
 ${ctx.owner_name ? `Owner: ${ctx.owner_name.split(' ')[0]}` : ''}
 Currency: ${ctx.currency}
 

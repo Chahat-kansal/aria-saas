@@ -334,6 +334,51 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
       required: ['vendor', 'total', 'date'],
     },
   },
+  {
+    name: 'get_business_profile',
+    description: 'Get this business\'s profile: name, location, hours, contact, rating. ALWAYS call this first if the user asks about location, address, suburb, city, hours, phone, or any business detail. Returns null_fields listing fields NOT set — NEVER guess or invent values for null fields.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'get_top',
+    description: 'SQL-computed ranked list for a subject. Use for "best", "top", "most popular", "highest-spending" questions. For staff: if served_by data is absent returns {available:false} — tell the user, never guess names.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', enum: ['products', 'customers', 'staff', 'payment_methods', 'categories'], description: 'What to rank' },
+        period: { type: 'string', enum: ['today', '7d', '30d', 'month', '90d', 'year'], description: 'Time period' },
+        limit: { type: 'number', description: 'How many to return (default 5)' },
+      },
+      required: ['subject', 'period'],
+    },
+  },
+  {
+    name: 'get_summary',
+    description: 'Business performance summary for a period: total revenue, sale count, average ticket, unique customers. Use for overview or "how did we do" questions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', 'month', '90d', 'year'], description: 'Time period' },
+      },
+      required: ['period'],
+    },
+  },
+  {
+    name: 'get_reviews',
+    description: 'Customer review data: count, average rating, unanswered count, breakdown by rating and platform, recent snippets. Use for reputation or review questions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', 'month', '90d', 'year'], description: 'Time period' },
+      },
+      required: ['period'],
+    },
+  },
+  {
+    name: 'get_profit_leaks',
+    description: 'Identified profit leaks for this business with monthly loss amounts and recommendations. Use for "where am I losing money" or profit leak questions.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
 ];
 
 function getWeekKey(dateStr: string): string {
@@ -346,6 +391,19 @@ function getWeekKey(dateStr: string): string {
 
 function getMonthKey(dateStr: string): string {
   return dateStr.slice(0, 7);
+}
+
+function getPeriodStart(period: string): string {
+  const now = new Date();
+  switch (period) {
+    case 'today': { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.toISOString(); }
+    case '7d': return new Date(now.getTime() - 7 * 86400000).toISOString();
+    case '30d': return new Date(now.getTime() - 30 * 86400000).toISOString();
+    case 'month': return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    case '90d': return new Date(now.getTime() - 90 * 86400000).toISOString();
+    case 'year': return new Date(now.getFullYear(), 0, 1).toISOString();
+    default: return new Date(now.getTime() - 30 * 86400000).toISOString();
+  }
 }
 
 async function querySales(
@@ -1103,6 +1161,188 @@ async function queryBankBalance(input: { metric?: string }, businessId: string):
   };
 }
 
+async function getBusinessProfile(businessId: string): Promise<unknown> {
+  const { data: biz } = await supabaseAdmin
+    .from('businesses')
+    .select('id, name, type, city, suburb, address, phone, timezone, closing_hour_local, google_average_rating, google_total_reviews')
+    .eq('id', businessId)
+    .maybeSingle();
+  if (!biz) return { error: 'Business not found' };
+  const b = biz as Record<string, unknown>;
+  const trackFields = ['city', 'suburb', 'address', 'phone', 'closing_hour_local', 'timezone'];
+  const nullFields = trackFields.filter(f => b[f] == null || b[f] === '');
+  return {
+    ...b,
+    null_fields: nullFields,
+    instruction: nullFields.length > 0
+      ? 'DO NOT guess or invent values for: ' + nullFields.join(', ') + '. If asked, say these are not set in the system.'
+      : 'All core profile fields are populated.',
+  };
+}
+
+async function getTop(
+  input: { subject: string; period: string; limit?: number },
+  businessId: string
+): Promise<unknown> {
+  const limit = input.limit ?? 5;
+  const from = getPeriodStart(input.period);
+
+  if (input.subject === 'products') {
+    const { data: sales } = await supabaseAdmin
+      .from('pos_sales').select('id').eq('business_id', businessId).neq('status', 'voided').gte('created_at', from);
+    const saleIds = (sales ?? []).map(s => s.id);
+    if (!saleIds.length) return { subject: 'products', rows: [], period: input.period };
+    const { data: items } = await supabaseAdmin
+      .from('pos_sale_items').select('product_name, quantity, line_total').in('sale_id', saleIds);
+    const map: Record<string, { name: string; qty: number; revenue: number }> = {};
+    for (const item of items ?? []) {
+      const key = (item as Record<string, unknown>).product_name as string ?? 'Unknown';
+      if (!map[key]) map[key] = { name: key, qty: 0, revenue: 0 };
+      map[key].qty += Number((item as Record<string, unknown>).quantity ?? 1);
+      map[key].revenue += Number((item as Record<string, unknown>).line_total ?? 0);
+    }
+    const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+    return { subject: 'products', rows, period: input.period };
+  }
+
+  if (input.subject === 'customers') {
+    const { data } = await supabaseAdmin
+      .from('pos_customers').select('id, name, total_spend, visit_count, last_visit_at')
+      .eq('business_id', businessId).order('total_spend', { ascending: false }).limit(limit);
+    const rows = (data ?? []).map(c => ({ ...c, total_spend: Math.round(Number((c as Record<string, unknown>).total_spend ?? 0) * 100) / 100 }));
+    return { subject: 'customers', rows, period: input.period };
+  }
+
+  if (input.subject === 'staff') {
+    const { data: sample } = await supabaseAdmin
+      .from('pos_sales').select('served_by').eq('business_id', businessId).neq('status', 'voided')
+      .gte('created_at', from).not('served_by', 'is', null).limit(1);
+    if (!sample?.length) {
+      return { subject: 'staff', available: false, reason: 'No staff tracking data in this period — served_by is not recorded for sales at this business.', period: input.period };
+    }
+    const { data } = await supabaseAdmin
+      .from('pos_sales').select('served_by, total_amount').eq('business_id', businessId)
+      .neq('status', 'voided').gte('created_at', from).not('served_by', 'is', null);
+    const map: Record<string, { name: string; sales: number; transactions: number }> = {};
+    for (const row of data ?? []) {
+      const r = row as Record<string, unknown>;
+      const key = r.served_by as string ?? 'Unknown';
+      if (!map[key]) map[key] = { name: key, sales: 0, transactions: 0 };
+      map[key].sales += Number(r.total_amount ?? 0);
+      map[key].transactions += 1;
+    }
+    const rows = Object.values(map).sort((a, b) => b.sales - a.sales).slice(0, limit)
+      .map(r => ({ ...r, sales: Math.round(r.sales * 100) / 100, avg_basket: r.transactions > 0 ? Math.round((r.sales / r.transactions) * 100) / 100 : 0 }));
+    return { subject: 'staff', rows, period: input.period };
+  }
+
+  if (input.subject === 'payment_methods') {
+    const { data } = await supabaseAdmin
+      .from('pos_sales').select('payment_method, total_amount').eq('business_id', businessId)
+      .neq('status', 'voided').gte('created_at', from);
+    const map: Record<string, { method: string; revenue: number; transactions: number }> = {};
+    for (const row of data ?? []) {
+      const r = row as Record<string, unknown>;
+      const key = r.payment_method as string ?? 'unknown';
+      if (!map[key]) map[key] = { method: key, revenue: 0, transactions: 0 };
+      map[key].revenue += Number(r.total_amount ?? 0);
+      map[key].transactions += 1;
+    }
+    const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+    return { subject: 'payment_methods', rows, period: input.period };
+  }
+
+  if (input.subject === 'categories') {
+    const { data: salesData } = await supabaseAdmin
+      .from('pos_sales').select('id').eq('business_id', businessId).neq('status', 'voided').gte('created_at', from);
+    const saleIds = (salesData ?? []).map(s => s.id);
+    if (!saleIds.length) return { subject: 'categories', rows: [], period: input.period };
+    const { data: items } = await supabaseAdmin
+      .from('pos_sale_items').select('product_name, quantity, line_total').in('sale_id', saleIds);
+    const productNames = [...new Set((items ?? []).map(i => (i as Record<string, unknown>).product_name as string).filter(Boolean))];
+    const { data: products } = await supabaseAdmin
+      .from('pos_products').select('name, category').eq('business_id', businessId)
+      .in('name', productNames.slice(0, 500));
+    const catMap: Record<string, string> = {};
+    for (const p of products ?? []) catMap[(p as Record<string, unknown>).name as string ?? ''] = (p as Record<string, unknown>).category as string ?? 'Uncategorised';
+    const map: Record<string, { category: string; revenue: number; qty: number }> = {};
+    for (const item of items ?? []) {
+      const i = item as Record<string, unknown>;
+      const cat = catMap[i.product_name as string ?? ''] ?? 'Uncategorised';
+      if (!map[cat]) map[cat] = { category: cat, revenue: 0, qty: 0 };
+      map[cat].revenue += Number(i.line_total ?? 0);
+      map[cat].qty += Number(i.quantity ?? 1);
+    }
+    const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+    return { subject: 'categories', rows, period: input.period };
+  }
+
+  return { error: 'Unknown subject: ' + input.subject + '. Valid: products, customers, staff, payment_methods, categories' };
+}
+
+async function getSummary(input: { period: string }, businessId: string): Promise<unknown> {
+  const from = getPeriodStart(input.period);
+  const { data } = await supabaseAdmin
+    .from('pos_sales').select('total_amount, customer_id').eq('business_id', businessId)
+    .neq('status', 'voided').gte('created_at', from);
+  const rows = (data ?? []) as Array<{ total_amount: number | null; customer_id: string | null }>;
+  const total_revenue = rows.reduce((s, r) => s + Number(r.total_amount ?? 0), 0);
+  const sale_count = rows.length;
+  const avg_ticket = sale_count > 0 ? total_revenue / sale_count : 0;
+  const unique_customers = new Set(rows.filter(r => r.customer_id).map(r => r.customer_id)).size;
+  return {
+    period: input.period,
+    from,
+    total_revenue: Math.round(total_revenue * 100) / 100,
+    sale_count,
+    avg_ticket: Math.round(avg_ticket * 100) / 100,
+    unique_customers,
+  };
+}
+
+async function getReviews(input: { period: string }, businessId: string): Promise<unknown> {
+  const from = getPeriodStart(input.period);
+  const { data } = await supabaseAdmin
+    .from('business_reviews').select('rating, review_text, response_status, review_date')
+    .eq('business_id', businessId).gte('review_date', from.slice(0, 10))
+    .order('review_date', { ascending: false }).limit(100);
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const total_count = rows.length;
+  const avg_rating = total_count > 0 ? rows.reduce((s, r) => s + Number(r.rating ?? 0), 0) / total_count : null;
+  const unanswered_count = rows.filter(r => r.response_status === 'unanswered' || r.response_status == null).length;
+  const by_rating: Record<number, number> = {};
+  for (const r of rows) { const rat = Number(r.rating ?? 0); by_rating[rat] = (by_rating[rat] ?? 0) + 1; }
+  return {
+    period: input.period,
+    total_count,
+    avg_rating: avg_rating !== null ? Math.round(avg_rating * 10) / 10 : null,
+    unanswered_count,
+    by_rating,
+    recent: rows.slice(0, 5).map(r => ({
+      rating: r.rating,
+      snippet: String(r.review_text ?? '').slice(0, 120),
+      status: r.response_status,
+      date: r.review_date,
+    })),
+  };
+}
+
+async function getProfitLeaks(businessId: string): Promise<unknown> {
+  const { data } = await supabaseAdmin
+    .from('profit_leaks').select('id, title, category, monthly_loss, recommendation, status')
+    .eq('business_id', businessId).order('monthly_loss', { ascending: false }).limit(20);
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const total_monthly_loss = rows.reduce((s, r) => s + Number(r.monthly_loss ?? 0), 0);
+  return {
+    leaks: rows.map(r => ({ ...r, monthly_loss: Math.round(Number(r.monthly_loss ?? 0) * 100) / 100 })),
+    count: rows.length,
+    total_monthly_loss: Math.round(total_monthly_loss * 100) / 100,
+  };
+}
+
 export async function executePOSTool(name: string, input: unknown, businessId: string): Promise<unknown> {
   const inp = input as Record<string, unknown>;
 
@@ -1241,6 +1481,16 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
 
     case 'save_extracted_receipt':
       return saveExtractedReceipt(inp, businessId);
+    case 'get_business_profile':
+      return getBusinessProfile(businessId);
+    case 'get_top':
+      return getTop(inp as { subject: string; period: string; limit?: number }, businessId);
+    case 'get_summary':
+      return getSummary(inp as { period: string }, businessId);
+    case 'get_reviews':
+      return getReviews(inp as { period: string }, businessId);
+    case 'get_profit_leaks':
+      return getProfitLeaks(businessId);
 
     default:
       throw new Error(`Unknown tool: ${name}`);

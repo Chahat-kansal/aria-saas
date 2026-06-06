@@ -509,6 +509,8 @@ export default function AskAriaPage() {
   const [history, setHistory] = useState<ConvSummary[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [pendingAction, setPendingAction] = useState<PlannedAction | null>(null)
+  const [pendingActionProposeOnly, setPendingActionProposeOnly] = useState(false)
+  const [showForkCard, setShowForkCard] = useState(false)
   const [confirmingAction, setConfirmingAction] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -692,14 +694,16 @@ export default function AskAriaPage() {
 
       if (data.conversation_id) setConversationId(data.conversation_id)
 
-      if (data.action?.action === 'preview' && data.action.planned) {
+      if ((data.action?.action === 'preview' || data.action?.action === 'fork') && data.action.planned) {
         setPendingAction(data.action.planned as PlannedAction)
+        setPendingActionProposeOnly(Boolean((data.action as Record<string, unknown>).propose_only))
+        setShowForkCard(true)
       }
 
       const msgAction: MessageAction = (() => {
         const a = data.action
         if (!a) return null
-        if (a.action === 'preview') return { type: 'action_preview', planned: a.planned as PlannedAction }
+        if (a.action === 'preview' || a.action === 'fork') return { type: 'action_preview', planned: a.planned as PlannedAction }
         if (a.type === 'execution_result') return a as unknown as ExecutionResultAction
         if (a.type === 'export') return a as unknown as ExportAction
         if (a.type === 'escalate') return a as unknown as EscalateAction
@@ -846,11 +850,15 @@ export default function AskAriaPage() {
         timestamp: new Date(),
       }])
       setPendingAction(null)
+      setPendingActionProposeOnly(false)
+      setShowForkCard(false)
       loadHistory()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setMessages(prev => [...prev, { role: 'assistant', content: `Action failed: ${msg}`, timestamp: new Date() }])
       setPendingAction(null)
+      setPendingActionProposeOnly(false)
+      setShowForkCard(false)
     } finally {
       setConfirmingAction(false)
     }
@@ -865,7 +873,31 @@ export default function AskAriaPage() {
       }).catch(() => { /* non-fatal */ })
     }
     setPendingAction(null)
+    setPendingActionProposeOnly(false)
+    setShowForkCard(false)
     setMessages(prev => [...prev, { role: 'assistant', content: 'Action cancelled.', timestamp: new Date() }])
+  }, [conversationId])
+
+  const savePlanAction = useCallback(async () => {
+    if (!conversationId) return
+    setConfirmingAction(true)
+    try {
+      const res = await fetch('/api/aria/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: '[ARIA_SAVE_PLAN]', conversation_id: conversationId }),
+      })
+      const data = await res.json() as { response?: string; conversation_id?: string }
+      if (data.conversation_id) setConversationId(data.conversation_id)
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response ?? 'Plan saved.', timestamp: new Date() }])
+    } catch (_e) {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Could not save plan — please try again.', timestamp: new Date() }])
+    } finally {
+      setPendingAction(null)
+      setPendingActionProposeOnly(false)
+      setShowForkCard(false)
+      setConfirmingAction(false)
+    }
   }, [conversationId])
 
   function newConversation() {
@@ -1301,14 +1333,61 @@ export default function AskAriaPage() {
             )
           })}
 
-          {/* Action confirmation card */}
-          {pendingAction && (
+          {/* Action fork card — first tap: choose path */}
+          {pendingAction && showForkCard && (
+            <div style={{ maxWidth: 680, width: '100%', margin: '0 auto', marginTop: 8 }}>
+              <div className="rounded-xl p-4 space-y-3"
+                style={{ border: '1px solid rgba(127,184,151,0.25)', background: 'rgba(45,82,64,0.08)' }}>
+                <div>
+                  <p className="font-medium text-sm" style={{ color: T.textPri }}>{pendingAction.title}</p>
+                  <p className="text-xs mt-0.5" style={{ color: T.textSec }}>{pendingAction.description}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={savePlanAction}
+                    disabled={confirmingAction}
+                    className="flex-1 py-2 rounded-xl text-sm font-medium transition-opacity disabled:opacity-50"
+                    style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(127,184,151,0.3)', color: T.sage }}
+                  >
+                    Save as plan
+                  </button>
+                  {!pendingActionProposeOnly && (
+                    <button
+                      onClick={() => setShowForkCard(false)}
+                      disabled={confirmingAction}
+                      className="flex-1 py-2 rounded-xl text-sm font-medium transition-opacity disabled:opacity-50"
+                      style={{ background: '#2D5240', color: '#fff' }}
+                    >
+                      Act on it
+                    </button>
+                  )}
+                  <button
+                    onClick={cancelAction}
+                    disabled={confirmingAction}
+                    className="px-4 py-2 rounded-xl text-sm transition-colors disabled:opacity-50"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {pendingActionProposeOnly && (
+                  <p className="text-[10px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    Price and roster changes require manual review before execution
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+          {/* Action confirm card — second tap: confirm execution */}
+          {pendingAction && !showForkCard && (
             <div style={{ maxWidth: 680, width: '100%', margin: '0 auto' }}>
               <ActionPreviewCard
                 action={pendingAction}
                 onConfirm={confirmAction}
                 onCancel={cancelAction}
                 loading={confirmingAction}
+                proposePlan={false}
+                onSavePlan={savePlanAction}
               />
             </div>
           )}
