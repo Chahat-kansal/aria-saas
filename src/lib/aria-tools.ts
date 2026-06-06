@@ -479,21 +479,16 @@ async function querySales(
       dowMap[dayName].transactions += 1;
       dowMap[dayName].dates.add(dateStr);
     }
-    const dowRowsRaw = Object.entries(dowMap).map(([day, v]) => ({
+    const dowRows = Object.entries(dowMap).map(([day, v]) => ({
       key: day,
       total_revenue: Math.round(v.revenue * 100) / 100,
       transactions: v.transactions,
       day_count: v.dates.size,
       avg_revenue_per_day: v.dates.size > 0 ? Math.round((v.revenue / v.dates.size) * 100) / 100 : 0,
     })).sort((a, b) => b.avg_revenue_per_day - a.avg_revenue_per_day);
-    const dowRows = dowRowsRaw.map((r, i) => ({ ...r, rank: i + 1 }));
-    const VERBATIM_RANKING = dowRows
-      .map(r => '#' + r.rank + ' ' + r.key + ': $' + r.avg_revenue_per_day.toFixed(2) + '/day avg (' + r.day_count + ' ' + r.key + 's in period)')
-      .join(' | ');
     return {
       rows: dowRows,
-      VERBATIM_RANKING,
-      note: 'RANK by avg_revenue_per_day ONLY (not total_revenue). Copy VERBATIM_RANKING string digit-for-digit — do NOT recompute these numbers.',
+      note: 'avg_revenue_per_day is normalized by how many of that weekday occurred in the period — use this value for ranking, not total_revenue.',
       total_revenue: (Array.isArray(rows) ? rows : []).reduce((s: number, r: {total_amount?: number|null}) => s + (r.total_amount ?? 0), 0),
       total_transactions: Array.isArray(rows) ? rows.length : 0,
     };
@@ -1219,18 +1214,16 @@ async function getTop(
       map[key].revenue += Number((item as Record<string, unknown>).line_total ?? 0);
     }
     const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
-      .map((r, i) => ({ ...r, rank: i + 1, revenue: Math.round(r.revenue * 100) / 100 }));
-    const VERBATIM_RESULT = rows.map(r => '#' + r.rank + ' ' + r.name + ': $' + r.revenue.toFixed(2) + ' (' + r.qty + ' sold)').join(' | ');
-    return { subject: 'products', rows, period: input.period, VERBATIM_RESULT };
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+    return { subject: 'products', rows, period: input.period };
   }
 
   if (input.subject === 'customers') {
     const { data } = await supabaseAdmin
       .from('pos_customers').select('id, name, total_spend, visit_count, last_visit_at')
       .eq('business_id', businessId).order('total_spend', { ascending: false }).limit(limit);
-    const rows = (data ?? []).map((c, i) => ({ ...c, rank: i + 1, total_spend: Math.round(Number((c as Record<string, unknown>).total_spend ?? 0) * 100) / 100 }));
-    const VERBATIM_RESULT = rows.map(r => { const row = r as Record<string, unknown>; return '#' + row.rank + ' ' + row.name + ': $' + (row.total_spend as number).toFixed(2); }).join(' | ');
-    return { subject: 'customers', rows, period: input.period, VERBATIM_RESULT };
+    const rows = (data ?? []).map(c => ({ ...c, total_spend: Math.round(Number((c as Record<string, unknown>).total_spend ?? 0) * 100) / 100 }));
+    return { subject: 'customers', rows, period: input.period };
   }
 
   if (input.subject === 'staff') {
@@ -1252,9 +1245,8 @@ async function getTop(
       map[key].transactions += 1;
     }
     const rows = Object.values(map).sort((a, b) => b.sales - a.sales).slice(0, limit)
-      .map((r, i) => ({ ...r, rank: i + 1, sales: Math.round(r.sales * 100) / 100, avg_basket: r.transactions > 0 ? Math.round((r.sales / r.transactions) * 100) / 100 : 0 }));
-    const VERBATIM_RESULT = rows.map(r => '#' + r.rank + ' ' + r.name + ': $' + r.sales.toFixed(2) + ' (' + r.transactions + ' sales)').join(' | ');
-    return { subject: 'staff', rows, period: input.period, VERBATIM_RESULT };
+      .map(r => ({ ...r, sales: Math.round(r.sales * 100) / 100, avg_basket: r.transactions > 0 ? Math.round((r.sales / r.transactions) * 100) / 100 : 0 }));
+    return { subject: 'staff', rows, period: input.period };
   }
 
   if (input.subject === 'payment_methods') {
@@ -1270,9 +1262,8 @@ async function getTop(
       map[key].transactions += 1;
     }
     const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
-      .map((r, i) => ({ ...r, rank: i + 1, revenue: Math.round(r.revenue * 100) / 100 }));
-    const VERBATIM_RESULT = rows.map(r => '#' + r.rank + ' ' + r.method + ': $' + r.revenue.toFixed(2) + ' (' + r.transactions + ' txns)').join(' | ');
-    return { subject: 'payment_methods', rows, period: input.period, VERBATIM_RESULT };
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+    return { subject: 'payment_methods', rows, period: input.period };
   }
 
   if (input.subject === 'categories') {
@@ -1297,9 +1288,8 @@ async function getTop(
       map[cat].qty += Number(i.quantity ?? 1);
     }
     const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
-      .map((r, i) => ({ ...r, rank: i + 1, revenue: Math.round(r.revenue * 100) / 100 }));
-    const VERBATIM_RESULT = rows.map(r => '#' + r.rank + ' ' + r.category + ': $' + r.revenue.toFixed(2)).join(' | ');
-    return { subject: 'categories', rows, period: input.period, VERBATIM_RESULT };
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+    return { subject: 'categories', rows, period: input.period };
   }
 
   return { error: 'Unknown subject: ' + input.subject + '. Valid: products, customers, staff, payment_methods, categories' };
