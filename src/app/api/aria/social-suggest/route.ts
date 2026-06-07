@@ -11,6 +11,8 @@ import { trackUsage } from '@/lib/track-usage';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { getRelevantImage } from '@/lib/images/pixabay'
+// Registry: canonical data sources — do NOT bypass with raw column reads
+// pos_sales.total_amount = revenue (neq voided); pos_sale_items.line_total = item revenue
 
 function getNextPostTime(timeStr: string, _platform: string, _prefs: any): string {
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -84,19 +86,37 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'no_connections', message: 'Connect at least one social account before generating posts.', posts: [] }, { status: 400 });
   }
 
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
+  const sevenDaysAgo  = new Date(Date.now() - 7  * 86400000).toISOString()
+  const weekStart     = new Date(Date.now() - 7  * 86400000).toISOString().split('T')[0]
+
   const [
     { data: biz },
     { data: topItems },
     { data: prefs },
     { data: promotions },
+    { data: salesHistory },
   ] = await Promise.all([
     supabase.from('businesses').select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle(),
-    supabaseAdmin.from('pos_sale_items').select('product_name,quantity').eq('business_id', business_id).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
+    // Registry: pos_sale_items.line_total is canonical item revenue (RULE 6 — no total_price)
+    supabaseAdmin.from('pos_sale_items').select('product_name,quantity,line_total').eq('business_id', business_id).gte('created_at', sevenDaysAgo),
     supabaseAdmin.from('social_preferences').select('*').eq('business_id', business_id).maybeSingle(),
     supabaseAdmin.from('pos_promotions').select('name,discount_percent,promotion_type').eq('business_id', business_id).eq('active', true),
+    // Registry: pos_sales.total_amount is canonical revenue (neq voided) — 90-day window for slow-day calc
+    // limit(3000) avoids the 1000-row default cap truncating a busy business's 90-day history
+    supabaseAdmin.from('pos_sales').select('created_at,total_amount').eq('business_id', business_id).neq('status', 'voided').gte('created_at', ninetyDaysAgo).limit(3000),
   ]);
 
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+
+  // Optional roster signal — graceful skip if table absent or no data
+  let rosterData: { week_starting?: string; shifts?: unknown } | null = null
+  try {
+    const { data: rd } = await supabaseAdmin.from('pos_roster_templates')
+      .select('week_starting,shifts').eq('business_id', business_id)
+      .gte('week_starting', weekStart).order('week_starting', { ascending: false }).limit(1).maybeSingle()
+    rosterData = rd
+  } catch { /* non-fatal — roster table may not exist for this business */ }
 
   trackUsage({ business_id, event_type: 'social_suggest' });
 
@@ -106,19 +126,97 @@ async function _POST(req: Request) {
     .filter((d: any) => [5, 6, 0].includes(new Date(d.date).getDay()))
     .some((d: any) => d.is_hot);
 
-  const productCounts: Record<string, number> = {};
-  for (const item of (topItems || [])) {
-    if (!item.product_name) continue;
-    productCounts[item.product_name] = (productCounts[item.product_name] || 0) + item.quantity;
+  // Top products by revenue — registry canonical: pos_sale_items.line_total (RULE 6)
+  const productRevenue: Record<string, { units: number; revenue: number }> = {}
+  for (const item of (topItems ?? [])) {
+    if (!item.product_name) continue
+    const p = productRevenue[item.product_name] ?? { units: 0, revenue: 0 }
+    p.units  += Number(item.quantity ?? 0)
+    p.revenue += Number(item.line_total ?? 0)
+    productRevenue[item.product_name] = p
   }
-  const topProducts = Object.entries(productCounts)
-    .sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([name, qty]) => `${name} (${qty} sold this week)`);
+  const sortedProducts = Object.entries(productRevenue)
+    .sort((a, b) => b[1].revenue - a[1].revenue)
+  const topProducts = sortedProducts.slice(0, 5)
+    .map(([name, { units, revenue }]) => `${name} (${units} sold, $${revenue.toFixed(2)} revenue this week)`)
+  const topProductsForSignal = sortedProducts.slice(0, 3)
+    .map(([name, { units, revenue }]) => ({ name, units, revenue }))
 
   // If no recent sales, fall back to brand awareness content
   const productContext = topProducts.length > 0
     ? `Top products sold this week: ${topProducts.join(', ')}`
     : `Business type: ${biz.industry ?? 'retail'}. No sales recorded yet — generate general brand awareness content.`
+
+  // ── Slowest day signal (registry: pos_sales.total_amount, 90-day window) ─────
+  // Group by calendar date first (daily totals), then average by day-of-week.
+  // This gives daily revenue per DOW — a much more reliable "slow day" signal
+  // than per-transaction averages, which conflate basket size with traffic.
+  const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  const dailyRevenue: Record<string, number> = {}    // "YYYY-MM-DD" → revenue total
+  for (const sale of (salesHistory ?? [])) {
+    const dateKey = sale.created_at.slice(0, 10)   // YYYY-MM-DD
+    dailyRevenue[dateKey] = (dailyRevenue[dateKey] ?? 0) + Number(sale.total_amount ?? 0)
+  }
+  // Now bucket daily totals by day-of-week
+  const dowBuckets: Record<number, { total: number; days: number }> = {}
+  for (const [dateStr, rev] of Object.entries(dailyRevenue)) {
+    const dow = new Date(dateStr).getDay()
+    const b = dowBuckets[dow] ?? { total: 0, days: 0 }
+    b.total += rev
+    b.days++
+    dowBuckets[dow] = b
+  }
+  const totalDailyRevenue = Object.values(dowBuckets).reduce((s, d) => s + d.total, 0)
+  const totalDays          = Object.values(dowBuckets).reduce((s, d) => s + d.days, 0)
+  const overallDailyAvg    = totalDays > 0 ? totalDailyRevenue / totalDays : 0
+
+  // Require ≥8 distinct calendar days for each DOW to ensure reliability
+  const slowDayEntry = Object.entries(dowBuckets)
+    .filter(([, d]) => d.days >= 8)
+    .map(([dow, d]) => ({ dow: Number(dow), avgRev: d.total / d.days }))
+    .sort((a, b) => a.avgRev - b.avgRev)[0] ?? null
+
+  const slowestDaySignal = slowDayEntry ? {
+    name: DOW_NAMES[slowDayEntry.dow],
+    dow:  slowDayEntry.dow,
+    avgRevenue: slowDayEntry.avgRev,
+    overallDailyAvg,
+  } : null
+
+  // ── Optional roster signal (well-staffed on slow day = good time to promote) ─
+  let rosterSignal: { staffCount: number } | null = null
+  if (slowestDaySignal && rosterData?.shifts) {
+    try {
+      const shifts = Array.isArray(rosterData.shifts)
+        ? (rosterData.shifts as Array<{ date?: string }>)
+        : Object.values(rosterData.shifts as Record<string, { date?: string }>)
+      const slowDayShifts = shifts.filter(sh => {
+        if (!sh.date) return false
+        return new Date(sh.date).getDay() === slowestDaySignal.dow
+      })
+      if (slowDayShifts.length > 0) rosterSignal = { staffCount: slowDayShifts.length }
+    } catch { /* non-fatal */ }
+  }
+
+  // ── Grounded signals packet — every figure here is computed, never invented ──
+  const signalLines: string[] = []
+  if (slowestDaySignal) {
+    const sd = slowestDaySignal
+    signalLines.push(
+      `Verified slowest day: ${sd.name} (avg $${sd.avgRevenue.toFixed(2)}/day vs $${sd.overallDailyAvg.toFixed(2)} overall daily avg — computed from 90 days of POS history)`
+    )
+    if (rosterSignal) {
+      signalLines.push(`${sd.name} roster: ${rosterSignal.staffCount} staff scheduled — well-staffed and ready for a promotion push`)
+    }
+  }
+  if (topProductsForSignal.length > 0) {
+    signalLines.push(
+      `Top products by revenue this week: ${topProductsForSignal.map(p => `${p.name} ($${p.revenue.toFixed(2)}, ${p.units} units)`).join(', ')}`
+    )
+  }
+  const groundedSignalsBlock = signalLines.length > 0
+    ? `\nGROUNDED BUSINESS SIGNALS — computed from live POS data. ONLY use these exact values (never invent figures):\n${signalLines.join('\n')}\n`
+    : ''
 
   const strategyContext = INDUSTRY_STRATEGIES[biz.industry] || INDUSTRY_STRATEGIES.retail;
   const promoContext = (promotions || []).length > 0
@@ -145,7 +243,7 @@ TAGLINE: ${prefs?.business_tagline || 'Not set'}
 TARGET AUDIENCE: ${prefs?.target_audience || 'Local community'}
 BRAND VOICE: ${prefs?.brand_voice || 'friendly'}
 TOPICS TO AVOID: ${prefs?.topics_to_avoid || 'None specified'}
-
+${groundedSignalsBlock}
 SALES DATA THIS WEEK:
 ${productContext}
 ${promoContext}
@@ -185,6 +283,15 @@ IMAGE SEARCH QUERY:
 - Examples: "latte art overhead", "flat white ceramic cup", "avocado toast rustic", "chai steam mug"
 - Never: "cafe business", "happy customer", "store product"
 
+ASSERTION GUARD — NUMBERS AND CLAIMS (mandatory):
+- Every product name, day name, and revenue figure in the post MUST come from the GROUNDED BUSINESS SIGNALS block.
+- NEVER invent a product, price, day, or revenue figure not explicitly in the data.
+- If a slow day is listed, you may write a post around that day — use the exact day name provided.
+- If top products are listed, feature those exact product names — do not substitute or invent alternatives.
+- NEVER claim a promotion is "working" or "performing well" without it appearing in ACTIVE PROMOTIONS.
+- Any promo price in a post is a DRAFT SUGGESTION ONLY — never presented as a live price.
+- If signals are absent, generate a general on-brand post — do NOT fill in with invented details.
+
 Return ONLY a valid JSON array. Each post: platform, caption, hashtags (array, no # prefix), best_time, why, image_prompt, image_search_query, topic, industry_tip, reel_concept, reel_script.`,
     messages: [{ role: 'user', content: userPrompt }],
   })
@@ -219,6 +326,11 @@ Return ONLY a valid JSON array. Each post: platform, caption, hashtags (array, n
     } catch { return { url: null, credit: null, provider: 'none' } }
   }
 
+  // Build grounded data rationale — recorded in aria_reasoning for auditability
+  const groundedRationale = signalLines.length > 0
+    ? `[DATA-GROUNDED] ${signalLines.join(' | ')}`
+    : null
+
   // Save posts immediately without waiting for images
   const saved: any[] = [];
   for (let i = 0; i < suggestions.length; i++) {
@@ -235,8 +347,11 @@ Return ONLY a valid JSON array. Each post: platform, caption, hashtags (array, n
       image_credit: null,
       reel_concept: s.reel_concept ?? null,
       reel_script: s.reel_script ?? null,
-      aria_reasoning: s.why,
-      industry_context: s.industry_tip,
+      // Grounded rationale takes priority — records real POS data provenance
+      aria_reasoning: groundedRationale
+        ? `${groundedRationale} | Post angle: ${s.topic || 'general'} | ${s.why}`
+        : s.why,
+      industry_context: `${new Date().toISOString().split('T')[0]} | Signals: ${signalLines.length > 0 ? `slowest_day=${slowestDaySignal?.name ?? 'n/a'}, top_product=${topProductsForSignal[0]?.name ?? 'n/a'}` : 'none'} | ${s.industry_tip}`,
       scheduled_for: getNextPostTime(s.best_time || '', s.platform, prefs),
     }).select().single();
     if (post) saved.push({ ...post, topic: s.topic });
