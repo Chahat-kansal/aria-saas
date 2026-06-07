@@ -83,6 +83,92 @@ export const SCHEMA_REGISTRY: Record<string, RegistryEntry> = {
     caveat: null,
     completeness_check: null,
   },
+
+  marketing_consent: {
+    domain: 'marketing_consent',
+    description: 'Count of POS customers who have consented to marketing — the ONLY safe emailable/textable audience',
+    canonical_table: 'pos_customers',
+    canonical_column: 'marketing_consent (boolean, COUNT WHERE true)',
+    canonical_query_description:
+      'SELECT COUNT(*) FROM pos_customers WHERE business_id = $bid AND marketing_consent = true',
+    banned_sources: [
+      'pos_customer_count (total headcount — includes non-consented)',
+      'with_email_count (has email address but may not have consented)',
+      'customers (CRM table — no marketing_consent column)',
+    ],
+    caveat:
+      'MANDATORY CAVEAT whenever suggesting an email or SMS campaign: ' +
+      '"Only [N] of [total] customers have consented to marketing — your reachable audience is [N], not [total]." ' +
+      'Verified ground truth for reference business: 11 of 37 customers consented (~30%). ' +
+      'Always compute live per business: COUNT WHERE marketing_consent = true / COUNT(*) from pos_customers.',
+    completeness_check:
+      'SELECT COUNT(*) FILTER (WHERE marketing_consent = true) AS consented, COUNT(*) AS total FROM pos_customers WHERE business_id = $bid',
+  },
+
+  product_stock: {
+    domain: 'product_stock',
+    description: 'Stock on hand per product — use for low-stock alerts and inventory signals in reel ideas and suggestions',
+    canonical_table: 'pos_products',
+    canonical_column: 'stock_quantity',
+    canonical_query_description:
+      'SELECT name, stock_quantity, reorder_point FROM pos_products WHERE business_id AND is_active = true ORDER BY stock_quantity ASC',
+    banned_sources: [
+      'qty_on_hand (does not exist on pos_products)',
+      'stock (does not exist)',
+      'pos_outlet_inventory.qty_on_hand (wrong column — RULE 6 says items_on_hand)',
+    ],
+    caveat:
+      'pos_products.stock_quantity is canonical for single-outlet businesses. ' +
+      'For multi-outlet businesses use pos_outlet_inventory.items_on_hand per RULE 6. ' +
+      'Verified: stock_quantity populated for 74/74 active products on reference business.',
+    completeness_check:
+      'SELECT COUNT(*) FILTER (WHERE stock_quantity IS NOT NULL) AS populated, COUNT(*) AS total FROM pos_products WHERE business_id = $bid AND is_active = true',
+  },
+
+  product_sales: {
+    domain: 'product_sales',
+    description: 'Per-product unit count and revenue from POS — use line_total (canonical per RULE 6), never unit_price×quantity',
+    canonical_table: 'pos_sale_items',
+    canonical_column: 'line_total (revenue), quantity (units), product_name',
+    canonical_query_description:
+      'SELECT product_name, SUM(quantity) AS units, SUM(line_total) AS revenue FROM pos_sale_items WHERE business_id GROUP BY product_name ORDER BY revenue DESC',
+    banned_sources: [
+      'total_price (wrong column name — RULE 6 bans this)',
+      'unit_price * quantity (manual multiplication — introduces rounding drift)',
+      'pos_sales.total_amount (sale-level aggregate only, not per-product)',
+    ],
+    caveat:
+      'product_name is a denormalised string in pos_sale_items — may differ from pos_products.name if a product was renamed after sale. ' +
+      'Use the sale_items product_name as-is for sales rankings (reflects what was sold at time of sale).',
+    completeness_check:
+      'SELECT COUNT(DISTINCT product_name) AS distinct_products FROM pos_sale_items WHERE business_id = $bid',
+  },
+
+  slow_day: {
+    domain: 'slow_day',
+    description: 'Day-of-week with the lowest average daily revenue — MUST use daily-bucketing method, not per-transaction count',
+    canonical_table: 'pos_sales',
+    canonical_column: 'created_at (grouped to calendar date), total_amount',
+    canonical_query_description:
+      'Step 1: Group each calendar date → SUM(total_amount) for that day (daily bucket). ' +
+      'Step 2: Group calendar dates by day-of-week → AVERAGE of the daily SUM values. ' +
+      'Step 3: Rank ascending → lowest average daily revenue = slowest day. ' +
+      'Requirements: ≥8 distinct calendar days per DOW for reliability; 90-day window; neq(status, voided); limit(3000) to exceed 1000-row default cap.',
+    banned_sources: [
+      'COUNT of sales rows per DOW (counts transactions, not revenue — skews toward high-volume-low-value days)',
+      'SUM(total_amount) per DOW / COUNT(sales rows) (averages transaction value, not daily revenue)',
+      'get_slow_days RPC (unverified stored procedure — may use banned method internally)',
+    ],
+    caveat:
+      'Verified ground truth (reference business, 90-day window): slowest day = Tuesday ' +
+      '(avg $232.89/day vs $349.88 overall daily avg). ' +
+      'Always compute live — never hard-code this value for a specific business. ' +
+      'Skip any DOW with fewer than 8 distinct calendar days (insufficient sample).',
+    completeness_check:
+      'SELECT DATE(created_at) AS d, EXTRACT(DOW FROM created_at) AS dow, SUM(total_amount) AS daily_rev ' +
+      "FROM pos_sales WHERE business_id = $bid AND status != 'voided' " +
+      'GROUP BY d, dow ORDER BY d DESC LIMIT 10',
+  },
 }
 
 export function getRegistryEntry(domain: string): RegistryEntry | undefined {
@@ -106,5 +192,10 @@ export function getCaveat(domain: string): string | null {
  * ONE source of truth; update here to propagate everywhere.
  */
 export const CANONICAL_COLS = {
-  CUSTOMER_SPEND: 'total_spent',
+  CUSTOMER_SPEND:      'total_spent',
+  PRODUCT_REVENUE:     'line_total',
+  PRODUCT_UNITS:       'quantity',
+  PRODUCT_STOCK:       'stock_quantity',
+  PRODUCT_STOCK_MULTI: 'items_on_hand',
+  MARKETING_CONSENT:   'marketing_consent',
 } as const
