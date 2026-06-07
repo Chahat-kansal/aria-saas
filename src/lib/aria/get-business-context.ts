@@ -29,6 +29,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     topLeakRaw,
     expenses7Raw,
     posCustomerCountRaw,
+    posCustomerEmailCountRaw,
     promotionsRaw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
@@ -78,6 +79,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .gte('expense_date', d7),
     // Real POS customer count — distinct from the CRM 'customers' table
     db.from('pos_customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
+    // POS customers with a non-null email
+    db.from('pos_customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).not('email', 'is', null).neq('email', ''),
     // Promotion status — prevents hallucinated "working" claims about scheduled promos
     db.from('pos_promotions')
       .select('id, name, promotion_type, discount_amount, active, starts_at, ends_at, current_uses')
@@ -132,6 +135,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const posCustomerCount: number | null = (posCustomerCountRaw as any).status === 'fulfilled'
     ? ((posCustomerCountRaw as any).value?.count ?? 0)
+    : null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const posCustomerEmailCount: number | null = (posCustomerEmailCountRaw as any).status === 'fulfilled'
+    ? ((posCustomerEmailCountRaw as any).value?.count ?? 0)
     : null
 
   const todayStr = now.toISOString().slice(0, 10)
@@ -198,6 +205,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     slow_products_7d: bottom20.map(s => ({ name: s.name, revenue: s.revenue, units: s.units })),
     customers: {
       pos_customer_count: posCustomerCount,
+      with_email_count: posCustomerEmailCount,
       total:           custs.length,
       top_5_by_spend:  custs.slice(0, 5).map((c: any) => ({
         name: c.name, total_spent: c.total_spent, visit_count: c.visit_count

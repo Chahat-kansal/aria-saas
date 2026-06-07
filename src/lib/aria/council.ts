@@ -519,7 +519,43 @@ export async function runAriaCouncil(
       'If data is insufficient for a recommendation, say: "Not enough data to advise on this."\n\n'
     : ''
 
-  const userPrompt = [summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + businessContext]
+  // Build VERIFIED_FIGURES block — pre-computed exact values brains must cite verbatim
+  let verifiedFiguresBlock = ''
+  try {
+    const ctx = JSON.parse(businessContext) as Record<string, unknown>
+    const revenue = ctx?.revenue as Record<string, number | null> | undefined
+    const customers = ctx?.customers as Record<string, number | null> | undefined
+    const promotions = ctx?.promotions as {
+      active?: Array<{ name: string; starts_at: string | null }>
+      scheduled?: Array<{ name: string; starts_at: string | null; status: string }>
+    } | undefined
+    const lines: string[] = [
+      'VERIFIED FIGURES — pre-computed values. Use EXACT values. DO NOT round, approximate, or invent any figure.',
+    ]
+    const rev7 = revenue?.last_7_days
+    const rev30 = revenue?.last_30_days
+    if (rev7 != null) lines.push(`  revenue_7d = ${Number(rev7).toFixed(2)}  ← exact figure for "last week" / "7-day" revenue — use verbatim`)
+    if (rev30 != null) lines.push(`  revenue_30d = ${Number(rev30).toFixed(2)}  ← exact figure for "30-day" / "monthly" revenue — use verbatim`)
+    const posCount = customers?.pos_customer_count
+    if (posCount != null) lines.push(`  pos_customer_count = ${posCount}  ← authoritative count; NEVER say "zero customers" unless this is 0`)
+    const emailCount = customers?.with_email_count
+    if (emailCount != null) lines.push(`  customers_with_email = ${emailCount}`)
+    if (promotions) {
+      const active = promotions.active ?? []
+      const scheduled = promotions.scheduled ?? []
+      if (active.length > 0) {
+        lines.push(`  active_promotions = ${active.map(p => p.name).join(', ')}  ← LIVE NOW — may be described as running`)
+      } else {
+        lines.push('  active_promotions = none  ← no promotions currently live')
+      }
+      if (scheduled.length > 0) {
+        lines.push(`  scheduled_promotions = ${scheduled.map(p => `${p.name} (${(p as { status: string }).status})`).join(', ')}  ← NOT YET ACTIVE — describe as "scheduled for [date]", NEVER as "working"`)
+      }
+    }
+    verifiedFiguresBlock = lines.join('\n') + '\n'
+  } catch { /* non-fatal */ }
+
+  const userPrompt = [verifiedFiguresBlock, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + businessContext]
     .filter(Boolean)
     .join('\n\n')
 
@@ -582,7 +618,7 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
     : ''
 
   const synthesisInput = `
-${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}BUSINESS DATA:
+${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}BUSINESS DATA:
 ${businessContext}
 ${qualitySynthesisBlock}
 GROWTH BRAIN (confidence: ${growth.confidence}):
