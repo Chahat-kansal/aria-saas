@@ -139,34 +139,47 @@ export default function ReelsPage() {
   }
 
   return (
-    <div ref={containerRef} style={{
-      position: 'fixed', inset: 0, top: 0, bottom: 0,
-      overflowY: 'scroll', scrollSnapType: 'y mandatory',
-      background: '#000', fontFamily: FONT,
-      WebkitOverflowScrolling: 'touch',
-    }}>
-      <Link href="/community" prefetch={false} style={{
-        position: 'fixed', top: 'calc(env(safe-area-inset-top, 10px) + 10px)', left: 12, zIndex: 20,
-        width: 40, height: 40, borderRadius: '50%',
-        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', textDecoration: 'none',
+    <>
+      <div ref={containerRef} style={{
+        position: 'fixed', inset: 0, top: 0, bottom: 0,
+        overflowY: 'scroll', scrollSnapType: 'y mandatory',
+        background: '#000', fontFamily: FONT,
+        WebkitOverflowScrolling: 'touch',
       }}>
-        <X size={20} />
-      </Link>
+        <Link href="/community" prefetch={false} style={{
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 10px) + 10px)', left: 12, zIndex: 20,
+          width: 40, height: 40, borderRadius: '50%',
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', textDecoration: 'none',
+          border: '1px solid rgba(255,255,255,0.15)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+        }}>
+          <X size={20} />
+        </Link>
 
-      {reels.map(reel => (
-        <ReelItem
-          key={reel.id}
-          reel={reel}
-          videoRef={(el) => { videoRefs.current[reel.id] = el }}
-          onLike={() => toggle(reel, 'like')}
-          onSave={() => toggle(reel, 'save')}
-          onShare={() => share(reel)}
-        />
-      ))}
-    </div>
+        {reels.map(reel => (
+          <ReelItem
+            key={reel.id}
+            reel={reel}
+            videoRef={(el) => { videoRefs.current[reel.id] = el }}
+            onLike={() => toggle(reel, 'like')}
+            onSave={() => toggle(reel, 'save')}
+            onShare={() => share(reel)}
+          />
+        ))}
+      </div>
+      <style>{`
+        @keyframes comm-slide-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes comm-heart-pop{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+        .comm-action-wrap{animation:comm-slide-in 380ms ease both}
+        .comm-action{transition:transform 150ms ease,color 150ms ease}
+        .comm-action:hover{transform:scale(1.2)}
+        .comm-action:active{transform:scale(0.88)}
+        .comm-action-active svg{animation:comm-heart-pop 300ms ease}
+      `}</style>
+    </>
   )
 }
 
@@ -232,42 +245,58 @@ function ReelItem({ reel, videoRef, onLike, onSave, onShare }: {
         />
       ) : null}
 
-      {/* Right-side action stack */}
+      {/* Gradient scrim — enhances text readability, no pointer events */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
+        background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
+        pointerEvents: 'none', zIndex: 4,
+      }} />
+
+      {/* Right-side action stack — staggered slide-in per item */}
       <div style={{
         position: 'absolute', right: 12, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)',
         display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', zIndex: 5,
       }}>
-        <ReelAction icon={<Heart size={28} fill={reel.mine.liked ? C.accent : 'transparent'} strokeWidth={reel.mine.liked ? 0 : 1.8} />} label={String(reel.counts.like)} onClick={onLike} active={reel.mine.liked} />
-        <ReelAction icon={<MessageCircle size={28} strokeWidth={1.8} />} label={String(reel.counts.comment)} onClick={() => { /* comments shown via feed for now */ }} />
-        <ReelAction icon={<Bookmark size={28} fill={reel.mine.saved ? C.accent : 'transparent'} strokeWidth={reel.mine.saved ? 0 : 1.8} />} label={String(reel.counts.save)} onClick={onSave} active={reel.mine.saved} />
-        <ReelAction icon={<Share2 size={28} strokeWidth={1.8} />} label="Share" onClick={onShare} />
+        <div className="comm-action-wrap" style={{ animationDelay: '80ms' }}>
+          <ReelAction icon={<Heart size={28} fill={reel.mine.liked ? C.accent : 'transparent'} strokeWidth={reel.mine.liked ? 0 : 1.8} />} label={String(reel.counts.like)} onClick={onLike} active={reel.mine.liked} />
+        </div>
+        <div className="comm-action-wrap" style={{ animationDelay: '140ms' }}>
+          <ReelAction icon={<MessageCircle size={28} strokeWidth={1.8} />} label={String(reel.counts.comment)} onClick={() => { /* comments shown via feed for now */ }} />
+        </div>
+        <div className="comm-action-wrap" style={{ animationDelay: '200ms' }}>
+          <ReelAction icon={<Bookmark size={28} fill={reel.mine.saved ? C.accent : 'transparent'} strokeWidth={reel.mine.saved ? 0 : 1.8} />} label={String(reel.counts.save)} onClick={onSave} active={reel.mine.saved} />
+        </div>
+        <div className="comm-action-wrap" style={{ animationDelay: '260ms' }}>
+          <ReelAction icon={<Share2 size={28} strokeWidth={1.8} />} label="Share" onClick={onShare} />
+        </div>
       </div>
 
-      {/* Bottom caption + business */}
+      {/* Bottom caption + business overlay */}
       <div style={{
         position: 'absolute', left: 12, right: 90, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
         color: '#fff', zIndex: 5,
       }}>
         <Link href={`/community/businesses/${reel.business_id}`} prefetch={false} style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fff', textDecoration: 'none', marginBottom: 8 }}>
           <div style={{
-            width: 32, height: 32, borderRadius: '50%',
+            width: 36, height: 36, borderRadius: '50%',
             background: reel.business?.logo_url ? `url(${reel.business.logo_url}) center/cover` : C.accentDeep,
             color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: 13, border: '1px solid rgba(255,255,255,0.3)', flexShrink: 0,
+            fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,0.25)', flexShrink: 0,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
           }}>
             {!reel.business?.logo_url && (reel.business?.name?.[0] ?? '?')}
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>
             {reel.business?.name}
             {reel.business?.community_verified && <BadgeCheck size={14} style={{ color: C.accent }} />}
           </span>
         </Link>
-        {reel.title && <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>{reel.title}</p>}
-        {reel.body && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.86)', margin: 0, lineHeight: 1.4, textShadow: '0 1px 8px rgba(0,0,0,0.6)', whiteSpace: 'pre-wrap' }}>{reel.body}</p>}
+        {reel.title && <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', textShadow: '0 1px 10px rgba(0,0,0,0.8)' }}>{reel.title}</p>}
+        {reel.body && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', margin: 0, lineHeight: 1.45, textShadow: '0 1px 10px rgba(0,0,0,0.8)', whiteSpace: 'pre-wrap' }}>{reel.body}</p>}
       </div>
 
       {muted && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', padding: '6px 12px', background: 'rgba(0,0,0,0.5)', borderRadius: 999, color: '#fff', fontSize: 11, pointerEvents: 'none', opacity: 0.7 }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', padding: '7px 14px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', borderRadius: 999, color: '#fff', fontSize: 11, pointerEvents: 'none', opacity: 0.8, border: '1px solid rgba(255,255,255,0.15)' }}>
           Tap for sound
         </div>
       )}
@@ -277,7 +306,7 @@ function ReelItem({ reel, videoRef, onLike, onSave, onShare }: {
 
 function ReelAction({ icon, label, onClick, active }: { icon: React.ReactNode; label: string; onClick: () => void; active?: boolean }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} className={'comm-action' + (active ? ' comm-action-active' : '')} style={{
       background: 'transparent', border: 'none', cursor: 'pointer',
       color: active ? C.accent : '#fff',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
