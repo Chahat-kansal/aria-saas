@@ -36,16 +36,16 @@ SUPPORTED ACTIONS (return one of these types):
   adjust_stock         — add/subtract/set stock_quantity on products
   apply_category_discount — apply a discount % to a category
   set_low_stock_threshold — update low_stock_threshold for products
-  create_promotion     — create a promotion rule saved to pos_promotions (payload: name, promotion_type ["percent_off"|"amount_off"|"bogo"], discount_value [number], starts_at [YYYY-MM-DD], ends_at? [YYYY-MM-DD], min_spend? [number], max_total_uses? [number], stacks_with_others [boolean, default false], category? [string for category-scoped promos], notes? [string])
+  create_promotion     — create a promotion rule saved to pos_promotions (payload: name, promotion_type ["percentage_discount"|"fixed_discount"|"bogo"|"bundle"|"multibuy"], discount_amount [number — the discount value in % for percentage_discount or $ for fixed_discount], starts_at [YYYY-MM-DD — MUST use the provided today's date as base; never use a past date or the wrong year], ends_at? [YYYY-MM-DD], min_spend? [number], category? [string for category-scoped promos], notes? [string])
   update_staff_permission — change staff permissions
   send_staff_message   — send a message to a staff member
   create_roster        — draft a staff roster for a week (payload: name, week_start YYYY-MM-DD, week_end?, notes?)
   create_invoice       — draft a client invoice (payload: customer_name, customer_email?, due_date?, items:[{description,quantity,unit_price}], notes?; amounts in DOLLARS)
 
 DEFAULTS — when required fields are missing, DO NOT ask a question. Fill in the most sensible default and surface it in preview[] as "Assumed X (adjustable)" so the owner sees what was assumed before confirming:
-  create_promotion missing promotion_type → use "percent_off"
-  create_promotion missing discount_value → use 10 (i.e. 10% for percent_off, $10 for amount_off)
-  create_promotion missing starts_at → use today's date (provided in context)
+  create_promotion missing promotion_type → use "percentage_discount"
+  create_promotion missing discount_amount → use 10 (i.e. 10%)
+  create_promotion missing starts_at → use today's date from context (IMPORTANT: today's year is provided — always use that year, never output a past date)
   bulk_price_update missing percentage → use 5 (5% increase, conservative)
   adjust_stock missing quantity → use 1
 
@@ -107,5 +107,19 @@ Staff: ${(staff as Array<Record<string,unknown>>).map(s => `${s.first_name} ${s.
 
   const planned = parseLLMJsonOr<Partial<PlannedAction>>(result.raw, {}, 'action-planner/plan')
   if (!planned.type) return null
+
+  // BUG 2 FIX: clamp starts_at to a future date — the LLM sometimes outputs a past date
+  // or wrong year. We check server-side and correct it.
+  if (planned.payload && typeof planned.payload === 'object') {
+    const p = planned.payload as Record<string, unknown>
+    if (p.starts_at && typeof p.starts_at === 'string') {
+      const asDate = new Date(p.starts_at)
+      const today = new Date(todayISO)
+      if (isNaN(asDate.getTime()) || asDate < today) {
+        p.starts_at = todayISO
+      }
+    }
+  }
+
   return { ...(planned as PlannedAction), requires_confirmation: true }
 }

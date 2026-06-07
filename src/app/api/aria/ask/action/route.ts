@@ -58,13 +58,11 @@ async function _POST(req: Request) {
       return NextResponse.json({ error: 'Action expired — please request it again', status: 'expired' })
     }
 
-    const result = await executeAction(
-      conv.pending_action as PlannedAction,
-      bid,
-      user.id,
-      conversationId,
-      message,
-    )
+    const rawPending = conv.pending_action
+    const parsedPending: PlannedAction = typeof rawPending === 'string'
+      ? JSON.parse(rawPending) as PlannedAction
+      : rawPending as PlannedAction
+    const result = await executeAction(parsedPending, bid, user.id, conversationId, message)
 
     await supabase.from('aria_conversations').update({
       pending_action: null,

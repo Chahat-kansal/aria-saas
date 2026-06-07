@@ -248,9 +248,15 @@ async function _POST(req: Request) {
       const expired = convPending.pending_action_expires_at &&
         new Date(String(convPending.pending_action_expires_at)) < new Date()
       if (!expired) {
-        const result = await executeAction(
-          convPending.pending_action as PlannedAction, bid, user.id, conversationId, message,
-        )
+        // BUG 1 FIX: pending_action may be stored as a text/string column and returned
+        // as a JSON string by the Supabase client. Safe-parse it into a real object so
+        // action.type is accessible inside executeAction.
+        const rawPending = convPending.pending_action
+        const parsedPending: PlannedAction = typeof rawPending === 'string'
+          ? JSON.parse(rawPending) as PlannedAction
+          : rawPending as PlannedAction
+
+        const result = await executeAction(parsedPending, bid, user.id, conversationId, message)
         await supabase.from('aria_conversations').update({
           pending_action: null, pending_action_expires_at: null,
         }).eq('id', conversationId)
@@ -270,7 +276,7 @@ async function _POST(req: Request) {
         }
 
         // Action succeeded — run council so Aria reflects on what changed
-        const execSummary = `${(convPending.pending_action as PlannedAction).title} — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' Reversible within 1 hour.' : ''}`
+        const execSummary = `${parsedPending.title} — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' Reversible within 1 hour.' : ''}`
         let postCouncil: CouncilOutput | null = null
         try {
           const bizCtxForAction = await getBusinessContext(bid)

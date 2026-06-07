@@ -218,34 +218,47 @@ export async function executeAction(
 
       case 'create_promotion': {
         const {
-          name, promotion_type, discount_value,
-          starts_at, ends_at, min_spend, max_total_uses,
-          stacks_with_others, category, notes,
+          name, promotion_type, discount_amount,
+          starts_at, ends_at, min_spend,
+          category, notes,
         } = action.payload as {
-          name: string; promotion_type: string; discount_value: number
+          name: string; promotion_type: string
+          discount_amount?: number
           starts_at?: string; ends_at?: string; min_spend?: number
-          max_total_uses?: number; stacks_with_others?: boolean
           category?: string; notes?: string
         }
-        if (!name || !promotion_type || discount_value == null) {
-          return { ok: false, affected_count: 0, error: 'name, promotion_type, and discount_value are required', rollback_available: false }
+        if (!name || !promotion_type) {
+          return { ok: false, affected_count: 0, error: 'name and promotion_type are required', rollback_available: false }
         }
+        // Map planner promotion_type values to DB CHECK constraint values
+        const promoTypeMap: Record<string, string> = {
+          percent_off: 'percentage_discount',
+          amount_off: 'fixed_discount',
+          percentage_discount: 'percentage_discount',
+          fixed_discount: 'fixed_discount',
+          bogo: 'bogo',
+          bundle: 'bundle',
+          multibuy: 'multibuy',
+        }
+        const dbPromoType = promoTypeMap[promotion_type] ?? 'percentage_discount'
         entityType = 'pos_promotions'
         const promoRow: Record<string, unknown> = {
           business_id: businessId,
           name,
-          promotion_type,
-          discount_value: Number(discount_value),
+          promotion_type: dbPromoType,
+          discount_amount: Number(discount_amount ?? 10),
           active: false,
           starts_at: starts_at ?? null,
           ends_at: ends_at ?? null,
           min_spend: min_spend ?? null,
-          max_total_uses: max_total_uses ?? null,
-          stacks_with_others: stacks_with_others ?? false,
-          ai_generated: true,
+          // Required NOT-NULL columns with no DB default — must supply
+          product_ids: '[]',
+          category_ids: '[]',
+          stack_priority: 0,
+          current_uses: 0,
+          exclude_discounted: false,
           updated_at: new Date().toISOString(),
         }
-        if (category) promoRow.category = category
         if (notes) promoRow.notes = notes
 
         const { data: promo, error: promoErr } = await supabase
@@ -259,7 +272,7 @@ export async function executeAction(
         afterState = {
           promotion_id: (promo as { id: string }).id,
           name: (promo as { name: string }).name,
-          promotion_type, discount_value, active: false,
+          promotion_type: dbPromoType, discount_amount, active: false,
         }
         break
       }
