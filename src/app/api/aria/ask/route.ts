@@ -574,6 +574,41 @@ Rules:
     : 'quick'
   const ctx = await buildAskAriaContext(bid, conversationId ?? undefined, ctxScope)
 
+  // Pre-compute weekly tracking data for target/same-week questions (injected into system prompt)
+  let weeklyTrackingBlock = ''
+  try {
+    const d28str = new Date(Date.now() - 28 * 86400000).toISOString()
+    const d35str = new Date(Date.now() - 35 * 86400000).toISOString()
+    const [{ data: bizTarget }, { data: swlmRows }] = await Promise.all([
+      supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', bid).maybeSingle(),
+      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid)
+        .gte('created_at', d35str).lt('created_at', d28str).neq('status', 'voided'),
+    ])
+    const wTarget = bizTarget?.weekly_revenue_target ? Number(bizTarget.weekly_revenue_target) : null
+    const swlmRev = (swlmRows ?? []).reduce(
+      (s: number, x: { total_amount: number | null }) => s + Number(x.total_amount ?? 0), 0,
+    )
+    const currentWeek = ctx.revenue_week_cents / 100
+    const windowLabel = `${d35str.slice(0, 10)} to ${d28str.slice(0, 10)}`
+    const lines: string[] = ['WEEKLY TRACKING DATA (live — use these exact figures):']
+    if (wTarget) {
+      const pct = Math.round((currentWeek / wTarget) * 100)
+      const gap = wTarget - currentWeek
+      lines.push(`  Weekly revenue target: $${wTarget.toFixed(2)}`)
+      lines.push(`  Current 7-day revenue vs target: $${currentWeek.toFixed(2)} / $${wTarget.toFixed(2)} = ${pct}%${gap > 0 ? ' (BEHIND by $' + gap.toFixed(2) + ')' : ' (ON TRACK)'}`)
+    } else {
+      lines.push('  Weekly revenue target: NOT SET')
+    }
+    if (swlmRows && swlmRows.length > 0) {
+      const chgPct = swlmRev > 0 ? (((currentWeek - swlmRev) / swlmRev) * 100).toFixed(1) : null
+      lines.push(`  Same week last month (${windowLabel}): $${swlmRev.toFixed(2)}${chgPct ? ' (' + (Number(chgPct) >= 0 ? '+' : '') + chgPct + '% vs this week)' : ''}`)
+    } else {
+      lines.push(`  Same week last month (${windowLabel}): no sales data for that window`)
+    }
+    lines.push('RULES: "same week last month" → use the figure above, NEVER 30-day average. "on track?" → use weekly target above; if NOT SET, say so honestly and offer to set one, never substitute an average.')
+    weeklyTrackingBlock = lines.join('\n')
+  } catch { /* non-fatal */ }
+
   // 3. Build system prompt
   let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
 
@@ -788,6 +823,8 @@ Avg daily revenue: $${ctx.avg_daily_revenue.toFixed(2)}
 Loyalty members: ${ctx.loyalty_stats.total_members} (${ctx.loyalty_stats.active_last_30d} active last 30d)
 Pending purchase orders: ${ctx.pending_purchase_orders.length > 0 ? ctx.pending_purchase_orders.map(o => `${o.supplier} $${o.total}`).join(', ') : 'none'}
 Subscription: ${ctx.subscription_tier ?? 'unknown'}
+
+${weeklyTrackingBlock}
 
 FRESH SIGNALS (from monitoring engine, last 30 min):
 ${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}

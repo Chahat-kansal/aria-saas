@@ -18,6 +18,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const ly30start = new Date(ly.getTime() - 30 * 86400000).toISOString()
   const ly30end   = ly.toISOString()
 
+  // "Same week last month" = the 7-day window ending 28 days ago (4 weeks back)
+  const d28 = new Date(now.getTime() - 28 * 86400000).toISOString()
+  const d35 = new Date(now.getTime() - 35 * 86400000).toISOString()
+
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
   const [
@@ -33,6 +37,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     posCustomerEmailCountRaw,
     posConsentCountRaw,
     promotionsRaw,
+    salesSameWeekLastMonth,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -91,6 +96,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
       .limit(20),
+    // "Same week last month" — 7-day window 4 weeks ago (d35 → d28)
+    db.from('pos_sales').select('total_amount')
+      .eq('business_id', businessId)
+      .gte('created_at', d35).lt('created_at', d28).neq('status', 'voided'),
   ])
 
   // SKU aggregation from sale_items — use line_total (registry product_sales canonical, RULE 6)
@@ -116,6 +125,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const rev90  = sum(sales90)
   const lyRev7  = sum(ly7)
   const lyRev30 = sum(ly30)
+  const revSWLM = sum(salesSameWeekLastMonth)   // "same week last month" revenue
 
   const yoy7  = rev7 != null && lyRev7  != null && lyRev7  > 0
     ? (((rev7  - lyRev7)  / lyRev7)  * 100).toFixed(1) + '%' : null
@@ -209,6 +219,40 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         ? `vs same period last year: 7d ${yoy7}, 30d ${yoy30 ?? 'n/a'}`
         : 'no prior year data available',
     },
+    week_tracking: (() => {
+      const target = biz?.weekly_revenue_target ? Number(biz.weekly_revenue_target) : null
+      const pctOfTarget = (target && target > 0 && rev7 != null)
+        ? Math.round((rev7 / target) * 100) : null
+      const vsSWLMPct = (revSWLM != null && revSWLM > 0 && rev7 != null)
+        ? (((rev7 - revSWLM) / revSWLM) * 100).toFixed(1) + '%' : null
+      const onTrack = (target && rev7 != null)
+        ? (rev7 >= target ? 'on_track' : 'behind') : null
+      const swlmWindow = `${d35.slice(0, 10)} to ${d28.slice(0, 10)}`
+      const parts: string[] = []
+      if (rev7 != null) {
+        if (target) {
+          const gap = target - rev7
+          parts.push(`7-day revenue $${rev7.toFixed(2)} vs weekly target $${target.toFixed(2)} — ${pctOfTarget}% of target${gap > 0 ? ', $' + gap.toFixed(2) + ' short' : ', on track'}.`)
+        } else {
+          parts.push(`7-day revenue $${rev7.toFixed(2)}. Weekly target: NOT SET — if owner asks "on track?", say target not set and offer to set one. Never use any average as a proxy for a target.`)
+        }
+      }
+      if (revSWLM != null) {
+        parts.push(`Same week last month (${swlmWindow}): $${revSWLM.toFixed(2)}${vsSWLMPct ? ' (' + (Number(vsSWLMPct) >= 0 ? '+' : '') + vsSWLMPct + ' vs current week)' : ''}.`)
+      } else {
+        parts.push(`Same week last month (${swlmWindow}): no sales data found for that window.`)
+      }
+      return {
+        current_7d_revenue: rev7,
+        same_week_last_month_revenue: revSWLM,
+        same_week_window: swlmWindow,
+        weekly_revenue_target: target,
+        pct_of_target: pctOfTarget,
+        vs_same_week_pct: vsSWLMPct,
+        on_track: onTrack,
+        note: parts.join(' '),
+      }
+    })(),
     top_products_7d:  top20.map(s => ({ name: s.name, revenue: s.revenue, units: s.units })),
     slow_products_7d: bottom20.map(s => ({ name: s.name, revenue: s.revenue, units: s.units })),
     customers: {

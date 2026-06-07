@@ -258,6 +258,11 @@ const SYNTHESIS_PROMPT_BODY = `GROUNDING RULES — ABSOLUTE — NEVER BREAK:
 1. CUSTOMER COUNT: Use customers.pos_customer_count from the business data as the authoritative POS customer count. If it shows 37, state 37. NEVER default to zero or invent a number. If the field is absent, say "I don't have the POS customer count."
 2. PROMOTIONS: ONLY describe a promotion as "working", "driving results", or "boosting sales" if it appears in promotions.active (status="ACTIVE — live and running now"). If it appears in promotions.scheduled, it is NOT live — describe it ONLY as "scheduled for [date]" or "set up but not yet active." NEVER say a scheduled or inactive promotion is working or producing results, even if a RECENT_ACTION just created it.
 3. FACTUAL CLAIMS: Every count, dollar figure, percentage, or causal statement must come directly from values passed to you in the data. Never infer, estimate, or guess. If a value is missing, say "I don't have that data" — never substitute zero or an assumption.
+4. ANSWER THE QUESTION ACTUALLY ASKED — NEVER SILENTLY SUBSTITUTE A DIFFERENT METRIC:
+   - "same week last month": use VERIFIED FIGURES same_week_last_month_revenue exactly. NEVER use revenue_30d, revenue_7d/30d ratio, or any rolling average as a substitute for this comparison. If null, say "I don't have data for the equivalent week last month."
+   - "on track?" / "hit my weekly target": use VERIFIED FIGURES weekly_revenue_target. If null, say "You haven't set a weekly revenue target — I can't tell you if you're on track. Head to Weekly Reports to set one." NEVER use 30-day average, daily average, or any other metric as a proxy for a target the owner didn't set.
+   - final_briefing MUST begin by directly answering yes/no when the question is yes/no. "You're on track — at $X of your $Y target, Z% there." not "Revenue is down 35% on the monthly average."
+   - If the owner's question contains TWO parts (e.g., "on track?" AND "same week last month?"), final_briefing must answer BOTH in its 2-3 sentences.
 
 HOW ARIA RESPONDS:
 - Leads with the single most important insight as a punchy headline with the actual number
@@ -550,6 +555,31 @@ export async function runAriaCouncil(
       }
       if (scheduled.length > 0) {
         lines.push(`  scheduled_promotions = ${scheduled.map(p => `${p.name} (${(p as { status: string }).status})`).join(', ')}  ← NOT YET ACTIVE — describe as "scheduled for [date]", NEVER as "working"`)
+      }
+    }
+    // Week-tracking block — critical for "on track?" and "same week last month" questions
+    const weekTracking = ctx?.week_tracking as {
+      same_week_last_month_revenue?: number | null
+      weekly_revenue_target?: number | null
+      on_track?: string | null
+      pct_of_target?: number | null
+      vs_same_week_pct?: string | null
+      same_week_window?: string
+      note?: string
+    } | undefined
+    if (weekTracking) {
+      if (weekTracking.same_week_last_month_revenue != null) {
+        lines.push(`  same_week_last_month_revenue = ${Number(weekTracking.same_week_last_month_revenue).toFixed(2)}  ← USE THIS (not revenue_30d) when owner asks "same week last month"`)
+      } else {
+        lines.push(`  same_week_last_month_revenue = null  ← no data for that window; say so explicitly`)
+      }
+      if (weekTracking.weekly_revenue_target != null) {
+        lines.push(`  weekly_revenue_target = ${Number(weekTracking.weekly_revenue_target).toFixed(2)}  ← USE THIS for "on track?" questions`)
+        if (weekTracking.on_track != null) lines.push(`  on_track_status = ${weekTracking.on_track}  ← direct answer to "am I on track?"`)
+        if (weekTracking.pct_of_target != null) lines.push(`  pct_of_weekly_target = ${weekTracking.pct_of_target}%`)
+        if (weekTracking.vs_same_week_pct != null) lines.push(`  vs_same_week_last_month = ${weekTracking.vs_same_week_pct}`)
+      } else {
+        lines.push('  weekly_revenue_target = null  ← NO target set; if asked "on track?", say "no weekly target set" and offer to set one — NEVER use 30d average or daily average as a proxy')
       }
     }
     verifiedFiguresBlock = lines.join('\n') + '\n'

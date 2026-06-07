@@ -1248,6 +1248,12 @@ export default function AskAriaPage() {
                     : m.blocks && m.blocks.length > 0
                       ? (
                         <div>
+                          {/* Narrative first — final_briefing / stripped response before visual blocks */}
+                          {m.content && m.content.trim() && (
+                            <div style={{ marginBottom: 10 }}>
+                              <AriaMarkdown text={m.content} />
+                            </div>
+                          )}
                           {m.blocks.map((block, bi) => (
                             <BlockRenderer key={bi} block={block} onChoice={(prompt) => { send(prompt) }} />
                           ))}
