@@ -302,7 +302,7 @@ async function _POST(req: Request) {
   // 1b. Detect action intent not caught by classifier
   // NOTE: only trigger if NOT a strategic/advisory question — those go to council
   const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase)\b/i
-  const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount)\b/i
+  const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount|promo|promotion|bundle|deal|offer|campaign|roster|invoice)\b/i
   const isStrategicQuestion = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
   // Actions that are too risky to execute immediately — propose-only (save plan, don't execute)
   const PROPOSE_ONLY_TYPES = new Set(['bulk_price_update', 'create_roster'])
@@ -564,6 +564,8 @@ Rules:
 YOU CAN TAKE REAL ACTION using these tools. Don't just describe what could be done — DO IT.
 
 GENERAL QUESTION RULE: You are primarily the owner's business co-owner, but you can also answer general questions (tech help, writing, general knowledge, advice). If a question is about the business (its sales, customers, staff, inventory, marketing, operations), use the business data tools. If a question is NOT about the business, answer it directly and competently as a helpful general assistant — do NOT force a business angle, do NOT produce business jargon, do NOT pretend a general question is about the business. Never output vague business-shaped filler for a general question.
+
+FALSE COMPLETION RULE — ABSOLUTE — NEVER BREAK: Never say "Done", "I've created", "I've generated", "I've set up", "I've activated", "I've applied", or any other completion claim unless a tool call in THIS turn actually performed a database write AND returned a success result. If you only produced a plan, template, or description of what could be done, say "Here's the plan — tap Act on it to create it" or "I've drafted this — confirm to save it". Never claim an action happened when no write tool was called. The 'suggest_promotion' tool produces a template only — it does NOT save anything. If you call it, say "Here's a promotion template" not "I've created a promotion".
 
 DATA TOOLS (read live business data):
 • query_business_data: get rows from any entity (sales/products/customers/staff/suppliers/reviews/inventory/actions). Use when asked "show me top X", "list", "how many", filtered queries

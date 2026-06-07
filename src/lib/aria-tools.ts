@@ -110,7 +110,7 @@ export const ARIA_POS_TOOLS: Tool[] = [
   },
   {
     name: 'suggest_promotion',
-    description: 'Generate a promotion rule JSON for a given business goal.',
+    description: 'Generate a promotion rule TEMPLATE for review — does NOT save to the database. Use this to show the owner what a promotion would look like. If they want to actually create it, the Act on it button handles the real write.',
     input_schema: {
       type: 'object',
       properties: {

@@ -216,6 +216,54 @@ export async function executeAction(
         break
       }
 
+      case 'create_promotion': {
+        const {
+          name, promotion_type, discount_value,
+          starts_at, ends_at, min_spend, max_total_uses,
+          stacks_with_others, category, notes,
+        } = action.payload as {
+          name: string; promotion_type: string; discount_value: number
+          starts_at?: string; ends_at?: string; min_spend?: number
+          max_total_uses?: number; stacks_with_others?: boolean
+          category?: string; notes?: string
+        }
+        if (!name || !promotion_type || discount_value == null) {
+          return { ok: false, affected_count: 0, error: 'name, promotion_type, and discount_value are required', rollback_available: false }
+        }
+        entityType = 'pos_promotions'
+        const promoRow: Record<string, unknown> = {
+          business_id: businessId,
+          name,
+          promotion_type,
+          discount_value: Number(discount_value),
+          active: false,
+          starts_at: starts_at ?? null,
+          ends_at: ends_at ?? null,
+          min_spend: min_spend ?? null,
+          max_total_uses: max_total_uses ?? null,
+          stacks_with_others: stacks_with_others ?? false,
+          ai_generated: true,
+          updated_at: new Date().toISOString(),
+        }
+        if (category) promoRow.category = category
+        if (notes) promoRow.notes = notes
+
+        const { data: promo, error: promoErr } = await supabase
+          .from('pos_promotions').insert(promoRow).select('id,name').single()
+        if (promoErr || !promo) {
+          return { ok: false, affected_count: 0, error: promoErr?.message ?? 'Failed to create promotion', rollback_available: false }
+        }
+        entityIds = [(promo as { id: string }).id]
+        affectedCount = 1
+        beforeState = {}
+        afterState = {
+          promotion_id: (promo as { id: string }).id,
+          name: (promo as { name: string }).name,
+          promotion_type, discount_value, active: false,
+        }
+        break
+      }
+
       default:
         return { ok: false, affected_count: 0, error: `Action type "${action.type}" not yet supported`, rollback_available: false }
     }

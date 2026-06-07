@@ -36,7 +36,7 @@ SUPPORTED ACTIONS (return one of these types):
   adjust_stock         — add/subtract/set stock_quantity on products
   apply_category_discount — apply a discount % to a category
   set_low_stock_threshold — update low_stock_threshold for products
-  create_promotion     — create a promotion via Aria Brain
+  create_promotion     — create a promotion rule saved to pos_promotions (payload: name, promotion_type ["percent_off"|"amount_off"|"bogo"], discount_value [number], starts_at [YYYY-MM-DD], ends_at? [YYYY-MM-DD], min_spend? [number], max_total_uses? [number], stacks_with_others [boolean, default false], category? [string for category-scoped promos], notes? [string])
   update_staff_permission — change staff permissions
   send_staff_message   — send a message to a staff member
   create_roster        — draft a staff roster for a week (payload: name, week_start YYYY-MM-DD, week_end?, notes?)
