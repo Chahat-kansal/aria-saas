@@ -615,7 +615,13 @@ Each item in the array must have these exact fields:
 - metric_label: string (e.g. "this week" or "at risk")
 - trend: "up" | "down" | "flat" | null
 
-Return 3-5 items. Use real numbers from the data. Do not invent data.`,
+Return 3-5 items. Use real numbers from the data. Do not invent data.
+
+ANTI-HALLUCINATION (non-negotiable):
+- Every number, count, and causal claim MUST come from the business data provided. Never invent, round, or estimate.
+- NEVER claim a promotion is "working" unless it is explicitly active AND started — otherwise call it "scheduled".
+- NEVER state a customer count you weren't given — absence of data is not zero.
+- Cite exact figures from the data (e.g. revenue_last_7_days_aud) — do not round or alter them.`,
         messages: [{
           role: 'user',
           content: `Today: ${todayDate}
