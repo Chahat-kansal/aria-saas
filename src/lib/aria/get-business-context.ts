@@ -28,6 +28,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     hypothesisOutcomes,
     topLeakRaw,
     expenses7Raw,
+    posCustomerCountRaw,
+    promotionsRaw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -74,6 +76,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .select('amount')
       .eq('business_id', businessId)
       .gte('expense_date', d7),
+    // Real POS customer count — distinct from the CRM 'customers' table
+    db.from('pos_customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
+    // Promotion status — prevents hallucinated "working" claims about scheduled promos
+    db.from('pos_promotions')
+      .select('id, name, promotion_type, discount_amount, active, starts_at, ends_at, current_uses')
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ])
 
   // SKU aggregation from sale_items
@@ -118,6 +128,22 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     : 0
   const net7 = (rev7 ?? 0) - expenses7Total
   const dailyNet = net7 / 7
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const posCustomerCount: number | null = (posCustomerCountRaw as any).status === 'fulfilled'
+    ? ((posCustomerCountRaw as any).value?.count ?? 0)
+    : null
+
+  const todayStr = now.toISOString().slice(0, 10)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allPromos = (promotionsRaw as any).status === 'fulfilled'
+    ? ((promotionsRaw as any).value?.data ?? []) as Array<{
+        id: string; name: string; promotion_type: string; discount_amount: number | null
+        active: boolean; starts_at: string | null; ends_at: string | null; current_uses: number
+      }>
+    : []
+  const activePromos = allPromos.filter(p => p.active && (!p.starts_at || p.starts_at <= todayStr))
+  const scheduledPromos = allPromos.filter(p => !p.active || (!!p.starts_at && p.starts_at > todayStr))
 
   const outcomeData = hypothesisOutcomes.status === 'fulfilled' ? (hypothesisOutcomes.value.data ?? []) : []
   const outcomes_arr = (outcomeData) as Array<{ outcome_verdict: string | null }>
@@ -171,6 +197,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     top_products_7d:  top20.map(s => ({ name: s.name, revenue: s.revenue, units: s.units })),
     slow_products_7d: bottom20.map(s => ({ name: s.name, revenue: s.revenue, units: s.units })),
     customers: {
+      pos_customer_count: posCustomerCount,
       total:           custs.length,
       top_5_by_spend:  custs.slice(0, 5).map((c: any) => ({
         name: c.name, total_spent: c.total_spent, visit_count: c.visit_count
@@ -200,6 +227,23 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       daily_net: Math.round(dailyNet * 100) / 100,
       runway_signal: dailyNet < 0 ? 'Spending exceeds revenue — monitor cash closely' : 'Revenue exceeding expenses — healthy position',
       summary: 'Estimated 7-day net position: $' + net7.toFixed(0) + '. Daily net: $' + dailyNet.toFixed(2) + '/day.',
+    },
+    promotions: {
+      as_of: todayStr,
+      active_count: activePromos.length,
+      scheduled_count: scheduledPromos.length,
+      active: activePromos.slice(0, 5).map(p => ({
+        name: p.name, type: p.promotion_type, discount: p.discount_amount,
+        starts_at: p.starts_at, ends_at: p.ends_at, uses: p.current_uses,
+        status: 'ACTIVE — live and running now',
+      })),
+      scheduled: scheduledPromos.slice(0, 5).map(p => ({
+        name: p.name, type: p.promotion_type, discount: p.discount_amount,
+        starts_at: p.starts_at, ends_at: p.ends_at,
+        status: p.starts_at && p.starts_at > todayStr
+          ? `SCHEDULED — not live yet (starts ${p.starts_at})`
+          : 'INACTIVE — created but not yet activated',
+      })),
     },
     top_profit_leak: topLeakData ? {
       title: topLeakData.title,

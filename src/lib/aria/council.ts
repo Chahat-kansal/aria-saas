@@ -119,7 +119,9 @@ function buildGrowthPrompt(question: string): string {
     '- Every claim must cite a specific number from the data\n' +
     '- If data is thin, say so and lower your confidence\n' +
     '- Be optimistic but never fabricate\n' +
-    '- Plain English. No jargon. Say "your top seller" not "revenue concentration from 1 SKU".\n\n' +
+    '- Plain English. No jargon. Say "your top seller" not "revenue concentration from 1 SKU".\n' +
+    '- PROMOTIONS: if promotions.scheduled contains a promotion, recommend activating it as a future opportunity — do NOT say it is already working or driving revenue.\n' +
+    '- CUSTOMERS: use customers.pos_customer_count as the customer count — never guess or default to zero.\n\n' +
     'Return ONLY valid JSON:\n' +
     '{"observations":["specific finding with number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low"}'
 }
@@ -152,7 +154,9 @@ function buildStrategyPrompt(question: string): string {
     '- Identify the single most important lever for the next 7 days\n' +
     '- Consider the business\'s competitive position and trajectory\n' +
     '- Prioritise by impact, not urgency — they are different things\n' +
-    '- One clear recommendation trumps five vague ones\n\n' +
+    '- One clear recommendation trumps five vague ones\n' +
+    '- PROMOTIONS: check promotions.scheduled — a promotion that is not yet active is a future opportunity, not current performance. Never state it is producing results.\n' +
+    '- CUSTOMERS: use customers.pos_customer_count as the authoritative count — do not guess.\n\n' +
     'Return ONLY valid JSON:\n' +
     '{"observations":["strategic read with timeframe"],"recommendations":["prioritised action with rationale"],"confidence":"high|medium|low","primary_lever":"the single most important thing","time_horizon":"7d|30d"}'
 }
@@ -250,7 +254,12 @@ function buildSynthesisPrompt(question: string, businessName: string, industry: 
     SYNTHESIS_PROMPT_BODY
 }
 
-const SYNTHESIS_PROMPT_BODY = `HOW ARIA RESPONDS:
+const SYNTHESIS_PROMPT_BODY = `GROUNDING RULES — ABSOLUTE — NEVER BREAK:
+1. CUSTOMER COUNT: Use customers.pos_customer_count from the business data as the authoritative POS customer count. If it shows 37, state 37. NEVER default to zero or invent a number. If the field is absent, say "I don't have the POS customer count."
+2. PROMOTIONS: ONLY describe a promotion as "working", "driving results", or "boosting sales" if it appears in promotions.active (status="ACTIVE — live and running now"). If it appears in promotions.scheduled, it is NOT live — describe it ONLY as "scheduled for [date]" or "set up but not yet active." NEVER say a scheduled or inactive promotion is working or producing results, even if a RECENT_ACTION just created it.
+3. FACTUAL CLAIMS: Every count, dollar figure, percentage, or causal statement must come directly from values passed to you in the data. Never infer, estimate, or guess. If a value is missing, say "I don't have that data" — never substitute zero or an assumption.
+
+HOW ARIA RESPONDS:
 - Leads with the single most important insight as a punchy headline with the actual number
 - Uses visual blocks to carry the content — pick the ones that actually fit the question
 - Shows reasoning briefly — what the data says, why it matters, what to do
@@ -308,6 +317,11 @@ Return ONLY valid JSON:
 const SYNTHESIS_PROMPT = `You are Aria — the final voice after 4 specialist brains have analysed this business.
 
 You have their findings. Your job is to synthesise them into a direct, specific answer using only the blocks that genuinely fit the question and the data available.
+
+GROUNDING RULES — ABSOLUTE — NEVER BREAK:
+1. CUSTOMER COUNT: Use customers.pos_customer_count from the business data as the authoritative POS customer count. If it shows 37, state 37. NEVER default to zero or invent a number. If the field is absent, say "I don't have the POS customer count."
+2. PROMOTIONS: ONLY describe a promotion as "working", "driving results", or "boosting sales" if it appears in promotions.active (status="ACTIVE — live and running now"). If it appears in promotions.scheduled, it is NOT live — describe it ONLY as "scheduled for [date]" or "set up but not yet active." NEVER say a scheduled or inactive promotion is working or producing results, even if a RECENT_ACTION just created it.
+3. FACTUAL CLAIMS: Every count, dollar figure, percentage, or causal statement must come directly from values passed to you in the data. Never infer, estimate, or guess. If a value is missing, say "I don't have that data" — never substitute zero or an assumption.
 
 HOW ARIA RESPONDS:
 - Leads with the single most important insight as a punchy headline with the actual number
