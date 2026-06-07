@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getWeatherContext } from './get-weather-context'
+import { CANONICAL_COLS } from './schema-registry'
 
 export async function getBusinessContext(businessId: string): Promise<string> {
   const supabase = createServerSupabaseClient()
@@ -30,6 +31,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     expenses7Raw,
     posCustomerCountRaw,
     posCustomerEmailCountRaw,
+    posConsentCountRaw,
     promotionsRaw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
@@ -45,8 +47,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', ly30start).lte('created_at', ly30end).neq('status', 'voided'),
-    // SKU aggregation from sale_items
-    db.from('pos_sale_items').select('product_name, quantity, unit_price')
+    // SKU aggregation from sale_items — line_total canonical (RULE 6, product_sales registry domain)
+    db.from('pos_sale_items').select(`product_name, ${CANONICAL_COLS.PRODUCT_UNITS}, ${CANONICAL_COLS.PRODUCT_REVENUE}`)
       .in('sale_id',
         (await db.from('pos_sales').select('id')
           .eq('business_id', businessId).gte('created_at', d7).neq('status', 'voided')
@@ -81,6 +83,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     db.from('pos_customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
     // POS customers with a non-null email
     db.from('pos_customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).not('email', 'is', null).neq('email', ''),
+    // Marketing-consented customers only — the ONLY safe emailable/textable audience (registry: marketing_consent domain)
+    db.from('pos_customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq(CANONICAL_COLS.MARKETING_CONSENT, true),
     // Promotion status — prevents hallucinated "working" claims about scheduled promos
     db.from('pos_promotions')
       .select('id, name, promotion_type, discount_amount, active, starts_at, ends_at, current_uses')
@@ -89,14 +93,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .limit(20),
   ])
 
-  // SKU aggregation from sale_items
+  // SKU aggregation from sale_items — use line_total (registry product_sales canonical, RULE 6)
   const skuMap: Record<string, { revenue: number; units: number; name: string }> = {}
   if (saleItems7.status === 'fulfilled' && saleItems7.value.data) {
-    for (const item of saleItems7.value.data) {
-      const key = item.product_name ?? 'unknown'
+    for (const item of saleItems7.value.data as Array<Record<string, unknown>>) {
+      const key = (item.product_name as string | null) ?? 'unknown'
       if (!skuMap[key]) skuMap[key] = { revenue: 0, units: 0, name: key }
-      skuMap[key].revenue += (item.unit_price ?? 0) * (item.quantity ?? 1)
-      skuMap[key].units  += item.quantity ?? 1
+      skuMap[key].revenue += Number(item[CANONICAL_COLS.PRODUCT_REVENUE] ?? 0)
+      skuMap[key].units  += Number(item[CANONICAL_COLS.PRODUCT_UNITS]   ?? 1)
     }
   }
   const skus     = Object.values(skuMap).sort((a, b) => b.revenue - a.revenue)
@@ -139,6 +143,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const posCustomerEmailCount: number | null = (posCustomerEmailCountRaw as any).status === 'fulfilled'
     ? ((posCustomerEmailCountRaw as any).value?.count ?? 0)
+    : null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const posConsentCount: number | null = (posConsentCountRaw as any).status === 'fulfilled'
+    ? ((posConsentCountRaw as any).value?.count ?? 0)
     : null
 
   const todayStr = now.toISOString().slice(0, 10)
@@ -206,6 +214,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     customers: {
       pos_customer_count: posCustomerCount,
       with_email_count: posCustomerEmailCount,
+      marketing_consented_count: posConsentCount,
+      marketing_consent_caveat: posConsentCount !== null && posCustomerCount !== null
+        ? `MANDATORY: only ${posConsentCount} of ${posCustomerCount} customers have consented to marketing. Emailable/textable audience = ${posConsentCount}, NOT ${posCustomerCount}. Always state this when suggesting campaigns.`
+        : 'marketing consent count unavailable — do not state a campaign audience size without querying live',
       total:           custs.length,
       top_5_by_spend:  custs.slice(0, 5).map((c: any) => ({
         name: c.name, total_spent: c.total_spent, visit_count: c.visit_count
