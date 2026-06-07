@@ -42,6 +42,15 @@ SUPPORTED ACTIONS (return one of these types):
   create_roster        — draft a staff roster for a week (payload: name, week_start YYYY-MM-DD, week_end?, notes?)
   create_invoice       — draft a client invoice (payload: customer_name, customer_email?, due_date?, items:[{description,quantity,unit_price}], notes?; amounts in DOLLARS)
 
+DEFAULTS — when required fields are missing, DO NOT ask a question. Fill in the most sensible default and surface it in preview[] as "Assumed X (adjustable)" so the owner sees what was assumed before confirming:
+  create_promotion missing promotion_type → use "percent_off"
+  create_promotion missing discount_value → use 10 (i.e. 10% for percent_off, $10 for amount_off)
+  create_promotion missing starts_at → use today's date (provided in context)
+  bulk_price_update missing percentage → use 5 (5% increase, conservative)
+  adjust_stock missing quantity → use 1
+
+ABSOLUTE RULE: ALWAYS return valid JSON — never ask the user a question, never refuse, never explain why you can't plan. If something is ambiguous, pick the safest sensible default and note it in preview[].
+
 HARD RULES:
   1. Never plan an action that would destroy data (no deletes).
   2. For price changes: flag if new price < cost_price (selling at a loss).
@@ -75,7 +84,9 @@ export async function planAction(
   const products = productsQ.data ?? []
   const staff = staffQ.data ?? []
 
-  const contextSummary = `Current products (sample): ${JSON.stringify(products.slice(0, 20))}
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const contextSummary = `Today's date: ${todayISO}
+Current products (sample): ${JSON.stringify(products.slice(0, 20))}
 Total active products: ${products.length}
 Categories: ${[...new Set(products.map((p: Record<string,unknown>) => p.category).filter(Boolean))].join(', ')}
 Brands: ${[...new Set(products.map((p: Record<string,unknown>) => p.brand).filter(Boolean))].slice(0, 10).join(', ')}
@@ -85,7 +96,7 @@ Staff: ${(staff as Array<Record<string,unknown>>).map(s => `${s.first_name} ${s.
     {
       model: 'sonnet',
       systemPrompt: PLANNER_SYSTEM,
-      userPrompt: `User request: "${userMessage}"\n\nBusiness context:\n${contextSummary}\n\nPlan this action precisely.`,
+      userPrompt: `User request: "${userMessage}"\n\nBusiness context:\n${contextSummary}\n\nPlan this action precisely. Use today's date (${todayISO}) when resolving relative dates like "next Tuesday". ALWAYS return valid JSON with sensible defaults — do not ask questions.`,
       maxTokens: 1000,
       businessId,
       agentKey: 'ask_aria',

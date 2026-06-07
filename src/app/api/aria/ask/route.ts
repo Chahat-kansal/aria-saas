@@ -309,30 +309,48 @@ async function _POST(req: Request) {
   if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question' && !isStrategicQuestion) {
     const planned = await planAction(message, bid)
     if (planned) {
-      if (conversationId) {
-        await supabase.from('aria_conversations').update({
-          pending_action: planned,
-          pending_action_expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
-        }).eq('id', conversationId).eq('business_id', bid)
-      }
       const propose_only = PROPOSE_ONLY_TYPES.has(planned.type)
       const previewText = propose_only
         ? `I've drafted a plan: ${planned.title}. This type of change needs your review before execution — I'll save it to your Actions dashboard.`
         : `I can ${planned.title.toLowerCase()}. Choose how to proceed:`
-      let savedConvId = conversationId
+
+      // BUG 2 FIX: create/update the conversation FIRST so we always have an ID,
+      // then attach pending_action to it — even for brand-new conversations (conversationId=null).
+      let forkConvId = conversationId
       try {
-        savedConvId = await upsertConversation(bid, user.id, conversationId, message, previewText, 'action_request')
+        forkConvId = await upsertConversation(bid, user.id, conversationId, message, previewText, 'action_request')
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (action_request):', (e as Error).message, 'conv_id:', conversationId)
       }
+      if (forkConvId) {
+        await supabase.from('aria_conversations').update({
+          pending_action: planned,
+          pending_action_expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+        }).eq('id', forkConvId).eq('business_id', bid)
+      }
       return NextResponse.json({
         response: previewText,
-        conversation_id: savedConvId ?? conversationId,
+        conversation_id: forkConvId ?? conversationId,
         intent: 'action_request',
         action: { action: 'fork', planned, propose_only },
         cost_usd_cents: 0,
       })
     }
+    // BUG 1 FALLBACK: planAction returned null (API failure or truly unresolvable request).
+    // Return a direct, non-looping prompt instead of falling through to the main LLM
+    // which would loop endlessly asking clarifying questions per rule 5.
+    const clarifyReply = `I can help create that — I just need a couple of quick details: what type of promotion (e.g. 10% off, $5 off, buy-one-get-one) and when should it start?`
+    let clarifyConvId = conversationId
+    try {
+      clarifyConvId = await upsertConversation(bid, user.id, conversationId, message, clarifyReply, 'action_request')
+    } catch (_e) { /* non-fatal */ }
+    return NextResponse.json({
+      response: clarifyReply,
+      conversation_id: clarifyConvId ?? conversationId,
+      intent: 'action_request',
+      action: null,
+      cost_usd_cents: 0,
+    })
   }
 
   // GENERAL fast-path — non-business question: skip all business context, answer directly as a capable assistant
