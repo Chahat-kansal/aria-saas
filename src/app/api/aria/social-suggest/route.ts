@@ -13,6 +13,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { getRelevantImage } from '@/lib/images/pixabay'
 // Registry: canonical data sources — do NOT bypass with raw column reads
 // pos_sales.total_amount = revenue (neq voided); pos_sale_items.line_total = item revenue
+import { computeSlowDay } from '@/lib/aria/slow-day'
 
 function getNextPostTime(timeStr: string, _platform: string, _prefs: any): string {
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -86,7 +87,6 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'no_connections', message: 'Connect at least one social account before generating posts.', posts: [] }, { status: 400 });
   }
 
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
   const sevenDaysAgo  = new Date(Date.now() - 7  * 86400000).toISOString()
   const weekStart     = new Date(Date.now() - 7  * 86400000).toISOString().split('T')[0]
 
@@ -95,16 +95,12 @@ async function _POST(req: Request) {
     { data: topItems },
     { data: prefs },
     { data: promotions },
-    { data: salesHistory },
   ] = await Promise.all([
     supabase.from('businesses').select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle(),
     // Registry: pos_sale_items.line_total is canonical item revenue (RULE 6 — no total_price)
     supabaseAdmin.from('pos_sale_items').select('product_name,quantity,line_total').eq('business_id', business_id).gte('created_at', sevenDaysAgo),
     supabaseAdmin.from('social_preferences').select('*').eq('business_id', business_id).maybeSingle(),
     supabaseAdmin.from('pos_promotions').select('name,discount_percent,promotion_type').eq('business_id', business_id).eq('active', true),
-    // Registry: pos_sales.total_amount is canonical revenue (neq voided) — 90-day window for slow-day calc
-    // limit(3000) avoids the 1000-row default cap truncating a busy business's 90-day history
-    supabaseAdmin.from('pos_sales').select('created_at,total_amount').eq('business_id', business_id).neq('status', 'voided').gte('created_at', ninetyDaysAgo).limit(3000),
   ]);
 
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
@@ -147,40 +143,13 @@ async function _POST(req: Request) {
     ? `Top products sold this week: ${topProducts.join(', ')}`
     : `Business type: ${biz.industry ?? 'retail'}. No sales recorded yet — generate general brand awareness content.`
 
-  // ── Slowest day signal (registry: pos_sales.total_amount, 90-day window) ─────
-  // Group by calendar date first (daily totals), then average by day-of-week.
-  // This gives daily revenue per DOW — a much more reliable "slow day" signal
-  // than per-transaction averages, which conflate basket size with traffic.
-  const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-  const dailyRevenue: Record<string, number> = {}    // "YYYY-MM-DD" → revenue total
-  for (const sale of (salesHistory ?? [])) {
-    const dateKey = sale.created_at.slice(0, 10)   // YYYY-MM-DD
-    dailyRevenue[dateKey] = (dailyRevenue[dateKey] ?? 0) + Number(sale.total_amount ?? 0)
-  }
-  // Now bucket daily totals by day-of-week
-  const dowBuckets: Record<number, { total: number; days: number }> = {}
-  for (const [dateStr, rev] of Object.entries(dailyRevenue)) {
-    const dow = new Date(dateStr).getDay()
-    const b = dowBuckets[dow] ?? { total: 0, days: 0 }
-    b.total += rev
-    b.days++
-    dowBuckets[dow] = b
-  }
-  const totalDailyRevenue = Object.values(dowBuckets).reduce((s, d) => s + d.total, 0)
-  const totalDays          = Object.values(dowBuckets).reduce((s, d) => s + d.days, 0)
-  const overallDailyAvg    = totalDays > 0 ? totalDailyRevenue / totalDays : 0
-
-  // Require ≥8 distinct calendar days for each DOW to ensure reliability
-  const slowDayEntry = Object.entries(dowBuckets)
-    .filter(([, d]) => d.days >= 8)
-    .map(([dow, d]) => ({ dow: Number(dow), avgRev: d.total / d.days }))
-    .sort((a, b) => a.avgRev - b.avgRev)[0] ?? null
-
-  const slowestDaySignal = slowDayEntry ? {
-    name: DOW_NAMES[slowDayEntry.dow],
-    dow:  slowDayEntry.dow,
-    avgRevenue: slowDayEntry.avgRev,
-    overallDailyAvg,
+  // ── Slowest day signal (canonical: computeSlowDay — 28-day, UTC DOW, total_amount) ───
+  const slowDayData = await computeSlowDay(business_id).catch(() => null)
+  const slowestDaySignal = slowDayData ? {
+    name: slowDayData.slowest.name,
+    dow:  slowDayData.slowest.dow,
+    avgRevenue: slowDayData.slowest.avgRev,
+    overallDailyAvg: slowDayData.overallDailyAvg,
   } : null
 
   // ── Optional roster signal (well-staffed on slow day = good time to promote) ─
@@ -203,7 +172,7 @@ async function _POST(req: Request) {
   if (slowestDaySignal) {
     const sd = slowestDaySignal
     signalLines.push(
-      `Verified slowest day: ${sd.name} (avg $${sd.avgRevenue.toFixed(2)}/day vs $${sd.overallDailyAvg.toFixed(2)} overall daily avg — computed from 90 days of POS history)`
+      `Verified slowest day: ${sd.name} (avg $${sd.avgRevenue.toFixed(2)}/day vs $${sd.overallDailyAvg.toFixed(2)} overall daily avg — computed from 28 days of POS history)`
     )
     if (rosterSignal) {
       signalLines.push(`${sd.name} roster: ${rosterSignal.staffCount} staff scheduled — well-staffed and ready for a promotion push`)

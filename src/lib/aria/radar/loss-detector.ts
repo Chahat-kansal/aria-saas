@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
+import { computeSlowDay } from '@/lib/aria/slow-day'
 
 export interface LossSignal {
   id: string
@@ -36,60 +37,32 @@ export async function detectLosses(businessId: string): Promise<LossSignal[]> {
   return signals.sort((a, b) => b.estimated_monthly_loss_aud - a.estimated_monthly_loss_aud).slice(0, 4)
 }
 
-async function detectSlowPeriods(businessId: string, since: string): Promise<LossSignal | null> {
-  const { data: sales } = await supabaseAdmin
-    .from('pos_sales')
-    .select('created_at, total_amount')
-    .eq('business_id', businessId)
-    .neq('status', 'voided')
-    .gte('created_at', since)
-    .limit(5000)
+async function detectSlowPeriods(businessId: string, _since: string): Promise<LossSignal | null> {
+  const slowDayResult = await computeSlowDay(businessId)
+  if (!slowDayResult || slowDayResult.all.length < 2) return null
 
-  if (!sales || sales.length < 10) return null
+  const all = slowDayResult.all  // sorted ascending by avgRev
+  const avgs = all.map(d => d.avgRev)
+  const medianAvg = avgs[Math.floor(avgs.length / 2)]
+  const slowest = all[0]
 
-  const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const dowTotals: Record<number, number> = {}
-  const dowDates: Record<number, Set<string>> = {}
+  if (!slowest || slowest.avgRev >= medianAvg * 0.85) return null
 
-  for (const sale of sales) {
-    const d = new Date(sale.created_at as string)
-    const dow = d.getDay()
-    const dateKey = (sale.created_at as string).slice(0, 10)
-    dowTotals[dow] = (dowTotals[dow] ?? 0) + Number(sale.total_amount ?? 0)
-    if (!dowDates[dow]) dowDates[dow] = new Set()
-    dowDates[dow].add(dateKey)
-  }
-
-  const dowEntries = Object.entries(dowTotals)
-  if (dowEntries.length < 3) return null
-
-  const dowAvgs = dowEntries.map(([dow, total]) => {
-    const occurrences = dowDates[Number(dow)].size || 1
-    return { dow: Number(dow), avg: total / occurrences }
-  }).sort((a, b) => a.avg - b.avg)
-
-  const avgs = dowAvgs.map(d => d.avg)
-  const sorted = [...avgs].sort((a, b) => a - b)
-  const medianAvg = sorted[Math.floor(sorted.length / 2)]
-  const slowest = dowAvgs[0]
-
-  if (!slowest || slowest.avg >= medianAvg * 0.85) return null
-
-  const gapPerOccurrence = medianAvg - slowest.avg
+  const gapPerOccurrence = medianAvg - slowest.avgRev
   const monthlyLoss = Math.round(gapPerOccurrence * 4.3)
   const gapPct = Math.round((gapPerOccurrence / medianAvg) * 100)
 
   return {
-    id: 'slow_period_' + DOW_NAMES[slowest.dow].toLowerCase(),
+    id: 'slow_period_' + slowest.name.toLowerCase(),
     type: 'slow_period',
-    title: DOW_NAMES[slowest.dow] + ' revenue ' + gapPct + '% below median',
-    insight: DOW_NAMES[slowest.dow] + 's average $' + Math.round(slowest.avg) + ' vs $' + Math.round(medianAvg) + ' median — $' + Math.round(gapPerOccurrence) + ' gap per ' + DOW_NAMES[slowest.dow] + ', ~$' + monthlyLoss + '/month.',
-    solution: 'Run a ' + DOW_NAMES[slowest.dow] + '-specific promotion, event, or staff-led push to drive foot traffic on your quietest day. Target existing customers with a day-of-week SMS offer.',
+    title: slowest.name + ' revenue ' + gapPct + '% below median',
+    insight: slowest.name + 's average $' + Math.round(slowest.avgRev) + ' vs $' + Math.round(medianAvg) + ' median — $' + Math.round(gapPerOccurrence) + ' gap per ' + slowest.name + ', ~$' + monthlyLoss + '/month.',
+    solution: 'Run a ' + slowest.name + '-specific promotion, event, or staff-led push to drive foot traffic on your quietest day. Target existing customers with a day-of-week SMS offer.',
     estimated_monthly_loss_aud: monthlyLoss,
     propose_only: true,
     payload: {
-      slowest_day: DOW_NAMES[slowest.dow],
-      avg_revenue_aud: Math.round(slowest.avg),
+      slowest_day: slowest.name,
+      avg_revenue_aud: Math.round(slowest.avgRev),
       median_avg_aud: Math.round(medianAvg),
       gap_per_occurrence_aud: Math.round(gapPerOccurrence),
     },

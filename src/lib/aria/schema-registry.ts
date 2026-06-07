@@ -148,22 +148,26 @@ export const SCHEMA_REGISTRY: Record<string, RegistryEntry> = {
     domain: 'slow_day',
     description: 'Day-of-week with the lowest average daily revenue — MUST use daily-bucketing method, not per-transaction count',
     canonical_table: 'pos_sales',
-    canonical_column: 'created_at (grouped to calendar date), total_amount',
+    canonical_column: 'total_amount (day-level revenue only — NOT per-product; use pos_sale_items.line_total for per-product breakdowns)',
     canonical_query_description:
       'Step 1: Group each calendar date → SUM(total_amount) for that day (daily bucket). ' +
-      'Step 2: Group calendar dates by day-of-week → AVERAGE of the daily SUM values. ' +
+      'Step 2: Group calendar dates by DOW (UTC) → AVERAGE of the daily SUM values. ' +
       'Step 3: Rank ascending → lowest average daily revenue = slowest day. ' +
-      'Requirements: ≥8 distinct calendar days per DOW for reliability; 90-day window; neq(status, voided); limit(3000) to exceed 1000-row default cap.',
+      'Requirements: ≥3 distinct calendar days per DOW; 28-day window (4 of each weekday, always satisfies ≥3); neq(status, voided); limit(3000). ' +
+      'DOW: UTC — extract as dateStr.slice(0,10) + "T00:00:00Z" → getUTCDay() to avoid AEST/UTC drift. ' +
+      'Implementation: import computeSlowDay from @/lib/aria/slow-day — the single canonical implementation.',
     banned_sources: [
       'COUNT of sales rows per DOW (counts transactions, not revenue — skews toward high-volume-low-value days)',
       'SUM(total_amount) per DOW / COUNT(sales rows) (averages transaction value, not daily revenue)',
       'get_slow_days RPC (unverified stored procedure — may use banned method internally)',
+      'pos_sale_items.line_total for slow-day (line_total is per-product only; total_amount is the day-level canonical)',
+      'new Date(dateStr).getDay() (returns local system timezone DOW — causes AEST vs UTC mismatch)',
     ],
     caveat:
-      'Verified ground truth (reference business, 90-day window): slowest day = Tuesday ' +
-      '(avg $232.89/day vs $349.88 overall daily avg). ' +
+      'Verified ground truth (reference business ff5055a0, 28-day window): Tuesday = $392.02/day. ' +
+      'Cross-checked to the cent against direct SQL aggregation. ' +
       'Always compute live — never hard-code this value for a specific business. ' +
-      'Skip any DOW with fewer than 8 distinct calendar days (insufficient sample).',
+      'Skip any DOW with fewer than 3 distinct calendar days (28d window always satisfies this).',
     completeness_check:
       'SELECT DATE(created_at) AS d, EXTRACT(DOW FROM created_at) AS dow, SUM(total_amount) AS daily_rev ' +
       "FROM pos_sales WHERE business_id = $bid AND status != 'voided' " +

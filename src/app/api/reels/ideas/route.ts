@@ -6,50 +6,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { CANONICAL_COLS, getCaveat } from '@/lib/aria/schema-registry'
+import { computeSlowDay } from '@/lib/aria/slow-day'
 
 const anthropic = new Anthropic()
-
-// Registry-canonical DOW names aligned with JS getDay() (0=Sunday)
-const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
-// Registry slow_day method: daily-bucketing over 90 days (neq voided, limit 3000)
-async function computeSlowDay(business_id: string): Promise<{ name: string; avgRev: number } | null> {
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-  const { data: sales } = await supabaseAdmin
-    .from('pos_sales')
-    .select('created_at,total_amount')
-    .eq('business_id', business_id)
-    .neq('status', 'voided')
-    .gte('created_at', ninetyDaysAgo)
-    .limit(3000)
-
-  if (!sales?.length) return null
-
-  // Step 1: bucket by calendar date
-  const dailyRevenue: Record<string, number> = {}
-  for (const sale of sales) {
-    const dateKey = (sale.created_at as string).slice(0, 10)
-    dailyRevenue[dateKey] = (dailyRevenue[dateKey] ?? 0) + Number(sale.total_amount ?? 0)
-  }
-
-  // Step 2: group daily totals by DOW, average them
-  const dowBuckets: Record<number, { total: number; days: number }> = {}
-  for (const [dateStr, rev] of Object.entries(dailyRevenue)) {
-    const dow = new Date(dateStr).getDay()
-    const b = dowBuckets[dow] ?? { total: 0, days: 0 }
-    b.total += rev
-    b.days++
-    dowBuckets[dow] = b
-  }
-
-  // Step 3: require ≥8 calendar days per DOW; rank ascending
-  const slowEntry = Object.entries(dowBuckets)
-    .filter(([, d]) => d.days >= 8)
-    .map(([dow, d]) => ({ dow: Number(dow), avgRev: d.total / d.days }))
-    .sort((a, b) => a.avgRev - b.avgRev)[0] ?? null
-
-  return slowEntry ? { name: DOW_NAMES[slowEntry.dow], avgRev: slowEntry.avgRev } : null
-}
 
 export async function GET(req: NextRequest) {
   const supabase = createServerSupabaseClient()
@@ -165,7 +124,7 @@ export async function GET(req: NextRequest) {
     business_name: biz.name,
     industry: biz.industry,
     top_products: topProducts,
-    slow_day: slowDay ? { name: slowDay.name, avg_daily_revenue: slowDay.avgRev.toFixed(2) } : null,
+    slow_day: slowDay ? { name: slowDay.slowest.name, avg_daily_revenue: slowDay.slowest.avgRev.toFixed(2) } : null,
     low_stock: lowStock,
     new_products: newProducts,
     recent_reviews: recentReviews,
@@ -181,7 +140,7 @@ export async function GET(req: NextRequest) {
 
 Business: ${biz.name} (${biz.industry})
 Top selling products this week (by revenue from live POS): ${JSON.stringify(topProducts)}
-Slowest day of week: ${slowDay ? slowDay.name + ' (avg $' + slowDay.avgRev.toFixed(2) + '/day — 90-day daily average)' : 'insufficient data'}
+Slowest day of week: ${slowDay ? slowDay.slowest.name + ' (avg $' + slowDay.slowest.avgRev.toFixed(2) + '/day — 28-day daily average)' : 'insufficient data'}
 Low stock products: ${JSON.stringify(lowStock)}
 New products added recently: ${JSON.stringify(newProducts)}
 Recent positive reviews: ${JSON.stringify(recentReviews)}

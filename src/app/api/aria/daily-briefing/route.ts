@@ -11,6 +11,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { geminiFlash } from '@/lib/gemini'
 import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
 import { detectLosses } from '@/lib/aria/radar/loss-detector'
+import { computeSlowDay } from '@/lib/aria/slow-day'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -230,15 +231,9 @@ async function _POST(req: Request) {
     }, 0);
   }, 0);
 
-  // Day-of-week revenue for slow day detection
-  const dowRevenue: Record<number, number> = {};
-  for (const sale of sales14daily) {
-    const dow = sale.soldAt.getDay();
-    dowRevenue[dow] = (dowRevenue[dow] ?? 0) + sale.totalCents;
-  }
-  const dowNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const slowestDow = Object.entries(dowRevenue).sort((a, b) => Number(a[1]) - Number(b[1]))[0];
-  const slowestDayName = slowestDow ? dowNames[Number(slowestDow[0])] : null;
+  // Slow day — canonical 28-day daily-bucketing method (UTC DOW, total_amount)
+  const slowDayResult = await computeSlowDay(business_id)
+  const slowestDayName = slowDayResult?.slowest.name ?? null
 
   // Customer analysis
   const lapsedCustomers = customers.filter(c => {
