@@ -8,6 +8,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import Anthropic from "@anthropic-ai/sdk";
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
@@ -54,7 +55,7 @@ async function _POST(req: Request) {
   const [{ data: sales }, { data: products }, { data: customers }] = await Promise.all([
     supabase.from("pos_sales").select("total_amount,created_at,payment_method").eq("business_id", bid).gte("created_at", thirtyDaysAgo).order("created_at", { ascending: false }).limit(500),
     supabase.from("pos_products").select("id,name,price,stock_quantity,track_stock").eq("business_id", bid).eq("is_active", true).limit(100),
-    supabase.from("pos_customers").select("id,name,last_visit,total_spend").eq("business_id", bid).order("last_visit", { ascending: true }).limit(50),
+    supabase.from("pos_customers").select(`id,name,last_visit,${CANONICAL_COLS.CUSTOMER_SPEND}`).eq("business_id", bid).order("last_visit", { ascending: true }).limit(50),
   ]);
 
   const totalRevenue = (sales ?? []).reduce((s: number, r: {total_amount?: number}) => s + (r.total_amount ?? 0), 0);

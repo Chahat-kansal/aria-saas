@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
 
 export type CustomerSegment =
   | 'champions' | 'loyal' | 'regular' | 'new'
@@ -39,9 +40,10 @@ function classifySegment(r: number, f: number, m: number, total: number, visits:
 }
 
 export async function scoreCustomersForBusiness(businessId: string): Promise<{ scored: number }> {
+  const spendCol = CANONICAL_COLS.CUSTOMER_SPEND
   const { data: customers } = await supabaseAdmin
     .from('pos_customers')
-    .select('id, total_spend, total_spent, visit_count, last_visit_at, last_visit, created_at')
+    .select(`id, ${spendCol}, visit_count, last_visit_at, last_visit, created_at`)
     .eq('business_id', businessId)
 
   if (!customers || customers.length === 0) return { scored: 0 }
@@ -52,7 +54,7 @@ export async function scoreCustomersForBusiness(businessId: string): Promise<{ s
     const days_since_visit = lastVisit
       ? Math.floor((now - new Date(lastVisit as string).getTime()) / 86400000)
       : 9999
-    const spend = Number((c as Record<string, unknown>).total_spend || (c as Record<string, unknown>).total_spent || 0)
+    const spend = Number((c as Record<string, unknown>)[spendCol] ?? 0)
     return { id: c.id, days_since_visit, spend, visits: (c as Record<string, unknown>).visit_count as number || 0, created_at: (c as Record<string, unknown>).created_at as string | null }
   })
 

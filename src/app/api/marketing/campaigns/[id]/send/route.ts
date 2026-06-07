@@ -27,7 +27,7 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
 
   let customerQuery = supabaseAdmin
     .from('pos_customers')
-    .select('id,name,email,phone,segment,days_since_visit,birthday,total_spend,visit_count,marketing_consent,tags')
+    .select('id,name,email,phone,segment,days_since_visit,birthday,total_spent,visit_count,marketing_consent,tags')
     .eq('business_id', c.business_id as string)
     .eq('marketing_consent', true)
 
@@ -56,7 +56,7 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
       first_name: firstName,
       business_name: (b.name as string) ?? '',
       days_since_visit: String(cu.days_since_visit ?? ''),
-      total_spend: `$${Number(cu.total_spend ?? 0).toFixed(2)}`,
+      total_spend: `$${Number(cu.total_spent ?? 0).toFixed(2)}`,
       visit_count: String(cu.visit_count ?? 0),
       google_url: (b.google_business_url as string) ?? '',
       offer: '$10 off',

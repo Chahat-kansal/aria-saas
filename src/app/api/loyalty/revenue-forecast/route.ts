@@ -9,7 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
-interface CustRow { id: string; total_lifetime_spend: number | null; total_spent: number | null; points_balance: number | null; loyalty_points: number | null; last_visit_at: string | null; loyalty_tier: string | null }
+interface CustRow { id: string; total_spent: number | null; points_balance: number | null; loyalty_points: number | null; last_visit_at: string | null; loyalty_tier: string | null }
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -26,11 +26,11 @@ async function _POST() {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { data: customers } = await supabase.from('pos_customers')
-    .select('id, total_lifetime_spend, total_spent, points_balance, loyalty_points, last_visit_at, loyalty_tier')
+    .select('id, total_spent, points_balance, loyalty_points, last_visit_at, loyalty_tier')
     .eq('business_id', bid).limit(2000);
 
   const rows = (customers ?? []) as CustRow[];
-  const spendOf = (c: CustRow) => Number(c.total_lifetime_spend ?? c.total_spent ?? 0);
+  const spendOf = (c: CustRow) => Number(c.total_spent ?? 0);
   const pointsOf = (c: CustRow) => Number(c.points_balance ?? c.loyalty_points ?? 0);
   const loyalty = rows.filter(c => pointsOf(c) > 0);
   const nonLoyalty = rows.filter(c => pointsOf(c) === 0);

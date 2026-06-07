@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { parseLLMJson } from '@/lib/ai-json'
+import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
 
@@ -104,12 +105,13 @@ export async function fetchRankedData(
 
   // ── customers ──────────────────────────────────────────────────────────────
   if (subject === 'customers') {
+    const spendCol = CANONICAL_COLS.CUSTOMER_SPEND
     const { data } = await supabaseAdmin
       .from('pos_customers')
-      .select('name, total_spend, visit_count')
+      .select(`name, ${spendCol}, visit_count`)
       .eq('business_id', businessId)
-      .gt('total_spend', 0)
-      .order('total_spend', { ascending: asc })
+      .gt(spendCol, 0)
+      .order(spendCol, { ascending: asc })
       .limit(10)
     if (!data || data.length === 0) {
       return { rows: [], valueLabel: 'Total spent', subject, metric, emptyReason: 'No customer spend data recorded yet.' }
@@ -117,7 +119,7 @@ export async function fetchRankedData(
     return {
       rows: data.map(c => ({
         label: String(c.name ?? 'Unknown'),
-        value: Number(c.total_spend ?? 0),
+        value: Number((c as Record<string, unknown>)[spendCol] ?? 0),
         sub: c.visit_count ? c.visit_count + ' visit' + (c.visit_count !== 1 ? 's' : '') : undefined,
       })),
       valueLabel: 'Total spent',

@@ -3,6 +3,7 @@ import { sendSMS } from '@/lib/clicksend';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
 import type { AgentType, AgentRunResult } from './types';
+import { CANONICAL_COLS } from '@/lib/aria/schema-registry';
 
 interface FiredTrigger {
   type: string;
@@ -721,7 +722,7 @@ Return ONLY valid JSON with no markdown.`;
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
       query = query.lt('last_visit_at', thirtyDaysAgo);
     } else if (choice.target_segment === 'vip_only') {
-      query = query.gt('total_spend', 1000);
+      query = query.gt(CANONICAL_COLS.CUSTOMER_SPEND, 1000);
     }
 
     const { data: customers } = await query.limit(200);

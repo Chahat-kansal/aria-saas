@@ -100,3 +100,11 @@ export function getBannedSources(domain: string): string[] {
 export function getCaveat(domain: string): string | null {
   return SCHEMA_REGISTRY[domain]?.caveat ?? null
 }
+
+/**
+ * Canonical column names — import these instead of hard-coding strings.
+ * ONE source of truth; update here to propagate everywhere.
+ */
+export const CANONICAL_COLS = {
+  CUSTOMER_SPEND: 'total_spent',
+} as const

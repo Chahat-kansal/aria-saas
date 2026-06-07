@@ -32,7 +32,7 @@ async function _POST(req: Request) {
 
   const c = customer as Record<string, unknown>
   const lastVisit = c.last_visit_at ?? c.last_visit
-  const ltv = c.lifetime_value_cents ? Number(c.lifetime_value_cents) / 100 : Number(c.total_spend ?? c.total_spent ?? 0)
+  const ltv = Number(c.total_spent ?? 0)
   const b = biz as Record<string, unknown>
 
   const ctx = [

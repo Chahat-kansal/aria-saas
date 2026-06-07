@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
 
 export interface LossSignal {
   id: string
@@ -167,22 +168,23 @@ async function detectMarginLeaks(businessId: string, since: string): Promise<Los
 }
 
 async function detectLapsingCustomers(businessId: string, cutoff: string): Promise<LossSignal | null> {
+  const spendCol = CANONICAL_COLS.CUSTOMER_SPEND
   const { data: customers } = await supabaseAdmin
     .from('pos_customers')
-    .select('id, total_spend, last_visit_at, marketing_consent')
+    .select(`id, ${spendCol}, last_visit_at, marketing_consent`)
     .eq('business_id', businessId)
-    .gt('total_spend', 0)
+    .gt(spendCol, 0)
     .lt('last_visit_at', cutoff)
     .not('last_visit_at', 'is', null)
-    .order('total_spend', { ascending: false })
+    .order(spendCol, { ascending: false })
     .limit(100)
 
   if (!customers || customers.length === 0) return null
 
-  type Customer = { id: string; total_spend: number | null; last_visit_at: string | null; marketing_consent: boolean | null }
+  type Customer = { id: string; total_spent: number | null; last_visit_at: string | null; marketing_consent: boolean | null }
   const custs = customers as Customer[]
 
-  const totalSpend = custs.reduce((s, c) => s + Number(c.total_spend ?? 0), 0)
+  const totalSpend = custs.reduce((s, c) => s + Number(c.total_spent ?? 0), 0)
   const avgSpend = totalSpend / custs.length
   const consentCount = custs.filter(c => c.marketing_consent).length
   const targetCount = consentCount > 0 ? consentCount : custs.length
