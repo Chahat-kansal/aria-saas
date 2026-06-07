@@ -402,7 +402,7 @@ export default function ReelStudioPage() {
     setGenerating(true); setLatestVideo(null); setGenProgress(5); setClipProgress(0)
     const clips = clipsNeeded(duration); setTotalClips(clips)
     const clipSecs = clipDuration(duration)
-    const base = { business_id: bid, influencer_id: selectedInf?.id ?? null, soul_id: selectedInf?.soul_status === 'ready' ? selectedInf.soul_id : null, higgsfield_job_id: selectedInf?.higgsfield_job_id ?? null, scene_image_url: sceneUrl ?? null, style, resolution, genre }
+    const base = { business_id: bid, influencer_id: selectedInf?.id ?? null, image_url: selectedInf?.image_url ?? null, soul_id: selectedInf?.soul_status === 'ready' ? selectedInf.soul_id : null, higgsfield_job_id: selectedInf?.higgsfield_job_id ?? null, scene_image_url: sceneUrl ?? null, style, resolution, genre }
 
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
