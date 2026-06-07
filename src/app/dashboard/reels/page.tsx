@@ -1075,7 +1075,7 @@ export default function ReelStudioPage() {
         .hist-banner{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(127,184,151,0.07);border:1px solid rgba(127,184,151,0.28);border-radius:12px}
         .hist-card{background:#111113;border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;transition:transform 200ms ease,box-shadow 200ms ease;animation:hist-fade-in 420ms ease both}
         .hist-card:hover{transform:translateY(-5px) scale(1.016);box-shadow:0 22px 55px rgba(0,0,0,0.7)}
-        .hist-play-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);opacity:0;transition:opacity 200ms ease}
+        .hist-play-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);opacity:0;transition:opacity 200ms ease;pointer-events:none}
         .hist-card:hover .hist-play-overlay{opacity:1}
         .hist-play-icon{transform:scale(0.72);transition:transform 260ms ease}
         .hist-card:hover .hist-play-icon{transform:scale(1.15)}
