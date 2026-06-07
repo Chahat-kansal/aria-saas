@@ -1,7 +1,7 @@
 import { callAnthropic } from '../providers/anthropic'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 
-export type IntentType = 'question' | 'file_export' | 'troubleshoot' | 'escalate' | 'smalltalk' | 'technical'
+export type IntentType = 'question' | 'file_export' | 'troubleshoot' | 'escalate' | 'smalltalk' | 'technical' | 'general'
 
 export type Complexity = 'simple' | 'complex'
 
@@ -23,6 +23,7 @@ const SYSTEM = `You are an intent classifier for a business AI assistant. Classi
 - escalate: explicitly asking to speak to support or lodge a complaint
 - smalltalk: greetings, thanks, general chitchat
 - technical: pasting code/errors/stack traces, asking to debug, "fix this", "what does this do", "how do I", "write SQL", reading Vercel logs — code and developer help requests
+- general: the question has NOTHING to do with this business — general world knowledge, consumer tech help (browsers, phones, apps — NOT Aria OS), personal advice, lifestyle, science, entertainment, sports, cooking, travel, health, general writing tasks (poems, generic emails not tied to business operations). Examples: "why does Chrome lag", "write a haiku", "what's the capital of France", "recommend a movie", "how do I lose weight". IMPORTANT: if the question could plausibly be about the business OR general (e.g. "how do I grow", "give me marketing tips"), classify it as question (business) — only use general when the question clearly has nothing to do with running a business.
 
 ALSO classify complexity:
 - simple: a direct factual lookup with at most one comparison. Examples: "revenue today", "low stock", "top customers", "how many sales last week", "is X selling".

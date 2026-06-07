@@ -335,6 +335,57 @@ async function _POST(req: Request) {
     }
   }
 
+  // GENERAL fast-path — non-business question: skip all business context, answer directly as a capable assistant
+  if (intent.type === 'general') {
+    const generalSystemPrompt = `You are Aria — an AI assistant for an Australian small business owner. The owner has asked a general question (not about their business data or operations). Answer it directly, helpfully, and competently as a knowledgeable general assistant.
+
+Rules:
+- Answer the question thoroughly and accurately
+- Do NOT force a business angle or mention the owner's business
+- Do NOT call business data tools — only use web_search or fetch_url if helpful
+- Do NOT produce business jargon or vague business-shaped filler
+- Be direct and useful, like a smart, well-informed friend
+- Australian context where relevant (e.g. local laws, products, services)`
+
+    const generalTools = ARIA_POS_TOOLS.filter((t: { name: string }) => ['web_search', 'fetch_url'].includes((t as { name: string }).name))
+    const generalResult = await callAnthropicWithTools({
+      model: 'haiku',
+      systemPrompt: generalSystemPrompt,
+      userPrompt: message,
+      priorMessages: [],
+      tools: generalTools,
+      executeTool: (name, input) => executePOSTool(name, input, bid),
+      maxTokens: 2000,
+      maxIterations: 3,
+      timeoutMs: 30_000,
+      businessId: bid,
+      agentKey: 'ask_aria',
+      role: 'chat',
+    })
+
+    let generalConvId = conversationId
+    try {
+      generalConvId = await upsertConversation(bid, user.id, conversationId, message, generalResult.raw, 'general')
+    } catch (e) {
+      console.error('[aria/ask] upsertConversation failed (general):', (e as Error).message)
+    }
+    trackSpend(bid, generalResult.cost_cents, 'chat').catch(() => {})
+
+    return NextResponse.json({
+      response: generalResult.raw,
+      conversation_id: generalConvId ?? conversationId,
+      intent: 'general',
+      action: null,
+      cost_usd_cents: generalResult.cost_cents,
+      downloads: null,
+      tool_calls: generalResult.tool_calls.map((t: { name: string; ms: number }) => ({ name: t.name, ms: t.ms })),
+      blocks: undefined,
+      used_council: false,
+      ai_mode: 'haiku',
+      model_used: 'haiku',
+    })
+  }
+
   // 2b-pre. Multi-domain path — parallel agents for broad business overview questions
   const MULTI_DOMAIN_TRIGGERS = /\b(weekly review|full summary|how (is|are) (everything|my business)|give me (an? )?overview|how (did|am) (i|we) (do|doing)|complete briefing|all (of )?my metrics|overall (performance|status))\b/i
   const isMultiDomain = intent.type === 'question' && MULTI_DOMAIN_TRIGGERS.test(message)
@@ -511,6 +562,8 @@ async function _POST(req: Request) {
 3. **ABSTAIN OVER GUESS.** If data is absent, say so plainly. "I don't have staff performance data for this period — served_by is not recorded for these sales." Never fill silence with plausible-sounding invented numbers or facts.
 
 YOU CAN TAKE REAL ACTION using these tools. Don't just describe what could be done — DO IT.
+
+GENERAL QUESTION RULE: You are primarily the owner's business co-owner, but you can also answer general questions (tech help, writing, general knowledge, advice). If a question is about the business (its sales, customers, staff, inventory, marketing, operations), use the business data tools. If a question is NOT about the business, answer it directly and competently as a helpful general assistant — do NOT force a business angle, do NOT produce business jargon, do NOT pretend a general question is about the business. Never output vague business-shaped filler for a general question.
 
 DATA TOOLS (read live business data):
 • query_business_data: get rows from any entity (sales/products/customers/staff/suppliers/reviews/inventory/actions). Use when asked "show me top X", "list", "how many", filtered queries
