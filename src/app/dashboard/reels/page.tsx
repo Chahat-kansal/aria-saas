@@ -858,60 +858,140 @@ export default function ReelStudioPage() {
 
       {/* ── HISTORY TAB ───────────────────────────────────────────────────────── */}
       {tab === 'history' && (
-        <div style={{ padding: T.sp.xl + 'px', flex: 1, overflowY: 'auto' }}>
-          {sessions.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: T.sp.md, color: T.textFaint }}>
-              <Clock size={36} />
-              <p style={{ fontSize: 14, margin: 0 }}>No reels generated yet</p>
-              <p style={{ fontSize: 12, margin: 0, color: T.textFaint }}>Generated reels appear here</p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: T.sp.lg }}>
-              {sessions.map((s) => (
-                <article key={s.id} style={{ background: T.surface, border: '1px solid ' + T.border, borderRadius: T.r.lg, overflow: 'hidden' }}>
-                  {s.video_url
-                    ? <video src={s.video_url} muted loop playsInline style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} onMouseEnter={(e) => (e.target as HTMLVideoElement).play()} onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }} />
-                    : <div style={{ aspectRatio: '9/16', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {s.status === 'processing' ? <Loader2 size={24} color={T.warn} style={{ animation: 'spin 0.8s linear infinite' }} /> : s.status === 'failed' ? <AlertCircle size={24} color={T.danger} /> : <Film size={24} color={T.textFaint} />}
-                      </div>
-                  }
-                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'capitalize', color: s.status === 'completed' ? T.accent : s.status === 'failed' ? T.danger : T.warn }}>{s.status}</span>
-                      <span style={{ fontSize: 10, color: T.textDim }}>${Number(s.cost_aud ?? 0).toFixed(2)}</span>
-                    </div>
-                    <p style={{ fontSize: 10, color: T.textDim, margin: 0 }}>{s.style} · {s.duration_seconds}s</p>
-                    {s.video_url && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <a href={s.video_url} download style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, background: T.accentBg, color: T.accent, textAlign: 'center', fontSize: 10, fontWeight: 700, textDecoration: 'none', minHeight: 30 }}><Download size={10} />Download</a>
-                          <button
-                            onClick={() => publishFromHistory(s)}
-                            disabled={historyPublishing.has(s.id)}
-                            aria-label="Publish to Instagram"
-                            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: historyPublishing.has(s.id) ? 'wait' : 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
-                          >
-                            {historyPublishing.has(s.id) ? <Loader2 size={10} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={10} />}
-                            Publish
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => { setLatestVideo(s.video_url!); setLatestSessionId(s.id); setTab('editor') }}
-                          aria-label="Edit in Studio"
-                          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', background: 'rgba(127,184,151,0.12)', color: T.accent, fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
-                        >
-                          <Edit3 size={10} />Edit in Studio
-                        </button>
-                      </div>
-                    )}
-                    {historyMsg[s.id] && (
-                      <p style={{ fontSize: 9, margin: 0, color: historyMsg[s.id] === 'Published!' ? T.accent : T.danger }}>{historyMsg[s.id]}</p>
-                    )}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {/* Ambient drifting gradient blobs — CSS-only, behind content */}
+          <div className="hist-blob hist-blob-1" />
+          <div className="hist-blob hist-blob-2" />
+
+          <div style={{ position: 'relative', zIndex: 1, height: '100%', overflowY: 'auto', padding: T.sp.xl + 'px' }}>
+            {sessions.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: T.sp.md, color: T.textFaint }}>
+                <Clock size={36} />
+                <p style={{ fontSize: 14, margin: 0 }}>No reels generated yet</p>
+                <p style={{ fontSize: 12, margin: 0, color: T.textFaint }}>Generated reels appear here</p>
+              </div>
+            ) : (
+              <>
+                {/* Section header with self-drawing SVG accent line */}
+                <div style={{ marginBottom: T.sp.xl }}>
+                  <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.8, margin: '0 0 6px', color: T.text, fontFamily: T.font }}>Your Reels</h2>
+                  <svg width="110" height="6" viewBox="0 0 110 6" fill="none" style={{ display: 'block', marginBottom: 12 }}>
+                    <path d="M2 4 Q27 1 55 4 Q83 7 108 4" stroke="#7FB897" strokeWidth="2" strokeLinecap="round" className="hist-accent-line" />
+                  </svg>
+                  <div style={{ display: 'flex', gap: T.sp.lg, fontSize: 12, flexWrap: 'wrap' }}>
+                    <span style={{ color: T.textDim }}><span style={{ color: T.accent, fontWeight: 700 }}>{sessions.filter(s => s.status === 'completed').length}</span> completed</span>
+                    <span style={{ color: T.textDim }}><span style={{ color: T.warn, fontWeight: 700 }}>{sessions.filter(s => s.status === 'processing').length}</span> in progress</span>
+                    <span style={{ color: T.textDim }}>Spent: <span style={{ color: T.gold, fontWeight: 700 }}>${totalSpent.toFixed(2)} AUD</span></span>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
+                </div>
+
+                {/* Bento grid */}
+                <div className="hist-grid">
+
+                  {/* "Aria spotted an opportunity" full-width banner */}
+                  <div className="hist-banner">
+                    <Sparkles size={14} color={T.accent} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>Aria spotted an opportunity </span>
+                      <span style={{ fontSize: 12, color: T.textMid }}>
+                        {sessions.filter(s => s.status === 'completed').length > 0
+                          ? `— Your ${sessions.filter(s => s.status === 'completed').length} completed reels avg ${Math.round(sessions.filter(s => s.status === 'completed').reduce((a, s) => a + Number(s.duration_seconds), 0) / sessions.filter(s => s.status === 'completed').length)}s. A 15s reel typically outperforms on Reels feed by 2×.`
+                          : '— Generate your first reel to unlock AI-powered performance insights.'}
+                      </span>
+                    </div>
+                    <button onClick={() => setTab('create')} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: T.r.full, border: 'none', cursor: 'pointer', background: T.accentDim, color: T.accent, fontSize: 11, fontWeight: 700, fontFamily: T.font, whiteSpace: 'nowrap' }}>Create →</button>
+                  </div>
+
+                  {/* Reel cards — first card is hero (spans 2 cols) */}
+                  {sessions.map((s, i) => (
+                    <article
+                      key={s.id}
+                      className={'hist-card' + (i === 0 ? ' hist-card-hero' : '')}
+                      style={{ animationDelay: Math.min(i * 60, 360) + 'ms' }}
+                    >
+                      {/* Video / placeholder */}
+                      <div style={{ position: 'relative', aspectRatio: i === 0 ? '4/5' : '9/16', background: '#0d0d0d', overflow: 'hidden', borderRadius: '12px 12px 0 0' }}>
+                        {s.video_url ? (
+                          <video
+                            src={s.video_url}
+                            muted loop playsInline
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play()}
+                            onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }}
+                          />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg,#0a120a,#0d160d)' }}>
+                            {s.status === 'processing'
+                              ? <Loader2 size={i === 0 ? 32 : 24} color={T.warn} style={{ animation: 'spin 0.8s linear infinite' }} />
+                              : s.status === 'failed'
+                              ? <AlertCircle size={i === 0 ? 32 : 24} color={T.danger} />
+                              : <Film size={i === 0 ? 32 : 24} color={T.textFaint} />}
+                          </div>
+                        )}
+                        {/* Hover play overlay — scales icon on card hover via CSS */}
+                        <div className="hist-play-overlay">
+                          <div className="hist-play-icon">
+                            <Play size={i === 0 ? 28 : 20} color="#fff" />
+                          </div>
+                        </div>
+                        {/* Semantic status badge */}
+                        <span className={'hist-badge hist-badge-' + s.status}>
+                          {s.status === 'completed' ? 'Published' : s.status === 'processing' ? 'Processing' : s.status === 'failed' ? 'Failed' : s.status}
+                        </span>
+                      </div>
+
+                      {/* Card body */}
+                      <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, color: T.textMid, textTransform: 'capitalize' }}>{s.style} · {s.duration_seconds}s</span>
+                          <span style={{ fontSize: 10, color: T.gold, fontWeight: 700 }}>${Number(s.cost_aud ?? 0).toFixed(2)}</span>
+                        </div>
+                        <p style={{ fontSize: 10, color: T.textDim, margin: 0 }}>{new Date(s.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: '2-digit' })}</p>
+                        {s.video_url && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <a
+                                href={s.video_url}
+                                download
+                                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '6px 0', borderRadius: T.r.sm, background: T.accentBg, color: T.accent, textAlign: 'center', fontSize: 10, fontWeight: 700, textDecoration: 'none', minHeight: 30 }}
+                              ><Download size={10} />Download</a>
+                              <button
+                                onClick={() => publishFromHistory(s)}
+                                disabled={historyPublishing.has(s.id)}
+                                aria-label="Publish to Instagram"
+                                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '6px 0', borderRadius: T.r.sm, border: 'none', cursor: historyPublishing.has(s.id) ? 'wait' : 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
+                              >
+                                {historyPublishing.has(s.id) ? <Loader2 size={10} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={10} />}
+                                Publish
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => { setLatestVideo(s.video_url!); setLatestSessionId(s.id); setTab('editor') }}
+                              aria-label="Edit in Studio"
+                              style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '6px 0', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', background: 'rgba(127,184,151,0.12)', color: T.accent, fontSize: 10, fontWeight: 700, fontFamily: T.font, minHeight: 30 }}
+                            >
+                              <Edit3 size={10} />Edit in Studio
+                            </button>
+                          </div>
+                        )}
+                        {historyMsg[s.id] && (
+                          <p style={{ fontSize: 9, margin: 0, color: historyMsg[s.id] === 'Published!' ? T.accent : T.danger }}>{historyMsg[s.id]}</p>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+
+                  {/* Dashed "Generate with Aria" tile */}
+                  <button className="hist-gen-tile" onClick={() => setTab('create')}>
+                    <Sparkles size={20} className="hist-gen-icon" />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>Generate with Aria</span>
+                    <span style={{ fontSize: 10, color: T.textDim }}>New reel →</span>
+                  </button>
+
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -977,7 +1057,37 @@ export default function ReelStudioPage() {
         </div>
       )}
 
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes hist-fade-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes blob-1{0%{transform:translate(0,0) scale(1)}100%{transform:translate(-55px,75px) scale(1.2)}}
+        @keyframes blob-2{0%{transform:translate(0,0) scale(1)}100%{transform:translate(65px,-55px) scale(0.85)}}
+        @keyframes hist-draw{to{stroke-dashoffset:0}}
+        @keyframes hist-pulse{0%,100%{opacity:0.65;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}
+        .hist-blob{position:absolute;border-radius:50%;filter:blur(100px);pointer-events:none;opacity:0.1}
+        .hist-blob-1{width:460px;height:460px;background:#2D5240;top:0;right:0;animation:blob-1 22s ease-in-out infinite alternate}
+        .hist-blob-2{width:340px;height:340px;background:#7FB897;bottom:5%;left:0;animation:blob-2 28s ease-in-out infinite alternate}
+        .hist-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
+        @media(max-width:1100px){.hist-grid{grid-template-columns:repeat(3,1fr)}}
+        @media(max-width:800px){.hist-grid{grid-template-columns:repeat(2,1fr)}.hist-card-hero{grid-column:span 2!important}.hist-banner{grid-column:span 2!important}}
+        @media(max-width:480px){.hist-grid{grid-template-columns:1fr}.hist-card-hero{grid-column:span 1!important}.hist-banner{grid-column:span 1!important}}
+        .hist-card-hero{grid-column:span 2}
+        .hist-banner{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(127,184,151,0.07);border:1px solid rgba(127,184,151,0.28);border-radius:12px}
+        .hist-card{background:#111113;border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;transition:transform 200ms ease,box-shadow 200ms ease;animation:hist-fade-in 420ms ease both}
+        .hist-card:hover{transform:translateY(-5px) scale(1.016);box-shadow:0 22px 55px rgba(0,0,0,0.7)}
+        .hist-play-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);opacity:0;transition:opacity 200ms ease}
+        .hist-card:hover .hist-play-overlay{opacity:1}
+        .hist-play-icon{transform:scale(0.72);transition:transform 260ms ease}
+        .hist-card:hover .hist-play-icon{transform:scale(1.15)}
+        .hist-badge{position:absolute;top:8px;left:8px;font-size:9px;font-weight:700;padding:3px 9px;border-radius:999px;letter-spacing:0.05em;text-transform:uppercase;font-family:inherit}
+        .hist-badge-completed{background:rgba(127,184,151,0.2);color:#7FB897}
+        .hist-badge-processing{background:rgba(245,158,11,0.2);color:#f59e0b}
+        .hist-badge-failed{background:rgba(239,68,68,0.15);color:#ef4444}
+        .hist-gen-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:30px 16px;border:1.5px dashed rgba(127,184,151,0.35);border-radius:14px;background:rgba(127,184,151,0.03);cursor:pointer;font-family:inherit;transition:border-color 220ms,background 220ms;min-height:140px;width:100%}
+        .hist-gen-tile:hover{border-color:rgba(127,184,151,0.68);background:rgba(127,184,151,0.08)}
+        .hist-gen-icon{color:#7FB897;animation:hist-pulse 2.8s ease-in-out infinite}
+        .hist-accent-line{stroke-dasharray:120;stroke-dashoffset:120;animation:hist-draw 0.75s ease forwards 0.18s}
+      `}</style>
     </div>
   )
 }
