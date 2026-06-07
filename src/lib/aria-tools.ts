@@ -127,7 +127,7 @@ export const ARIA_POS_TOOLS: Tool[] = [
 Available entities and their REAL column names:
 - products: id, name, sku, barcode, price (selling price in AUD), cost_price, stock_quantity, current_stock, category, brand, is_active, description
 - sales: id, total_amount, payment_method, created_at, status, customer_id, customer_name, sale_number, subtotal, tax_total, discount_total
-- customers: id, name, phone, email, total_spent, total_spend, visit_count, last_visit, loyalty_points, segment
+- customers: id, name, phone, email, total_spent (canonical spend column — ORDER BY total_spent DESC for best customers), visit_count, last_visit, loyalty_points, segment
 - staff: id, first_name, last_name, position, department, employment_type, pay_rate_cents (cents), status
 - suppliers: id, name, contact_name, email, phone, address, notes
 - reviews: id, reviewer_name, rating, comment, review_date, has_reply, sentiment
@@ -565,7 +565,7 @@ async function queryCustomers(
   const supabase = supabaseAdmin;
   let query = supabase
     .from('pos_customers')
-    .select('id, name, email, phone, total_spend, total_spent, last_visit_at, last_visit, visit_count, segment, rfm_score_total, days_since_visit, created_at')
+    .select('id, name, email, phone, total_spent, last_visit_at, last_visit, visit_count, segment, rfm_score_total, days_since_visit, created_at')
     .eq('business_id', businessId);
 
   if (input.segment) query = query.eq('segment', input.segment);
@@ -576,7 +576,7 @@ async function queryCustomers(
   }
 
   const sortCol =
-    input.sort_by === 'ltv' ? 'total_spend' :
+    input.sort_by === 'ltv' ? 'total_spent' :
     input.sort_by === 'recency' ? 'last_visit_at' :
     input.sort_by === 'frequency' ? 'visit_count' :
     'rfm_score_total';
@@ -669,7 +669,7 @@ const ENTITY_TABLES: Record<string, { table: string; defaultColumns: string[]; d
   },
   customers: {
     table: 'pos_customers',
-    defaultColumns: ['id','name','phone','email','total_spent','total_spend','visit_count','last_visit','loyalty_points','segment'],
+    defaultColumns: ['id','name','phone','email','total_spent','visit_count','last_visit','loyalty_points','segment'],
     defaultOrder: 'total_spent',
   },
   staff:     {
@@ -1220,24 +1220,29 @@ async function getTop(
 
   if (input.subject === 'customers') {
     const { data } = await supabaseAdmin
-      .from('pos_customers').select('id, name, total_spend, visit_count, last_visit_at')
-      .eq('business_id', businessId).order('total_spend', { ascending: false }).limit(limit);
-    const rows = (data ?? []).map(c => ({ ...c, total_spend: Math.round(Number((c as Record<string, unknown>).total_spend ?? 0) * 100) / 100 }));
+      .from('pos_customers').select('id, name, total_spent, visit_count, last_visit_at')
+      .eq('business_id', businessId).order('total_spent', { ascending: false }).limit(limit);
+    const rows = (data ?? []).map(c => ({ ...c, total_spent: Math.round(Number((c as Record<string, unknown>).total_spent ?? 0) * 100) / 100 }));
     return { subject: 'customers', rows, period: input.period };
   }
 
   if (input.subject === 'staff') {
-    const { data: sample } = await supabaseAdmin
-      .from('pos_sales').select('served_by').eq('business_id', businessId).neq('status', 'voided')
-      .gte('created_at', from).not('served_by', 'is', null).limit(1);
-    if (!sample?.length) {
+    // Fetch attributed and total sales to compute completeness % (must be surfaced as caveat)
+    const [{ data: attributedData }, { count: totalCount }] = await Promise.all([
+      supabaseAdmin.from('pos_sales').select('served_by, total_amount').eq('business_id', businessId)
+        .neq('status', 'voided').gte('created_at', from).not('served_by', 'is', null),
+      supabaseAdmin.from('pos_sales').select('*', { count: 'exact', head: true })
+        .eq('business_id', businessId).neq('status', 'voided').gte('created_at', from),
+    ])
+    if (!attributedData?.length) {
       return { subject: 'staff', available: false, reason: 'No staff tracking data in this period — served_by is not recorded for sales at this business.', period: input.period };
     }
-    const { data } = await supabaseAdmin
-      .from('pos_sales').select('served_by, total_amount').eq('business_id', businessId)
-      .neq('status', 'voided').gte('created_at', from).not('served_by', 'is', null);
+    const totalSales = totalCount ?? 0
+    const attributedCount = attributedData.length
+    const completenessPercent = totalSales > 0 ? Math.round((attributedCount / totalSales) * 100) : 0
+    const completeness_caveat = `Based on ${completenessPercent}% of sales with staff recorded (${attributedCount}/${totalSales} sales). Rankings are partial — you MUST state this caveat.`
     const map: Record<string, { name: string; sales: number; transactions: number }> = {};
-    for (const row of data ?? []) {
+    for (const row of attributedData) {
       const r = row as Record<string, unknown>;
       const key = r.served_by as string ?? 'Unknown';
       if (!map[key]) map[key] = { name: key, sales: 0, transactions: 0 };
@@ -1246,7 +1251,7 @@ async function getTop(
     }
     const rows = Object.values(map).sort((a, b) => b.sales - a.sales).slice(0, limit)
       .map(r => ({ ...r, sales: Math.round(r.sales * 100) / 100, avg_basket: r.transactions > 0 ? Math.round((r.sales / r.transactions) * 100) / 100 : 0 }));
-    return { subject: 'staff', rows, period: input.period };
+    return { subject: 'staff', rows, period: input.period, completeness_caveat };
   }
 
   if (input.subject === 'payment_methods') {
@@ -1477,8 +1482,13 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
         : date_range === 'last_month' ? new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
         : new Date(Date.now() - 30 * 86400000).toISOString()
       const { data } = await supabaseAdmin.from('pos_sales').select('served_by, total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', from).limit(10000)
+      const allRows = (data ?? []) as Array<{ served_by: string | null; total_amount: number | null }>
+      const totalCount = allRows.length
+      const attributedCount = allRows.filter(r => r.served_by != null).length
+      const completenessPercent = totalCount > 0 ? Math.round((attributedCount / totalCount) * 100) : 0
+      const completeness_caveat = `Based on ${completenessPercent}% of sales with staff recorded (${attributedCount}/${totalCount} sales). You MUST state this caveat when reporting rankings.`
       const map: Record<string, { name: string; sales: number; transactions: number }> = {}
-      for (const row of (data ?? []) as Array<{ served_by: string | null; total_amount: number | null }>) {
+      for (const row of allRows.filter(r => r.served_by != null)) {
         const name = row.served_by ?? 'Unknown'
         if (!map[name]) map[name] = { name, sales: 0, transactions: 0 }
         map[name].sales += Number(row.total_amount ?? 0)
@@ -1488,7 +1498,7 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
         name: c.name, total_sales: Math.round(c.sales * 100) / 100,
         transactions: c.transactions, avg_basket: c.transactions > 0 ? Math.round((c.sales / c.transactions) * 100) / 100 : 0,
       }))
-      return { date_range, cashiers, total_cashiers: cashiers.length }
+      return { date_range, cashiers, total_cashiers: cashiers.length, completeness_caveat }
     }
 
     case 'save_extracted_receipt':

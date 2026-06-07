@@ -689,7 +689,7 @@ CRITICAL RULES:
    - Products: price (the selling price), cost_price, stock_quantity or current_stock, name, sku, barcode, category, brand
    - When user says "selling price" they mean the column named "price". When they say "cost" they mean "cost_price".
    - Sales: total_amount, created_at, customer_name, payment_method
-   - Customers: total_spent (or total_spend for Square data), visit_count, last_visit
+   - Customers: total_spent (canonical spend column — ORDER BY total_spent DESC for best customer), visit_count, last_visit
    - To filter products starting with letters: use filters: {name_starts_with_any: ["x", "z"]}
 
 ARIA OS FEATURES YOU KNOW AND CAN TROUBLESHOOT:
