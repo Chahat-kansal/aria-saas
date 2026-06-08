@@ -11,6 +11,7 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
+import { classifyAriaIntent } from '@/lib/aria/ask/aria-intent'
 import { buildAskAriaContext, type ContextScope } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
 import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
@@ -31,6 +32,7 @@ import { summariseConversation } from '@/lib/aria/memory/summarize'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
+import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -235,7 +237,11 @@ async function _POST(req: Request) {
   }
 
   // 1. Classify intent + detect output format preference
-  const intent = await classifyIntent(message)
+  const [intent, ariaIntent] = await Promise.all([
+    classifyIntent(message),
+    classifyAriaIntent(message),
+  ])
+  console.log('[ask-aria] ariaIntent', JSON.stringify({ intent_type: ariaIntent.intent_type, comparison_period: ariaIntent.comparison_period, routing_reason: ariaIntent.routing_reason }), 'bid', bid)
   const outputFmt = detectOutputFormat(message)
 
   // 1a. Check if a pending action awaits confirmation
@@ -312,7 +318,7 @@ async function _POST(req: Request) {
   const isStrategicQuestion = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
   // Actions that are too risky to execute immediately — propose-only (save plan, don't execute)
   const PROPOSE_ONLY_TYPES = new Set(['bulk_price_update', 'create_roster'])
-  if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question' && !isStrategicQuestion) {
+  if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question' && !isStrategicQuestion && ariaIntent.intent_type !== 'analytical') {
     const planned = await planAction(message, bid)
     if (planned) {
       const propose_only = PROPOSE_ONLY_TYPES.has(planned.type)
@@ -360,7 +366,7 @@ async function _POST(req: Request) {
   }
 
   // GENERAL fast-path — non-business question: skip all business context, answer directly as a capable assistant
-  if (intent.type === 'general') {
+  if (intent.type === 'general' || ariaIntent.intent_type === 'general' || ariaIntent.intent_type === 'smalltalk') {
     const generalSystemPrompt = `You are Aria — an AI assistant for an Australian small business owner. The owner has asked a general question (not about their business data or operations). Answer it directly, helpfully, and competently as a knowledgeable general assistant.
 
 Rules:
@@ -446,7 +452,7 @@ Rules:
 
   // 2b-deliverable. Deliverable classifier — generates inline HTML dashboard/chart for visual requests
   const deliverableKind = classifyDeliverableKind(message)
-  if (deliverableKind && !isMultiDomain) {
+  if (deliverableKind && !isMultiDomain && ariaIntent.intent_type === 'artifact_request') {
     try {
       const { data: bizInfoD } = await supabaseAdmin.from('businesses').select('industry').eq('id', bid).maybeSingle()
       const result = await generateDeliverable(bid, conversationId ?? null, message, deliverableKind, (bizInfoD as { industry?: string } | null)?.industry ?? 'retail')
@@ -525,10 +531,19 @@ Rules:
   }
 
   // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests
-  if (isStrategicQuestion) {
+  if (isStrategicQuestion || ariaIntent.intent_type === 'analytical') {
     try {
-      const bizCtx = await getBusinessContext(bid)
-      const council = await runAriaCouncil(bizCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
+      const [bizCtx, factsPacket] = await Promise.all([
+        getBusinessContext(bid),
+        buildFactsPacket(bid, ariaIntent.comparison_period),
+      ])
+      let augCtx = bizCtx
+      try {
+        const ctxParsed = JSON.parse(bizCtx) as Record<string, unknown>
+        ctxParsed.aria_facts_packet = factsPacket
+        augCtx = JSON.stringify(ctxParsed)
+      } catch { /* non-fatal — council still gets bizCtx */ }
+      const council = await runAriaCouncil(augCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
       if (council?.final_briefing) {
         let savedConvId = conversationId
         try {

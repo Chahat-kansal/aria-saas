@@ -19,6 +19,7 @@ function agentToCategory(key: AgentKey): string {
     long_doc_map: 'sales', long_doc_reduce: 'sales',
     conversation_summarizer: 'sales',
     ask_aria_verifier: 'sales', action_planner: 'sales',
+    aria_intent_classifier: 'sales',
   }
   return map[key] ?? 'sales'
 }

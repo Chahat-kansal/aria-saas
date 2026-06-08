@@ -69,6 +69,7 @@ Return ONLY valid JSON. No prose. No code fences.`
     conversation_summarizer: `Schema: { "summary": "string", "key_decisions": [], "key_concerns": [], "followup_promised": [] }`,
     ask_aria_verifier: `Schema: { "verdict": "OK"|"CORRECTION: ...", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     action_planner: `Schema: { "type": "plan", "title": "action plan", "description": "planned action steps", "rationale": "1 sentence", "confidence": "high"|"medium"|"low", "estimated_impact_dollars": 0, "payload": {} }`,
+    aria_intent_classifier: `Schema: { "intent_type": "analytical|artifact_request|action|general|smalltalk", "needs_business_data": true|false, "comparison_period": "...|null", "wants_visual": true|false, "is_action": true|false, "routing_reason": "string" }`,
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -114,6 +115,7 @@ export async function runAgent(
     long_doc_map: 'haiku', long_doc_reduce: 'sonnet',
     conversation_summarizer: 'haiku',
     ask_aria_verifier: 'haiku', action_planner: 'sonnet',
+    aria_intent_classifier: 'haiku',
   }
 
   const result = await callAnthropic<Recommendation>({

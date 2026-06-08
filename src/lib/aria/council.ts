@@ -259,10 +259,12 @@ const SYNTHESIS_PROMPT_BODY = `GROUNDING RULES — ABSOLUTE — NEVER BREAK:
 2. PROMOTIONS: ONLY describe a promotion as "working", "driving results", or "boosting sales" if it appears in promotions.active (status="ACTIVE — live and running now"). If it appears in promotions.scheduled, it is NOT live — describe it ONLY as "scheduled for [date]" or "set up but not yet active." NEVER say a scheduled or inactive promotion is working or producing results, even if a RECENT_ACTION just created it.
 3. FACTUAL CLAIMS: Every count, dollar figure, percentage, or causal statement must come directly from values passed to you in the data. Never infer, estimate, or guess. If a value is missing, say "I don't have that data" — never substitute zero or an assumption.
 4. ANSWER THE QUESTION ACTUALLY ASKED — NEVER SILENTLY SUBSTITUTE A DIFFERENT METRIC:
-   - "same week last month": use VERIFIED FIGURES same_week_last_month_revenue exactly. NEVER use revenue_30d, revenue_7d/30d ratio, or any rolling average as a substitute for this comparison. If null, say "I don't have data for the equivalent week last month."
-   - "on track?" / "hit my weekly target": use VERIFIED FIGURES weekly_revenue_target. If null, say "You haven't set a weekly revenue target — I can't tell you if you're on track. Head to Weekly Reports to set one." NEVER use 30-day average, daily average, or any other metric as a proxy for a target the owner didn't set.
-   - final_briefing MUST begin by directly answering yes/no when the question is yes/no. "You're on track — at $X of your $Y target, Z% there." not "Revenue is down 35% on the monthly average."
-   - If the owner's question contains TWO parts (e.g., "on track?" AND "same week last month?"), final_briefing must answer BOTH in its 2-3 sentences.
+   - If INTENT-GROUNDED FACTS are present above, use comparison_revenue from there first. It is pre-computed for the EXACT comparison period the owner asked about. NEVER substitute revenue_30d or week_tracking figures when intent-grounded facts are available.
+   - "same week last month": use INTENT-GROUNDED FACTS comparison_revenue if available (detected_comparison_period=same_week_last_month), else fall back to VERIFIED FIGURES same_week_last_month_revenue. NEVER use revenue_30d or a rolling average.
+   - "on track?" / "hit my weekly target": use INTENT-GROUNDED FACTS weekly_revenue_target or VERIFIED FIGURES weekly_revenue_target. If NOT SET, say "You haven't set a weekly revenue target — want to set one?" NEVER use 30-day average, daily average, or any other metric as a proxy.
+   - final_briefing MUST begin with a direct answer to the question in 1 sentence. For yes/no: "You're on track — at $X of your $Y target, Z% there." For comparisons: "This week's $X is [down/up] Y% on the same week last month ($Z)." NEVER start with a tangential observation.
+   - If the owner's question contains TWO parts (e.g., "on track?" AND "same week last month?"), final_briefing must answer BOTH in the opening 2 sentences.
+   - NARRATIVE FIRST — ABSOLUTE: final_briefing must contain at least 2 sentences of narrative BEFORE any block references or lists. A response that jumps straight to figures without explaining what they mean fails this rule.
 
 HOW ARIA RESPONDS:
 - Leads with the single most important insight as a punchy headline with the actual number
@@ -582,7 +584,37 @@ export async function runAriaCouncil(
         lines.push('  weekly_revenue_target = null  ← NO target set; if asked "on track?", say "no weekly target set" and offer to set one — NEVER use 30d average or daily average as a proxy')
       }
     }
+    // Intent-grounded facts packet — overrides week_tracking when it provides comparison-period specifics
+    const factsPacket = ctx?.aria_facts_packet as {
+      detected_comparison_period?: string | null
+      comparison_revenue?: number | null
+      comparison_window?: string | null
+      pct_change?: string | null
+      weekly_revenue_target?: number | null
+      on_track?: string | null
+      pct_of_target?: number | null
+      caveats?: string[]
+    } | undefined
+    if (factsPacket) {
+      lines.push('INTENT-GROUNDED FACTS (highest priority — override week_tracking where they conflict):')
+      if (factsPacket.detected_comparison_period) {
+        lines.push(`  comparison_period_detected = ${factsPacket.detected_comparison_period}`)
+      }
+      if (factsPacket.comparison_revenue != null) {
+        lines.push(`  comparison_revenue = ${Number(factsPacket.comparison_revenue).toFixed(2)}  ← USE THIS for the comparison asked (${factsPacket.comparison_window}). NEVER substitute revenue_30d.`)
+        if (factsPacket.pct_change) lines.push(`  pct_change_vs_comparison = ${factsPacket.pct_change}`)
+      }
+      if (factsPacket.weekly_revenue_target != null) {
+        lines.push(`  weekly_revenue_target = ${Number(factsPacket.weekly_revenue_target).toFixed(2)}`)
+        if (factsPacket.on_track) lines.push(`  on_track_status = ${factsPacket.on_track}`)
+        if (factsPacket.pct_of_target != null) lines.push(`  pct_of_weekly_target = ${factsPacket.pct_of_target}%`)
+      } else {
+        lines.push("  weekly_revenue_target = NOT SET  ← say \"You haven't set a weekly revenue target yet — want to set one?\" NEVER use any average as proxy.")
+      }
+      for (const caveat of (factsPacket.caveats ?? [])) lines.push(`  CAVEAT: ${caveat}`)
+    }
     verifiedFiguresBlock = lines.join('\n') + '\n'
+    console.log('[council] verifiedFiguresBlock chars:', verifiedFiguresBlock.length, 'business:', businessId)
   } catch { /* non-fatal */ }
 
   const userPrompt = [verifiedFiguresBlock, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + businessContext]

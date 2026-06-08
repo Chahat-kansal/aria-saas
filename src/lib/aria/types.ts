@@ -15,7 +15,7 @@ export type AgentKey =
   | 'marketing_ai_generate' | 'review_reputation'
   | 'long_doc_map' | 'long_doc_reduce'
   | 'conversation_summarizer'
-  | 'ask_aria_verifier' | 'action_planner'
+  | 'ask_aria_verifier' | 'action_planner' | 'aria_intent_classifier'
 
 export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document'
 
