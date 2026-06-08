@@ -17,10 +17,11 @@ export async function logAdminAction(params: {
   details?: object;
 }) {
   const db = getAdminClient();
-  void db.from('admin_audit_log').insert({
+  const { error } = await db.from('admin_audit_log').insert({
     ...params,
     created_at: new Date().toISOString(),
   });
+  if (error) console.error('[logAdminAction] insert failed:', error.message, error.code);
 }
 
 export function formatCents(cents: number): string {
