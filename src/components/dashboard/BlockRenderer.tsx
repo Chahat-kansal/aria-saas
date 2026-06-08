@@ -391,9 +391,25 @@ export function BlockRenderer({ block, onChoice }: Props) {
     )
   }
 
-    return null
+  // Graceful fallback: any block type without a dedicated renderer renders as text
+  const fallbackText = (block as { content?: string; title?: string; description?: string }).content
+    ?? (block as { content?: string; title?: string; description?: string }).title
+    ?? (block as { content?: string; title?: string; description?: string }).description
+    ?? ''
+  if (!fallbackText) return null
+  return (
+    <div style={{ fontSize: 13, lineHeight: 1.72, color: 'rgba(255,255,255,0.78)', marginBottom: 10 }}>
+      {fallbackText.split('\n').map((line, i) => <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>)}
+    </div>
+  )
   } catch (e) {
     console.error('[BlockRenderer] render error:', block?.type, e)
-    return null
+    const fb = (block as { content?: string; title?: string }).content ?? (block as { content?: string; title?: string }).title ?? ''
+    if (!fb) return null
+    return (
+      <div style={{ fontSize: 13, lineHeight: 1.72, color: 'rgba(255,255,255,0.78)', marginBottom: 10 }}>
+        {fb.split('\n').map((line, i) => <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>)}
+      </div>
+    )
   }
 }
