@@ -105,6 +105,8 @@ export async function callOpenAI(params: ChatParams & { model?: string }): Promi
   let inputTokens = 0, outputTokens = 0
 
   try {
+    const controller = new AbortController()
+    const abortTimer = setTimeout(() => controller.abort(), params.timeoutMs ?? 30_000)
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -117,8 +119,9 @@ export async function callOpenAI(params: ChatParams & { model?: string }): Promi
           { role: 'user',   content: params.userPrompt   },
         ],
       }),
-      signal: AbortSignal.timeout(params.timeoutMs ?? 30_000),
+      signal: controller.signal,
     })
+    clearTimeout(abortTimer)
     if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`)
     const json = await r.json() as Record<string, unknown>
     const choices = json.choices as Array<Record<string, unknown>> | undefined

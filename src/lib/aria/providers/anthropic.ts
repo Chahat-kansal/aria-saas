@@ -56,14 +56,16 @@ export async function callAnthropic<T = Record<string, unknown>>(
 
   try {
     const timeoutMs = params.timeoutMs ?? 30_000
-    const response = await withBackoff(() => {
-      const ac = new AbortController()
-      let raceReject: ((e: Error) => void) | null = null
-      const timer = setTimeout(() => {
+    const ac = new AbortController()
+    let hardTimerId: ReturnType<typeof setTimeout> | undefined
+    const hardTimeout = new Promise<never>((_, rej) => {
+      hardTimerId = setTimeout(() => {
         ac.abort()
-        raceReject?.(new Error(`Anthropic timed out after ${timeoutMs}ms`))
+        rej(new Error(`Anthropic call timed out after ${timeoutMs}ms`))
       }, timeoutMs)
-      const sdkCall = client.messages.create({
+    })
+    const response = await Promise.race([
+      withBackoff(() => client.messages.create({
         model: modelId,
         max_tokens: params.maxTokens ?? 800,
         system: [{
@@ -73,10 +75,10 @@ export async function callAnthropic<T = Record<string, unknown>>(
           cache_control: { type: 'ephemeral' } as any,
         }],
         messages: [{ role: 'user', content: params.userPrompt }],
-      }, { signal: ac.signal }).finally(() => clearTimeout(timer))
-      const raceTimeout = new Promise<never>((_, rej) => { raceReject = rej })
-      return Promise.race([sdkCall, raceTimeout])
-    })
+      }, { signal: ac.signal })),
+      hardTimeout,
+    ])
+    clearTimeout(hardTimerId)
     raw = (response.content[0] as { type: string; text?: string }).text ?? ''
     inputTokens = response.usage.input_tokens
     outputTokens = response.usage.output_tokens
@@ -182,18 +184,19 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
       }
 
       const iterTimeoutMs = params.timeoutMs ?? 45_000
-      const response = await withBackoff(() => {
-        const ac = new AbortController()
-        let raceReject: ((e: Error) => void) | null = null
-        const timer = setTimeout(() => {
-          ac.abort()
-          raceReject?.(new Error(`Anthropic timed out after ${iterTimeoutMs}ms`))
+      const iterAc = new AbortController()
+      let iterTimerId: ReturnType<typeof setTimeout> | undefined
+      const iterHardTimeout = new Promise<never>((_, rej) => {
+        iterTimerId = setTimeout(() => {
+          iterAc.abort()
+          rej(new Error(`Anthropic call timed out after ${iterTimeoutMs}ms`))
         }, iterTimeoutMs)
-        const sdkCall = client.messages.create(requestBody, { signal: ac.signal })
-          .finally(() => clearTimeout(timer))
-        const raceTimeout = new Promise<never>((_, rej) => { raceReject = rej })
-        return Promise.race([sdkCall, raceTimeout])
       })
+      const response = await Promise.race([
+        withBackoff(() => client.messages.create(requestBody, { signal: iterAc.signal })),
+        iterHardTimeout,
+      ])
+      clearTimeout(iterTimerId)
 
       totalInputTokens += response.usage.input_tokens
       totalOutputTokens += response.usage.output_tokens
