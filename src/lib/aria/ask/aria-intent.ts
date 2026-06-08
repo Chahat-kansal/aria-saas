@@ -40,34 +40,53 @@ const VALID_COMPARISON_PERIODS = new Set<ComparisonPeriod>([
 const SYSTEM = `You are a semantic intent classifier for an AI business assistant called Aria.
 Classify the owner message by MEANING, not by keywords. Handle imperfect English, typos, abbreviations.
 
-Common typo mappings (treat these as equivalent):
-- "munth" / "mont" / "mth" → month
+Common typo/variant mappings (treat ALL of these as equivalent):
+- "munth" / "mont" / "mth" / "mnth" → month
 - "revenew" / "revenu" → revenue
 - "compar" / "compair" → compare
-- "las week" → last week
+- "las week" / "lst week" → last week
 - "sane weak" → same week
+- "hows" / "how's" / "how'd" / "how did" → how is (business performance question)
+- "up or down" / "up/down" → comparison question
 
 Intent types:
-- analytical: questions about business data, performance, comparisons, trends, advice, "should I", "why", "how can", "compare X vs Y", "am I on track". IMPORTANT: "compare" and "vs" = analytical, NOT artifact_request.
-- artifact_request: owner EXPLICITLY requests a file, chart, export, download, visual, report, poster, or spreadsheet as the PRIMARY OUTPUT. Only use when the artifact is the end goal, not when they want an analytical answer and also want it charted.
-- action: wants Aria to DO something (update a price, send a message, create a promo, mark something). Not just asking about it — actually requesting the action.
-- general: question has nothing to do with the business — general world knowledge, consumer tech help, personal advice, entertainment, lifestyle, cooking, travel, health. Example: "how do I lose weight", "what is the capital of France", "recommend a movie".
-- smalltalk: greetings, thanks, chitchat. "hi", "thanks", "great job".
+- analytical: ANY question about business data, performance, comparisons, trends, advice. This includes ALL of:
+  • "how did we do / how'd we do / hows business / how are we doing / how is the business" + any time reference
+  • "are we up or down / up or down from / better than / worse than" any period
+  • "compare X vs Y / vs last month / vs same week" and all typo variants
+  • "am I on track / hit my target / on target"
+  • "should I / why / how can / what would / is it worth / should we"
+  • ANY question that references a time period comparison even loosely (e.g., "vs same week last munth")
+  NEVER classify business-performance questions as 'general'. If it mentions the business, revenue, sales, customers, staff, or trade — it is analytical.
+- artifact_request: owner EXPLICITLY requests a FILE, chart, export, download, visual, report, poster, or spreadsheet as the PRIMARY OUTPUT. Only use when the artifact IS the end goal. "Give me a chart", "export to excel", "download CSV", "generate a report".
+- action: wants Aria to DO something (update a price, send a message, create a promo). Not asking about it — requesting the action.
+- general: has NOTHING to do with the business — pure general world knowledge, consumer tech help (browsers, phones), personal lifestyle (weight loss, cooking, travel). NEVER use for questions involving business performance, revenue, sales, customers, or operations.
+- smalltalk: greetings, thanks, chitchat only. "hi", "thanks", "great job".
 
-comparison_period — what time window is the owner comparing TO? Classify as one of:
-- "same_week_last_month": "same week last month", "same period last month", "this time last month", "4 weeks ago"
-- "last_month": "last month", "previous month", "past month", "compared to last month"
-- "last_week": "last week", "previous week", "past week", "las week"
+comparison_period — detect the time window being compared TO. IMPORTANT: recognize typos.
+- "same_week_last_month": any of: "same week last month/munth", "same week last munth", "4 weeks ago", "this time last month", "same period last month", "vs same week last month/munth", "compared to same week last month"
+- "last_month": "last month/munth", "previous month", "past month", "vs last month/munth", "compared to last month", "a month ago"
+- "last_week": "last week", "previous week", "past week", "las week", "vs last week", "a week ago"
 - "last_year": "last year", "same time last year", "year on year", "YoY", "12 months ago"
-- "today": "today", "this morning", "right now", "since open"
-- null: no comparison period mentioned, or unclear
+- "today": "today", "this morning", "right now", "since open", "so far today"
+- null: no comparison period mentioned or truly unclear
 
 CRITICAL RULES:
-1. If the owner says "compare", "vs", "versus", "against", "am I on track" → intent_type = "analytical" (NOT artifact_request)
-2. artifact_request ONLY when: "give me a chart", "export to excel", "download CSV", "generate a report", "make a poster", "create a visual", "show me a chart OF" — where the FILE or VISUAL is explicitly the deliverable
-3. If unsure between analytical and artifact_request → choose analytical (safer, routes to council with narrative)
-4. wants_visual = true only when they want a visual AS the answer, not just because their question might be shown with a chart
-5. Default to analytical when in doubt — it always produces a thorough answer
+1. "how did we do vs same week last munth" → analytical + same_week_last_month (typo munth = month)
+2. "hows business vs last month" → analytical + last_month
+3. "are we up or down from a month ago" → analytical + last_month
+4. "did we do better than last munth" → analytical + last_month
+5. If ANYTHING in the message resembles a business comparison (vs, up/down, better/worse, compared to, same week) → analytical
+6. artifact_request ONLY when a file/export/chart is the explicit deliverable, not when they want an answer
+7. Default to analytical when in doubt — it always routes to the best answer path
+
+FEW-SHOT EXAMPLES (follow these exactly):
+"how did we do vs same week last munth?" → {"intent_type":"analytical","comparison_period":"same_week_last_month","needs_business_data":true,"wants_visual":false,"is_action":false,"routing_reason":"business performance comparison to same week last month (munth=month typo)"}
+"hows business vs last month" → {"intent_type":"analytical","comparison_period":"last_month","needs_business_data":true,"wants_visual":false,"is_action":false,"routing_reason":"casual business performance check vs last month"}
+"are we up or down from a month ago" → {"intent_type":"analytical","comparison_period":"last_month","needs_business_data":true,"wants_visual":false,"is_action":false,"routing_reason":"revenue comparison to one month ago"}
+"did we do better than last munth" → {"intent_type":"analytical","comparison_period":"last_month","needs_business_data":true,"wants_visual":false,"is_action":false,"routing_reason":"performance comparison to last month (munth=month typo)"}
+"show me a sales chart" → {"intent_type":"artifact_request","comparison_period":null,"needs_business_data":true,"wants_visual":true,"is_action":false,"routing_reason":"explicit chart/visual request"}
+"what is the capital of France" → {"intent_type":"general","comparison_period":null,"needs_business_data":false,"wants_visual":false,"is_action":false,"routing_reason":"general knowledge question unrelated to business"}
 
 Respond with JSON only (no extra text):
 {

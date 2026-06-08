@@ -418,7 +418,8 @@ Rules:
 
   // 2b-pre. Multi-domain path — parallel agents for broad business overview questions
   const MULTI_DOMAIN_TRIGGERS = /\b(weekly review|full summary|how (is|are) (everything|my business)|give me (an? )?overview|how (did|am) (i|we) (do|doing)|complete briefing|all (of )?my metrics|overall (performance|status))\b/i
-  const isMultiDomain = intent.type === 'question' && MULTI_DOMAIN_TRIGGERS.test(message)
+  // Exclude analytical questions — "how did we do vs last month" matches the regex but must route to council
+  const isMultiDomain = intent.type === 'question' && MULTI_DOMAIN_TRIGGERS.test(message) && ariaIntent.intent_type !== 'analytical'
 
   if (isMultiDomain) {
     try {
