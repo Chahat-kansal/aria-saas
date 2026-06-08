@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 
 import { createHmac } from 'crypto';
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
+import Anthropic from '@anthropic-ai/sdk';
 import { getAdminClient } from '@/lib/admin';
 
 interface SentryIssue {
@@ -17,6 +19,134 @@ interface SentryIssue {
 interface SentryWebhookPayload {
   action?: string;
   data?: { issue?: SentryIssue };
+}
+
+interface SentryFrame {
+  filename?: string;
+  function?: string;
+  lineno?: number;
+  context_line?: string;
+}
+
+interface SentryException {
+  type?: string;
+  value?: string;
+  stacktrace?: { frames?: SentryFrame[] };
+}
+
+interface SentryEvent {
+  exception?: { values?: SentryException[] };
+}
+
+async function runDiagnosis({
+  ticketId,
+  issueId,
+  issue,
+}: {
+  ticketId: string;
+  issueId: string;
+  issue: SentryIssue;
+}) {
+  const db = getAdminClient();
+  const startMs = Date.now();
+  let diagnosis = '';
+  let success = false;
+  let errorMessage: string | undefined;
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+
+  try {
+    // 1. Enrich from Sentry API — latest event with stack trace
+    let stackContext = '';
+    const authToken = process.env.SENTRY_AUTH_TOKEN;
+    if (authToken) {
+      try {
+        const sentryRes = await fetch(
+          `https://sentry.io/api/0/issues/${issueId}/events/latest/`,
+          { headers: { Authorization: `Bearer ${authToken}` } }
+        );
+        if (sentryRes.ok) {
+          const event = await sentryRes.json() as SentryEvent;
+          const exc = event.exception?.values?.[0];
+          if (exc) {
+            const frames = (exc.stacktrace?.frames ?? []).slice(-5);
+            stackContext = [
+              exc.type ? `Exception: ${exc.type}` : '',
+              exc.value ? `Message: ${exc.value}` : '',
+              frames.length
+                ? 'Top frames:\n' + frames.map(
+                    f => `  ${f.filename ?? '?'}:${f.lineno ?? '?'} in ${f.function ?? '?'}\n    ${f.context_line ?? ''}`
+                  ).join('\n')
+                : '',
+            ].filter(Boolean).join('\n');
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[sentry/diagnosis] Sentry API fetch failed:', fetchErr instanceof Error ? fetchErr.message : fetchErr);
+      }
+    }
+
+    // 2. Grounded diagnosis — only real data from Sentry, no invented details
+    const anthropic = new Anthropic();
+    const promptLines = [
+      'You are a senior engineer diagnosing a production error from Sentry.',
+      'Diagnose ONLY from the data provided below — do not invent file names, line numbers, or causes not visible in the data.',
+      '',
+      `Issue title: ${issue.title ?? 'Unknown'}`,
+      `Level: ${issue.level ?? 'unknown'}`,
+      `Project: ${issue.project?.name ?? issue.project?.slug ?? 'unknown'}`,
+      `Culprit: ${issue.culprit ?? 'unknown'}`,
+      `Event count: ${issue.count ?? '?'}`,
+      stackContext ? `\nStack context:\n${stackContext}` : '',
+      '',
+      'Write 3–5 sentences: what the error is, likely root cause based on the data above, and one specific actionable fix.',
+    ].filter(s => s !== undefined);
+
+    const resp = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: promptLines.join('\n') }],
+    });
+
+    const textBlock = resp.content.find(b => b.type === 'text');
+    diagnosis = textBlock?.type === 'text' ? textBlock.text.trim() : '';
+    inputTokens = resp.usage?.input_tokens;
+    outputTokens = resp.usage?.output_tokens;
+    success = true;
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : String(e);
+    console.error('[sentry/diagnosis] failed:', errorMessage);
+    success = false;
+  }
+
+  const latencyMs = Date.now() - startMs;
+
+  // 3. Write back in parallel — update ticket + log call
+  const [updateResult, logResult] = await Promise.allSettled([
+    db.from('support_tickets').update({
+      aria_diagnosis: diagnosis || `Diagnosis failed: ${errorMessage ?? 'unknown error'}`,
+      aria_attempted: true,
+    }).eq('id', ticketId),
+    db.from('aria_ai_calls').insert({
+      agent_key: 'sentry_health_diagnosis',
+      provider: 'anthropic',
+      role: 'diagnosis',
+      business_id: null,
+      model_id: 'claude-sonnet-4-5-20250929',
+      latency_ms: latencyMs,
+      success,
+      error_message: errorMessage ?? null,
+      input_tokens: inputTokens ?? null,
+      output_tokens: outputTokens ?? null,
+      request_summary: `Sentry issue ${issueId}: ${(issue.title ?? '').slice(0, 100)}`,
+      response_summary: diagnosis.slice(0, 200) || null,
+    }),
+  ]);
+
+  if (updateResult.status === 'rejected') console.error('[sentry/diagnosis] ticket update failed:', updateResult.reason);
+  if (logResult.status === 'rejected') console.error('[sentry/diagnosis] aria_ai_calls insert failed:', logResult.reason);
+
+  console.log(`[sentry/diagnosis] done — ticket=${ticketId} issue=${issueId} success=${success} latency=${latencyMs}ms`);
 }
 
 export async function POST(req: Request) {
@@ -90,8 +220,8 @@ export async function POST(req: Request) {
     `Sentry issue ID: ${issueId}`,
   ].join('\n');
 
-  // 7. AWAITED insert — void kills it on serverless teardown
-  const { error: insertError } = await db.from('support_tickets').insert({
+  // 7. AWAITED insert — get id back so runDiagnosis can update the row
+  const { data: insertData, error: insertError } = await db.from('support_tickets').insert({
     business_id: null,           // platform-level health ticket; column is nullable
     user_email: 'sentry@ariaos.site',
     subject,
@@ -101,13 +231,20 @@ export async function POST(req: Request) {
     source: 'aria_health',
     category: categoryKey,       // dedupe key: sentry:<issueId>
     aria_attempted: false,
-  });
+  }).select('id').single();
 
-  if (insertError) {
-    console.error('[sentry/webhook] insert failed:', insertError.message, insertError.code);
+  if (insertError || !insertData) {
+    console.error('[sentry/webhook] insert failed:', insertError?.message, insertError?.code);
     return NextResponse.json({ error: 'Failed to create ticket' }, { status: 500 });
   }
 
   console.log(`[sentry/webhook] ticket created for Sentry issue ${issueId} (${priority} priority)`);
+
+  // 8. Background AI diagnosis — survives after response via waitUntil (not void)
+  waitUntil(
+    runDiagnosis({ ticketId: insertData.id as string, issueId, issue })
+      .catch(e => console.error('[sentry/diagnosis] uncaught:', e instanceof Error ? e.message : e))
+  );
+
   return NextResponse.json({ ok: true, issue_id: issueId });
 }
