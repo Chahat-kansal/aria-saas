@@ -317,11 +317,13 @@ AVAILABLE BLOCK TYPES — choose only what fits the question and data:
   Set show_delta:true — delta % is computed and colour-coded automatically. Do NOT add a delta row yourself. left = current_period_revenue, right = comparison_revenue from INTENT-GROUNDED FACTS.
 
 - "data_table": Multi-row ranked or breakdown list. Use for top-N customers, products, categories, staff.
-  {"type":"data_table","title":"Top customers this week","columns":[{"key":"rank","label":"#","format":"number"},{"key":"name","label":"Customer","format":"text"},{"key":"revenue","label":"Revenue","format":"currency"}],"rows":[{"rank":1,"name":"Charlotte Nguyen","revenue":557.50},{"rank":2,"name":"Alex Park","revenue":312.00}]}
+  {"type":"data_table","title":"Top customers (all-time)","columns":[{"key":"rank","label":"#","format":"number"},{"key":"name","label":"Customer","format":"text"},{"key":"spend","label":"Lifetime spend","format":"currency"}],"rows":[{"rank":1,"name":"Charlotte Nguyen","spend":557.50},{"rank":2,"name":"Hassan Ahmad","spend":527.20}]}
+  CUSTOMER RULE: "best/top customer" with NO time qualifier → use TOP CUSTOMERS from VERIFIED FIGURES (all-time total_spent), title="Top customers (all-time)", column label="Lifetime spend". Only use a period label ("this week", "this month") if the question EXPLICITLY names a window.
   Only include rows with real numbers from the data. If no data exists, skip this block entirely — do NOT invent rows or placeholder values.
 
 BLOCK SELECTION RULES — FORMAT BY ANSWER SHAPE (mandatory, not optional):
 - RANKING ("top X", "best/worst", "who/what leads", "highest/lowest") → data_table with rank + name + value columns. NOT metric_row. Narrative leads with the #1 result named.
+  CUSTOMER RANKING: "best/top customer" with NO time qualifier → pull from VERIFIED FIGURES TOP CUSTOMERS (all-time total_spent). column key="spend", label="Lifetime spend", title="Top customers (all-time)". Do NOT source from sales aggregations.
 - COMPARISON ("vs", "compared to", "same week/month last year", "how did we do vs") → comparison_table; show_delta:true; delta auto-colors negative=red, positive=sage. Narrative MUST open with both numbers in one sentence ("$X vs $Y, N% down/up").
 - SINGLE METRIC / YES-NO ("on track?", "hit target?", "how much today?") → kpi_card with semantic color. Narrative leads with a direct yes/no sentence.
 - TREND OVER TIME ("over the last N", "how has X changed") → chart (bar or line). Narrative leads.
@@ -393,10 +395,12 @@ AVAILABLE BLOCK TYPES — choose only what fits:
   {"type":"comparison_table","title":"This week vs same week last month","left_label":"This week","right_label":"Same week last month","rows":[{"metric":"Revenue","left":2553.00,"right":4498.00,"format":"currency"}],"show_delta":true}
 
 - "data_table": Ranked or multi-row breakdown list. Only real numbers — skip entirely if no data.
-  {"type":"data_table","title":"Top customers","columns":[{"key":"rank","label":"#","format":"number"},{"key":"name","label":"Customer","format":"text"},{"key":"revenue","label":"Revenue","format":"currency"}],"rows":[{"rank":1,"name":"Charlotte Nguyen","revenue":557.50}]}
+  {"type":"data_table","title":"Top customers (all-time)","columns":[{"key":"rank","label":"#","format":"number"},{"key":"name","label":"Customer","format":"text"},{"key":"spend","label":"Lifetime spend","format":"currency"}],"rows":[{"rank":1,"name":"Charlotte Nguyen","spend":557.50},{"rank":2,"name":"Hassan Ahmad","spend":527.20}]}
+  CUSTOMER RULE: "best/top customer" unqualified → all-time total_spent from VERIFIED FIGURES. Column key="spend", label="Lifetime spend". Period label only if question explicitly names one.
 
 BLOCK SELECTION RULES — FORMAT BY ANSWER SHAPE (mandatory):
 - RANKING ("top X", "best/worst", "who/what leads") → data_table with rank + name + value. Narrative leads.
+  CUSTOMER RANKING: "best/top customer" unqualified → VERIFIED FIGURES TOP CUSTOMERS (all-time total_spent). column key="spend", label="Lifetime spend", title="Top customers (all-time)". Never source from sales aggregations.
 - COMPARISON ("vs", "compared to", "same week/month last year") → comparison_table with show_delta:true. Narrative leads with both numbers in the opening sentence.
 - SINGLE METRIC / YES-NO ("on track?", "hit target?") → kpi_card with semantic color. Narrative leads.
 - TREND OVER TIME → chart (bar or line). Narrative leads.
@@ -654,6 +658,15 @@ export async function runAriaCouncil(
         lines.push("  weekly_revenue_target = NOT SET  ← say \"You haven't set a weekly revenue target yet — want to set one?\" NEVER use any average as proxy.")
       }
       for (const caveat of (factsPacket.caveats ?? [])) lines.push(`  CAVEAT: ${caveat}`)
+    }
+    // Top customers — all-time canonical (pos_customers.total_spent). Always inject for customer questions.
+    const topCustomers = ctx?.top_customers_alltime as Array<{ name: string; total_spent: number }> | undefined
+    if (topCustomers && topCustomers.length > 0) {
+      lines.push('TOP CUSTOMERS (all-time pos_customers.total_spent — canonical source of truth):')
+      topCustomers.slice(0, 5).forEach((c, i) => {
+        lines.push(`  #${i + 1} ${c.name} = $${Number(c.total_spent).toFixed(2)}`)
+      })
+      lines.push('  → "best/top customer" with NO time qualifier = these all-time totals. Use verbatim. Only label as "this week/month" if the question explicitly specifies a time window.')
     }
     verifiedFiguresBlock = lines.join('\n') + '\n'
     console.log('[council] verifiedFiguresBlock chars:', verifiedFiguresBlock.length, 'business:', businessId)

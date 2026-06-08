@@ -45,7 +45,7 @@ export interface AskAriaContext {
   prediction: { today_predicted: number; tomorrow_predicted: number; today_dow: string; tomorrow_dow: string; pattern: Record<string, number> }
   // Pre-loaded top data (avoids tool calls for common questions)
   top_products_month: Array<{ name: string; revenue: number; qty: number }>
-  top_customers_month: Array<{ name: string; total_spent: number; visits: number }>
+  top_customers_alltime: Array<{ name: string; total_spent: number; visits: number }>
   recent_transactions: Array<{ amount: number; payment_method: string; created_at: string; items_count: number }>
   staff_on_shift_today: Array<{ name: string; role: string; hours: number }>
   pending_purchase_orders: Array<{ supplier: string; total: number; expected_date: string | null }>
@@ -193,8 +193,8 @@ export async function buildAskAriaContext(
     .slice(0, 5)
     .map(p => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }))
 
-  // Top customers this month
-  const topCustomersMonth = (topCustomersRes.data ?? []).map((c: Record<string, unknown>) => ({
+  // Top customers all-time (canonical: pos_customers.total_spent DESC — NOT a period window)
+  const topCustomersAllTime = (topCustomersRes.data ?? []).map((c: Record<string, unknown>) => ({
     name: String(c.name ?? 'Unknown'),
     total_spent: Number(c.total_spent ?? 0),
     visits: Number(c.visit_count ?? 0),
@@ -409,7 +409,7 @@ export async function buildAskAriaContext(
     competitor_intelligence: [],
     prediction,
     top_products_month: topProductsMonth,
-    top_customers_month: topCustomersMonth,
+    top_customers_alltime: topCustomersAllTime,
     recent_transactions: recentTransactions,
     staff_on_shift_today: [],
     pending_purchase_orders: pendingPOs,

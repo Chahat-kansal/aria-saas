@@ -833,7 +833,7 @@ Staff (POS users): ${ctx.staff_count}
 Pending Aria actions: ${ctx.pending_aria_actions}
 Open support tickets: ${ctx.open_support_tickets}
 Top products this month: ${ctx.top_products_month.map(p => `${p.name} ($${p.revenue.toFixed(2)})`).join(', ') || 'no data'}
-Top customers this month: ${ctx.top_customers_month.map(c => `${c.name} ($${c.total_spent.toFixed(2)}, ${c.visits} visits)`).join(', ') || 'no data'}
+Top customers (all-time total_spent — canonical, use for ANY "best/top customer" question): ${ctx.top_customers_alltime.map((c, i) => `#${i+1} ${c.name} $${c.total_spent.toFixed(2)}`).join(', ') || 'no data'}
 Month vs last month: ${ctx.monthly_comparison.change_pct > 0 ? '+' : ''}${ctx.monthly_comparison.change_pct.toFixed(1)}% ($${(ctx.monthly_comparison.this_month/100).toFixed(2)} vs $${(ctx.monthly_comparison.last_month/100).toFixed(2)})
 Avg daily revenue: $${ctx.avg_daily_revenue.toFixed(2)}
 Loyalty members: ${ctx.loyalty_stats.total_members} (${ctx.loyalty_stats.active_last_30d} active last 30d)
