@@ -265,6 +265,7 @@ const SYNTHESIS_PROMPT_BODY = `GROUNDING RULES — ABSOLUTE — NEVER BREAK:
    - final_briefing MUST begin with a direct answer to the question in 1 sentence. For yes/no: "You're on track — at $X of your $Y target, Z% there." For comparisons: "This week's $X is [down/up] Y% on the same week last month ($Z)." NEVER start with a tangential observation.
    - If the owner's question contains TWO parts (e.g., "on track?" AND "same week last month?"), final_briefing must answer BOTH in the opening 2 sentences.
    - NARRATIVE FIRST — ABSOLUTE: final_briefing must contain at least 2 sentences of narrative BEFORE any block references or lists. A response that jumps straight to figures without explaining what they mean fails this rule.
+   - NO DUPLICATION: Each dollar amount, percentage, or named period must appear at most ONCE in final_briefing. Never restate the same fact twice, even in different words.
 
 HOW ARIA RESPONDS:
 - Leads with the single most important insight as a punchy headline with the actual number
@@ -587,8 +588,11 @@ export async function runAriaCouncil(
     // Intent-grounded facts packet — overrides week_tracking when it provides comparison-period specifics
     const factsPacket = ctx?.aria_facts_packet as {
       detected_comparison_period?: string | null
+      current_period_revenue?: number | null
+      current_window?: string | null
       comparison_revenue?: number | null
       comparison_window?: string | null
+      periods_are_same_length?: boolean
       pct_change?: string | null
       weekly_revenue_target?: number | null
       on_track?: string | null
@@ -600,9 +604,14 @@ export async function runAriaCouncil(
       if (factsPacket.detected_comparison_period) {
         lines.push(`  comparison_period_detected = ${factsPacket.detected_comparison_period}`)
       }
+      if (factsPacket.current_period_revenue != null) {
+        lines.push(`  current_period_revenue = ${Number(factsPacket.current_period_revenue).toFixed(2)}  ← revenue for THIS period (${factsPacket.current_window ?? 'current window'}). USE THIS as the "current" figure.`)
+      }
       if (factsPacket.comparison_revenue != null) {
         lines.push(`  comparison_revenue = ${Number(factsPacket.comparison_revenue).toFixed(2)}  ← USE THIS for the comparison asked (${factsPacket.comparison_window}). NEVER substitute revenue_30d.`)
-        if (factsPacket.pct_change) lines.push(`  pct_change_vs_comparison = ${factsPacket.pct_change}`)
+        if (factsPacket.pct_change) {
+          lines.push(`  pct_change_vs_comparison = ${factsPacket.pct_change}  ← LIKE-FOR-LIKE: both periods are ${factsPacket.current_window} vs ${factsPacket.comparison_window}`)
+        }
       }
       if (factsPacket.weekly_revenue_target != null) {
         lines.push(`  weekly_revenue_target = ${Number(factsPacket.weekly_revenue_target).toFixed(2)}`)
@@ -617,7 +626,15 @@ export async function runAriaCouncil(
     console.log('[council] verifiedFiguresBlock chars:', verifiedFiguresBlock.length, 'business:', businessId)
   } catch { /* non-fatal */ }
 
-  const userPrompt = [verifiedFiguresBlock, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + businessContext]
+  // Strip aria_facts_packet from context passed to brains — it's already formatted in verifiedFiguresBlock
+  let cleanContextStr = businessContext
+  try {
+    const cleanCtxObj = { ...(safeParseJSON(businessContext) ?? {}) } as Record<string, unknown>
+    delete cleanCtxObj.aria_facts_packet
+    cleanContextStr = JSON.stringify(cleanCtxObj)
+  } catch { /* non-fatal — fall back to raw businessContext */ }
+
+  const userPrompt = [verifiedFiguresBlock, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + cleanContextStr]
     .filter(Boolean)
     .join('\n\n')
 
@@ -681,7 +698,7 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
 
   const synthesisInput = `
 ${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}BUSINESS DATA:
-${businessContext}
+${cleanContextStr}
 ${qualitySynthesisBlock}
 GROWTH BRAIN (confidence: ${growth.confidence}):
 Observations: ${growth.observations.join(' | ')}
