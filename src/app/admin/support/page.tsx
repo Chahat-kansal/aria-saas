@@ -9,6 +9,8 @@ export default function SupportPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState('open');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [replies, setReplies] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -18,8 +20,18 @@ export default function SupportPage() {
   }, [filter]);
 
   async function updateTicket(id: string, updates: object) {
-    await fetch(`/api/admin/support?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const res = await fetch(`/api/admin/support?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
+    const d = await res.json();
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...(d.ticket || updates) } : t));
+  }
+
+  async function sendReply(id: string) {
+    const reply = (replies[id] || '').trim();
+    if (!reply) return;
+    setSending(id);
+    await updateTicket(id, { admin_reply: reply, status: 'resolved' });
+    setReplies(prev => ({ ...prev, [id]: '' }));
+    setSending(null);
   }
 
   const iS = { background: 'var(--bg-base)', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: C.text, outline: 'none', fontFamily: 'inherit' };
@@ -59,6 +71,35 @@ export default function SupportPage() {
               {expanded===ticket.id && (
                 <div style={{ padding:'0 18px 18px', borderTop:`1px solid ${C.border}` }}>
                   <p style={{ fontSize:13, color:C.muted, lineHeight:1.65, marginTop:14, marginBottom:16 }}>{ticket.message}</p>
+                  {ticket.aria_diagnosis && (
+                    <div style={{ background:'rgba(245,158,11,0.08)', border:`1px solid rgba(245,158,11,0.2)`, borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:C.amber, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6 }}>Aria Diagnosis</p>
+                      <p style={{ fontSize:12, color:'rgba(245,158,11,0.9)', lineHeight:1.65 }}>{ticket.aria_diagnosis}</p>
+                    </div>
+                  )}
+                  {ticket.admin_reply && (
+                    <div style={{ background:'rgba(34,197,94,0.08)', border:`1px solid rgba(34,197,94,0.2)`, borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:C.green, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6 }}>Reply sent</p>
+                      <p style={{ fontSize:12, color:'rgba(34,197,94,0.9)', lineHeight:1.65 }}>{ticket.admin_reply}</p>
+                    </div>
+                  )}
+                  {!ticket.admin_reply && (
+                    <div style={{ marginBottom:16 }}>
+                      <textarea
+                        value={replies[ticket.id] || ''}
+                        onChange={e => setReplies(prev => ({ ...prev, [ticket.id]: e.target.value }))}
+                        placeholder="Write a reply to the business owner…"
+                        rows={3}
+                        style={{ width:'100%', background:'var(--bg-base)', border:`1px solid rgba(0,229,255,0.15)`, borderRadius:10, padding:'10px 12px', fontSize:13, color:C.text, fontFamily:'inherit', outline:'none', resize:'vertical', boxSizing:'border-box' }}
+                      />
+                      <button
+                        onClick={() => sendReply(ticket.id)}
+                        disabled={sending === ticket.id || !(replies[ticket.id] || '').trim()}
+                        style={{ marginTop:8, padding:'7px 18px', borderRadius:8, border:'none', background: sending===ticket.id ? 'rgba(0,229,255,0.3)' : C.cyan, color:'#000', fontSize:12, fontWeight:700, cursor: sending===ticket.id ? 'default' : 'pointer', fontFamily:'inherit', opacity: !(replies[ticket.id]||'').trim() ? 0.45 : 1 }}>
+                        {sending===ticket.id ? 'Sending…' : '↗ Send reply'}
+                      </button>
+                    </div>
+                  )}
                   <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                     <select value={ticket.status} onChange={e => updateTicket(ticket.id, { status: e.target.value })} style={iS}>
                       {['open','in_progress','resolved','closed'].map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}

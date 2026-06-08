@@ -53,7 +53,18 @@ async function _PATCH(req: Request) {
   const db = getAdminClient();
   const { data, error } = await db.from('support_tickets').update(body).eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  await logAdminAction({ admin_email: user.email!, action: 'update_ticket', target_type: 'support_ticket', target_id: id, details: { status: body.status } });
+  const auditAction = body.admin_reply ? 'reply_ticket' : 'update_ticket'
+  await logAdminAction({ admin_email: user.email!, action: auditAction, target_type: 'support_ticket', target_id: id, details: { status: body.status, has_reply: !!body.admin_reply } });
+  if (body.admin_reply && (data as { business_id?: string } | null)?.business_id) {
+    void db.from('aria_notifications').insert({
+      business_id: (data as { business_id: string }).business_id,
+      type: 'support_reply',
+      title: 'Support team replied to your ticket',
+      message: String(body.admin_reply).slice(0, 500),
+      action_url: null,
+      action_label: null,
+    })
+  }
   return NextResponse.json({ ticket: data });
 }
 
