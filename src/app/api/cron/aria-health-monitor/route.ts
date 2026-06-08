@@ -176,15 +176,17 @@ export async function GET(req: Request) {
   let skipped = 0
 
   for (const anomaly of anomalies) {
-    // One ticket per ongoing problem — check for any open ticket with this category
-    const { data: existing } = await supabaseAdmin
+    // One ticket per ongoing problem — use limit(1) not maybeSingle (multi-row safe)
+    const { data: existingRows, error: dedupErr } = await supabaseAdmin
       .from('support_tickets')
       .select('id')
       .eq('category', anomaly.category)
       .neq('status', 'resolved')
-      .maybeSingle()
+      .limit(1)
 
-    if (existing) {
+    if (dedupErr) console.warn('[aria-health-monitor] dedup query error:', dedupErr.message, anomaly.category)
+
+    if (existingRows && existingRows.length > 0) {
       skipped++
       console.log(`[aria-health-monitor] dedup skip: ${anomaly.category}`)
       continue
