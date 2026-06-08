@@ -34,10 +34,17 @@ function windowPairForPeriod(period: ComparisonPeriod): WindowPair | null {
 
   switch (period) {
     case 'last_month': {
+      // Canonical definition (verified by direct SQL 2026-06-08):
+      //   current    = YYYY-MM-01 00:00:00 UTC (incl) → YYYY-MM-{N+1} 00:00:00 UTC (excl)
+      //   comparison = YYYY-{M-1}-01 00:00:00 UTC (incl) → YYYY-{M-1}-{N+1} 00:00:00 UTC (excl)
+      //   where N = UTC day-of-month of today.  Both windows are exactly N full calendar days.
+      //   Column: pos_sales.total_amount, status != 'voided', UTC, calendar-day-aligned.
+      //   Both ends use new Date(year, monthIndex, day+1) — identical boundary logic, no TZ drift.
       const dayOfMonth = today.getDate()
       const firstOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1)
       const firstOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-      // Exclusive upper bound: day N+1 of last month — includes all sales on day N
+      // N+1 of this month: exclusive upper bound so all N full days are included in both windows
+      const currentEnd = new Date(today.getFullYear(), today.getMonth(), dayOfMonth + 1)
       const comparisonEnd = new Date(today.getFullYear(), today.getMonth() - 1, dayOfMonth + 1)
       const thisMonthStr = firstOfThisMonth.toISOString().slice(0, 7)
       const lastMonthStr = firstOfLastMonth.toISOString().slice(0, 7)
@@ -45,8 +52,8 @@ function windowPairForPeriod(period: ComparisonPeriod): WindowPair | null {
       return {
         current: {
           start: firstOfThisMonth.toISOString(),
-          end: new Date(now).toISOString(),
-          label: `${thisMonthStr}-01 to today (${dayLabel}, MTD)`,
+          end: currentEnd.toISOString(),
+          label: `${thisMonthStr}-01 to ${thisMonthStr}-${String(dayOfMonth).padStart(2, '0')} (${dayLabel}, MTD)`,
         },
         comparison: {
           start: firstOfLastMonth.toISOString(),
