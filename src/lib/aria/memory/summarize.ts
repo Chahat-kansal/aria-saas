@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import Anthropic from '@anthropic-ai/sdk'
+import { callAnthropic } from '../providers/anthropic'
 
 interface ConversationMessage {
   role: string
@@ -47,30 +47,33 @@ export async function summariseConversation(
   if (transcript.split(' ').length < 40) return
 
   try {
-    const { callOpenAI } = await import('../providers/openai')
     let rawText = ''
 
-    const openaiResult = await callOpenAI({
+    // Primary: Haiku via callAnthropic (proper timeout + logging)
+    const haikuResult = await callAnthropic({
+      model: 'haiku',
       systemPrompt: SUMMARIZER_SYSTEM,
       userPrompt: transcript,
       maxTokens: 400,
       businessId,
       agentKey: 'conversation_summarizer',
       role: 'classify',
-    })
+    }, { summary: '', key_decisions: [] as string[], key_concerns: [] as string[], followup_promised: [] as string[] })
 
-    if (openaiResult.success && openaiResult.raw) {
-      rawText = openaiResult.raw
+    if (haikuResult.success && haikuResult.raw) {
+      rawText = haikuResult.raw
     } else {
-      // OpenAI unavailable or failed — fall back to Anthropic
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-      const resp = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        system: SUMMARIZER_SYSTEM,
-        messages: [{ role: 'user', content: transcript }],
+      // gpt-4o-mini last-resort fallback (kept per RULE 0)
+      const { callOpenAI } = await import('../providers/openai')
+      const openaiResult = await callOpenAI({
+        systemPrompt: SUMMARIZER_SYSTEM,
+        userPrompt: transcript,
+        maxTokens: 400,
+        businessId,
+        agentKey: 'conversation_summarizer',
+        role: 'classify',
       })
-      rawText = (resp.content[0] as { type: string; text: string }).text ?? ''
+      rawText = openaiResult.raw
     }
 
     const cleaned = rawText

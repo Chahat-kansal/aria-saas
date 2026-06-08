@@ -6,7 +6,7 @@ import type { AgentKey, AgentRole } from '../types'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 55_000,
+  timeout: 35_000,
   maxRetries: 0,
 })
 
@@ -28,7 +28,7 @@ interface CallParams {
   toolChoice?: { type: 'tool'; name: string } | { type: 'auto' }
 }
 
-async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
   let lastErr: Error | null = null
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -55,8 +55,15 @@ export async function callAnthropic<T = Record<string, unknown>>(
   let data: T = fallback
 
   try {
-    const response = await withBackoff(() =>
-      client.messages.create({
+    const timeoutMs = params.timeoutMs ?? 30_000
+    const response = await withBackoff(() => {
+      const ac = new AbortController()
+      let raceReject: ((e: Error) => void) | null = null
+      const timer = setTimeout(() => {
+        ac.abort()
+        raceReject?.(new Error(`Anthropic timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
+      const sdkCall = client.messages.create({
         model: modelId,
         max_tokens: params.maxTokens ?? 800,
         system: [{
@@ -66,10 +73,10 @@ export async function callAnthropic<T = Record<string, unknown>>(
           cache_control: { type: 'ephemeral' } as any,
         }],
         messages: [{ role: 'user', content: params.userPrompt }],
-      }, {
-        signal: AbortSignal.timeout(params.timeoutMs ?? 55_000),
-      })
-    )
+      }, { signal: ac.signal }).finally(() => clearTimeout(timer))
+      const raceTimeout = new Promise<never>((_, rej) => { raceReject = rej })
+      return Promise.race([sdkCall, raceTimeout])
+    })
     raw = (response.content[0] as { type: string; text?: string }).text ?? ''
     inputTokens = response.usage.input_tokens
     outputTokens = response.usage.output_tokens
@@ -174,11 +181,19 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         if (requestBody.max_tokens < budget + 1024) requestBody.max_tokens = budget + 1024
       }
 
-      const response = await withBackoff(() =>
-        client.messages.create(requestBody, {
-          signal: AbortSignal.timeout(params.timeoutMs ?? 45_000),
-        })
-      )
+      const iterTimeoutMs = params.timeoutMs ?? 45_000
+      const response = await withBackoff(() => {
+        const ac = new AbortController()
+        let raceReject: ((e: Error) => void) | null = null
+        const timer = setTimeout(() => {
+          ac.abort()
+          raceReject?.(new Error(`Anthropic timed out after ${iterTimeoutMs}ms`))
+        }, iterTimeoutMs)
+        const sdkCall = client.messages.create(requestBody, { signal: ac.signal })
+          .finally(() => clearTimeout(timer))
+        const raceTimeout = new Promise<never>((_, rej) => { raceReject = rej })
+        return Promise.race([sdkCall, raceTimeout])
+      })
 
       totalInputTokens += response.usage.input_tokens
       totalOutputTokens += response.usage.output_tokens

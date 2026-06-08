@@ -1,4 +1,5 @@
 import { callAnthropic } from './providers/anthropic'
+import { parseLLMJsonOr } from '@/lib/ai-json'
 import { searchWeb } from './signals/web'
 import type { AgentKey, BusinessContext, Recommendation } from './types'
 
@@ -127,6 +128,32 @@ export async function runAgent(
     agentKey,
     role: 'other',
   }, { ...FALLBACK_REC, agent: agentKey })
+
+  // Gemini fallback for analytical/generic agents when Haiku fails
+  if (!result.success && (agentKey === 'ops_narrative' || agentKey === 'generic')) {
+    try {
+      const { callGemini } = await import('./providers/gemini')
+      const geminiResult = await callGemini({
+        model: 'gemini-2.5-flash',
+        systemPrompt,
+        userPrompt,
+        maxTokens: 600,
+        businessId: ctx.business_id,
+        agentKey,
+        role: 'other',
+      })
+      if (geminiResult.success && geminiResult.raw) {
+        const data = parseLLMJsonOr<Recommendation>(
+          geminiResult.raw,
+          { ...FALLBACK_REC, agent: agentKey },
+          `aria/gemini/${agentKey}`,
+        )
+        return { recommendation: { ...data, agent: agentKey }, cost_cents: geminiResult.cost_cents, latency_ms: geminiResult.latency_ms }
+      }
+    } catch (e) {
+      console.error('[agents] gemini fallback failed:', (e as Error).message)
+    }
+  }
 
   const rec: Recommendation = { ...result.data, agent: agentKey }
   return { recommendation: rec, cost_cents: result.cost_cents, latency_ms: result.latency_ms }
