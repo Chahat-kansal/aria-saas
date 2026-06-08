@@ -24,6 +24,8 @@ const BONES = {
 function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   const groupRef = useRef(new THREE.Group());
   const vrmRef = useRef<VRM | null>(null);
+  const vrmReadyRef = useRef(false);
+  const frameErrorRef = useRef(false);
   const bonesRef = useRef<Record<string, THREE.Object3D>>({});
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const greetingDone = useRef(false);
@@ -47,6 +49,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       VRMUtils.combineSkeletons(gltf.scene);
       groupRef.current.add(vrm.scene);
       vrmRef.current = vrm;
+      // vrmReadyRef stays false until all bone/expression setup is done below
 
       // Reset all expressions — override the angry default
       vrm.expressionManager?.setValue('angry', 0);
@@ -74,6 +77,9 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
       if (bones.lLowerArm) bones.lLowerArm.rotation.z = -0.2;
       if (bones.rLowerArm) bones.rLowerArm.rotation.z = 0.2;
+
+      // All scene setup done — frame loop may now run safely
+      vrmReadyRef.current = true;
 
       // Loader 2: VRMA only (separate loader, no conflict)
       try {
@@ -109,7 +115,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     }
 
     load().catch(() => { greetingDone.current = true; });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; vrmReadyRef.current = false; frameErrorRef.current = false; };
   }, []);
 
   useEffect(() => {
@@ -124,13 +130,14 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
 
   useFrame((_, delta) => {
     const vrm = vrmRef.current;
-    if (!vrm) return;
+    if (!vrm || !vrmReadyRef.current) return;
+    try {
 
     // Run greeting mixer
     if (mixerRef.current) {
       mixerRef.current.update(delta);
       vrm.update(delta);
-      return;
+      return; // exits the try block cleanly
     }
 
     clock.current += delta;
@@ -182,6 +189,12 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       if (cur && cur.morph !== 'Fcl_MTH_Close') {
         const expr = EXPR_MAP[cur.morph];
         if (expr) vrm.expressionManager?.setValue(expr, cur.value);
+      }
+    }
+    } catch (e) {
+      if (!frameErrorRef.current) {
+        frameErrorRef.current = true;
+        console.error('[AriaTalkingHead] frame error (suppressed after first):', e instanceof Error ? e.message : e);
       }
     }
   });
