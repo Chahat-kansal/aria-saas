@@ -809,6 +809,19 @@ MODE: ${mode}
         if (b.type === 'action_list') return Array.isArray((b as {items?:unknown[]}).items) && (b as {items?:unknown[]}).items!.length > 0
         if (b.type === 'council_split') return !!(b as {question?:string}).question && !!(b as {growth?:string}).growth
         if (b.type === 'lead' || b.type === 'text') return !!(b as {content?:string}).content
+        // Guardrails for new block types — prevent fabricated-zero visuals
+        if (b.type === 'kpi_card') {
+          const k = b as { label?: unknown; value?: unknown }
+          return !!(k.label) && k.value != null
+        }
+        if (b.type === 'comparison_table') {
+          const ct = b as { rows?: unknown[] }
+          return Array.isArray(ct.rows) && ct.rows.length > 0
+        }
+        if (b.type === 'data_table') {
+          const dt = b as { columns?: unknown[]; rows?: unknown[] }
+          return Array.isArray(dt.columns) && dt.columns.length > 0 && Array.isArray(dt.rows) && dt.rows.length > 0
+        }
         return true
       }) : undefined,
       ask_followups: mode === 'ask_aria' && Array.isArray(parsed.ask_followups) ? parsed.ask_followups as string[] : undefined,

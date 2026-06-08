@@ -270,6 +270,127 @@ export function BlockRenderer({ block, onChoice }: Props) {
     )
   }
 
+  if (block.type === 'kpi_card') {
+    const color = block.color ?? G
+    const tv = block.trend
+    const trendColor = tv == null ? 'rgba(255,255,255,0.35)' : tv >= 0 ? G : Math.abs(tv) <= 20 ? A : R
+    const trendArrow = tv == null ? '' : tv >= 0 ? '↑' : '↓'
+    const fmtVal = (v: string | number) => {
+      if (typeof v === 'string') return v
+      if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+      return Number(v).toLocaleString()
+    }
+    return (
+      <div style={{ borderRadius: 14, border: `0.5px solid ${color}38`, background: `${color}0A`, marginBottom: 12, padding: '18px 20px' }}>
+        <div style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+          {block.label}
+        </div>
+        <div style={{ fontSize: 34, fontWeight: 700, color, fontFamily: 'var(--font-display), Georgia, serif', fontStyle: 'italic', lineHeight: 1, letterSpacing: '-0.01em' }}>
+          {fmtVal(block.value)}
+        </div>
+        {(tv != null || block.trend_label) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
+            {tv != null && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: trendColor }}>
+                {trendArrow}{Math.abs(tv).toFixed(1)}%
+              </span>
+            )}
+            {block.trend_label && (
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)' }}>{block.trend_label}</span>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (block.type === 'comparison_table') {
+    const fmt = (v: number, f?: string) => {
+      if (f === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      if (f === 'percent') return Number(v).toFixed(1) + '%'
+      return Number(v).toLocaleString()
+    }
+    return (
+      <div style={{ borderRadius: 12, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '7px 14px', background: 'rgba(96,165,250,0.07)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: 9, fontWeight: 600, color: B, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {block.title}
+        </div>
+        <div style={{ padding: '10px 14px 14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, paddingBottom: 6, borderBottom: '0.5px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.05em' }} />
+            <div style={{ fontSize: 9, fontWeight: 600, color: G, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>{block.left_label}</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>{block.right_label}</div>
+          </div>
+          {(block.rows ?? []).map((row, ri) => {
+            const delta = row.right > 0 ? ((row.left - row.right) / row.right) * 100 : null
+            const deltaColor = delta == null ? 'rgba(255,255,255,0.3)' : delta >= 0 ? G : Math.abs(delta) <= 20 ? A : R
+            return (
+              <div key={ri} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '8px 0', borderBottom: ri < (block.rows?.length ?? 0) - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{row.metric}</div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.95)', fontFamily: 'var(--font-display), Georgia, serif', fontStyle: 'italic' }}>
+                    {fmt(row.left, row.format)}
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>{fmt(row.right, row.format)}</div>
+                  {block.show_delta && delta != null && (
+                    <div style={{ fontSize: 11, fontWeight: 600, color: deltaColor, marginTop: 2 }}>
+                      {delta >= 0 ? '+' : ''}{delta.toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  if (block.type === 'data_table') {
+    const fmtCell = (v: unknown, format?: string) => {
+      if (v == null || v === '') return '—'
+      if (format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      if (format === 'percent') return Number(v).toFixed(1) + '%'
+      if (format === 'number') return Number(v).toLocaleString()
+      return String(v)
+    }
+    const cols = block.columns ?? []
+    return (
+      <div style={{ borderRadius: 12, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '7px 14px', background: 'rgba(127,184,151,0.07)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: 9, fontWeight: 600, color: G, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {block.title}
+        </div>
+        <div style={{ padding: '0 14px 10px', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 240 }}>
+            <thead>
+              <tr>
+                {cols.map((col, ci) => (
+                  <th key={ci} style={{ padding: '8px 0 6px', paddingRight: ci < cols.length - 1 ? 12 : 0, textAlign: ci === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(block.rows ?? []).map((row, ri) => (
+                <tr key={ri} style={{ borderTop: '0.5px solid rgba(255,255,255,0.05)' }}>
+                  {cols.map((col, ci) => (
+                    <td key={ci} style={{ padding: '7px 0', paddingRight: ci < cols.length - 1 ? 12 : 0, textAlign: ci === 0 ? 'left' : 'right', fontSize: 13, color: ci === 0 ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.72)', fontFamily: (ci > 0 && col.format === 'currency') ? 'var(--font-display), Georgia, serif' : 'inherit', fontStyle: (ci > 0 && col.format === 'currency') ? 'italic' : 'normal', fontWeight: (ci > 0 && col.format === 'currency') ? 600 : 400 }}>
+                      {fmtCell(row[col.key], col.format)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
     return null
   } catch (e) {
     console.error('[BlockRenderer] render error:', block?.type, e)
