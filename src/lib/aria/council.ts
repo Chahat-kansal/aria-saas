@@ -527,7 +527,7 @@ export async function runAriaCouncil(
   // Build VERIFIED_FIGURES block — pre-computed exact values brains must cite verbatim
   let verifiedFiguresBlock = ''
   try {
-    const ctx = JSON.parse(businessContext) as Record<string, unknown>
+    const ctx = (safeParseJSON(businessContext) ?? {}) as Record<string, unknown>
     const revenue = ctx?.revenue as Record<string, number | null> | undefined
     const customers = ctx?.customers as Record<string, number | null> | undefined
     const promotions = ctx?.promotions as {
