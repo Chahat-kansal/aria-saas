@@ -59,7 +59,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
           .eq('business_id', businessId).gte('created_at', d7).neq('status', 'voided')
         ).data?.map((s: any) => s.id) ?? []
       ),
-    db.from('customers').select('id, name, total_spent, last_visit, visit_count')
+    db.from('pos_customers').select('id, name, total_spent, last_visit, visit_count')
       .eq('business_id', businessId).order('total_spent', { ascending: false }).limit(5),
     db.from('reviews').select('rating, text, created_at')
       .eq('business_id', businessId).order('created_at', { ascending: false }).limit(5),

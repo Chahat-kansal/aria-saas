@@ -660,7 +660,8 @@ export async function runAriaCouncil(
       for (const caveat of (factsPacket.caveats ?? [])) lines.push(`  CAVEAT: ${caveat}`)
     }
     // Top customers — all-time canonical (pos_customers.total_spent). Always inject for customer questions.
-    const topCustomers = ctx?.top_customers_alltime as Array<{ name: string; total_spent: number }> | undefined
+    // getBusinessContext stores these under ctx.customers.top_5_by_spend (NOT top_customers_alltime).
+    const topCustomers = (ctx?.customers as { top_5_by_spend?: Array<{ name: string; total_spent: number }> } | undefined)?.top_5_by_spend
     if (topCustomers && topCustomers.length > 0) {
       lines.push('TOP CUSTOMERS (all-time pos_customers.total_spent — canonical source of truth):')
       topCustomers.slice(0, 5).forEach((c, i) => {
