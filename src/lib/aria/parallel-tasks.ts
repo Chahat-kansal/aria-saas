@@ -14,14 +14,23 @@ export function buildBriefingTasks(businessId: string, _industry: string): Paral
       fn: async () => {
         const today = new Date().toISOString().split('T')[0]
         const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-        const [todayRes, yestRes] = await Promise.all([
+        const week7 = new Date(Date.now() - 7 * 86400000).toISOString()
+        const [todayRes, yestRes, week7Res] = await Promise.all([
           supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', today),
           supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', yesterday).lt('created_at', today),
+          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', week7),
         ])
         const todayRev = (todayRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
         const yestRev = (yestRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
-        const delta = yestRev > 0 ? ((todayRev - yestRev) / yestRev * 100).toFixed(1) : 'N/A'
-        return 'Today: ' + fmt(todayRev) + ' (' + (todayRes.data?.length ?? 0) + ' transactions). Yesterday: ' + fmt(yestRev) + '. Delta: ' + delta + '%.'
+        const week7Rev = (week7Res.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
+        const week7Count = week7Res.data?.length ?? 0
+        const todayCount = todayRes.data?.length ?? 0
+        // GROUNDING: A quiet today must be judged against the 7-day trend, not reported as a closure
+        const todayNote = todayRev === 0 && week7Rev > 0
+          ? 'Today: $0.00 so far (' + todayCount + ' transactions — in-progress day, 7-day trend is healthy)'
+          : 'Today: ' + fmt(todayRev) + ' (' + todayCount + ' transactions)'
+        const delta = yestRev > 0 ? ((todayRev - yestRev) / yestRev * 100).toFixed(1) + '% vs yesterday' : 'yesterday data not available'
+        return todayNote + '. Yesterday: ' + fmt(yestRev) + '. ' + delta + '. 7-day total: ' + fmt(week7Rev) + ' (' + week7Count + ' transactions).'
       },
     },
     {
@@ -78,12 +87,17 @@ export function buildBriefingTasks(businessId: string, _industry: string): Paral
             .neq('status', 'voided')
             .gte('created_at', weekStart),
         ])
-        const labourCost = (staffRes.data ?? []).reduce((s: number, r: Record<string, unknown>) => {
+        const timesheetRows = staffRes.data ?? []
+        const labourCost = timesheetRows.reduce((s: number, r: Record<string, unknown>) => {
           const members = r.staff_members as Array<{ hourly_rate?: number }> | null
           const rate = Array.isArray(members) && members[0]?.hourly_rate ? Number(members[0].hourly_rate) : 0
           return s + Number(r.hours_worked || 0) * rate
         }, 0)
         const revenue = (salesRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
+        // GROUNDING: empty timesheets = "not tracked", NOT evidence of impossible/broken cost
+        if (timesheetRows.length === 0) {
+          return 'Labour costs: not tracked (timesheet system unpopulated — no clock-in data this week). Revenue: ' + fmt(revenue) + '. Labour ratio cannot be calculated.'
+        }
         const ratio = revenue > 0 ? ((labourCost / revenue) * 100).toFixed(1) : 'N/A'
         return '7-day labour cost: ' + fmt(labourCost) + '. Revenue: ' + fmt(revenue) + '. Labour ratio: ' + ratio + '%. Target: <35%.'
       },
@@ -98,9 +112,12 @@ export function buildBriefingTasks(businessId: string, _industry: string): Paral
           .select('id, last_visit_at, loyalty_points')
           .eq('business_id', businessId)
           .gte('created_at', since)
-        if (!data?.length) return 'No recent customer data.'
+        // GROUNDING: sparse/empty data = "limited data", never "retention collapsed"
+        if (!data?.length) return 'Customer data: not available for the last 30 days (table unpopulated or no recent customers tracked).'
+        if (data.length < 5) return 'Customer data: limited (' + data.length + ' records in last 30 days — insufficient for retention analysis).'
         const active = data.filter(c => c.last_visit_at && new Date(c.last_visit_at) > new Date(Date.now() - 14 * 86400000)).length
-        return data.length + ' customers in last 30 days. ' + active + ' visited in last 14 days (' + ((active / data.length) * 100).toFixed(0) + '% retention).'
+        const retentionPct = ((active / data.length) * 100).toFixed(0)
+        return data.length + ' customers in last 30 days. ' + active + ' visited in last 14 days (' + retentionPct + '% retention rate).'
       },
     },
   ]

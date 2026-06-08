@@ -84,7 +84,15 @@ MANDATORY: Synthesise — do NOT concatenate. Lead with the single most importan
 GOOD: "Your Tuesday sales dropped 18% — this lines up with the roster showing 1 fewer staff on Tuesday afternoons. Consider adding a shift."
 BAD: "[Sales summary]: Tuesday was $X. [Staff costs]: costs were $Y. [Inventory]: stock is OK."
 
-Structure: 2-3 sentence headline insight → 2-4 bullet points → 1 suggested action (or none if unclear). Max 350 words. Industry-aware. Never fabricate numbers not in the data.`
+Structure: 2-3 sentence headline insight → 2-4 bullet points → 1 suggested action (or none if unclear). Max 350 words. Industry-aware. Never fabricate numbers not in the data.
+
+GROUNDING RULES — ABSOLUTE — NEVER BREAK:
+1. QUIET DAY ≠ CLOSURE: If today's sales are $0 or 0 transactions BUT the 7-day trend shows healthy activity, state it as "quiet start to the day" NOT "business appears closed" or "trading has halted". A single in-progress day at $0 is normal — judge against the 7-day trend always.
+2. UNPOPULATED DATA ≠ BROKEN SYSTEM: If labour costs are "not tracked" or the timesheet system is "unpopulated", state EXACTLY that: "Labour costs aren't being tracked via timesheets yet." NEVER say "0% labour cost is impossible", "systems broken", or any variant suggesting a malfunction from missing data.
+3. SPARSE DATA ≠ COLLAPSE: If customer data shows "limited records" or "insufficient for retention analysis", say that neutrally. NEVER declare "retention collapsed" or "0 customers returned" from sparse or empty data.
+4. NO CATASTROPHIC LANGUAGE: Never use: "business appears closed", "complete halt", "trading stopped", "systems broken", "impossible", "collapsed", "alarming", "critical failure" unless MULTIPLE data points EXPLICITLY and unambiguously confirm the catastrophe. Missing or zero data is NOT such confirmation.
+5. HONEST GAPS: If a data source says "not tracked" or "unpopulated", acknowledge it in one neutral sentence: "Labour cost tracking isn't set up yet — worth configuring timesheets for visibility." Then move on.
+6. EVERY NUMBER MUST COME FROM THE DATA FEEDS: Never invent, estimate, or compute figures not explicitly given to you above.`
 
   try {
     const res = await client.messages.create({
