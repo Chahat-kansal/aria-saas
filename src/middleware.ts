@@ -221,8 +221,13 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/') {
     const { data: { user } } = await makeSupabase().auth.getUser()
     if (user) {
-      return applySecurityHeaders(NextResponse.redirect(new URL('/pos/terminal', request.url)))
+      // Send authenticated users to dashboard — dashboard/page.tsx handles
+      // the onboarding_complete check and redirects if needed.
+      // Previously redirected to /pos/terminal which chained to /onboarding
+      // via pos/layout.tsx when the business query returned empty.
+      return applySecurityHeaders(NextResponse.redirect(new URL('/dashboard', request.url)))
     }
+    // Unauthenticated: serve the marketing landing page — no redirect
     return applySecurityHeaders(response)
   }
 
