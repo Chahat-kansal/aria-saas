@@ -6,12 +6,52 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+const DEEP  = '#2D5240'
+const MUTED = '#6b7d74'
+const LINE  = '#e6ece8'
+
+function BottomNav() {
+  const pathname = usePathname()
+  const tabs = [
+    { href: '/staff/portal',          label: 'Home',     icon: '🏠' },
+    { href: '/staff/portal/schedule', label: 'Schedule', icon: '📅' },
+    { href: '/staff/portal/training', label: 'Training', icon: '🎓' },
+    { href: '/staff/portal/leave',    label: 'Leave',    icon: '🏖️' },
+    { href: '/staff/portal/messages', label: 'Inbox',    icon: '✉️' },
+  ]
+  return (
+    <nav style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+      display: 'flex',
+      background: 'rgba(255,255,255,.92)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+      borderTop: '1px solid ' + LINE,
+      padding: '9px 8px 14px',
+    }}>
+      {tabs.map(({ href, label, icon }) => {
+        const active = pathname === href
+        return (
+          <Link key={href} href={href} style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 3, textDecoration: 'none',
+            fontSize: 10, fontWeight: active ? 600 : 500,
+            color: active ? DEEP : MUTED,
+          }}>
+            <span style={{ fontSize: 19 }}>{icon}</span>
+            {label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
 export default function StaffPortalLayout({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [checking, setChecking] = useState(true)
 
-  // Skip auth check on pages that handle their own session exchange
   const isPublicPage = pathname === '/staff/login'
     || pathname === '/staff/accept-invite'
     || pathname === '/staff/reset-password'
@@ -34,51 +74,29 @@ export default function StaffPortalLayout({ children }: { children: ReactNode })
   if (!isPublicPage && checking) {
     return (
       <div className="min-h-screen flex items-center justify-center"
-        style={{ background: '#0E1411' }}>
+        style={{ background: '#f4f7f5' }}>
         <div className="w-5 h-5 rounded-full border-2 animate-spin"
           style={{ borderColor: '#7FB897', borderTopColor: 'transparent' }} />
       </div>
     )
   }
 
-  // Public pages (login / invite / reset) render without nav
   if (isPublicPage) return <>{children}</>
 
   return (
-    <div className="min-h-screen" style={{ background: '#0E1411', color: '#E8EDE7' }}>
-      <nav style={{ background: '#1A2620', borderBottom: '1px solid rgba(127,184,151,0.08)', padding: '12px 16px' }}>
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-medium italic" style={{ color: '#7FB897' }}>Aria</span>
-            <span className="text-xs" style={{ color: '#A8B5A8' }}>Staff Portal</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {[
-              { href: '/staff/portal', label: 'Home' },
-              { href: '/staff/portal/schedule', label: 'Schedule' },
-              { href: '/staff/portal/timesheets', label: 'Hours' },
-              { href: '/staff/portal/leave', label: 'Leave' },
-              { href: '/staff/portal/availability', label: 'Availability' },
-              { href: '/staff/portal/messages', label: 'Messages' },
-            ].map(item => (
-              <Link key={item.href} href={item.href}
-                className="px-2.5 py-1.5 text-xs rounded transition-colors hover:text-white"
-                style={{ color: pathname === item.href ? '#7FB897' : '#A8B5A8' }}>
-                {item.label}
-              </Link>
-            ))}
-            <button
-              onClick={handleSignOut}
-              className="px-2.5 py-1.5 text-xs rounded ml-2 transition-colors hover:text-white"
-              style={{ color: '#6E7C6E' }}>
-              Sign out
-            </button>
-          </div>
-        </div>
-      </nav>
-      <main className="max-w-2xl mx-auto px-4 py-6">
+    <div className="min-h-screen" style={{ background: '#f4f7f5' }}>
+      <main className="max-w-2xl mx-auto" style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 24, paddingBottom: 90 }}>
         {children}
+        <div style={{ textAlign: 'center', paddingTop: 28, paddingBottom: 4 }}>
+          <button onClick={handleSignOut} style={{
+            fontSize: 12, color: MUTED, background: 'none',
+            border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Sign out
+          </button>
+        </div>
       </main>
+      <BottomNav />
     </div>
   )
 }
