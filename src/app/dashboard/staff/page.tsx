@@ -737,8 +737,11 @@ export default function StaffPage() {
       {bid && <LiveWidget bid={bid} />}
       {bid && <ClockWidget bid={bid} />}
       {bid && (tab === 'schedule' || tab === 'timesheets') && <LabourMetrics bid={bid} />}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={tabBtnStyle(tab === t.id)}>{t.label}</button>)}
+        <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.08)', margin: '0 2px', flexShrink: 0 }} />
+        <Link href="/dashboard/staff/messages" style={{ ...tabBtnStyle(false), textDecoration: 'none' }}>Messages</Link>
+        <Link href="/dashboard/staff/announcements" style={{ ...tabBtnStyle(false), textDecoration: 'none' }}>Announcements</Link>
       </div>
       {tab === 'schedule' && bid && <ScheduleTab bid={bid} />}
       {tab === 'timesheets' && bid && <TimesheetTab bid={bid} />}
