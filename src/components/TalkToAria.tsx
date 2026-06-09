@@ -152,7 +152,7 @@ export default function TalkToAria({ className }: { className?: string }) {
     setError('')
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
-      const t = e.results.map(r => r[0].transcript).join('')
+      const t = Array.from(e.results).map(r => r[0].transcript).join('')
       setTranscript(t)
       if (e.results[e.results.length - 1].isFinal) {
         recognition.stop()

@@ -167,7 +167,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     rec.lang = 'en-AU'; rec.continuous = false; rec.interimResults = true
     setPhase('listening'); setTranscript(''); setError('')
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      const t = e.results.map(r => r[0].transcript).join('')
+      const t = Array.from(e.results).map(r => r[0].transcript).join('')
       setTranscript(t)
       if (e.results[e.results.length - 1].isFinal) { rec.stop(); send(t); setTranscript('') }
     }
