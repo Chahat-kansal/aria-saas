@@ -31,13 +31,22 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({})) as {
     message?: string
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>
     page_context?: { route?: string; page_name?: string }
   }
   const message = (body.message ?? '').trim().slice(0, 500)
   if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 })
 
+  const clientHistory = Array.isArray(body.messages) ? body.messages.slice(-20) : []
   const pageName = body.page_context?.page_name ?? body.page_context?.route ?? ''
   const userContent = pageName ? '[On page: ' + pageName + ']\n' + message : message
+
+  // Prior turns (exclude the current user message at the end of clientHistory)
+  const priorHistory = clientHistory.slice(0, -1).map(m => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }))
+  const allMessages = [...priorHistory, { role: 'user' as const, content: userContent }]
 
   try {
     const response = await client.messages.create({
@@ -49,7 +58,7 @@ export async function POST(req: Request) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         cache_control: { type: 'ephemeral' } as any,
       }],
-      messages: [{ role: 'user', content: userContent }],
+      messages: allMessages,
     })
 
     const reply = response.content[0]?.type === 'text' ? response.content[0].text : ''

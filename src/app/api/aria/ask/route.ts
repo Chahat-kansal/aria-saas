@@ -140,6 +140,7 @@ async function _POST(req: Request) {
   let conversationId: string | null = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let attachments: any[] = []
+  let clientMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await req.formData()
@@ -155,9 +156,10 @@ async function _POST(req: Request) {
       }
     }
   } else {
-    const body = await req.json() as { message?: string; conversation_id?: string }
+    const body = await req.json() as { message?: string; conversation_id?: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> }
     message = (body.message ?? '').trim()
     conversationId = body.conversation_id ?? null
+    clientMessages = Array.isArray(body.messages) ? body.messages.slice(-20) : []
   }
 
   if (!message && attachments.length === 0) return NextResponse.json({ error: 'message or file required' }, { status: 400 })
@@ -1190,6 +1192,15 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
         continue // drop this stale refusal from history
       }
       historyMessages.push({ role: m.role as 'user' | 'assistant', content: msgContent })
+    }
+  }
+
+  // Inject floating-panel client-side history when no DB conversation exists
+  if (clientMessages.length > 1 && historyMessages.length === 0) {
+    for (const m of clientMessages.slice(0, -1)) {
+      if (m.role === 'user' || m.role === 'assistant') {
+        historyMessages.push({ role: m.role, content: m.content })
+      }
     }
   }
 

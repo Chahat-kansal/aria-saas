@@ -92,6 +92,8 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
   const [micOk,    setMicOk]    = useState(false)
   const [transcript, setTranscript] = useState('')
 
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
   const recognRef = useRef<AriaRecog | null>(null)
   const brain     = getBrain(pathname)
@@ -105,9 +107,18 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     return () => { stopAriaSpeech(); recognRef.current?.abort() }
   }, [])
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   const send = useCallback(async (text: string) => {
     const msg = text.trim()
     if (!msg || phase === 'thinking' || phase === 'speaking') return
+
+    // Append user message to history before API call (spec step 2)
+    const newMessages = [...messages, { role: 'user' as const, content: msg }].slice(-20)
+    setMessages(newMessages)
+
     stopAriaSpeech()
     setReply('')
     setError('')
@@ -116,11 +127,11 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     setPhase('thinking')
 
     try {
-      // /api/aria/ask uses a different body shape; others use { message }
-      const isAsk = brain === '/api/aria/ask'
-      const body = isAsk
-        ? JSON.stringify({ message: msg, page_context: { route: pathname, page_name: pageName } })
-        : JSON.stringify({ message: msg, page_context: { route: pathname, page_name: pageName } })
+      const body = JSON.stringify({
+        message: msg,
+        messages: newMessages,
+        page_context: { route: pathname, page_name: pageName },
+      })
 
       const res  = await fetch(brain, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
       const data = await res.json() as { reply?: string; response?: string; error?: string }
@@ -134,10 +145,11 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
       // ask → data.response ; talk/staff-talk → data.reply
       const raw = (data.reply ?? data.response ?? '').trim()
       const { clean, mood: m, gesture: g } = parseAriaTags(raw)
-      // For /api/aria/ask which doesn't emit tags, use heuristic mood
       const resolvedMood    = (m !== 'neutral' || /\[mood:/.test(raw)) ? m : heuristicMood(clean)
       const resolvedGesture = g || (resolvedMood === 'happy' ? 'thumbup' : resolvedMood === 'concerned' ? 'shrug' : '')
 
+      // Append Aria's reply to history (spec step 4)
+      setMessages(prev => [...prev, { role: 'assistant' as const, content: clean }].slice(-20))
       setMood(resolvedMood)
       setGesture(resolvedGesture)
       setReply(clean)
@@ -155,7 +167,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
       setError((e as Error).message ?? 'Network error')
       setPhase('idle')
     }
-  }, [phase, brain, pathname, pageName])
+  }, [phase, brain, pathname, pageName, messages])
 
   const startListening = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -250,20 +262,32 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
 
       {/* ── Body ──────────────────────────────────────────────── */}
       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {reply ? (
-          <div style={{
-            background: 'rgba(127,184,151,0.08)',
-            border: '1px solid ' + T.border,
-            borderRadius: 12, padding: '10px 12px',
-            fontSize: 13, color: T.text, lineHeight: 1.6, fontFamily: T.body,
-          }}>
-            {reply}
-          </div>
-        ) : (
-          <p style={{ fontSize: 12, color: T.muted, margin: 0, fontFamily: T.body }}>
-            {'Hi! Ask me anything about ' + pageName + '.'}
-          </p>
-        )}
+        {/* Scrollable conversation history (spec step 5) */}
+        <div style={{
+          maxHeight: 180, overflowY: 'auto',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {messages.length === 0 ? (
+            <p style={{ fontSize: 12, color: T.muted, margin: 0, fontFamily: T.body }}>
+              {'Hi! Ask me anything about ' + pageName + '.'}
+            </p>
+          ) : messages.map((m, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div style={{
+                maxWidth: '85%',
+                background: m.role === 'user' ? 'rgba(127,184,151,0.18)' : 'rgba(255,255,255,0.05)',
+                border: '1px solid ' + T.border,
+                borderRadius: m.role === 'user' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                padding: '6px 10px',
+                fontSize: 12, color: T.text, lineHeight: 1.5, fontFamily: T.body,
+                wordBreak: 'break-word',
+              }}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
 
         {error && (
           <p style={{ fontSize: 11, color: '#EF4444', margin: 0 }}>{error}</p>

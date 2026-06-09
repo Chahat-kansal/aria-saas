@@ -60,12 +60,21 @@ End every response with a mood tag and gesture tag on the same line — these dr
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({})) as { message?: string }
+    const body = await req.json().catch(() => ({})) as {
+      message?: string
+      messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+    }
     const message = (body.message ?? '').trim().slice(0, 500)
+    const clientHistory = Array.isArray(body.messages) ? body.messages.slice(-20) : []
 
     if (!message) {
       return NextResponse.json({ error: 'message required' }, { status: 400 })
     }
+
+    // Use full conversation history when available, else single-turn fallback
+    const allMessages = clientHistory.length > 0
+      ? clientHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+      : [{ role: 'user' as const, content: message }]
 
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -76,7 +85,7 @@ export async function POST(req: Request) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         cache_control: { type: 'ephemeral' } as any,
       }],
-      messages: [{ role: 'user', content: message }],
+      messages: allMessages,
     })
 
     const reply = response.content[0]?.type === 'text' ? response.content[0].text : ''
