@@ -27,39 +27,60 @@ export default function StaffResetPasswordPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const init = async () => {
-      if (!supabase) { setStatus('error'); setMessage('Authentication unavailable.'); return }
+    if (!supabase) { setStatus('error'); setMessage('Authentication unavailable.'); return }
 
-      const { data: { session } } = await supabase.auth.getSession()
+    let resolved = false
+
+    // PRIMARY: listen for PASSWORD_RECOVERY event — Supabase fires this when a recovery
+    // link is processed, even if detectSessionInUrl already ran before we subscribed.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+      if (event === 'PASSWORD_RECOVERY' && !resolved) {
+        resolved = true
+        setStatus('form')
+      }
+    })
+
+    // FALLBACK: Supabase may have already processed the recovery session via
+    // detectSessionInUrl before we subscribed above. Check getSession() as backup.
+    const init = async () => {
+      const { data: { session } } = await supabase!.auth.getSession()
+
+      if (session && !resolved) {
+        // A session exists — it may be a recovery session already processed by the SDK.
+        // Show the form; updateUser({ password }) will succeed for recovery sessions.
+        resolved = true
+        setStatus('form')
+        return
+      }
 
       if (!session) {
+        // Manual hash exchange (Supabase detectSessionInUrl disabled or hash not processed)
         const hash = window.location.hash
         if (hash.includes('access_token')) {
           const p = new URLSearchParams(hash.slice(1))
           const accessToken = p.get('access_token')
           const refreshToken = p.get('refresh_token')
           if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+            const { error } = await supabase!.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
             if (error) {
               setStatus('error')
               setMessage('Reset link is invalid or has expired. Please request a new one from the login page.')
-              return
             }
+            // onAuthStateChange will fire PASSWORD_RECOVERY and set status='form'
           } else {
             setStatus('error')
             setMessage('Reset link is missing credentials. Please request a new one.')
-            return
           }
-        } else {
+        } else if (!resolved) {
+          // No hash and no session — invalid state
           setStatus('error')
           setMessage('No reset session found. Please use the link from your email.')
-          return
         }
       }
-
-      setStatus('form')
     }
     init()
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const submit = async () => {
@@ -75,8 +96,10 @@ export default function StaffResetPasswordPage() {
     if (error) { setValidationError(error.message); return }
 
     setStatus('success')
-    setMessage('Password updated! Redirecting to your portal…')
-    setTimeout(() => router.replace('/staff/portal'), 1500)
+    setMessage('Password updated! Redirecting to sign in…')
+    // Sign out the recovery session so the user logs in fresh with the new password
+    await supabase.auth.signOut({ scope: 'local' })
+    setTimeout(() => router.replace('/staff/login'), 1500)
   }
 
   return (

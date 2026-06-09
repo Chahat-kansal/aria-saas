@@ -26,9 +26,24 @@ export default function AcceptInvitePage() {
   const [validationError, setValidationError] = useState('')
   const router = useRouter()
 
+  // Read the link type synchronously during first render, before Supabase's
+  // detectSessionInUrl (which runs as a Promise/microtask) clears the hash.
+  // type=recovery means this is a password-reset link, not an invite.
+  const [initialLinkType] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.hash.slice(1)).get('type')
+  })
+
   useEffect(() => {
     const init = async () => {
       if (!supabase) { setStatus('error'); setMessage('Authentication unavailable.'); return }
+
+      // Recovery links arrive here when Supabase's redirectTo fallback is accept-invite.
+      // Detect and re-route so the user sees the password-reset form, not an invite prompt.
+      if (initialLinkType === 'recovery') {
+        router.replace('/staff/reset-password')
+        return
+      }
 
       // Establish session from URL hash (Supabase invite/magic-link token exchange)
       const { data: { session }, error } = await supabase.auth.getSession()
@@ -68,7 +83,7 @@ export default function AcceptInvitePage() {
       setStatus('set-password')
     }
     init()
-  }, [router])
+  }, [router, initialLinkType])
 
   const handleSetPassword = async () => {
     setValidationError('')
