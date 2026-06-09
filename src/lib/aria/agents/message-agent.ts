@@ -74,7 +74,7 @@ export async function messageAgent(
     const business: BizRow = { name: biz?.name ?? 'this business', industry: biz?.industry ?? 'retail', city: biz?.city ?? 'Melbourne' }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let customerQuery: any = supabaseAdmin.from('customers')
+    let customerQuery: any = supabaseAdmin.from('pos_customers')
       .select('id, name, phone, email, last_visit, total_spent')
       .eq('business_id', businessId)
 

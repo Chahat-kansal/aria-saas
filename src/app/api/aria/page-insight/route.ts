@@ -556,17 +556,21 @@ async function _POST(req: Request): Promise<Response> {
     }
 
     if (page === 'customers') {
-      const { data: custs } = await supabase.from('customers')
-        .select('customer_segment, churn_risk, last_visit, total_spent')
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
+      const { data: custs } = await supabase.from('pos_customers')
+        .select('visit_count, last_visit, total_spent')
         .eq('business_id', business_id).limit(2000);
-      type C = { customer_segment: string | null; churn_risk: string | null; visit_count: number | null; last_visit: string | null; total_spent: number | null; total_spend: number | null };
+      type C = { visit_count: number | null; last_visit: string | null; total_spent: number | null };
       const list = (custs ?? []) as C[];
-      const champions = list.filter(c => c.customer_segment === 'champions').length;
-      const atRisk = list.filter(c => c.customer_segment === 'at_risk' || c.churn_risk === 'high').length;
+      // Champions: high visit_count (≥10) and visited in last 90 days
+      const champions = list.filter(c => (c.visit_count ?? 0) >= 10 && c.last_visit && c.last_visit > ninetyDaysAgo).length;
+      // At-risk: visited before (visit_count > 0) but last visit > 60 days ago
+      const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString()
+      const atRisk = list.filter(c => (c.visit_count ?? 0) > 0 && c.last_visit && c.last_visit < sixtyDaysAgo).length;
       const valueAtRisk = list
-        .filter(c => c.customer_segment === 'at_risk' || c.churn_risk === 'high')
-        .reduce((s, c) => s + Number(c.total_spent ?? c.total_spend ?? 0), 0);
-      const ctx = `${list.length} customers total. ${champions} Champions, ${atRisk} At-Risk (representing A$${valueAtRisk.toFixed(0)} lifetime spend at risk).`;
+        .filter(c => (c.visit_count ?? 0) > 0 && c.last_visit && c.last_visit < sixtyDaysAgo)
+        .reduce((s, c) => s + Number(c.total_spent ?? 0), 0);
+      const ctx = `${list.length} customers total. ${champions} loyal regulars (10+ visits, active last 90 days), ${atRisk} at-risk (visited before but not in 60+ days, representing A$${valueAtRisk.toFixed(0)} lifetime spend at risk).`;
       const insight = await callClaude(`In ONE sentence, give ${bizName} the most important customers insight: ${ctx}. If lifetime value is at risk, suggest one concrete action.`, systemPrompt);
       const priority: Priority = atRisk > 10 ? 'warning' : 'info';
       return NextResponse.json({ insight, priority, link: '/dashboard/customers' } satisfies PageInsightResult);

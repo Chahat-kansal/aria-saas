@@ -145,7 +145,6 @@ export async function collectBusinessData(
     purchaseOrders,
     posCustomers,
     squareCustomers,
-    customers,
     staffMembers,
     posStaff,
     imports,
@@ -177,7 +176,6 @@ export async function collectBusinessData(
     safeSelect(db, 'warehouse_purchase_orders', q => q.eq('business_id', businessId).gte('created_at', since90).limit(RECENT_LIMIT)),
     safeSelect(db, 'pos_customers', q => q.eq('business_id', businessId).order('last_visit', { ascending: false }).limit(RECENT_LIMIT)),
     safeSelect(db, 'square_customers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
-    safeSelect(db, 'customers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(db, 'staff_members', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(db, 'pos_staff', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(db, 'imported_files', q => q.eq('business_id', businessId).order('created_at', { ascending: false }).limit(50)),
@@ -190,7 +188,7 @@ export async function collectBusinessData(
   const inventory = [...stockMovements, ...warehouseLots, ...warehouseItemLocations];
   const suppliers = posSuppliers;
   const supplierCosts = [...supplierPerformance, ...purchaseOrders];
-  const allCustomers = [...posCustomers, ...squareCustomers, ...customers];
+  const allCustomers = [...posCustomers, ...squareCustomers];
   const staff = [...staffMembers, ...posStaff];
   const importTypes = uploadTypes(imports);
 

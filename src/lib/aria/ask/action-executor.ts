@@ -220,11 +220,13 @@ export async function executeAction(
         const {
           name, promotion_type, discount_amount,
           starts_at, ends_at, min_spend,
-          category, notes,
+          active_days, product_ids, category, notes,
         } = action.payload as {
           name: string; promotion_type: string
           discount_amount?: number
           starts_at?: string; ends_at?: string; min_spend?: number
+          active_days?: number[]
+          product_ids?: string[]
           category?: string; notes?: string
         }
         if (!name || !promotion_type) {
@@ -240,6 +242,30 @@ export async function executeAction(
           bundle: 'bundle',
           multibuy: 'multibuy',
         }
+        // Day-name → ISO number fallback (1=Mon … 7=Sun), in case planner sends names instead of numbers
+        const DAY_NAME_TO_ISO: Record<string, number> = {
+          monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
+          friday: 5, saturday: 6, sunday: 7,
+          mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7,
+        }
+        const resolvedActiveDays: number[] | null = active_days && active_days.length > 0
+          ? active_days.map(d => typeof d === 'string'
+              ? (DAY_NAME_TO_ISO[(d as string).toLowerCase()] ?? Number(d))
+              : Number(d)).filter(n => n >= 1 && n <= 7)
+          : null
+
+        // Infer active_days from the promo name if the planner didn't supply them
+        const inferredDaysFromName = ((): number[] | null => {
+          if (resolvedActiveDays) return null
+          const lower = name.toLowerCase()
+          for (const [dayName, isoNum] of Object.entries(DAY_NAME_TO_ISO)) {
+            if (lower.includes(dayName)) return [isoNum]
+          }
+          return null
+        })()
+
+        const finalActiveDays = resolvedActiveDays ?? inferredDaysFromName
+
         const dbPromoType = promoTypeMap[promotion_type] ?? 'percentage_discount'
         entityType = 'pos_promotions'
         const promoRow: Record<string, unknown> = {
@@ -247,18 +273,21 @@ export async function executeAction(
           name,
           promotion_type: dbPromoType,
           discount_amount: Number(discount_amount ?? 10),
-          active: false,
+          // active=true so the discount engine fires; date-window (starts_at/ends_at) handles scheduling
+          active: true,
+          is_active: true,
           starts_at: starts_at ?? null,
           ends_at: ends_at ?? null,
           min_spend: min_spend ?? null,
-          // Required NOT-NULL columns with no DB default — must supply
-          product_ids: '[]',
-          category_ids: '[]',
-          stack_priority: 0,
+          product_ids: product_ids && product_ids.length > 0 ? product_ids : [],
+          category_ids: [],
+          active_days: finalActiveDays ?? [1, 2, 3, 4, 5, 6, 7],
+          stack_priority: 100,
           current_uses: 0,
           exclude_discounted: false,
           updated_at: new Date().toISOString(),
         }
+        if (category) promoRow.applies_to = 'category'
         if (notes) promoRow.notes = notes
 
         const { data: promo, error: promoErr } = await supabase
@@ -272,7 +301,9 @@ export async function executeAction(
         afterState = {
           promotion_id: (promo as { id: string }).id,
           name: (promo as { name: string }).name,
-          promotion_type: dbPromoType, discount_amount, active: false,
+          promotion_type: dbPromoType, discount_amount, active: true,
+          active_days: finalActiveDays ?? [1, 2, 3, 4, 5, 6, 7],
+          product_ids: product_ids && product_ids.length > 0 ? product_ids : [],
         }
         break
       }
