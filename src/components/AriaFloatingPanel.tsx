@@ -57,16 +57,11 @@ function heuristicMood(text: string): string {
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking'
 
-// ── Design tokens (matches landing page dark palette) ──────────────────────
 const T = {
-  bg:      '#13201a',
-  card:    '#1a2b22',
-  border:  'rgba(127,184,151,0.15)',
+  border:  'rgba(127,184,151,0.12)',
   text:    '#E8EDE7',
-  muted:   '#9BA8A0',
   sage:    '#7FB897',
   deep:    '#2D5240',
-  display: 'var(--font-display, Cormorant, Georgia, serif)',
   body:    'var(--font-body, Outfit, Inter, sans-serif)',
 }
 
@@ -82,18 +77,18 @@ type AriaRecog = {
 }
 
 export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) {
-  const pathname   = usePathname() ?? '/'
-  const [phase,    setPhase]    = useState<Phase>('idle')
-  const [input,    setInput]    = useState('')
-  const [reply,    setReply]    = useState('')
-  const [mood,     setMood]     = useState('neutral')
-  const [gesture,  setGesture]  = useState('')
-  const [error,    setError]    = useState('')
-  const [micOk,    setMicOk]    = useState(false)
-  const [transcript, setTranscript] = useState('')
+  const pathname  = usePathname() ?? '/'
+  const [phase,   setPhase]   = useState<Phase>('idle')
+  const [input,   setInput]   = useState('')
+  const [reply,   setReply]   = useState('')
+  const [mood,    setMood]    = useState('neutral')
+  const [gesture, setGesture] = useState('')
+  const [error,   setError]   = useState('')
+  const [micOk,   setMicOk]   = useState(false)
 
+  // Conversation history — passed to API for context, never rendered
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+
   const inputRef  = useRef<HTMLInputElement>(null)
   const recognRef = useRef<AriaRecog | null>(null)
   const brain     = getBrain(pathname)
@@ -107,15 +102,11 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     return () => { stopAriaSpeech(); recognRef.current?.abort() }
   }, [])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
   const send = useCallback(async (text: string) => {
     const msg = text.trim()
     if (!msg || phase === 'thinking' || phase === 'speaking') return
 
-    // Append user message to history before API call (spec step 2)
+    // Append user turn before API call (memory cap: 20 messages)
     const newMessages = [...messages, { role: 'user' as const, content: msg }].slice(-20)
     setMessages(newMessages)
 
@@ -127,13 +118,15 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     setPhase('thinking')
 
     try {
-      const body = JSON.stringify({
-        message: msg,
-        messages: newMessages,
-        page_context: { route: pathname, page_name: pageName },
+      const res = await fetch(brain, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          messages: newMessages,
+          page_context: { route: pathname, page_name: pageName },
+        }),
       })
-
-      const res  = await fetch(brain, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
       const data = await res.json() as { reply?: string; response?: string; error?: string }
 
       if (!res.ok || data.error) {
@@ -142,13 +135,12 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
         return
       }
 
-      // ask → data.response ; talk/staff-talk → data.reply
       const raw = (data.reply ?? data.response ?? '').trim()
       const { clean, mood: m, gesture: g } = parseAriaTags(raw)
       const resolvedMood    = (m !== 'neutral' || /\[mood:/.test(raw)) ? m : heuristicMood(clean)
       const resolvedGesture = g || (resolvedMood === 'happy' ? 'thumbup' : resolvedMood === 'concerned' ? 'shrug' : '')
 
-      // Append Aria's reply to history (spec step 4)
+      // Silently append Aria's reply to hidden history
       setMessages(prev => [...prev, { role: 'assistant' as const, content: clean }].slice(-20))
       setMood(resolvedMood)
       setGesture(resolvedGesture)
@@ -177,144 +169,107 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     const rec: AriaRecog = new SR()
     recognRef.current = rec
     rec.lang = 'en-AU'; rec.continuous = false; rec.interimResults = true
-    setPhase('listening'); setTranscript(''); setError('')
+    setPhase('listening'); setError('')
     rec.onresult = (e: SpeechRecognitionEvent) => {
       const t = Array.from(e.results).map(r => r[0].transcript).join('')
-      setTranscript(t)
-      if (e.results[e.results.length - 1].isFinal) { rec.stop(); send(t); setTranscript('') }
+      if (e.results[e.results.length - 1].isFinal) { rec.stop(); send(t) }
     }
-    rec.onerror = () => { setPhase('idle'); setTranscript('') }
+    rec.onerror = () => { setPhase('idle') }
     rec.onend   = () => { setPhase(p => p === 'listening' ? 'idle' : p) }
     rec.start()
   }, [send])
 
   const stopListening = useCallback(() => {
     recognRef.current?.stop()
-    setPhase('idle'); setTranscript('')
+    setPhase('idle')
   }, [])
 
   const busy = phase === 'thinking' || phase === 'speaking'
 
-  const phaseLabel: Record<Phase, string> = {
-    idle: '', listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking…'
-  }
+  const statusText =
+    phase === 'thinking' ? 'Aria is thinking…' :
+    phase === 'speaking' ? 'Aria is speaking…' :
+    phase === 'listening' ? 'Listening…' : null
 
   return (
     <div style={{
       position: 'fixed', bottom: 88, right: 24, zIndex: 9998,
-      width: 360, maxWidth: 'calc(100vw - 32px)',
-      background: T.bg,
+      width: 360, height: 520,
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'calc(100vh - 104px)',
+      background: 'rgba(14,20,17,0.97)',
+      backdropFilter: 'blur(20px)',
       border: '1px solid ' + T.border,
-      borderRadius: 20,
-      boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+      borderRadius: 24,
+      boxShadow: '0 16px 60px rgba(0,0,0,0.75)',
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
-      animation: 'ariaSlideUp 220ms cubic-bezier(0.34,1.56,0.64,1) forwards',
+      animation: 'ariaSlideUp 250ms cubic-bezier(0.34,1.56,0.64,1) forwards',
     }}>
-      {/* ── Header ────────────────────────────────────────────── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 16px',
-        borderBottom: '1px solid ' + T.border,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 18, fontWeight: 500, color: T.sage }}>Aria</span>
-          <span style={{ fontSize: 10, color: T.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {'· ' + pageName}
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          aria-label="Close Aria"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: T.muted, fontSize: 18, lineHeight: 1, padding: '0 4px' }}
-        >×</button>
-      </div>
 
-      {/* ── Avatar canvas ─────────────────────────────────────── */}
-      <div style={{ position: 'relative', height: 200, background: 'linear-gradient(180deg, #1e3329 0%, #152820 100%)' }}>
+      {/* Close — floating top-right */}
+      <button
+        onClick={onClose}
+        aria-label="Close Aria"
+        style={{
+          position: 'absolute', top: 14, right: 14, zIndex: 20,
+          width: 30, height: 30, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(255,255,255,0.07)',
+          border: '1px solid rgba(255,255,255,0.10)',
+          cursor: 'pointer', color: 'rgba(255,255,255,0.5)',
+          fontSize: 17, lineHeight: 1, padding: 0,
+        }}
+      >×</button>
+
+      {/* Avatar — takes all remaining vertical space */}
+      <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden' }}>
         <AriaTalkingHead
           mode={phase === 'speaking' ? 'talking' : 'idle'}
           replyText={reply}
           mood={mood}
           gesture={gesture}
         />
-        {phase !== 'idle' && (
+        {/* Subtle page context badge, bottom-left */}
+        {pageName !== 'Aria' && (
           <div style={{
-            position: 'absolute', bottom: 10, left: 0, right: 0,
-            display: 'flex', justifyContent: 'center',
+            position: 'absolute', bottom: 8, left: 14, zIndex: 10,
+            fontSize: 9, color: 'rgba(127,184,151,0.5)',
+            fontFamily: T.body, letterSpacing: '0.08em', textTransform: 'uppercase',
           }}>
-            <div style={{
-              background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
-              borderRadius: 99, padding: '3px 12px',
-              fontSize: 11, color: '#fff', display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: phase === 'listening' ? '#EF4444' : T.sage,
-                display: 'inline-block', animation: 'ariaVoicePulse 0.9s ease-in-out infinite',
-              }} />
-              {phaseLabel[phase]}
-            </div>
+            {pageName}
           </div>
         )}
       </div>
 
-      {/* ── Body ──────────────────────────────────────────────── */}
-      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* Scrollable conversation history (spec step 5) */}
-        <div style={{
-          maxHeight: 180, overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: 6,
-        }}>
-          {messages.length === 0 ? (
-            <p style={{ fontSize: 12, color: T.muted, margin: 0, fontFamily: T.body }}>
-              {'Hi! Ask me anything about ' + pageName + '.'}
-            </p>
-          ) : messages.map((m, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-              <div style={{
-                maxWidth: '85%',
-                background: m.role === 'user' ? 'rgba(127,184,151,0.18)' : 'rgba(255,255,255,0.05)',
-                border: '1px solid ' + T.border,
-                borderRadius: m.role === 'user' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                padding: '6px 10px',
-                fontSize: 12, color: T.text, lineHeight: 1.5, fontFamily: T.body,
-                wordBreak: 'break-word',
-              }}>
-                {m.content}
-              </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+      {/* Bottom controls — input + status only */}
+      <div style={{
+        padding: '10px 14px 14px',
+        background: 'linear-gradient(0deg, rgba(14,20,17,1) 0%, rgba(14,20,17,0.88) 100%)',
+        borderTop: '1px solid rgba(127,184,151,0.07)',
+        display: 'flex', flexDirection: 'column', gap: 6,
+      }}>
 
-        {error && (
-          <p style={{ fontSize: 11, color: '#EF4444', margin: 0 }}>{error}</p>
-        )}
-
-        {transcript && (
-          <p style={{ fontSize: 12, color: T.muted, fontStyle: 'italic', margin: 0 }}>{transcript}</p>
-        )}
-
-        {/* Input row */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {micOk && (
             <button
               onClick={phase === 'listening' ? stopListening : startListening}
               disabled={busy}
               title={phase === 'listening' ? 'Stop' : 'Speak'}
               style={{
-                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: phase === 'listening' ? '#EF4444' : 'rgba(127,184,151,0.12)',
-                border: '1px solid ' + (phase === 'listening' ? '#EF4444' : T.border),
+                background: phase === 'listening' ? 'rgba(127,184,151,0.22)' : 'rgba(127,184,151,0.07)',
+                border: '1px solid ' + (phase === 'listening' ? 'rgba(127,184,151,0.45)' : 'rgba(127,184,151,0.15)'),
                 cursor: busy ? 'default' : 'pointer',
                 opacity: busy ? 0.4 : 1,
+                animation: phase === 'listening' ? 'ariaVoicePulse 0.9s ease-in-out infinite' : 'none',
+                transition: 'background 0.15s, border-color 0.15s',
               }}
             >
               {phase === 'listening'
-                ? <svg width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10" rx="2" fill="#fff"/></svg>
+                ? <svg width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10" rx="2" fill={T.sage}/></svg>
                 : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.sage} strokeWidth="2" strokeLinecap="round">
                     <rect x="9" y="2" width="6" height="12" rx="3"/>
                     <path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/>
@@ -323,6 +278,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
               }
             </button>
           )}
+
           <input
             ref={inputRef}
             type="text"
@@ -332,18 +288,21 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
             placeholder={phase === 'listening' ? 'Listening…' : 'Ask Aria…'}
             disabled={busy || phase === 'listening'}
             style={{
-              flex: 1, height: 36, padding: '0 10px', borderRadius: 8,
-              border: '1px solid ' + T.border,
-              background: T.card, color: T.text, fontSize: 13,
-              fontFamily: T.body, outline: 'none',
+              flex: 1, height: 38, padding: '0 12px',
+              borderRadius: 10,
+              border: '1px solid rgba(127,184,151,0.14)',
+              background: 'rgba(255,255,255,0.05)',
+              color: T.text, fontSize: 13, fontFamily: T.body,
+              outline: 'none',
               opacity: (busy || phase === 'listening') ? 0.5 : 1,
             }}
           />
+
           <button
             onClick={() => send(input)}
             disabled={!input.trim() || busy || phase === 'listening'}
             style={{
-              width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: T.deep, border: 'none',
               cursor: (!input.trim() || busy || phase === 'listening') ? 'default' : 'pointer',
@@ -356,16 +315,26 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
             </svg>
           </button>
         </div>
+
+        {/* Subtle status line — no bubbles */}
+        {(statusText || error) && (
+          <p style={{
+            fontSize: 11, margin: 0, textAlign: 'center', fontFamily: T.body,
+            color: error ? '#EF4444' : 'rgba(127,184,151,0.55)',
+          }}>
+            {error ?? statusText}
+          </p>
+        )}
       </div>
 
       <style>{`
         @keyframes ariaSlideUp {
-          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          from { opacity: 0; transform: translateY(24px) scale(0.96); }
           to   { opacity: 1; transform: translateY(0)    scale(1);    }
         }
         @keyframes ariaVoicePulse {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.4; transform: scale(1.4); }
+          50%       { opacity: 0.5; transform: scale(1.3); }
         }
       `}</style>
     </div>
