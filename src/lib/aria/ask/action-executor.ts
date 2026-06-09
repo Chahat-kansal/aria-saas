@@ -308,6 +308,91 @@ export async function executeAction(
         break
       }
 
+      case 'apply_category_discount': {
+        const {
+          category_id, category_name, discount_percent,
+          starts_at, ends_at, active_days, name, notes,
+        } = action.payload as {
+          category_id: string; category_name?: string
+          discount_percent?: number
+          starts_at?: string; ends_at?: string
+          active_days?: number[]
+          name?: string; notes?: string
+        }
+        if (!category_id) {
+          return { ok: false, affected_count: 0, error: 'category_id is required for apply_category_discount', rollback_available: false }
+        }
+
+        // Verify category belongs to this business
+        const { data: catRow } = await supabase.from('pos_categories')
+          .select('id,name').eq('id', category_id).eq('business_id', businessId).maybeSingle()
+        if (!catRow) {
+          const { data: allCats } = await supabase.from('pos_categories')
+            .select('name').eq('business_id', businessId).order('name')
+          const catList = (allCats ?? []).map((c: Record<string,unknown>) => String(c.name)).join(', ')
+          return { ok: false, affected_count: 0, error: `Category not found. Available categories: ${catList || 'none'}`, rollback_available: false }
+        }
+
+        const DAY_NAME_TO_ISO_CAT: Record<string, number> = {
+          monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
+          friday: 5, saturday: 6, sunday: 7,
+          mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7,
+        }
+        const resolvedCatDays: number[] | null = active_days && active_days.length > 0
+          ? active_days.map(d => typeof d === 'string'
+              ? (DAY_NAME_TO_ISO_CAT[(d as string).toLowerCase()] ?? Number(d))
+              : Number(d)).filter(n => n >= 1 && n <= 7)
+          : null
+
+        const pct = Number(discount_percent ?? 10)
+        const promoName = name ?? `${catRow.name} ${pct}% off`
+        const todayISO = new Date().toISOString().slice(0, 10)
+
+        entityType = 'pos_promotions'
+        const catPromoRow: Record<string, unknown> = {
+          business_id: businessId,
+          name: promoName,
+          promotion_type: 'percentage_discount',
+          // discount_percent is the column the discount engine reads for percentage_discount (discount-engine.ts:176)
+          discount_percent: pct,
+          applies_to: 'category',
+          category_id,
+          active: true,
+          is_active: true,
+          starts_at: starts_at ?? todayISO,
+          ends_at: ends_at ?? null,
+          active_days: resolvedCatDays ?? [1, 2, 3, 4, 5, 6, 7],
+          product_ids: [],
+          category_ids: [],
+          stack_priority: 100,
+          current_uses: 0,
+          exclude_discounted: false,
+          updated_at: new Date().toISOString(),
+        }
+        if (notes) catPromoRow.notes = notes
+
+        const { data: catPromo, error: catPromoErr } = await supabase
+          .from('pos_promotions').insert(catPromoRow).select('id,name').single()
+        if (catPromoErr || !catPromo) {
+          return { ok: false, affected_count: 0, error: catPromoErr?.message ?? 'Failed to create category promotion', rollback_available: false }
+        }
+        entityIds = [(catPromo as { id: string }).id]
+        affectedCount = 1
+        beforeState = {}
+        afterState = {
+          promotion_id: (catPromo as { id: string }).id,
+          name: (catPromo as { name: string }).name,
+          promotion_type: 'percentage_discount',
+          discount_percent: pct,
+          applies_to: 'category',
+          category_id,
+          category_name: category_name ?? (catRow as { name: string }).name,
+          active: true,
+          active_days: resolvedCatDays ?? [1, 2, 3, 4, 5, 6, 7],
+        }
+        break
+      }
+
       default:
         return { ok: false, affected_count: 0, error: `Action type "${action.type}" not yet supported`, rollback_available: false }
     }
