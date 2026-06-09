@@ -49,6 +49,7 @@ export type SpeechBackend = 'elevenlabs' | 'webgpu-headtts' | 'speechsynthesis' 
 let _backend: SpeechBackend = 'none'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _tts: any = null
+let _headTTSReady = false                     // true only after a confirmed clean connect()
 let _audioEl: HTMLAudioElement | null = null  // current ElevenLabs audio element
 let _initPromise: Promise<void> | null = null
 let _pendingVisemes: VisemeEntry[] = []
@@ -137,8 +138,8 @@ async function tryInitHeadTTS(): Promise<boolean> {
         workerModule:  '/headtts/modules/worker-tts.mjs',
         dictionaryURL: '/headtts/dictionaries',
         languages:     ['en-us'],
-        defaultVoice:  'af_bella',
-        defaultSpeed:  1.05,
+        defaultVoice:  'af_heart',
+        defaultSpeed:  1.0,
       })
 
       // Track whether a connection-level error fired during this attempt.
@@ -164,7 +165,10 @@ async function tryInitHeadTTS(): Promise<boolean> {
       }
 
       try {
-        await tts.connect()
+        // Pass voice + rate explicitly so HeadTTS initialises the synthesis
+        // input pipeline immediately. Without this config "Input property not set"
+        // fires on the first synthesize() call even after a successful connect().
+        await tts.connect({ voice: 'af_heart', rate: 1.0 })
       } catch (connectErr) {
         // connect() threw — treat same as a connection error
         hadConnectionError = true
@@ -182,13 +186,15 @@ async function tryInitHeadTTS(): Promise<boolean> {
       }
 
       // ── Clean connect: no connection errors fired ──────────────────────────
-      // Restore normal runtime onerror and mark the instance as ready.
+      // Restore normal runtime onerror, mark ready, and store the instance.
+      // _headTTSReady gates all synthesize() calls — it is never set until here.
       tts.onerror = (err: unknown) => {
         console.warn('[AriaVoice] HeadTTS error:', err)
       }
       _tts = tts
+      _headTTSReady = true
       _backend = 'webgpu-headtts'
-      console.log('[AriaVoice] HeadTTS WebGPU ready — phoneme-level lip-sync enabled')
+      console.log('[AriaVoice] HeadTTS WebGPU ready — phoneme-level lip-sync enabled (af_heart voice)')
       return true
     }
 
@@ -315,7 +321,9 @@ export function speakAriaText(
   }
 
   // ── WebGPU + HeadTTS path ────────────────────────────────────────────────
-  if (_backend === 'webgpu-headtts' && _tts) {
+  // _headTTSReady is only true after a confirmed clean connect() with voice config —
+  // this prevents "Input property not set" if connect() resolved but init was partial.
+  if (_backend === 'webgpu-headtts' && _tts && _headTTSReady) {
     _tts.clear?.()
 
     _tts.onend = () => {
