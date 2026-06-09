@@ -81,14 +81,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   } catch(e){}
 })();
 `}} />
-        {/* Importmap — must come before any ES module scripts.
-            Tells the browser where to find 'three' when TalkingHead imports it. */}
-        <script type="importmap" dangerouslySetInnerHTML={{ __html: JSON.stringify({
-          imports: {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
-          }
-        }) }} />
       </head>
       <body className={`${cormorant.variable} ${outfit.variable} ${mono.variable} font-sans antialiased`}>
         {/* Anti-flash: restore theme before paint */}

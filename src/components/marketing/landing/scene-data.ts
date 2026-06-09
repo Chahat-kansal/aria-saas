@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import dynamic from 'next/dynamic'
 
 export interface SceneDef {
   id: string
@@ -20,7 +21,9 @@ import AskScene from './scenes/AskScene'
 import ScheduleScene from './scenes/ScheduleScene'
 import AustraliaScene from './scenes/AustraliaScene'
 import TestimonialScene from './scenes/TestimonialScene'
-import TalkToAriaScene from './scenes/TalkToAriaScene'
+// TalkToAriaScene pulls in Three.js / WebGL via AriaTalkingHead — must be
+// loaded client-only so it never touches the SSR bundle.
+const TalkToAriaScene = dynamic(() => import('./scenes/TalkToAriaScene'), { ssr: false }) as ComponentType
 import PricingTiersScene from './scenes/PricingTiersScene'
 import OutroScene from './scenes/OutroScene'
 
