@@ -57,6 +57,7 @@ export default function StaffPortalLayout({ children }: { children: ReactNode })
               { href: '/staff/portal/timesheets', label: 'Hours' },
               { href: '/staff/portal/leave', label: 'Leave' },
               { href: '/staff/portal/availability', label: 'Availability' },
+              { href: '/staff/portal/messages', label: 'Messages' },
             ].map(item => (
               <Link key={item.href} href={item.href}
                 className="px-2.5 py-1.5 text-xs rounded transition-colors hover:text-white"
