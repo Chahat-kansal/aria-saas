@@ -7,8 +7,9 @@ export default function AriaFloatingButton() {
   const pathname = usePathname() ?? ''
   const [isOpen, setIsOpen] = useState(false)
 
-  // Never render on /pos or any sub-route (POS terminal)
-  if (pathname.startsWith('/pos')) return null
+  // Hide on unauthenticated / public pages — only show inside the product
+  const EXCLUDED = ['/pos', '/', '/login', '/signup', '/staff/login', '/staff/accept-invite', '/staff/reset-password']
+  if (EXCLUDED.some(p => pathname === p || pathname.startsWith(p + '/'))) return null
 
   return (
     <>
