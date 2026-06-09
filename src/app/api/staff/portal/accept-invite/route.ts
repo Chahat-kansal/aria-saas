@@ -32,8 +32,11 @@ async function _POST(_req: Request) {
 
   if (!sm) {
     // No match — still redirect to portal, don't block the user
-    return NextResponse.json({ ok: true, warning: 'Staff member not found for this account' })
+    return NextResponse.json({ ok: true, warning: 'Staff member not found for this account', was_already_enabled: false })
   }
+
+  // Capture before-update state so the UI knows whether to show the password form
+  const wasAlreadyEnabled = Boolean(sm.portal_enabled)
 
   // Step 3: update staff_member — link user_id and enable portal
   const { error: smErr } = await supabaseAdmin
@@ -63,7 +66,7 @@ async function _POST(_req: Request) {
     console.error('[accept-invite] staff_invites update failed:', invErr.message)
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, was_already_enabled: wasAlreadyEnabled })
 }
 
 export const POST = withErrorCapture('staff/portal/accept-invite', _POST)

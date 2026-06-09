@@ -11,25 +11,27 @@ export default function StaffPortalLayout({ children }: { children: ReactNode })
   const pathname = usePathname()
   const [checking, setChecking] = useState(true)
 
-  // Skip auth check on login page
-  const isLoginPage = pathname === '/staff/login'
+  // Skip auth check on pages that handle their own session exchange
+  const isPublicPage = pathname === '/staff/login'
+    || pathname === '/staff/accept-invite'
+    || pathname === '/staff/reset-password'
 
   useEffect(() => {
-    if (isLoginPage) { setChecking(false); return }
+    if (isPublicPage) { setChecking(false); return }
     if (!supabase) { router.replace('/staff/login'); return }
     supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
       const session = result.data.session
       if (!session) router.replace('/staff/login')
       else setChecking(false)
     })
-  }, [isLoginPage, router])
+  }, [isPublicPage, router])
 
   const handleSignOut = async () => {
     if (supabase) await supabase.auth.signOut()
     router.replace('/staff/login')
   }
 
-  if (!isLoginPage && checking) {
+  if (!isPublicPage && checking) {
     return (
       <div className="min-h-screen flex items-center justify-center"
         style={{ background: '#0E1411' }}>
@@ -39,8 +41,8 @@ export default function StaffPortalLayout({ children }: { children: ReactNode })
     )
   }
 
-  // Login page renders without nav
-  if (isLoginPage) return <>{children}</>
+  // Public pages (login / invite / reset) render without nav
+  if (isPublicPage) return <>{children}</>
 
   return (
     <div className="min-h-screen" style={{ background: '#0E1411', color: '#E8EDE7' }}>

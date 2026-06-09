@@ -62,6 +62,8 @@ export default function StaffProfilePage() {
   const [notFound, setNotFound] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
+  const [sendingLoginLink, setSendingLoginLink] = useState(false)
+  const [loginLinkMsg, setLoginLinkMsg] = useState('')
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
@@ -104,6 +106,15 @@ export default function StaffProfilePage() {
     const j = await r.json() as { email?: string; error?: string }
     setInviteMsg(r.ok ? `Invite resent to ${j.email}` : (j.error ?? 'Failed'))
     setInviting(false)
+  }
+
+  const sendLoginLink = async () => {
+    if (!member) return
+    setSendingLoginLink(true); setLoginLinkMsg('')
+    const r = await fetch(`/api/staff/${params.id}/send-login-link`, { method: 'POST' })
+    const j = await r.json() as { email?: string; error?: string }
+    setLoginLinkMsg(r.ok ? `Login link sent to ${j.email}` : (j.error ?? 'Failed to send'))
+    setSendingLoginLink(false)
   }
 
   const sendInvite = async () => {
@@ -260,7 +271,16 @@ export default function StaffProfilePage() {
               </button>
             </>
           )}
-          {hasPortal && <span className="px-3 py-1.5 text-xs rounded-lg bg-emerald-500/20 text-emerald-400">✓ Portal active</span>}
+          {hasPortal && (
+            <>
+              <span className="px-3 py-1.5 text-xs rounded-lg bg-emerald-500/20 text-emerald-400">✓ Portal active</span>
+              <button onClick={sendLoginLink} disabled={sendingLoginLink}
+                className="px-4 py-1.5 text-sm rounded-lg"
+                style={{ border: '1px solid rgba(127,184,151,0.2)', color: '#7FB897' }}>
+                {sendingLoginLink ? 'Sending…' : 'Send login link'}
+              </button>
+            </>
+          )}
           <Link href="/dashboard/staff" className="px-4 py-1.5 text-sm rounded-lg"
             style={{ border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-secondary, #A8B5A8)' }}>
             ← Team
@@ -268,7 +288,8 @@ export default function StaffProfilePage() {
         </div>
       </div>
 
-      {inviteMsg && <p className="text-sm" style={{ color: inviteMsg.startsWith('Invite sent') ? '#7FB897' : '#ef4444' }}>{inviteMsg}</p>}
+      {inviteMsg && <p className="text-sm" style={{ color: inviteMsg.startsWith('Invite') ? '#7FB897' : '#ef4444' }}>{inviteMsg}</p>}
+      {loginLinkMsg && <p className="text-sm" style={{ color: loginLinkMsg.startsWith('Login link') ? '#7FB897' : '#ef4444' }}>{loginLinkMsg}</p>}
 
       {/* Visa expiry alert banner */}
       {(() => {
