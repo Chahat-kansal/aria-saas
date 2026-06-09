@@ -26,7 +26,18 @@ const BONES = {
   lLowerArm: 'J_Bip_L_LowerArm', rLowerArm: 'J_Bip_R_LowerArm',
 };
 
-function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
+// ── Mood → VRM expression map ─────────────────────────────────────────────
+const MOOD_EXPR: Record<string, { expr: string; value: number }> = {
+  happy:     { expr: 'happy',     value: 0.7 },
+  excited:   { expr: 'surprised', value: 0.5 },
+  concerned: { expr: 'sad',       value: 0.4 },
+  thinking:  { expr: 'neutral',   value: 0.0 },
+  neutral:   { expr: 'neutral',   value: 0.0 },
+}
+
+function AvatarScene({ mode, replyText, mood, gesture }: {
+  mode: string; replyText: string; mood: string; gesture: string
+}) {
   const groupRef = useRef(new THREE.Group());
   const vrmRef = useRef<VRM | null>(null);
   const vrmReadyRef = useRef(false);
@@ -41,6 +52,10 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   const talkStart = useRef<number | null>(null);
   const useHtVisemes = useRef(false);
 
+  // ── Mood + gesture state ──────────────────────────────────────────────────
+  const moodRef    = useRef<string>('neutral');
+  const gestureRef = useRef<{ name: string; end: number } | null>(null);
+
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
   const clock = useRef(0);
@@ -49,6 +64,26 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   useEffect(() => {
     initVoice()
   }, [])
+
+  // ── Mood: update ref + apply expression immediately if VRM is ready ──────
+  useEffect(() => {
+    moodRef.current = mood
+    const vrm = vrmRef.current
+    if (!vrm || !vrmReadyRef.current) return
+    const def = MOOD_EXPR[mood] ?? MOOD_EXPR.neutral
+    // Reset all mood-driven expressions before applying new one
+    vrm.expressionManager?.setValue('sad', 0)
+    vrm.expressionManager?.setValue('surprised', 0)
+    if (def.expr !== 'neutral' && def.value > 0) {
+      vrm.expressionManager?.setValue(def.expr, def.value)
+    }
+  }, [mood])
+
+  // ── Gesture: start a 3-second arm animation ───────────────────────────────
+  useEffect(() => {
+    if (!gesture) return
+    gestureRef.current = { name: gesture, end: Date.now() + 3000 }
+  }, [gesture])
 
   // ── VRM load (unchanged from original) ─────────────────────────────────
   useEffect(() => {
@@ -190,9 +225,48 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       bones.neck.rotation.x = -0.08;
     }
 
-    // Arms breathing
-    if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2 + Math.sin(t * 0.8) * 0.015;
-    if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2 - Math.sin(t * 0.8) * 0.015;
+    // Arms: breathing unless a gesture is active
+    if (!gestureRef.current) {
+      if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2 + Math.sin(t * 0.8) * 0.015;
+      if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2 - Math.sin(t * 0.8) * 0.015;
+    }
+
+    // Gesture arm override
+    if (gestureRef.current) {
+      const { name, end } = gestureRef.current
+      const remaining = end - Date.now()
+      if (remaining <= 0) {
+        gestureRef.current = null
+        if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2
+        if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2
+        if (bones.rLowerArm) bones.rLowerArm.rotation.x = 0.0
+        if (bones.rUpperArm) bones.rUpperArm.rotation.x = 0.0
+      } else {
+        const total = 3000
+        const elapsed = total - remaining
+        const easeIn  = Math.min(1, elapsed / 400)
+        const easeOut = Math.min(1, remaining / 400)
+        const blend   = easeIn * easeOut
+        switch (name) {
+          case 'handup':
+          case 'thumbup':
+            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.35, blend)
+            if (bones.rLowerArm) bones.rLowerArm.rotation.x = THREE.MathUtils.lerp(0, -0.4, blend)
+            break
+          case 'shrug':
+            if (bones.lUpperArm) bones.lUpperArm.rotation.z = THREE.MathUtils.lerp(-1.2, -0.8, blend)
+            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.8, blend)
+            break
+          case 'index':
+            if (bones.rUpperArm) bones.rUpperArm.rotation.x = THREE.MathUtils.lerp(0, -0.35, blend)
+            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.6, blend)
+            break
+          default: // side, ok
+            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.55, blend)
+            break
+        }
+      }
+    }
 
     // Talking — more movement
     if (mode === 'talking' && bones.head) {
@@ -209,8 +283,16 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       blinkTimer.current = 2.5 + Math.random() * 2.5;
     }
 
-    // Soft smile
-    vrm.expressionManager?.setValue('happy', mode === 'talking' || talkStart.current !== null ? 0.4 : 0.25);
+    // Mood-aware smile (mood prop overrides default idle smile)
+    const curMood = moodRef.current
+    const moodSmile = (curMood === 'happy' || curMood === 'excited')
+      ? 0.7
+      : curMood === 'concerned'
+        ? 0.05
+        : (mode === 'talking' || talkStart.current !== null ? 0.4 : 0.25)
+    vrm.expressionManager?.setValue('happy', moodSmile);
+    vrm.expressionManager?.setValue('sad',       curMood === 'concerned' ? 0.4 : 0);
+    vrm.expressionManager?.setValue('surprised',  curMood === 'excited'   ? 0.4 : 0);
 
     // ── Lip sync ─────────────────────────────────────────────────────────
     // Reset all mouth morphs
@@ -254,7 +336,11 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   return <primitive object={groupRef.current} />;
 }
 
-export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mode?: string; replyText?: string }) {
+export default function AriaTalkingHead({
+  mode = 'idle', replyText = '', mood = 'neutral', gesture = '',
+}: {
+  mode?: string; replyText?: string; mood?: string; gesture?: string
+}) {
   return (
     <Canvas
       camera={{ position: [0, 1.1, 1.8], fov: 30 }}
@@ -264,7 +350,7 @@ export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mod
     >
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
-      <AvatarScene mode={mode} replyText={replyText} />
+      <AvatarScene mode={mode} replyText={replyText} mood={mood} gesture={gesture} />
     </Canvas>
   );
 }

@@ -7,6 +7,13 @@ import { Providers } from './providers';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import PostHogProvider from '@/components/PostHogProvider';
 import PWARegister from '@/components/PWARegister';
+import dynamic from 'next/dynamic';
+
+// Floating Aria button — client-only, never SSR, never on /pos
+const AriaFloatingButton = dynamic(
+  () => import('@/components/AriaFloatingButton'),
+  { ssr: false },
+);
 
 const cormorant = Cormorant({
   subsets: ['latin'],
@@ -91,6 +98,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </ThemeProvider>
         </PostHogProvider>
         <PWARegister />
+        <AriaFloatingButton />
       </body>
     </html>
   );

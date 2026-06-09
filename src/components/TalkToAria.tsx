@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { speakAriaText, stopAriaSpeech, initVoice, getVoiceBackend } from '@/lib/aria/headTTSBridge'
+import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 // Avatar loaded client-only (Three.js / WebGL)
 const AriaTalkingHead = dynamic(
@@ -54,6 +55,8 @@ export default function TalkToAria({ className }: { className?: string }) {
   const [phase,       setPhase]       = useState<Phase>('idle')
   const [input,       setInput]       = useState('')
   const [replyText,   setReplyText]   = useState('')
+  const [mood,        setMood]        = useState('neutral')
+  const [gesture,     setGesture]     = useState('')
   const [transcript,  setTranscript]  = useState('')
   const [error,       setError]       = useState('')
   const [micSupported, setMicSupported] = useState(false)
@@ -104,7 +107,10 @@ export default function TalkToAria({ className }: { className?: string }) {
         return
       }
 
-      const reply = data.reply ?? ''
+      const rawReply = data.reply ?? ''
+      const { clean: reply, mood: replyMood, gesture: replyGesture } = parseAriaTags(rawReply)
+      setMood(replyMood)
+      setGesture(replyGesture)
       setReplyText(reply)
       setPhase('speaking')
 
@@ -229,6 +235,8 @@ export default function TalkToAria({ className }: { className?: string }) {
           <AriaTalkingHead
             mode={phase === 'speaking' ? 'talking' : 'idle'}
             replyText={replyText}
+            mood={mood}
+            gesture={gesture}
           />
         </div>
 

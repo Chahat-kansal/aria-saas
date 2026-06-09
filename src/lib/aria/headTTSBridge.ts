@@ -42,13 +42,14 @@ export type VisemeEntry = {
   value: number   // blend weight (0..1)
 }
 
-export type SpeechBackend = 'webgpu-headtts' | 'speechsynthesis' | 'none'
+export type SpeechBackend = 'elevenlabs' | 'webgpu-headtts' | 'speechsynthesis' | 'none'
 
 // ── Singletons ─────────────────────────────────────────────────────────────
 
 let _backend: SpeechBackend = 'none'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _tts: any = null
+let _audioEl: HTMLAudioElement | null = null  // current ElevenLabs audio element
 let _initPromise: Promise<void> | null = null
 let _pendingVisemes: VisemeEntry[] = []
 
@@ -77,6 +78,7 @@ function batchToEntries(data: Record<string, unknown>): VisemeEntry[] {
 
 function cleanForSpeech(text: string): string {
   return text
+    .replace(/\[(?:mood|gesture):\w+\]/g, '')     // strip [mood:X] [gesture:Y] tags
     .replace(/!\[.*?\]\(.*?\)/g, '')              // remove markdown images
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')      // unwrap links → text
     .replace(/[#*_`>~|]/g, ' ')                   // strip markdown syntax
@@ -199,17 +201,57 @@ async function tryInitHeadTTS(): Promise<boolean> {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
+// ── ElevenLabs availability check ─────────────────────────────────────────
+
+async function tryInitElevenLabs(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  try {
+    const res = await fetch('/api/aria/tts?check=1')
+    if (res.ok) {
+      _backend = 'elevenlabs'
+      console.log('[AriaVoice] ElevenLabs ready — human-quality voice enabled')
+      return true
+    }
+  } catch { /* network error or not configured */ }
+  return false
+}
+
+// ── Shared speechSynthesis fallback (used when ElevenLabs/HeadTTS fail) ───
+
+function fallbackSpeechSynthesis(
+  speechText: string,
+  onSchedule: (schedule: VisemeEntry[] | null, startMs: number) => void,
+): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+  window.speechSynthesis.cancel()
+  const utt = new SpeechSynthesisUtterance(speechText)
+  utt.rate = 1.05
+  const v = preferredVoice()
+  if (v) utt.voice = v
+  window.speechSynthesis.speak(utt)
+  onSchedule(null, Date.now())
+}
+
 /**
  * Detect the best voice backend. Idempotent — safe to call multiple times.
  * Call once inside a useEffect (browser-only).
+ * Priority: ElevenLabs → HeadTTS (WebGPU) → speechSynthesis
  */
 export function initVoice(): Promise<void> {
   if (_initPromise) return _initPromise
   _initPromise = (async () => {
-    const ok = await tryInitHeadTTS()
-    if (!ok && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    // 1. Try ElevenLabs first (human-quality, server-proxied)
+    const elOk = await tryInitElevenLabs()
+    if (elOk) return
+
+    // 2. Try HeadTTS WebGPU (phoneme-level lip-sync)
+    const htOk = await tryInitHeadTTS()
+    if (htOk) return
+
+    // 3. Fallback: browser speechSynthesis
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       _backend = 'speechsynthesis'
-      console.log('[AriaVoice] speechSynthesis fallback ready (no WebGPU)')
+      console.log('[AriaVoice] speechSynthesis fallback ready (no WebGPU/ElevenLabs)')
     }
   })()
   return _initPromise
@@ -242,6 +284,35 @@ export function speakAriaText(
     : clean
 
   _pendingVisemes = []
+
+  // ── ElevenLabs path (primary when key is configured) ────────────────────
+  if (_backend === 'elevenlabs') {
+    fetch('/api/aria/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: speechText }),
+    }).then(async res => {
+      if (!res.ok || res.headers.get('Content-Type')?.includes('application/json')) {
+        // Proxy returned error or stub → graceful fallback
+        fallbackSpeechSynthesis(speechText, onSchedule)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      _audioEl = audio
+      audio.onended = () => { URL.revokeObjectURL(url); _audioEl = null }
+      audio.play()
+        .then(() => onSchedule(null, Date.now()))
+        .catch(() => {
+          URL.revokeObjectURL(url)
+          fallbackSpeechSynthesis(speechText, onSchedule)
+        })
+    }).catch(() => {
+      fallbackSpeechSynthesis(speechText, onSchedule)
+    })
+    return
+  }
 
   // ── WebGPU + HeadTTS path ────────────────────────────────────────────────
   if (_backend === 'webgpu-headtts' && _tts) {
@@ -288,6 +359,7 @@ export function stopAriaSpeech(): void {
     window.speechSynthesis.cancel()
   }
   if (_tts?.clear) _tts.clear()
+  if (_audioEl) { _audioEl.pause(); _audioEl.src = ''; _audioEl = null }
   _pendingVisemes = []
 }
 
