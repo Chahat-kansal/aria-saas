@@ -296,16 +296,59 @@ async function _POST(req: Request) {
           })
         }
 
-        // Action succeeded — run council so Aria reflects on what changed
-        const execSummary = `${parsedPending.title} — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' Reversible within 1 hour.' : ''}`
+        // Build grounded confirmation from the actual action result.
+        // Council may still run for follow-up blocks/suggestions but must NEVER override this text.
+        const _ap = parsedPending.payload as Record<string, unknown>
+        const _rollback = result.rollback_available ? ' You can undo this within 1 hour.' : ''
+        const confirmText = (() => {
+          switch (parsedPending.type) {
+            case 'create_promotion':
+            case 'apply_category_discount': {
+              const promoName = (typeof _ap.name === 'string' && _ap.name) || parsedPending.title
+              const pct = parsedPending.type === 'apply_category_discount'
+                ? (_ap.discount_percent as number | undefined)
+                : (_ap.discount_amount as number | undefined)
+              const catName = (typeof _ap.category_name === 'string' && _ap.category_name)
+                || (typeof _ap.category === 'string' && _ap.category) || ''
+              const activeDays = _ap.active_days as number[] | undefined
+              const dayStr = activeDays && activeDays.length > 0 && activeDays.length < 7
+                ? ' on ' + activeDays.map((d: number) => (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])[d - 1] ?? String(d)).join('/')
+                : ''
+              let msg = `Done — **${promoName}** is live`
+              if (pct != null) msg += ` (${pct}% off`
+              if (catName) msg += ` all ${catName}`
+              if (pct != null) msg += ')'
+              return msg + dayStr + '.' + _rollback
+            }
+            case 'bulk_price_update': {
+              const scope = (typeof _ap.category === 'string' && _ap.category)
+                || (typeof _ap.brand === 'string' && _ap.brand) || 'all products'
+              return `Done — prices updated for ${result.affected_count} ${scope} product${result.affected_count !== 1 ? 's' : ''}.${_rollback}`
+            }
+            case 'adjust_stock':
+              return `Done — stock adjusted for ${result.affected_count} product${result.affected_count !== 1 ? 's' : ''}.${_rollback}`
+            case 'mark_products':
+              return `Done — ${result.affected_count} product${result.affected_count !== 1 ? 's' : ''} updated (${String(_ap.field)} → ${String(_ap.value)}).${_rollback}`
+            case 'set_low_stock_threshold':
+              return `Done — low stock threshold set to ${String(_ap.threshold)} for ${result.affected_count} product${result.affected_count !== 1 ? 's' : ''}.${_rollback}`
+            case 'create_roster':
+              return `Done — draft roster **${String(_ap.name)}** created for week starting ${String(_ap.week_start)}. Review and publish from Staff.`
+            case 'create_invoice':
+              return `Done — draft invoice created for **${String(_ap.customer_name)}**. Review and send from Invoices.`
+            default:
+              return `Done — ${parsedPending.title}: ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${_rollback}`
+          }
+        })()
+
+        // Council provides follow-up blocks/suggestions only — responseText is always confirmText
         let postCouncil: CouncilOutput | null = null
         try {
           const bizCtxForAction = await getBusinessContext(bid)
-          postCouncil = await runAriaCouncil(bizCtxForAction + '\n\nRECENT_ACTION: ' + execSummary, bid, 'ask_aria')
+          postCouncil = await runAriaCouncil(bizCtxForAction + '\n\nRECENT_ACTION: ' + confirmText, bid, 'ask_aria')
         } catch (e) {
-          console.error('[aria/ask] post-action council failed, using summary:', (e as Error).message)
+          console.error('[aria/ask] post-action council failed (non-fatal):', (e as Error).message)
         }
-        const responseText = postCouncil?.final_briefing ?? execSummary
+        const responseText = confirmText
         let savedConvId = conversationId
         try {
           savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'action_executed')
