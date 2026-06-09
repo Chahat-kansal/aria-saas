@@ -28,7 +28,7 @@ export async function getMessagesForBusiness(
   const supabase = createServerSupabaseClient()
   const { data } = await supabase.from('staff_messages')
     .select(`
-      id, subject, body, is_broadcast, read_at, created_at,
+      id, subject, body, is_broadcast, recipient_id, read_at, created_at,
       sender:sender_id(first_name, last_name, color),
       recipient:recipient_id(first_name, last_name)
     `)
