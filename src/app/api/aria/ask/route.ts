@@ -253,6 +253,21 @@ async function _POST(req: Request) {
     if (convPending?.pending_action && isConfirmation(message)) {
       const expired = convPending.pending_action_expires_at &&
         new Date(String(convPending.pending_action_expires_at)) < new Date()
+
+      // Explicit expired branch — never fall through to smalltalk
+      if (expired) {
+        const expiredText = "Your action plan has expired — please re-request the action and I'll set it up again."
+        let expConvId = conversationId
+        try { expConvId = await upsertConversation(bid, user.id, conversationId, message, expiredText, 'action_expired') } catch (_e) { /* non-fatal */ }
+        return NextResponse.json({
+          response: expiredText,
+          conversation_id: expConvId ?? conversationId,
+          intent: 'action_expired',
+          action: null,
+          cost_usd_cents: 0,
+        })
+      }
+
       if (!expired) {
         // BUG 1 FIX: pending_action may be stored as a text/string column and returned
         // as a JSON string by the Supabase client. Safe-parse it into a real object so
@@ -335,10 +350,22 @@ async function _POST(req: Request) {
         console.error('[aria/ask] upsertConversation failed (action_request):', (e as Error).message, 'conv_id:', conversationId)
       }
       if (forkConvId) {
-        await supabase.from('aria_conversations').update({
+        const { error: pendingWriteErr } = await supabase.from('aria_conversations').update({
           pending_action: planned,
-          pending_action_expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+          pending_action_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
         }).eq('id', forkConvId).eq('business_id', bid)
+
+        if (pendingWriteErr) {
+          console.error('[aria/ask] pending_action write failed:', pendingWriteErr.message, 'conv_id:', forkConvId)
+          const stageErrText = "Couldn't stage the action — please try again."
+          return NextResponse.json({
+            response: stageErrText,
+            conversation_id: forkConvId,
+            intent: 'action_request',
+            action: null,
+            cost_usd_cents: 0,
+          })
+        }
       }
       return NextResponse.json({
         response: previewText,
