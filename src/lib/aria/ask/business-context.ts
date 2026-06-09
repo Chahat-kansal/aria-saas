@@ -84,9 +84,9 @@ export async function buildAskAriaContext(
     saleItemsRes, topCustomersRes, recentTxnsRes, pendingPOsRes, loyaltyRes, activeCustomersRes, lastMonthSalesRes, subscriptionRes,
   ] = await Promise.all([
     supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()).neq('status', 'voided'),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()).neq('status', 'voided'),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()).neq('status', 'voided'),
     supabaseAdmin.from('pos_outlet_inventory').select('id,product_id,items_on_hand,items_reorder_level,pos_products(name)').eq('business_id', businessId).lt('items_on_hand', 5).limit(10),
     supabaseAdmin.from('pos_users').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'open'),
@@ -130,7 +130,7 @@ export async function buildAskAriaContext(
     supabaseAdmin.from('pos_customers')
       .select('id', { count: 'exact', head: true })
       .eq('business_id', businessId)
-      .gte('last_visit_at', thirtyDaysAgo.toISOString()),
+      .gte('last_visit', thirtyDaysAgo.toISOString()),
     // Last month sales for comparison
     supabaseAdmin.from('pos_sales')
       .select('total_amount')
@@ -406,7 +406,11 @@ export async function buildAskAriaContext(
     fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,
     memories: (memoryRows ?? []) as Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>,
     advice_weights: adviceWeights,
-    competitor_intelligence: [],
+    competitor_intelligence: (competitorsRes.data ?? []).map((c: Record<string, unknown>) => ({
+      name: String(c.competitor_name ?? ''),
+      last_checked: c.last_checked_at ? String(c.last_checked_at) : null,
+      data: c.competitor_data ?? null,
+    })),
     prediction,
     top_products_month: topProductsMonth,
     top_customers_alltime: topCustomersAllTime,
