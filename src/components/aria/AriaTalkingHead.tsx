@@ -346,7 +346,10 @@ export default function AriaTalkingHead({
       camera={{ position: [0, 1.1, 1.8], fov: 30 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
-      onCreated={({ camera }) => camera.lookAt(0, 1.2, 0)}
+      onCreated={({ camera, gl }) => {
+        camera.lookAt(0, 1.2, 0)
+        gl.setClearColor(0x000000, 0) // transparent canvas background
+      }}
     >
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />

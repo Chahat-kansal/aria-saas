@@ -10,14 +10,12 @@ const AriaTalkingHead = dynamic(
   { ssr: false },
 )
 
-// ── Route → brain endpoint ──────────────────────────────────────────────────
 function getBrain(pathname: string): string {
   if (pathname.startsWith('/dashboard')) return '/api/aria/ask'
   if (pathname.startsWith('/staff/portal')) return '/api/aria/staff-talk'
   return '/api/aria/talk'
 }
 
-// ── Route → human-readable page name ────────────────────────────────────────
 const PAGE_NAMES: [string, string][] = [
   ['/dashboard/ask-aria',         'Ask Aria'],
   ['/dashboard/staff',            'Staff Management'],
@@ -46,7 +44,6 @@ function getPageName(pathname: string): string {
   return 'Aria'
 }
 
-// ── Heuristic mood for endpoints that don't return [mood:X] tags ────────────
 function heuristicMood(text: string): string {
   const t = text.toLowerCase()
   if (/\b(great|excellent|up|growth|well done|positive|good news)\b/.test(t)) return 'happy'
@@ -58,11 +55,10 @@ function heuristicMood(text: string): string {
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 const T = {
-  border:  'rgba(127,184,151,0.12)',
-  text:    '#E8EDE7',
-  sage:    '#7FB897',
-  deep:    '#2D5240',
-  body:    'var(--font-body, Outfit, Inter, sans-serif)',
+  sage: '#7FB897',
+  deep: '#2D5240',
+  text: '#E8EDE7',
+  body: 'var(--font-body, Outfit, Inter, sans-serif)',
 }
 
 type SpeechRecognitionEvent = {
@@ -106,7 +102,6 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     const msg = text.trim()
     if (!msg || phase === 'thinking' || phase === 'speaking') return
 
-    // Append user turn before API call (memory cap: 20 messages)
     const newMessages = [...messages, { role: 'user' as const, content: msg }].slice(-20)
     setMessages(newMessages)
 
@@ -140,7 +135,6 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
       const resolvedMood    = (m !== 'neutral' || /\[mood:/.test(raw)) ? m : heuristicMood(clean)
       const resolvedGesture = g || (resolvedMood === 'happy' ? 'thumbup' : resolvedMood === 'concerned' ? 'shrug' : '')
 
-      // Silently append Aria's reply to hidden history
       setMessages(prev => [...prev, { role: 'assistant' as const, content: clean }].slice(-20))
       setMood(resolvedMood)
       setGesture(resolvedGesture)
@@ -192,49 +186,43 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     phase === 'listening' ? 'Listening…' : null
 
   return (
+    // Outer: no background, no border, no shadow — just positioning
     <div style={{
       position: 'fixed', bottom: 88, right: 24, zIndex: 9998,
-      width: 360, height: 520,
-      maxWidth: 'calc(100vw - 32px)',
-      maxHeight: 'calc(100vh - 104px)',
-      background: 'rgba(14,20,17,0.97)',
-      backdropFilter: 'blur(20px)',
-      border: '1px solid ' + T.border,
-      borderRadius: 24,
-      boxShadow: '0 16px 60px rgba(0,0,0,0.75)',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
+      width: 280,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
       animation: 'ariaSlideUp 250ms cubic-bezier(0.34,1.56,0.64,1) forwards',
     }}>
 
-      {/* Close — floating top-right */}
-      <button
-        onClick={onClose}
-        aria-label="Close Aria"
-        style={{
-          position: 'absolute', top: 14, right: 14, zIndex: 20,
-          width: 30, height: 30, borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(255,255,255,0.07)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          cursor: 'pointer', color: 'rgba(255,255,255,0.5)',
-          fontSize: 17, lineHeight: 1, padding: 0,
-        }}
-      >×</button>
-
-      {/* Avatar — takes all remaining vertical space */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden' }}>
+      {/* Avatar — transparent, no box */}
+      <div style={{ width: '100%', height: 320, position: 'relative' }}>
         <AriaTalkingHead
           mode={phase === 'speaking' ? 'talking' : 'idle'}
           replyText={reply}
           mood={mood}
           gesture={gesture}
         />
-        {/* Subtle page context badge, bottom-left */}
+
+        {/* Floating close button — top-right of avatar */}
+        <button
+          onClick={onClose}
+          aria-label="Close Aria"
+          style={{
+            position: 'absolute', top: 8, right: 4, zIndex: 10,
+            width: 28, height: 28, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(14,20,17,0.6)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            cursor: 'pointer', color: 'rgba(255,255,255,0.65)',
+            fontSize: 16, lineHeight: 1, padding: 0,
+            backdropFilter: 'blur(4px)',
+          }}
+        >×</button>
+
+        {/* Subtle page context — bottom-left of avatar */}
         {pageName !== 'Aria' && (
           <div style={{
-            position: 'absolute', bottom: 8, left: 14, zIndex: 10,
+            position: 'absolute', bottom: 6, left: 10, zIndex: 10,
             fontSize: 9, color: 'rgba(127,184,151,0.5)',
             fontFamily: T.body, letterSpacing: '0.08em', textTransform: 'uppercase',
           }}>
@@ -243,93 +231,91 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
         )}
       </div>
 
-      {/* Bottom controls — input + status only */}
+      {/* Status / error — floating text, no background box */}
+      {(statusText || error) && (
+        <p style={{
+          fontSize: 10, margin: '2px 0 5px', textAlign: 'center',
+          fontFamily: T.body,
+          color: error ? '#EF4444' : 'rgba(255,255,255,0.5)',
+        }}>
+          {error ?? statusText}
+        </p>
+      )}
+
+      {/* Input — pill only, frosted glass */}
       <div style={{
-        padding: '10px 14px 14px',
-        background: 'linear-gradient(0deg, rgba(14,20,17,1) 0%, rgba(14,20,17,0.88) 100%)',
-        borderTop: '1px solid rgba(127,184,151,0.07)',
-        display: 'flex', flexDirection: 'column', gap: 6,
+        display: 'flex', gap: 4, alignItems: 'center',
+        background: 'rgba(14,20,17,0.88)',
+        backdropFilter: 'blur(12px)',
+        borderRadius: 999,
+        padding: '5px 5px 5px 14px',
+        border: '1px solid rgba(127,184,151,0.2)',
+        width: 'calc(100% - 8px)',
       }}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
+          placeholder={phase === 'listening' ? 'Listening…' : 'Ask Aria…'}
+          disabled={busy || phase === 'listening'}
+          style={{
+            flex: 1, minWidth: 0,
+            background: 'transparent', border: 'none', outline: 'none',
+            color: T.text, fontSize: 13, fontFamily: T.body, height: 28,
+            opacity: (busy || phase === 'listening') ? 0.5 : 1,
+          }}
+        />
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {micOk && (
-            <button
-              onClick={phase === 'listening' ? stopListening : startListening}
-              disabled={busy}
-              title={phase === 'listening' ? 'Stop' : 'Speak'}
-              style={{
-                width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: phase === 'listening' ? 'rgba(127,184,151,0.22)' : 'rgba(127,184,151,0.07)',
-                border: '1px solid ' + (phase === 'listening' ? 'rgba(127,184,151,0.45)' : 'rgba(127,184,151,0.15)'),
-                cursor: busy ? 'default' : 'pointer',
-                opacity: busy ? 0.4 : 1,
-                animation: phase === 'listening' ? 'ariaVoicePulse 0.9s ease-in-out infinite' : 'none',
-                transition: 'background 0.15s, border-color 0.15s',
-              }}
-            >
-              {phase === 'listening'
-                ? <svg width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10" rx="2" fill={T.sage}/></svg>
-                : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.sage} strokeWidth="2" strokeLinecap="round">
-                    <rect x="9" y="2" width="6" height="12" rx="3"/>
-                    <path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/>
-                    <line x1="8" y1="22" x2="16" y2="22"/>
-                  </svg>
-              }
-            </button>
-          )}
-
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
-            placeholder={phase === 'listening' ? 'Listening…' : 'Ask Aria…'}
-            disabled={busy || phase === 'listening'}
-            style={{
-              flex: 1, height: 38, padding: '0 12px',
-              borderRadius: 10,
-              border: '1px solid rgba(127,184,151,0.14)',
-              background: 'rgba(255,255,255,0.05)',
-              color: T.text, fontSize: 13, fontFamily: T.body,
-              outline: 'none',
-              opacity: (busy || phase === 'listening') ? 0.5 : 1,
-            }}
-          />
-
+        {micOk && (
           <button
-            onClick={() => send(input)}
-            disabled={!input.trim() || busy || phase === 'listening'}
+            onClick={phase === 'listening' ? stopListening : startListening}
+            disabled={busy}
+            title={phase === 'listening' ? 'Stop' : 'Speak'}
             style={{
-              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: T.deep, border: 'none',
-              cursor: (!input.trim() || busy || phase === 'listening') ? 'default' : 'pointer',
-              opacity: (!input.trim() || busy || phase === 'listening') ? 0.3 : 1,
+              background: phase === 'listening' ? 'rgba(127,184,151,0.25)' : 'rgba(127,184,151,0.1)',
+              border: 'none',
+              cursor: busy ? 'default' : 'pointer',
+              opacity: busy ? 0.4 : 1,
+              animation: phase === 'listening' ? 'ariaVoicePulse 0.9s ease-in-out infinite' : 'none',
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
+            {phase === 'listening'
+              ? <svg width="9" height="9" viewBox="0 0 9 9"><rect width="9" height="9" rx="2" fill={T.sage}/></svg>
+              : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.sage} strokeWidth="2" strokeLinecap="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3"/>
+                  <path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/>
+                  <line x1="8" y1="22" x2="16" y2="22"/>
+                </svg>
+            }
           </button>
-        </div>
-
-        {/* Subtle status line — no bubbles */}
-        {(statusText || error) && (
-          <p style={{
-            fontSize: 11, margin: 0, textAlign: 'center', fontFamily: T.body,
-            color: error ? '#EF4444' : 'rgba(127,184,151,0.55)',
-          }}>
-            {error ?? statusText}
-          </p>
         )}
+
+        <button
+          onClick={() => send(input)}
+          disabled={!input.trim() || busy || phase === 'listening'}
+          style={{
+            width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: (!input.trim() || busy || phase === 'listening') ? 'rgba(45,82,64,0.4)' : T.deep,
+            border: 'none',
+            cursor: (!input.trim() || busy || phase === 'listening') ? 'default' : 'pointer',
+            opacity: (!input.trim() || busy || phase === 'listening') ? 0.4 : 1,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
       </div>
 
       <style>{`
         @keyframes ariaSlideUp {
-          from { opacity: 0; transform: translateY(24px) scale(0.96); }
+          from { opacity: 0; transform: translateY(20px) scale(0.97); }
           to   { opacity: 1; transform: translateY(0)    scale(1);    }
         }
         @keyframes ariaVoicePulse {
