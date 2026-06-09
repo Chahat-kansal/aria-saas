@@ -124,7 +124,7 @@ export function formatSummariesForPrompt(summaries: ConversationSummary[]): stri
     lines.push(line)
   }
 
-  lines.push('If you promised to follow up on something, do it now. Reference what was discussed.')
+  lines.push('If there are open follow-ups from these conversations, mention them briefly if relevant to the current question.')
 
   return lines.join('\n')
 }

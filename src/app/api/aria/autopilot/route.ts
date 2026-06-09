@@ -32,7 +32,27 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? "pending";
 
-  const { data, error } = await supabase.from("aria_autopilot_actions").select("*").eq("business_id", bid).eq("status", status).order("created_at", { ascending: false });
+  const now = new Date().toISOString()
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+
+  let q = supabase
+    .from("aria_autopilot_actions")
+    .select("*")
+    .eq("business_id", bid)
+    .eq("status", status)
+    .order("created_at", { ascending: false })
+
+  if (status === "pending") {
+    // Only surface actions that haven't expired, newest first, at most 3
+    q = q
+      .or('expires_at.is.null,expires_at.gt.' + now)
+      .gte('created_at', threeDaysAgo)
+      .limit(3)
+  } else {
+    q = q.limit(50)
+  }
+
+  const { data, error } = await q
   if (error?.code === "42P01") return NextResponse.json({ actions: [] });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ actions: data ?? [] });
@@ -76,6 +96,12 @@ Customers needing winback (${winbackCustomers.length}): ${winbackCustomers.slice
 
 Categories: INVENTORY, STAFFING, CUSTOMERS, PROMOTIONS, SOCIAL, FINANCE
 Priorities: urgent (needs action today), important (this week), routine (anytime)
+
+TONE RULES — MANDATORY:
+- Titles must be calm and direct. Never start a title with "URGENT:", "CRITICAL:", "ACTIVATE", or "IMMEDIATELY".
+- Do NOT include "ACTIVATE NOW", "do this now", "immediately", "you committed to", "remains undone", or age-based guilt language anywhere.
+- Good title: "Reorder Corona Extra — 2 units left". Bad title: "URGENT: ACTIVATE reorder NOW".
+- Good description: "At current velocity you will sell out in 2 days." Bad: "You committed to reordering this last week and it remains undone."
 
 Return a JSON array of actions:
 [{

@@ -5,9 +5,9 @@ import { useBusinessContext } from '@/components/providers/BusinessProvider'
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'rgba(255,255,255,0.07)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' }
 const CATEGORY_ICON: Record<string, string> = { INVENTORY: '📦', STAFFING: '👥', CUSTOMERS: '👤', PROMOTIONS: '💸', SOCIAL: '📱', FINANCE: '💰', COMPLIANCE: '⚖️', GENERAL: '⚡' }
 const PRIORITY_COLOR = {
-  urgent:    { bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.25)',  accent: '#EF4444', label: '🔴 URGENT' },
-  important: { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)', accent: '#F59E0B', label: '🟡 IMPORTANT' },
-  routine:   { bg: 'rgba(34,197,94,0.08)',  border: 'rgba(34,197,94,0.25)',  accent: '#22C55E', label: '🟢 ROUTINE' },
+  urgent:    { bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.25)',  accent: '#EF4444', label: '🔴 Needs attention' },
+  important: { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)', accent: '#F59E0B', label: '🟡 Worth doing' },
+  routine:   { bg: 'rgba(34,197,94,0.08)',  border: 'rgba(34,197,94,0.25)',  accent: '#22C55E', label: '🟢 When ready' },
 }
 
 interface AutopilotAction {
@@ -67,7 +67,7 @@ export default function AutopilotPage() {
   async function updateAction(id: string, status: string) {
     const res = await fetch('/api/aria/autopilot?id=' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     const d = await res.json()
-    if (d.action) { setActions(prev => prev.filter(a => a.id !== id)); if (status === 'approved' || status === 'rejected') { await load() } }
+    if (d.action) { setActions(prev => prev.filter(a => a.id !== id)); if (status === 'approved') { await load() } }
   }
 
   async function approveAllRoutine() {
@@ -182,7 +182,7 @@ export default function AutopilotPage() {
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                           <button onClick={() => updateAction(action.id, 'approved')} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: C.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Approve</button>
-                          <button onClick={() => updateAction(action.id, 'rejected')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid ' + C.border, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✗ Dismiss</button>
+                          <button onClick={() => updateAction(action.id, 'dismissed')} title="Not now — dismiss this suggestion" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid ' + C.border, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Not now</button>
                         </div>
                       </div>
                     ))}
