@@ -13,11 +13,12 @@ const LINE  = '#e6ece8'
 function BottomNav() {
   const pathname = usePathname()
   const tabs = [
-    { href: '/staff/portal',          label: 'Home',     icon: '🏠' },
-    { href: '/staff/portal/schedule', label: 'Schedule', icon: '📅' },
-    { href: '/staff/portal/training', label: 'Training', icon: '🎓' },
-    { href: '/staff/portal/leave',    label: 'Leave',    icon: '🏖️' },
-    { href: '/staff/portal/messages', label: 'Inbox',    icon: '✉️' },
+    { href: '/staff/portal',              label: 'Home',         icon: '🏠' },
+    { href: '/staff/portal/schedule',     label: 'Schedule',     icon: '📅' },
+    { href: '/staff/portal/training',     label: 'Training',     icon: '🎓' },
+    { href: '/staff/portal/leave',        label: 'Leave',        icon: '🏖️' },
+    { href: '/staff/portal/availability', label: 'Availability', icon: '📋' },
+    { href: '/staff/portal/messages',     label: 'Inbox',        icon: '✉️' },
   ]
   return (
     <nav style={{
@@ -35,10 +36,10 @@ function BottomNav() {
           <Link key={href} href={href} style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', gap: 3, textDecoration: 'none',
-            fontSize: 10, fontWeight: active ? 600 : 500,
+            fontSize: 9, fontWeight: active ? 600 : 500,
             color: active ? DEEP : MUTED,
           }}>
-            <span style={{ fontSize: 19 }}>{icon}</span>
+            <span style={{ fontSize: 17 }}>{icon}</span>
             {label}
           </Link>
         )
