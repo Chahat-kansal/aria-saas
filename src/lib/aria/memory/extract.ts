@@ -38,6 +38,22 @@ CONFIDENCE 0.0-1.0:
 - 0.7-0.8: clear inference but the owner did not say it directly
 - 0.5-0.6: educated guess from limited evidence
 
+VOLATILE METRICS — NEVER EXTRACT THESE:
+Durable memory must remain TRUE indefinitely regardless of recent performance. These types are FORBIDDEN:
+- Revenue totals, sales amounts, or earnings (e.g. "revenue was $2,177 this week", "made $15,940 last month")
+- Percentage changes or trends (e.g. "revenue up 23%", "sales declined 45%", "down 12% this month")
+- Customer counts, visitor counts, or transaction counts (e.g. "37 customers this week", "1,788 sales last month")
+- Per-day, per-week, or per-month averages (e.g. "$544/day average", "daily revenue of $200")
+- Any metric scoped to "this week", "last week", "this month", or "last month"
+Live metrics belong in the real-time data packet — NOT in durable memory.
+
+ALLOWED examples of durable memories:
+- "Owner runs a single-outlet cafe in Brunswick, Melbourne, open 6am-3pm Mon-Sat" (identity/hours)
+- "Owner prefers terse answers with one chart and one specific recommendation" (communication preference)
+- "Flat white is the signature product, priced at $5.50" (structural product fact)
+- "Owner goal: open a second location in Fitzroy within 2 years" (explicit goal)
+- "Owner has decided to stop stocking oat milk from Brand X due to quality issues" (decision)
+
 Return AT MOST 5 memories per call. If nothing is worth extracting, return [].
 
 Output format — JSON array only, no preamble, no code fences:
@@ -45,6 +61,23 @@ Output format — JSON array only, no preamble, no code fences:
   {"kind":"fact","content":"Owner runs a single-outlet cafe in Brunswick, Melbourne, open 6am-3pm Mon-Sat","topic":null,"importance":9,"confidence":0.95},
   {"kind":"preference","content":"Owner prefers terse answers with one chart and one specific recommendation","topic":null,"importance":7,"confidence":0.85}
 ]`
+
+// Safety-net guard: rejects any memory that contains a point-in-time metric,
+// regardless of what the LLM extracted. Live metrics must come from the facts packet, not durable memory.
+function isVolatileMetric(content: string): boolean {
+  const c = content.toLowerCase()
+  // Dollar figure combined with a time window → revenue/metric scoped to a period
+  if (/\$[\d,]+/.test(c) && /\b(?:this|last)\s+(?:week|month)|(?:7|14|30)\s*days?\b/.test(c)) return true
+  // Any percentage → always a trend/metric, never a durable structural fact
+  if (/\d+(?:\.\d+)?\s*%/.test(c)) return true
+  // Count + entity type → point-in-time volume metric
+  if (/\b\d[\d,]*\s+(?:customers?|sales?|transactions?|orders?|visits?)\b/.test(c)) return true
+  // Revenue / earnings / turnover combined with a dollar figure → financial metric
+  if (/\b(?:revenue|earnings?|turnover)\b/.test(c) && /\$[\d,]+/.test(c)) return true
+  // Per-period average with a dollar figure → rate metric
+  if (/\$[\d,]+/.test(c) && /\b(?:per\s+(?:day|week|month)|daily\s+average|weekly\s+average|monthly\s+average|avg)\b/.test(c)) return true
+  return false
+}
 
 export async function extractMemoriesFromTranscript(
   businessId: string,
@@ -139,6 +172,8 @@ export async function maybeWriteOutcome(
   if (!recommendationMatch) return
   const recommendation = recommendationMatch[0].trim()
   if (recommendation.length < 30) return
+  // Don't store recommendations that quote volatile metrics (dollar figures, percentages, counts)
+  if (isVolatileMetric(recommendation)) return
 
   await persistMemories(businessId, [{
     kind: 'decision',
@@ -172,6 +207,10 @@ export async function persistMemories(
   const toInsert = memories
     .filter(m => {
       if (!m.content || m.content.length < 20) return false
+      if (isVolatileMetric(m.content)) {
+        console.log('[memory/persist] blocked volatile metric:', m.content.slice(0, 80))
+        return false
+      }
       const key = m.content.toLowerCase().replace(/[^\w\s]/g, '').slice(0, 80)
       return !existingNormalised.has(key)
     })
