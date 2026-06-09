@@ -6,11 +6,8 @@ export type ActionType =
   | 'bulk_price_update'
   | 'mark_products'
   | 'adjust_stock'
-  | 'apply_category_discount'
   | 'set_low_stock_threshold'
   | 'create_promotion'
-  | 'update_staff_permission'
-  | 'send_staff_message'
   | 'create_roster'
   | 'create_invoice'
 
@@ -34,11 +31,8 @@ SUPPORTED ACTIONS (return one of these types):
   bulk_price_update    — change prices for products (by category, brand, or all)
   mark_products        — set is_active, age_restricted on products
   adjust_stock         — add/subtract/set stock_quantity on products
-  apply_category_discount — apply a discount % to a category
   set_low_stock_threshold — update low_stock_threshold for products
   create_promotion     — create a promotion rule saved to pos_promotions (payload: name, promotion_type ["percentage_discount"|"fixed_discount"|"bogo"|"bundle"|"multibuy"], discount_amount [number — the discount value in % for percentage_discount or $ for fixed_discount], starts_at [YYYY-MM-DD — MUST use the provided today's date as base; never use a past date or the wrong year], ends_at? [YYYY-MM-DD], min_spend? [number], active_days? [number[] — ISO day numbers: 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat 7=Sun; include ONLY if the promo targets specific days, e.g. "Thursday Special" → [4], "weekdays" → [1,2,3,4,5]; omit for all-day promos], product_ids? [string[] — UUIDs from the product list above; include ONLY if the owner names specific products by name, match the UUID exactly], category? [string for category-scoped promos], notes? [string])
-  update_staff_permission — change staff permissions
-  send_staff_message   — send a message to a staff member
   create_roster        — draft a staff roster for a week (payload: name, week_start YYYY-MM-DD, week_end?, notes?)
   create_invoice       — draft a client invoice (payload: customer_name, customer_email?, due_date?, items:[{description,quantity,unit_price}], notes?; amounts in DOLLARS)
 
