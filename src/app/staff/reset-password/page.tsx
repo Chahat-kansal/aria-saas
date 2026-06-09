@@ -5,12 +5,23 @@ import { supabase } from '@/lib/supabase'
 
 type Status = 'loading' | 'form' | 'success' | 'error'
 
+// ─── Design tokens — same palette as the rest of the portal ─────────────
+const CARD   = '#ffffff'
+const INK    = '#1d2a24'
+const MUTED  = '#6b7d74'
+const LINE   = '#e6ece8'
+const SAGE   = '#7FB897'
+const DEEP   = '#2D5240'
+const RED    = '#E24B4A'
+const SHADOW = '0 1px 2px rgba(45,82,64,.06), 0 8px 24px rgba(45,82,64,.06)'
+
+// Light-mode input style (matches leave / availability pages)
 const INP: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.06)',
-  border: '1px solid rgba(127,184,151,0.2)',
-  borderRadius: 12,
+  background: CARD,
+  border: '1px solid ' + LINE,
+  borderRadius: 10,
   padding: '10px 14px',
-  color: '#E8EDE7',
+  color: INK,
   fontSize: 14,
   width: '100%',
   outline: 'none',
@@ -18,21 +29,20 @@ const INP: React.CSSProperties = {
 }
 
 export default function StaffResetPasswordPage() {
-  const [status, setStatus] = useState<Status>('loading')
-  const [message, setMessage] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [status,          setStatus]          = useState<Status>('loading')
+  const [message,         setMessage]         = useState('')
+  const [password,        setPassword]        = useState('')
+  const [confirm,         setConfirm]         = useState('')
+  const [submitting,      setSubmitting]      = useState(false)
   const [validationError, setValidationError] = useState('')
   const router = useRouter()
 
+  // ── useEffect — PRESERVED EXACTLY (PASSWORD_RECOVERY listener + fallback) ─
   useEffect(() => {
     if (!supabase) { setStatus('error'); setMessage('Authentication unavailable.'); return }
 
     let resolved = false
 
-    // PRIMARY: listen for PASSWORD_RECOVERY event — Supabase fires this when a recovery
-    // link is processed, even if detectSessionInUrl already ran before we subscribed.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'PASSWORD_RECOVERY' && !resolved) {
         resolved = true
@@ -40,21 +50,16 @@ export default function StaffResetPasswordPage() {
       }
     })
 
-    // FALLBACK: Supabase may have already processed the recovery session via
-    // detectSessionInUrl before we subscribed above. Check getSession() as backup.
     const init = async () => {
       const { data: { session } } = await supabase!.auth.getSession()
 
       if (session && !resolved) {
-        // A session exists — it may be a recovery session already processed by the SDK.
-        // Show the form; updateUser({ password }) will succeed for recovery sessions.
         resolved = true
         setStatus('form')
         return
       }
 
       if (!session) {
-        // Manual hash exchange (Supabase detectSessionInUrl disabled or hash not processed)
         const hash = window.location.hash
         if (hash.includes('access_token')) {
           const p = new URLSearchParams(hash.slice(1))
@@ -66,13 +71,11 @@ export default function StaffResetPasswordPage() {
               setStatus('error')
               setMessage('Reset link is invalid or has expired. Please request a new one from the login page.')
             }
-            // onAuthStateChange will fire PASSWORD_RECOVERY and set status='form'
           } else {
             setStatus('error')
             setMessage('Reset link is missing credentials. Please request a new one.')
           }
         } else if (!resolved) {
-          // No hash and no session — invalid state
           setStatus('error')
           setMessage('No reset session found. Please use the link from your email.')
         }
@@ -83,6 +86,7 @@ export default function StaffResetPasswordPage() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // ── submit — PRESERVED EXACTLY (updateUser + signOut + redirect) ──────────
   const submit = async () => {
     setValidationError('')
     if (password.length < 8) { setValidationError('Password must be at least 8 characters.'); return }
@@ -97,71 +101,116 @@ export default function StaffResetPasswordPage() {
 
     setStatus('success')
     setMessage('Password updated! Redirecting to sign in…')
-    // Sign out the recovery session so the user logs in fresh with the new password
     await supabase.auth.signOut({ scope: 'local' })
     setTimeout(() => router.replace('/staff/login'), 1500)
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: '#0E1411', color: '#E8EDE7' }}>
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-1">
-          <div className="text-3xl font-medium italic" style={{ color: '#7FB897' }}>Aria</div>
-          <div className="text-sm" style={{ color: '#A8B5A8' }}>Staff Portal</div>
+      style={{ background: '#f4f7f5' }}>
+      <div className="w-full max-w-sm" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+        {/* Branding */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            fontFamily: 'var(--font-display, serif)',
+            fontSize: 34, fontWeight: 500, fontStyle: 'italic',
+            color: DEEP, marginBottom: 4,
+          }}>
+            Aria
+          </div>
+          <div style={{ fontSize: 13, color: MUTED }}>Staff Portal</div>
         </div>
 
+        {/* ── Loading ───────────────────────────────────────────────────── */}
         {status === 'loading' && (
-          <div className="text-center py-8">
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div className="w-5 h-5 rounded-full border-2 animate-spin mx-auto"
-              style={{ borderColor: '#7FB897', borderTopColor: 'transparent' }} />
-            <p className="text-sm mt-3" style={{ color: '#A8B5A8' }}>Verifying reset link…</p>
+              style={{ borderColor: SAGE, borderTopColor: 'transparent' }} />
+            <p style={{ fontSize: 13, color: MUTED, marginTop: 12 }}>Verifying reset link…</p>
           </div>
         )}
 
+        {/* ── Success / Error ───────────────────────────────────────────── */}
         {(status === 'success' || status === 'error') && (
-          <div className="rounded-2xl p-6 text-center space-y-3"
-            style={{ background: '#1A2620', border: '1px solid rgba(127,184,151,0.15)' }}>
-            <div className="text-4xl">{status === 'success' ? '✓' : '✕'}</div>
-            <p className="text-sm" style={{ color: '#A8B5A8' }}>{message}</p>
+          <div className="rounded-2xl p-6"
+            style={{
+              background: CARD, border: '1px solid ' + LINE,
+              boxShadow: SHADOW, textAlign: 'center',
+            }}>
+            <div style={{
+              fontSize: 40, marginBottom: 12,
+              color: status === 'success' ? SAGE : RED,
+            }}>
+              {status === 'success' ? '✓' : '✕'}
+            </div>
+            <p style={{ fontSize: 13, color: MUTED }}>{message}</p>
             {status === 'error' && (
-              <a href="/staff/login" className="text-sm hover:underline" style={{ color: '#7FB897' }}>
+              <a href="/staff/login"
+                style={{ fontSize: 13, color: DEEP, display: 'block', marginTop: 14 }}>
                 Back to login →
               </a>
             )}
           </div>
         )}
 
+        {/* ── New password form ─────────────────────────────────────────── */}
         {status === 'form' && (
-          <div className="rounded-2xl p-6 space-y-4"
-            style={{ background: '#1A2620', border: '1px solid rgba(127,184,151,0.15)' }}>
-            <div>
-              <h1 className="font-medium text-lg">Set a new password</h1>
-              <p className="text-sm mt-1" style={{ color: '#A8B5A8' }}>
+          <div className="rounded-2xl p-6"
+            style={{ background: CARD, border: '1px solid ' + LINE, boxShadow: SHADOW }}>
+            <div style={{ marginBottom: 20 }}>
+              <h1 style={{
+                fontFamily: 'var(--font-display, serif)',
+                fontSize: 22, fontWeight: 600, color: INK, margin: 0,
+              }}>
+                Set a new password
+              </h1>
+              <p style={{ fontSize: 13, color: MUTED, marginTop: 5 }}>
                 Choose a password you'll use to log in to the staff portal.
               </p>
             </div>
-            <div className="space-y-3">
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="text-xs block mb-1.5" style={{ color: '#A8B5A8' }}>New password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                <label style={{ fontSize: 12, color: MUTED, display: 'block', marginBottom: 5 }}>
+                  New password
+                </label>
+                {/* onChange PRESERVED EXACTLY */}
+                <input type="password" value={password}
+                  onChange={e => setPassword(e.target.value)}
                   placeholder="At least 8 characters" autoFocus style={INP} />
               </div>
               <div>
-                <label className="text-xs block mb-1.5" style={{ color: '#A8B5A8' }}>Confirm password</label>
-                <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
+                <label style={{ fontSize: 12, color: MUTED, display: 'block', marginBottom: 5 }}>
+                  Confirm password
+                </label>
+                {/* onChange + onKeyDown PRESERVED EXACTLY */}
+                <input type="password" value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && submit()}
                   placeholder="Repeat your password" style={INP} />
               </div>
-              {validationError && <p className="text-xs" style={{ color: '#EF4444' }}>{validationError}</p>}
-              <button onClick={submit} disabled={submitting || !password || !confirm}
-                className="w-full py-2.5 rounded-xl text-sm font-medium transition-opacity disabled:opacity-40"
-                style={{ background: '#2D5240', color: '#7FB897' }}>
+
+              {validationError && (
+                <p style={{ fontSize: 12, color: RED, margin: 0 }}>{validationError}</p>
+              )}
+
+              {/* onClick + disabled PRESERVED EXACTLY */}
+              <button onClick={submit}
+                disabled={submitting || !password || !confirm}
+                className="disabled:opacity-40"
+                style={{
+                  width: '100%', padding: '11px', borderRadius: 12,
+                  fontSize: 14, fontWeight: 600,
+                  background: DEEP, color: '#ffffff',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                }}>
                 {submitting ? 'Updating…' : 'Set password →'}
               </button>
             </div>
           </div>
         )}
+
       </div>
     </div>
   )
