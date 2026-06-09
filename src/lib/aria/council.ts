@@ -429,6 +429,27 @@ function intentHash(question: string): string {
   return (h >>> 0).toString(16).padStart(8, '0')
 }
 
+// Fetch a cheap data-epoch signal: minute-truncated timestamp of the most recent non-voided sale.
+// Changes whenever a new sale is recorded, making the compound cache key self-invalidating.
+// A new sale → new epoch → different hash → cache miss → fresh data fetched. Structurally impossible
+// to serve stale numbers after new POS data arrives.
+async function getDataEpoch(businessId: string): Promise<string> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('pos_sales')
+      .select('created_at')
+      .eq('business_id', businessId)
+      .neq('status', 'voided')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    // Minute-level truncation: avoids per-second thrash while still changing on every new sale
+    return data?.created_at ? (data.created_at as string).slice(0, 16) : 'no-sales'
+  } catch {
+    return 'epoch-err'
+  }
+}
+
 async function readCouncilCache(businessId: string, hash: string): Promise<CouncilOutput | null> {
   try {
     const { data } = await supabaseAdmin
@@ -443,7 +464,8 @@ async function readCouncilCache(businessId: string, hash: string): Promise<Counc
 }
 
 async function writeCouncilCache(businessId: string, hash: string, result: CouncilOutput): Promise<void> {
-  const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+  // 5-min TTL as a backstop (primary staleness guard is the data-epoch in the key)
+  const expires = new Date(Date.now() + 5 * 60 * 1000).toISOString()
   try {
     await supabaseAdmin.from('council_cache').upsert({
       business_id: businessId,
@@ -537,11 +559,19 @@ export async function runAriaCouncil(
   // Classify synthesis model based on question complexity
   const { synthesisModel, escalationReason } = classifyQuestionComplexity(activeQuestion, mode)
 
-  // Cache check — skip for briefing/weekly_report modes (always fresh data)
-  const hash = intentHash(activeQuestion)
+  // Cache check — skip for briefing/weekly_report modes (always fresh data).
+  // Compound key = questionHash + '_' + dataEpoch so the key changes automatically whenever
+  // a new sale is recorded — no write-path invalidation needed, staleness is structurally impossible.
+  const questionHash = intentHash(activeQuestion)
+  const dataEpoch = mode === 'ask_aria' ? await getDataEpoch(businessId) : 'no-cache'
+  const hash = questionHash + '_' + dataEpoch
   if (mode === 'ask_aria') {
     const cached = await readCouncilCache(businessId, hash)
-    if (cached) return cached
+    if (cached) {
+      console.log('[council] cache HIT — epoch:', dataEpoch, 'hash:', hash, 'business:', businessId)
+      return cached
+    }
+    console.log('[council] cache MISS — epoch:', dataEpoch, 'hash:', hash, 'business:', businessId)
   }
 
   // Assess quality + recall memories + fetch summaries in parallel before brains
