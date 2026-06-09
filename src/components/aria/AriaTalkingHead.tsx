@@ -7,7 +7,12 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';
 import { buildVisemes, Viseme } from './textToVisemes';
+import { initVoice, speakAriaText, stopAriaSpeech } from '@/lib/aria/headTTSBridge';
+import type { VisemeEntry } from '@/lib/aria/headTTSBridge';
 
+// ── VRoid blendshape ↔ Oculus viseme map ─────────────────────────────────
+// Used when HeadTTS WebGPU returns Oculus viseme IDs.
+// Character-based textToVisemes uses the same VRoid morph names directly.
 const EXPR_MAP: Record<string, string> = {
   'Fcl_MTH_A': 'aa', 'Fcl_MTH_I': 'ih', 'Fcl_MTH_U': 'ou',
   'Fcl_MTH_E': 'ee', 'Fcl_MTH_O': 'oh',
@@ -29,16 +34,26 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   const bonesRef = useRef<Record<string, THREE.Object3D>>({});
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const greetingDone = useRef(false);
-  const visemes = useRef<Viseme[]>([]);
+
+  // ── Viseme state — supports both character-based and HeadTTS Oculus visemes
+  const visemes = useRef<Viseme[]>([]);          // character-based (fallback)
+  const htVisemes = useRef<VisemeEntry[]>([]);   // HeadTTS Oculus visemes (preferred)
   const talkStart = useRef<number | null>(null);
+  const useHtVisemes = useRef(false);
+
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
   const clock = useRef(0);
 
+  // ── Init HeadTTS voice backend (runs once, client-only) ──────────────────
+  useEffect(() => {
+    initVoice()
+  }, [])
+
+  // ── VRM load (unchanged from original) ─────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      // Loader 1: VRM only
       const vrmLoader = new GLTFLoader();
       vrmLoader.register(p => new VRMLoaderPlugin(p));
       const gltf = await vrmLoader.loadAsync('/models/Aria.glb');
@@ -49,20 +64,16 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       VRMUtils.combineSkeletons(gltf.scene);
       groupRef.current.add(vrm.scene);
       vrmRef.current = vrm;
-      // vrmReadyRef stays false until all bone/expression setup is done below
 
-      // Reset all expressions — override the angry default
       vrm.expressionManager?.setValue('angry', 0);
       vrm.expressionManager?.setValue('sad', 0);
       vrm.expressionManager?.setValue('neutral', 1);
       vrm.update(0);
-      // Settle to relaxed/happy
       setTimeout(() => {
         vrm.expressionManager?.setValue('neutral', 0);
         vrm.expressionManager?.setValue('happy', 0.3);
       }, 100);
 
-      // Cache bones
       const bones: Record<string, THREE.Object3D> = {};
       vrm.scene.traverse(obj => {
         Object.entries(BONES).forEach(([k, name]) => {
@@ -71,17 +82,14 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       });
       bonesRef.current = bones;
 
-      // Arms down: VRoid T-pose arms horizontal, z=-1.2 left / z=+1.2 right drops them
-      if (bones.head) bones.head.rotation.x = 0.12; // chin up on load
+      if (bones.head) bones.head.rotation.x = 0.12;
       if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
       if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
       if (bones.lLowerArm) bones.lLowerArm.rotation.z = -0.2;
       if (bones.rLowerArm) bones.rLowerArm.rotation.z = 0.2;
 
-      // All scene setup done — frame loop may now run safely
       vrmReadyRef.current = true;
 
-      // Loader 2: VRMA only (separate loader, no conflict)
       try {
         const vrmaLoader = new GLTFLoader();
         vrmaLoader.register(p => new VRMAnimationLoaderPlugin(p));
@@ -96,8 +104,6 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
           const action = mixer.clipAction(clip);
           action.setLoop(THREE.LoopOnce, 1);
           action.play();
-          // Use timeout — 'finished' event unreliable with LoopOnce
-          // Start fading at 5.5s (before animation ends at 7.27s) over 3s
           setTimeout(() => {
             greetingDone.current = true;
             mixerRef.current = null;
@@ -115,29 +121,54 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     }
 
     load().catch(() => { greetingDone.current = true; });
-    return () => { cancelled = true; vrmReadyRef.current = false; frameErrorRef.current = false; };
+    return () => {
+      cancelled = true;
+      vrmReadyRef.current = false;
+      frameErrorRef.current = false;
+      stopAriaSpeech();
+    };
   }, []);
 
+  // ── Speech + viseme trigger: fires when replyText changes ─────────────
   useEffect(() => {
-    if (mode === 'talking' && replyText) {
-      visemes.current = buildVisemes(replyText);
-      talkStart.current = performance.now();
-    } else {
+    if (!replyText) {
+      // Clear lip-sync state when text is cleared (new question / idle)
+      stopAriaSpeech();
       talkStart.current = null;
       visemes.current = [];
+      htVisemes.current = [];
+      useHtVisemes.current = false;
+      return;
     }
-  }, [mode, replyText]);
 
+    // Start speaking; onSchedule fires with either HeadTTS viseme data (WebGPU)
+    // or null (speechSynthesis fallback → use character-based visemes).
+    speakAriaText(replyText, (schedule, startMs) => {
+      if (schedule && schedule.length > 0) {
+        // HeadTTS Oculus visemes — high quality phoneme-level lip-sync
+        htVisemes.current = schedule;
+        useHtVisemes.current = true;
+      } else {
+        // Fallback: character-duration visemes (textToVisemes.ts)
+        visemes.current = buildVisemes(replyText);
+        useHtVisemes.current = false;
+      }
+      talkStart.current = startMs;
+    });
+
+    return () => { stopAriaSpeech(); };
+  }, [replyText]);
+
+  // ── Frame loop (unchanged idle/talk/blink logic; lip-sync extended) ─────
   useFrame((_, delta) => {
     const vrm = vrmRef.current;
     if (!vrm || !vrmReadyRef.current) return;
     try {
 
-    // Run greeting mixer
     if (mixerRef.current) {
       mixerRef.current.update(delta);
       vrm.update(delta);
-      return; // exits the try block cleanly
+      return;
     }
 
     clock.current += delta;
@@ -179,18 +210,39 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     }
 
     // Soft smile
-    vrm.expressionManager?.setValue('happy', mode === 'talking' ? 0.4 : 0.25);
+    vrm.expressionManager?.setValue('happy', mode === 'talking' || talkStart.current !== null ? 0.4 : 0.25);
 
-    // Lip sync
+    // ── Lip sync ─────────────────────────────────────────────────────────
+    // Reset all mouth morphs
     ['aa','ih','ou','ee','oh'].forEach(e => vrm.expressionManager?.setValue(e, 0));
-    if (mode === 'talking' && talkStart.current !== null) {
-      const elapsed = (performance.now() - talkStart.current) / 1000;
-      const cur = visemes.current.find(v => elapsed >= v.start && elapsed < v.end);
-      if (cur && cur.morph !== 'Fcl_MTH_Close') {
-        const expr = EXPR_MAP[cur.morph];
-        if (expr) vrm.expressionManager?.setValue(expr, cur.value);
+
+    if (talkStart.current !== null) {
+      const elapsed = (Date.now() - talkStart.current) / 1000;
+
+      if (useHtVisemes.current && htVisemes.current.length > 0) {
+        // ── HeadTTS Oculus visemes (WebGPU path) ─────────────────────────
+        const cur = htVisemes.current.find(v => elapsed >= v.start && elapsed < v.end);
+        if (cur && cur.morph) {
+          vrm.expressionManager?.setValue(cur.morph, cur.value);
+        }
+      } else if (visemes.current.length > 0) {
+        // ── Character-based visemes (fallback) ────────────────────────────
+        const cur = visemes.current.find(v => elapsed >= v.start && elapsed < v.end);
+        if (cur && cur.morph !== 'Fcl_MTH_Close') {
+          const expr = EXPR_MAP[cur.morph];
+          if (expr) vrm.expressionManager?.setValue(expr, cur.value);
+        }
+      }
+
+      // Clear lip-sync once the viseme schedule is exhausted
+      const maxEnd = useHtVisemes.current
+        ? (htVisemes.current[htVisemes.current.length - 1]?.end ?? 0)
+        : (visemes.current[visemes.current.length - 1]?.end ?? 0);
+      if (elapsed > maxEnd + 0.5) {
+        talkStart.current = null;
       }
     }
+
     } catch (e) {
       if (!frameErrorRef.current) {
         frameErrorRef.current = true;

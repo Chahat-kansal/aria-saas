@@ -643,6 +643,7 @@ export default function AskAriaPage() {
     if ((!msg && attachedFiles.length === 0) || sending) return
 
     setInput('')
+    setAriaResponseText('') // stop any active avatar speech when user sends
     const filesToSend = [...attachedFiles]
     setAttachedFiles([])
     const userContent = filesToSend.length > 0
@@ -732,6 +733,13 @@ export default function AskAriaPage() {
         }
         return updated
       })
+
+      // Trigger avatar speech — first sentence or up to 150 words
+      const rawResponse = (data.response ?? '').replace(/\s*\[DELIVERABLE:[^\]]+\]\s*/g, '').trim()
+      if (rawResponse) {
+        const firstSentence = rawResponse.match(/^[^.!?]+[.!?]/)?.[0] ?? rawResponse.slice(0, 300)
+        setAriaResponseText(firstSentence.trim())
+      }
 
       loadHistory()
       if (data.intent === 'deliverable') loadDeliverables()
@@ -919,8 +927,6 @@ export default function AskAriaPage() {
 
   void briefingCollapsed
   void setBriefingCollapsed
-  void ariaResponseText
-  void setAriaResponseText
   void ChartBlock
 
   if (loading) {
