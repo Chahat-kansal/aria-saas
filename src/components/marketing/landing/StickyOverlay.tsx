@@ -6,6 +6,15 @@ interface Props {
   hasScrolled: boolean
 }
 
+// TalkToAriaScene is at SCENES index 13 in a 16-scene array, hero = 2 viewports
+function scrollToTalkScene() {
+  const vh = window.innerHeight
+  const heroEndPx = 2 * vh
+  const docH = document.documentElement.scrollHeight - vh
+  const target = heroEndPx + (13 / 16) * (docH - heroEndPx)
+  window.scrollTo({ top: target, behavior: 'smooth' })
+}
+
 export default function StickyOverlay({ hasScrolled }: Props) {
   return (
     <>
@@ -16,6 +25,13 @@ export default function StickyOverlay({ hasScrolled }: Props) {
           aria-label="Back to top"
         >
           Aria
+        </button>
+        <button
+          className={'talk-aria-nav-btn ' + (hasScrolled ? 'visible' : '')}
+          onClick={scrollToTalkScene}
+          aria-label="Talk to Aria demo"
+        >
+          Talk to Aria
         </button>
       </header>
 

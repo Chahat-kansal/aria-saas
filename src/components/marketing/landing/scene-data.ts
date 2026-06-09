@@ -20,6 +20,7 @@ import AskScene from './scenes/AskScene'
 import ScheduleScene from './scenes/ScheduleScene'
 import AustraliaScene from './scenes/AustraliaScene'
 import TestimonialScene from './scenes/TestimonialScene'
+import TalkToAriaScene from './scenes/TalkToAriaScene'
 import PricingTiersScene from './scenes/PricingTiersScene'
 import OutroScene from './scenes/OutroScene'
 
@@ -37,6 +38,7 @@ export const SCENES: SceneDef[] = [
   { id: '12', className: 'scene-smart-pos',    Component: SmartPOSScene },
   { id: '13', className: 'scene-australia-wide', Component: AustraliaWideScene },
   { id: '14', className: 'scene-testimonial',  Component: TestimonialScene },
-  { id: '15', className: 'scene-pricing',      Component: PricingTiersScene },
-  { id: '16', className: 'scene-outro',        Component: OutroScene },
+  { id: '15', className: 'scene-talk-aria',    Component: TalkToAriaScene },
+  { id: '16', className: 'scene-pricing',      Component: PricingTiersScene },
+  { id: '17', className: 'scene-outro',        Component: OutroScene },
 ]

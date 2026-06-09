@@ -803,6 +803,26 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .attribution strong { color: var(--text-primary); font-weight: 500; }
 .landing-v3 .attribution .em-meta { color: var(--text-tertiary); font-style: italic; }
 
+/*  Scene: Talk to Aria  */
+.landing-v3 .scene-talk-aria { background: var(--bg-canvas); }
+.landing-v3 .scene-talk-aria::before { background: radial-gradient(ellipse 50% 60% at 75% 50%, rgba(127, 184, 151, 0.12), rgba(0,0,0,0) 60%); }
+.landing-v3 .scene-talk-aria .scene-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+
+.landing-v3 .talk-text-side { display: flex; flex-direction: column; }
+.landing-v3 .talk-h2 { text-align: left !important; }
+.landing-v3 .talk-body { margin-top: 0; }
+
+.landing-v3 .talk-hint-list { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.landing-v3 .talk-hint-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-secondary); font-family: var(--font-body); }
+.landing-v3 .talk-hint-list li::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--sage); flex-shrink: 0; }
+
+.landing-v3 .talk-widget-side { display: flex; justify-content: center; align-items: center; }
+
+/* Talk to Aria nav button */
+.landing-v3 .talk-aria-nav-btn { font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--sage); background: transparent; border: 1px solid rgba(127,184,151,0.3); border-radius: 999px; padding: 7px 16px; cursor: pointer; opacity: 0; transform: translateY(-4px); transition: opacity 300ms, transform 300ms, background 200ms; letter-spacing: 0.01em; }
+.landing-v3 .talk-aria-nav-btn.visible { opacity: 1; transform: translateY(0); }
+.landing-v3 .talk-aria-nav-btn:hover { background: rgba(127,184,151,0.08); }
+
 /*  Scene 10: Pricing tiers  */
 .landing-v3 .scene-pricing { background: var(--bg-canvas); }
 .landing-v3 .scene-pricing::before { background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(127, 184, 151, 0.16), rgba(0,0,0,0) 70%); }
@@ -861,7 +881,10 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   .landing-v3 .scene { padding: 80px 20px; }
   .landing-v3 .scene-problem .scene-inner,
   .landing-v3 .scene-split .scene-inner,
-  .landing-v3 .scene-australia .scene-inner { grid-template-columns: 1fr; gap: 32px; }
+  .landing-v3 .scene-australia .scene-inner,
+  .landing-v3 .scene-talk-aria .scene-inner { grid-template-columns: 1fr; gap: 32px; }
+  .landing-v3 .talk-h2 { text-align: center !important; }
+  .landing-v3 .talk-widget-side { justify-content: center; }
   .landing-v3 .scene-split.reverse .text-side { order: 2; }
   .landing-v3 .scene-split.reverse .mockup-side { order: 1; }
   .landing-v3 .pricing-grid { grid-template-columns: 1fr; gap: 12px; }

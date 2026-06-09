@@ -44,23 +44,16 @@ function chipsForIndustry(industry: string | null): string[] {
 }
 
 // Web Speech API types (browser-only)
-type SpeechRecognitionEvent = { results: { 0: { transcript: string } }[] }
-type SpeechRecognition = {
+type KioskSpeechRecognitionEvent = { results: { 0: { transcript: string } }[] }
+type KioskRecognition = {
   lang: string
   interimResults: boolean
   continuous: boolean
-  onresult: ((e: SpeechRecognitionEvent) => void) | null
+  onresult: ((e: KioskSpeechRecognitionEvent) => void) | null
   onerror: ((e: unknown) => void) | null
   onend: (() => void) | null
   start: () => void
   stop: () => void
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: { new(): SpeechRecognition }
-    webkitSpeechRecognition?: { new(): SpeechRecognition }
-  }
 }
 
 function speak(text: string) {
@@ -123,7 +116,7 @@ export default function KioskClient() {
   const [showConfetti, setShowConfetti] = useState(false)
   const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<KioskRecognition | null>(null)
 
   // Load kiosk config for header
   useEffect(() => {
@@ -286,7 +279,9 @@ export default function KioskClient() {
 
   const startListening = useCallback(() => {
     if (typeof window === 'undefined') return
-    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition
     if (!SR) {
       setError('Voice input is not supported in this browser. Try typing instead.')
       return
@@ -301,7 +296,7 @@ export default function KioskClient() {
     rec.lang = 'en-AU'
     rec.interimResults = false
     rec.continuous = false
-    rec.onresult = (e: SpeechRecognitionEvent) => {
+    rec.onresult = (e: KioskSpeechRecognitionEvent) => {
       const transcript = e.results[0][0].transcript
       setInput(transcript)
       setTimeout(() => sendMessage(transcript), 100)
