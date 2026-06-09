@@ -99,8 +99,23 @@ function preferredVoice(): SpeechSynthesisVoice | null {
 
 // ── HeadTTS WebGPU init ────────────────────────────────────────────────────
 
+const HEADTTS_MAX_ATTEMPTS = 3
+const HEADTTS_RETRY_MS     = 600
+
 async function tryInitHeadTTS(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false
+
+  // Guard: ensure the WebGPU adapter is actually available before attempting
+  // to connect. On some browsers the GPU process starts asynchronously —
+  // requesting the adapter here forces the browser to initialise it now so
+  // the worker spawned by HeadTTS finds a working context.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adapter = await (navigator as any).gpu.requestAdapter()
+    if (!adapter) return false
+  } catch {
+    return false
+  }
 
   try {
     // Load HeadTTS from public/ via a webpack-ignored dynamic import.
@@ -111,32 +126,71 @@ async function tryInitHeadTTS(): Promise<boolean> {
     const HeadTTS = (mod as any).HeadTTS
     if (typeof HeadTTS !== 'function') throw new Error('HeadTTS class not found in module')
 
-    const tts = new HeadTTS({
-      // workerModule → HeadTTS spawns the Web Worker from a Blob URL that
-      // imports this path; blob:-origin workers are allowed by the CSP.
-      workerModule:   '/headtts/modules/worker-tts.mjs',
-      dictionaryURL:  '/headtts/dictionaries',
-      languages:      ['en-us'],
-      defaultVoice:   'af_bella',
-      defaultSpeed:   1.05,
-    })
+    for (let attempt = 1; attempt <= HEADTTS_MAX_ATTEMPTS; attempt++) {
+      // ── Fresh instance per attempt so no stale worker state carries over ──
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tts: any = new HeadTTS({
+        // workerModule → HeadTTS spawns the Web Worker from a Blob URL that
+        // imports this path; blob:-origin workers are allowed by the CSP.
+        workerModule:  '/headtts/modules/worker-tts.mjs',
+        dictionaryURL: '/headtts/dictionaries',
+        languages:     ['en-us'],
+        defaultVoice:  'af_bella',
+        defaultSpeed:  1.05,
+      })
 
-    // Accumulate viseme batches as HeadTTS streams them
-    tts.onmessage = (msg: { type: string; data?: Record<string, unknown> }) => {
-      if (msg.type === 'audio' && msg.data) {
-        _pendingVisemes.push(...batchToEntries(msg.data))
+      // Track whether a connection-level error fired during this attempt.
+      // connect() may resolve even after an internal worker failure if HeadTTS
+      // retries internally — we need to detect this to avoid handing a broken
+      // instance to synthesize().
+      let hadConnectionError = false
+
+      tts.onmessage = (msg: { type: string; data?: Record<string, unknown> }) => {
+        if (msg.type === 'audio' && msg.data) {
+          _pendingVisemes.push(...batchToEntries(msg.data))
+        }
       }
+
+      tts.onerror = (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('connection failed') || msg.includes('Failed to start')) {
+          // Swallow during init — we'll retry below
+          hadConnectionError = true
+        } else {
+          console.warn('[AriaVoice] HeadTTS error:', err)
+        }
+      }
+
+      try {
+        await tts.connect()
+      } catch (connectErr) {
+        // connect() threw — treat same as a connection error
+        hadConnectionError = true
+      }
+
+      if (hadConnectionError) {
+        if (attempt < HEADTTS_MAX_ATTEMPTS) {
+          // Wait for the GPU process / worker to stabilise, then retry
+          await new Promise<void>(r => setTimeout(r, HEADTTS_RETRY_MS))
+          continue
+        }
+        // Exhausted retries
+        console.warn('[AriaVoice] HeadTTS connect failed after', HEADTTS_MAX_ATTEMPTS, 'attempts — falling back to speechSynthesis')
+        return false
+      }
+
+      // ── Clean connect: no connection errors fired ──────────────────────────
+      // Restore normal runtime onerror and mark the instance as ready.
+      tts.onerror = (err: unknown) => {
+        console.warn('[AriaVoice] HeadTTS error:', err)
+      }
+      _tts = tts
+      _backend = 'webgpu-headtts'
+      console.log('[AriaVoice] HeadTTS WebGPU ready — phoneme-level lip-sync enabled')
+      return true
     }
 
-    tts.onerror = (err: unknown) => {
-      console.warn('[AriaVoice] HeadTTS error:', err)
-    }
-
-    await tts.connect()
-    _tts = tts
-    _backend = 'webgpu-headtts'
-    console.log('[AriaVoice] HeadTTS WebGPU ready — phoneme-level lip-sync enabled')
-    return true
+    return false
   } catch (e) {
     console.warn('[AriaVoice] HeadTTS init failed, falling back to speechSynthesis:', e)
     return false
