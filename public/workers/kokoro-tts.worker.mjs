@@ -55,9 +55,11 @@ async function speak(text, voice, speed) {
     return
   }
   try {
-    console.log(`[KokoroWorker] speak start ${text.length} chars voice=${voice}`)
+    // Strip emoji — they confuse the Kokoro phonemizer and can stall generation
+    const safe = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim()
+    console.log(`[KokoroWorker] speak start ${safe.length} chars (was ${text.length})`)
 
-    const result = await tts.generate(text, { voice, speed })
+    const result = await tts.generate(safe, { voice: 'af_heart', speed: 1.0 })
 
     // kokoro-js 1.2.x returns RawAudio { audio: Float32Array, sampling_rate: number }
     const audio = result.audio instanceof Float32Array
@@ -78,7 +80,7 @@ async function speak(text, voice, speed) {
     }
 
     console.log('[KokoroWorker] posting audio')
-    postMessage({ type: 'audio', audio, sampleRate, durationMs, text }, [audio.buffer])
+    postMessage({ type: 'audio', audio, sampleRate, durationMs, text: safe }, [audio.buffer])
   } catch (err) {
     console.error('[KokoroWorker] speak error:', err)
     postMessage({
