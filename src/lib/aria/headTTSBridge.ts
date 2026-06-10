@@ -1,16 +1,17 @@
 /**
  * headTTSBridge.ts — TTS + Viseme bridge for the Aria 3D avatar
  *
- * Strategy
- * ─────────
+ * Voice chain
+ * ───────────
  * WebGPU available (Chrome/Edge 113+)
- *   → HeadTTS (github.com/met4citizen/HeadTTS) loaded from /public/headtts/
+ *   → HeadTTS + Kokoro af_heart voice (warm, natural-sounding AI TTS)
+ *   → HeadTTS handles audio via Web Audio API internally
  *   → Provides Oculus phoneme-level viseme timing for accurate lip-sync
- *   → window.speechSynthesis handles audio (no AudioContext in our code)
+ *   → Visemes are anchored to HeadTTS audio start time (onend)
  *
  * No WebGPU (Firefox, Safari, older Chrome)
- *   → window.speechSynthesis for audio
- *   → Caller uses character-based visemes (textToVisemes.ts fallback)
+ *   → window.speechSynthesis fallback (robotic but functional)
+ *   → Caller uses character-based visemes (textToVisemes.ts)
  *
  * HeadTTS static assets live in public/headtts/ (copied from npm package at build).
  * The worker is loaded via a Blob URL so webpack never tries to bundle it.
@@ -18,7 +19,7 @@
 
 // ── Oculus viseme IDs → VRoid blendshape morph names ──────────────────────
 const OCULUS_TO_VROID: Record<string, string> = {
-  sil: '',    // silence   — close (empty = no morph set)
+  sil: '',    // silence   — close
   PP:  '',    // p/b       — bilabial close
   FF:  '',    // f/v       — labiodental close
   TH:  'ih',  // th        — tongue forward → ih
@@ -36,31 +37,25 @@ const OCULUS_TO_VROID: Record<string, string> = {
 }
 
 export type VisemeEntry = {
-  morph: string   // '' | 'aa' | 'ih' | 'ou' | 'ee' | 'oh'
-  start: number   // seconds from speech start
-  end:   number   // seconds from speech start
-  value: number   // blend weight (0..1)
+  morph:  string   // '' | 'aa' | 'ih' | 'ou' | 'ee' | 'oh'
+  start:  number   // seconds from audio start
+  end:    number   // seconds from audio start
+  value:  number   // blend weight (0..1)
 }
 
-export type SpeechBackend = 'elevenlabs' | 'webgpu-headtts' | 'speechsynthesis' | 'none'
+export type SpeechBackend = 'webgpu-headtts' | 'speechsynthesis' | 'none'
 
 // ── Singletons ─────────────────────────────────────────────────────────────
-
-let _backend: SpeechBackend = 'none'
+let _backend:      SpeechBackend   = 'none'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _tts: any = null
-let _headTTSReady = false                     // true only after a confirmed clean connect()
-let _audioEl: HTMLAudioElement | null = null  // current ElevenLabs audio element
-let _initPromise: Promise<void> | null = null
+let _tts:          any             = null
+let _headTTSReady: boolean         = false   // true only after clean connect()
+let _initPromise:  Promise<void> | null = null
 let _pendingVisemes: VisemeEntry[] = []
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function toVisemeEntry(
-  oculusId: string,
-  vtimeMs: number,
-  vdurMs: number,
-): VisemeEntry {
+function toVisemeEntry(oculusId: string, vtimeMs: number, vdurMs: number): VisemeEntry {
   const morph = OCULUS_TO_VROID[oculusId] ?? ''
   return {
     morph,
@@ -71,18 +66,18 @@ function toVisemeEntry(
 }
 
 function batchToEntries(data: Record<string, unknown>): VisemeEntry[] {
-  const visemes   = (data.visemes   as string[] | undefined) ?? []
-  const vtimes    = (data.vtimes    as number[] | undefined) ?? []
-  const vdurs     = (data.vdurations as number[] | undefined) ?? []
+  const visemes = (data.visemes    as string[] | undefined) ?? []
+  const vtimes  = (data.vtimes     as number[] | undefined) ?? []
+  const vdurs   = (data.vdurations as number[] | undefined) ?? []
   return visemes.map((v, i) => toVisemeEntry(v, vtimes[i] ?? 0, vdurs[i] ?? 80))
 }
 
-function cleanForSpeech(text: string): string {
+export function cleanForSpeech(text: string): string {
   return text
-    .replace(/\[(?:mood|gesture):\w+\]/g, '')     // strip [mood:X] [gesture:Y] tags
-    .replace(/!\[.*?\]\(.*?\)/g, '')              // remove markdown images
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')      // unwrap links → text
-    .replace(/[#*_`>~|]/g, ' ')                   // strip markdown syntax
+    .replace(/\[(?:mood|gesture):\w+\]/g, '')     // strip [mood:X] [gesture:Y]
+    .replace(/!\[.*?\]\(.*?\)/g, '')              // markdown images
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')      // links → text
+    .replace(/[#*_`>~|]/g, ' ')                   // markdown syntax
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -108,10 +103,8 @@ const HEADTTS_RETRY_MS     = 600
 async function tryInitHeadTTS(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false
 
-  // Guard: ensure the WebGPU adapter is actually available before attempting
-  // to connect. On some browsers the GPU process starts asynchronously —
-  // requesting the adapter here forces the browser to initialise it now so
-  // the worker spawned by HeadTTS finds a working context.
+  // Force the GPU process to initialise before the worker spawned by HeadTTS
+  // requests it — prevents a timing race on first load.
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const adapter = await (navigator as any).gpu.requestAdapter()
@@ -121,20 +114,15 @@ async function tryInitHeadTTS(): Promise<boolean> {
   }
 
   try {
-    // Load HeadTTS from public/ via a webpack-ignored dynamic import.
-    // Using /* webpackIgnore: true */ so the bundler doesn't attempt to
-    // resolve the URL — it is served as a static asset from Next.js.
     const mod = await import(/* webpackIgnore: true */ '/headtts/modules/headtts.mjs' as string)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const HeadTTS = (mod as any).HeadTTS
     if (typeof HeadTTS !== 'function') throw new Error('HeadTTS class not found in module')
 
     for (let attempt = 1; attempt <= HEADTTS_MAX_ATTEMPTS; attempt++) {
-      // ── Fresh instance per attempt so no stale worker state carries over ──
+      // Fresh instance per attempt — no stale worker state carries over
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tts: any = new HeadTTS({
-        // workerModule → HeadTTS spawns the Web Worker from a Blob URL that
-        // imports this path; blob:-origin workers are allowed by the CSP.
         workerModule:  '/headtts/modules/worker-tts.mjs',
         dictionaryURL: '/headtts/dictionaries',
         languages:     ['en-us'],
@@ -142,10 +130,6 @@ async function tryInitHeadTTS(): Promise<boolean> {
         defaultSpeed:  1.0,
       })
 
-      // Track whether a connection-level error fired during this attempt.
-      // connect() may resolve even after an internal worker failure if HeadTTS
-      // retries internally — we need to detect this to avoid handing a broken
-      // instance to synthesize().
       let hadConnectionError = false
 
       tts.onmessage = (msg: { type: string; data?: Record<string, unknown> }) => {
@@ -157,7 +141,6 @@ async function tryInitHeadTTS(): Promise<boolean> {
       tts.onerror = (err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
         if (msg.includes('connection failed') || msg.includes('Failed to start')) {
-          // Swallow during init — we'll retry below
           hadConnectionError = true
         } else {
           console.warn('[AriaVoice] HeadTTS error:', err)
@@ -165,64 +148,39 @@ async function tryInitHeadTTS(): Promise<boolean> {
       }
 
       try {
-        // Pass voice + rate explicitly so HeadTTS initialises the synthesis
-        // input pipeline immediately. Without this config "Input property not set"
-        // fires on the first synthesize() call even after a successful connect().
         await tts.connect({ voice: 'af_heart', rate: 1.0 })
-      } catch (connectErr) {
-        // connect() threw — treat same as a connection error
+      } catch {
         hadConnectionError = true
       }
 
       if (hadConnectionError) {
         if (attempt < HEADTTS_MAX_ATTEMPTS) {
-          // Wait for the GPU process / worker to stabilise, then retry
           await new Promise<void>(r => setTimeout(r, HEADTTS_RETRY_MS))
           continue
         }
-        // Exhausted retries
-        console.warn('[AriaVoice] HeadTTS connect failed after', HEADTTS_MAX_ATTEMPTS, 'attempts — falling back to speechSynthesis')
+        console.error('[AriaVoice] HeadTTS failed: connect failed after', HEADTTS_MAX_ATTEMPTS, 'attempts')
         return false
       }
 
-      // ── Clean connect: no connection errors fired ──────────────────────────
-      // Restore normal runtime onerror, mark ready, and store the instance.
-      // _headTTSReady gates all synthesize() calls — it is never set until here.
+      // Clean connect — set runtime error handler, mark ready
       tts.onerror = (err: unknown) => {
-        console.warn('[AriaVoice] HeadTTS error:', err)
+        console.error('[AriaVoice] HeadTTS failed:', err)
       }
       _tts = tts
       _headTTSReady = true
       _backend = 'webgpu-headtts'
-      console.log('[AriaVoice] HeadTTS WebGPU ready — phoneme-level lip-sync enabled (af_heart voice)')
+      console.log('[AriaVoice] HeadTTS Kokoro af_heart ready')
       return true
     }
 
     return false
   } catch (e) {
-    console.warn('[AriaVoice] HeadTTS init failed, falling back to speechSynthesis:', e)
+    console.error('[AriaVoice] HeadTTS failed:', e)
     return false
   }
 }
 
-// ── Public API ─────────────────────────────────────────────────────────────
-
-// ── ElevenLabs availability check ─────────────────────────────────────────
-
-async function tryInitElevenLabs(): Promise<boolean> {
-  if (typeof window === 'undefined') return false
-  try {
-    const res = await fetch('/api/aria/tts?check=1')
-    if (res.ok) {
-      _backend = 'elevenlabs'
-      console.log('[AriaVoice] ElevenLabs ready — human-quality voice enabled')
-      return true
-    }
-  } catch { /* network error or not configured */ }
-  return false
-}
-
-// ── Shared speechSynthesis fallback (used when ElevenLabs/HeadTTS fail) ───
+// ── speechSynthesis fallback ───────────────────────────────────────────────
 
 function fallbackSpeechSynthesis(
   speechText: string,
@@ -238,26 +196,23 @@ function fallbackSpeechSynthesis(
   onSchedule(null, Date.now())
 }
 
+// ── Public API ─────────────────────────────────────────────────────────────
+
 /**
  * Detect the best voice backend. Idempotent — safe to call multiple times.
- * Call once inside a useEffect (browser-only).
- * Priority: ElevenLabs → HeadTTS (WebGPU) → speechSynthesis
+ * Priority: HeadTTS (Kokoro af_heart, WebGPU) → speechSynthesis fallback
  */
 export function initVoice(): Promise<void> {
   if (_initPromise) return _initPromise
   _initPromise = (async () => {
-    // 1. Try ElevenLabs first (human-quality, server-proxied)
-    const elOk = await tryInitElevenLabs()
-    if (elOk) return
-
-    // 2. Try HeadTTS WebGPU (phoneme-level lip-sync)
+    // 1. HeadTTS Kokoro af_heart (WebGPU — phoneme-level lip-sync, warm voice)
     const htOk = await tryInitHeadTTS()
     if (htOk) return
 
-    // 3. Fallback: browser speechSynthesis
+    // 2. Fallback: browser speechSynthesis
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       _backend = 'speechsynthesis'
-      console.log('[AriaVoice] speechSynthesis fallback ready (no WebGPU/ElevenLabs)')
+      console.log('[AriaVoice] Fallback: window.speechSynthesis')
     }
   })()
   return _initPromise
@@ -266,15 +221,13 @@ export function initVoice(): Promise<void> {
 /**
  * Speak text aloud and call `onSchedule` with viseme timing once ready.
  *
- * WebGPU path  — HeadTTS synthesises first (visemes collected), then
- *                speechSynthesis starts audio + onSchedule fires together
- *                so lip-sync and audio are in sync.
+ * WebGPU path  — HeadTTS synthesises text; Kokoro af_heart audio plays
+ *                via Web Audio API internally. On `onend`, viseme schedule
+ *                is handed to the caller (anchored to HeadTTS audio start).
+ *                Do NOT call speechSynthesis — HeadTTS handles audio.
  *
  * Fallback     — speechSynthesis starts immediately; onSchedule(null) is
- *                called so the caller can use character-based visemes.
- *
- * @param text        Plain prose to speak (markdown stripped internally).
- * @param onSchedule  Receives (schedule | null, wallClockStartMs).
+ *                called so the caller falls back to character-based visemes.
  */
 export function speakAriaText(
   text: string,
@@ -283,7 +236,7 @@ export function speakAriaText(
   const clean = cleanForSpeech(text)
   if (!clean) return
 
-  // Limit to ~150 words so speech isn't excessively long
+  // Cap at 150 words so speech isn't excessively long
   const words = clean.split(' ')
   const speechText = words.length > 150
     ? words.slice(0, 150).join(' ') + '…'
@@ -291,54 +244,17 @@ export function speakAriaText(
 
   _pendingVisemes = []
 
-  // ── ElevenLabs path (primary when key is configured) ────────────────────
-  if (_backend === 'elevenlabs') {
-    fetch('/api/aria/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: speechText }),
-    }).then(async res => {
-      if (!res.ok || res.headers.get('Content-Type')?.includes('application/json')) {
-        // Proxy returned error or stub → graceful fallback
-        fallbackSpeechSynthesis(speechText, onSchedule)
-        return
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      _audioEl = audio
-      audio.onended = () => { URL.revokeObjectURL(url); _audioEl = null }
-      audio.play()
-        .then(() => onSchedule(null, Date.now()))
-        .catch(() => {
-          URL.revokeObjectURL(url)
-          fallbackSpeechSynthesis(speechText, onSchedule)
-        })
-    }).catch(() => {
-      fallbackSpeechSynthesis(speechText, onSchedule)
-    })
-    return
-  }
-
-  // ── WebGPU + HeadTTS path ────────────────────────────────────────────────
-  // _headTTSReady is only true after a confirmed clean connect() with voice config —
-  // this prevents "Input property not set" if connect() resolved but init was partial.
+  // ── HeadTTS + Kokoro af_heart (WebGPU) ───────────────────────────────────
+  // _headTTSReady is only true after a confirmed clean connect() with voice config.
   if (_backend === 'webgpu-headtts' && _tts && _headTTSReady) {
     _tts.clear?.()
+    _pendingVisemes = []
 
     _tts.onend = () => {
-      // Both speech and lip-sync start together so they stay in sync
+      // HeadTTS Kokoro af_heart audio is playing via Web Audio API.
+      // Do NOT call window.speechSynthesis — that produces the robotic voice.
+      // Visemes are anchored to onend time (= when HeadTTS starts audio playback).
       const schedule = _pendingVisemes.length > 0 ? [..._pendingVisemes] : null
-
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel()
-        const utt = new SpeechSynthesisUtterance(speechText)
-        utt.rate = 1.05
-        const v = preferredVoice()
-        if (v) utt.voice = v
-        window.speechSynthesis.speak(utt)
-      }
-
       onSchedule(schedule, Date.now())
     }
 
@@ -346,28 +262,16 @@ export function speakAriaText(
     return
   }
 
-  // ── speechSynthesis fallback ─────────────────────────────────────────────
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel()
-    const utt = new SpeechSynthesisUtterance(speechText)
-    utt.rate = 1.05
-    const v = preferredVoice()
-    if (v) utt.voice = v
-
-    const startMs = Date.now()
-    window.speechSynthesis.speak(utt)
-    // Return null schedule → caller uses its own character-based viseme system
-    onSchedule(null, startMs)
-  }
+  // ── speechSynthesis fallback (no WebGPU) ─────────────────────────────────
+  fallbackSpeechSynthesis(speechText, onSchedule)
 }
 
-/** Cancel any active speech. */
+/** Cancel any active speech (both HeadTTS and speechSynthesis). */
 export function stopAriaSpeech(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel()
   }
   if (_tts?.clear) _tts.clear()
-  if (_audioEl) { _audioEl.pause(); _audioEl.src = ''; _audioEl = null }
   _pendingVisemes = []
 }
 
