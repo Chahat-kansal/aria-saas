@@ -439,9 +439,12 @@ async function _POST(req: Request) {
   }
 
   // NAV fast-path — "where is X / how do I open X / where can I find X"
-  // Answered directly from PRODUCT_MAP — no LLM call, no clarifying question.
+  // DISABLED by default: product-map is still in the system prompt so LLM answers
+  // navigation questions correctly. The zero-LLM shortcut risks hijacking analytical
+  // questions (e.g. "where does my best customer live" → wrong nav card).
+  // Re-enable by setting NAV_FASTPATH=1 in env after adversarial testing passes.
   const NAV_PATTERN = /\b(where|how do i|how to|find|open|go to|navigate|get to|access|show me|take me to|can i find|can i see)\b.{0,60}\b(pos|terminal|dashboard|staff|roster|inventory|stock|reports?|reviews?|customers?|autopilot|daily briefing|intelligence|analytics|settings|reels|social|marketing|promotions?|loyalty|gift card|laybys?|tables?|kds|kitchen|timesheets?|payroll|leave|schedule|shifts?|cash|end.?of.?day|stocktake|suppliers?|purchase orders?|invoices?|bookings?|orders?|community|chat|website chat|warehouse|compliance|billing|plan|integrations?|xero|receipts?|barcode|price tick|labels?|waste|void|fitting room|split|competitors?|display|ask aria|agents?|churn|winback|missed demand|profit leak|delivery|recipes?|slow day|weekly|shift report|reorder|bas|tax|ad network|seo|tabs?|quotes?|bundles?|variance)\b/i
-  if (NAV_PATTERN.test(message)) {
+  if (process.env.NAV_FASTPATH === '1' && NAV_PATTERN.test(message)) {
     const match = findProductByQuery(message)
     if (match) {
       const navReply = `You can find **${match.feature}** at \`${match.route}\` in the sidebar.\n\n${match.blurb}.`

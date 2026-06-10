@@ -339,7 +339,10 @@ async function playKokoroAudio(
   _currentSource = source
 
   source.addEventListener('ended', () => {
-    if (_currentSource === source) _currentSource = null
+    // Guard: if _currentSource was already cleared by stopAriaSpeech(), this is a
+    // stale stopped-source event — do NOT fire onSpeakEnd for it.
+    if (_currentSource !== source) return
+    _currentSource = null
     fireSpeakEnd()
   })
 
