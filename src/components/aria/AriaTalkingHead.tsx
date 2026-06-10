@@ -10,8 +10,15 @@ import { buildVisemes, Viseme } from './textToVisemes';
 import { initVoice, speakAriaText, stopAriaSpeech, onSpeakStart, onSpeakEnd } from '@/lib/aria/headTTSBridge';
 import type { VisemeEntry } from '@/lib/aria/headTTSBridge';
 
-// Greeting plays once per browser session — prevents re-wave on React remounts
-let _greetingPlayedThisSession = false;
+// Session guard for the greeting wave — sessionStorage survives hot-reloads
+// (module-level vars reset on Fast Refresh; sessionStorage persists until tab close).
+const GREET_KEY = 'aria_greeted_this_session'
+function greetingAlreadyPlayed(): boolean {
+  try { return !!sessionStorage.getItem(GREET_KEY) } catch { return false }
+}
+function markGreetingPlayed(): void {
+  try { sessionStorage.setItem(GREET_KEY, '1') } catch { /* ignore */ }
+}
 
 // ── VRoid blendshape ↔ Oculus viseme map ─────────────────────────────────
 // Used when HeadTTS WebGPU returns Oculus viseme IDs.
@@ -259,23 +266,42 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         }
       };
 
-      if (!_greetingPlayedThisSession && greetRes.status === 'fulfilled') {
+      if (!greetingAlreadyPlayed() && greetRes.status === 'fulfilled') {
         const vrmaGreet = greetRes.value.userData.vrmAnimations?.[0];
         if (vrmaGreet) {
-          _greetingPlayedThisSession = true;
+          markGreetingPlayed();
           const greetClip = filterHeadTracks(createVRMAnimationClip(vrmaGreet, vrm));
           const greetAction = mixer.clipAction(greetClip);
           greetAction.setLoop(THREE.LoopOnce, 1);
+          greetAction.clampWhenFinished = true;  // hold last frame; no snap-back
           greetAction.play();
-          greetTimeoutRef.current = setTimeout(() => {
+          mixerStateRef.current = 'greeting';
+
+          // Crossfade to idle exactly when the clip finishes — no hardcoded timer
+          const onGreetDone = (evt: { type: string; action: THREE.AnimationAction }) => {
+            if (evt.action !== greetAction) return;
+            mixer.removeEventListener('finished', onGreetDone as Parameters<typeof mixer.addEventListener>[1]);
             if (cancelled) return;
             if (idleActionRef.current) {
               idleActionRef.current.reset();
               greetAction.crossFadeTo(idleActionRef.current, 0.5, true);
             }
             startIdle();
-            console.log('[AriaTalkingHead] greeting → idle crossfade');
-          }, 7267);
+            console.log('[AriaTalkingHead] greeting finished → idle crossfade');
+          };
+          mixer.addEventListener('finished', onGreetDone as Parameters<typeof mixer.addEventListener>[1]);
+
+          // Safety fallback: force transition after 12s if finished event never fires
+          greetTimeoutRef.current = setTimeout(() => {
+            if (cancelled || greetingDone.current) return;
+            mixer.removeEventListener('finished', onGreetDone as Parameters<typeof mixer.addEventListener>[1]);
+            if (idleActionRef.current) {
+              idleActionRef.current.reset();
+              greetAction.crossFadeTo(idleActionRef.current, 0.5, true);
+            }
+            startIdle();
+            console.log('[AriaTalkingHead] greeting safety-timeout → idle');
+          }, 12_000);
         } else {
           startIdle();
         }
