@@ -198,10 +198,18 @@ async function speak(id, text) {
 
   console.log(`[KokoroWorker] speak start id=${id} ${safe.length} chars (was ${text.length})`)
 
-  if (TextSplitterStream && typeof tts.stream === 'function') {
+  // Default: generate() (single-shot). WASM Kokoro is ~0.2–1× real-time, so
+  // streaming produces sentence gaps of 9–44 s on low-core machines — worse
+  // than waiting for the full clip. Enable streaming only with ?voicestream=1.
+  const streamingEnabled =
+    TextSplitterStream &&
+    typeof tts.stream === 'function' &&
+    new URLSearchParams(self.location.search).get('voicestream') === '1'
+
+  if (streamingEnabled) {
     const outcome = await speakStreaming(id, safe)
     if (outcome !== 'stall') return  // 'done' or 'cancelled' — no further action
-    // 'stall' → run generate() as proven fallback
+    // 'stall' → fall through to generate()
   }
 
   await speakGenerate(id, safe)
