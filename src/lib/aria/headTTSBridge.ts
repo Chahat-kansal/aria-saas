@@ -402,7 +402,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     try {
-      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=5', { type: 'module' })
+      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=6', { type: 'module' })
 
       _worker.onmessage = (e: MessageEvent) => {
         const msg = e.data as Record<string, unknown>

@@ -90,17 +90,26 @@ async function speakStreaming(id, safe) {
             }
             return 'cancelled'
           }
-          // audio is RawAudio { audio: Float32Array, sampling_rate: number }
-          const audioData  = audio.audio instanceof Float32Array ? audio.audio : new Float32Array(audio.audio)
-          const sampleRate = audio.sampling_rate ?? 24000
-          if (!audioData.length) { seq++; continue }
+          // stream yields { text, phonemes, audio: RawAudio } — RawAudio is
+          // { audio: Float32Array, sampling_rate }, one level deeper than generate()
+          const raw = audio
+          const audioData =
+            raw instanceof Float32Array ? raw
+            : raw?.audio instanceof Float32Array ? raw.audio
+            : null
+          const sampleRate = raw?.sampling_rate ?? 24000
+          if (!audioData || !audioData.length) {
+            console.warn(`[KokoroWorker] invalid chunk id=${id} seq=${seq} raw=${Object.prototype.toString.call(raw)}`)
+            seq++; continue
+          }
 
           const durationMs = (audioData.length / sampleRate) * 1000
           const ct         = typeof chunkText === 'string' ? chunkText : ''
           console.log(`[KokoroWorker] chunk ${seq} id=${id} ${audioData.length}samp "${ct.slice(0, 50)}"`)
+          const out = audioData.slice()   // standalone copy — safe to transfer, won't detach ONNX memory
           postMessage(
-            { type: 'audio-chunk', id, seq, audio: audioData, sampleRate, durationMs, text: ct, isLast: false },
-            [audioData.buffer]
+            { type: 'audio-chunk', id, seq, audio: out, sampleRate, durationMs, text: ct, isLast: false },
+            [out.buffer]
           )
           seq++
         }
