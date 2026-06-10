@@ -290,9 +290,11 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
 
   // ── Speech + viseme trigger: fires when replyText changes ─────────────
   useEffect(() => {
-    // Clear gesture schedule on reply clear
+    // Clear gesture/viseme state when reply is cleared.
+    // Deliberately do NOT reset lastSpokenRef here — it must survive the '' cycle so the
+    // guard below blocks a duplicate fire even if fireSpeakEnd briefly clears replyText
+    // and the same text comes back (e.g. spurious StrictMode re-mount).
     if (!replyText) {
-      lastSpokenRef.current = '';
       talkStart.current = null;
       visemes.current = [];
       htVisemes.current = [];
@@ -303,8 +305,9 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       return;
     }
 
-    // Guard: don't re-speak the same text (React StrictMode double-fires effects)
-    if (replyText === lastSpokenRef.current) return;
+    // Guard: don't re-speak the same text (StrictMode double-fire or spurious setReply cycle).
+    // lastSpokenRef is set BEFORE speakAriaText so StrictMode's second invocation sees it already set.
+    if (lastSpokenRef.current === replyText) return;
     lastSpokenRef.current = replyText;
 
     try {

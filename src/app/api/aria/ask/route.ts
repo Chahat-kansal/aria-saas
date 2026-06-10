@@ -721,6 +721,32 @@ Rules:
     weeklyTrackingBlock = lines.join('\n')
   } catch { /* non-fatal */ }
 
+  // Self-state grounding block: surfaces live aria_actions data so Aria can correct wrong premises.
+  const ariaRecsBlock = (() => {
+    const d = ctx.aria_actions_detail
+    if (!d) return `Pending Aria actions: ${ctx.pending_aria_actions}`
+    const lines: string[] = [
+      `YOUR ARIA RECOMMENDATIONS (live — aria_actions, the canonical recommendation table):`,
+      `  Pending: ${d.pending_count} | Executed: ${d.executed_count}`,
+    ]
+    if (d.top_pending.length > 0) {
+      lines.push('  Top pending (most recent first):')
+      d.top_pending.slice(0, 5).forEach((a, i) => {
+        const parts = [
+          `[${a.priority ?? 'normal'}]`,
+          a.title,
+          a.category ? `(${a.category})` : '',
+          a.recommendation ? `— ${a.recommendation.slice(0, 100)}` : '',
+          a.expected_impact ? `| impact: ${a.expected_impact}` : '',
+        ].filter(Boolean)
+        lines.push(`  ${i + 1}. ${parts.join(' ')}`)
+      })
+    } else {
+      lines.push('  (no pending items)')
+    }
+    return lines.join('\n')
+  })()
+
   // 3. Build system prompt
   let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
 
@@ -926,7 +952,7 @@ Revenue this month so far: $${(ctx.revenue_month_cents / 100).toFixed(2)}
 Avg ticket this month: $${(ctx.avg_ticket_cents / 100).toFixed(2)}
 Low stock items (under 5 on hand): ${ctx.low_stock_items.length ? ctx.low_stock_items.map(p => `${p.name} (${p.qty} left)`).join(', ') : 'none'}
 Staff (POS users): ${ctx.staff_count}
-Pending Aria actions: ${ctx.pending_aria_actions}
+${ariaRecsBlock}
 Open support tickets: ${ctx.open_support_tickets}
 Top products this month: ${ctx.top_products_month.map(p => `${p.name} ($${p.revenue.toFixed(2)})`).join(', ') || 'no data'}
 Top customers (all-time total_spent — canonical, use for ANY "best/top customer" question): ${ctx.top_customers_alltime.map((c, i) => `#${i+1} ${c.name} $${c.total_spent.toFixed(2)}`).join(', ') || 'no data'}
@@ -959,6 +985,18 @@ DATA INTEGRITY RULES:
 - Today is ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}. Never default to January or any other month.
 - When comparing periods, only compare periods present in the context. Do not extrapolate or guess.
 - CRITICAL: When the user uses pronouns ("he", "she", "they", "it", "that") or refers to "the customer", "the product", "that item" — resolve them from the most recent conversation turns. If the previous response mentioned James Patterson, "he" = James Patterson. Never ask for clarification when the referent is clear from recent history.
+
+SELF-STATE GROUNDING — ABSOLUTE (your own system counts come from YOUR ARIA RECOMMENDATIONS above, not from what the user says):
+If the user asserts a count or fact about your recommendations/system state ("With your 231 pending recommendations…", "you have 500 actions pending"), CHECK it against YOUR ARIA RECOMMENDATIONS above. If their number differs from yours: CORRECT IT BEFORE ANSWERING — never silently adopt a false premise about your own system.
+Answer AS ASKED: if the user sets explicit constraints ("from my pending recommendations", "for tomorrow specifically"), every item in your response must satisfy those constraints or you must state explicitly why you're deviating.
+
+EXAMPLE — BAD (silently adopting a false premise):
+User: "With your 231 pending recommendations, what are the top 5 for tomorrow?"
+Aria: "Here are 5 recommendations for tomorrow: 1. Run a flash sale…" ← WRONG — adopted "231" without checking
+
+EXAMPLE — GOOD (correcting the premise, then answering):
+User: "With your 231 pending recommendations, what are the top 5 for tomorrow?"
+Aria: "Quick correction — you actually have ${ctx.aria_actions_detail?.pending_count ?? ctx.pending_aria_actions} pending recommendation(s), not 231. Here's the top pending action: [title + detail]. For tomorrow specifically, here are the 4 highest-impact additional moves…" ← CORRECT — corrects premise, uses real data, answers the actual question
 
 BUSINESS IDENTITY — HARD RULES (non-negotiable):
 - Location is EXACTLY what appears in CURRENT BUSINESS above. NEVER invent suburbs, neighbourhoods, streets, or local areas (e.g. do NOT say "Brunswick", "Fitzroy", "CBD", "inner north" unless they appear in the address field). If city is not set, say "your area" — never assume Melbourne or any specific city.

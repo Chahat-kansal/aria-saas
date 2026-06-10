@@ -32,6 +32,23 @@ export interface AskAriaContext {
   staff_count: number
   open_support_tickets: number
   pending_aria_actions: number
+  // Self-state grounding — canonical recommendation data.
+  // THREE action tables exist; this field uses the canonical one:
+  //   aria_actions          — primary queue (235+ pending for Sip); UI: Autopilot/Brain panel
+  //   aria_autopilot_actions — secondary lighter table (~1 pending); UI: aria-os/status, inbox, wins
+  //   aria_action_log        — immutable audit trail (action-executor writes, action-rollback reads)
+  aria_actions_detail: {
+    pending_count: number
+    executed_count: number
+    top_pending: Array<{
+      title: string
+      category: string | null
+      priority: string | null
+      recommendation: string | null
+      expected_impact: string | null
+      created_at: string
+    }>
+  } | null
   // Conversation memory
   conversation_history: Array<{ role: string; content: string }>
   recent_conversations: ConversationSummary[]
@@ -82,6 +99,7 @@ export async function buildAskAriaContext(
   const [
     bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes, competitorsRes,
     saleItemsRes, topCustomersRes, recentTxnsRes, pendingPOsRes, loyaltyRes, activeCustomersRes, lastMonthSalesRes, subscriptionRes,
+    actionsExecutedRes,
   ] = await Promise.all([
     supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()).neq('status', 'voided'),
@@ -90,7 +108,8 @@ export async function buildAskAriaContext(
     supabaseAdmin.from('pos_outlet_inventory').select('id,product_id,items_on_hand,items_reorder_level,pos_products(name)').eq('business_id', businessId).lt('items_on_hand', 5).limit(10),
     supabaseAdmin.from('pos_users').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'open'),
-    supabaseAdmin.from('aria_actions').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'pending'),
+    // Fetch top pending items + count for self-state grounding (canonical recommendations table)
+    supabaseAdmin.from('aria_actions').select('id, title, category, priority, recommendation, expected_impact, created_at', { count: 'exact' }).eq('business_id', businessId).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
     conversationId
       ? supabaseAdmin.from('aria_conversations').select('messages').eq('id', conversationId).eq('business_id', businessId).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -144,6 +163,11 @@ export async function buildAskAriaContext(
       .eq('business_id', businessId)
       .eq('status', 'active')
       .maybeSingle(),
+    // Executed aria_actions count (for self-state grounding: "X executed, Y pending")
+    supabaseAdmin.from('aria_actions')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', businessId)
+      .eq('status', 'executed'),
   ])
 
   const biz = bizRes.data
@@ -241,6 +265,20 @@ export async function buildAskAriaContext(
 
   // Subscription tier
   const subscriptionTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
+
+  // ── Build self-state grounding block (aria_actions = canonical recommendation table) ──
+  const ariaActionsDetail = {
+    pending_count:  Number(actionsRes.count) || 0,
+    executed_count: Number(actionsExecutedRes.count) || 0,
+    top_pending: ((actionsRes.data ?? []) as Array<Record<string, unknown>>).map(a => ({
+      title:            String(a.title ?? ''),
+      category:         a.category        ? String(a.category)        : null,
+      priority:         a.priority        ? String(a.priority)        : null,
+      recommendation:   a.recommendation  ? String(a.recommendation).slice(0, 200) : null,
+      expected_impact:  a.expected_impact ? String(a.expected_impact) : null,
+      created_at:       String(a.created_at ?? ''),
+    })),
+  }
 
   // ── Fetch current BAS quarter draft (non-blocking, best-effort) ──────────
   const { data: basRow } = isQuick ? { data: null } : await supabaseAdmin
@@ -400,7 +438,8 @@ export async function buildAskAriaContext(
     low_stock_items: lowStock,
     staff_count: Number(staffRes.count) || 0,
     open_support_tickets: Number(ticketsRes.count) || 0,
-    pending_aria_actions: Number(actionsRes.count) || 0,
+    pending_aria_actions: ariaActionsDetail.pending_count,
+    aria_actions_detail: ariaActionsDetail,
     conversation_history: convHistory,
     recent_conversations: recentConvs,
     fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,

@@ -38,6 +38,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     posConsentCountRaw,
     promotionsRaw,
     salesSameWeekLastMonth,
+    ariaActionsRaw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -100,6 +101,13 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', d35).lt('created_at', d28).neq('status', 'voided'),
+    // CANONICAL recommendations (aria_actions). See THREE-TABLE NOTE in return JSON below.
+    db.from('aria_actions')
+      .select('id, title, category, priority, recommendation, expected_impact, created_at', { count: 'exact' })
+      .eq('business_id', businessId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
 
   // SKU aggregation from sale_items — use line_total (registry product_sales canonical, RULE 6)
@@ -316,6 +324,32 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       summary: 'Top profit leak: ' + topLeakData.title + ' — costing $' + Number(topLeakData.monthly_loss ?? 0).toFixed(0) + '/month. ' + (topLeakData.recommendation ?? ''),
     } : null,
     weather: weather ?? { _note: 'Weather data unavailable — proceeding without weather context.' },
+    // THREE-TABLE NOTE — prevents split-brain when reading recommendation counts:
+    //   aria_actions          = CANONICAL queue (~235 pending for Sip); UI: Autopilot/Brain panel
+    //   aria_autopilot_actions = secondary table (~1 pending for Sip); UI: aria-os/status, inbox, wins
+    //   aria_action_log        = immutable audit trail (never counts as "recommendations")
+    // The block below uses aria_actions (canonical). Use this count when correcting user premises.
+    aria_recommendations: (() => {
+      if (ariaActionsRaw.status !== 'fulfilled') return null
+      const r = ariaActionsRaw.value
+      const rows = (r.data ?? []) as Array<{
+        title: string | null; category: string | null; priority: string | null
+        recommendation: string | null; expected_impact: string | null; created_at: string
+      }>
+      return {
+        _source: 'aria_actions (canonical — NOT aria_autopilot_actions)',
+        pending_count: r.count ?? 0,
+        top_pending: rows.slice(0, 5).map(a => ({
+          title:           a.title,
+          category:        a.category,
+          priority:        a.priority,
+          recommendation:  a.recommendation?.slice(0, 200),
+          expected_impact: a.expected_impact,
+          created_at:      a.created_at,
+        })),
+        grounding_note: `Pending recommendation count is ${r.count ?? 0}. If the user states a different number, correct them before answering.`,
+      }
+    })(),
     seo: await (async () => {
       try {
         const [seoCtx, kwRankings] = await Promise.all([

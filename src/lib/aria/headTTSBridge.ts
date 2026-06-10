@@ -118,6 +118,12 @@ const _speakEndListeners   = new Set<() => void>()
 // from resetting lastSpokenRef and causing Aria to re-speak the same reply.
 let _isSpeaking = false
 
+// Bridge-level duplicate suppression (belt-and-braces, Part 1c):
+// speakAriaText rejects the same cleaned text if called again within 2 s.
+// Catches StrictMode double-invokes that slip past the React-layer guard.
+let _lastSpeakText = ''
+let _lastSpeakMs   = 0
+
 /**
  * Subscribe to speech-start events. Returns an unsubscribe function.
  * Panels use this to transition to 'speaking' phase; avatar uses it for
@@ -380,7 +386,15 @@ function handleAudioChunkMsg(msg: Record<string, unknown>): void {
   // Disable watchdog when first chunk arrives — subsequent chunks prove the stream is live
   if (seq === 0) {
     clearSpeakWatchdog()
-    console.log(`[AriaVoice] first chunk utterance=${msgId}, watchdog cleared`)
+    // Stop filler the moment real streaming audio arrives — prevents simultaneous playback.
+    // _fillerPendingReal is only set by the non-streaming path so it will be null here.
+    if (_fillerSource) {
+      try { _fillerSource.stop() } catch { /* already stopped */ }
+      _fillerSource  = null
+    }
+    _fillerPlaying     = false
+    _fillerPendingReal = null
+    console.log(`[AriaVoice] first chunk utterance=${msgId}, watchdog cleared, filler stopped`)
   }
 
   // Empty sentinel — end of stream, no audio to schedule
@@ -657,6 +671,16 @@ export function speakAriaText(
 ): void {
   const clean = cleanForSpeech(text)
   if (!clean) return
+
+  // Belt-and-braces: reject exact-duplicate text within 2 s.
+  // Catches React StrictMode double-invokes that slip past the component-level guard.
+  const nowMs = Date.now()
+  if (clean === _lastSpeakText && nowMs - _lastSpeakMs < 2000) {
+    console.log('[AriaVoice] duplicate suppressed:', clean.slice(0, 40))
+    return
+  }
+  _lastSpeakText = clean
+  _lastSpeakMs   = nowMs
 
   const words = clean.split(' ')
   const speechText = words.length > 150

@@ -48,7 +48,9 @@ You are not a chatbot. You are a senior business operator who happens to have AI
 ## Live business data right now
 - Today: ${fmt(ctx.revenue_today_cents, ctx.currency)} | This week: ${fmt(ctx.revenue_week_cents, ctx.currency)} | This month: ${fmt(ctx.revenue_month_cents, ctx.currency)}
 - Avg transaction: ${fmt(ctx.avg_ticket_cents, ctx.currency)} | Staff on roster: ${ctx.staff_count} | Open support tickets: ${ctx.open_support_tickets}
-- Pending Aria actions: ${ctx.pending_aria_actions}
+- ${ctx.aria_actions_detail
+    ? `Pending Aria actions: ${ctx.aria_actions_detail.pending_count} | Executed: ${ctx.aria_actions_detail.executed_count}${ctx.aria_actions_detail.top_pending.length > 0 ? ' | Top pending: ' + ctx.aria_actions_detail.top_pending.slice(0, 3).map(a => `[${a.priority ?? 'normal'}] ${a.title}`).join('; ') : ''}`
+    : `Pending Aria actions: ${ctx.pending_aria_actions}`}
 
 ## Stock alerts
 ${lowStock}
