@@ -113,6 +113,11 @@ let _streamEnded: boolean = false
 const _speakStartListeners = new Set<() => void>()
 const _speakEndListeners   = new Set<() => void>()
 
+// State-machine guard: fireSpeakEnd() is a no-op unless fireSpeakStart() fired first.
+// This prevents every double-fire path (stale source.ended, streaming race, filler overlap)
+// from resetting lastSpokenRef and causing Aria to re-speak the same reply.
+let _isSpeaking = false
+
 /**
  * Subscribe to speech-start events. Returns an unsubscribe function.
  * Panels use this to transition to 'speaking' phase; avatar uses it for
@@ -134,11 +139,15 @@ export function onSpeakEnd(cb: () => void): () => void {
 
 // Internal fire helpers — called by the audio paths, never registered as listeners.
 function fireSpeakStart(): void {
+  if (_isSpeaking) return   // filler→real-audio transition: already speaking, keep going
+  _isSpeaking = true
   for (const cb of [..._speakStartListeners]) {
     try { cb() } catch (e) { console.error('[AriaVoice] speakStart listener error', e) }
   }
 }
 function fireSpeakEnd(): void {
+  if (!_isSpeaking) return  // stale stopped-source, duplicate streaming end, or filler bleed
+  _isSpeaking = false
   for (const cb of [..._speakEndListeners]) {
     try { cb() } catch (e) { console.error('[AriaVoice] speakEnd listener error', e) }
   }
@@ -703,6 +712,7 @@ export function stopAriaSpeech(): void {
   _accVisemes        = []
   _firstChunkStartMs = 0
   _streamEnded       = false
+  _isSpeaking        = false   // silent reset — never fires onSpeakEnd callbacks
 
   stopAllSources()
 
