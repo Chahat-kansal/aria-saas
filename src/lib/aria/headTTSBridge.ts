@@ -3,9 +3,9 @@
  *
  * Voice chain
  * ───────────
- * Primary (kokoro-js worker, npm-bundled):
- *   WebGPU (Chrome/Edge 113+) → fp32 model, warm af_heart voice, ~330 MB first load
- *   WASM  (Safari, Firefox, no WebGPU) → q8 model, still Kokoro, ~80 MB first load
+ * Primary (kokoro-js worker, static file in public/):
+ *   WebGPU (Chrome/Edge 113+) → fp16 model, af_heart voice, ~165 MB first load
+ *   WASM  (Safari, Firefox, no WebGPU) → q8 model, ~80 MB first load
  *   Model downloads from HuggingFace on first use then cached by browser forever.
  *   Audio plays via Web Audio API (AudioContext + BufferSource).
  *   Visemes: character-duration schedule (textToVisemes.ts) scaled to actual audio
@@ -13,6 +13,16 @@
  *
  * Fallback: window.speechSynthesis (robotic but universal).
  *   Used when kokoro worker is still loading or unavailable.
+ *
+ * ── Message contract (worker ↔ bridge) ──────────────────────────────────────
+ * IN  { type: 'init' }
+ * IN  { type: 'speak', text: string, voice: string, speed: number }
+ * OUT { status: 'ready', device: 'webgpu'|'wasm' }
+ * OUT { status: 'error', message: string }
+ * OUT { type: 'audio', audio: Float32Array, sampleRate: number, durationMs: number, text: string }
+ *     transfer: [audio.buffer]
+ * OUT { type: 'error', stage: string, message: string, stack?: string }
+ * ─────────────────────────────────────────────────────────────────────────────
  *
  * Public API is unchanged — AriaTalkingHead, AriaFloatingPanel, TalkToAria
  * consume initVoice / speakAriaText / stopAriaSpeech / getVoiceBackend exactly
@@ -60,6 +70,9 @@ let _pendingText:  string = ''
 // Queued speak request that arrived before worker was ready
 let _queuedCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
 let _queuedText:  string = ''
+
+// 10-second watchdog: if the worker doesn't respond after posting speak, fall back
+let _speakWatchdog: ReturnType<typeof setTimeout> | null = null
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -115,6 +128,34 @@ function getAudioCtx(): AudioContext {
   return _audioCtx
 }
 
+function clearSpeakWatchdog(): void {
+  if (_speakWatchdog !== null) {
+    clearTimeout(_speakWatchdog)
+    _speakWatchdog = null
+  }
+}
+
+/** Post speak message + arm 10 s watchdog. Always use this instead of posting directly. */
+function postSpeakToWorker(
+  text: string,
+  cb: (schedule: VisemeEntry[] | null, startMs: number) => void,
+): void {
+  _pendingCb   = cb
+  _pendingText = text
+  clearSpeakWatchdog()
+  _speakWatchdog = setTimeout(() => {
+    _speakWatchdog = null
+    const timedOutCb  = _pendingCb
+    const timedOutTxt = _pendingText
+    if (!timedOutCb) return
+    _pendingCb   = null
+    _pendingText = ''
+    console.error('[AriaVoice] speak timeout — no worker response in 10 s; falling back to speechSynthesis')
+    fallbackSpeechSynthesis(timedOutTxt, timedOutCb)
+  }, 10_000)
+  _worker!.postMessage({ type: 'speak', text, voice: 'af_heart', speed: 1.0 })
+}
+
 async function playKokoroAudio(
   audio:      Float32Array,
   sampleRate: number,
@@ -158,14 +199,29 @@ async function playKokoroAudio(
 // ── Worker message handlers ────────────────────────────────────────────────
 
 function handleAudioMsg(msg: Record<string, unknown>): void {
+  clearSpeakWatchdog()
   const cb   = _pendingCb
   const txt  = _pendingText
   _pendingCb   = null
   _pendingText = ''
-  if (!cb) return
+
+  const audioData = msg.audio as Float32Array
+  const rate      = msg.sampleRate as number
+  console.log(`[AriaVoice] worker audio: ${audioData?.length ?? 0} samples @ ${rate} Hz`)
+
+  if (!cb) {
+    // Race: approx-timer cleared _pendingCb before audio arrived — still play so user hears it
+    console.warn('[AriaVoice] audio arrived but _pendingCb was cleared (timer race) — playing without viseme sync')
+    if (audioData?.length && rate) {
+      playKokoroAudio(audioData, rate, msg.durationMs as number, msg.text as string ?? '', () => {})
+        .catch(err => console.error('[AriaVoice] playKokoroAudio (no-cb) error:', err))
+    }
+    return
+  }
+
   playKokoroAudio(
-    msg.audio    as Float32Array,
-    msg.sampleRate as number,
+    audioData,
+    rate,
     msg.durationMs as number,
     txt,
     cb,
@@ -173,7 +229,9 @@ function handleAudioMsg(msg: Record<string, unknown>): void {
 }
 
 function handleSpeakError(msg: Record<string, unknown>): void {
-  console.error('[AriaVoice] kokoro speak error:', msg.message)
+  clearSpeakWatchdog()
+  console.error('[AriaVoice] worker speak error stage=%s message=%s\n%s',
+    msg.stage ?? '?', msg.message, msg.stack ?? '')
   const cb   = _pendingCb
   const txt  = _pendingText
   _pendingCb   = null
@@ -192,6 +250,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
       _worker.onmessage = (e: MessageEvent) => {
         const msg = e.data as Record<string, unknown>
+        console.log('[AriaVoice] worker msg:', msg.type ?? msg.status)
 
         if (msg.status === 'ready') {
           _workerReady = true
@@ -205,9 +264,7 @@ async function tryInitKokoro(): Promise<boolean> {
             _queuedCb   = null
             _queuedText = ''
             console.log('[AriaVoice] flushing queued speak:', txt.slice(0, 40))
-            _pendingCb   = cb
-            _pendingText = txt
-            _worker!.postMessage({ type: 'speak', text: txt, voice: 'af_heart', speed: 1.0 })
+            postSpeakToWorker(txt, cb)
           }
           return
         }
@@ -219,6 +276,14 @@ async function tryInitKokoro(): Promise<boolean> {
             if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
               _backend = 'speechsynthesis'
               console.log('[AriaVoice] Fallback: window.speechSynthesis (kokoro init failed)')
+            }
+            // If a speak was queued, fire it via speechSynthesis now
+            if (_queuedCb && _queuedText) {
+              const cb  = _queuedCb
+              const txt = _queuedText
+              _queuedCb   = null
+              _queuedText = ''
+              fallbackSpeechSynthesis(txt, cb)
             }
           }
           return
@@ -236,7 +301,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
       // Resolve immediately — worker is created; model download happens in background.
       // _workerReady flips to true once 'ready' arrives (may take minutes on first load).
-      // speakAriaText() falls back to speechSynthesis until _workerReady is true.
+      // speakAriaText() queues until _workerReady is true.
       resolve(true)
 
     } catch (err) {
@@ -302,11 +367,9 @@ export function speakAriaText(
     ? words.slice(0, 150).join(' ') + '…'
     : clean
 
-  // kokoro path: worker ready
+  // kokoro path: worker ready — post immediately
   if (_worker && _workerReady) {
-    _pendingCb   = onSchedule
-    _pendingText = speechText
-    _worker.postMessage({ type: 'speak', text: speechText, voice: 'af_heart', speed: 1.0 })
+    postSpeakToWorker(speechText, onSchedule)
     return
   }
 
@@ -324,6 +387,7 @@ export function speakAriaText(
 
 /** Cancel any active speech (kokoro AudioContext source + speechSynthesis). */
 export function stopAriaSpeech(): void {
+  clearSpeakWatchdog()
   _pendingCb   = null
   _pendingText = ''
   _queuedCb    = null
