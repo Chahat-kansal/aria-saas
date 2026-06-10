@@ -184,8 +184,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       mixerRef.current = mixer;
 
       const aLoader = () => { const l = new GLTFLoader(); l.register(p => new VRMAnimationLoaderPlugin(p)); return l; };
-      const [greetRes, idleRes, talkRes] = await Promise.allSettled([
-        aLoader().loadAsync('/models/VRMA_02.vrma'),
+      const [idleRes, talkRes] = await Promise.allSettled([
         aLoader().loadAsync('/models/idle.vrma'),
         aLoader().loadAsync('/models/VRMA_01.vrma'),
       ]);
@@ -249,7 +248,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         mixerStateRef.current = 'idle';
       });
 
-      // ── Greeting clip → crossfade to idle ────────────────────────────────
+      // ── Start idle base loop ──────────────────────────────────────────────
       const startIdle = () => {
         greetingDone.current = true;
         if (idleActionRef.current) {
@@ -266,48 +265,13 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         }
       };
 
-      if (!greetingAlreadyPlayed() && greetRes.status === 'fulfilled') {
-        const vrmaGreet = greetRes.value.userData.vrmAnimations?.[0];
-        if (vrmaGreet) {
-          markGreetingPlayed();
-          const greetClip = filterHeadTracks(createVRMAnimationClip(vrmaGreet, vrm));
-          const greetAction = mixer.clipAction(greetClip);
-          greetAction.setLoop(THREE.LoopOnce, 1);
-          greetAction.clampWhenFinished = true;  // hold last frame; no snap-back
-          greetAction.play();
-          mixerStateRef.current = 'greeting';
-
-          // Crossfade to idle exactly when the clip finishes — no hardcoded timer
-          const onGreetDone = (evt: { type: string; action: THREE.AnimationAction }) => {
-            if (evt.action !== greetAction) return;
-            mixer.removeEventListener('finished', onGreetDone as Parameters<typeof mixer.addEventListener>[1]);
-            if (cancelled) return;
-            if (idleActionRef.current) {
-              idleActionRef.current.reset();
-              greetAction.crossFadeTo(idleActionRef.current, 0.5, true);
-            }
-            startIdle();
-            console.log('[AriaTalkingHead] greeting finished → idle crossfade');
-          };
-          mixer.addEventListener('finished', onGreetDone as Parameters<typeof mixer.addEventListener>[1]);
-
-          // Safety fallback: force transition after 12s if finished event never fires
-          greetTimeoutRef.current = setTimeout(() => {
-            if (cancelled || greetingDone.current) return;
-            mixer.removeEventListener('finished', onGreetDone as Parameters<typeof mixer.addEventListener>[1]);
-            if (idleActionRef.current) {
-              idleActionRef.current.reset();
-              greetAction.crossFadeTo(idleActionRef.current, 0.5, true);
-            }
-            startIdle();
-            console.log('[AriaTalkingHead] greeting safety-timeout → idle');
-          }, 12_000);
-        } else {
-          startIdle();
-        }
-      } else {
-        startIdle();
+      // One-shot greeting wave — JS bone animation, never loops, independent of VRMA.
+      // gestureRef owns the right-arm bones for 3s, then blend-out returns to idle pose.
+      if (!greetingAlreadyPlayed()) {
+        markGreetingPlayed();
+        gestureRef.current = { name: 'greet_wave', end: Date.now() + 3000, mirrorLeft: false };
       }
+      startIdle();
     }
 
     load().catch(() => { greetingDone.current = true; });
@@ -516,6 +480,11 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
           case 'shrug':
             if (bones.lUpperArm) bones.lUpperArm.rotation.z = THREE.MathUtils.lerp(-1.2, -0.8, blend)
             if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.8, blend)
+            break
+          case 'greet_wave':
+            // Arm raised, forearm oscillates — guaranteed one-shot, never loops
+            if (ua) ua.rotation.z = THREE.MathUtils.lerp(uaZ_rest, uaZ_sign * 0.30, blend)
+            if (la) la.rotation.x = THREE.MathUtils.lerp(0, -0.45 + Math.sin(Date.now() / 1000 * 2.5) * 0.40, blend)
             break
           case 'index':
             if (ua) ua.rotation.x = THREE.MathUtils.lerp(0, -0.35, blend)
