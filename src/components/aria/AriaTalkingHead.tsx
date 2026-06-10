@@ -7,8 +7,11 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';
 import { buildVisemes, Viseme } from './textToVisemes';
-import { initVoice, speakAriaText, stopAriaSpeech, setAvatarSpeakCallbacks } from '@/lib/aria/headTTSBridge';
+import { initVoice, speakAriaText, stopAriaSpeech, onSpeakStart, onSpeakEnd } from '@/lib/aria/headTTSBridge';
 import type { VisemeEntry } from '@/lib/aria/headTTSBridge';
+
+// Greeting plays once per browser session — prevents re-wave on React remounts
+let _greetingPlayedThisSession = false;
 
 // ── VRoid blendshape ↔ Oculus viseme map ─────────────────────────────────
 // Used when HeadTTS WebGPU returns Oculus viseme IDs.
@@ -73,6 +76,9 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   // Scheduled timers for sentence-timed gestures + head nods (Part 3)
   const gestureTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const headNodEndRef    = useRef<number>(0);  // ms timestamp when active nod ends
+
+  const unsubSpeakStartRef = useRef<(() => void) | null>(null);
+  const unsubSpeakEndRef   = useRef<(() => void) | null>(null);
 
   const lastSpokenRef = useRef<string>('');
   const pendingGestureRef = useRef<string>('');
@@ -203,23 +209,23 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       }
 
       // ── Wire mixer crossfades to speech events ────────────────────────────
-      setAvatarSpeakCallbacks({
-        onSpeakStart: () => {
-          if (!talkActionRef.current || !idleActionRef.current) return;
-          if (mixerStateRef.current === 'talk' || mixerStateRef.current === 'greeting') return;
-          talkActionRef.current.reset();
-          idleActionRef.current.crossFadeTo(talkActionRef.current, 0.4, true);
-          talkActionRef.current.play();
-          mixerStateRef.current = 'talk';
-        },
-        onSpeakEnd: () => {
-          if (!idleActionRef.current || !talkActionRef.current) return;
-          if (mixerStateRef.current !== 'talk') return;
-          idleActionRef.current.reset();
-          talkActionRef.current.crossFadeTo(idleActionRef.current, 0.6, true);
-          idleActionRef.current.play();
-          mixerStateRef.current = 'idle';
-        },
+      unsubSpeakStartRef.current?.();
+      unsubSpeakStartRef.current = onSpeakStart(() => {
+        if (!talkActionRef.current || !idleActionRef.current) return;
+        if (mixerStateRef.current === 'talk' || mixerStateRef.current === 'greeting') return;
+        talkActionRef.current.reset();
+        idleActionRef.current.crossFadeTo(talkActionRef.current, 0.4, true);
+        talkActionRef.current.play();
+        mixerStateRef.current = 'talk';
+      });
+      unsubSpeakEndRef.current?.();
+      unsubSpeakEndRef.current = onSpeakEnd(() => {
+        if (!idleActionRef.current || !talkActionRef.current) return;
+        if (mixerStateRef.current !== 'talk') return;
+        idleActionRef.current.reset();
+        talkActionRef.current.crossFadeTo(idleActionRef.current, 0.6, true);
+        idleActionRef.current.play();
+        mixerStateRef.current = 'idle';
       });
 
       // ── Greeting clip → crossfade to idle ────────────────────────────────
@@ -239,9 +245,10 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         }
       };
 
-      if (greetRes.status === 'fulfilled') {
+      if (!_greetingPlayedThisSession && greetRes.status === 'fulfilled') {
         const vrmaGreet = greetRes.value.userData.vrmAnimations?.[0];
         if (vrmaGreet) {
+          _greetingPlayedThisSession = true;
           const greetClip = createVRMAnimationClip(vrmaGreet, vrm);
           const greetAction = mixer.clipAction(greetClip);
           greetAction.setLoop(THREE.LoopOnce, 1);
@@ -269,7 +276,8 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       if (greetTimeoutRef.current) { clearTimeout(greetTimeoutRef.current); greetTimeoutRef.current = null; }
       gestureTimersRef.current.forEach(clearTimeout);
       gestureTimersRef.current = [];
-      setAvatarSpeakCallbacks({ onSpeakStart: null, onSpeakEnd: null });
+      unsubSpeakStartRef.current?.(); unsubSpeakStartRef.current = null;
+      unsubSpeakEndRef.current?.();   unsubSpeakEndRef.current   = null;
       vrmReadyRef.current = false;
       frameErrorRef.current = false;
       stopAriaSpeech();
@@ -295,68 +303,73 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     if (replyText === lastSpokenRef.current) return;
     lastSpokenRef.current = replyText;
 
-    speakAriaText(replyText, (schedule, startMs) => {
-      if (schedule && schedule.length > 0) {
-        htVisemes.current = schedule;
-        useHtVisemes.current = true;
-      } else {
-        visemes.current = buildVisemes(replyText);
-        useHtVisemes.current = false;
-      }
+    try {
+      speakAriaText(replyText, (schedule, startMs) => {
+        try {
+          if (schedule && schedule.length > 0) {
+            htVisemes.current = schedule;
+            useHtVisemes.current = true;
+          } else {
+            visemes.current = buildVisemes(replyText);
+            useHtVisemes.current = false;
+          }
 
-      const isFirst = talkStart.current === null;
-      talkStart.current = startMs;
+          const isFirst = talkStart.current === null;
+          talkStart.current = startMs;
 
-      if (isFirst) {
-        // ── Fire prop-driven gesture hint ────────────────────────────────
-        if (pendingGestureRef.current) {
-          const gName = pendingGestureRef.current;
-          pendingGestureRef.current = '';
-          console.log(`[AriaGesture] firing ${gName} (speech-start)`);
-          gestureRef.current = { name: gName, end: Date.now() + 3500, mirrorLeft: Math.random() > 0.5 };
+          if (isFirst) {
+            // ── Fire prop-driven gesture hint ────────────────────────────────
+            if (pendingGestureRef.current) {
+              const gName = pendingGestureRef.current;
+              pendingGestureRef.current = '';
+              console.log(`[AriaGesture] firing ${gName} (speech-start)`);
+              gestureRef.current = { name: gName, end: Date.now() + 3500, mirrorLeft: Math.random() > 0.5 };
+            }
+
+            // ── Schedule sentence-timed gestures + head nods (Part 3) ────────
+            gestureTimersRef.current.forEach(clearTimeout);
+            gestureTimersRef.current = [];
+            gestureIdxRef.current = 0;
+
+            const sentences = replyText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 3);
+            let charOffset = 0;
+            sentences.forEach((sentence, i) => {
+              const msFromStart = charOffset * 60;  // ~60 ms/char matches TTS speech rate
+              charOffset += sentence.length + 1;
+
+              if (i > 0) {
+                const nodDelay = Math.max(100, (startMs - Date.now()) + msFromStart - 150);
+                const nodTimer = setTimeout(() => {
+                  headNodEndRef.current = Date.now() + 280;
+                }, nodDelay);
+                gestureTimersRef.current.push(nodTimer);
+              }
+
+              const fireGesture = (i % 2 === 0) || (Math.random() > 0.6);
+              if (fireGesture) {
+                const mood = moodRef.current;
+                const set = GESTURE_SETS[mood] ?? GESTURE_SETS.neutral;
+                const gIdx = gestureIdxRef.current % set.length;
+                gestureIdxRef.current++;
+                const gName = set[gIdx];
+                const mirrorLeft = Math.random() > 0.5;
+
+                const gDelay = Math.max(200, (startMs - Date.now()) + msFromStart + 200);
+                const gTimer = setTimeout(() => {
+                  console.log(`[AriaGesture] firing ${gName} (sentence ${i}, mirror=${mirrorLeft})`);
+                  gestureRef.current = { name: gName, end: Date.now() + 3000, mirrorLeft };
+                }, gDelay);
+                gestureTimersRef.current.push(gTimer);
+              }
+            });
+          }
+        } catch (e) {
+          console.error('[AriaTalkingHead] speak schedule callback error', e);
         }
-
-        // ── Schedule sentence-timed gestures + head nods (Part 3) ────────
-        // Clear any leftover timers from a previous reply
-        gestureTimersRef.current.forEach(clearTimeout);
-        gestureTimersRef.current = [];
-        gestureIdxRef.current = 0;
-
-        const sentences = replyText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 3);
-        let charOffset = 0;
-        sentences.forEach((sentence, i) => {
-          const msFromStart = charOffset * 60;  // ~60 ms/char matches TTS speech rate
-          charOffset += sentence.length + 1;
-
-          // Head nod at each sentence boundary (except the very first)
-          if (i > 0) {
-            const nodDelay = Math.max(100, (startMs - Date.now()) + msFromStart - 150);
-            const nodTimer = setTimeout(() => {
-              headNodEndRef.current = Date.now() + 280;
-            }, nodDelay);
-            gestureTimersRef.current.push(nodTimer);
-          }
-
-          // Arm gesture every 1–2 sentences (skip odd sentences randomly for variety)
-          const fireGesture = (i % 2 === 0) || (Math.random() > 0.6);
-          if (fireGesture) {
-            const mood = moodRef.current;
-            const set = GESTURE_SETS[mood] ?? GESTURE_SETS.neutral;
-            const gIdx = gestureIdxRef.current % set.length;
-            gestureIdxRef.current++;
-            const gName = set[gIdx];
-            const mirrorLeft = Math.random() > 0.5;
-
-            const gDelay = Math.max(200, (startMs - Date.now()) + msFromStart + 200);
-            const gTimer = setTimeout(() => {
-              console.log(`[AriaGesture] firing ${gName} (sentence ${i}, mirror=${mirrorLeft})`);
-              gestureRef.current = { name: gName, end: Date.now() + 3000, mirrorLeft };
-            }, gDelay);
-            gestureTimersRef.current.push(gTimer);
-          }
-        });
-      }
-    });
+      });
+    } catch (e) {
+      console.error('[AriaTalkingHead] speakAriaText error', e);
+    }
   }, [replyText]);
 
   // ── Frame loop (unchanged idle/talk/blink logic; lip-sync extended) ─────

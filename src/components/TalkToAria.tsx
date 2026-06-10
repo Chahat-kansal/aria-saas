@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked, setSpeakCallbacks } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked, onSpeakEnd } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 // Avatar loaded client-only (Three.js / WebGL)
@@ -77,7 +77,6 @@ export default function TalkToAria({ className }: { className?: string }) {
     setMicSupported(!!(w.SpeechRecognition ?? w.webkitSpeechRecognition))
 
     return () => {
-      setSpeakCallbacks({ onSpeakEnd: null })
       stopAriaSpeech()
       recognRef.current?.abort()
     }
@@ -85,12 +84,10 @@ export default function TalkToAria({ className }: { className?: string }) {
 
   // Event-driven phase transitions — driven by real AudioContext events, not timers
   useEffect(() => {
-    setSpeakCallbacks({
-      onSpeakEnd: () => {
-        setPhase('idle')
-        setReplyText('')
-        inputRef.current?.focus()
-      },
+    return onSpeakEnd(() => {
+      setPhase('idle')
+      setReplyText('')
+      inputRef.current?.focus()
     })
   }, [])
 

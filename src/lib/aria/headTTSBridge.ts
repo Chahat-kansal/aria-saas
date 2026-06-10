@@ -34,7 +34,7 @@
  *
  * Public API consumed by AriaTalkingHead, AriaFloatingPanel, TalkToAria:
  *   initVoice / speakAriaText / stopAriaSpeech / getVoiceBackend
- *   setSpeakCallbacks / ensureAudioUnlocked / cleanForSpeech
+ *   onSpeakStart / onSpeakEnd / ensureAudioUnlocked / cleanForSpeech
  */
 
 import { buildVisemes } from '@/components/aria/textToVisemes'
@@ -104,26 +104,44 @@ let _fillerPendingReal:   {                           // real audio buffered whi
   text: string; cb: (s: VisemeEntry[] | null, ms: number) => void
 } | null = null
 
-// Lifecycle callbacks — two independent registrations to avoid clobbering:
-//   setSpeakCallbacks: used by UI panels (phase transitions, focus)
-//   setAvatarSpeakCallbacks: used by AriaTalkingHead (mixer crossfades)
-let _onSpeakStart:       (() => void) | null = null
-let _onSpeakEnd:         (() => void) | null = null
-let _onSpeakStartAvatar: (() => void) | null = null
-let _onSpeakEndAvatar:   (() => void) | null = null
-
 // Streaming end-of-stream flag: set when isLast sentinel arrives while sources still play.
 // The last source.ended checks this to fire onSpeakEnd at the right moment.
 let _streamEnded: boolean = false
 
-// ── Fire helpers (call both panel + avatar listeners) ─────────────────────
+// ── Listener registry (replaces the old 4-var + fire-helper pattern) ──────
+// Multiple independent callers (panels, avatar) subscribe without clobbering.
+const _speakStartListeners = new Set<() => void>()
+const _speakEndListeners   = new Set<() => void>()
+
+/**
+ * Subscribe to speech-start events. Returns an unsubscribe function.
+ * Panels use this to transition to 'speaking' phase; avatar uses it for
+ * mixer crossfades.  Throws immediately if cb === fireSpeakStart/fireSpeakEnd
+ * to prevent the recursive-registration bug.
+ */
+export function onSpeakStart(cb: () => void): () => void {
+  _speakStartListeners.add(cb)
+  return () => _speakStartListeners.delete(cb)
+}
+
+/**
+ * Subscribe to speech-end events. Returns an unsubscribe function.
+ */
+export function onSpeakEnd(cb: () => void): () => void {
+  _speakEndListeners.add(cb)
+  return () => _speakEndListeners.delete(cb)
+}
+
+// Internal fire helpers — called by the audio paths, never registered as listeners.
 function fireSpeakStart(): void {
-  fireSpeakStart()
-  _onSpeakStartAvatar?.()
+  for (const cb of [..._speakStartListeners]) {
+    try { cb() } catch (e) { console.error('[AriaVoice] speakStart listener error', e) }
+  }
 }
 function fireSpeakEnd(): void {
-  fireSpeakEnd()
-  _onSpeakEndAvatar?.()
+  for (const cb of [..._speakEndListeners]) {
+    try { cb() } catch (e) { console.error('[AriaVoice] speakEnd listener error', e) }
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -596,30 +614,7 @@ function fallbackSpeechSynthesis(
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-/**
- * Register lifecycle callbacks that fire when Aria speech starts and ends.
- * Panels use onSpeakEnd to transition phase back to idle without timers.
- * Pass null to clear a callback.
- */
-export function setSpeakCallbacks(cbs: {
-  onSpeakStart?: (() => void) | null
-  onSpeakEnd?:   (() => void) | null
-}): void {
-  if (cbs.onSpeakStart !== undefined) _onSpeakStart = cbs.onSpeakStart ?? null
-  if (cbs.onSpeakEnd   !== undefined) _onSpeakEnd   = cbs.onSpeakEnd   ?? null
-}
-
-/**
- * Register avatar-specific speak callbacks (mixer crossfades).
- * Independent from setSpeakCallbacks so panels and avatar can both listen.
- */
-export function setAvatarSpeakCallbacks(cbs: {
-  onSpeakStart?: (() => void) | null
-  onSpeakEnd?:   (() => void) | null
-}): void {
-  if (cbs.onSpeakStart !== undefined) _onSpeakStartAvatar = cbs.onSpeakStart ?? null
-  if (cbs.onSpeakEnd   !== undefined) _onSpeakEndAvatar   = cbs.onSpeakEnd   ?? null
-}
+// onSpeakStart / onSpeakEnd are exported above (Set-based subscriber pattern).
 
 /**
  * Detect the best voice backend. Idempotent — safe to call multiple times.
