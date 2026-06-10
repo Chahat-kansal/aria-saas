@@ -56,6 +56,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   const moodRef    = useRef<string>('neutral');
   const gestureRef = useRef<{ name: string; end: number } | null>(null);
 
+  const lastSpokenRef = useRef<string>('');
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
   const clock = useRef(0);
@@ -167,8 +168,9 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   // ── Speech + viseme trigger: fires when replyText changes ─────────────
   useEffect(() => {
     if (!replyText) {
-      // Clear lip-sync state when text is cleared (new question / idle)
-      stopAriaSpeech();
+      // Clear lip-sync state — do NOT call stopAriaSpeech() here; the bridge
+      // manages lifecycle and fires onSpeakEnd when audio actually finishes.
+      lastSpokenRef.current = '';
       talkStart.current = null;
       visemes.current = [];
       htVisemes.current = [];
@@ -176,22 +178,27 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       return;
     }
 
-    // Start speaking; onSchedule fires with either HeadTTS viseme data (WebGPU)
-    // or null (speechSynthesis fallback → use character-based visemes).
+    // Guard: don't re-speak the same text (React StrictMode double-fires effects)
+    if (replyText === lastSpokenRef.current) return;
+    lastSpokenRef.current = replyText;
+
+    // Start speaking. Callback fires once per streaming chunk (or once for generate).
+    // Each call updates htVisemes.current with the accumulated schedule so far;
+    // talkStart is set on the first call and remains stable for subsequent chunks.
     speakAriaText(replyText, (schedule, startMs) => {
       if (schedule && schedule.length > 0) {
-        // HeadTTS Oculus visemes — high quality phoneme-level lip-sync
         htVisemes.current = schedule;
         useHtVisemes.current = true;
       } else {
-        // Fallback: character-duration visemes (textToVisemes.ts)
         visemes.current = buildVisemes(replyText);
         useHtVisemes.current = false;
       }
-      talkStart.current = startMs;
+      // Only update talkStart on first callback (startMs stays constant across chunks)
+      if (talkStart.current === null) {
+        talkStart.current = startMs;
+      }
     });
-
-    return () => { stopAriaSpeech(); };
+    // No cleanup stopAriaSpeech() — the unmount effect (VRM load) handles that.
   }, [replyText]);
 
   // ── Frame loop (unchanged idle/talk/blink logic; lip-sync extended) ─────

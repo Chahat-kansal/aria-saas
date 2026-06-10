@@ -9,6 +9,8 @@
  *   WebGPU fp16/q8 causes GPU contention with Three.js and slow first inference).
  *   Model downloads from HuggingFace on first use then cached by browser forever.
  *   Audio plays via Web Audio API (AudioContext + BufferSource).
+ *   Streaming: TextSplitterStream + tts.stream() → sentence-level chunks → gapless
+ *   AudioContext scheduling → first-chunk latency ~1-2s after WASM warmup.
  *   Visemes: character-duration schedule (textToVisemes.ts) scaled to actual audio
  *   duration — gives accurate lip-sync timing without phoneme data.
  *
@@ -20,15 +22,19 @@
  * IN  { type: 'speak', text: string, id: number }
  * OUT { status: 'ready', device: 'wasm'|'webgpu' }
  * OUT { status: 'error', message: string }
- * OUT { type: 'audio', audio: Float32Array, sampleRate: number, durationMs: number, text: string, id: number }
- *     transfer: [audio.buffer]
+ * OUT { type: 'audio', audio: Float32Array, sampleRate, durationMs, text, id }
+ *     transfer: [audio.buffer]   ← non-streaming fallback path
+ * OUT { type: 'audio-chunk', id, seq, audio, sampleRate, durationMs, text, isLast: false }
+ *     transfer: [audio.buffer]   ← streaming path, one chunk per sentence
+ * OUT { type: 'audio-chunk', id, seq, audio: Float32Array(0), sampleRate, text: '', isLast: true }
+ *     end-of-stream sentinel
  * OUT { type: 'error', stage: string, message: string, stack?: string, id?: number }
  * OUT { type: 'cancelled', id: number }
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * Public API is unchanged — AriaTalkingHead, AriaFloatingPanel, TalkToAria
- * consume initVoice / speakAriaText / stopAriaSpeech / getVoiceBackend exactly
- * as before.
+ * Public API consumed by AriaTalkingHead, AriaFloatingPanel, TalkToAria:
+ *   initVoice / speakAriaText / stopAriaSpeech / getVoiceBackend
+ *   setSpeakCallbacks / ensureAudioUnlocked / cleanForSpeech
  */
 
 import { buildVisemes } from '@/components/aria/textToVisemes'
@@ -62,16 +68,22 @@ let _workerReady:  boolean       = false
 let _initPromise:  Promise<void> | null = null
 
 // Web Audio
-let _audioCtx:      AudioContext | null           = null
-let _currentSource: AudioBufferSourceNode | null  = null
+let _audioCtx:        AudioContext | null           = null
+let _currentSource:   AudioBufferSourceNode | null  = null  // non-streaming path
+let _scheduledSources: AudioBufferSourceNode[]      = []    // streaming path (all active chunks)
+
+// Gapless streaming state (reset on each new utterance)
+let _nextStartTime:    number        = 0   // AudioContext scheduled time for next chunk
+let _firstChunkStartMs: number       = 0   // Date.now() when first chunk of utterance started
+let _accVisemes:       VisemeEntry[] = []  // accumulated viseme schedule across chunks
 
 // Utterance IDs — every speakAriaText() call gets a unique, monotonically
-// increasing id. Any audio/error that arrives with an id < _currentUtteranceId
-// is stale and is discarded without playing.
+// increasing id. Any audio/error that arrives with id < _currentUtteranceId
+// is stale and discarded without playing.
 let _currentUtteranceId = 0
-let _utteranceCount     = 0   // number of speaks posted; controls watchdog duration
+let _utteranceCount     = 0   // controls watchdog duration (first vs subsequent)
 
-// Pending speak callback — one active utterance at a time
+// Pending speak callback — kept alive until last streaming chunk
 let _pendingCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
 let _pendingText:  string = ''
 
@@ -81,6 +93,10 @@ let _queuedText:  string = ''
 
 // Watchdog: fires speechSynthesis fallback if worker doesn't respond
 let _speakWatchdog: ReturnType<typeof setTimeout> | null = null
+
+// Lifecycle callbacks (registered by panels via setSpeakCallbacks)
+let _onSpeakStart: (() => void) | null = null
+let _onSpeakEnd:   (() => void) | null = null
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -138,17 +154,30 @@ function clearSpeakWatchdog(): void {
   }
 }
 
+function stopAllSources(): void {
+  _scheduledSources.forEach(s => { try { s.stop() } catch { /* already stopped */ } })
+  _scheduledSources = []
+  if (_currentSource) {
+    try { _currentSource.stop() } catch { /* already stopped */ }
+    _currentSource = null
+  }
+}
+
 /**
- * Post a speak message + arm watchdog. Always use this instead of posting directly.
- * FIX 3: first utterance uses 20 s watchdog (WASM session warmup); subsequent 10 s.
+ * Post a speak message + arm watchdog. Resets streaming state for the new utterance.
  */
 function postSpeakToWorker(
   text: string,
   cb: (schedule: VisemeEntry[] | null, startMs: number) => void,
 ): void {
   const id = ++_currentUtteranceId
+  console.log(`[AriaVoice] bump → ${id} (new-speak)`)
   _pendingCb   = cb
   _pendingText = text
+  // Reset streaming state for this utterance
+  _nextStartTime     = 0
+  _firstChunkStartMs = 0
+  _accVisemes        = []
   clearSpeakWatchdog()
 
   const watchdogMs = _utteranceCount === 0 ? 20_000 : 10_000
@@ -156,8 +185,10 @@ function postSpeakToWorker(
 
   _speakWatchdog = setTimeout(() => {
     _speakWatchdog = null
-    // Bump id so any late worker audio for this utterance is discarded
-    if (_currentUtteranceId === id) _currentUtteranceId++
+    if (_currentUtteranceId === id) {
+      _currentUtteranceId++
+      console.log(`[AriaVoice] bump → ${_currentUtteranceId} (watchdog)`)
+    }
     const timedOutCb  = _pendingCb
     const timedOutTxt = _pendingText
     if (!timedOutCb) return
@@ -169,6 +200,8 @@ function postSpeakToWorker(
 
   _worker!.postMessage({ type: 'speak', text, id })
 }
+
+// ── Non-streaming audio playback (generate() fallback path) ───────────────
 
 async function playKokoroAudio(
   audio:      Float32Array,
@@ -183,10 +216,8 @@ async function playKokoroAudio(
     await ctx.resume()
   }
 
-  if (_currentSource) {
-    try { _currentSource.stop() } catch { /* already stopped */ }
-    _currentSource = null
-  }
+  // Stop any still-playing audio (streaming or non-streaming)
+  stopAllSources()
 
   const buffer = ctx.createBuffer(1, audio.length, sampleRate)
   buffer.copyToChannel(audio as Float32Array<ArrayBuffer>, 0)
@@ -198,13 +229,105 @@ async function playKokoroAudio(
 
   source.addEventListener('ended', () => {
     if (_currentSource === source) _currentSource = null
+    _onSpeakEnd?.()
   })
 
   const startMs = Date.now()
   source.start()
+  _onSpeakStart?.()
 
   const schedule = buildScaledVisemes(text, durationMs / 1000)
   onSchedule(schedule.length > 0 ? schedule : null, startMs)
+}
+
+// ── Streaming audio chunk handler ─────────────────────────────────────────
+
+function handleAudioChunkMsg(msg: Record<string, unknown>): void {
+  const msgId    = msg.id     as number
+  const seq      = msg.seq    as number
+  const isLast   = msg.isLast as boolean
+  const audioData = msg.audio  as Float32Array
+  const rate      = msg.sampleRate as number
+
+  if (msgId !== _currentUtteranceId) {
+    console.log(`[AriaVoice] discarding stale chunk seq=${seq} (utterance ${msgId}, current ${_currentUtteranceId})`)
+    return
+  }
+
+  // Disable watchdog when first chunk arrives — subsequent chunks prove the stream is live
+  if (seq === 0) {
+    clearSpeakWatchdog()
+    console.log(`[AriaVoice] first chunk utterance=${msgId}, watchdog cleared`)
+  }
+
+  // Empty sentinel — end of stream, no audio to schedule
+  if (!audioData?.length) {
+    if (isLast) {
+      _pendingCb   = null
+      _pendingText = ''
+      // If no chunks remain scheduled, fire onSpeakEnd immediately;
+      // otherwise the last real chunk's 'ended' handler fires it.
+      if (_scheduledSources.length === 0) {
+        _onSpeakEnd?.()
+        console.log(`[AriaVoice] speech ended utterance=${msgId} (sentinel, no pending sources)`)
+      }
+    }
+    return
+  }
+
+  const ctx = getAudioCtx()
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {})
+  }
+
+  const chunkDuration  = audioData.length / rate
+  // 5 ms scheduling buffer to avoid AudioContext underruns
+  const chunkCtxStart  = Math.max(ctx.currentTime + 0.005, _nextStartTime)
+  _nextStartTime       = chunkCtxStart + chunkDuration
+
+  const buffer = ctx.createBuffer(1, audioData.length, rate)
+  buffer.copyToChannel(audioData as Float32Array<ArrayBuffer>, 0)
+  const source = ctx.createBufferSource()
+  source.buffer = buffer
+  source.connect(ctx.destination)
+  source.start(chunkCtxStart)
+  _scheduledSources.push(source)
+
+  // Wall-clock time when this chunk will start playing
+  const chunkStartMs = Date.now() + Math.max(0, (chunkCtxStart - ctx.currentTime)) * 1000
+
+  if (seq === 0) {
+    _firstChunkStartMs = chunkStartMs
+    _accVisemes        = []
+    _onSpeakStart?.()
+    console.log(`[AriaVoice] speech started utterance=${msgId} seq=0 startMs=${Math.round(chunkStartMs)}`)
+  }
+
+  // Build visemes for this chunk offset into the global utterance timeline
+  const chunkText   = msg.text as string
+  const chunkVisemes = buildScaledVisemes(chunkText, chunkDuration)
+  const offsetSecs  = _firstChunkStartMs > 0
+    ? (chunkStartMs - _firstChunkStartMs) / 1000
+    : 0
+  const offsetVisemes = chunkVisemes.map(v => ({
+    morph: v.morph, start: v.start + offsetSecs, end: v.end + offsetSecs, value: v.value,
+  }))
+  _accVisemes.push(...offsetVisemes)
+
+  // Fire callback with the accumulated schedule so far
+  if (_pendingCb) {
+    _pendingCb(_accVisemes.length > 0 ? _accVisemes : null, _firstChunkStartMs)
+  }
+
+  source.addEventListener('ended', () => {
+    _scheduledSources = _scheduledSources.filter(s => s !== source)
+    if (isLast) {
+      _pendingCb   = null
+      _pendingText = ''
+      _onSpeakEnd?.()
+      console.log(`[AriaVoice] speech ended utterance=${msgId} (last chunk ended)`)
+    }
+  })
 }
 
 // ── Worker message handlers ────────────────────────────────────────────────
@@ -213,7 +336,6 @@ function handleAudioMsg(msg: Record<string, unknown>): void {
   const msgId = msg.id as number
   clearSpeakWatchdog()
 
-  // Discard stale audio — utterance was superseded or cancelled
   if (msgId !== _currentUtteranceId) {
     console.log(`[AriaVoice] discarding stale audio (utterance ${msgId}, current ${_currentUtteranceId})`)
     return
@@ -229,7 +351,6 @@ function handleAudioMsg(msg: Record<string, unknown>): void {
   console.log(`[AriaVoice] worker audio utterance=${msgId}: ${audioData?.length ?? 0} samples @ ${rate} Hz`)
 
   if (!cb) {
-    // id matched but callback was cleared — should not happen with correct id tracking
     console.warn(`[AriaVoice] utterance ${msgId} audio arrived with no callback`)
     return
   }
@@ -263,7 +384,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     try {
-      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=3', { type: 'module' })
+      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=4', { type: 'module' })
 
       _worker.onmessage = (e: MessageEvent) => {
         const msg = e.data as Record<string, unknown>
@@ -303,8 +424,9 @@ async function tryInitKokoro(): Promise<boolean> {
           return
         }
 
-        if (msg.type === 'audio')     { handleAudioMsg(msg);   return }
-        if (msg.type === 'error')     { handleSpeakError(msg); return }
+        if (msg.type === 'audio')       { handleAudioMsg(msg);       return }
+        if (msg.type === 'audio-chunk') { handleAudioChunkMsg(msg);  return }
+        if (msg.type === 'error')       { handleSpeakError(msg);     return }
         if (msg.type === 'cancelled') {
           console.log(`[AriaVoice] worker cancelled utterance ${msg.id}`)
           return
@@ -337,11 +459,26 @@ function fallbackSpeechSynthesis(
   utt.rate = 1.05
   const v = preferredVoice()
   if (v) utt.voice = v
+  utt.onstart = () => { _onSpeakStart?.() }
+  utt.onend   = () => { _onSpeakEnd?.() }
   window.speechSynthesis.speak(utt)
   onSchedule(null, Date.now())
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
+
+/**
+ * Register lifecycle callbacks that fire when Aria speech starts and ends.
+ * Panels use onSpeakEnd to transition phase back to idle without timers.
+ * Pass null to clear a callback.
+ */
+export function setSpeakCallbacks(cbs: {
+  onSpeakStart?: (() => void) | null
+  onSpeakEnd?:   (() => void) | null
+}): void {
+  if (cbs.onSpeakStart !== undefined) _onSpeakStart = cbs.onSpeakStart ?? null
+  if (cbs.onSpeakEnd   !== undefined) _onSpeakEnd   = cbs.onSpeakEnd   ?? null
+}
 
 /**
  * Detect the best voice backend. Idempotent — safe to call multiple times.
@@ -362,7 +499,9 @@ export function initVoice(): Promise<void> {
 
 /**
  * Speak text and call onSchedule with viseme schedule + audio start time.
- * Single ownership — ONLY AriaTalkingHead should call this.
+ * The callback may fire multiple times (once per streaming chunk) as the
+ * accumulated viseme schedule grows. Single ownership — ONLY AriaTalkingHead
+ * should call this.
  */
 export function speakAriaText(
   text: string,
@@ -392,21 +531,32 @@ export function speakAriaText(
 }
 
 /**
- * Cancel any active speech. Increments utteranceId so any in-flight worker
- * audio arriving later will be discarded without playing.
+ * Cancel any active speech. Only bumps the utterance ID when something is
+ * actually pending or playing — avoids spurious bumps that cause self-cancellation.
  */
 export function stopAriaSpeech(): void {
+  const hasPending =
+    _pendingCb !== null ||
+    _queuedCb  !== null ||
+    _currentSource !== null ||
+    _scheduledSources.length > 0
+
   clearSpeakWatchdog()
-  _currentUtteranceId++   // invalidate any in-flight utterance
+
+  if (hasPending) {
+    _currentUtteranceId++
+    console.log(`[AriaVoice] bump → ${_currentUtteranceId} (stop-explicit, hasPending=${hasPending})`)
+  }
+
   _pendingCb   = null
   _pendingText = ''
   _queuedCb    = null
   _queuedText  = ''
+  _nextStartTime     = 0
+  _accVisemes        = []
+  _firstChunkStartMs = 0
 
-  if (_currentSource) {
-    try { _currentSource.stop() } catch { /* already stopped */ }
-    _currentSource = null
-  }
+  stopAllSources()
 
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel()

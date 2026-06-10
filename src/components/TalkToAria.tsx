@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked, setSpeakCallbacks } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 // Avatar loaded client-only (Three.js / WebGL)
@@ -77,9 +77,21 @@ export default function TalkToAria({ className }: { className?: string }) {
     setMicSupported(!!(w.SpeechRecognition ?? w.webkitSpeechRecognition))
 
     return () => {
+      setSpeakCallbacks({ onSpeakEnd: null })
       stopAriaSpeech()
       recognRef.current?.abort()
     }
+  }, [])
+
+  // Event-driven phase transitions — driven by real AudioContext events, not timers
+  useEffect(() => {
+    setSpeakCallbacks({
+      onSpeakEnd: () => {
+        setPhase('idle')
+        setReplyText('')
+        inputRef.current?.focus()
+      },
+    })
   }, [])
 
   // ── Send a message to /api/aria/talk ────────────────────────────────────
@@ -114,15 +126,7 @@ export default function TalkToAria({ className }: { className?: string }) {
       setGesture(replyGesture)
       setReplyText(reply)
       setPhase('speaking')
-
-      // AriaTalkingHead's useEffect is the sole caller of speakAriaText (no double-speak).
-      // Timer approximates speech duration so the parent transitions back to idle.
-      const approxMs = Math.max(1500, reply.split(' ').length * 350)
-      setTimeout(() => {
-        setPhase('idle')
-        setReplyText('')
-        inputRef.current?.focus()
-      }, approxMs)
+      // Phase transitions to idle via onSpeakEnd callback (real AudioContext events)
 
     } catch (e) {
       setError((e as Error).message ?? 'Network error')

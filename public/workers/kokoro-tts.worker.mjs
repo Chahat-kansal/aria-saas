@@ -9,14 +9,19 @@
 // OUT { status: 'ready', device: 'wasm'|'webgpu' }
 // OUT { status: 'error', message: string }
 // OUT { type: 'audio', audio: Float32Array, sampleRate: number, durationMs: number, text: string, id: number }
-//     transfer: [audio.buffer]
+//     transfer: [audio.buffer]   ← non-streaming fallback path
+// OUT { type: 'audio-chunk', id, seq, audio, sampleRate, durationMs, text, isLast: false }
+//     transfer: [audio.buffer]   ← streaming path, one per sentence
+// OUT { type: 'audio-chunk', id, seq, audio: Float32Array(0), sampleRate, text: '', isLast: true }
+//     end-of-stream sentinel (no transfer needed)
 // OUT { type: 'error', stage: string, message: string, stack?: string, id?: number }
 // OUT { type: 'cancelled', id: number }   — utterance was superseded before audio was posted
 // ─────────────────────────────────────────────────────────────────────────
 
 let tts = null
+let TextSplitterStream = null  // populated in init() if kokoro-js supports streaming
 let currentSpeakId = 0     // id of the most recently received speak message
-let generating     = false  // true while tts.generate() is in progress
+let generating     = false  // true while speak() is in progress
 let pendingSpeakMsg = null  // { id, text } — latest speak that arrived before/during generation
 
 async function init() {
@@ -29,7 +34,9 @@ async function init() {
     const dtype    = device === 'webgpu' ? 'fp16' : 'q8'
 
     console.log(`[KokoroWorker] init device=${device} dtype=${dtype}`)
-    const { KokoroTTS, env } = await import('https://esm.sh/kokoro-js@1.2.1')
+    const mod = await import('https://esm.sh/kokoro-js@1.2.1')
+    const { KokoroTTS, env } = mod
+    TextSplitterStream = mod.TextSplitterStream ?? null
 
     if (env?.backends?.onnx?.wasm) {
       env.backends.onnx.wasm.wasmPaths =
@@ -38,7 +45,10 @@ async function init() {
 
     tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype, device })
 
-    console.log('[KokoroWorker] ready')
+    const streamNote = TextSplitterStream && typeof tts.stream === 'function'
+      ? ' (streaming supported)'
+      : ' (generate-only fallback)'
+    console.log('[KokoroWorker] ready' + streamNote)
     postMessage({ status: 'ready', device })
 
     // Process any speak that arrived before init completed
@@ -64,11 +74,66 @@ async function speak(id, text) {
 
   console.log(`[KokoroWorker] speak start id=${id} ${safe.length} chars (was ${text.length})`)
 
+  // ── Streaming path (preferred — sentence-level latency) ─────────────────
+  if (TextSplitterStream && typeof tts.stream === 'function') {
+    let streamed = false
+    try {
+      const splitter = new TextSplitterStream()
+      const stream = tts.stream(splitter, { voice: 'af_heart', speed: 1.0 })
+      splitter.push(safe)
+      // Signal end of text input (API varies by version)
+      if (typeof splitter.close === 'function') splitter.close()
+      else if (typeof splitter.flush === 'function') await splitter.flush()
+
+      let seq = 0
+      for await (const chunk of stream) {
+        if (id !== currentSpeakId) {
+          console.log(`[KokoroWorker] utterance ${id} superseded by ${currentSpeakId} — cancelling (stream)`)
+          postMessage({ type: 'cancelled', id })
+          return
+        }
+        const audio = chunk.audio instanceof Float32Array
+          ? chunk.audio
+          : new Float32Array(chunk.audio)
+        const sampleRate = chunk.sampling_rate ?? 24000
+        if (!audio.length) { seq++; continue }  // skip empty chunks from splitter
+        const durationMs = (audio.length / sampleRate) * 1000
+        const chunkText  = typeof chunk.text === 'string' ? chunk.text : ''
+        console.log(`[KokoroWorker] chunk id=${id} seq=${seq} ${audio.length}samp "${chunkText.slice(0, 40)}"`)
+        postMessage(
+          { type: 'audio-chunk', id, seq, audio, sampleRate, durationMs, text: chunkText, isLast: false },
+          [audio.buffer]
+        )
+        seq++
+        streamed = true
+      }
+
+      // End-of-stream sentinel (only if supersession hasn't occurred)
+      if (id === currentSpeakId) {
+        postMessage({
+          type: 'audio-chunk', id, seq,
+          audio: new Float32Array(0), sampleRate: 24000, text: '', isLast: true,
+        })
+      }
+      return
+    } catch (streamErr) {
+      if (streamed) {
+        // Partial stream completed — error mid-stream, report it
+        console.error('[KokoroWorker] stream error mid-flight:', streamErr instanceof Error ? streamErr.message : String(streamErr))
+        postMessage({ type: 'error', stage: 'stream', message: String(streamErr), id })
+        return
+      }
+      // No chunks yet — fall back to generate()
+      console.warn('[KokoroWorker] stream failed (pre-first-chunk), falling back to generate:',
+        streamErr instanceof Error ? streamErr.message : String(streamErr))
+    }
+  }
+
+  // ── Generate path (fallback / no streaming API) ──────────────────────────
   let result
   try {
     result = await tts.generate(safe, { voice: 'af_heart', speed: 1.0 })
   } catch (err) {
-    // Even if superseded, still report the error
     console.error('[KokoroWorker] generate error:', err)
     postMessage({
       type: 'error',
@@ -92,7 +157,7 @@ async function speak(id, text) {
   const sampleRate = result.sampling_rate
   const durationMs = (audio.length / sampleRate) * 1000
 
-  console.log(`[KokoroWorker] generated id=${id} ${audio.length} samples @ ${sampleRate} Hz (${Math.round(durationMs)}ms)`)
+  console.log(`[KokoroWorker] generated id=${id} ${audio.length}samp @ ${sampleRate}Hz (${Math.round(durationMs)}ms)`)
 
   if (!audio.length || !sampleRate) {
     postMessage({
@@ -120,7 +185,6 @@ async function runSpeak(id, text) {
     if (pendingSpeakMsg) {
       const next = pendingSpeakMsg
       pendingSpeakMsg = null
-      // runSpeak sets generating=true synchronously before first await — no race window
       runSpeak(next.id, next.text).catch(err =>
         postMessage({ type: 'error', stage: 'runSpeak-queued', message: String(err), id: next.id }))
     }

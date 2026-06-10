@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice, ensureAudioUnlocked } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, ensureAudioUnlocked, setSpeakCallbacks } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 const AriaTalkingHead = dynamic(
@@ -95,7 +95,18 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     setMicOk(!!(w.SpeechRecognition ?? w.webkitSpeechRecognition))
-    return () => { stopAriaSpeech(); recognRef.current?.abort() }
+    return () => { setSpeakCallbacks({ onSpeakEnd: null }); stopAriaSpeech(); recognRef.current?.abort() }
+  }, [])
+
+  // Event-driven phase transitions — driven by real AudioContext events, not timers
+  useEffect(() => {
+    setSpeakCallbacks({
+      onSpeakEnd: () => {
+        setPhase('idle')
+        setReply('')
+        inputRef.current?.focus()
+      },
+    })
   }, [])
 
   const send = useCallback(async (text: string) => {
@@ -141,14 +152,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
       setGesture(resolvedGesture)
       setReply(clean)
       setPhase('speaking')
-
-      // AriaTalkingHead's useEffect is the sole caller of speakAriaText (no double-speak).
-      const approxMs = Math.max(1500, clean.split(' ').length * 350)
-      setTimeout(() => {
-        setPhase('idle')
-        setReply('')
-        inputRef.current?.focus()
-      }, approxMs)
+      // Phase transitions to idle via onSpeakEnd callback (real AudioContext events)
     } catch (e) {
       setError((e as Error).message ?? 'Network error')
       setPhase('idle')
