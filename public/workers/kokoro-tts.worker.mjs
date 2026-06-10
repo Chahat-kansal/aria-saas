@@ -216,6 +216,7 @@ async function speak(id, text) {
 }
 
 async function runSpeak(id, text) {
+  postMessage({ type: 'speak-started', id })
   generating = true
   try {
     await speak(id, text)
@@ -258,14 +259,14 @@ async function pregenFillers(texts) {
       console.log(`[KokoroWorker] filler ready: "${safe}" (${Math.round(durationMs)}ms)`)
     } catch (err) {
       console.warn('[KokoroWorker] filler pregen failed:', err)
-    } finally {
-      generating = false
-      if (pendingSpeakMsg) {
-        const next = pendingSpeakMsg
-        pendingSpeakMsg = null
-        runSpeak(next.id, next.text)
-        break
-      }
+    }
+    generating = false
+    await new Promise(r => setTimeout(r, 0))  // yield so onmessage('speak') can process before next filler
+    if (pendingSpeakMsg) {
+      const next = pendingSpeakMsg
+      pendingSpeakMsg = null
+      runSpeak(next.id, next.text)
+      break
     }
   }
   if (clips.length > 0) {

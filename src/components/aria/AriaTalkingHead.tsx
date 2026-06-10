@@ -97,6 +97,9 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   const gestureTimersRef  = useRef<ReturnType<typeof setTimeout>[]>([]);
   const headNodEndRef     = useRef<number>(0);  // ms timestamp when active nod ends
   const gestureBlendOutRef = useRef<GestureBlendOut | null>(null);
+  const sentencePlanRef   = useRef<Array<{
+    msOffset: number; type: 'gesture' | 'nod'; name?: string; mirror?: boolean
+  }>>([]);
 
   const unsubSpeakStartRef = useRef<(() => void) | null>(null);
   const unsubSpeakEndRef   = useRef<(() => void) | null>(null);
@@ -184,9 +187,8 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       mixerRef.current = mixer;
 
       const aLoader = () => { const l = new GLTFLoader(); l.register(p => new VRMAnimationLoaderPlugin(p)); return l; };
-      const [idleRes, talkRes] = await Promise.allSettled([
+      const [idleRes] = await Promise.allSettled([
         aLoader().loadAsync('/models/idle.vrma'),
-        aLoader().loadAsync('/models/VRMA_01.vrma'),
       ]);
       if (cancelled) return;
 
@@ -205,21 +207,8 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         console.warn('[AriaTalkingHead] idle.vrma missing — manual sway active');
       }
 
-      // ── Talk animation (VRMA_01 if substantial; else idle@1.15×) ─────────
-      if (talkRes.status === 'fulfilled') {
-        const talkVrma = talkRes.value.userData.vrmAnimations?.[0];
-        if (talkVrma) {
-          const talkClip = filterHeadTracks(createVRMAnimationClip(talkVrma, vrm));
-          if (talkClip.tracks.length > 2) {
-            const talkAction = mixer.clipAction(talkClip);
-            talkAction.setLoop(THREE.LoopRepeat, Infinity);
-            talkActionRef.current = talkAction;
-            console.log(`[AriaTalkingHead] VRMA_01 → TALK (${talkClip.tracks.length} tracks)`);
-          }
-        }
-      }
-      if (!talkActionRef.current && idleVrma) {
-        // Reuse idle at 1.15× as a slightly more energetic talk loop
+      // ── Talk animation — idle@1.15× (VRMA_01 was a VRoid dance clip; removed) ─
+      if (idleVrma) {
         const talkFastClip = createVRMAnimationClip(idleVrma, vrm);
         const talkAction = mixer.clipAction(talkFastClip);
         talkAction.setLoop(THREE.LoopRepeat, Infinity);
@@ -237,11 +226,26 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         idleActionRef.current.crossFadeTo(talkActionRef.current, 0.4, true);
         talkActionRef.current.play();
         mixerStateRef.current = 'talk';
+        // Arm sentence-timed gesture/nod plan now that AudioContext playback has started
+        const plan = sentencePlanRef.current;
+        sentencePlanRef.current = [];
+        gestureTimersRef.current.forEach(clearTimeout);
+        gestureTimersRef.current = [];
+        for (const p of plan) {
+          const t = setTimeout(() => {
+            if (p.type === 'nod') headNodEndRef.current = Date.now() + 280;
+            else if (p.name) gestureRef.current = { name: p.name, end: Date.now() + 3000, mirrorLeft: !!p.mirror };
+          }, p.msOffset);
+          gestureTimersRef.current.push(t);
+        }
       });
       unsubSpeakEndRef.current?.();
       unsubSpeakEndRef.current = onSpeakEnd(() => {
         if (!idleActionRef.current || !talkActionRef.current) return;
         if (mixerStateRef.current !== 'talk') return;
+        // Clear pending gesture timers before returning to idle
+        gestureTimersRef.current.forEach(clearTimeout);
+        gestureTimersRef.current = [];
         idleActionRef.current.reset();
         talkActionRef.current.crossFadeTo(idleActionRef.current, 0.6, true);
         idleActionRef.current.play();
@@ -310,6 +314,27 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     if (lastSpokenRef.current === replyText) return;
     lastSpokenRef.current = replyText;
 
+    // Build sentence gesture plan — timers armed in onSpeakStart (actual AudioContext start)
+    gestureTimersRef.current.forEach(clearTimeout);
+    gestureTimersRef.current = [];
+    gestureIdxRef.current = 0;
+    const sentences = replyText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 3);
+    let charOffset = 0;
+    const curMood = moodRef.current;
+    const gSet = GESTURE_SETS[curMood] ?? GESTURE_SETS.neutral;
+    const plan: Array<{ msOffset: number; type: 'gesture' | 'nod'; name?: string; mirror?: boolean }> = [];
+    sentences.forEach((sentence, i) => {
+      const msFromStart = charOffset * 60;
+      charOffset += sentence.length + 1;
+      if (i > 0) plan.push({ msOffset: Math.max(100, msFromStart - 150), type: 'nod' });
+      if ((i % 2 === 0) || Math.random() > 0.6) {
+        const gName = gSet[gestureIdxRef.current % gSet.length];
+        gestureIdxRef.current++;
+        plan.push({ msOffset: Math.max(200, msFromStart + 200), type: 'gesture', name: gName, mirror: Math.random() > 0.5 });
+      }
+    });
+    sentencePlanRef.current = plan;
+
     try {
       speakAriaText(replyText, (schedule, startMs) => {
         try {
@@ -320,55 +345,14 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
             visemes.current = buildVisemes(replyText);
             useHtVisemes.current = false;
           }
-
-          const isFirst = talkStart.current === null;
           talkStart.current = startMs;
 
-          if (isFirst) {
-            // ── Fire prop-driven gesture hint ────────────────────────────────
-            if (pendingGestureRef.current) {
-              const gName = pendingGestureRef.current;
-              pendingGestureRef.current = '';
-              console.log(`[AriaGesture] firing ${gName} (speech-start)`);
-              gestureRef.current = { name: gName, end: Date.now() + 3500, mirrorLeft: Math.random() > 0.5 };
-            }
-
-            // ── Schedule sentence-timed gestures + head nods (Part 3) ────────
-            gestureTimersRef.current.forEach(clearTimeout);
-            gestureTimersRef.current = [];
-            gestureIdxRef.current = 0;
-
-            const sentences = replyText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 3);
-            let charOffset = 0;
-            sentences.forEach((sentence, i) => {
-              const msFromStart = charOffset * 60;  // ~60 ms/char matches TTS speech rate
-              charOffset += sentence.length + 1;
-
-              if (i > 0) {
-                const nodDelay = Math.max(100, (startMs - Date.now()) + msFromStart - 150);
-                const nodTimer = setTimeout(() => {
-                  headNodEndRef.current = Date.now() + 280;
-                }, nodDelay);
-                gestureTimersRef.current.push(nodTimer);
-              }
-
-              const fireGesture = (i % 2 === 0) || (Math.random() > 0.6);
-              if (fireGesture) {
-                const mood = moodRef.current;
-                const set = GESTURE_SETS[mood] ?? GESTURE_SETS.neutral;
-                const gIdx = gestureIdxRef.current % set.length;
-                gestureIdxRef.current++;
-                const gName = set[gIdx];
-                const mirrorLeft = Math.random() > 0.5;
-
-                const gDelay = Math.max(200, (startMs - Date.now()) + msFromStart + 200);
-                const gTimer = setTimeout(() => {
-                  console.log(`[AriaGesture] firing ${gName} (sentence ${i}, mirror=${mirrorLeft})`);
-                  gestureRef.current = { name: gName, end: Date.now() + 3000, mirrorLeft };
-                }, gDelay);
-                gestureTimersRef.current.push(gTimer);
-              }
-            });
+          // Fire prop-driven gesture hint once (self-clearing)
+          if (pendingGestureRef.current) {
+            const gName = pendingGestureRef.current;
+            pendingGestureRef.current = '';
+            console.log(`[AriaGesture] firing ${gName} (speech-start)`);
+            gestureRef.current = { name: gName, end: Date.now() + 3500, mirrorLeft: Math.random() > 0.5 };
           }
         } catch (e) {
           console.error('[AriaTalkingHead] speak schedule callback error', e);

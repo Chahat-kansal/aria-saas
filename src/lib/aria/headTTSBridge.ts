@@ -93,6 +93,8 @@ let _queuedText:  string = ''
 
 // Watchdog: fires speechSynthesis fallback if worker doesn't respond
 let _speakWatchdog: ReturnType<typeof setTimeout> | null = null
+// Deferred watchdog — set in postSpeakToWorker, armed when speak-started ack arrives
+let _watchdogArmed: { id: number; ms: number } | null = null
 
 // ── Filler clip cache (latency masking — Part 4) ──────────────────────────
 type FillerClip = { audio: Float32Array; sampleRate: number; durationMs: number; text: string }
@@ -215,6 +217,24 @@ function clearSpeakWatchdog(): void {
   }
 }
 
+function armSpeakWatchdog(id: number, watchdogMs: number): void {
+  clearSpeakWatchdog()
+  _speakWatchdog = setTimeout(() => {
+    _speakWatchdog = null
+    if (_currentUtteranceId === id) {
+      _currentUtteranceId++
+      console.log(`[AriaVoice] bump → ${_currentUtteranceId} (watchdog)`)
+    }
+    const timedOutCb  = _pendingCb
+    const timedOutTxt = _pendingText
+    if (!timedOutCb) return
+    _pendingCb   = null
+    _pendingText = ''
+    console.error(`[AriaVoice] speak timeout utterance=${id} (${watchdogMs / 1000}s) — falling back`)
+    fallbackSpeechSynthesis(timedOutTxt, timedOutCb)
+  }, watchdogMs)
+}
+
 function stopAllSources(): void {
   _scheduledSources.forEach(s => { try { s.stop() } catch { /* already stopped */ } })
   _scheduledSources = []
@@ -309,20 +329,9 @@ function postSpeakToWorker(
   const watchdogMs = _utteranceCount === 0 ? 20_000 : 10_000
   _utteranceCount++
 
-  _speakWatchdog = setTimeout(() => {
-    _speakWatchdog = null
-    if (_currentUtteranceId === id) {
-      _currentUtteranceId++
-      console.log(`[AriaVoice] bump → ${_currentUtteranceId} (watchdog)`)
-    }
-    const timedOutCb  = _pendingCb
-    const timedOutTxt = _pendingText
-    if (!timedOutCb) return
-    _pendingCb   = null
-    _pendingText = ''
-    console.error(`[AriaVoice] speak timeout utterance=${id} (${watchdogMs / 1000}s) — falling back`)
-    fallbackSpeechSynthesis(timedOutTxt, timedOutCb)
-  }, watchdogMs)
+  // Delay arming the watchdog until the worker sends speak-started (actual WASM gen start).
+  // Prevents the watchdog firing during pregen queue time and triggering false fallback.
+  _watchdogArmed = { id, ms: watchdogMs }
 
   _worker!.postMessage({ type: 'speak', text, id })
 }
@@ -585,6 +594,16 @@ async function tryInitKokoro(): Promise<boolean> {
           return
         }
 
+        if (msg.type === 'speak-started') {
+          const speakId = msg.id as number
+          if (_watchdogArmed && _watchdogArmed.id === speakId) {
+            const { id, ms } = _watchdogArmed
+            _watchdogArmed = null
+            armSpeakWatchdog(id, ms)
+            console.log(`[AriaVoice] speak-started ack utterance=${speakId} — watchdog armed (${ms / 1000}s)`)
+          }
+          return
+        }
         if (msg.type === 'audio')       { handleAudioMsg(msg);       return }
         if (msg.type === 'audio-chunk') { handleAudioChunkMsg(msg);  return }
         if (msg.type === 'error')       { handleSpeakError(msg);     return }
@@ -722,6 +741,7 @@ export function stopAriaSpeech(): void {
     _fillerPlaying
 
   clearSpeakWatchdog()
+  _watchdogArmed = null
 
   if (hasPending) {
     _currentUtteranceId++
