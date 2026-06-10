@@ -7,7 +7,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';
 import { buildVisemes, Viseme } from './textToVisemes';
-import { initVoice, speakAriaText, stopAriaSpeech } from '@/lib/aria/headTTSBridge';
+import { initVoice, speakAriaText, stopAriaSpeech, setAvatarSpeakCallbacks } from '@/lib/aria/headTTSBridge';
 import type { VisemeEntry } from '@/lib/aria/headTTSBridge';
 
 // ── VRoid blendshape ↔ Oculus viseme map ─────────────────────────────────
@@ -44,6 +44,10 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   const frameErrorRef = useRef(false);
   const bonesRef = useRef<Record<string, THREE.Object3D>>({});
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const idleActionRef  = useRef<THREE.AnimationAction | null>(null);
+  const talkActionRef  = useRef<THREE.AnimationAction | null>(null);
+  const mixerStateRef  = useRef<'greeting' | 'idle' | 'talk'>('greeting');
+  const greetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const greetingDone = useRef(false);
 
   // ── Viseme state — supports both character-based and HeadTTS Oculus visemes
@@ -135,39 +139,122 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
 
       vrmReadyRef.current = true;
 
-      try {
-        const vrmaLoader = new GLTFLoader();
-        vrmaLoader.register(p => new VRMAnimationLoaderPlugin(p));
-        const a02 = await vrmaLoader.loadAsync('/models/VRMA_02.vrma');
-        if (cancelled) return;
+      // ── Persistent mixer — lives for the avatar's lifetime ───────────────
+      const mixer = new THREE.AnimationMixer(vrm.scene);
+      mixerRef.current = mixer;
 
-        const vrmaGreet = a02.userData.vrmAnimations?.[0];
+      const aLoader = () => { const l = new GLTFLoader(); l.register(p => new VRMAnimationLoaderPlugin(p)); return l; };
+      const [greetRes, idleRes, talkRes] = await Promise.allSettled([
+        aLoader().loadAsync('/models/VRMA_02.vrma'),
+        aLoader().loadAsync('/models/idle.vrma'),
+        aLoader().loadAsync('/models/VRMA_01.vrma'),
+      ]);
+      if (cancelled) return;
+
+      // ── Idle base loop ────────────────────────────────────────────────────
+      let idleVrma: import('@pixiv/three-vrm-animation').VRMAnimation | undefined;
+      if (idleRes.status === 'fulfilled') {
+        idleVrma = idleRes.value.userData.vrmAnimations?.[0];
+        if (idleVrma) {
+          const idleClip = createVRMAnimationClip(idleVrma, vrm);
+          const idleAction = mixer.clipAction(idleClip);
+          idleAction.setLoop(THREE.LoopRepeat, Infinity);
+          idleActionRef.current = idleAction;
+          console.log(`[AriaTalkingHead] idle.vrma loaded (${idleClip.tracks.length} tracks)`);
+        }
+      } else {
+        console.warn('[AriaTalkingHead] idle.vrma missing — manual sway active');
+      }
+
+      // ── Talk animation (VRMA_01 if substantial; else idle@1.15×) ─────────
+      if (talkRes.status === 'fulfilled') {
+        const talkVrma = talkRes.value.userData.vrmAnimations?.[0];
+        if (talkVrma) {
+          const talkClip = createVRMAnimationClip(talkVrma, vrm);
+          if (talkClip.tracks.length > 2) {
+            const talkAction = mixer.clipAction(talkClip);
+            talkAction.setLoop(THREE.LoopRepeat, Infinity);
+            talkActionRef.current = talkAction;
+            console.log(`[AriaTalkingHead] VRMA_01 → TALK (${talkClip.tracks.length} tracks)`);
+          }
+        }
+      }
+      if (!talkActionRef.current && idleVrma) {
+        // Reuse idle at 1.15× as a slightly more energetic talk loop
+        const talkFastClip = createVRMAnimationClip(idleVrma, vrm);
+        const talkAction = mixer.clipAction(talkFastClip);
+        talkAction.setLoop(THREE.LoopRepeat, Infinity);
+        talkAction.timeScale = 1.15;
+        talkActionRef.current = talkAction;
+        console.log('[AriaTalkingHead] idle@1.15× → TALK');
+      }
+
+      // ── Wire mixer crossfades to speech events ────────────────────────────
+      setAvatarSpeakCallbacks({
+        onSpeakStart: () => {
+          if (!talkActionRef.current || !idleActionRef.current) return;
+          if (mixerStateRef.current === 'talk' || mixerStateRef.current === 'greeting') return;
+          talkActionRef.current.reset();
+          idleActionRef.current.crossFadeTo(talkActionRef.current, 0.4, true);
+          talkActionRef.current.play();
+          mixerStateRef.current = 'talk';
+        },
+        onSpeakEnd: () => {
+          if (!idleActionRef.current || !talkActionRef.current) return;
+          if (mixerStateRef.current !== 'talk') return;
+          idleActionRef.current.reset();
+          talkActionRef.current.crossFadeTo(idleActionRef.current, 0.6, true);
+          idleActionRef.current.play();
+          mixerStateRef.current = 'idle';
+        },
+      });
+
+      // ── Greeting clip → crossfade to idle ────────────────────────────────
+      const startIdle = () => {
+        greetingDone.current = true;
+        if (idleActionRef.current) {
+          idleActionRef.current.play();
+          mixerStateRef.current = 'idle';
+        } else {
+          // No idle.vrma — null mixer, fall back to manual sway
+          mixerRef.current = null;
+          mixerStateRef.current = 'idle';
+          if (bones.head) bones.head.rotation.set(0, 0, 0);
+          if (bones.neck) bones.neck.rotation.set(-0.08, 0, 0);
+          if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
+          if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
+        }
+      };
+
+      if (greetRes.status === 'fulfilled') {
+        const vrmaGreet = greetRes.value.userData.vrmAnimations?.[0];
         if (vrmaGreet) {
-          const mixer = new THREE.AnimationMixer(vrm.scene);
-          mixerRef.current = mixer;
-          const clip = createVRMAnimationClip(vrmaGreet, vrm);
-          const action = mixer.clipAction(clip);
-          action.setLoop(THREE.LoopOnce, 1);
-          action.play();
-          setTimeout(() => {
-            greetingDone.current = true;
-            mixerRef.current = null;
-            if (bones.head) { bones.head.rotation.set(0, 0, 0); }
-            if (bones.neck) { bones.neck.rotation.set(-0.08, 0, 0); }
-            if (bones.chest) { bones.chest.rotation.set(-0.05, 0, 0); }
-            if (bones.spine) { bones.spine.rotation.set(-0.03, 0, 0); }
-            if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
-            if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
+          const greetClip = createVRMAnimationClip(vrmaGreet, vrm);
+          const greetAction = mixer.clipAction(greetClip);
+          greetAction.setLoop(THREE.LoopOnce, 1);
+          greetAction.play();
+          greetTimeoutRef.current = setTimeout(() => {
+            if (cancelled) return;
+            if (idleActionRef.current) {
+              idleActionRef.current.reset();
+              greetAction.crossFadeTo(idleActionRef.current, 0.5, true);
+            }
+            startIdle();
+            console.log('[AriaTalkingHead] greeting → idle crossfade');
           }, 7267);
         } else {
-          greetingDone.current = true;
+          startIdle();
         }
-      } catch { greetingDone.current = true; }
+      } else {
+        startIdle();
+      }
     }
 
     load().catch(() => { greetingDone.current = true; });
     return () => {
       cancelled = true;
+      if (greetTimeoutRef.current) { clearTimeout(greetTimeoutRef.current); greetTimeoutRef.current = null; }
+      setAvatarSpeakCallbacks({ onSpeakStart: null, onSpeakEnd: null });
       vrmReadyRef.current = false;
       frameErrorRef.current = false;
       stopAriaSpeech();
@@ -223,20 +310,20 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     if (!vrm || !vrmReadyRef.current) return;
     try {
 
-    if (mixerRef.current) {
-      mixerRef.current.update(delta);
-      vrm.update(delta);
-      return;
-    }
+    // Mixer runs for avatar's full lifetime (idle/talk clips + greeting)
+    if (mixerRef.current) mixerRef.current.update(delta);
 
     clock.current += delta;
     const t = clock.current;
     vrm.update(delta);
     const bones = bonesRef.current;
 
-    // Breathing
-    if (bones.chest) bones.chest.rotation.x = Math.sin(t * 0.8) * 0.012;
-    if (bones.spine) bones.spine.rotation.x = Math.sin(t * 0.8) * 0.008;
+    // Manual breathing only when no idle animation provides it via mixer.
+    // Decision: REMOVE when idle.vrma loaded; keep as fallback otherwise.
+    if (!idleActionRef.current) {
+      if (bones.chest) bones.chest.rotation.x = Math.sin(t * 0.8) * 0.012;
+      if (bones.spine) bones.spine.rotation.x = Math.sin(t * 0.8) * 0.008;
+    }
 
     // Head sway
     if (bones.head) {
