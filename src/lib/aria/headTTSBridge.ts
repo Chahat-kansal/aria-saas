@@ -94,6 +94,16 @@ let _queuedText:  string = ''
 // Watchdog: fires speechSynthesis fallback if worker doesn't respond
 let _speakWatchdog: ReturnType<typeof setTimeout> | null = null
 
+// ── Filler clip cache (latency masking — Part 4) ──────────────────────────
+type FillerClip = { audio: Float32Array; sampleRate: number; durationMs: number; text: string }
+let _fillerCache:         FillerClip[]                = []
+let _fillerPlaying:       boolean                     = false
+let _fillerSource:        AudioBufferSourceNode | null = null
+let _fillerPendingReal:   {                           // real audio buffered while filler plays
+  audio: Float32Array; sampleRate: number; durationMs: number
+  text: string; cb: (s: VisemeEntry[] | null, ms: number) => void
+} | null = null
+
 // Lifecycle callbacks — two independent registrations to avoid clobbering:
 //   setSpeakCallbacks: used by UI panels (phase transitions, focus)
 //   setAvatarSpeakCallbacks: used by AriaTalkingHead (mixer crossfades)
@@ -179,6 +189,70 @@ function stopAllSources(): void {
     try { _currentSource.stop() } catch { /* already stopped */ }
     _currentSource = null
   }
+  // Stop filler if playing (explicit stop = panel close or new user message)
+  if (_fillerSource) {
+    try { _fillerSource.stop() } catch { /* already stopped */ }
+    _fillerSource = null
+  }
+  _fillerPlaying     = false
+  _fillerPendingReal = null
+}
+
+// ── Filler playback (latency masking) ─────────────────────────────────────
+
+async function playFillerAudio(
+  filler: FillerClip,
+  onSchedule: (schedule: VisemeEntry[] | null, startMs: number) => void,
+): Promise<void> {
+  const ctx = getAudioCtx()
+  if (ctx.state === 'suspended') await ctx.resume()
+
+  const buffer = ctx.createBuffer(1, filler.audio.length, filler.sampleRate)
+  buffer.copyToChannel(filler.audio as Float32Array<ArrayBuffer>, 0)
+  const source = ctx.createBufferSource()
+  source.buffer = buffer
+  source.connect(ctx.destination)
+  _fillerSource  = source
+  _fillerPlaying = true
+
+  source.addEventListener('ended', () => {
+    if (_fillerSource !== source) return
+    _fillerSource  = null
+    _fillerPlaying = false
+    if (_fillerPendingReal) {
+      const real = _fillerPendingReal
+      _fillerPendingReal = null
+      playKokoroAudio(real.audio, real.sampleRate, real.durationMs, real.text, real.cb)
+        .catch(err => console.error('[AriaVoice] post-filler playback error:', err))
+    }
+    // Don't fire onSpeakEnd — real audio is coming; it will fire onSpeakEnd
+  })
+
+  const startMs = Date.now()
+  source.start()
+  // Fire start callbacks so mixer crossfades to TALK immediately
+  fireSpeakStart()
+
+  const schedule = buildScaledVisemes(filler.text, filler.durationMs / 1000)
+  onSchedule(schedule.length > 0 ? schedule : null, startMs)
+  console.log(`[AriaVoice] filler playing: "${filler.text}" (${Math.round(filler.durationMs)}ms)`)
+}
+
+/** Play real TTS audio; if a filler is still playing, queue it for after. */
+async function playRealAudio(
+  audio: Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  text: string,
+  cb: (schedule: VisemeEntry[] | null, startMs: number) => void,
+): Promise<void> {
+  if (_fillerPlaying) {
+    // Filler still playing — buffer real audio and play once filler ends
+    _fillerPendingReal = { audio, sampleRate, durationMs, text, cb }
+    console.log('[AriaVoice] real audio queued behind filler')
+    return
+  }
+  await playKokoroAudio(audio, sampleRate, durationMs, text, cb)
 }
 
 /**
@@ -387,8 +461,8 @@ function handleAudioMsg(msg: Record<string, unknown>): void {
     return
   }
 
-  playKokoroAudio(audioData, rate, msg.durationMs as number, txt, cb)
-    .catch(err => console.error('[AriaVoice] playKokoroAudio error:', err))
+  playRealAudio(audioData, rate, msg.durationMs as number, txt, cb)
+    .catch(err => console.error('[AriaVoice] playRealAudio error:', err))
 }
 
 function handleSpeakError(msg: Record<string, unknown>): void {
@@ -427,6 +501,17 @@ async function tryInitKokoro(): Promise<boolean> {
           const device = msg.device as string
           _backend = device === 'webgpu' ? 'kokoro-webgpu' : 'kokoro-wasm'
           console.log(`[AriaVoice] kokoro-js ready (${device})`)
+
+          // Pre-generate filler clips in the background (Part 4 latency masking)
+          _worker!.postMessage({ type: 'pregen', texts: [
+            'Hmm, let me check that for you.',
+            'One moment.',
+            'Good question — let me look.',
+            'Let me pull that up.',
+            'Just a sec.',
+            'Looking into it now.',
+          ]})
+
           if (_queuedCb && _queuedText) {
             const cb  = _queuedCb
             const txt = _queuedText
@@ -461,6 +546,12 @@ async function tryInitKokoro(): Promise<boolean> {
         if (msg.type === 'error')       { handleSpeakError(msg);     return }
         if (msg.type === 'cancelled') {
           console.log(`[AriaVoice] worker cancelled utterance ${msg.id}`)
+          return
+        }
+        if (msg.type === 'pregen-ready') {
+          const clips = msg.clips as Array<{ audio: Float32Array; sampleRate: number; durationMs: number; text: string }>
+          _fillerCache = clips ?? []
+          console.log(`[AriaVoice] ${_fillerCache.length} filler clips cached`)
           return
         }
       }
@@ -566,6 +657,13 @@ export function speakAriaText(
     : clean
 
   if (_worker && _workerReady) {
+    // Part 4 — play a filler immediately to mask WASM generation latency (~9-15 s).
+    // One filler per question; exempt from utterance cancellation (only stop/panel-close kills it).
+    if (!_fillerPlaying && _fillerCache.length > 0) {
+      const filler = _fillerCache[Math.floor(Math.random() * _fillerCache.length)]
+      playFillerAudio(filler, onSchedule).catch(err =>
+        console.error('[AriaVoice] filler playback error:', err))
+    }
     postSpeakToWorker(speechText, onSchedule)
     return
   }
@@ -589,7 +687,8 @@ export function stopAriaSpeech(): void {
     _pendingCb !== null ||
     _queuedCb  !== null ||
     _currentSource !== null ||
-    _scheduledSources.length > 0
+    _scheduledSources.length > 0 ||
+    _fillerPlaying
 
   clearSpeakWatchdog()
 

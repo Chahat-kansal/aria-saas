@@ -233,9 +233,51 @@ async function runSpeak(id, text) {
   }
 }
 
+// ── Filler pre-generation ─────────────────────────────────────────────────
+// Runs after init(), respects generating flag, yields to real speak requests.
+async function pregenFillers(texts) {
+  const clips = []
+  for (const text of texts) {
+    // Wait if a real speak is running
+    while (generating) {
+      await new Promise(r => setTimeout(r, 150))
+    }
+    // Stop if a real speak just queued up
+    if (pendingSpeakMsg) {
+      console.log('[KokoroWorker] pregen interrupted by pending speak')
+      break
+    }
+    generating = true
+    try {
+      const safe = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim()
+      const result = await tts.generate(safe, { voice: 'af_heart', speed: 1.05 })
+      const audio = result.audio instanceof Float32Array ? result.audio : new Float32Array(result.audio)
+      const sampleRate = result.sampling_rate
+      const durationMs = (audio.length / sampleRate) * 1000
+      clips.push({ audio: audio.slice(), sampleRate, durationMs, text: safe })
+      console.log(`[KokoroWorker] filler ready: "${safe}" (${Math.round(durationMs)}ms)`)
+    } catch (err) {
+      console.warn('[KokoroWorker] filler pregen failed:', err)
+    } finally {
+      generating = false
+      if (pendingSpeakMsg) {
+        const next = pendingSpeakMsg
+        pendingSpeakMsg = null
+        runSpeak(next.id, next.text)
+        break
+      }
+    }
+  }
+  if (clips.length > 0) {
+    const transfers = clips.map(c => c.audio.buffer)
+    postMessage({ type: 'pregen-ready', clips }, transfers)
+    console.log(`[KokoroWorker] pregen complete: ${clips.length} fillers cached`)
+  }
+}
+
 self.onmessage = (e) => {
   console.log('[KokoroWorker] msg received:', e.data?.type)
-  const { type, text, id } = e.data
+  const { type, text, id, texts } = e.data
 
   if (type === 'init') {
     init().catch(err => postMessage({ status: 'error', message: String(err) }))
@@ -251,5 +293,15 @@ self.onmessage = (e) => {
     }
     runSpeak(id, text).catch(err =>
       postMessage({ type: 'error', stage: 'runSpeak-dispatch', message: String(err), id }))
+    return
+  }
+
+  if (type === 'pregen' && Array.isArray(texts)) {
+    if (!tts) {
+      console.warn('[KokoroWorker] pregen received before tts ready — ignoring')
+      return
+    }
+    pregenFillers(texts).catch(err =>
+      console.error('[KokoroWorker] pregenFillers error:', err))
   }
 }
