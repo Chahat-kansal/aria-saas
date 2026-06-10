@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice, getVoiceBackend } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 // Avatar loaded client-only (Three.js / WebGL)
@@ -84,6 +84,7 @@ export default function TalkToAria({ className }: { className?: string }) {
 
   // ── Send a message to /api/aria/talk ────────────────────────────────────
   const send = useCallback(async (text: string) => {
+    ensureAudioUnlocked()  // synchronous — must precede any await to satisfy autoplay policy
     const msg = text.trim()
     if (!msg || phase === 'thinking' || phase === 'speaking') return
 
@@ -131,6 +132,7 @@ export default function TalkToAria({ className }: { className?: string }) {
 
   // ── Mic / Web Speech Recognition ────────────────────────────────────────
   const startListening = useCallback(() => {
+    ensureAudioUnlocked()  // unlock AudioContext on mic button press (user gesture)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition

@@ -57,6 +57,10 @@ let _currentSource: AudioBufferSourceNode | null  = null
 let _pendingCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
 let _pendingText:  string = ''
 
+// Queued speak request that arrived before worker was ready
+let _queuedCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
+let _queuedText:  string = ''
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 export function cleanForSpeech(text: string): string {
@@ -119,6 +123,7 @@ async function playKokoroAudio(
   onSchedule: (schedule: VisemeEntry[] | null, startMs: number) => void,
 ): Promise<void> {
   const ctx = getAudioCtx()
+  console.log(`[AriaVoice] AudioContext state: ${ctx.state}`)
   if (ctx.state === 'suspended') {
     await ctx.resume()
   }
@@ -183,7 +188,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     try {
-      _worker = new Worker('/workers/kokoro-tts.worker.mjs', { type: 'module' })
+      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=2', { type: 'module' })
 
       _worker.onmessage = (e: MessageEvent) => {
         const msg = e.data as Record<string, unknown>
@@ -193,6 +198,17 @@ async function tryInitKokoro(): Promise<boolean> {
           const device = msg.device as string
           _backend = device === 'webgpu' ? 'kokoro-webgpu' : 'kokoro-wasm'
           console.log(`[AriaVoice] kokoro-js ready (${device})`)
+          // Flush any speak request that arrived before worker was ready
+          if (_queuedCb && _queuedText) {
+            const cb  = _queuedCb
+            const txt = _queuedText
+            _queuedCb   = null
+            _queuedText = ''
+            console.log('[AriaVoice] flushing queued speak:', txt.slice(0, 40))
+            _pendingCb   = cb
+            _pendingText = txt
+            _worker!.postMessage({ type: 'speak', text: txt, voice: 'af_heart', speed: 1.0 })
+          }
           return
         }
 
@@ -294,7 +310,15 @@ export function speakAriaText(
     return
   }
 
-  // Fallback: speechSynthesis (kokoro still loading or unavailable)
+  // kokoro path: worker created but model still loading — queue and wait
+  if (_worker && !_workerReady) {
+    console.log('[AriaVoice] queued until ready:', speechText.slice(0, 40))
+    _queuedCb   = onSchedule
+    _queuedText = speechText
+    return
+  }
+
+  // Fallback: speechSynthesis (worker creation failed or unavailable)
   fallbackSpeechSynthesis(speechText, onSchedule)
 }
 
@@ -302,6 +326,8 @@ export function speakAriaText(
 export function stopAriaSpeech(): void {
   _pendingCb   = null
   _pendingText = ''
+  _queuedCb    = null
+  _queuedText  = ''
 
   if (_currentSource) {
     try { _currentSource.stop() } catch { /* already stopped */ }
@@ -311,6 +337,21 @@ export function stopAriaSpeech(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel()
   }
+}
+
+/**
+ * Call synchronously inside a user gesture handler (button onClick) to pre-warm
+ * the AudioContext before the first async await. Browsers block ctx.resume() called
+ * outside a gesture; calling it here ensures the context is unlocked in time.
+ */
+export function ensureAudioUnlocked(): void {
+  if (typeof window === 'undefined') return
+  try {
+    const ctx = getAudioCtx()
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => { /* browser may still block — that's ok */ })
+    }
+  } catch { /* ignore */ }
 }
 
 export function getVoiceBackend(): SpeechBackend { return _backend }

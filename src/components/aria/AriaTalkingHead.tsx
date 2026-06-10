@@ -349,6 +349,13 @@ export default function AriaTalkingHead({
       onCreated={({ camera, gl }) => {
         camera.lookAt(0, 1.2, 0)
         gl.setClearColor(0x000000, 0) // transparent canvas background
+        gl.domElement.addEventListener('webglcontextlost', (e: Event) => {
+          e.preventDefault()
+          console.warn('[AriaTalkingHead] WebGL context lost — will restore when available')
+        }, false)
+        gl.domElement.addEventListener('webglcontextrestored', () => {
+          console.log('[AriaTalkingHead] WebGL context restored')
+        }, false)
       }}
     >
       <ambientLight intensity={1.4} />

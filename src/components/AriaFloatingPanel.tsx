@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, ensureAudioUnlocked } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 const AriaTalkingHead = dynamic(
@@ -99,6 +99,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
   }, [])
 
   const send = useCallback(async (text: string) => {
+    ensureAudioUnlocked()  // synchronous — must precede any await to satisfy autoplay policy
     const msg = text.trim()
     if (!msg || phase === 'thinking' || phase === 'speaking') return
 
@@ -155,6 +156,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
   }, [phase, brain, pathname, pageName, messages])
 
   const startListening = useCallback(() => {
+    ensureAudioUnlocked()  // unlock AudioContext on mic button press (user gesture)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition

@@ -83,6 +83,12 @@ const nextConfig = {
   async headers() {
     return [
       {
+        source: '/workers/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store' },
+        ],
+      },
+      {
         source: '/(.*)',
         headers: [
           {

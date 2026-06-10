@@ -16,7 +16,7 @@ async function init() {
   try {
     const hasWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator
     const device = hasWebGPU ? 'webgpu' : 'wasm'
-    const dtype = device === 'webgpu' ? 'fp32' : 'q8'
+    const dtype = 'q8'  // q8 on both paths — reduces GPU memory contention with Three.js
 
     const { KokoroTTS, env } = await import('https://esm.sh/kokoro-js@1.2.1')
 
