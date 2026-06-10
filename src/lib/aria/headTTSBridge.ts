@@ -139,8 +139,16 @@ async function tryInitHeadTTS(): Promise<boolean> {
       }
 
       tts.onerror = (err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err)
+        const isEE = typeof ErrorEvent !== 'undefined' && err instanceof ErrorEvent
+        const msg  = isEE ? (err as ErrorEvent).message : err instanceof Error ? err.message : String(err)
         if (msg.includes('connection failed') || msg.includes('Failed to start')) {
+          if (isEE) {
+            const ee = err as ErrorEvent
+            console.error('[AriaVoice] HeadTTS attempt', attempt, 'worker error:', msg,
+              '| file:', ee.filename, '| line:', ee.lineno, '| col:', ee.colno)
+          } else {
+            console.error('[AriaVoice] HeadTTS attempt', attempt, 'worker error:', err)
+          }
           hadConnectionError = true
         } else {
           console.warn('[AriaVoice] HeadTTS error:', err)
@@ -149,7 +157,8 @@ async function tryInitHeadTTS(): Promise<boolean> {
 
       try {
         await tts.connect({ voice: 'af_heart', rate: 1.0 })
-      } catch {
+      } catch (connectErr) {
+        console.error('[AriaVoice] HeadTTS attempt', attempt, 'connect() threw:', connectErr)
         hadConnectionError = true
       }
 

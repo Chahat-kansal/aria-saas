@@ -64,6 +64,7 @@ export const metadata: Metadata = {
   applicationName: 'Aria OS',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Aria OS' },
   formatDetection: { telephone: false },
+  other: { 'mobile-web-app-capable': 'yes' },
 };
 
 export const viewport: Viewport = {
