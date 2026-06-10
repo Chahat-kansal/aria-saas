@@ -8,14 +8,20 @@
 // IN  { type: 'speak', text: string, id: number }
 // OUT { status: 'ready', device: 'wasm'|'webgpu' }
 // OUT { status: 'error', message: string }
-// OUT { type: 'audio', audio: Float32Array, sampleRate: number, durationMs: number, text: string, id: number }
-//     transfer: [audio.buffer]   ← non-streaming fallback path
-// OUT { type: 'audio-chunk', id, seq, audio, sampleRate, durationMs, text, isLast: false }
+// OUT { type: 'audio', audio: Float32Array, sampleRate, durationMs, text, id }
+//     transfer: [audio.buffer]   ← generate() fallback path
+// OUT { type: 'audio-chunk', id, seq, audio: Float32Array, sampleRate, durationMs, text, isLast: false }
 //     transfer: [audio.buffer]   ← streaming path, one per sentence
-// OUT { type: 'audio-chunk', id, seq, audio: Float32Array(0), sampleRate, text: '', isLast: true }
-//     end-of-stream sentinel (no transfer needed)
-// OUT { type: 'error', stage: string, message: string, stack?: string, id?: number }
-// OUT { type: 'cancelled', id: number }   — utterance was superseded before audio was posted
+// OUT { type: 'audio-chunk', id, seq, audio: null, sampleRate: 0, text: '', isLast: true }
+//     end-of-stream sentinel (no transfer)
+// OUT { type: 'error', stage, message, stack?, id? }
+// OUT { type: 'cancelled', id }  — utterance superseded before audio posted
+//
+// ── Streaming usage note ──────────────────────────────────────────────────
+// CRITICAL: consumer must be created BEFORE splitter.push/close.
+// tts.stream() returns a readable that yields { text, audio } where
+// audio is RawAudio { audio: Float32Array, sampling_rate: number }.
+// Without close() the splitter never flushes and the stream hangs forever.
 // ─────────────────────────────────────────────────────────────────────────
 
 let tts = null
@@ -26,8 +32,6 @@ let pendingSpeakMsg = null  // { id, text } — latest speak that arrived before
 
 async function init() {
   try {
-    // Default: WASM/q8 (reliable, no GPU contention with Three.js).
-    // Escape hatch: add ?voicegpu=1 to the Worker URL for WebGPU/fp16.
     const forceGPU = new URLSearchParams(self.location.search).get('voicegpu') === '1'
     const hasGPU   = forceGPU && typeof navigator !== 'undefined' && 'gpu' in navigator
     const device   = hasGPU ? 'webgpu' : 'wasm'
@@ -46,12 +50,11 @@ async function init() {
     tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype, device })
 
     const streamNote = TextSplitterStream && typeof tts.stream === 'function'
-      ? ' (streaming supported)'
-      : ' (generate-only fallback)'
+      ? ' (streaming available)'
+      : ' (generate-only: TextSplitterStream not exported)'
     console.log('[KokoroWorker] ready' + streamNote)
     postMessage({ status: 'ready', device })
 
-    // Process any speak that arrived before init completed
     if (pendingSpeakMsg) {
       const { id, text } = pendingSpeakMsg
       pendingSpeakMsg = null
@@ -64,80 +67,95 @@ async function init() {
   }
 }
 
-async function speak(id, text) {
-  // Strip emoji — confuse phonemizer, can stall generation
-  const safe = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim()
-  if (!safe) {
-    postMessage({ type: 'cancelled', id })
-    return
-  }
+// ── Streaming path ────────────────────────────────────────────────────────
+// Returns 'done' | 'cancelled' | 'stall' | 'error:<msg>'
+async function speakStreaming(id, safe) {
+  // stallFired: set when the 12s stall timer fires, suppresses late stream chunks
+  let stallFired = false
 
-  console.log(`[KokoroWorker] speak start id=${id} ${safe.length} chars (was ${text.length})`)
-
-  // ── Streaming path (preferred — sentence-level latency) ─────────────────
-  if (TextSplitterStream && typeof tts.stream === 'function') {
-    let streamed = false
+  const streamAttempt = (async () => {
     try {
       const splitter = new TextSplitterStream()
-      const stream = tts.stream(splitter, { voice: 'af_heart', speed: 1.0 })
-      splitter.push(safe)
-      // Signal end of text input (API varies by version)
-      if (typeof splitter.close === 'function') splitter.close()
-      else if (typeof splitter.flush === 'function') await splitter.flush()
+      const stream   = tts.stream(splitter, { voice: 'af_heart', speed: 1.0 })
 
-      let seq = 0
-      for await (const chunk of stream) {
-        if (id !== currentSpeakId) {
-          console.log(`[KokoroWorker] utterance ${id} superseded by ${currentSpeakId} — cancelling (stream)`)
-          postMessage({ type: 'cancelled', id })
-          return
+      // Consumer MUST be created before push/close — otherwise the readable has
+      // no consumer when items are pushed and the stream deadlocks forever.
+      const consumer = (async () => {
+        let seq = 0
+        for await (const { text: chunkText, audio } of stream) {
+          if (stallFired || id !== currentSpeakId) {
+            if (!stallFired) {
+              console.log(`[KokoroWorker] utterance ${id} superseded during stream — cancelling`)
+              postMessage({ type: 'cancelled', id })
+            }
+            return 'cancelled'
+          }
+          // audio is RawAudio { audio: Float32Array, sampling_rate: number }
+          const audioData  = audio.audio instanceof Float32Array ? audio.audio : new Float32Array(audio.audio)
+          const sampleRate = audio.sampling_rate ?? 24000
+          if (!audioData.length) { seq++; continue }
+
+          const durationMs = (audioData.length / sampleRate) * 1000
+          const ct         = typeof chunkText === 'string' ? chunkText : ''
+          console.log(`[KokoroWorker] chunk ${seq} id=${id} ${audioData.length}samp "${ct.slice(0, 50)}"`)
+          postMessage(
+            { type: 'audio-chunk', id, seq, audio: audioData, sampleRate, durationMs, text: ct, isLast: false },
+            [audioData.buffer]
+          )
+          seq++
         }
-        const audio = chunk.audio instanceof Float32Array
-          ? chunk.audio
-          : new Float32Array(chunk.audio)
-        const sampleRate = chunk.sampling_rate ?? 24000
-        if (!audio.length) { seq++; continue }  // skip empty chunks from splitter
-        const durationMs = (audio.length / sampleRate) * 1000
-        const chunkText  = typeof chunk.text === 'string' ? chunk.text : ''
-        console.log(`[KokoroWorker] chunk id=${id} seq=${seq} ${audio.length}samp "${chunkText.slice(0, 40)}"`)
-        postMessage(
-          { type: 'audio-chunk', id, seq, audio, sampleRate, durationMs, text: chunkText, isLast: false },
-          [audio.buffer]
-        )
-        seq++
-        streamed = true
-      }
+        if (!stallFired && id === currentSpeakId) {
+          postMessage({ type: 'audio-chunk', id, seq, audio: null, sampleRate: 0, text: '', isLast: true })
+          console.log(`[KokoroWorker] stream complete id=${id}`)
+        }
+        return 'done'
+      })()
 
-      // End-of-stream sentinel (only if supersession hasn't occurred)
-      if (id === currentSpeakId) {
-        postMessage({
-          type: 'audio-chunk', id, seq,
-          audio: new Float32Array(0), sampleRate: 24000, text: '', isLast: true,
-        })
-      }
-      return
-    } catch (streamErr) {
-      if (streamed) {
-        // Partial stream completed — error mid-stream, report it
-        console.error('[KokoroWorker] stream error mid-flight:', streamErr instanceof Error ? streamErr.message : String(streamErr))
-        postMessage({ type: 'error', stage: 'stream', message: String(streamErr), id })
-        return
-      }
-      // No chunks yet — fall back to generate()
-      console.warn('[KokoroWorker] stream failed (pre-first-chunk), falling back to generate:',
-        streamErr instanceof Error ? streamErr.message : String(streamErr))
+      // Push + close AFTER the consumer is already listening
+      splitter.push(safe)
+      splitter.close()
+
+      return await consumer
+    } catch (err) {
+      if (stallFired) return 'stall'
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[KokoroWorker] stream error:', msg)
+      return 'error:' + msg
     }
+  })()
+
+  // Stall guard: if no chunk arrives in 12s, fall back to generate()
+  const STALL_MS   = 12_000
+  const stallTimer = new Promise(resolve => setTimeout(() => resolve('stalled'), STALL_MS))
+
+  const winner = await Promise.race([
+    streamAttempt.then(r => ({ from: 'stream',   r })),
+    stallTimer.then(()  => ({ from: 'timeout',  r: 'stalled' })),
+  ])
+
+  if (winner.from === 'stream') {
+    const r = winner.r
+    if (r === 'done' || r === 'cancelled' || r === 'stall') return r
+    // error fallthrough
+    console.warn('[KokoroWorker] stream errored before first chunk — falling back to generate:', winner.r)
+    return 'stall'  // treat as stall so caller runs generate()
   }
 
-  // ── Generate path (fallback / no streaming API) ──────────────────────────
+  // Timeout — stream produced no first chunk in STALL_MS
+  stallFired = true
+  console.warn(`[KokoroWorker] stream stalled (${STALL_MS/1000}s no first chunk) — falling back to non-streaming generate`)
+  return 'stall'
+}
+
+// ── Generate path (single-shot fallback) ─────────────────────────────────
+async function speakGenerate(id, safe) {
   let result
   try {
     result = await tts.generate(safe, { voice: 'af_heart', speed: 1.0 })
   } catch (err) {
     console.error('[KokoroWorker] generate error:', err)
     postMessage({
-      type: 'error',
-      stage: 'generate',
+      type: 'error', stage: 'generate',
       message: err instanceof Error ? err.message : String(err),
       stack:   err instanceof Error ? err.stack   : undefined,
       id,
@@ -145,14 +163,12 @@ async function speak(id, text) {
     return
   }
 
-  // After awaiting: check if a newer speak arrived during generation
   if (id !== currentSpeakId) {
-    console.log(`[KokoroWorker] utterance ${id} superseded by ${currentSpeakId} — cancelling`)
+    console.log(`[KokoroWorker] utterance ${id} superseded after generate — cancelling`)
     postMessage({ type: 'cancelled', id })
     return
   }
 
-  // kokoro-js 1.2.x: RawAudio { audio: Float32Array, sampling_rate: number }
   const audio      = result.audio instanceof Float32Array ? result.audio : new Float32Array(result.audio)
   const sampleRate = result.sampling_rate
   const durationMs = (audio.length / sampleRate) * 1000
@@ -160,16 +176,26 @@ async function speak(id, text) {
   console.log(`[KokoroWorker] generated id=${id} ${audio.length}samp @ ${sampleRate}Hz (${Math.round(durationMs)}ms)`)
 
   if (!audio.length || !sampleRate) {
-    postMessage({
-      type: 'error', stage: 'generate',
-      message: `empty audio: length=${audio.length} sampleRate=${sampleRate}`,
-      id,
-    })
+    postMessage({ type: 'error', stage: 'generate', message: `empty audio: ${audio.length}samp ${sampleRate}Hz`, id })
     return
   }
 
-  console.log(`[KokoroWorker] posting audio id=${id}`)
   postMessage({ type: 'audio', audio, sampleRate, durationMs, text: safe, id }, [audio.buffer])
+}
+
+async function speak(id, text) {
+  const safe = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim()
+  if (!safe) { postMessage({ type: 'cancelled', id }); return }
+
+  console.log(`[KokoroWorker] speak start id=${id} ${safe.length} chars (was ${text.length})`)
+
+  if (TextSplitterStream && typeof tts.stream === 'function') {
+    const outcome = await speakStreaming(id, safe)
+    if (outcome !== 'stall') return  // 'done' or 'cancelled' — no further action
+    // 'stall' → run generate() as proven fallback
+  }
+
+  await speakGenerate(id, safe)
 }
 
 async function runSpeak(id, text) {
@@ -181,7 +207,6 @@ async function runSpeak(id, text) {
     postMessage({ type: 'error', stage: 'speak-outer', message: String(err), stack: err?.stack, id })
   } finally {
     generating = false
-    // Drain the queue: run the latest pending speak, if any
     if (pendingSpeakMsg) {
       const next = pendingSpeakMsg
       pendingSpeakMsg = null
@@ -201,9 +226,8 @@ self.onmessage = (e) => {
   }
 
   if (type === 'speak' && text !== undefined) {
-    currentSpeakId = id  // always update so post-generate check detects supersession
+    currentSpeakId = id
     if (!tts || generating) {
-      // Queue for when init/current generation completes — only keep latest
       pendingSpeakMsg = { id, text }
       console.log(`[KokoroWorker] speak ${id} queued (${!tts ? 'tts not ready' : 'generating'})`)
       return

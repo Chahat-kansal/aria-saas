@@ -303,6 +303,8 @@ function handleAudioChunkMsg(msg: Record<string, unknown>): void {
   // Wall-clock time when this chunk will start playing
   const chunkStartMs = Date.now() + Math.max(0, (chunkCtxStart - ctx.currentTime)) * 1000
 
+  console.log(`[AriaVoice] chunk seq=${seq} id=${msgId} scheduled at ctx=${chunkCtxStart.toFixed(3)}s (${audioData.length}samp@${rate}Hz offset=${((chunkStartMs - (_firstChunkStartMs || chunkStartMs)) / 1000).toFixed(2)}s)`)
+
   if (seq === 0) {
     _firstChunkStartMs = chunkStartMs
     _accVisemes        = []
@@ -400,7 +402,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     try {
-      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=4', { type: 'module' })
+      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=5', { type: 'module' })
 
       _worker.onmessage = (e: MessageEvent) => {
         const msg = e.data as Record<string, unknown>
