@@ -47,6 +47,19 @@ const GESTURE_SETS: Record<string, string[]> = {
   neutral:   ['side', 'index'],
 }
 
+// Head/neck bones owned by manual sway — strip their tracks from VRMA clips so
+// the mixer never fights manual control.
+const HEAD_BONES = new Set(['J_Bip_C_Head', 'J_Bip_C_Neck'])
+function filterHeadTracks(clip: THREE.AnimationClip): THREE.AnimationClip {
+  const tracks = clip.tracks.filter(t => !HEAD_BONES.has(t.name.split('.')[0]))
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks, clip.blendMode)
+}
+
+type GestureBlendOut = {
+  startMs: number; durationMs: number
+  lUAz: number; rUAz: number; lUAx: number; rUAx: number; lLAx: number; rLAx: number
+}
+
 function AvatarScene({ mode, replyText, mood, gesture }: {
   mode: string; replyText: string; mood: string; gesture: string
 }) {
@@ -74,8 +87,9 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   const gestureIdxRef = useRef(0);  // rotates through GESTURE_SETS per mood
 
   // Scheduled timers for sentence-timed gestures + head nods (Part 3)
-  const gestureTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const headNodEndRef    = useRef<number>(0);  // ms timestamp when active nod ends
+  const gestureTimersRef  = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const headNodEndRef     = useRef<number>(0);  // ms timestamp when active nod ends
+  const gestureBlendOutRef = useRef<GestureBlendOut | null>(null);
 
   const unsubSpeakStartRef = useRef<(() => void) | null>(null);
   const unsubSpeakEndRef   = useRef<(() => void) | null>(null);
@@ -175,7 +189,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       if (idleRes.status === 'fulfilled') {
         idleVrma = idleRes.value.userData.vrmAnimations?.[0];
         if (idleVrma) {
-          const idleClip = createVRMAnimationClip(idleVrma, vrm);
+          const idleClip = filterHeadTracks(createVRMAnimationClip(idleVrma, vrm));
           const idleAction = mixer.clipAction(idleClip);
           idleAction.setLoop(THREE.LoopRepeat, Infinity);
           idleActionRef.current = idleAction;
@@ -189,7 +203,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       if (talkRes.status === 'fulfilled') {
         const talkVrma = talkRes.value.userData.vrmAnimations?.[0];
         if (talkVrma) {
-          const talkClip = createVRMAnimationClip(talkVrma, vrm);
+          const talkClip = filterHeadTracks(createVRMAnimationClip(talkVrma, vrm));
           if (talkClip.tracks.length > 2) {
             const talkAction = mixer.clipAction(talkClip);
             talkAction.setLoop(THREE.LoopRepeat, Infinity);
@@ -249,7 +263,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         const vrmaGreet = greetRes.value.userData.vrmAnimations?.[0];
         if (vrmaGreet) {
           _greetingPlayedThisSession = true;
-          const greetClip = createVRMAnimationClip(vrmaGreet, vrm);
+          const greetClip = filterHeadTracks(createVRMAnimationClip(vrmaGreet, vrm));
           const greetAction = mixer.clipAction(greetClip);
           greetAction.setLoop(THREE.LoopOnce, 1);
           greetAction.play();
@@ -372,62 +386,97 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     }
   }, [replyText]);
 
-  // ── Frame loop (unchanged idle/talk/blink logic; lip-sync extended) ─────
+  // ── Frame loop ────────────────────────────────────────────────────────────
+  // Execution order: mixer.update → manual bone overrides → vrm.update (LAST).
+  // vrm.update runs last so spring bones and look-at process the FINAL bone
+  // state after all gesture/head overrides are applied.
   useFrame((_, delta) => {
     const vrm = vrmRef.current;
     if (!vrm || !vrmReadyRef.current) return;
     try {
 
-    // Mixer runs for avatar's full lifetime (idle/talk clips + greeting)
+    // 1. Mixer tick — writes bone rotations from animation clips
     if (mixerRef.current) mixerRef.current.update(delta);
 
     clock.current += delta;
     const t = clock.current;
-    vrm.update(delta);
     const bones = bonesRef.current;
 
-    // Manual breathing only when no idle animation provides it via mixer.
-    // Decision: REMOVE when idle.vrma loaded; keep as fallback otherwise.
+    // 2. Manual breathing — only when idle.vrma not loaded (mixer handles it otherwise)
     if (!idleActionRef.current) {
       if (bones.chest) bones.chest.rotation.x = Math.sin(t * 0.8) * 0.012;
       if (bones.spine) bones.spine.rotation.x = Math.sin(t * 0.8) * 0.008;
     }
 
-    // Head sway
+    // 3. Head / neck sway — manual override AFTER mixer (head tracks stripped from clips)
     if (bones.head) {
       bones.head.rotation.y = Math.sin(t * 0.3) * 0.06;
-      bones.head.rotation.x = 0 + Math.sin(t * 0.25) * 0.02;
+      bones.head.rotation.x = Math.sin(t * 0.25) * 0.02;
     }
     if (bones.neck) {
       bones.neck.rotation.y = Math.sin(t * 0.3) * 0.03;
       bones.neck.rotation.x = -0.08;
     }
 
-    // Arms: breathing unless a gesture is active
-    if (!gestureRef.current) {
-      if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2 + Math.sin(t * 0.8) * 0.015;
-      if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2 - Math.sin(t * 0.8) * 0.015;
+    // 4. Head nod pulses at sentence boundaries
+    const nodNow = Date.now()
+    if (headNodEndRef.current > nodNow && bones.head) {
+      const nodProgress = 1 - (headNodEndRef.current - nodNow) / 280
+      bones.head.rotation.x += Math.sin(nodProgress * Math.PI) * 0.06
     }
 
-    // Gesture arm override — supports mirrorLeft for natural L/R alternation
+    // 5. Talking — additional head micro-movement
+    if (mode === 'talking' && bones.head) {
+      bones.head.rotation.y += Math.sin(t * 2.5) * 0.02;
+      bones.head.rotation.x += Math.sin(t * 1.8) * 0.01;
+    }
+
+    // 6. Arm control — gesture wins; blend-out eases back; breathing is fallback
+    //    Breathing: written here so blend-out can read it as the "rest target"
+    if (!gestureRef.current && !idleActionRef.current) {
+      if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2 + Math.sin(t * 0.8) * 0.015;
+      if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2  - Math.sin(t * 0.8) * 0.015;
+    }
+
+    // Gesture blend-out: lerp from captured end-pose toward current bone state (rest target)
+    if (gestureBlendOutRef.current && !gestureRef.current) {
+      const bo = gestureBlendOutRef.current
+      const progress = Math.min(1, (Date.now() - bo.startMs) / bo.durationMs)
+      if (progress >= 1) {
+        gestureBlendOutRef.current = null
+      } else {
+        // After mixer.update (or breathing write), bones hold the rest target — lerp toward it
+        if (bones.lUpperArm) bones.lUpperArm.rotation.z = THREE.MathUtils.lerp(bo.lUAz, bones.lUpperArm.rotation.z, progress)
+        if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(bo.rUAz, bones.rUpperArm.rotation.z, progress)
+        if (bones.lUpperArm) bones.lUpperArm.rotation.x = THREE.MathUtils.lerp(bo.lUAx, bones.lUpperArm.rotation.x, progress)
+        if (bones.rUpperArm) bones.rUpperArm.rotation.x = THREE.MathUtils.lerp(bo.rUAx, bones.rUpperArm.rotation.x, progress)
+        if (bones.lLowerArm) bones.lLowerArm.rotation.x = THREE.MathUtils.lerp(bo.lLAx, bones.lLowerArm.rotation.x, progress)
+        if (bones.rLowerArm) bones.rLowerArm.rotation.x = THREE.MathUtils.lerp(bo.rLAx, bones.rLowerArm.rotation.x, progress)
+      }
+    }
+
+    // Active gesture — owns only upperArm/lowerArm; applied post-mixer so it wins the frame
     if (gestureRef.current) {
       const { name, end, mirrorLeft } = gestureRef.current
       const remaining = end - Date.now()
-      // Bone aliases based on mirror flag
-      const ua  = mirrorLeft ? bones.lUpperArm : bones.rUpperArm
-      const la  = mirrorLeft ? bones.lLowerArm : bones.rLowerArm
+      const ua      = mirrorLeft ? bones.lUpperArm : bones.rUpperArm
+      const la      = mirrorLeft ? bones.lLowerArm : bones.rLowerArm
       const uaZ_rest = mirrorLeft ? -1.2 : 1.2
-      const uaZ_sign = mirrorLeft ? -1 : 1   // lerp targets flip sign for left arm
+      const uaZ_sign = mirrorLeft ? -1 : 1
       if (remaining <= 0) {
+        // Capture current bone state and start 0.4s blend-out (no snap)
+        gestureBlendOutRef.current = {
+          startMs: Date.now(), durationMs: 400,
+          lUAz: bones.lUpperArm?.rotation.z ?? -1.2,
+          rUAz: bones.rUpperArm?.rotation.z ?? 1.2,
+          lUAx: bones.lUpperArm?.rotation.x ?? 0,
+          rUAx: bones.rUpperArm?.rotation.x ?? 0,
+          lLAx: bones.lLowerArm?.rotation.x ?? 0,
+          rLAx: bones.rLowerArm?.rotation.x ?? 0,
+        }
         gestureRef.current = null
-        if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2
-        if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2
-        if (bones.rLowerArm) bones.rLowerArm.rotation.x = 0.0
-        if (bones.lLowerArm) bones.lLowerArm.rotation.x = 0.0
-        if (bones.rUpperArm) bones.rUpperArm.rotation.x = 0.0
-        if (bones.lUpperArm) bones.lUpperArm.rotation.x = 0.0
       } else {
-        const total = 3000
+        const total   = 3000
         const elapsed = total - remaining
         const easeIn  = Math.min(1, elapsed / 400)
         const easeOut = Math.min(1, remaining / 400)
@@ -451,21 +500,6 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
             break
         }
       }
-    }
-
-    // Head nod pulses at sentence boundaries
-    const nodNow = Date.now()
-    if (headNodEndRef.current > nodNow && bones.head) {
-      const nodProgress = 1 - (headNodEndRef.current - nodNow) / 280
-      // Quick dip-and-recover (sin arch)
-      const nodAmt = Math.sin(nodProgress * Math.PI) * 0.06
-      bones.head.rotation.x += nodAmt
-    }
-
-    // Talking — more head movement
-    if (mode === 'talking' && bones.head) {
-      bones.head.rotation.y += Math.sin(t * 2.5) * 0.02;
-      bones.head.rotation.x += Math.sin(t * 1.8) * 0.01;
     }
 
     // Blink
@@ -519,6 +553,9 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         talkStart.current = null;
       }
     }
+
+    // 8. VRM update LAST — runs spring bones + look-at against the fully-overridden bone state
+    vrm.update(delta);
 
     } catch (e) {
       if (!frameErrorRef.current) {
