@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { speakAriaText, stopAriaSpeech, initVoice, getVoiceBackend } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, getVoiceBackend } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 // Avatar loaded client-only (Three.js / WebGL)
@@ -114,18 +114,14 @@ export default function TalkToAria({ className }: { className?: string }) {
       setReplyText(reply)
       setPhase('speaking')
 
-      // Speak via HeadTTS (WebGPU) or speechSynthesis (fallback)
-      speakAriaText(reply, (_schedule, _startMs) => {
-        // After speech ends (HeadTTS onend callback or speechSynthesis onend)
-        // transition back to idle. Use a slightly generous timeout so the
-        // avatar's mouth finishes moving before we reset.
-        const approxMs = Math.max(1500, reply.split(' ').length * 350)
-        setTimeout(() => {
-          setPhase('idle')
-          setReplyText('')
-          inputRef.current?.focus()
-        }, approxMs)
-      })
+      // AriaTalkingHead's useEffect is the sole caller of speakAriaText (no double-speak).
+      // Timer approximates speech duration so the parent transitions back to idle.
+      const approxMs = Math.max(1500, reply.split(' ').length * 350)
+      setTimeout(() => {
+        setPhase('idle')
+        setReplyText('')
+        inputRef.current?.focus()
+      }, approxMs)
 
     } catch (e) {
       setError((e as Error).message ?? 'Network error')
@@ -264,7 +260,7 @@ export default function TalkToAria({ className }: { className?: string }) {
         </div>
 
         {/* Voice backend badge (debug/info) */}
-        {voiceBackend === 'webgpu-headtts' && (
+        {voiceBackend.startsWith('kokoro') && (
           <div style={{
             position: 'absolute', top: 14, right: 14, zIndex: 10,
             background: 'rgba(127,184,151,.25)',
@@ -444,7 +440,7 @@ export default function TalkToAria({ className }: { className?: string }) {
             style={{ color: T.deep, textDecoration: 'none', fontWeight: 500 }}>
             Aria OS
           </a>
-          {voiceBackend === 'webgpu-headtts' ? ' · HeadTTS lip-sync' : ' · speechSynthesis voice'}
+          {voiceBackend.startsWith('kokoro') ? ' · Kokoro voice' : ' · speechSynthesis voice'}
         </p>
       </div>
 

@@ -3,38 +3,35 @@
  *
  * Voice chain
  * ───────────
- * WebGPU available (Chrome/Edge 113+)
- *   → HeadTTS + Kokoro af_heart voice (warm, natural-sounding AI TTS)
- *   → HeadTTS handles audio via Web Audio API internally
- *   → Provides Oculus phoneme-level viseme timing for accurate lip-sync
- *   → Visemes are anchored to HeadTTS audio start time (onend)
+ * Primary (kokoro-js worker, npm-bundled):
+ *   WebGPU (Chrome/Edge 113+) → fp32 model, warm af_heart voice, ~330 MB first load
+ *   WASM  (Safari, Firefox, no WebGPU) → q8 model, still Kokoro, ~80 MB first load
+ *   Model downloads from HuggingFace on first use then cached by browser forever.
+ *   Audio plays via Web Audio API (AudioContext + BufferSource).
+ *   Visemes: character-duration schedule (textToVisemes.ts) scaled to actual audio
+ *   duration — gives accurate lip-sync timing without phoneme data.
  *
- * No WebGPU (Firefox, Safari, older Chrome)
- *   → window.speechSynthesis fallback (robotic but functional)
- *   → Caller uses character-based visemes (textToVisemes.ts)
+ * Fallback: window.speechSynthesis (robotic but universal).
+ *   Used when kokoro worker is still loading or unavailable.
  *
- * HeadTTS static assets live in public/headtts/ (copied from npm package at build).
- * The worker is loaded via a Blob URL so webpack never tries to bundle it.
+ * Public API is unchanged — AriaTalkingHead, AriaFloatingPanel, TalkToAria
+ * consume initVoice / speakAriaText / stopAriaSpeech / getVoiceBackend exactly
+ * as before.
  */
 
-// ── Oculus viseme IDs → VRoid blendshape morph names ──────────────────────
-const OCULUS_TO_VROID: Record<string, string> = {
-  sil: '',    // silence   — close
-  PP:  '',    // p/b       — bilabial close
-  FF:  '',    // f/v       — labiodental close
-  TH:  'ih',  // th        — tongue forward → ih
-  DD:  '',    // d/t       — alveolar close
-  kk:  '',    // k/g       — velar close
-  CH:  'ih',  // ch        — palatal → ih
-  SS:  'ih',  // s/z       — sibilant → ih
-  nn:  '',    // n/m       — nasal close
-  RR:  'ou',  // r         — rhotic → ou
-  aa:  'aa',  // a         — open vowel → aa
-  E:   'ee',  // e         — front mid → ee
-  I:   'ih',  // i         — front high → ih
-  O:   'oh',  // o         — back mid → oh
-  U:   'ou',  // u         — back high → ou
+import { buildVisemes } from '@/components/aria/textToVisemes'
+
+// Fcl_MTH_* (textToVisemes output) → VRoid morph names (AriaTalkingHead input)
+const FCL_TO_MORPH: Record<string, string> = {
+  'Fcl_MTH_A':     'aa',
+  'Fcl_MTH_I':     'ih',
+  'Fcl_MTH_U':     'ou',
+  'Fcl_MTH_E':     'ee',
+  'Fcl_MTH_O':     'oh',
+  'Fcl_MTH_Close': '',
 }
+
+// ── Public types ───────────────────────────────────────────────────────────
 
 export type VisemeEntry = {
   morph:  string   // '' | 'aa' | 'ih' | 'ou' | 'ee' | 'oh'
@@ -43,41 +40,31 @@ export type VisemeEntry = {
   value:  number   // blend weight (0..1)
 }
 
-export type SpeechBackend = 'webgpu-headtts' | 'speechsynthesis' | 'none'
+export type SpeechBackend = 'kokoro-webgpu' | 'kokoro-wasm' | 'speechsynthesis' | 'none'
 
-// ── Singletons ─────────────────────────────────────────────────────────────
-let _backend:      SpeechBackend   = 'none'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _tts:          any             = null
-let _headTTSReady: boolean         = false   // true only after clean connect()
+// ── Module singletons ──────────────────────────────────────────────────────
+
+let _backend:      SpeechBackend = 'none'
+let _worker:       Worker | null = null
+let _workerReady:  boolean       = false
 let _initPromise:  Promise<void> | null = null
-let _pendingVisemes: VisemeEntry[] = []
+
+// Web Audio
+let _audioCtx:      AudioContext | null           = null
+let _currentSource: AudioBufferSourceNode | null  = null
+
+// Pending speak callback — one active utterance at a time
+let _pendingCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
+let _pendingText:  string = ''
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function toVisemeEntry(oculusId: string, vtimeMs: number, vdurMs: number): VisemeEntry {
-  const morph = OCULUS_TO_VROID[oculusId] ?? ''
-  return {
-    morph,
-    value: morph ? 0.75 : 0,
-    start: vtimeMs / 1000,
-    end:   (vtimeMs + vdurMs) / 1000,
-  }
-}
-
-function batchToEntries(data: Record<string, unknown>): VisemeEntry[] {
-  const visemes = (data.visemes    as string[] | undefined) ?? []
-  const vtimes  = (data.vtimes     as number[] | undefined) ?? []
-  const vdurs   = (data.vdurations as number[] | undefined) ?? []
-  return visemes.map((v, i) => toVisemeEntry(v, vtimes[i] ?? 0, vdurs[i] ?? 80))
-}
-
 export function cleanForSpeech(text: string): string {
   return text
-    .replace(/\[(?:mood|gesture):\w+\]/g, '')     // strip [mood:X] [gesture:Y]
-    .replace(/!\[.*?\]\(.*?\)/g, '')              // markdown images
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')      // links → text
-    .replace(/[#*_`>~|]/g, ' ')                   // markdown syntax
+    .replace(/\[(?:mood|gesture):\w+\]/g, '')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#*_`>~|]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -95,98 +82,152 @@ function preferredVoice(): SpeechSynthesisVoice | null {
   )
 }
 
-// ── HeadTTS WebGPU init ────────────────────────────────────────────────────
+/**
+ * Build a VisemeEntry[] from character-duration visemes, scaled so the total
+ * duration matches the actual audio length. This gives accurate lip-sync
+ * timing without needing phoneme data from the TTS engine.
+ */
+function buildScaledVisemes(text: string, audioDurSecs: number): VisemeEntry[] {
+  const raw = buildVisemes(text)
+  if (!raw.length || audioDurSecs <= 0) return []
+  const rawDur = raw[raw.length - 1].end || 1
+  const scale  = audioDurSecs / rawDur
+  return raw.map(v => ({
+    morph:  FCL_TO_MORPH[v.morph as string] ?? '',
+    start:  v.start * scale,
+    end:    v.end   * scale,
+    value:  v.value,
+  }))
+}
 
-const HEADTTS_MAX_ATTEMPTS = 3
-const HEADTTS_RETRY_MS     = 600
-
-async function tryInitHeadTTS(): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false
-
-  // Force the GPU process to initialise before the worker spawned by HeadTTS
-  // requests it — prevents a timing race on first load.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const adapter = await (navigator as any).gpu.requestAdapter()
-    if (!adapter) return false
-  } catch {
-    return false
-  }
-
-  try {
-    const mod = await import(/* webpackIgnore: true */ '/headtts/modules/headtts.mjs' as string)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const HeadTTS = (mod as any).HeadTTS
-    if (typeof HeadTTS !== 'function') throw new Error('HeadTTS class not found in module')
-
-    for (let attempt = 1; attempt <= HEADTTS_MAX_ATTEMPTS; attempt++) {
-      // Fresh instance per attempt — no stale worker state carries over
+function getAudioCtx(): AudioContext {
+  if (!_audioCtx || _audioCtx.state === 'closed') {
+    _audioCtx = new (
+      window.AudioContext ||
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tts: any = new HeadTTS({
-        workerModule:  '/headtts/modules/worker-tts.mjs',
-        dictionaryURL: '/headtts/dictionaries',
-        languages:     ['en-us'],
-        defaultVoice:  'af_heart',
-        defaultSpeed:  1.0,
-      })
-
-      let hadConnectionError = false
-
-      tts.onmessage = (msg: { type: string; data?: Record<string, unknown> }) => {
-        if (msg.type === 'audio' && msg.data) {
-          _pendingVisemes.push(...batchToEntries(msg.data))
-        }
-      }
-
-      tts.onerror = (err: unknown) => {
-        const isEE = typeof ErrorEvent !== 'undefined' && err instanceof ErrorEvent
-        const msg  = isEE ? (err as ErrorEvent).message : err instanceof Error ? err.message : String(err)
-        if (msg.includes('connection failed') || msg.includes('Failed to start')) {
-          if (isEE) {
-            const ee = err as ErrorEvent
-            console.error('[AriaVoice] HeadTTS attempt', attempt, 'worker error:', msg,
-              '| file:', ee.filename, '| line:', ee.lineno, '| col:', ee.colno)
-          } else {
-            console.error('[AriaVoice] HeadTTS attempt', attempt, 'worker error:', err)
-          }
-          hadConnectionError = true
-        } else {
-          console.warn('[AriaVoice] HeadTTS error:', err)
-        }
-      }
-
-      try {
-        await tts.connect({ voice: 'af_heart', rate: 1.0 })
-      } catch (connectErr) {
-        console.error('[AriaVoice] HeadTTS attempt', attempt, 'connect() threw:', connectErr)
-        hadConnectionError = true
-      }
-
-      if (hadConnectionError) {
-        if (attempt < HEADTTS_MAX_ATTEMPTS) {
-          await new Promise<void>(r => setTimeout(r, HEADTTS_RETRY_MS))
-          continue
-        }
-        console.error('[AriaVoice] HeadTTS failed: connect failed after', HEADTTS_MAX_ATTEMPTS, 'attempts')
-        return false
-      }
-
-      // Clean connect — set runtime error handler, mark ready
-      tts.onerror = (err: unknown) => {
-        console.error('[AriaVoice] HeadTTS failed:', err)
-      }
-      _tts = tts
-      _headTTSReady = true
-      _backend = 'webgpu-headtts'
-      console.log('[AriaVoice] HeadTTS Kokoro af_heart ready')
-      return true
-    }
-
-    return false
-  } catch (e) {
-    console.error('[AriaVoice] HeadTTS failed:', e)
-    return false
+      (window as any).webkitAudioContext
+    )()
   }
+  return _audioCtx
+}
+
+async function playKokoroAudio(
+  audio:      Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  text:       string,
+  onSchedule: (schedule: VisemeEntry[] | null, startMs: number) => void,
+): Promise<void> {
+  const ctx = getAudioCtx()
+  if (ctx.state === 'suspended') {
+    await ctx.resume()
+  }
+
+  // Stop any currently playing audio before starting the new one
+  if (_currentSource) {
+    try { _currentSource.stop() } catch { /* already stopped */ }
+    _currentSource = null
+  }
+
+  const buffer = ctx.createBuffer(1, audio.length, sampleRate)
+  // audio is transferred from the worker — always backed by a plain ArrayBuffer
+  buffer.copyToChannel(audio as Float32Array<ArrayBuffer>, 0)
+
+  const source = ctx.createBufferSource()
+  source.buffer = buffer
+  source.connect(ctx.destination)
+  _currentSource = source
+
+  source.addEventListener('ended', () => {
+    if (_currentSource === source) _currentSource = null
+  })
+
+  const startMs = Date.now()
+  source.start()
+
+  // Scale character-based visemes to actual audio duration for accurate lip-sync
+  const schedule = buildScaledVisemes(text, durationMs / 1000)
+  onSchedule(schedule.length > 0 ? schedule : null, startMs)
+}
+
+// ── Worker message handlers ────────────────────────────────────────────────
+
+function handleAudioMsg(msg: Record<string, unknown>): void {
+  const cb   = _pendingCb
+  const txt  = _pendingText
+  _pendingCb   = null
+  _pendingText = ''
+  if (!cb) return
+  playKokoroAudio(
+    msg.audio    as Float32Array,
+    msg.sampleRate as number,
+    msg.durationMs as number,
+    txt,
+    cb,
+  ).catch(err => console.error('[AriaVoice] playKokoroAudio error:', err))
+}
+
+function handleSpeakError(msg: Record<string, unknown>): void {
+  console.error('[AriaVoice] kokoro speak error:', msg.message)
+  const cb   = _pendingCb
+  const txt  = _pendingText
+  _pendingCb   = null
+  _pendingText = ''
+  if (cb) fallbackSpeechSynthesis(txt, cb)
+}
+
+// ── kokoro worker init ─────────────────────────────────────────────────────
+
+async function tryInitKokoro(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+
+  return new Promise<boolean>((resolve) => {
+    try {
+      _worker = new Worker('/workers/kokoro-tts.worker.mjs', { type: 'module' })
+
+      _worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data as Record<string, unknown>
+
+        if (msg.status === 'ready') {
+          _workerReady = true
+          const device = msg.device as string
+          _backend = device === 'webgpu' ? 'kokoro-webgpu' : 'kokoro-wasm'
+          console.log(`[AriaVoice] kokoro-js ready (${device})`)
+          return
+        }
+
+        if (msg.status === 'error') {
+          console.error('[AriaVoice] kokoro init error:', msg.message)
+          if (!_workerReady) {
+            // Model failed to load — switch to speechSynthesis
+            if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+              _backend = 'speechsynthesis'
+              console.log('[AriaVoice] Fallback: window.speechSynthesis (kokoro init failed)')
+            }
+          }
+          return
+        }
+
+        if (msg.type === 'audio') { handleAudioMsg(msg); return }
+        if (msg.type === 'error') { handleSpeakError(msg) }
+      }
+
+      _worker.onerror = (e: ErrorEvent) => {
+        console.error('[AriaVoice] kokoro worker error:', e.message, '|', e.filename, 'L' + e.lineno)
+      }
+
+      _worker.postMessage({ type: 'init' })
+
+      // Resolve immediately — worker is created; model download happens in background.
+      // _workerReady flips to true once 'ready' arrives (may take minutes on first load).
+      // speakAriaText() falls back to speechSynthesis until _workerReady is true.
+      resolve(true)
+
+    } catch (err) {
+      console.error('[AriaVoice] kokoro worker creation failed:', err)
+      resolve(false)
+    }
+  })
 }
 
 // ── speechSynthesis fallback ───────────────────────────────────────────────
@@ -209,16 +250,16 @@ function fallbackSpeechSynthesis(
 
 /**
  * Detect the best voice backend. Idempotent — safe to call multiple times.
- * Priority: HeadTTS (Kokoro af_heart, WebGPU) → speechSynthesis fallback
+ * Resolves quickly (after worker creation), not after model download.
+ * Priority: kokoro-js (WebGPU → WASM) → speechSynthesis fallback.
  */
 export function initVoice(): Promise<void> {
   if (_initPromise) return _initPromise
   _initPromise = (async () => {
-    // 1. HeadTTS Kokoro af_heart (WebGPU — phoneme-level lip-sync, warm voice)
-    const htOk = await tryInitHeadTTS()
-    if (htOk) return
+    const ok = await tryInitKokoro()
+    if (ok) return  // worker created; model downloads in background
 
-    // 2. Fallback: browser speechSynthesis
+    // Worker creation failed — use speechSynthesis immediately
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       _backend = 'speechsynthesis'
       console.log('[AriaVoice] Fallback: window.speechSynthesis')
@@ -228,15 +269,10 @@ export function initVoice(): Promise<void> {
 }
 
 /**
- * Speak text aloud and call `onSchedule` with viseme timing once ready.
- *
- * WebGPU path  — HeadTTS synthesises text; Kokoro af_heart audio plays
- *                via Web Audio API internally. On `onend`, viseme schedule
- *                is handed to the caller (anchored to HeadTTS audio start).
- *                Do NOT call speechSynthesis — HeadTTS handles audio.
- *
- * Fallback     — speechSynthesis starts immediately; onSchedule(null) is
- *                called so the caller falls back to character-based visemes.
+ * Speak text and call onSchedule with a viseme timing schedule + audio start time.
+ * Single ownership: ONLY the component that controls replyText/AriaTalkingHead
+ * should call this — not the parent panel. Calling from two places per reply
+ * causes double-audio.
  */
 export function speakAriaText(
   text: string,
@@ -245,43 +281,36 @@ export function speakAriaText(
   const clean = cleanForSpeech(text)
   if (!clean) return
 
-  // Cap at 150 words so speech isn't excessively long
   const words = clean.split(' ')
   const speechText = words.length > 150
     ? words.slice(0, 150).join(' ') + '…'
     : clean
 
-  _pendingVisemes = []
-
-  // ── HeadTTS + Kokoro af_heart (WebGPU) ───────────────────────────────────
-  // _headTTSReady is only true after a confirmed clean connect() with voice config.
-  if (_backend === 'webgpu-headtts' && _tts && _headTTSReady) {
-    _tts.clear?.()
-    _pendingVisemes = []
-
-    _tts.onend = () => {
-      // HeadTTS Kokoro af_heart audio is playing via Web Audio API.
-      // Do NOT call window.speechSynthesis — that produces the robotic voice.
-      // Visemes are anchored to onend time (= when HeadTTS starts audio playback).
-      const schedule = _pendingVisemes.length > 0 ? [..._pendingVisemes] : null
-      onSchedule(schedule, Date.now())
-    }
-
-    _tts.synthesize(speechText)
+  // kokoro path: worker ready
+  if (_worker && _workerReady) {
+    _pendingCb   = onSchedule
+    _pendingText = speechText
+    _worker.postMessage({ type: 'speak', text: speechText, voice: 'af_heart', speed: 1.0 })
     return
   }
 
-  // ── speechSynthesis fallback (no WebGPU) ─────────────────────────────────
+  // Fallback: speechSynthesis (kokoro still loading or unavailable)
   fallbackSpeechSynthesis(speechText, onSchedule)
 }
 
-/** Cancel any active speech (both HeadTTS and speechSynthesis). */
+/** Cancel any active speech (kokoro AudioContext source + speechSynthesis). */
 export function stopAriaSpeech(): void {
+  _pendingCb   = null
+  _pendingText = ''
+
+  if (_currentSource) {
+    try { _currentSource.stop() } catch { /* already stopped */ }
+    _currentSource = null
+  }
+
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel()
   }
-  if (_tts?.clear) _tts.clear()
-  _pendingVisemes = []
 }
 
 export function getVoiceBackend(): SpeechBackend { return _backend }

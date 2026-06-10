@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { speakAriaText, stopAriaSpeech, initVoice } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 const AriaTalkingHead = dynamic(
@@ -141,14 +141,13 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
       setReply(clean)
       setPhase('speaking')
 
-      speakAriaText(clean, (_schedule, _startMs) => {
-        const approxMs = Math.max(1500, clean.split(' ').length * 350)
-        setTimeout(() => {
-          setPhase('idle')
-          setReply('')
-          inputRef.current?.focus()
-        }, approxMs)
-      })
+      // AriaTalkingHead's useEffect is the sole caller of speakAriaText (no double-speak).
+      const approxMs = Math.max(1500, clean.split(' ').length * 350)
+      setTimeout(() => {
+        setPhase('idle')
+        setReply('')
+        inputRef.current?.focus()
+      }, approxMs)
     } catch (e) {
       setError((e as Error).message ?? 'Network error')
       setPhase('idle')

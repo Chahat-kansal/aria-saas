@@ -3,6 +3,16 @@
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig = {
+  // Prevent Node.js-only @huggingface/transformers modules from being bundled
+  // in browser chunks (including the kokoro-js Web Worker bundle).
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'sharp$': false,
+      'onnxruntime-node$': false,
+    }
+    return config
+  },
   generateBuildId: async () => {
     // Force unique build ID every deployment so Vercel never restores stale CSS cache
     return `build-${Date.now()}`
