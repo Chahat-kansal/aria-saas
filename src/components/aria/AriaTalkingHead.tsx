@@ -323,11 +323,12 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         }
       }
 
-      // Clear lip-sync once the viseme schedule is exhausted
+      // Safety fallback: close lips if viseme schedule ended long ago with no onSpeakEnd signal.
+      // onSpeakEnd (source.ended) is authoritative — this only fires in error/hang cases.
       const maxEnd = useHtVisemes.current
         ? (htVisemes.current[htVisemes.current.length - 1]?.end ?? 0)
         : (visemes.current[visemes.current.length - 1]?.end ?? 0);
-      if (elapsed > maxEnd + 0.5) {
+      if (elapsed > maxEnd + 5.0) {
         talkStart.current = null;
       }
     }

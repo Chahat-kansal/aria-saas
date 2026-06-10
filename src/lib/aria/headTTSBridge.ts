@@ -98,6 +98,10 @@ let _speakWatchdog: ReturnType<typeof setTimeout> | null = null
 let _onSpeakStart: (() => void) | null = null
 let _onSpeakEnd:   (() => void) | null = null
 
+// Streaming end-of-stream flag: set when isLast sentinel arrives while sources still play.
+// The last source.ended checks this to fire onSpeakEnd at the right moment.
+let _streamEnded: boolean = false
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 export function cleanForSpeech(text: string): string {
@@ -178,6 +182,7 @@ function postSpeakToWorker(
   _nextStartTime     = 0
   _firstChunkStartMs = 0
   _accVisemes        = []
+  _streamEnded       = false
   clearSpeakWatchdog()
 
   const watchdogMs = _utteranceCount === 0 ? 20_000 : 10_000
@@ -263,14 +268,16 @@ function handleAudioChunkMsg(msg: Record<string, unknown>): void {
   // Empty sentinel — end of stream, no audio to schedule
   if (!audioData?.length) {
     if (isLast) {
-      _pendingCb   = null
-      _pendingText = ''
-      // If no chunks remain scheduled, fire onSpeakEnd immediately;
-      // otherwise the last real chunk's 'ended' handler fires it.
+      _streamEnded = true
       if (_scheduledSources.length === 0) {
+        // All sources already ended before sentinel arrived — fire immediately
+        _pendingCb   = null
+        _pendingText = ''
+        _streamEnded = false
         _onSpeakEnd?.()
         console.log(`[AriaVoice] speech ended utterance=${msgId} (sentinel, no pending sources)`)
       }
+      // Otherwise: last source.ended will check _streamEnded and fire onSpeakEnd
     }
     return
   }
@@ -322,10 +329,19 @@ function handleAudioChunkMsg(msg: Record<string, unknown>): void {
   source.addEventListener('ended', () => {
     _scheduledSources = _scheduledSources.filter(s => s !== source)
     if (isLast) {
+      // isLast=true on a real audio chunk (future: if worker marks it directly)
       _pendingCb   = null
       _pendingText = ''
+      _streamEnded = false
       _onSpeakEnd?.()
       console.log(`[AriaVoice] speech ended utterance=${msgId} (last chunk ended)`)
+    } else if (_streamEnded && _scheduledSources.length === 0) {
+      // Sentinel already received and this was the last playing source
+      _pendingCb   = null
+      _pendingText = ''
+      _streamEnded = false
+      _onSpeakEnd?.()
+      console.log(`[AriaVoice] speech ended utterance=${msgId} (last source ended after sentinel)`)
     }
   })
 }
@@ -459,10 +475,16 @@ function fallbackSpeechSynthesis(
   utt.rate = 1.05
   const v = preferredVoice()
   if (v) utt.voice = v
-  utt.onstart = () => { _onSpeakStart?.() }
-  utt.onend   = () => { _onSpeakEnd?.() }
+  utt.onstart = () => {
+    _onSpeakStart?.()
+    const startMs = Date.now()
+    // Estimate duration at 1.05 rate (~0.38 s/word) and build a scaled viseme schedule
+    const estimatedDurSecs = Math.max(1, speechText.split(' ').length * 0.38)
+    const schedule = buildScaledVisemes(speechText, estimatedDurSecs)
+    onSchedule(schedule.length > 0 ? schedule : null, startMs)
+  }
+  utt.onend = () => { _onSpeakEnd?.() }
   window.speechSynthesis.speak(utt)
-  onSchedule(null, Date.now())
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -555,6 +577,7 @@ export function stopAriaSpeech(): void {
   _nextStartTime     = 0
   _accVisemes        = []
   _firstChunkStartMs = 0
+  _streamEnded       = false
 
   stopAllSources()
 
