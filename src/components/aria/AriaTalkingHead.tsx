@@ -35,6 +35,15 @@ const MOOD_EXPR: Record<string, { expr: string; value: number }> = {
   neutral:   { expr: 'neutral',   value: 0.0 },
 }
 
+// ── Mood → gesture-set rotation (Part 3) ─────────────────────────────────
+const GESTURE_SETS: Record<string, string[]> = {
+  happy:     ['side', 'handup', 'ok'],
+  excited:   ['handup', 'thumbup', 'side'],
+  concerned: ['shrug', 'side'],
+  thinking:  ['index', 'side'],
+  neutral:   ['side', 'index'],
+}
+
 function AvatarScene({ mode, replyText, mood, gesture }: {
   mode: string; replyText: string; mood: string; gesture: string
 }) {
@@ -57,8 +66,13 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   const useHtVisemes = useRef(false);
 
   // ── Mood + gesture state ──────────────────────────────────────────────────
-  const moodRef    = useRef<string>('neutral');
-  const gestureRef = useRef<{ name: string; end: number } | null>(null);
+  const moodRef       = useRef<string>('neutral');
+  const gestureRef    = useRef<{ name: string; end: number; mirrorLeft: boolean } | null>(null);
+  const gestureIdxRef = useRef(0);  // rotates through GESTURE_SETS per mood
+
+  // Scheduled timers for sentence-timed gestures + head nods (Part 3)
+  const gestureTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const headNodEndRef    = useRef<number>(0);  // ms timestamp when active nod ends
 
   const lastSpokenRef = useRef<string>('');
   const pendingGestureRef = useRef<string>('');
@@ -85,15 +99,14 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     }
   }, [mood])
 
-  // ── Gesture: arm the gesture; fire when speech actually starts.
-  // WASM TTS latency (9–15 s) means a 3 s window set on prop-change expires
-  // before any audio plays. We hold it in pendingGestureRef until onSchedule fires.
+  // ── Gesture: store prop-driven gesture as a hint for the next speech start.
+  // Sentence-timed gestures (Part 3) fire automatically; this handles explicit
+  // [gesture:X] tags from the AI response as a one-shot override.
   useEffect(() => {
     if (!gesture) return
     if (vrmReadyRef.current && talkStart.current !== null) {
-      // Speech already active — fire immediately
       console.log(`[AriaGesture] firing ${gesture} (immediate — speech active)`)
-      gestureRef.current = { name: gesture, end: Date.now() + 3500 }
+      gestureRef.current = { name: gesture, end: Date.now() + 3500, mirrorLeft: Math.random() > 0.5 }
     } else {
       pendingGestureRef.current = gesture
     }
@@ -254,6 +267,8 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     return () => {
       cancelled = true;
       if (greetTimeoutRef.current) { clearTimeout(greetTimeoutRef.current); greetTimeoutRef.current = null; }
+      gestureTimersRef.current.forEach(clearTimeout);
+      gestureTimersRef.current = [];
       setAvatarSpeakCallbacks({ onSpeakStart: null, onSpeakEnd: null });
       vrmReadyRef.current = false;
       frameErrorRef.current = false;
@@ -263,15 +278,16 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
 
   // ── Speech + viseme trigger: fires when replyText changes ─────────────
   useEffect(() => {
+    // Clear gesture schedule on reply clear
     if (!replyText) {
-      // Clear lip-sync state — do NOT call stopAriaSpeech() here; the bridge
-      // manages lifecycle and fires onSpeakEnd when audio actually finishes.
       lastSpokenRef.current = '';
       talkStart.current = null;
       visemes.current = [];
       htVisemes.current = [];
       useHtVisemes.current = false;
       pendingGestureRef.current = '';
+      gestureTimersRef.current.forEach(clearTimeout);
+      gestureTimersRef.current = [];
       return;
     }
 
@@ -279,9 +295,6 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     if (replyText === lastSpokenRef.current) return;
     lastSpokenRef.current = replyText;
 
-    // Start speaking. Callback fires once per streaming chunk (or once for generate).
-    // Each call updates htVisemes.current with the accumulated schedule so far;
-    // talkStart is set on the first call and remains stable for subsequent chunks.
     speakAriaText(replyText, (schedule, startMs) => {
       if (schedule && schedule.length > 0) {
         htVisemes.current = schedule;
@@ -290,18 +303,60 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         visemes.current = buildVisemes(replyText);
         useHtVisemes.current = false;
       }
-      // Update talkStart on first callback; always accept a new startMs when it's
-      // different (covers filler→real transition in Part 4).
+
       const isFirst = talkStart.current === null;
       talkStart.current = startMs;
-      if (isFirst && pendingGestureRef.current) {
-        const gName = pendingGestureRef.current;
-        pendingGestureRef.current = '';
-        console.log(`[AriaGesture] firing ${gName} (speech-start)`);
-        gestureRef.current = { name: gName, end: Date.now() + 3500 };
+
+      if (isFirst) {
+        // ── Fire prop-driven gesture hint ────────────────────────────────
+        if (pendingGestureRef.current) {
+          const gName = pendingGestureRef.current;
+          pendingGestureRef.current = '';
+          console.log(`[AriaGesture] firing ${gName} (speech-start)`);
+          gestureRef.current = { name: gName, end: Date.now() + 3500, mirrorLeft: Math.random() > 0.5 };
+        }
+
+        // ── Schedule sentence-timed gestures + head nods (Part 3) ────────
+        // Clear any leftover timers from a previous reply
+        gestureTimersRef.current.forEach(clearTimeout);
+        gestureTimersRef.current = [];
+        gestureIdxRef.current = 0;
+
+        const sentences = replyText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 3);
+        let charOffset = 0;
+        sentences.forEach((sentence, i) => {
+          const msFromStart = charOffset * 60;  // ~60 ms/char matches TTS speech rate
+          charOffset += sentence.length + 1;
+
+          // Head nod at each sentence boundary (except the very first)
+          if (i > 0) {
+            const nodDelay = Math.max(100, (startMs - Date.now()) + msFromStart - 150);
+            const nodTimer = setTimeout(() => {
+              headNodEndRef.current = Date.now() + 280;
+            }, nodDelay);
+            gestureTimersRef.current.push(nodTimer);
+          }
+
+          // Arm gesture every 1–2 sentences (skip odd sentences randomly for variety)
+          const fireGesture = (i % 2 === 0) || (Math.random() > 0.6);
+          if (fireGesture) {
+            const mood = moodRef.current;
+            const set = GESTURE_SETS[mood] ?? GESTURE_SETS.neutral;
+            const gIdx = gestureIdxRef.current % set.length;
+            gestureIdxRef.current++;
+            const gName = set[gIdx];
+            const mirrorLeft = Math.random() > 0.5;
+
+            const gDelay = Math.max(200, (startMs - Date.now()) + msFromStart + 200);
+            const gTimer = setTimeout(() => {
+              console.log(`[AriaGesture] firing ${gName} (sentence ${i}, mirror=${mirrorLeft})`);
+              gestureRef.current = { name: gName, end: Date.now() + 3000, mirrorLeft };
+            }, gDelay);
+            gestureTimersRef.current.push(gTimer);
+          }
+        });
       }
     });
-    // No cleanup stopAriaSpeech() — the unmount effect (VRM load) handles that.
   }, [replyText]);
 
   // ── Frame loop (unchanged idle/talk/blink logic; lip-sync extended) ─────
@@ -341,16 +396,23 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2 - Math.sin(t * 0.8) * 0.015;
     }
 
-    // Gesture arm override
+    // Gesture arm override — supports mirrorLeft for natural L/R alternation
     if (gestureRef.current) {
-      const { name, end } = gestureRef.current
+      const { name, end, mirrorLeft } = gestureRef.current
       const remaining = end - Date.now()
+      // Bone aliases based on mirror flag
+      const ua  = mirrorLeft ? bones.lUpperArm : bones.rUpperArm
+      const la  = mirrorLeft ? bones.lLowerArm : bones.rLowerArm
+      const uaZ_rest = mirrorLeft ? -1.2 : 1.2
+      const uaZ_sign = mirrorLeft ? -1 : 1   // lerp targets flip sign for left arm
       if (remaining <= 0) {
         gestureRef.current = null
         if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2
         if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2
         if (bones.rLowerArm) bones.rLowerArm.rotation.x = 0.0
+        if (bones.lLowerArm) bones.lLowerArm.rotation.x = 0.0
         if (bones.rUpperArm) bones.rUpperArm.rotation.x = 0.0
+        if (bones.lUpperArm) bones.lUpperArm.rotation.x = 0.0
       } else {
         const total = 3000
         const elapsed = total - remaining
@@ -360,25 +422,34 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         switch (name) {
           case 'handup':
           case 'thumbup':
-            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.35, blend)
-            if (bones.rLowerArm) bones.rLowerArm.rotation.x = THREE.MathUtils.lerp(0, -0.4, blend)
+            if (ua) ua.rotation.z = THREE.MathUtils.lerp(uaZ_rest, uaZ_sign * 0.35, blend)
+            if (la) la.rotation.x = THREE.MathUtils.lerp(0, -0.4, blend)
             break
           case 'shrug':
             if (bones.lUpperArm) bones.lUpperArm.rotation.z = THREE.MathUtils.lerp(-1.2, -0.8, blend)
             if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.8, blend)
             break
           case 'index':
-            if (bones.rUpperArm) bones.rUpperArm.rotation.x = THREE.MathUtils.lerp(0, -0.35, blend)
-            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.6, blend)
+            if (ua) ua.rotation.x = THREE.MathUtils.lerp(0, -0.35, blend)
+            if (ua) ua.rotation.z = THREE.MathUtils.lerp(uaZ_rest, uaZ_sign * 0.6, blend)
             break
           default: // side, ok
-            if (bones.rUpperArm) bones.rUpperArm.rotation.z = THREE.MathUtils.lerp(1.2, 0.55, blend)
+            if (ua) ua.rotation.z = THREE.MathUtils.lerp(uaZ_rest, uaZ_sign * 0.55, blend)
             break
         }
       }
     }
 
-    // Talking — more movement
+    // Head nod pulses at sentence boundaries
+    const nodNow = Date.now()
+    if (headNodEndRef.current > nodNow && bones.head) {
+      const nodProgress = 1 - (headNodEndRef.current - nodNow) / 280
+      // Quick dip-and-recover (sin arch)
+      const nodAmt = Math.sin(nodProgress * Math.PI) * 0.06
+      bones.head.rotation.x += nodAmt
+    }
+
+    // Talking — more head movement
     if (mode === 'talking' && bones.head) {
       bones.head.rotation.y += Math.sin(t * 2.5) * 0.02;
       bones.head.rotation.x += Math.sin(t * 1.8) * 0.01;
