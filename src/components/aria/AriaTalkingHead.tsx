@@ -57,6 +57,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
   const gestureRef = useRef<{ name: string; end: number } | null>(null);
 
   const lastSpokenRef = useRef<string>('');
+  const pendingGestureRef = useRef<string>('');
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
   const clock = useRef(0);
@@ -80,10 +81,18 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
     }
   }, [mood])
 
-  // ── Gesture: start a 3-second arm animation ───────────────────────────────
+  // ── Gesture: arm the gesture; fire when speech actually starts.
+  // WASM TTS latency (9–15 s) means a 3 s window set on prop-change expires
+  // before any audio plays. We hold it in pendingGestureRef until onSchedule fires.
   useEffect(() => {
     if (!gesture) return
-    gestureRef.current = { name: gesture, end: Date.now() + 3000 }
+    if (vrmReadyRef.current && talkStart.current !== null) {
+      // Speech already active — fire immediately
+      console.log(`[AriaGesture] firing ${gesture} (immediate — speech active)`)
+      gestureRef.current = { name: gesture, end: Date.now() + 3500 }
+    } else {
+      pendingGestureRef.current = gesture
+    }
   }, [gesture])
 
   // ── VRM load (unchanged from original) ─────────────────────────────────
@@ -175,6 +184,7 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
       visemes.current = [];
       htVisemes.current = [];
       useHtVisemes.current = false;
+      pendingGestureRef.current = '';
       return;
     }
 
@@ -193,9 +203,15 @@ function AvatarScene({ mode, replyText, mood, gesture }: {
         visemes.current = buildVisemes(replyText);
         useHtVisemes.current = false;
       }
-      // Only update talkStart on first callback (startMs stays constant across chunks)
-      if (talkStart.current === null) {
-        talkStart.current = startMs;
+      // Update talkStart on first callback; always accept a new startMs when it's
+      // different (covers filler→real transition in Part 4).
+      const isFirst = talkStart.current === null;
+      talkStart.current = startMs;
+      if (isFirst && pendingGestureRef.current) {
+        const gName = pendingGestureRef.current;
+        pendingGestureRef.current = '';
+        console.log(`[AriaGesture] firing ${gName} (speech-start)`);
+        gestureRef.current = { name: gName, end: Date.now() + 3500 };
       }
     });
     // No cleanup stopAriaSpeech() — the unmount effect (VRM load) handles that.
