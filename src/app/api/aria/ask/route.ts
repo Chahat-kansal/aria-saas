@@ -33,6 +33,7 @@ import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
+import { findProductByQuery, buildProductMapBlock } from '@/lib/aria/product-map'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -435,6 +436,26 @@ async function _POST(req: Request) {
       action: null,
       cost_usd_cents: 0,
     })
+  }
+
+  // NAV fast-path — "where is X / how do I open X / where can I find X"
+  // Answered directly from PRODUCT_MAP — no LLM call, no clarifying question.
+  const NAV_PATTERN = /\b(where|how do i|how to|find|open|go to|navigate|get to|access|show me|take me to|can i find|can i see)\b.{0,60}\b(pos|terminal|dashboard|staff|roster|inventory|stock|reports?|reviews?|customers?|autopilot|daily briefing|intelligence|analytics|settings|reels|social|marketing|promotions?|loyalty|gift card|laybys?|tables?|kds|kitchen|timesheets?|payroll|leave|schedule|shifts?|cash|end.?of.?day|stocktake|suppliers?|purchase orders?|invoices?|bookings?|orders?|community|chat|website chat|warehouse|compliance|billing|plan|integrations?|xero|receipts?|barcode|price tick|labels?|waste|void|fitting room|split|competitors?|display|ask aria|agents?|churn|winback|missed demand|profit leak|delivery|recipes?|slow day|weekly|shift report|reorder|bas|tax|ad network|seo|tabs?|quotes?|bundles?|variance)\b/i
+  if (NAV_PATTERN.test(message)) {
+    const match = findProductByQuery(message)
+    if (match) {
+      const navReply = `You can find **${match.feature}** at \`${match.route}\` in the sidebar.\n\n${match.blurb}.`
+      let navConvId = conversationId
+      try { navConvId = await upsertConversation(bid, user.id, conversationId, message, navReply, 'navigation') } catch (_e) { /* non-fatal */ }
+      return NextResponse.json({
+        response: navReply,
+        conversation_id: navConvId ?? conversationId,
+        intent: 'navigation',
+        action: null,
+        cost_usd_cents: 0,
+        used_council: false,
+      })
+    }
   }
 
   // GENERAL fast-path — non-business question: skip all business context, answer directly as a capable assistant
@@ -1117,6 +1138,8 @@ For ALL of these: just answer in the text field. No block needed.
 The owner is talking to an AI business co-owner who knows everything about running an Australian small business and can help with anything.
 
 ${ARTIFACT_INSTRUCTIONS}
+
+${buildProductMapBlock()}
 
 RESPONSE STYLE - CRITICAL:
 You are a senior business advisor, not a chatbot. Every response must be substantive.
