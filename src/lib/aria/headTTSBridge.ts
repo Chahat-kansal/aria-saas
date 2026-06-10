@@ -3,25 +3,27 @@
  *
  * Voice chain
  * ───────────
- * Primary (kokoro-js worker, static file in public/):
- *   WebGPU (Chrome/Edge 113+) → fp16 model, af_heart voice, ~165 MB first load
- *   WASM  (Safari, Firefox, no WebGPU) → q8 model, ~80 MB first load
+ * Primary (kokoro-js WASM worker, static file in public/):
+ *   device=wasm, dtype=q8, ~80 MB first load, af_heart voice.
+ *   WebGPU available as escape hatch via ?voicegpu=1 in Worker URL (not default —
+ *   WebGPU fp16/q8 causes GPU contention with Three.js and slow first inference).
  *   Model downloads from HuggingFace on first use then cached by browser forever.
  *   Audio plays via Web Audio API (AudioContext + BufferSource).
  *   Visemes: character-duration schedule (textToVisemes.ts) scaled to actual audio
  *   duration — gives accurate lip-sync timing without phoneme data.
  *
  * Fallback: window.speechSynthesis (robotic but universal).
- *   Used when kokoro worker is still loading or unavailable.
+ *   Used on watchdog timeout or if worker creation fails.
  *
  * ── Message contract (worker ↔ bridge) ──────────────────────────────────────
  * IN  { type: 'init' }
- * IN  { type: 'speak', text: string, voice: string, speed: number }
- * OUT { status: 'ready', device: 'webgpu'|'wasm' }
+ * IN  { type: 'speak', text: string, id: number }
+ * OUT { status: 'ready', device: 'wasm'|'webgpu' }
  * OUT { status: 'error', message: string }
- * OUT { type: 'audio', audio: Float32Array, sampleRate: number, durationMs: number, text: string }
+ * OUT { type: 'audio', audio: Float32Array, sampleRate: number, durationMs: number, text: string, id: number }
  *     transfer: [audio.buffer]
- * OUT { type: 'error', stage: string, message: string, stack?: string }
+ * OUT { type: 'error', stage: string, message: string, stack?: string, id?: number }
+ * OUT { type: 'cancelled', id: number }
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Public API is unchanged — AriaTalkingHead, AriaFloatingPanel, TalkToAria
@@ -63,6 +65,12 @@ let _initPromise:  Promise<void> | null = null
 let _audioCtx:      AudioContext | null           = null
 let _currentSource: AudioBufferSourceNode | null  = null
 
+// Utterance IDs — every speakAriaText() call gets a unique, monotonically
+// increasing id. Any audio/error that arrives with an id < _currentUtteranceId
+// is stale and is discarded without playing.
+let _currentUtteranceId = 0
+let _utteranceCount     = 0   // number of speaks posted; controls watchdog duration
+
 // Pending speak callback — one active utterance at a time
 let _pendingCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
 let _pendingText:  string = ''
@@ -71,7 +79,7 @@ let _pendingText:  string = ''
 let _queuedCb:    ((schedule: VisemeEntry[] | null, startMs: number) => void) | null = null
 let _queuedText:  string = ''
 
-// 10-second watchdog: if the worker doesn't respond after posting speak, fall back
+// Watchdog: fires speechSynthesis fallback if worker doesn't respond
 let _speakWatchdog: ReturnType<typeof setTimeout> | null = null
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -99,11 +107,6 @@ function preferredVoice(): SpeechSynthesisVoice | null {
   )
 }
 
-/**
- * Build a VisemeEntry[] from character-duration visemes, scaled so the total
- * duration matches the actual audio length. This gives accurate lip-sync
- * timing without needing phoneme data from the TTS engine.
- */
 function buildScaledVisemes(text: string, audioDurSecs: number): VisemeEntry[] {
   const raw = buildVisemes(text)
   if (!raw.length || audioDurSecs <= 0) return []
@@ -135,25 +138,36 @@ function clearSpeakWatchdog(): void {
   }
 }
 
-/** Post speak message + arm 10 s watchdog. Always use this instead of posting directly. */
+/**
+ * Post a speak message + arm watchdog. Always use this instead of posting directly.
+ * FIX 3: first utterance uses 20 s watchdog (WASM session warmup); subsequent 10 s.
+ */
 function postSpeakToWorker(
   text: string,
   cb: (schedule: VisemeEntry[] | null, startMs: number) => void,
 ): void {
+  const id = ++_currentUtteranceId
   _pendingCb   = cb
   _pendingText = text
   clearSpeakWatchdog()
+
+  const watchdogMs = _utteranceCount === 0 ? 20_000 : 10_000
+  _utteranceCount++
+
   _speakWatchdog = setTimeout(() => {
     _speakWatchdog = null
+    // Bump id so any late worker audio for this utterance is discarded
+    if (_currentUtteranceId === id) _currentUtteranceId++
     const timedOutCb  = _pendingCb
     const timedOutTxt = _pendingText
     if (!timedOutCb) return
     _pendingCb   = null
     _pendingText = ''
-    console.error('[AriaVoice] speak timeout — no worker response in 10 s; falling back to speechSynthesis')
+    console.error(`[AriaVoice] speak timeout utterance=${id} (${watchdogMs / 1000}s) — falling back`)
     fallbackSpeechSynthesis(timedOutTxt, timedOutCb)
-  }, 10_000)
-  _worker!.postMessage({ type: 'speak', text, voice: 'af_heart', speed: 1.0 })
+  }, watchdogMs)
+
+  _worker!.postMessage({ type: 'speak', text, id })
 }
 
 async function playKokoroAudio(
@@ -169,14 +183,12 @@ async function playKokoroAudio(
     await ctx.resume()
   }
 
-  // Stop any currently playing audio before starting the new one
   if (_currentSource) {
     try { _currentSource.stop() } catch { /* already stopped */ }
     _currentSource = null
   }
 
   const buffer = ctx.createBuffer(1, audio.length, sampleRate)
-  // audio is transferred from the worker — always backed by a plain ArrayBuffer
   buffer.copyToChannel(audio as Float32Array<ArrayBuffer>, 0)
 
   const source = ctx.createBufferSource()
@@ -191,7 +203,6 @@ async function playKokoroAudio(
   const startMs = Date.now()
   source.start()
 
-  // Scale character-based visemes to actual audio duration for accurate lip-sync
   const schedule = buildScaledVisemes(text, durationMs / 1000)
   onSchedule(schedule.length > 0 ? schedule : null, startMs)
 }
@@ -199,39 +210,45 @@ async function playKokoroAudio(
 // ── Worker message handlers ────────────────────────────────────────────────
 
 function handleAudioMsg(msg: Record<string, unknown>): void {
+  const msgId = msg.id as number
   clearSpeakWatchdog()
+
+  // Discard stale audio — utterance was superseded or cancelled
+  if (msgId !== _currentUtteranceId) {
+    console.log(`[AriaVoice] discarding stale audio (utterance ${msgId}, current ${_currentUtteranceId})`)
+    return
+  }
+
   const cb   = _pendingCb
   const txt  = _pendingText
   _pendingCb   = null
   _pendingText = ''
 
-  const audioData = msg.audio as Float32Array
+  const audioData = msg.audio    as Float32Array
   const rate      = msg.sampleRate as number
-  console.log(`[AriaVoice] worker audio: ${audioData?.length ?? 0} samples @ ${rate} Hz`)
+  console.log(`[AriaVoice] worker audio utterance=${msgId}: ${audioData?.length ?? 0} samples @ ${rate} Hz`)
 
   if (!cb) {
-    // Race: approx-timer cleared _pendingCb before audio arrived — still play so user hears it
-    console.warn('[AriaVoice] audio arrived but _pendingCb was cleared (timer race) — playing without viseme sync')
-    if (audioData?.length && rate) {
-      playKokoroAudio(audioData, rate, msg.durationMs as number, msg.text as string ?? '', () => {})
-        .catch(err => console.error('[AriaVoice] playKokoroAudio (no-cb) error:', err))
-    }
+    // id matched but callback was cleared — should not happen with correct id tracking
+    console.warn(`[AriaVoice] utterance ${msgId} audio arrived with no callback`)
     return
   }
 
-  playKokoroAudio(
-    audioData,
-    rate,
-    msg.durationMs as number,
-    txt,
-    cb,
-  ).catch(err => console.error('[AriaVoice] playKokoroAudio error:', err))
+  playKokoroAudio(audioData, rate, msg.durationMs as number, txt, cb)
+    .catch(err => console.error('[AriaVoice] playKokoroAudio error:', err))
 }
 
 function handleSpeakError(msg: Record<string, unknown>): void {
+  const msgId = msg.id as number | undefined
   clearSpeakWatchdog()
-  console.error('[AriaVoice] worker speak error stage=%s message=%s\n%s',
-    msg.stage ?? '?', msg.message, msg.stack ?? '')
+
+  if (msgId !== undefined && msgId !== _currentUtteranceId) {
+    console.warn(`[AriaVoice] stale speak error utterance=${msgId} (current ${_currentUtteranceId}) — discarding`)
+    return
+  }
+
+  console.error('[AriaVoice] worker speak error stage=%s utterance=%s\n%s: %s',
+    msg.stage ?? '?', msgId ?? '?', msg.message, msg.stack ?? '')
   const cb   = _pendingCb
   const txt  = _pendingText
   _pendingCb   = null
@@ -246,7 +263,7 @@ async function tryInitKokoro(): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     try {
-      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=2', { type: 'module' })
+      _worker = new Worker('/workers/kokoro-tts.worker.mjs?v=3', { type: 'module' })
 
       _worker.onmessage = (e: MessageEvent) => {
         const msg = e.data as Record<string, unknown>
@@ -257,7 +274,6 @@ async function tryInitKokoro(): Promise<boolean> {
           const device = msg.device as string
           _backend = device === 'webgpu' ? 'kokoro-webgpu' : 'kokoro-wasm'
           console.log(`[AriaVoice] kokoro-js ready (${device})`)
-          // Flush any speak request that arrived before worker was ready
           if (_queuedCb && _queuedText) {
             const cb  = _queuedCb
             const txt = _queuedText
@@ -272,12 +288,10 @@ async function tryInitKokoro(): Promise<boolean> {
         if (msg.status === 'error') {
           console.error('[AriaVoice] kokoro init error:', msg.message)
           if (!_workerReady) {
-            // Model failed to load — switch to speechSynthesis
             if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
               _backend = 'speechsynthesis'
-              console.log('[AriaVoice] Fallback: window.speechSynthesis (kokoro init failed)')
+              console.log('[AriaVoice] fallback: window.speechSynthesis (kokoro init failed)')
             }
-            // If a speak was queued, fire it via speechSynthesis now
             if (_queuedCb && _queuedText) {
               const cb  = _queuedCb
               const txt = _queuedText
@@ -289,8 +303,12 @@ async function tryInitKokoro(): Promise<boolean> {
           return
         }
 
-        if (msg.type === 'audio') { handleAudioMsg(msg); return }
-        if (msg.type === 'error') { handleSpeakError(msg) }
+        if (msg.type === 'audio')     { handleAudioMsg(msg);   return }
+        if (msg.type === 'error')     { handleSpeakError(msg); return }
+        if (msg.type === 'cancelled') {
+          console.log(`[AriaVoice] worker cancelled utterance ${msg.id}`)
+          return
+        }
       }
 
       _worker.onerror = (e: ErrorEvent) => {
@@ -298,10 +316,6 @@ async function tryInitKokoro(): Promise<boolean> {
       }
 
       _worker.postMessage({ type: 'init' })
-
-      // Resolve immediately — worker is created; model download happens in background.
-      // _workerReady flips to true once 'ready' arrives (may take minutes on first load).
-      // speakAriaText() queues until _workerReady is true.
       resolve(true)
 
     } catch (err) {
@@ -332,28 +346,23 @@ function fallbackSpeechSynthesis(
 /**
  * Detect the best voice backend. Idempotent — safe to call multiple times.
  * Resolves quickly (after worker creation), not after model download.
- * Priority: kokoro-js (WebGPU → WASM) → speechSynthesis fallback.
  */
 export function initVoice(): Promise<void> {
   if (_initPromise) return _initPromise
   _initPromise = (async () => {
     const ok = await tryInitKokoro()
-    if (ok) return  // worker created; model downloads in background
-
-    // Worker creation failed — use speechSynthesis immediately
+    if (ok) return
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       _backend = 'speechsynthesis'
-      console.log('[AriaVoice] Fallback: window.speechSynthesis')
+      console.log('[AriaVoice] fallback: window.speechSynthesis')
     }
   })()
   return _initPromise
 }
 
 /**
- * Speak text and call onSchedule with a viseme timing schedule + audio start time.
- * Single ownership: ONLY the component that controls replyText/AriaTalkingHead
- * should call this — not the parent panel. Calling from two places per reply
- * causes double-audio.
+ * Speak text and call onSchedule with viseme schedule + audio start time.
+ * Single ownership — ONLY AriaTalkingHead should call this.
  */
 export function speakAriaText(
   text: string,
@@ -367,13 +376,11 @@ export function speakAriaText(
     ? words.slice(0, 150).join(' ') + '…'
     : clean
 
-  // kokoro path: worker ready — post immediately
   if (_worker && _workerReady) {
     postSpeakToWorker(speechText, onSchedule)
     return
   }
 
-  // kokoro path: worker created but model still loading — queue and wait
   if (_worker && !_workerReady) {
     console.log('[AriaVoice] queued until ready:', speechText.slice(0, 40))
     _queuedCb   = onSchedule
@@ -381,13 +388,16 @@ export function speakAriaText(
     return
   }
 
-  // Fallback: speechSynthesis (worker creation failed or unavailable)
   fallbackSpeechSynthesis(speechText, onSchedule)
 }
 
-/** Cancel any active speech (kokoro AudioContext source + speechSynthesis). */
+/**
+ * Cancel any active speech. Increments utteranceId so any in-flight worker
+ * audio arriving later will be discarded without playing.
+ */
 export function stopAriaSpeech(): void {
   clearSpeakWatchdog()
+  _currentUtteranceId++   // invalidate any in-flight utterance
   _pendingCb   = null
   _pendingText = ''
   _queuedCb    = null
@@ -404,16 +414,15 @@ export function stopAriaSpeech(): void {
 }
 
 /**
- * Call synchronously inside a user gesture handler (button onClick) to pre-warm
- * the AudioContext before the first async await. Browsers block ctx.resume() called
- * outside a gesture; calling it here ensures the context is unlocked in time.
+ * Call synchronously in a user gesture handler to pre-warm AudioContext
+ * before any async await (browser autoplay policy).
  */
 export function ensureAudioUnlocked(): void {
   if (typeof window === 'undefined') return
   try {
     const ctx = getAudioCtx()
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => { /* browser may still block — that's ok */ })
+      ctx.resume().catch(() => { /* browser may still block */ })
     }
   } catch { /* ignore */ }
 }
