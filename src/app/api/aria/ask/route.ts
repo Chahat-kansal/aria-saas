@@ -32,6 +32,7 @@ import { summariseConversation } from '@/lib/aria/memory/summarize'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
+import { validateAndHeal } from '@/lib/aria/response-validator'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
 import { buildNavGrounding } from '@/lib/aria/nav-grounding'
@@ -563,6 +564,14 @@ Rules:
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (deliverable):', (e as Error).message)
       }
+      // HEAL-1: validate deliverable output — catches spreadsheet-class mismatches not caught by SPREADSHEET_RE gate
+      const delivValidated = await validateAndHeal({
+        userMessage: message,
+        blocks: [],
+        rawResponse: result.html ?? '',
+        pipelinePath: 'deliverable',
+        businessId: bid,
+      })
       return NextResponse.json({
         response: responseText,
         conversation_id: savedConvId ?? conversationId,
@@ -573,6 +582,9 @@ Rules:
         tool_calls: [],
         used_council: false,
         deliverable: { id: result.outputId, kind: result.kind, title: result.title, html: result.html },
+        blocks: delivValidated.blocks.length > 0 ? delivValidated.blocks : undefined,
+        healed: delivValidated.healed || undefined,
+        heal_reason: delivValidated.healReason,
       })
     } catch (err) {
       console.error('[aria/ask] deliverable generation failed, falling back to text:', (err as Error).message)
@@ -1624,7 +1636,16 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   }
 
   // Extract rich blocks from the response if Aria included them
-  const richBlocks = extractBlocks(rawResponse)
+  let richBlocks = extractBlocks(rawResponse)
+  // HEAL-1: validate and self-heal malformed/missing/wrong-type blocks
+  const validated = await validateAndHeal({
+    userMessage: message,
+    blocks: richBlocks,
+    rawResponse,
+    pipelinePath: 'main',
+    businessId: bid,
+  })
+  if (validated.healed) richBlocks = validated.blocks
   // Phase 5.3: Prepend a task_plan block for complex analytical queries to show analysis steps
   if (intent.complexity === 'complex' && richBlocks && richBlocks.length > 0) {
     const analysisPlanBlock: import('@/lib/aria/ask-types').AskBlock = {
@@ -1661,6 +1682,8 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     sonnet_used_cents: sonnetUsed,
     sonnet_budget_cents: sonnetBudget,
     sonnet_percent_used: Math.min(100, Math.round((sonnetUsed / Math.max(1, sonnetBudget)) * 100)),
+    healed: validated.healed || undefined,
+    heal_reason: validated.healReason,
   })
 }
 
