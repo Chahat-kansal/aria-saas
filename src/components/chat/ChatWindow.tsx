@@ -21,9 +21,9 @@ interface Message { role: 'user' | 'assistant'; content: string; fileUrl?: strin
 interface Props { conversationId?: string; }
 
 const MODELS = [
-  { id: 'claude-haiku-4-5-20251001',  label: 'Haiku 4.5',  plan: 'free' },
-  { id: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', plan: 'pro' },
-  { id: 'claude-opus-4-5-20251101',   label: 'Opus 4.5',   plan: 'pro' },
+  { id: 'claude-haiku-4-5-20251001',  label: 'Quick',         plan: 'free' },
+  { id: 'claude-sonnet-4-5-20250929', label: 'Deep analysis', plan: 'pro' },
+  { id: 'claude-opus-4-5-20251101',   label: 'Expert',        plan: 'pro' },
 ];
 
 const CHAT_STARTERS = [

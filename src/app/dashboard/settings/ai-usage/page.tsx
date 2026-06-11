@@ -29,7 +29,7 @@ export default function AiUsagePage() {
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 24px', fontFamily: "'Manrope', system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>AI usage</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 22 }}>How much premium AI (Sonnet) you&apos;ve used this month. After your budget, Aria stays available on lite mode.</p>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 22 }}>How much premium AI you&apos;ve used this month. After your budget, Aria stays available on lite mode.</p>
 
       {loading ? (
         <p style={{ color: 'var(--text-tertiary)' }}>Loading…</p>

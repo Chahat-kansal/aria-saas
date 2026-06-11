@@ -170,6 +170,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [switching, setSwitching] = useState<string | null>(null);
   const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({});
   const [health, setHealth] = useState<{ score: number; grade: string } | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
   const industry = (business.industry ?? 'professional') as Industry;
   const config = industryConfig[industry] ?? industryConfig.professional;
@@ -200,6 +201,24 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
       if (h?.grade) setHealth({ score: h.score as number, grade: h.grade as string });
     });
   }, [business?.id]);
+
+  useEffect(() => {
+    try { setCollapsed(localStorage.getItem('aria_sidebar_collapsed') === 'true'); } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('aria_sidebar_collapsed', String(collapsed)); } catch { /* ignore */ }
+  }, [collapsed]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      if (e.key === '[') setCollapsed(c => !c);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Map hrefs to badge count keys
   const BADGE_MAP: Record<string, string> = {
@@ -279,25 +298,46 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     .join('');
 
   return (
-    <aside className="w-[220px] flex-shrink-0 bg-black h-screen flex flex-col overflow-y-auto">
+    <aside
+      style={{
+        width: collapsed ? 64 : 220,
+        transition: 'width 200ms ease',
+        flexShrink: 0,
+        background: '#000',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflowY: collapsed ? 'hidden' : 'auto',
+        overflowX: 'hidden',
+      }}
+    >
       {/* Logo */}
-      <div className="px-5 pt-[22px] pb-3 flex-shrink-0">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="text-lg font-medium tracking-tight">
-            <span className="text-white">aria</span>
-            <span className="text-[#1D9E75]">OS</span>
+      <div className="pt-[22px] pb-3 flex-shrink-0" style={{ padding: collapsed ? '22px 0 12px' : '22px 20px 12px' }}>
+        {collapsed ? (
+          <div className="flex justify-center">
+            <div className="text-lg font-medium tracking-tight"><span style={{ color: '#1D9E75' }}>a</span></div>
           </div>
-          {onNavigate && (
-            <button onClick={onNavigate} className="md:hidden -mr-1 -mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-          )}
-        </div>
-        <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)]">
-          <span className="text-[10px] text-[rgba(255,255,255,0.45)]">{config.label}</span>
-        </div>
+        ) : (
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-lg font-medium tracking-tight">
+              <span className="text-white">aria</span>
+              <span className="text-[#1D9E75]">OS</span>
+            </div>
+            {onNavigate && (
+              <button onClick={onNavigate} className="md:hidden -mr-1 -mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            )}
+          </div>
+        )}
+        {!collapsed && (
+          <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)]">
+            <span className="text-[10px] text-[rgba(255,255,255,0.45)]">{config.label}</span>
+          </div>
+        )}
       </div>
       {/* Business switcher */}
+      {!collapsed && (
       <div className="px-3 mb-3 flex-shrink-0 relative" ref={switcherRef}>
         <button
           onClick={() => setSwitcherOpen(o => !o)}
@@ -352,8 +392,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           </div>
         )}
       </div>
+      )}
 
       {/* Plan badge + health */}
+      {!collapsed && (
       <div className="px-4 mb-4 space-y-2">
         <div className="bg-[rgba(29,158,117,0.12)] border border-[rgba(29,158,117,0.25)] rounded-lg px-3 py-2">
           <div className="text-[11px] font-medium text-[#1D9E75] capitalize">{business.plan} plan</div>
@@ -374,6 +416,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           </div>
         )}
       </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 px-2 pb-4">
@@ -382,9 +425,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           if (!items?.length) return null;
           return (
             <div key={sectionName} className="mb-3">
-              <div className="px-3 py-1.5 text-[9px] uppercase tracking-[.1em] text-[rgba(255,255,255,0.4)] font-semibold">
-                {sectionName}
-              </div>
+              {!collapsed && (
+                <div className="px-3 py-1.5 text-[9px] uppercase tracking-[.1em] text-[rgba(255,255,255,0.4)] font-semibold">
+                  {sectionName}
+                </div>
+              )}
               {items.map(item => {
                 const isActive = item.href === '/dashboard'
                   ? pathname === '/dashboard'
@@ -396,35 +441,40 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                     target={item.target}
                     rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
                     onClick={item.target === '_blank' ? undefined : onNavigate}
+                    title={collapsed ? item.label : undefined}
                     className={
-                      'flex items-center gap-2.5 px-3 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] font-semibold transition-colors mb-0.5 ' +
+                      'flex items-center gap-2.5 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] font-semibold transition-colors mb-0.5 ' +
+                      (collapsed ? 'justify-center px-0 ' : 'px-3 ') +
                       (isActive ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]' : 'text-white hover:bg-[rgba(255,255,255,0.07)] hover:text-white')
                     }
                   >
                     <item.icon className="w-[13px] h-[13px] flex-shrink-0" />
-                    <span className="flex-1">{item.label}</span>
-                    {/* Live count badge */}
-                    {(() => {
-                      const countKey = BADGE_MAP[item.href];
-                      const liveCount = countKey ? (badgeCounts[countKey] ?? 0) : 0;
-                      if (liveCount > 0) return (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 min-w-[18px] text-center">
-                          {liveCount > 99 ? '99+' : liveCount}
-                        </span>
-                      );
-                      // NEW pill for features shipped in the last 30 days
-                      if (freshHrefs.has(item.href) && item.badge !== 'AI') return (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-[rgba(217,245,78,0.22)] text-[#a5c400]">NEW</span>
-                      );
-                      if (item.badge) return (
-                        <span className={
-                          item.badge === 'AI'  ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
-                          item.badge === 'New' ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(249,115,22,0.2)] text-orange-400' :
-                          'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(245,158,11,0.2)] text-amber-400'
-                        }>{item.badge}</span>
-                      );
-                      return null;
-                    })()}
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1">{item.label}</span>
+                        {/* Live count badge */}
+                        {(() => {
+                          const countKey = BADGE_MAP[item.href];
+                          const liveCount = countKey ? (badgeCounts[countKey] ?? 0) : 0;
+                          if (liveCount > 0) return (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 min-w-[18px] text-center">
+                              {liveCount > 99 ? '99+' : liveCount}
+                            </span>
+                          );
+                          if (freshHrefs.has(item.href) && item.badge !== 'AI') return (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-[rgba(217,245,78,0.22)] text-[#a5c400]">NEW</span>
+                          );
+                          if (item.badge) return (
+                            <span className={
+                              item.badge === 'AI'  ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
+                              item.badge === 'New' ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(249,115,22,0.2)] text-orange-400' :
+                              'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(245,158,11,0.2)] text-amber-400'
+                            }>{item.badge}</span>
+                          );
+                          return null;
+                        })()}
+                      </>
+                    )}
                   </Link>
                 );
               })}
@@ -434,34 +484,62 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
       </nav>
 
       {/* Ask Aria — featured action */}
-      <div className="px-3 pb-3 flex-shrink-0">
-        <Link href="/dashboard/ask-aria"
-          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
-          style={{ background: 'linear-gradient(135deg,#1D9E75,#15875f)' }}>
-          <span className="text-base">✦</span>
-          Ask Aria
-        </Link>
-        <p className="text-[9px] text-center text-[rgba(255,255,255,0.25)] mt-1">⌘K anywhere</p>
+      <div className="px-3 pb-2 flex-shrink-0">
+        {collapsed ? (
+          <Link href="/dashboard/ask-aria" title="Ask Aria"
+            className="flex items-center justify-center w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg,#1D9E75,#15875f)' }}>
+            <span className="text-base">✦</span>
+          </Link>
+        ) : (
+          <>
+            <Link href="/dashboard/ask-aria"
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg,#1D9E75,#15875f)' }}>
+              <span className="text-base">✦</span>
+              Ask Aria
+            </Link>
+            <p className="text-[9px] text-center text-[rgba(255,255,255,0.25)] mt-1">⌘K anywhere</p>
+          </>
+        )}
+      </div>
+
+      {/* Collapse toggle */}
+      <div className="px-3 pb-2 flex-shrink-0">
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          title={collapsed ? 'Expand sidebar ([)' : 'Collapse sidebar ([)'}
+          className="w-full flex items-center justify-center py-1.5 rounded-lg text-[rgba(255,255,255,0.2)] hover:text-[rgba(255,255,255,0.5)] hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
+            {collapsed
+              ? <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              : <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            }
+          </svg>
+        </button>
       </div>
 
       {/* User footer — always visible */}
       <div className="px-3 py-3 border-t border-[rgba(255,255,255,0.05)] flex-shrink-0">
-        <div className="flex items-center gap-2.5">
+        <div className={collapsed ? 'flex flex-col items-center gap-2' : 'flex items-center gap-2.5'}>
           {/* Avatar */}
-          <div className="w-8 h-8 rounded-full bg-[rgba(29,158,117,0.2)] border border-[rgba(29,158,117,0.3)] flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-[rgba(29,158,117,0.2)] border border-[rgba(29,158,117,0.3)] flex items-center justify-center flex-shrink-0" title={business.owner_name || business.name}>
             <span className="text-[11px] font-semibold text-[#1D9E75]">{initials || '?'}</span>
           </div>
-          {/* Name + email truncated */}
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-medium text-[rgba(255,255,255,0.75)] truncate leading-tight">
-              {business.owner_name || business.name}
+          {/* Name + city — hidden when collapsed */}
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium text-[rgba(255,255,255,0.75)] truncate leading-tight">
+                {business.owner_name || business.name}
+              </div>
+              {business.city && (
+                <div className="text-[10px] text-[rgba(255,255,255,0.3)] truncate">{business.city}</div>
+              )}
             </div>
-            {business.city && (
-              <div className="text-[10px] text-[rgba(255,255,255,0.3)] truncate">{business.city}</div>
-            )}
-          </div>
+          )}
           {/* Action icons */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className={collapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-1 flex-shrink-0'}>
             <Link
               href="/dashboard/settings"
               title="Business settings"

@@ -2591,7 +2591,7 @@ export default function AgentsPage() {
                           <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{new Date(run.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.6)', fontSize: 11, textTransform: 'capitalize' }}>{run.mode.replace(/_/g, ' ')}</td>
                           <td style={{ padding: '10px 14px', color: run.synthesis_model?.includes('sonnet') ? '#A78BFA' : 'rgba(255,255,255,0.4)', fontSize: 10 }}>
-                            {run.synthesis_model ? run.synthesis_model.replace('claude-', '').replace(/-20\d{6}$/, '') : 'haiku'}
+                            {run.synthesis_model?.includes('opus') ? 'Expert' : run.synthesis_model?.includes('sonnet') ? 'Deep analysis' : 'Quick'}
                           </td>
                           <td style={{ padding: '10px 14px', color: run.brains_succeeded === 4 ? '#7FB897' : '#F59E0B', fontSize: 12 }}>{run.brains_succeeded}/4</td>
                           <td style={{ padding: '10px 14px' }}>

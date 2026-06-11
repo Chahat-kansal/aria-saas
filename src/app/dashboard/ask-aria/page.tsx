@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { showAriaBriefing } from '@/components/dashboard/DailyBriefingModal'
 import VoiceInput from '@/components/aria/VoiceInput'
 import ChatSuggestions from '@/components/aria/ChatSuggestions'
 import { SkillPicker } from '@/components/aria/SkillPicker'
@@ -941,7 +942,7 @@ export default function AskAriaPage() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: T.bg, overflow: 'hidden', fontFamily: T.body }}>
+    <div style={{ height: '100dvh', overflow: 'hidden', position: 'relative', fontFamily: T.body }}>
       <style>{`
         @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
         @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }
@@ -950,21 +951,96 @@ export default function AskAriaPage() {
         @keyframes blinkCaret { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes msgIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes haloSpin { to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .msg-reveal { animation: none !important; } }
+        @media (max-width: 1023px) {
+          .aria-split-grid { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr !important; }
+          .aria-left-panel { flex-direction: row !important; padding: 10px 14px !important; gap: 10px !important; min-height: 60px !important; overflow: hidden !important; flex-shrink: 0 !important; }
+          .aria-left-speech, .aria-left-avatar, .aria-left-kpi { display: none !important; }
+          .aria-left-topbar { flex: 1; min-width: 0; }
+        }
         @media (max-width: 767px) {
           .aria-avatar-float { bottom: 160px !important; z-index: 10 !important; }
           .aria-avatar-float * { pointer-events: none !important; }
         }
       `}</style>
 
-      {/* Mobile backdrop */}
-      {showHistory && (
-        <div className="fixed inset-0 bg-black/70 z-10 md:hidden" onClick={() => setShowHistory(false)} />
-      )}
+      {/* ── Split-screen grid ── */}
+      <div className="aria-split-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 400px', height: '100dvh', overflow: 'hidden' }}>
+
+        {/* ══ LEFT PANEL — clay-glass-bento ══ */}
+        <div className="aria-left-panel" style={{
+          background: '#f3eee5',
+          backgroundImage: 'radial-gradient(ellipse at 15% 20%, rgba(127,184,151,0.14), transparent 50%), radial-gradient(ellipse at 85% 80%, rgba(180,160,220,0.12), transparent 50%)',
+          display: 'flex', flexDirection: 'column', gap: 16, padding: 24, overflowY: 'auto',
+        }}>
+          {/* Top bar */}
+          <div className="aria-left-topbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.9)', backdropFilter: 'blur(16px)', borderRadius: 50, padding: '6px 14px 6px 8px', boxShadow: '0 3px 8px rgba(45,82,64,0.08), inset 0 1px 2px rgba(255,255,255,0.9)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1D9E75', boxShadow: '0 0 6px #1D9E75', flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#2D5240' }}>{business?.name ?? 'Business'}</span>
+              <span style={{ fontSize: 11, color: '#7FB897' }}>{new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button onClick={() => showAriaBriefing()} style={{ fontSize: 12, fontWeight: 500, color: '#2D5240', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)', borderRadius: 10, padding: '6px 14px', backdropFilter: 'blur(8px)', cursor: 'pointer' }}>Briefing</button>
+              <Link href="/dashboard/actions" style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#2D5240', border: '1px solid rgba(45,82,64,0.5)', borderRadius: 10, padding: '6px 14px', textDecoration: 'none' }}>+ New action</Link>
+            </div>
+          </div>
+
+          {/* Speech card */}
+          {(() => {
+            const lastA = [...messages].reverse().find(m => m.role === 'assistant' && m.content && !m.streaming)
+            const raw = lastA ? lastA.content.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/#+\s/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') : `${greeting}, ${business?.owner_name?.split(' ')[0] ?? 'there'}. I have your business data ready.`
+            const snippet = (raw.match(/^[^.!?]+[.!?]/)?.[0] ?? raw.slice(0, 160)).trim()
+            const html = snippet.replace(/(\$[\d,.]+)/g, '<span style="color:#2D5240;font-weight:500">$1</span>')
+            return (
+              <div className="aria-left-speech" style={{ background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.9)', backdropFilter: 'blur(16px)', borderRadius: '6px 26px 26px 26px', padding: '14px 18px', boxShadow: '0 10px 30px rgba(45,82,64,0.10), 0 3px 8px rgba(45,82,64,0.06), inset 0 2px 4px rgba(255,255,255,0.9), inset 0 -2px 6px rgba(45,82,64,0.04)', fontSize: 14, lineHeight: 1.65, color: '#2D5240', flexShrink: 0 }}>
+                <span dangerouslySetInnerHTML={{ __html: html }} />
+              </div>
+            )
+          })()}
+
+          {/* Avatar zone */}
+          <div className="aria-left-avatar" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 0 }}>
+            <div style={{ position: 'relative', width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'absolute', inset: -10, borderRadius: '50%', border: '1.5px dashed rgba(90,138,110,0.3)', animation: 'haloSpin 24s linear infinite' }} />
+              <div style={{ width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 10px 40px rgba(45,82,64,0.15), inset 0 2px 4px rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div style={{ width: 120, height: 160, marginTop: -20 }}>
+                  {avatarMounted && <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 2.5, alignItems: 'flex-end', height: 12 }}>
+                {[0,1,2,3,4].map(i => (
+                  <div key={i} style={{ width: 2.5, borderRadius: 2, background: '#5a8a6e', height: [5,9,7,10,6][i], animation: isAriaActive ? `ariaBar${i % 4} 0.5s ease-in-out infinite alternate` : 'none', animationDelay: (i * 0.1) + 's', opacity: isAriaActive ? 1 : 0.35 }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 11, color: '#7FB897', fontWeight: 500 }}>{sending ? 'Aria is thinking' : isAriaActive ? 'Aria is speaking' : 'Aria is listening'}</span>
+            </div>
+          </div>
+
+          {/* KPI bento row */}
+          <div className="aria-left-kpi" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, flexShrink: 0 }}>
+            {[
+              { label: "Today's Revenue", value: vitals?.revenue_today != null ? `$${Math.round(vitals.revenue_today).toLocaleString()}` : '—' },
+              { label: 'Orders Today', value: vitals?.tx_count_today != null ? String(vitals.tx_count_today) : '—' },
+              { label: 'Avg Basket', value: vitals?.revenue_today != null && vitals.tx_count_today ? `$${Math.round(vitals.revenue_today / vitals.tx_count_today)}` : '—' },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.9)', backdropFilter: 'blur(16px)', borderRadius: 16, padding: '14px 16px', boxShadow: '0 4px 16px rgba(45,82,64,0.08), inset 0 2px 4px rgba(255,255,255,0.9)' }}>
+                <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#7FB897', marginBottom: 6 }}>{label}</div>
+                <div style={{ fontSize: 26, fontWeight: 500, color: '#2D5240', lineHeight: 1, fontFamily: T.display }}>{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ══ RIGHT PANEL — dark conversation ══ */}
+        <div style={{ background: '#16181a', borderLeft: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
       {/* ── History sidebar ───────────────────────────────────────────────── */}
       {showHistory && (
-        <div className="w-72 flex-shrink-0 flex flex-col border-r" style={{ borderColor: T.border, background: T.sidebarBg, position: 'relative', zIndex: 20 }}>
+        <div className="absolute inset-y-0 left-0 w-72 flex flex-col border-r z-20" style={{ borderColor: T.border, background: T.sidebarBg }}>
           {/* Wordmark */}
           <div style={{ padding: '22px 20px 16px', borderBottom: '1px solid ' + T.border }}>
             <div style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 26, color: T.sage, letterSpacing: '-0.02em', lineHeight: 1 }}>aria</div>
@@ -1077,8 +1153,8 @@ export default function AskAriaPage() {
         </div>
       )}
 
-      {/* ── Main chat column ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: T.bg }}>
+      {/* ── Conversation panel ─────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative' }}>
         {/* Floating avatar video */}
         {ariaVideoUrl && (
           <div style={{
@@ -1106,62 +1182,35 @@ export default function AskAriaPage() {
           </div>
         )}
 
-        {/* ── Header ────────────────────────────────────────────────────── */}
-        <div style={{ borderBottom: '1px solid ' + T.border, background: T.surface, flexShrink: 0 }}>
-          <div className="px-5 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowHistory(v => !v)}
-                title="Chat history"
-                aria-label="Toggle chat history"
-                className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
-                style={{ background: showHistory ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.04)', color: showHistory ? T.sage : T.textMut, border: '1px solid ' + T.border }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
-              </button>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(127,184,151,0.1)', border: '1px solid ' + T.borderMd, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: T.display, fontStyle: 'italic', fontSize: 14, color: T.sage, flexShrink: 0 }}>A</div>
-                  <span style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 20, color: T.textPri, letterSpacing: '-0.01em' }}>Aria</span>
-                  <span style={{ fontSize: 11, color: T.textMut, marginLeft: 2 }}>for {business?.name ?? 'your business'}</span>
-                </div>
-                {/* Context strip: live vitals */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 3 }}>
-                  {vitals?.revenue_today != null && (
-                    <span style={{ fontSize: 11, color: T.textMut }}>
-                      Today{' '}
-                      <span style={{ fontFamily: T.display, fontStyle: 'italic', fontSize: 13, color: T.sage }}>
-                        ${vitals.revenue_today.toFixed(0)}
-                      </span>
-                    </span>
-                  )}
-                  {vitals?.tx_count_today != null && (
-                    <span style={{ fontSize: 11, color: T.textMut }}>
-                      {vitals.tx_count_today} sale{vitals.tx_count_today !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  <span style={{ fontSize: 11, color: T.textMut }}>
-                    {business?.data_source === 'square' ? 'Square' : 'Aria POS'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/dashboard/ask-aria/intelligence"
-                className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
-                style={{ color: T.textMut, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + T.border, minHeight: 32, fontFamily: T.body }}>
-                ✦ Intel
-              </Link>
-              {messages.length > 0 && (
-                <button onClick={newConversation}
-                  className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
-                  style={{ color: T.textMut, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + T.border, minHeight: 32, fontFamily: T.body }}>
-                  New chat
-                </button>
-              )}
-            </div>
+        {/* ── Header ─ */}
+        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(22,24,26,0.98)', flexShrink: 0, padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              title="Chat history"
+              aria-label="Toggle chat history"
+              style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: showHistory ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.04)', color: showHistory ? T.sage : 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', flexShrink: 0 }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} style={{ width: 14, height: 14 }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+            </button>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.28)' }}>Conversation</span>
+            {vitals?.revenue_today != null && (
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)' }}>
+                · <span style={{ color: T.sage }}>${vitals.revenue_today.toFixed(0)}</span> today
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Link href="/dashboard/ask-aria/intelligence"
+              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 7, color: 'rgba(255,255,255,0.38)', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', textDecoration: 'none', fontFamily: T.body }}>
+              ✦ Intel
+            </Link>
+            <button onClick={newConversation}
+              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 7, color: 'rgba(255,255,255,0.38)', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', fontFamily: T.body }}>
+              New
+            </button>
           </div>
         </div>
 
@@ -1213,20 +1262,15 @@ export default function AskAriaPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
                     <div style={{ width: 22, height: 22, borderRadius: 7, background: 'rgba(127,184,151,0.1)', border: '1px solid ' + T.borderMd, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: T.display, fontStyle: 'italic', fontSize: 12, color: T.sage, flexShrink: 0 }}>A</div>
                     <span style={{ fontSize: 12, fontWeight: 500, color: T.textSec, fontFamily: T.body }}>Aria</span>
-                    {m.model_used && !m.streaming && (
-                      <span style={{ fontSize: 10, color: T.textDim }}>
-                        {m.model_used === 'haiku' ? '⚡ fast' : m.model_used === 'sonnet' ? '🧠 deep' : '🔬 expert'}
-                      </span>
-                    )}
                   </div>
                 )}
 
                 {/* Message bubble */}
                 <div style={{
-                  padding: isUser ? '12px 18px' : '16px 20px',
-                  background: isUser ? 'rgba(127,184,151,0.08)' : T.surfaceEl,
-                  border: '1px solid ' + (isUser ? 'rgba(127,184,151,0.18)' : T.border),
-                  borderRadius: isUser ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
+                  padding: isUser ? '11px 16px' : '14px 18px',
+                  background: isUser ? '#262a2d' : 'rgba(255,255,255,0.04)',
+                  border: '1px solid ' + (isUser ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.05)'),
+                  borderRadius: isUser ? '16px 16px 4px 16px' : '4px 16px 16px 16px',
                   fontSize: 15,
                   lineHeight: 1.65,
                   color: T.textPri,
@@ -1261,7 +1305,9 @@ export default function AskAriaPage() {
                             </div>
                           )}
                           {m.blocks.map((block, bi) => (
-                            <BlockRenderer key={bi} block={block} onChoice={(prompt) => { send(prompt) }} />
+                            <div key={bi} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '1px 0', marginTop: 6 }}>
+                              <BlockRenderer block={block} onChoice={(prompt) => { send(prompt) }} />
+                            </div>
                           ))}
                           {(m.followups ?? []).length > 0 && (
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
@@ -1430,7 +1476,7 @@ export default function AskAriaPage() {
         )}
 
         {/* ── Composer ──────────────────────────────────────────────────── */}
-        <div style={{ padding: '12px 20px 16px', borderTop: '1px solid ' + T.border, background: T.surface, flexShrink: 0, position: 'relative' }}>
+        <div style={{ padding: '10px 14px 14px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(22,24,26,0.98)', flexShrink: 0, position: 'relative' }}>
           <input
             ref={fileInputRef}
             type="file"
@@ -1499,7 +1545,7 @@ export default function AskAriaPage() {
               placeholder="Ask anything… (⌘↵ to send)"
               rows={1}
               className="flex-1 px-4 py-2.5 rounded-xl outline-none resize-none"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid ' + T.border, color: T.textPri, maxHeight: '120px', fontSize: 15, lineHeight: 1.55, fontFamily: T.body }}
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#eef0f2', maxHeight: '120px', fontSize: 15, lineHeight: 1.55, fontFamily: T.body }}
             />
             {/* Stop button — visible only while streaming */}
             {sending && (
@@ -1527,6 +1573,8 @@ export default function AskAriaPage() {
             Aria uses connected records only — it will not invent missing data
           </p>
         </div>
+      </div>
+    </div>
       </div>
     </div>
   )
