@@ -9,15 +9,9 @@ import { buildVisemes, Viseme } from './textToVisemes';
 import { initVoice, speakAriaText, stopAriaSpeech, onSpeakStart, onSpeakEnd } from '@/lib/aria/headTTSBridge';
 import type { VisemeEntry } from '@/lib/aria/headTTSBridge';
 
-// Session guard for the greeting wave — sessionStorage survives hot-reloads
-// (module-level vars reset on Fast Refresh; sessionStorage persists until tab close).
-const GREET_KEY = 'aria_greeted_this_session'
-function greetingAlreadyPlayed(): boolean {
-  try { return !!sessionStorage.getItem(GREET_KEY) } catch { return false }
-}
-function markGreetingPlayed(): void {
-  try { sessionStorage.setItem(GREET_KEY, '1') } catch { /* ignore */ }
-}
+// Module-level gate: wave fires ONCE per page load, never on React remounts.
+// Resets to false on every full page navigation (module re-evaluated).
+let _greetingFiredThisLoad = false
 
 // ── VRoid blendshape ↔ Oculus viseme map ─────────────────────────────────
 // Used when HeadTTS WebGPU returns Oculus viseme IDs.
@@ -166,14 +160,27 @@ function AvatarScene({ replyText, mood, gesture }: {
       });
       bonesRef.current = bones;
 
-      if (bones.head) bones.head.rotation.x = 0.12;
-      if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
-      if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
-      if (bones.lLowerArm) bones.lLowerArm.rotation.z = -0.2;
-      if (bones.rLowerArm) bones.rLowerArm.rotation.z = 0.2;
+      // ── Procedural rest pose via VRM humanoid normalized bones ─────────
+      // Applied ONCE after load, BEFORE sinusoid starts. The frame loop
+      // modulates on top of these values every frame.
+      const hum = vrm.humanoid
+      const lUA = hum.getNormalizedBoneNode('leftUpperArm')
+      const rUA = hum.getNormalizedBoneNode('rightUpperArm')
+      const lLA = hum.getNormalizedBoneNode('leftLowerArm')
+      const rLA = hum.getNormalizedBoneNode('rightLowerArm')
+      const lH  = hum.getNormalizedBoneNode('leftHand')
+      const rH  = hum.getNormalizedBoneNode('rightHand')
+      if (lUA) lUA.rotation.z = -1.2          // arm down ~69°
+      if (rUA) rUA.rotation.z =  1.2
+      if (lLA) lLA.rotation.x =  0.25         // slight elbow bend
+      if (rLA) rLA.rotation.x =  0.25
+      if (lH)  lH.rotation.z  =  0.06         // relaxed wrist
+      if (rH)  rH.rotation.z  = -0.06
+      if (bones.head) bones.head.rotation.x = 0.12
+      vrm.update(0)  // flush normalized → raw before first frame
+      console.log('[AriaTalkingHead] rest pose applied')
 
       vrmReadyRef.current = true;
-      console.log('[AriaTalkingHead] VRM ready — procedural motion active');
 
       // ── Wire speech events to isTalkingRef + gesture plan arming ─────────
       unsubSpeakStartRef.current?.();
@@ -201,10 +208,10 @@ function AvatarScene({ replyText, mood, gesture }: {
         isTalkingRef.current = false;
       });
 
-      // One-shot greeting wave — JS bone animation, never loops.
-      if (!greetingAlreadyPlayed()) {
-        markGreetingPlayed();
-        gestureRef.current = { name: 'greet_wave', end: Date.now() + 3000, mirrorLeft: false };
+      // One-shot greeting wave per page load — module-level bool resets on navigation.
+      if (!_greetingFiredThisLoad) {
+        _greetingFiredThisLoad = true
+        gestureRef.current = { name: 'greet_wave', end: Date.now() + 3000, mirrorLeft: false }
       }
     }
 

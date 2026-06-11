@@ -126,6 +126,10 @@ let _isSpeaking = false
 let _lastSpeakText = ''
 let _lastSpeakMs   = 0
 
+// Latency instrumentation — brain call sets this via markBrainDone().
+let _brainDoneMs  = 0   // Date.now() when brain response was received
+let _speakCallMs  = 0   // Date.now() when speakAriaText() was called
+
 /**
  * Subscribe to speech-start events. Returns an unsubscribe function.
  * Panels use this to transition to 'speaking' phase; avatar uses it for
@@ -149,6 +153,13 @@ export function onSpeakEnd(cb: () => void): () => void {
 function fireSpeakStart(): void {
   if (_isSpeaking) return   // filler→real-audio transition: already speaking, keep going
   _isSpeaking = true
+  if (_brainDoneMs > 0 && _speakCallMs > 0) {
+    const synthMs = Date.now() - _speakCallMs
+    const totalMs = Date.now() - _brainDoneMs
+    console.log(`[AriaTiming] synth=${synthMs}ms total=${totalMs}ms`)
+    _brainDoneMs = 0
+    _speakCallMs = 0
+  }
   for (const cb of [..._speakStartListeners]) {
     try { cb() } catch (e) { console.error('[AriaVoice] speakStart listener error', e) }
   }
@@ -685,6 +696,13 @@ export function initVoice(): Promise<void> {
  * accumulated viseme schedule grows. Single ownership — ONLY AriaTalkingHead
  * should call this.
  */
+/** Call from the panel's send() function immediately after receiving the brain response. */
+export function markBrainDone(brainMs: number): void {
+  _brainDoneMs = Date.now()
+  _speakCallMs = 0  // reset; will be set when speakAriaText is called
+  console.log(`[AriaTiming] brain=${brainMs}ms`)
+}
+
 export function speakAriaText(
   text: string,
   onSchedule: (schedule: VisemeEntry[] | null, startMs: number) => void,
@@ -701,6 +719,7 @@ export function speakAriaText(
   }
   _lastSpeakText = clean
   _lastSpeakMs   = nowMs
+  _speakCallMs   = nowMs  // latency: time from speak call to fireSpeakStart
 
   const words = clean.split(' ')
   const speechText = words.length > 150

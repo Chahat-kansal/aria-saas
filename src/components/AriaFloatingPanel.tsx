@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice, ensureAudioUnlocked, onSpeakEnd } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, ensureAudioUnlocked, onSpeakEnd, markBrainDone } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 const AriaTalkingHead = dynamic(
@@ -123,6 +123,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
     setPhase('thinking')
 
     try {
+      const t0 = Date.now()
       const res = await fetch(brain, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,6 +133,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
           page_context: { route: pathname, page_name: pageName },
         }),
       })
+      const brainMs = Date.now() - t0
       const data = await res.json() as { reply?: string; response?: string; error?: string }
 
       if (!res.ok || data.error) {
@@ -140,6 +142,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
         return
       }
 
+      markBrainDone(brainMs)
       const raw = (data.reply ?? data.response ?? '').trim()
       const { clean, mood: m, gesture: g } = parseAriaTags(raw)
       const resolvedMood    = (m !== 'neutral' || /\[mood:/.test(raw)) ? m : heuristicMood(clean)

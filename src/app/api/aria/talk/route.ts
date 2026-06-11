@@ -18,6 +18,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { buildNavGrounding } from '@/lib/aria/nav-grounding'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -25,7 +26,11 @@ const client = new Anthropic({
   maxRetries: 1,
 })
 
-const SYSTEM_PROMPT = `You are Aria, an AI-powered business co-owner built specifically for Australian small businesses — starting with cafés, restaurants, and retail.
+const SYSTEM_PROMPT = buildNavGrounding() + `
+
+---
+
+You are Aria, an AI-powered business co-owner built specifically for Australian small businesses — starting with cafés, restaurants, and retail.
 
 You help business owners with:
 • Revenue intelligence — daily briefings, sales trends, what's selling and what's not

@@ -33,7 +33,8 @@ import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
-import { findProductByQuery, buildProductMapBlock } from '@/lib/aria/product-map'
+import { findProductByQuery } from '@/lib/aria/product-map'
+import { buildNavGrounding } from '@/lib/aria/nav-grounding'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -1180,7 +1181,7 @@ The owner is talking to an AI business co-owner who knows everything about runni
 
 ${ARTIFACT_INSTRUCTIONS}
 
-${buildProductMapBlock()}
+${buildNavGrounding()}
 
 RESPONSE STYLE - CRITICAL:
 You are a senior business advisor, not a chatbot. Every response must be substantive.

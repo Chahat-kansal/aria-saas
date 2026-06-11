@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked, onSpeakEnd } from '@/lib/aria/headTTSBridge'
+import { stopAriaSpeech, initVoice, getVoiceBackend, ensureAudioUnlocked, onSpeakEnd, markBrainDone } from '@/lib/aria/headTTSBridge'
 import { parseAriaTags } from '@/lib/aria/parse-aria-tags'
 
 // Avatar loaded client-only (Three.js / WebGL)
@@ -104,11 +104,13 @@ export default function TalkToAria({ className }: { className?: string }) {
     setPhase('thinking')
 
     try {
+      const t0 = Date.now()
       const res = await fetch('/api/aria/talk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg }),
       })
+      const brainMs = Date.now() - t0
       const data = await res.json() as { reply?: string; error?: string }
 
       if (!res.ok || data.error) {
@@ -117,6 +119,7 @@ export default function TalkToAria({ className }: { className?: string }) {
         return
       }
 
+      markBrainDone(brainMs)
       const rawReply = data.reply ?? ''
       const { clean: reply, mood: replyMood, gesture: replyGesture } = parseAriaTags(rawReply)
       setMood(replyMood)
