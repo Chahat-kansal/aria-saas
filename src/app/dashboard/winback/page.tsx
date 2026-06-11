@@ -3,10 +3,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface LapsedCustomer { id: string; name: string; phone: string | null; email: string | null; last_visit_at: string | null; total_spend: number | null }
-interface Campaign { id: string; name: string | null; message: string | null; email_subject: string | null; channel: string | null; status: string | null; created_at: string; recipients_count: number | null; returned_customers: number | null; attributed_revenue: number | null; roi_percent: number | null }
+interface Campaign { id: string; name: string | null; message: string | null; email_subject: string | null; channel: string | null; status: string | null; created_at: string; recipients_count: number | null; returned_customers: number | null; attributed_revenue: number | null; roi_percent: number | null; ab_variant: string | null }
 interface Automation { id: string | null; trigger_type: string; label?: string; desc?: string; is_active: boolean; sms_message: string | null; email_subject: string | null; email_body: string | null }
 interface ComposeResult { audience_filter: { lapsed_days: number }; sms_message: string; email_subject: string; email_body: string; suggested_send_time: string; estimated_reach: number }
 interface SendResult { campaign_id: string; scheduled: boolean; will_send_sms: number; will_send_email: number; total: number }
+interface SequenceStepDraft { delay_days: number; message: string; condition: 'always' | 'if_not_returned' }
+interface SequenceCampaign { id: string; name: string | null; status: string | null; created_at: string; recipients_count: number | null; returned_customers: number | null; roi_percent: number | null; sequence_steps: SequenceStepDraft[] | null }
 
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
@@ -22,7 +24,7 @@ function stripHtml(s: string) { return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g
 
 export default function WinbackPage() {
   const { business } = useBusinessContext()
-  const [tab, setTab] = useState<'campaigns' | 'automations'>('campaigns')
+  const [tab, setTab] = useState<'campaigns' | 'sequences' | 'automations'>('campaigns')
   const [lapsedDays, setLapsedDays] = useState(60)
   const [customers, setCustomers] = useState<LapsedCustomer[]>([])
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -36,21 +38,32 @@ export default function WinbackPage() {
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<SendResult | null>(null)
   const [savingAuto, setSavingAuto] = useState<string | null>(null)
+  const [sequences, setSequences] = useState<SequenceCampaign[]>([])
+  const [seqSteps, setSeqSteps] = useState<SequenceStepDraft[]>([
+    { delay_days: 0, message: '', condition: 'always' },
+    { delay_days: 3, message: '', condition: 'if_not_returned' },
+    { delay_days: 7, message: '', condition: 'if_not_returned' },
+  ])
+  const [seqLaunching, setSeqLaunching] = useState(false)
+  const [seqResult, setSeqResult] = useState<{ campaign_id: string; customers: number; sends_scheduled: number } | null>(null)
+  const [enableAB, setEnableAB] = useState(false)
 
   const load = useCallback(async () => {
     if (!business?.id) return
     setLoading(true)
     const cutoff = new Date(Date.now() - lapsedDays * 86400000).toISOString()
-    const [cR, campR, autoR] = await Promise.all([
+    const [cR, campR, autoR, seqR] = await Promise.all([
       fetch('/api/pos/customers?business_id=' + business.id + '&limit=200').then(r => r.json()).catch(() => ({ customers: [] })),
       fetch('/api/campaigns?business_id=' + business.id + '&type=winback').then(r => r.json()).catch(() => ({ campaigns: [] })),
       fetch('/api/aria/winback-automations?business_id=' + business.id).then(r => r.json()).catch(() => ({ automations: [] })),
+      fetch('/api/aria/winback-sequence?business_id=' + business.id).then(r => r.json()).catch(() => ({ sequences: [] })),
     ])
     const all: LapsedCustomer[] = cR.customers ?? cR.data ?? []
     const lapsed = all.filter(c => !c.last_visit_at || c.last_visit_at < cutoff)
     setCustomers(lapsed)
     setCampaigns(campR.campaigns ?? campR.data ?? [])
     setAutomations(autoR.automations ?? [])
+    setSequences(seqR.sequences ?? [])
     const init: Record<string, boolean> = {}
     lapsed.forEach(c => { if (c.phone || c.email) init[c.id] = true })
     setSelected(init)
@@ -80,7 +93,7 @@ export default function WinbackPage() {
     try {
       const res = await fetch('/api/aria/winback-send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ business_id: business.id, customer_ids: ids, sms_message: composed.sms_message, email_subject: composed.email_subject, email_body: composed.email_body, channel }),
+        body: JSON.stringify({ business_id: business.id, customer_ids: ids, sms_message: composed.sms_message, email_subject: composed.email_subject, email_body: composed.email_body, channel, enable_ab_test: enableAB }),
       }).then(r => r.json())
       setSendResult(res); load()
     } catch (e) { console.warn('[non-fatal]', e) }
@@ -96,6 +109,22 @@ export default function WinbackPage() {
     }).catch(() => null)
     setAutomations(prev => prev.map(a => a.trigger_type === auto.trigger_type ? { ...a, is_active: !a.is_active } : a))
     setSavingAuto(null)
+  }
+
+  async function launchSequence() {
+    if (!business?.id) return
+    const ids = customers.filter(c => selected[c.id]).map(c => c.id)
+    const validSteps = seqSteps.filter(s => s.message.trim())
+    if (!ids.length || !validSteps.length) return
+    setSeqLaunching(true)
+    try {
+      const res = await fetch('/api/aria/winback-sequence', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, customer_ids: ids, steps: validSteps }),
+      }).then(r => r.json())
+      setSeqResult(res); load()
+    } catch (e) { console.warn('[non-fatal]', e) }
+    setSeqLaunching(false)
   }
 
   const selectedCount = Object.values(selected).filter(Boolean).length
@@ -128,10 +157,10 @@ export default function WinbackPage() {
       </div>
 
       <div style={{ display: 'flex', borderBottom: '1px solid ' + C.border, marginBottom: 24 }}>
-        {(['campaigns', 'automations'] as const).map(t => (
+        {(['campaigns', 'sequences', 'automations'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding: '10px 18px', border: 'none', borderBottom: '2px solid ' + (tab === t ? C.violet : 'transparent'), background: 'transparent', color: tab === t ? C.text : C.muted, fontSize: 13, fontWeight: tab === t ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'color 0.2s ease' }}>
-            {t === 'campaigns' ? `Campaigns (${campaigns.length})` : `Automations (${automations.filter(a => a.is_active).length} active)`}
+            {t === 'campaigns' ? `Campaigns (${campaigns.length})` : t === 'sequences' ? `Sequences (${sequences.length})` : `Automations (${automations.filter(a => a.is_active).length} active)`}
           </button>
         ))}
       </div>
@@ -175,6 +204,10 @@ export default function WinbackPage() {
                       </button>
                     ))}
                   </div>
+                  <button onClick={() => setEnableAB(v => !v)}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid ' + (enableAB ? C.amber : C.border), background: enableAB ? 'rgba(245,158,11,0.12)' : 'transparent', color: enableAB ? C.amber : C.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease' }}>
+                    {enableAB ? '⚡ A/B On' : 'A/B Test'}
+                  </button>
                   <button onClick={scheduleSend} disabled={sending || selectedCount === 0}
                     style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: selectedCount > 0 ? C.green : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: sending ? 0.6 : 1, transition: 'all 0.2s ease' }}>
                     {sending ? 'Scheduling...' : `Schedule for ${selectedCount} customer${selectedCount !== 1 ? 's' : ''}`}
@@ -260,7 +293,10 @@ export default function WinbackPage() {
                   {campaigns.map(c => (
                     <div key={c.id} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 14px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                        <p style={{ fontSize: 13, fontWeight: 600 }}>{c.name ?? 'Winback Campaign'}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600 }}>{c.name ?? 'Winback Campaign'}</p>
+                          {c.ab_variant && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 99, background: c.ab_variant === 'A' ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)', color: c.ab_variant === 'A' ? C.blue : C.amber, fontWeight: 700 }}>{c.ab_variant}</span>}
+                        </div>
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: c.status === 'sent' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: c.status === 'sent' ? C.green : C.muted }}>{c.status ?? 'scheduled'}</span>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4 }}>
@@ -279,6 +315,74 @@ export default function WinbackPage() {
             </div>
           </div>
         </>
+      )}
+
+      {tab === 'sequences' && (
+        <div>
+          {/* Step Builder */}
+          <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 14, padding: 20, marginBottom: 20 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>⚡ Multi-Step Sequence Builder</p>
+            <p style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Customers who return after any step are automatically skipped from follow-up sends.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              {seqSteps.map((step, i) => (
+                <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid ' + C.border, borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: C.violet, background: 'rgba(139,92,246,0.12)', padding: '3px 10px', borderRadius: 99 }}>Day {step.delay_days}</span>
+                    <select value={step.condition}
+                      onChange={e => setSeqSteps(prev => prev.map((s, j) => j === i ? { ...s, condition: e.target.value as 'always' | 'if_not_returned' } : s))}
+                      style={{ ...inp, padding: '4px 10px', fontSize: 11, flex: 1, maxWidth: 220 }}>
+                      <option value="always">Always send</option>
+                      <option value="if_not_returned">Only if not returned</option>
+                    </select>
+                  </div>
+                  <textarea value={step.message} rows={3}
+                    placeholder={`Step ${i + 1} SMS message (use {name} for personalisation)…`}
+                    onChange={e => setSeqSteps(prev => prev.map((s, j) => j === i ? { ...s, message: e.target.value } : s))}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }} />
+                  <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{step.message.length}/160</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button onClick={launchSequence}
+                disabled={seqLaunching || selectedCount === 0 || seqSteps.every(s => !s.message.trim())}
+                style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: selectedCount > 0 && seqSteps.some(s => s.message.trim()) ? C.violet : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: seqLaunching ? 0.6 : 1, transition: 'all 0.2s ease' }}>
+                {seqLaunching ? 'Launching…' : `Launch for ${selectedCount} customer${selectedCount !== 1 ? 's' : ''}`}
+              </button>
+              {seqResult && (
+                <div style={{ fontSize: 12, color: C.violet, padding: '8px 14px', background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8 }}>
+                  ✓ Sequence launched: {seqResult.customers} customers × {seqSteps.length} steps = {seqResult.sends_scheduled} sends
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sequence history */}
+          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Sequence History ({sequences.length})</p>
+          {sequences.length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 32 }}>No sequences yet — build your first above.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {sequences.map(s => (
+                <div key={s.id} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600 }}>{s.name ?? 'Winback Sequence'}</p>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: s.status === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: s.status === 'active' ? C.green : C.muted }}>{s.status ?? 'active'}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4 }}>
+                    {([['Customers', s.recipients_count ?? 0], ['Steps', (s.sequence_steps ?? []).length], ['Returned', s.returned_customers ?? 0], ['ROI', (s.roi_percent ?? 0) > 0 ? (s.roi_percent ?? 0) + '%' : '—']] as [string, string | number][]).map(([label, val]) => (
+                      <div key={label}>
+                        <div style={{ fontSize: 10, color: C.dim, marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: C.dim, marginTop: 6 }}>{new Date(s.created_at).toLocaleDateString('en-AU')} · {(s.sequence_steps ?? []).length} steps</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {tab === 'automations' && (
