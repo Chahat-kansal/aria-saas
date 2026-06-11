@@ -8,7 +8,7 @@ export default function AriaFloatingButton() {
   const [isOpen, setIsOpen] = useState(false)
 
   // Hide on unauthenticated / public pages — only show inside the product
-  const EXCLUDED = ['/pos', '/', '/login', '/signup', '/staff/login', '/staff/accept-invite', '/staff/reset-password']
+  const EXCLUDED = ['/pos', '/', '/login', '/signup', '/staff/login', '/staff/accept-invite', '/staff/reset-password', '/dashboard/ask-aria']
   if (EXCLUDED.some(p => pathname === p || pathname.startsWith(p + '/'))) return null
 
   return (

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { routeForInsight } from '@/lib/aria/insight-route'
 
 interface Insight {
@@ -24,6 +24,7 @@ const PRIORITY_COLOR: Record<string, string> = {
 
 export default function AriaBrainPanel({ businessId }: { businessId?: string }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [open, setOpen]       = useState(false)
   const [insights, setInsights] = useState<Insight[]>([])
   const [loading, setLoading] = useState(false)
@@ -59,6 +60,8 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
   }
 
   const pendingCount = insights.filter(i => i.status === 'pending').length
+
+  if (pathname?.startsWith('/dashboard/ask-aria')) return null
 
   return (
     <>

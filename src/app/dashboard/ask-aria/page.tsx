@@ -932,7 +932,7 @@ export default function AskAriaPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: T.bg }}>
+      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', background: T.bg }}>
         <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: T.sage + ' transparent transparent transparent' }} />
       </div>
     )
@@ -942,7 +942,7 @@ export default function AskAriaPage() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div style={{ height: '100dvh', overflow: 'hidden', position: 'relative', fontFamily: T.body }}>
+    <div style={{ height: '100%', overflow: 'hidden', position: 'relative', fontFamily: T.body }}>
       <style>{`
         @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
         @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }

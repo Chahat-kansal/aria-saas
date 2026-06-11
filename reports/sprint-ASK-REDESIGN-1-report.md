@@ -87,6 +87,53 @@ Admin routes (`admin/*`) exempt — not modified.
 
 ---
 
+---
+
+## ASK-REDESIGN-1-FIX — Visual bug fixes (follow-up)
+
+### Investigation findings
+
+**Bug 1 — Sidebar file audit:**
+- `src/app/dashboard/layout.tsx` imports and renders `<DashboardShell>`, not `Sidebar` directly.
+- `DashboardShell.tsx` imports `{ Sidebar }` from `@/components/dashboard/Sidebar` (line 4) and renders it on lines 53 and 78.
+- Conclusion: the collapse implementation applied to `Sidebar.tsx` in Part 1 is in the **correct file**. No wrong-file issue. Bug 1 does not exist as a mismatch — implementation is wired correctly end-to-end.
+
+**Bug 2 — Ask-aria not full-bleed:**
+- `DashboardShell` always rendered a desktop top bar (Schedule PDF + Briefing buttons, ~40px) and a mobile top bar (52px) above `<main>`.
+- `ask-aria/page.tsx` used `height: '100dvh'` which is the full viewport — this extended beyond the `<main>` container and caused scrolling.
+- Fix applied:
+  - Both top bars wrapped in `{pathname !== '/dashboard/ask-aria' && (...)}` — hidden on ask-aria only.
+  - `AriaAwarenessBar` similarly suppressed on ask-aria.
+  - `<main>` className: `overflow-y-auto` → `overflow-hidden` on ask-aria (via ternary).
+  - `ask-aria/page.tsx`: `height: '100dvh'` → `height: '100%'` (both loading spinner wrapper and main grid wrapper).
+
+**Bug 3 — Floating overlays on ask-aria:**
+- `AriaBrainPanel` (🧠 floating brain bubble, `position: fixed, bottom: 180, right: 24`) is globally mounted in `src/app/dashboard/layout.tsx`.
+- `AriaFloatingButton` (green floating Aria button, `position: fixed, bottom: 24, right: 24`) is globally mounted in the **root** `src/app/layout.tsx`.
+- `AriaFloatingPanel` (the TalkingHead overlay) is rendered inside `AriaFloatingButton` — suppressing the button suppresses the panel.
+- Fixes applied:
+  - `AriaBrainPanel.tsx`: added `usePathname` import + `if (pathname?.startsWith('/dashboard/ask-aria')) return null` after all hooks.
+  - `AriaFloatingButton.tsx`: added `'/dashboard/ask-aria'` to the EXCLUDED list — returns null before rendering the button or panel.
+
+### Files changed (FIX)
+
+| File | Change |
+|---|---|
+| `src/components/dashboard/DashboardShell.tsx` | Hide mobile + desktop top bar + AriaAwarenessBar on ask-aria; main uses overflow-hidden on ask-aria |
+| `src/app/dashboard/ask-aria/page.tsx` | `height: '100dvh'` → `height: '100%'` (loading + main wrapper) |
+| `src/components/aria/AriaBrainPanel.tsx` | usePathname + return null on /dashboard/ask-aria |
+| `src/components/AriaFloatingButton.tsx` | Added /dashboard/ask-aria to EXCLUDED list |
+
+### Founder verify checklist (FIX)
+
+- [ ] `/dashboard/ask-aria`: no Schedule PDF / Briefing bar above the split screen — grid fills edge-to-edge
+- [ ] Split screen height fills the full available area (sidebar height) — no partial render, no scrollbar
+- [ ] No floating 🧠 brain bubble (bottom-right) on ask-aria; it returns on other dashboard pages
+- [ ] No floating green Aria button (bottom-right) on ask-aria; it returns on other dashboard pages
+- [ ] Sidebar `[` collapse still works on all other pages — unaffected by this fix
+
+---
+
 ## Build gate
 - `npx tsc --noEmit` → **0 errors** ✓
 - `npm run build` → **PASS** ✓

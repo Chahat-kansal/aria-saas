@@ -82,6 +82,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Mobile top bar */}
+        {pathname !== '/dashboard/ask-aria' && (
         <div
           className="md:hidden flex-shrink-0 flex items-center gap-3 px-4"
           style={{
@@ -124,8 +125,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </button>
           <SchedulePDFButton compact />
         </div>
+        )}
 
         {/* Desktop top bar */}
+        {pathname !== '/dashboard/ask-aria' && (
         <div className="hidden md:flex items-center justify-end gap-2 px-4 py-2 flex-shrink-0"
           style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <SchedulePDFButton />
@@ -139,9 +142,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             Briefing
           </button>
         </div>
+        )}
 
-        <AriaAwarenessBar />
-        <main className="flex-1 overflow-y-auto relative overscroll-contain">
+        {pathname !== '/dashboard/ask-aria' && <AriaAwarenessBar />}
+        <main className={`flex-1 relative overscroll-contain ${pathname === '/dashboard/ask-aria' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {pathname === '/dashboard' && (
             <div className="px-6 pt-6">
               <SetupGuide />
