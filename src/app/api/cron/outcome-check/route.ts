@@ -17,6 +17,15 @@ export async function GET(req: Request) {
   })
 
   try {
+    // Expire stale pending aria_actions older than 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const { error: expireErr } = await supabaseAdmin
+      .from('aria_actions')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .eq('status', 'pending')
+      .lt('created_at', thirtyDaysAgo)
+    if (expireErr) console.error('[outcome-check] stale expiry failed:', expireErr.message)
+
     const { data: businesses } = await supabaseAdmin
       .from('businesses')
       .select('id')

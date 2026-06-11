@@ -1,5 +1,5 @@
 # WIRE-3 — Aria Action Canonical Table Enforcement
-STATUS: READY | MODE: SOLO
+STATUS: AWAITING-VERIFY | MODE: SOLO
 Goal: Enforce correct table ownership across all three aria action tables.
       Every insert to the wrong table is a silent data consistency bug.
 

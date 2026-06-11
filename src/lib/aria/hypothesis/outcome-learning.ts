@@ -28,6 +28,25 @@ export async function onActionApproved(actionId: string, businessId: string): Pr
     baseline_metric_cents: baseline,
   })
 
+  // Create corresponding aria_autopilot_actions row so the Autopilot dashboard
+  // reflects approved recommendations with their outcome tracking status
+  const confStr = (a.confidence as string | null) ?? ''
+  const confNum = confStr === 'high' ? 0.9 : confStr === 'medium' ? 0.7 : confStr === 'low' ? 0.5 : null
+  await supabaseAdmin.from('aria_autopilot_actions').insert({
+    business_id: businessId,
+    action_type: 'aria_recommendation_approved',
+    title: (a.title as string).slice(0, 200),
+    description: (a.recommendation as string | null)?.slice(0, 500) ?? null,
+    status: 'approved',
+    priority: (a.priority as string | null) ?? null,
+    category: a.category as string | null,
+    reasoning: (a.reason as string | null)?.slice(0, 500) ?? null,
+    confidence: confNum,
+    estimated_impact: (a.expected_impact as string | null) ?? null,
+    approved_at: new Date().toISOString(),
+    triggered_by: 'aria_actions:' + actionId,
+  })
+
   const memContent = `Owner accepted Aria recommendation: "${(a.title as string).slice(0, 150)}". Category: ${a.category as string | null}. Expected: ${(a.expected_impact as string | null) ?? 'unspecified'}.`
   await persistMemories(
     businessId,

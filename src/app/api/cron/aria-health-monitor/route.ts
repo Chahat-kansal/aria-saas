@@ -4,6 +4,7 @@ export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 // ─── SH-3 types ──────────────────────────────────────────────────────────────
 
@@ -374,42 +375,30 @@ async function runWiringHealthPass(since7d: string, since24h: string): Promise<{
     const title = buildRedTitle(check)
     const recommendation = buildRedRecommendation(check)
 
-    // Dedup: skip if a pending system_health action already exists for this check + business
-    const { data: existing } = await supabaseAdmin
-      .from('aria_actions')
-      .select('id')
-      .eq('business_id', check.business_id!)
-      .eq('category', 'system_health')
-      .eq('status', 'pending')
-      .ilike('title', `%${check.check_name}%`)
-      .limit(1)
-
-    if (existing && existing.length > 0) continue
-
-    const { error: actionErr } = await supabaseAdmin.from('aria_actions').insert({
-      business_id:    check.business_id!,
-      category:       'system_health',
-      title,
-      recommendation,
-      priority:       'high',
-      status:         'pending',
-      source:         'cron:aria-health-monitor',
-      expected_impact: 'data integrity',
-      confidence:     'high',
-      payload: {
-        check_name: check.check_name,
-        value:      check.value,
-        threshold:  check.threshold,
-        details:    check.details,
-        detected_at: new Date().toISOString(),
-      },
-    })
-
-    if (actionErr) {
-      console.error('[aria-health-monitor] red action insert failed:', actionErr.message, check.check_name)
-    } else {
+    // Dedup via upsertAriaAction — refreshes existing pending row or inserts new one
+    try {
+      await upsertAriaAction({
+        business_id:    check.business_id!,
+        category:       'system_health',
+        title,
+        recommendation,
+        priority:       'high',
+        status:         'pending',
+        source:         'cron:aria-health-monitor',
+        expected_impact: 'data integrity',
+        confidence:     'high',
+        payload: {
+          check_name: check.check_name,
+          value:      check.value,
+          threshold:  check.threshold,
+          details:    check.details,
+          detected_at: new Date().toISOString(),
+        },
+      })
       redActions++
-      console.log(`[aria-health-monitor] RED action created: ${check.check_name} biz=${check.business_id}`)
+      console.log(`[aria-health-monitor] RED action upserted: ${check.check_name} biz=${check.business_id}`)
+    } catch (e) {
+      console.error('[aria-health-monitor] red action upsert failed:', (e as Error).message, check.check_name)
     }
   }
 

@@ -472,3 +472,16 @@ All amounts stored in the DB as plain dollars (numeric) EXCEPT:
 1. daily_briefings — original OS briefings (date, recommendations jsonb, content text)
 2. aria_daily_briefings — Aria-specific briefings (briefing_date, content text, source)
 3. pos_daily_briefings — POS-specific briefings (briefing_date, summary, yesterday_revenue, etc.)
+
+### Aria Action Table Ownership (confirmed WIRE-3, 2026-06-11)
+
+| Table | Purpose | Who writes | Who reads |
+|---|---|---|---|
+| `aria_actions` | AI recommendations for the founder to approve/dismiss | `upsertAriaAction()` (all callers MUST use this) + direct insert for non-pending status only | Dashboard actions panel, Brain context, Intelligence Centre |
+| `aria_agent_actions` | Executor log: actions the agentic layer TOOK (sent email, reordered stock, etc.) | `automation-agent.ts`, `message-agent.ts`, `query-agent.ts` ONLY | Intelligence Centre audit log, `approve-action` endpoint |
+| `aria_autopilot_actions` | Outcome records: what Aria proposed + what happened | Feature-level agents (CLV, flash-revenue, reputation, autopilot POST) + `onActionApproved()` (on aria_actions approval) | Autopilot dashboard, wins, aria-os status |
+| `aria_outcomes` | Quantitative outcome tracking: baseline vs 7d/30d metric deltas | `onActionApproved()` via outcome-learning.ts | `runOutcomeChecks()` cron, advice weight system |
+
+**Dedup rule**: All `status='pending'` inserts to `aria_actions` MUST go through `upsertAriaAction()` — it deduplicates by `business_id + category + title[0:60]` to prevent daily duplicate recommendations. Non-pending inserts (status='completed', 'executed', 'proposed') may insert directly.
+
+**Stale expiry**: `outcome-check` cron expires `status='pending'` aria_actions older than 30 days on every run.
