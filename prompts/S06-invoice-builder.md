@@ -1,5 +1,5 @@
 # S06 — Invoice Builder
-STATUS: PARTIAL | MODE: SOLO
+STATUS: AWAITING-VERIFY | MODE: SOLO
 Covers: prompts/11-invoice-builder.md, 35-invoices-pro-upgrade.md
 Missing pieces: scheduled/recurring invoices, e-signature flow, overdue auto-reminder escalation
 
@@ -14,20 +14,61 @@ See RUNNER-PROTOCOL.md Pre-flight protocol steps 1–9.
 Key tables to sibling-check: `%invoice%`, `%quote%`
 
 ## CONSTRAINT CATALOGUE
-FIRST ACTION at execution time: run live SQL for every table this sprint touches.
-Tables: invoices, invoice_line_items, businesses, pos_customers, customers
+Filled from live SQL run at execution time (2026-06-11).
 
-```sql
-SELECT column_name, data_type, is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'invoices'
-ORDER BY ordinal_position;
+### invoices (key columns)
+| column | type | nullable | notes |
+|---|---|---|---|
+| id | uuid | NO | PK |
+| business_id | uuid | NO | FK → businesses |
+| customer_id | uuid | YES | FK → pos_customers |
+| invoice_number | text | NO | |
+| status | text | NO | CHECK: draft/sent/overdue/paid/voided |
+| bill_to_name | text | NO | |
+| bill_to_email | text | YES | |
+| bill_to_address | text | YES | |
+| bill_to_phone | text | YES | |
+| notes | text | YES | |
+| issue_date | date | YES | |
+| due_date | date | YES | |
+| subtotal | numeric | YES | |
+| gst_total | numeric | YES | |
+| total | numeric | YES | |
+| currency | text | YES | default 'AUD' |
+| send_method | text | YES | email/sms |
+| sent_at | timestamptz | YES | |
+| paid_at | timestamptz | YES | |
+| viewed_at | timestamptz | YES | |
+| pdf_url | text | YES | |
+| auto_reminders | boolean | YES | default true |
+| ai_generated | boolean | YES | |
+| signature_token | text | YES | UNIQUE — added by S06 migration |
+| signed_at | timestamptz | YES | added by S06 migration |
+| signed_by_name | text | YES | added by S06 migration |
+| created_at | timestamptz | YES | |
+| updated_at | timestamptz | YES | |
 
-SELECT conname, contype, pg_get_constraintdef(oid)
-FROM pg_constraint WHERE conrelid = 'invoices'::regclass ORDER BY contype;
-```
+### recurring_invoices (sibling table — used instead of adding to invoices)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| business_id | uuid | NO |
+| base_invoice_id | uuid | NO |
+| frequency | text | NO | CHECK: weekly/monthly/quarterly |
+| next_due_date | date | NO |
+| is_active | boolean | NO | default true |
+| created_at | timestamptz | YES |
 
-Fill in results here before writing any code.
+### invoice_reminders
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| invoice_id | uuid | NO |
+| business_id | uuid | NO |
+| remind_at | timestamptz | YES |
+| trigger_type | text | YES | e.g. '7d_final' |
+| sent_at | timestamptz | YES |
+| created_at | timestamptz | YES |
 
 ## Gap closure scope
 

@@ -28,7 +28,7 @@ Generated: 2026-06-10 from roadmap-audit-2026-06-10.md
 | 3 | [S03-seo-suite.md](S03-seo-suite.md) | SEO Suite (crawler + dashboard + local) | DONE | BATCH |
 | 4 | [S04-pos-performance.md](S04-pos-performance.md) | POS Performance & Terminal | DONE | BATCH |
 | 5 | [S05-customer-management.md](S05-customer-management.md) | Customer Management | DONE | BATCH |
-| 6 | [S06-invoice-builder.md](S06-invoice-builder.md) | Invoice Builder | PARTIAL | SOLO |
+| 6 | [S06-invoice-builder.md](S06-invoice-builder.md) | Invoice Builder | AWAITING-VERIFY | SOLO |
 | 7 | [S07-recipe-management.md](S07-recipe-management.md) | Recipe Management | PARTIAL | SOLO |
 | 8 | [S08-weekly-shift-reports.md](S08-weekly-shift-reports.md) | Weekly & Shift Reports | PARTIAL | SOLO |
 | 9 | [S09-roster-intelligence.md](S09-roster-intelligence.md) | Roster & Staff Intelligence | DONE | BATCH |

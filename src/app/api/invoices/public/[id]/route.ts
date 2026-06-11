@@ -8,7 +8,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const { data: inv } = await supabaseAdmin
     .from('invoices')
-    .select('id, invoice_number, status, issue_date, due_date, bill_to_name, bill_to_email, bill_to_address, subtotal, gst_total, total, notes, pdf_url, paid_at, business_id, viewed_at')
+    .select('id, invoice_number, status, issue_date, due_date, bill_to_name, bill_to_email, bill_to_address, subtotal, gst_total, total, notes, pdf_url, paid_at, business_id, viewed_at, signature_token, signed_at, signed_by_name')
     .eq('id', params.id)
     .maybeSingle()
   if (!inv) return NextResponse.json({ error: 'Not found' }, { status: 404 })

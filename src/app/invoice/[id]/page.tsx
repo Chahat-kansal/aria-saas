@@ -27,6 +27,9 @@ interface Invoice {
   notes: string | null
   pdf_url: string | null
   paid_at: string | null
+  signature_token: string | null
+  signed_at: string | null
+  signed_by_name: string | null
 }
 
 interface Business {
@@ -47,6 +50,11 @@ export default function PublicInvoicePage() {
   const [paidLoading, setPaidLoading] = useState(false)
   const [paidMethod, setPaidMethod] = useState<'cash' | 'bank_transfer' | null>(null)
   const [markedPaid, setMarkedPaid] = useState(false)
+  const [sigAgreed, setSigAgreed] = useState(false)
+  const [sigName, setSigName] = useState('')
+  const [sigLoading, setSigLoading] = useState(false)
+  const [sigDone, setSigDone] = useState(false)
+  const [sigError, setSigError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -61,6 +69,30 @@ export default function PublicInvoicePage() {
       .catch(() => setError('Failed to load invoice'))
       .finally(() => setLoading(false))
   }, [id])
+
+  async function signInvoice() {
+    if (!invoice || sigLoading || !sigAgreed || sigName.trim().length < 2) return
+    setSigLoading(true)
+    setSigError(null)
+    try {
+      const res = await fetch('/api/invoices/public/' + id + '/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature_token: invoice.signature_token, name: sigName.trim() }),
+      })
+      const d = await res.json()
+      if (d.ok) {
+        setSigDone(true)
+        setInvoice(prev => prev ? { ...prev, signed_at: d.signed_at, signed_by_name: d.signed_by_name } : prev)
+      } else {
+        setSigError(d.error ?? 'Signing failed')
+      }
+    } catch {
+      setSigError('Network error — try again')
+    } finally {
+      setSigLoading(false)
+    }
+  }
 
   async function markPaid(method: 'cash' | 'bank_transfer') {
     if (!invoice || paidLoading) return
@@ -208,6 +240,63 @@ export default function PublicInvoicePage() {
           <div style={{ borderTop: '1px solid #e8f0eb', paddingTop: '24px', textAlign: 'center' }}>
             <p style={{ color: '#27ae60', fontSize: '15px', fontWeight: 600 }}>Payment received — thank you!</p>
             <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>The business will confirm and issue a receipt.</p>
+          </div>
+        )}
+
+        {/* E-signature block */}
+        {invoice.signature_token && !isPaid && (
+          <div style={{ borderTop: '1px solid #e8f0eb', paddingTop: '24px', marginTop: '8px' }}>
+            {(invoice.signed_at || sigDone) ? (
+              <div style={{ background: '#f0faf4', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+                <p style={{ color: '#27ae60', fontSize: '14px', fontWeight: 600, margin: '0 0 4px' }}>Invoice signed</p>
+                <p style={{ color: '#555', fontSize: '12px', margin: 0 }}>
+                  Signed by <strong>{invoice.signed_by_name ?? sigName}</strong>
+                  {invoice.signed_at ? ' on ' + new Date(invoice.signed_at).toLocaleString('en-AU') : ''}
+                </p>
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px', color: '#1a1a1a' }}>Sign this invoice</p>
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '16px' }}>
+                  By signing, you acknowledge receipt and agree to the terms. This constitutes a valid electronic signature under Australian law.
+                </p>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '16px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={sigAgreed}
+                    onChange={e => setSigAgreed(e.target.checked)}
+                    style={{ marginTop: '2px', accentColor: '#2D5240', width: '16px', height: '16px', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: '13px', color: '#333' }}>
+                    I have reviewed this invoice and agree to its terms
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Full legal name"
+                  value={sigName}
+                  onChange={e => setSigName(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cde0d4', borderRadius: '6px', fontSize: '14px', marginBottom: '12px', boxSizing: 'border-box' }}
+                />
+                {sigError && <p style={{ color: '#c0392b', fontSize: '12px', marginBottom: '10px' }}>{sigError}</p>}
+                <button
+                  onClick={signInvoice}
+                  disabled={sigLoading || !sigAgreed || sigName.trim().length < 2}
+                  style={{
+                    padding: '10px 24px',
+                    background: sigLoading || !sigAgreed || sigName.trim().length < 2 ? '#a0b8ac' : '#2D5240',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: sigLoading || !sigAgreed || sigName.trim().length < 2 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {sigLoading ? 'Signing…' : 'Sign Invoice'}
+                </button>
+              </>
+            )}
           </div>
         )}
 

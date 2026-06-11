@@ -216,14 +216,18 @@ async function _POST(req: Request) {
     }
   }
 
-  const { data: updated, error: updateErr } = await supabaseAdmin.from('invoices').update({
+  const sendUpdate: Record<string, unknown> = {
     status: 'sent',
     sent_at: new Date().toISOString(),
     send_method: sendMethod,
     pdf_url: pdfUrl,
     auto_reminders: true,
     updated_at: new Date().toISOString(),
-  }).eq('id', invoiceId).select('*').single()
+  }
+  if (!inv.signature_token) {
+    sendUpdate.signature_token = crypto.randomUUID()
+  }
+  const { data: updated, error: updateErr } = await supabaseAdmin.from('invoices').update(sendUpdate).eq('id', invoiceId).select('*').single()
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
   markBriefingStale(inv.business_id).catch(() => {})
