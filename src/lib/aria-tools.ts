@@ -707,6 +707,31 @@ function resolveColumn(entity: string, col: string): string {
   return cfg.columnAliases?.[col] ?? col;
 }
 
+// SQL-GUARD-1: fire-and-forget guard-event log — never blocks or fails the query
+function logGuardEvent(businessId: string, summary: string, signal: string): void {
+  void (async () => {
+    try {
+      await supabaseAdmin.from('aria_ai_calls').insert({
+        business_id: businessId,
+        agent_key: 'sql_guard',
+        provider: 'internal',
+        role: 'guard',
+        success: true,
+        request_summary: summary.slice(0, 200),
+        learning_signal: signal,
+      });
+    } catch { /* non-fatal */ }
+  })();
+}
+
+// SQL-GUARD-1 Guard 3: closest known columns for a bad column name (shared 4-char prefix either way)
+function similarColumns(badCol: string, entity: string): string[] {
+  const cfg = ENTITY_TABLES[entity];
+  if (!cfg) return [];
+  const all = [...cfg.defaultColumns, ...Object.keys(cfg.columnAliases ?? {})];
+  return all.filter(c => c.includes(badCol.slice(0, 4)) || badCol.includes(c.slice(0, 4))).slice(0, 5);
+}
+
 async function queryBusinessData(input: Record<string, unknown>, businessId: string): Promise<unknown> {
   const entity = String(input.entity ?? '');
   const cfg = ENTITY_TABLES[entity];
@@ -747,7 +772,14 @@ async function queryBusinessData(input: Record<string, unknown>, businessId: str
     }
   }
 
-  if (entity === 'sales') query = query.neq('status', 'voided');
+  // SQL-GUARD-1 Guard 2: inject voided filter ONLY when no explicit status filter was provided
+  // (previously unconditional — an explicit status filter, e.g. status='voided', was contradicted by the neq)
+  if (entity === 'sales') {
+    if (!('status' in filters)) {
+      query = query.neq('status', 'voided');
+      logGuardEvent(businessId, 'voided filter injected on pos_sales (no status filter in query)', 'guard_fired:voided_filter_injected');
+    }
+  }
   if (entity === 'products' && !filters.is_active && !filters.status) query = query.neq('is_active', false);
 
   query = query.order(orderBy, { ascending }).limit(limit);
@@ -756,17 +788,54 @@ async function queryBusinessData(input: Record<string, unknown>, businessId: str
   if (error) {
     // Self-healing: if column not found, retry with a relaxed query
     if (error.message.includes('column') && error.message.includes('does not exist')) {
+      // SQL-GUARD-1 Guard 3: schema-aware hint so the LLM's next tool call can self-correct
+      const colMatch = error.message.match(/column "?(?:[a-z_]+\.)?([a-zA-Z_]+)"? does not exist/i);
+      const badCol = colMatch?.[1] ?? '';
+      const candidates = badCol ? similarColumns(badCol, entity) : [];
+      const hint = badCol
+        ? `Column "${badCol}" does not exist on table "${cfg.table}". Did you mean one of: ${(candidates.length > 0 ? candidates : cfg.defaultColumns.slice(0, 8)).join(', ')}?`
+        : undefined;
+      if (hint) logGuardEvent(businessId, `schema hint: ${badCol} on ${cfg.table}`, 'guard_fired:schema_hint');
       const { data: fallback, error: fbErr } = await supabaseAdmin
         .from(cfg.table)
         .select(cfg.defaultColumns.join(','))
         .eq('business_id', businessId)
         .order(cfg.defaultOrder, { ascending })
         .limit(limit);
-      if (fbErr) return { error: fbErr.message, rows: [] };
-      return { entity, count: (fallback ?? []).length, rows: fallback ?? [], note: 'Filter was ignored due to schema mismatch — returning default sort' };
+      if (fbErr) {
+        return {
+          error: 'column_not_found',
+          requested_column: badCol || undefined,
+          table: cfg.table,
+          available_similar_columns: candidates,
+          hint: hint ?? fbErr.message,
+          rows: [],
+        };
+      }
+      return { entity, count: (fallback ?? []).length, rows: fallback ?? [], note: 'Filter was ignored due to schema mismatch — returning default sort' + (hint ? '. ' + hint : '') };
     }
     return { error: error.message, rows: [] };
   }
+
+  // SQL-GUARD-1 Guard 1: entity 'customers' maps to pos_customers — if that table is EMPTY for this
+  // business, transparently fall back to the legacy customers table so Aria never reports zero customers
+  // for a business whose records live in the other table.
+  if (entity === 'customers' && (data ?? []).length === 0) {
+    const { count: posCount } = await supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', businessId);
+    if ((posCount ?? 0) === 0) {
+      const { data: legacy, error: legacyErr } = await supabaseAdmin
+        .from('customers')
+        .select('id,name,phone,email,total_spent,visit_count,last_visit,customer_segment,churn_risk')
+        .eq('business_id', businessId)
+        .order('total_spent', { ascending: false, nullsFirst: false })
+        .limit(limit);
+      if (!legacyErr && (legacy ?? []).length > 0) {
+        logGuardEvent(businessId, 'customers entity: pos_customers empty, returned legacy customers rows', 'guard_fired:customers_empty_rewrite');
+        return { entity, count: (legacy ?? []).length, rows: legacy ?? [], note: 'pos_customers is empty for this business — rows returned from the customers table instead' };
+      }
+    }
+  }
+
   return { entity, count: (data ?? []).length, rows: data ?? [] };
 }
 
