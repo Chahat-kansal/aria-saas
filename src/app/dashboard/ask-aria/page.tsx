@@ -963,10 +963,13 @@ export default function AskAriaPage() {
           .aria-avatar-float { bottom: 160px !important; z-index: 10 !important; }
           .aria-avatar-float * { pointer-events: none !important; }
         }
+        @media (min-width: 1024px) {
+          .aria-avatar-float { display: none !important; }
+        }
       `}</style>
 
       {/* ── Split-screen grid ── */}
-      <div className="aria-split-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 400px', height: '100dvh', overflow: 'hidden' }}>
+      <div className="aria-split-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(380px, 420px) 1fr', height: '100%', overflow: 'hidden' }}>
 
         {/* ══ LEFT PANEL — clay-glass-bento ══ */}
         <div className="aria-left-panel" style={{

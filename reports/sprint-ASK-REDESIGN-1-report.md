@@ -200,6 +200,74 @@ Added `const SPREADSHEET_RE = /spreadsheet|\bcsv\b|excel|export/i` and appended 
 
 ---
 
+## ASK-REDESIGN-1-FIX-3 — Panel ratio + visible sidebar toggle + verify hidden overlays
+
+### Investigation findings (verbatim)
+
+**Finding 1 — pwd:** `C:\Users\kansa\aria-saas-audit` confirmed.
+
+**Finding 2 — Top bar hiding check in DashboardShell.tsx:**
+The FIX-1 edit IS in git history (commit `e2fd186d fix(ask-aria): full-bleed layout + suppress floating overlays on ask-aria route`). The exact checks were:
+- Line 85: `{pathname !== '/dashboard/ask-aria' && (` — mobile top bar
+- Line 131: `{pathname !== '/dashboard/ask-aria' && (` — desktop top bar
+- Line 147: `{pathname !== '/dashboard/ask-aria' && <AriaAwarenessBar />}`
+- Line 148: `pathname === '/dashboard/ask-aria' ? 'overflow-hidden' : 'overflow-y-auto'`
+All four used **strict equality** — fragile against trailing slash or sub-routes. Replaced with a single `isAskAria = pathname?.startsWith('/dashboard/ask-aria') ?? false` flag.
+
+**Finding 3 — Floating avatar audit (the FastGridLayout lesson):**
+Files mounting floating avatar components:
+- `src/components/AriaFloatingButton.tsx` — root layout; ALREADY excludes ask-aria via EXCLUDED list (`pathname === p || pathname.startsWith(p + '/')` — robust, no change needed)
+- `src/components/AriaFloatingPanel.tsx` — only rendered inside AriaFloatingButton (suppressed transitively)
+- `src/components/aria/AriaBrainPanel.tsx` — dashboard layout; ALREADY returns null via `pathname?.startsWith('/dashboard/ask-aria')` (FIX-1)
+- `src/components/TalkToAria.tsx` — landing page only (mounted via `scene-data.tsx` → `TalkToAriaScene`), never on dashboard — no change needed
+- **`src/app/dashboard/ask-aria/page.tsx` line 1494 — THE ACTUAL CULPRIT.** The page itself renders a SECOND floating `AriaTalkingHead` in a `position: fixed, bottom: 0, right: 0, width: 120` div (class `aria-avatar-float`). This is the small character avatar visible in the bottom-right of the screenshot. The earlier ASK-REDESIGN-1 report even documented it: "AriaTalkingHead: mounted in left panel glass ring AND floating in right panel composer zone." The FIX-1 guards on AriaFloatingButton/AriaBrainPanel were correct but could never touch this one.
+
+**Finding 4 — Sidebar toggle:**
+The chevron toggle DOES exist (lines 507–521) and is always rendered (not gated by `collapsed`). BUT: it is at the **bottom** of the sidebar (below all nav, above the user footer), uses a 14px icon (`w-3.5 h-3.5`), and base colour `text-[rgba(255,255,255,0.2)]` — 20% white on black, effectively invisible until hovered. Click target ~30px tall via `py-1.5`. It exists but is undiscoverable — which matches the founder's experience.
+
+### Fixes applied
+
+**Fix 1 — panel ratio flip** (`ask-aria/page.tsx` line 969)
+- `gridTemplateColumns: '1fr 400px'` → `'minmax(380px, 420px) 1fr'`
+- Left Aria panel: fixed 380–420px band; right dark chat panel: all remaining space
+- ALSO corrected `height: '100dvh'` → `'100%'` on the same grid line — this inner grid still had the viewport height that FIX-1 only removed from the two outer wrappers, causing the grid to overflow its `overflow-hidden` parent (composer clipped). Now the grid exactly fills the main content area.
+- Mobile breakpoint logic (`.aria-split-grid` stacking <1024px) untouched.
+
+**Fix 2 — bulletproof top-bar hiding** (`DashboardShell.tsx`)
+- Added `const isAskAria = pathname?.startsWith('/dashboard/ask-aria') ?? false`
+- Applied to all four sites: mobile top bar, desktop top bar, AriaAwarenessBar, main overflow class
+- No dev `console.log` was committed — none was needed; the root cause was the strict-equality check, fixed by `startsWith`. Verified: `grep console.log src/components/dashboard/DashboardShell.tsx` → no matches from this change.
+
+**Fix 3 — eliminate floating avatar on ask-aria desktop** — files changed:
+| File | Change |
+|---|---|
+| `src/app/dashboard/ask-aria/page.tsx` | Added `@media (min-width: 1024px) { .aria-avatar-float { display: none !important; } }` — hides the page's own bottom-right floating AriaTalkingHead on desktop |
+| `src/components/AriaFloatingButton.tsx` | No change needed — exclude list already robust (verified) |
+| `src/components/aria/AriaBrainPanel.tsx` | No change needed — startsWith guard already present (verified) |
+| `src/components/TalkToAria.tsx` | No change — landing page only, never mounted on dashboard |
+
+Rationale for media-query (not removal): on screens <1024px the left panel's glass-ring avatar is `display: none` (mobile stacking), so the floating avatar is the ONLY avatar there — removing the element entirely would delete the avatar feature from mobile (RULE 0). On desktop ≥1024px the glass-ring avatar is visible, so the bottom-right corner is now empty as required.
+
+**Fix 4 — visible sidebar toggle** (`Sidebar.tsx` header)
+- New 32×32px (`w-8 h-8`) chevron button in the sidebar header, top-right next to the ariaOS logo
+- Always rendered in both states: collapse chevron (←) when expanded, expand chevron (→) below the "a" mark when collapsed
+- `aria-label="Collapse sidebar"` / `aria-label="Expand sidebar"` per state
+- Visible affordance: `border border-[rgba(255,255,255,0.1)]` + `text-[rgba(255,255,255,0.45)]` base + hover white/bg states
+- `hidden md:flex` — desktop only (mobile sidebar overlay keeps its ✕ close button)
+- The existing bottom toggle and the `[` keyboard shortcut both kept (additive)
+
+### Additive-only confirmation
+Every change is additive: a ratio/height value swap, a route-guard flag consolidation, one desktop-only CSS hide rule (mobile avatar retained), and a second toggle button added alongside the existing one. No component, handler, voice/TTS path, palette, breakpoint, or feature was removed. BlockRenderer, route.ts, ask-types.ts, and AI brain logic untouched.
+
+### Founder verify checklist (FIX-3)
+- [ ] Desktop `/dashboard/ask-aria`: dark chat panel is now the DOMINANT area; cream Aria panel is a 380–420px left band
+- [ ] No top bar (Schedule PDF / Briefing) above the split screen; no scrollbar; composer fully visible at bottom
+- [ ] Bottom-right corner of the screen is EMPTY on desktop — only avatar is in the left panel's glass ring
+- [ ] On mobile (<1024px): floating avatar still appears (left panel avatar is hidden there)
+- [ ] Sidebar: visible bordered chevron button at top-right of header — click collapses to 64px rail; in rail mode, chevron under the "a" expands. `[` still works.
+
+---
+
 ## Build gate
 - `npx tsc --noEmit` → **0 errors** ✓
 - `npm run build` → **PASS** ✓

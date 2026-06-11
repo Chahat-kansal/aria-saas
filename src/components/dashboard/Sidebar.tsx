@@ -314,8 +314,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
       {/* Logo */}
       <div className="pt-[22px] pb-3 flex-shrink-0" style={{ padding: collapsed ? '22px 0 12px' : '22px 20px 12px' }}>
         {collapsed ? (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-2">
             <div className="text-lg font-medium tracking-tight"><span style={{ color: '#1D9E75' }}>a</span></div>
+            <button
+              onClick={() => setCollapsed(false)}
+              aria-label="Expand sidebar"
+              title="Expand sidebar ([)"
+              className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-[rgba(255,255,255,0.45)] hover:text-white border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
           </div>
         ) : (
           <div className="flex items-center justify-between mb-1.5">
@@ -323,11 +331,21 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
               <span className="text-white">aria</span>
               <span className="text-[#1D9E75]">OS</span>
             </div>
-            {onNavigate && (
-              <button onClick={onNavigate} className="md:hidden -mr-1 -mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCollapsed(true)}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar ([)"
+                className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-[rgba(255,255,255,0.45)] hover:text-white border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
               </button>
-            )}
+              {onNavigate && (
+                <button onClick={onNavigate} className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              )}
+            </div>
           </div>
         )}
         {!collapsed && (
