@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 export interface CompetitorCheckResult {
   competitor_name: string
@@ -94,7 +95,7 @@ export async function checkCompetitorPrices(
 
   const alerts = productsFound.filter(p => p.alert)
   if (alerts.length > 0) {
-    await supabaseAdmin.from('aria_actions').insert({
+    await upsertAriaAction({
       business_id: businessId,
       category: 'pricing',
       title: `Competitor alert: ${competitorName} is cheaper on ${alerts.length} item${alerts.length !== 1 ? 's' : ''}`,

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 // 17TRACK pushes here automatically whenever a carrier updates a parcel.
 // Setup: 17TRACK dashboard -> Settings -> Webhook -> https://www.ariaos.site/api/pos/parcel-tracking/webhook
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
           .neq('status', 'exception')
           .limit(1)
         if (parcels?.[0]) {
-          void supabaseAdmin.from('aria_actions').insert({
+          void upsertAriaAction({
             business_id: parcels[0].business_id, category: 'delivery', priority: 'high',
             title: `Delivery exception: ${item.number}`, status: 'pending', source: 'parcel_webhook',
             recommendation: `Parcel ${item.number} has a delivery exception. Contact ${parcels[0].carrier_name ?? 'the carrier'}.`,

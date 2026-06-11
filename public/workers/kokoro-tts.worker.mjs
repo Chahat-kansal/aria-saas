@@ -286,12 +286,15 @@ self.onmessage = (e) => {
   }
 
   if (type === 'speak' && text !== undefined) {
+    const hadQueued = !!pendingSpeakMsg
     currentSpeakId = id
     if (!tts || generating) {
       pendingSpeakMsg = { id, text }
-      console.log(`[KokoroWorker] speak ${id} queued (${!tts ? 'tts not ready' : 'generating'})`)
+      const queueDepth = hadQueued ? 1 : 0  // queue holds at most 1 (latest wins, old discarded)
+      console.log(`[KokoroWorker] speak ${id} queued (${!tts ? 'tts not ready' : 'generating'}) depth=${queueDepth + 1} discarded=${hadQueued ? 1 : 0}`)
       return
     }
+    console.log(`[KokoroWorker] speak ${id} dispatching immediately depth=0`)
     runSpeak(id, text).catch(err =>
       postMessage({ type: 'error', stage: 'runSpeak-dispatch', message: String(err), id }))
     return

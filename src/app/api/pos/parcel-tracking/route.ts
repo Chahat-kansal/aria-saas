@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -320,7 +321,7 @@ async function _POST(req: Request) {
 
   // Log to activity + trigger autopilot if exception
   if (liveData?.status === 'exception') {
-    void supabaseAdmin.from('aria_actions').insert({
+    void upsertAriaAction({
       business_id: bid, category: 'delivery', priority: 'high',
       title: `Delivery exception: ${tn}`, status: 'pending', source: 'parcel_tracking',
       recommendation: `Parcel ${tn} (${carrierName}) has an exception. Contact carrier or recipient.`,
@@ -403,7 +404,7 @@ async function _PATCH(req: Request) {
 
       // Autopilot action on exception
       if (liveData.status === 'exception' && existing.status !== 'exception') {
-        void supabaseAdmin.from('aria_actions').insert({
+        void upsertAriaAction({
           business_id: bid, category: 'delivery', priority: 'high',
           title: `Delivery exception: ${existing.tracking_number}`, status: 'pending', source: 'parcel_tracking',
           recommendation: `Parcel ${existing.tracking_number} has an exception. Check with ${existing.carrier_name}.`,

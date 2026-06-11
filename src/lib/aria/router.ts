@@ -3,6 +3,7 @@ import { buildBusinessContext } from './context'
 import { runAgent } from './agents'
 import { judge } from './judge'
 import { tryConsume } from './rate-limit'
+import { upsertAriaAction } from './upsert-aria-action'
 import type { AgentKey, AriaInvokeResult } from './types'
 
 function agentToCategory(key: AgentKey): string {
@@ -70,7 +71,7 @@ export async function routeAndJudge(
 
   // Persist to aria_actions — expected_impact is TEXT
   try {
-    await supabase.from('aria_actions').insert({
+    await upsertAriaAction({
       business_id: businessId,
       title: rec.title,
       category: agentToCategory(agentKey),
@@ -95,7 +96,7 @@ export async function routeAndJudge(
         latency_ms: Date.now() - t0,
       },
     })
-  } catch { /* aria_actions insert failure non-fatal */ }
+  } catch { /* aria_actions upsert failure non-fatal */ }
 
   return {
     recommendation: finalRec,

@@ -1,5 +1,6 @@
 import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 export async function checkComplianceExpiry(businessId: string): Promise<number> {
   const now = new Date()
@@ -16,7 +17,7 @@ export async function checkComplianceExpiry(businessId: string): Promise<number>
       .eq('expiry_date', dateStr)
       .neq('status', 'done')
     for (const item of expiring ?? []) {
-      await supabaseAdmin.from('aria_actions').insert({
+      await upsertAriaAction({
         business_id: businessId,
         category: 'compliance',
         title: `Compliance expiry: ${item.title}`,
@@ -122,7 +123,7 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
     const lastFired = alert.last_triggered_at ? new Date(String(alert.last_triggered_at)).getTime() : 0
     if (Date.now() - lastFired < 4 * 3600_000) continue
 
-    await supabaseAdmin.from('aria_actions').insert({
+    await upsertAriaAction({
       business_id: businessId,
       category: 'sales',
       title: String(alert.name),

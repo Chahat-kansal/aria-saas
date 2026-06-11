@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -74,7 +75,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
 
   if (aria_event) {
     try {
-      await supabase.from('aria_actions').insert({
+      await upsertAriaAction({
         business_id: bid,
         category: 'sales',
         title: aria_event === 'slow_ticket_bumped' ? `Slow ticket: ${ticket.station}` : `Recall: ${ticket.station}`,

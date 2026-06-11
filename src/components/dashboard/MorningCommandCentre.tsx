@@ -241,8 +241,8 @@ export function MorningCommandCentre() {
     }
 
     setLoading(true);
-    // Load live monitor in parallel — don't block main brain
-    loadLive(business.id);
+    // Live intelligence is loaded on demand (refresh button), not on initial mount,
+    // to prevent concurrent ops_narrative calls (each is a full AI invocation).
     try {
       const result = await postBrain(business.id, 'daily', undefined, forceRefresh);
       setData({ ...EMPTY_OUTPUT, ...result, data_status: result.data_status ?? EMPTY_STATUS });

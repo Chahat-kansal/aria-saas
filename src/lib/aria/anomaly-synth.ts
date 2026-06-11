@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { bulkUpsertAriaActions } from './upsert-aria-action'
 import type { Signal } from './signal-engine'
 
 export async function synthesizeFromSignals(businessId: string, signals: Signal[]): Promise<void> {
@@ -46,12 +47,12 @@ export async function synthesizeFromSignals(businessId: string, signals: Signal[
     recommendation: r.recommendation,
     reason: r.reason,
     expected_impact: r.expected_impact,
-    confidence: r.confidence,
+    confidence: String(r.confidence),
     status: 'pending',
     source: 'signal_engine',
     triggered_by: 'system',
     payload: { triggering_signals: alerts.map(a => a.signal_type) },
   }))
 
-  await supabaseAdmin.from('aria_actions').insert(rows)
+  await bulkUpsertAriaActions(rows)
 }

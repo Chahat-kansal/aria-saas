@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveHourlyRateCents } from './pay-rates'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 export interface TimesheetEntry {
   id: string
@@ -145,7 +146,7 @@ export async function clockOut(
           const scheduledHours = computeHours(String(shift.start_time), String(shift.end_time), Number(shift.break_minutes) || 0)
           const variance = Math.abs(hours - scheduledHours) / Math.max(scheduledHours, 0.1)
           if (variance > 0.15) {
-            await supabaseAdmin.from('aria_actions').insert({
+            await upsertAriaAction({
               business_id: businessId,
               category: 'staff',
               title: `Timesheet variance: ${String(ts.staff_name)}`,

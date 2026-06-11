@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { callAnthropic } from '@/lib/aria/providers/anthropic'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 const INSIGHT_SYSTEM = `You are Aria's workforce analyst for an Australian SMB.
 Given labour and sales data, identify the most important workforce insight.
@@ -102,7 +103,7 @@ Identify the most important workforce insight.`
   if (!d || d.insight_type === 'all_clear') return
 
   try {
-    await supabaseAdmin.from('aria_actions').insert({
+    await upsertAriaAction({
       business_id: businessId,
       category: 'staff',
       title: String(d.title ?? 'Workforce insight'),

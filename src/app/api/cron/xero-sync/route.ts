@@ -7,6 +7,7 @@ import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { logger } from '@/lib/observability/logger'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
@@ -103,7 +104,7 @@ async function _GET(req: Request) {
         payment_breakdown: paymentBreakdown,
       })
 
-      await supabaseAdmin.from('aria_actions').insert({
+      await upsertAriaAction({
         business_id: biz.id,
         category: 'xero',
         title: `Xero sync ready for ${dateStr}`,

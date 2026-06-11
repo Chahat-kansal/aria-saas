@@ -4,6 +4,7 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { lookup17Track } from '@/app/api/pos/parcel-tracking/route'
+import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
 // Daily cron — polls every non-delivered parcel and refreshes its status
 // from 17TRACK. This is the fallback path; the webhook handles real-time
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
     // Raise an autopilot action the first time a parcel hits an exception.
     if (liveData.status === 'exception' && parcel.status !== 'exception') {
       exceptions++
-      void supabaseAdmin.from('aria_actions').insert({
+      void upsertAriaAction({
         business_id: parcel.business_id, category: 'delivery', priority: 'high',
         title: `Delivery exception: ${parcel.tracking_number}`, status: 'pending', source: 'parcel_sync_cron',
         recommendation: `Parcel ${parcel.tracking_number} has a delivery exception. Check with the carrier.`,

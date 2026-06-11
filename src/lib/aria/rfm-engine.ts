@@ -128,6 +128,9 @@ export async function generateWinbackRecommendations(businessId: string): Promis
     })
   }
 
-  if (created.length) await supabaseAdmin.from('aria_actions').insert(created)
+  if (created.length) {
+    const { bulkUpsertAriaActions } = await import('./upsert-aria-action')
+    await bulkUpsertAriaActions(created as import('./upsert-aria-action').AriaActionInsert[])
+  }
   return { recommendations_created: created.length }
 }
