@@ -1,5 +1,5 @@
 # WIRE-2 — Briefing Table Consolidation
-STATUS: READY | MODE: SOLO
+STATUS: AWAITING-VERIFY | MODE: SOLO
 Pre-condition: BRIEF-1 complete ✅ (c0fbb7f7)
 Goal: aria_daily_briefings = single source of truth for dashboard briefing display.
       Retire pos_daily_briefings as a READ source; keep it as a write-only audit log.

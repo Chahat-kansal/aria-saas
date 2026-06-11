@@ -82,8 +82,9 @@ interface HistoryEntry {
   id: string
   date: string
   generated_at: string
-  recommendations: Rec[]
-  data_snapshot: Snap
+  content?: string | null
+  recommendations?: Rec[]
+  data_snapshot?: Snap
 }
 
 const G = '#7FB897'
@@ -166,12 +167,14 @@ export default function DailyBriefingPage() {
     if (!business?.id) return
     fetchBriefing()
     supabase
-      .from('daily_briefings')
-      .select('id, date, generated_at, recommendations, data_snapshot')
+      .from('aria_daily_briefings')
+      .select('id, briefing_date, generated_at, content, source')
       .eq('business_id', business.id)
-      .order('date', { ascending: false })
+      .order('briefing_date', { ascending: false })
       .limit(7)
-      .then(({ data }: { data: HistoryEntry[] | null }) => { if (data) setHistory(data) })
+      .then(({ data }: { data: Array<{ id: string; briefing_date: string; generated_at: string; content: string | null; source: string | null }> | null }) => {
+        if (data) setHistory(data.map(row => ({ id: row.id, date: row.briefing_date, generated_at: row.generated_at, content: row.content })))
+      })
   }, [business?.id, fetchBriefing])
 
   async function handleRecAction(rec: Rec, idx: number) {
@@ -366,6 +369,8 @@ export default function DailyBriefingPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Skel /><Skel w="80%" /><Skel w="60%" />
             </div>
+          ) : historyView?.content ? (
+            <p style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(255,255,255,0.85)', margin: 0 }}>{historyView.content}</p>
           ) : bullets.length > 0 ? (
             <ul style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {bullets.map((b, i) => <li key={i} style={{ fontSize: 14, lineHeight: 1.65, color: 'rgba(255,255,255,0.85)' }}>{b}</li>)}
@@ -644,7 +649,7 @@ export default function DailyBriefingPage() {
             style={{ width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: historyView?.id === h.id ? `1px solid ${G}55` : BORDER, background: historyView?.id === h.id ? `${G}12` : CARD, cursor: 'pointer', marginBottom: 8, display: 'block', fontFamily: 'inherit' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{fmtDate(h.date)}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', marginTop: 3 }}>
-              {Array.isArray(h.recommendations) ? `${h.recommendations.length} item${h.recommendations.length !== 1 ? 's' : ''}` : '—'}
+              {h.content ? 'Daily briefing' : '—'}
             </div>
           </button>
         ))}

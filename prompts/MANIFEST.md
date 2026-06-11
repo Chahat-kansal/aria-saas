@@ -84,7 +84,7 @@ Generated: 2026-06-10 from roadmap-audit-2026-06-10.md
 
 | # | Sprint File | Name | Status | Mode |
 |---|---|---|---|---|
-| 47 | [WIRE-2-briefing-consolidation.md](WIRE-2-briefing-consolidation.md) | Briefing Table Consolidation | READY | SOLO |
+| 47 | [WIRE-2-briefing-consolidation.md](WIRE-2-briefing-consolidation.md) | Briefing Table Consolidation | AWAITING-VERIFY | SOLO |
 | 48 | [WIRE-3-aria-action-tables.md](WIRE-3-aria-action-tables.md) | Aria Action Canonical Tables | AWAITING-VERIFY | SOLO |
 | 49 | [SH-4-security-verify.md](SH-4-security-verify.md) | Security Hardening Verify | READY | SOLO |
 | 50 | [DB-TYPES-1-type-correctness.md](DB-TYPES-1-type-correctness.md) | DB Type Correctness Audit | AWAITING-VERIFY | SOLO |

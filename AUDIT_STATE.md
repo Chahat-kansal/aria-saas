@@ -468,10 +468,10 @@ All amounts stored in the DB as plain dollars (numeric) EXCEPT:
 - Any column explicitly named *_cents (integer, cents)
 - Everything else: dollars (numeric)
 
-### THREE BRIEFING TABLES — code must use the right one
-1. daily_briefings — original OS briefings (date, recommendations jsonb, content text)
-2. aria_daily_briefings — Aria-specific briefings (briefing_date, content text, source)
-3. pos_daily_briefings — POS-specific briefings (briefing_date, summary, yesterday_revenue, etc.)
+### THREE BRIEFING TABLES — canonical ownership (confirmed WIRE-2, 2026-06-11)
+1. **daily_briefings** — legacy source. READ: deprecated (dashboard page now reads aria_daily_briefings). WRITE: legacy /api/aria/daily-briefing route only.
+2. **aria_daily_briefings** — CANONICAL display source. READ: /api/aria/briefing (cache gate), /dashboard/daily-briefing page (history). WRITE: generate-briefings cron + daily-briefing-poll cron + onboarding/provision.
+3. **pos_daily_briefings** — POS audit log. READ: never for display (health-monitor count check only). WRITE: daily-narrative route (DailySummaryCard), generate-briefings cron.
 
 ### Aria Action Table Ownership (confirmed WIRE-3, 2026-06-11)
 
