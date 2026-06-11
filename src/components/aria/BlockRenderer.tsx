@@ -819,6 +819,189 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
       )
     }
 
+    case 'animated_kpi': {
+      const acc = block.variant === 'b' ? '#2D5240' : block.variant === 'c' ? '#534AB7' : '#7FB897'
+      const fmtVal = (v: string | number) => {
+        if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0 })
+        if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+        return String(v)
+      }
+      return (
+        <div style={{ background: 'var(--color-background-primary, #fff)', border: `1.5px solid ${acc}`, borderRadius: 14, padding: '18px 20px', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 3, background: acc }} />
+          <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary, #888)', margin: '0 0 6px' }}>{block.label}</p>
+          <p style={{ fontSize: 36, fontWeight: 600, lineHeight: 1, color: 'var(--text-primary, #111)', margin: 0 }}>{fmtVal(block.value)}</p>
+          {block.delta !== undefined && (
+            <p style={{ fontSize: 12, fontWeight: 500, color: block.delta >= 0 ? '#3B6D11' : '#A32D2D', margin: '6px 0 0' }}>
+              {block.delta >= 0 ? '↑' : '↓'} {Math.abs(block.delta)}% {block.delta_label ?? ''}
+            </p>
+          )}
+        </div>
+      )
+    }
+
+    case 'bold_metric': {
+      const fmtBold = (v: string | number) => {
+        if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0 })
+        if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+        return String(v)
+      }
+      return (
+        <div style={{ background: block.dark ? '#1a1a1a' : '#F5F0E8', borderRadius: 10, padding: '20px 20px' }}>
+          <p style={{ fontSize: 56, fontWeight: 600, lineHeight: 1, color: block.dark ? '#7FB897' : '#1a1a1a', margin: 0 }}>{fmtBold(block.value)}</p>
+          <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: block.dark ? '#5a8a6a' : '#7a7060', margin: '6px 0 0' }}>{block.label}</p>
+        </div>
+      )
+    }
+
+    case 'bento_grid': {
+      return (
+        <div style={{ background: 'var(--color-background-secondary, #f5f5f5)', borderRadius: 14, padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {block.items.map((item, i) => (
+            <div key={i} style={{
+              background: i === 0 ? '#2D5240' : i % 3 === 1 ? '#7FB897' : 'var(--color-background-primary, #fff)',
+              border: i % 3 === 2 ? '0.5px solid var(--color-border-tertiary, #ddd)' : 'none',
+              borderRadius: 10, padding: '10px 12px',
+              gridColumn: item.span === 'full' ? '1 / 3' : 'auto',
+            }}>
+              <p style={{ fontSize: 11, color: i === 0 ? 'rgba(232,245,238,0.7)' : i % 3 === 1 ? '#1a3a28' : 'var(--text-secondary, #666)', margin: '0 0 3px' }}>{item.label}</p>
+              <p style={{ fontSize: 22, fontWeight: 500, lineHeight: 1, color: i === 0 ? '#e8f5ee' : i % 3 === 1 ? '#1a3a28' : 'var(--text-primary, #111)', margin: 0 }}>{item.value}</p>
+              {item.sub && <p style={{ fontSize: 10, color: i === 0 ? 'rgba(232,245,238,0.6)' : 'var(--text-tertiary, #999)', margin: '3px 0 0' }}>{item.sub}</p>}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    case 'progress_bars': {
+      return (
+        <div style={{ background: 'var(--color-background-primary, #fff)', border: '0.5px solid var(--color-border-tertiary, #ddd)', borderRadius: 12, padding: '14px 16px' }}>
+          {block.title && <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary, #888)', margin: '0 0 12px' }}>{block.title}</p>}
+          {block.items.map((item, i) => {
+            const pct = Math.min(100, Math.round((item.value / (item.max ?? 100)) * 100))
+            const col = item.color ?? (pct >= 80 ? '#3B6D11' : pct >= 50 ? '#7FB897' : '#BA7517')
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < block.items.length - 1 ? 10 : 0 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary, #666)', minWidth: 80 }}>{item.label}</span>
+                <div style={{ flex: 1, height: 8, background: 'var(--color-background-secondary, #f0f0f0)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: col, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary, #111)', minWidth: 32 }}>{pct}%</span>
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+
+    case 'activity_stream': {
+      return (
+        <div style={{ background: 'var(--color-background-primary, #fff)', border: '0.5px solid var(--color-border-tertiary, #ddd)', borderRadius: 12, padding: '14px 16px' }}>
+          {block.title && <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary, #888)', margin: '0 0 12px' }}>{block.title}</p>}
+          {block.items.map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: i < block.items.length - 1 ? 8 : 0 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.dot_color ?? '#7FB897', marginTop: 4, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, color: 'var(--text-primary, #111)', margin: 0 }}>{item.text}</p>
+                {item.time && <p style={{ fontSize: 11, color: 'var(--text-tertiary, #999)', margin: '2px 0 0' }}>{item.time}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    case 'alert_card': {
+      const sevColor = block.severity === 'critical' ? '#A32D2D' : block.severity === 'warning' ? '#854F0B' : '#185FA5'
+      const sevBg = block.severity === 'critical' ? '#0f1117' : block.severity === 'warning' ? '#1a1205' : '#0a1020'
+      return (
+        <div style={{ background: sevBg, border: `1px solid ${sevColor}`, borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: sevColor, marginTop: 5, flexShrink: 0 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#e8eaf2', margin: '0 0 4px' }}>{block.title}</p>
+            <p style={{ fontSize: 12, color: '#a0a8c0', margin: 0 }}>{block.body}</p>
+          </div>
+        </div>
+      )
+    }
+
+    case 'ai_reasoning': {
+      const confColor = block.confidence === 'high' ? '#3B6D11' : block.confidence === 'low' ? '#854F0B' : '#185FA5'
+      return (
+        <div style={{ background: 'var(--color-background-primary, #fff)', border: '0.5px solid var(--color-border-tertiary, #ddd)', borderRadius: 12, padding: '14px 16px' }}>
+          <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary, #888)', margin: '0 0 8px' }}>Aria's reasoning</p>
+          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary, #111)', margin: '0 0 8px' }}>{block.question}</p>
+          <div style={{ background: 'var(--color-background-secondary, #f5f5f5)', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary, #666)', margin: 0, lineHeight: 1.6 }}>{block.reasoning}</p>
+          </div>
+          {block.confidence && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: confColor }} />
+              <span style={{ fontSize: 11, color: confColor, fontWeight: 500 }}>{block.confidence} confidence</span>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    case 'clay_chart': {
+      const maxVal = Math.max(...block.data.map(d => d.value), 1)
+      const col = block.color ?? '#7FB897'
+      return (
+        <div style={{ background: col, borderRadius: 20, padding: 14, boxShadow: `0 6px 16px ${col}40, inset 0 -3px 6px rgba(0,0,0,0.08), inset 0 3px 6px rgba(255,255,255,0.4)` }}>
+          {block.title && <p style={{ fontSize: 11, fontWeight: 500, color: '#1a3a28', margin: '0 0 8px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{block.title}</p>}
+          <div style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 14, padding: '10px 10px 6px' }}>
+            <ResponsiveContainer width="100%" height={100}>
+              <BarChart data={block.data} barCategoryGap="20%">
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {block.data.map((_, i) => (
+                    <Cell key={i} fill={block.data[i].value === maxVal ? '#2D5240' : 'rgba(45,82,64,0.6)'} />
+                  ))}
+                </Bar>
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#1a3a28' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: '#fff', border: 'none', borderRadius: 8, fontSize: 12 }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )
+    }
+
+    case 'kinetic_text': {
+      const cols = block.colors ?? ['#7FB897', '#ffffff', '#FAC775']
+      return (
+        <div style={{ background: '#1a1a1a', borderRadius: 8, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 8, minHeight: 64 }}>
+          {block.words.map((w, i) => (
+            <span key={i} style={{
+              fontSize: 18, fontWeight: 500,
+              color: cols[i % cols.length],
+              display: 'inline-block',
+              animation: `ariaKb 1s ease-in-out ${i * 0.15}s infinite alternate`,
+            }}>{w}</span>
+          ))}
+          <style>{`@keyframes ariaKb { from { transform: translateY(0) } to { transform: translateY(-6px) } }`}</style>
+        </div>
+      )
+    }
+
+    case 'aurora_summary': {
+      const fmtAurora = (v: string | number) => {
+        if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0 })
+        if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+        return String(v)
+      }
+      return (
+        <div style={{ borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ background: '#1a0a2e', padding: '18px 20px', position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 50%, rgba(127,184,151,0.45), transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(83,74,183,0.35), transparent 60%)', borderRadius: 10 }} />
+            <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(180,240,210,0.7)', margin: '0 0 6px', position: 'relative' }}>{block.title}</p>
+            <p style={{ fontSize: 38, fontWeight: 600, lineHeight: 1, color: '#e0f8ee', margin: 0, position: 'relative' }}>{fmtAurora(block.value)}</p>
+            {block.sub && <p style={{ fontSize: 12, color: 'rgba(180,240,210,0.6)', margin: '6px 0 0', position: 'relative' }}>{block.sub}</p>}
+          </div>
+        </div>
+      )
+    }
+
     default:
       return (
         <span style={{ display: 'inline-block', fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', color: '#F87171', fontFamily: 'monospace' }}>

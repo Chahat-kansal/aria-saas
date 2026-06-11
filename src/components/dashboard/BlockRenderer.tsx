@@ -391,6 +391,138 @@ export function BlockRenderer({ block, onChoice }: Props) {
     )
   }
 
+  if (block.type === 'animated_kpi') {
+    const acc = block.variant === 'b' ? '#2D5240' : block.variant === 'c' ? '#A78BFA' : '#7FB897'
+    const fmtV = (v: string | number) => {
+      if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0 })
+      if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+      return String(v)
+    }
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.06)', border: `1.5px solid ${acc}`, borderRadius: 12, padding: '14px 16px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 3, background: acc }} />
+        <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 4px' }}>{block.label}</p>
+        <p style={{ fontSize: 32, fontWeight: 600, lineHeight: 1, color: '#fff', margin: 0 }}>{fmtV(block.value)}</p>
+        {block.delta !== undefined && (
+          <p style={{ fontSize: 12, fontWeight: 500, color: block.delta >= 0 ? '#7FB897' : '#F87171', margin: '5px 0 0' }}>
+            {block.delta >= 0 ? '↑' : '↓'} {Math.abs(block.delta)}% {block.delta_label ?? ''}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  if (block.type === 'bold_metric') {
+    const fmtB = (v: string | number) => {
+      if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0 })
+      if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+      return String(v)
+    }
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '16px' }}>
+        <p style={{ fontSize: 48, fontWeight: 600, lineHeight: 1, color: '#7FB897', margin: 0 }}>{fmtB(block.value)}</p>
+        <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', margin: '5px 0 0' }}>{block.label}</p>
+      </div>
+    )
+  }
+
+  if (block.type === 'bento_grid') {
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+        {block.items.map((item, i) => (
+          <div key={i} style={{
+            background: i === 0 ? '#2D5240' : i % 3 === 1 ? 'rgba(127,184,151,0.2)' : 'rgba(255,255,255,0.06)',
+            borderRadius: 9, padding: '9px 11px',
+            gridColumn: item.span === 'full' ? '1 / 3' : 'auto',
+          }}>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', margin: '0 0 2px' }}>{item.label}</p>
+            <p style={{ fontSize: 20, fontWeight: 500, lineHeight: 1, color: '#fff', margin: 0 }}>{item.value}</p>
+            {item.sub && <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: '2px 0 0' }}>{item.sub}</p>}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (block.type === 'progress_bars') {
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px' }}>
+        {block.title && <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', margin: '0 0 10px' }}>{block.title}</p>}
+        {block.items.map((item, i) => {
+          const pct = Math.min(100, Math.round((item.value / (item.max ?? 100)) * 100))
+          const col = item.color ?? (pct >= 80 ? '#7FB897' : pct >= 50 ? '#F59E0B' : '#F87171')
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: i < block.items.length - 1 ? 8 : 0 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', minWidth: 72 }}>{item.label}</span>
+              <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: col, borderRadius: 3 }} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 500, color: '#fff', minWidth: 28 }}>{pct}%</span>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  if (block.type === 'activity_stream') {
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px' }}>
+        {block.title && <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', margin: '0 0 10px' }}>{block.title}</p>}
+        {block.items.map((item, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: i < block.items.length - 1 ? 7 : 0 }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.dot_color ?? '#7FB897', marginTop: 4, flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', margin: 0 }}>{item.text}</p>
+              {item.time && <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: '1px 0 0' }}>{item.time}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (block.type === 'alert_card') {
+    const sevColor = block.severity === 'critical' ? '#F87171' : block.severity === 'warning' ? '#F59E0B' : '#60A5FA'
+    return (
+      <div style={{ background: 'rgba(0,0,0,0.4)', border: `1px solid ${sevColor}`, borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: sevColor, marginTop: 4, flexShrink: 0 }} />
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', margin: '0 0 3px' }}>{block.title}</p>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', margin: 0 }}>{block.body}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (block.type === 'kinetic_text') {
+    const cols = block.colors ?? ['#7FB897', '#ffffff', '#FAC775']
+    return (
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 8, minHeight: 56 }}>
+        {block.words.map((w, i) => (
+          <span key={i} style={{ fontSize: 16, fontWeight: 500, color: cols[i % cols.length], display: 'inline-block', animation: `ariaKb 1s ease-in-out ${i * 0.15}s infinite alternate` }}>{w}</span>
+        ))}
+        <style>{`@keyframes ariaKb { from { transform: translateY(0) } to { transform: translateY(-5px) } }`}</style>
+      </div>
+    )
+  }
+
+  if (block.type === 'aurora_summary') {
+    const fmtA = (v: string | number) => {
+      if (block.format === 'currency') return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0 })
+      if (block.format === 'percent') return Number(v).toFixed(1) + '%'
+      return String(v)
+    }
+    return (
+      <div style={{ background: '#1a0a2e', borderRadius: 10, padding: '14px 16px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 50%, rgba(127,184,151,0.4), transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(83,74,183,0.3), transparent 60%)', borderRadius: 10 }} />
+        <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(180,240,210,0.65)', margin: '0 0 4px', position: 'relative' }}>{block.title}</p>
+        <p style={{ fontSize: 32, fontWeight: 600, lineHeight: 1, color: '#e0f8ee', margin: 0, position: 'relative' }}>{fmtA(block.value)}</p>
+        {block.sub && <p style={{ fontSize: 11, color: 'rgba(180,240,210,0.55)', margin: '4px 0 0', position: 'relative' }}>{block.sub}</p>}
+      </div>
+    )
+  }
+
   // Graceful fallback: any block type without a dedicated renderer renders as text
   const fallbackText = (block as { content?: string; title?: string; description?: string }).content
     ?? (block as { content?: string; title?: string; description?: string }).title

@@ -159,6 +159,16 @@ export type AskBlock =
       }>
       estimated_seconds?: number
     }
+  | { type: 'animated_kpi'; label: string; value: string | number; format?: 'currency' | 'number' | 'percent'; delta?: number; delta_label?: string; variant?: 'a' | 'b' | 'c' }
+  | { type: 'bold_metric'; label: string; value: string | number; format?: 'currency' | 'number' | 'percent'; dark?: boolean }
+  | { type: 'bento_grid'; items: Array<{ label: string; value: string | number; sub?: string; span?: 'full' | 'half'; accent?: string }> }
+  | { type: 'progress_bars'; title?: string; items: Array<{ label: string; value: number; max?: number; color?: string }> }
+  | { type: 'activity_stream'; title?: string; items: Array<{ text: string; time?: string; dot_color?: string }> }
+  | { type: 'alert_card'; title: string; body: string; severity?: 'info' | 'warning' | 'critical' }
+  | { type: 'ai_reasoning'; question: string; reasoning: string; confidence?: 'low' | 'medium' | 'high' }
+  | { type: 'clay_chart'; title?: string; data: Array<{ name: string; value: number }>; color?: string }
+  | { type: 'kinetic_text'; words: string[]; colors?: string[] }
+  | { type: 'aurora_summary'; title: string; value: string | number; sub?: string; format?: 'currency' | 'number' | 'percent' }
 
 export interface AskResponse {
   blocks: AskBlock[]

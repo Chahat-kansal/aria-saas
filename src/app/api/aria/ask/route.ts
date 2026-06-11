@@ -1091,6 +1091,53 @@ When the owner wants a single metric/KPI/number → use "kpi_card" with appropri
 When the owner specifies a colour ("in green", "red chart") → pass it as a hex in the color field.
 You can return MULTIPLE blocks — e.g. both a styled_chart AND a spreadsheet if the owner wants both a visual and a download.
 
+### RICH RENDERER SELECTION (intent-driven — use these in addition to static keyword matching)
+
+Before emitting any block, read the user's phrasing and infer their desired output format.
+
+STEP 1 — INFER OUTPUT INTENT FROM PHRASING:
+
+| User phrasing signals | Inferred intent |
+|---|---|
+| "show me", "visualise", "chart", "graph", "plot" | visual renderer (chart/clay_chart/styled_chart) |
+| "just tell me", "what is", "how much", "quick number" | single number (bold_metric or animated_kpi) |
+| "break it down", "overview", "summary of multiple" | multi-metric (bento_grid or metric_row) |
+| "trend", "over time", "by hour/day/week" | time-series (styled_chart line/area or clay_chart) |
+| "compare", "vs", "versus", "difference between" | comparison_table or two charts side by side |
+| "export", "spreadsheet", "CSV", "download", "save", "excel" | spreadsheet (auto_download:true) FIRST + data_table |
+| "list", "what happened", "activity", "events", "today's" | activity_stream or data_table |
+| "why", "explain", "reason", "how did you decide" | ai_reasoning block |
+| "should I", "what do you recommend", "what's the best" | council_split or action_list |
+| "alert", "anomaly", "warning", "problem", "issue" | alert_card |
+| "summarise the week/month", "weekly", "monthly total" | aurora_summary |
+| "target", "goal", "progress", "how close am I" | progress_bars |
+| anything ambiguous | pick the richest renderer that fits the data shape |
+
+STEP 2 — MATCH DATA SHAPE TO RENDERER (when intent is ambiguous):
+
+| Data shape | Default renderer | Alternate |
+|---|---|---|
+| Single number, no delta | bold_metric dark:true | animated_kpi variant:"a" |
+| Single number + % change | animated_kpi (rotate variant a/b/c) | kpi_card |
+| 2–4 metrics together | bento_grid | metric_row |
+| Ranked list of items | data_table sortable:true downloadable:true | activity_stream |
+| Time-series bar data | clay_chart | styled_chart bar |
+| Time-series line/trend | styled_chart line or area | clay_chart |
+| Goals vs actuals | progress_bars | comparison_table |
+| Week/month summary | aurora_summary | bold_metric |
+| Warning or anomaly | alert_card severity:"critical"/"warning" | pushback |
+| Reasoning/explanation | ai_reasoning + confidence | text block |
+| Loading complex query | kinetic_text FIRST, then real blocks | — |
+
+CRITICAL RENDERER RULES:
+- NEVER use keyword matching alone — read the full sentence for intent
+- SPREADSHEET: any mention of "spreadsheet", "CSV", "excel", "export", "download" → emit spreadsheet block FIRST with auto_download:true, then data_table. Never substitute.
+- VARIATION: rotate animated_kpi variants a→b→c across answers. Alternate bold_metric dark:true/false. Same question answered twice can render differently — correct behaviour, not a bug.
+- NEVER emit alert_card for non-anomaly content — it always signals danger to the user
+- ALWAYS emit kinetic_text as the very first block when a complex multi-tool query will take time, then follow with the real blocks once data is ready
+- Can return MULTIPLE blocks together — e.g. aurora_summary + progress_bars + activity_stream for a weekly debrief
+- ALWAYS write 2 full paragraphs of narrative BEFORE the json_blocks tag, even for simple queries
+
 ### Plain text
 For explanations, advice, writing tasks, emails, analysis in words — just reply in the text field. No block needed unless a visual adds value.
 
