@@ -134,6 +134,72 @@ Admin routes (`admin/*`) exempt — not modified.
 
 ---
 
+## ASK-REDESIGN-1-FIX-2 — Format honor + actions 404
+
+### Investigation findings
+
+**Deliverable pipeline files:**
+- `src/app/api/aria/ask/route.ts` — main brain; contains the intent router at lines 551–578 (`classifyDeliverableKind` gate + `ariaIntent.intent_type === 'artifact_request'` condition)
+- `src/lib/aria/deliverables.ts` — `classifyDeliverableKind` function (regex classifier for dashboard/ranked_list/comparison/scorecard/trend/single_answer); `generateDeliverable` function
+- `src/app/api/aria/process-user-task/route.ts` — background task processor that calls `generateDeliverable` for queued tasks
+- `src/app/api/aria/deliverables/route.ts` — GET endpoint for fetching completed deliverable outputs from `aria_task_outputs`
+
+**Intent router decision point:**
+Lines 551–578 of `ask/route.ts`. Gate: `classifyDeliverableKind(message)` returns non-null AND `!isMultiDomain` AND `ariaIntent.intent_type === 'artifact_request'`. If all three: calls `generateDeliverable` and returns `[DELIVERABLE:outputId]` sentinel. Otherwise falls through to main brain.
+
+**Spreadsheet/export gap:**
+`classifyDeliverableKind` has no entry for spreadsheet/csv/excel/export — these requests correctly returned null and fell through to main brain, BUT if the message also matched a ranked_list keyword (e.g. "top products as a spreadsheet"), it would enter the deliverable path and return an HTML block instead of a spreadsheet AskBlock.
+
+**FIX 1 approach taken — intent router bypass (smaller, safer):**
+Added `const SPREADSHEET_RE = /spreadsheet|\bcsv\b|excel|export/i` and appended `&& !SPREADSHEET_RE.test(message)` to the deliverable gate condition. When a message matches this regex, the deliverable path is bypassed entirely and the main brain handles it with its existing RICH-1 spreadsheet-first rules. No changes to `deliverables.ts` or `generateDeliverable` — avoids introducing a new AskBlock emission path into the HTML-focused deliverable pipeline.
+
+**ARTIFACT_INSTRUCTIONS:**
+- Exported from `src/lib/aria-system-prompt.ts` (line 12) — large `<aria_artifact>` XML format block.
+- Was imported in `ask/route.ts` (line 17) and injected at line 1230: `${ARTIFACT_INSTRUCTIONS}`.
+- `extractBlocks` at line 52 only parses `<json_blocks>` XML — it does NOT have a legacy `<aria_artifact>` fallback. Any old saved `<aria_artifact>` messages are handled client-side in `parseAriaResponse` (ask-aria/page.tsx), NOT in `extractBlocks`. So the backend injection is fully removable with no risk to old message rendering.
+
+**Actions 404:**
+- `+ New action` button linked to `/dashboard/actions` — no such folder exists.
+- The real Aria actions/recommendations surface is `/dashboard/autopilot`, which renders `AutopilotAction[]` (aria_autopilot_actions) with approve/reject/execute UI. This is the canonical page for reviewing and acting on Aria-generated action recommendations.
+
+### FIX 1 — Format honor
+
+**File:** `src/app/api/aria/ask/route.ts`
+- Added `SPREADSHEET_RE` constant before deliverable gate
+- Deliverable gate now: `deliverableKind && !isMultiDomain && ariaIntent.intent_type === 'artifact_request' && !SPREADSHEET_RE.test(message)`
+- Result: "top products as a spreadsheet", "export to CSV", "give me an Excel report" now bypass the HTML deliverable and go to main brain → RICH-1 spreadsheet block returned
+
+### FIX 2 — Remove ARTIFACT_INSTRUCTIONS injection
+
+**File:** `src/app/api/aria/ask/route.ts`
+- Removed `import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'` (replaced with comment)
+- Removed `${ARTIFACT_INSTRUCTIONS}` from system prompt string — the `<aria_artifact>` XML format conflicted with `json_blocks`
+- `extractBlocks` function and its `<json_blocks>` parser: untouched
+- `aria-system-prompt.ts` export: untouched (preserved for any other consumers)
+
+### FIX 3 — Actions 404
+
+**File:** `src/app/dashboard/ask-aria/page.tsx`
+- Changed `+ New action` Link: `/dashboard/actions` → `/dashboard/autopilot`
+- Autopilot page shows all pending/history Aria actions with approve/reject/execute capability
+
+### Files changed (FIX-2)
+
+| File | Change |
+|---|---|
+| `src/app/api/aria/ask/route.ts` | SPREADSHEET_RE bypass on deliverable gate; remove ARTIFACT_INSTRUCTIONS import + injection |
+| `src/app/dashboard/ask-aria/page.tsx` | + New action link: /dashboard/actions → /dashboard/autopilot |
+
+### Founder verify checklist (FIX-2)
+
+- [ ] Ask "show me top products as a spreadsheet" → should get a spreadsheet/table block, NOT an HTML deliverable widget
+- [ ] Ask "give me a dashboard" → should still get the HTML deliverable (deliverable path not broken)
+- [ ] Ask "export my sales to CSV" → should get a download block from the main brain
+- [ ] Click "+ New action" on ask-aria left panel → goes to /dashboard/autopilot (not 404)
+- [ ] Ask a business question → response is clean json_blocks format, no `<aria_artifact>` XML leaking
+
+---
+
 ## Build gate
 - `npx tsc --noEmit` → **0 errors** ✓
 - `npm run build` → **PASS** ✓

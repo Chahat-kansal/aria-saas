@@ -14,7 +14,7 @@ import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { classifyAriaIntent } from '@/lib/aria/ask/aria-intent'
 import { buildAskAriaContext, type ContextScope } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
-import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
+// ARTIFACT_INSTRUCTIONS removed — xml <aria_artifact> format superseded by json_blocks
 import { checkCostCeiling } from '@/lib/aria-cost-guard'
 import { buildTroubleshootContext, buildTroubleshootAddendum } from '@/lib/aria/ask/troubleshoot'
 import { createSupportTicket } from '@/lib/aria/ask/escalate'
@@ -549,8 +549,10 @@ Rules:
   }
 
   // 2b-deliverable. Deliverable classifier — generates inline HTML dashboard/chart for visual requests
+  // Spreadsheet/export requests bypass deliverable pipeline → main brain handles with spreadsheet-first RICH rules
+  const SPREADSHEET_RE = /spreadsheet|\bcsv\b|excel|export/i
   const deliverableKind = classifyDeliverableKind(message)
-  if (deliverableKind && !isMultiDomain && ariaIntent.intent_type === 'artifact_request') {
+  if (deliverableKind && !isMultiDomain && ariaIntent.intent_type === 'artifact_request' && !SPREADSHEET_RE.test(message)) {
     try {
       const { data: bizInfoD } = await supabaseAdmin.from('businesses').select('industry').eq('id', bid).maybeSingle()
       const result = await generateDeliverable(bid, conversationId ?? null, message, deliverableKind, (bizInfoD as { industry?: string } | null)?.industry ?? 'retail')
@@ -1226,8 +1228,6 @@ When asked a technical question: ANSWER IT. Never say "I can't help with code."
 
 For ALL of these: just answer in the text field. No block needed.
 The owner is talking to an AI business co-owner who knows everything about running an Australian small business and can help with anything.
-
-${ARTIFACT_INSTRUCTIONS}
 
 ${buildNavGrounding()}
 

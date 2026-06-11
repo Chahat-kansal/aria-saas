@@ -983,7 +983,7 @@ export default function AskAriaPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={() => showAriaBriefing()} style={{ fontSize: 12, fontWeight: 500, color: '#2D5240', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.8)', borderRadius: 10, padding: '6px 14px', backdropFilter: 'blur(8px)', cursor: 'pointer' }}>Briefing</button>
-              <Link href="/dashboard/actions" style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#2D5240', border: '1px solid rgba(45,82,64,0.5)', borderRadius: 10, padding: '6px 14px', textDecoration: 'none' }}>+ New action</Link>
+              <Link href="/dashboard/autopilot" style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#2D5240', border: '1px solid rgba(45,82,64,0.5)', borderRadius: 10, padding: '6px 14px', textDecoration: 'none' }}>+ New action</Link>
             </div>
           </div>
 
