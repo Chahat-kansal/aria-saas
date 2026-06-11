@@ -680,11 +680,10 @@ function fallbackSpeechSynthesis(
 export function initVoice(): Promise<void> {
   if (_initPromise) return _initPromise
   _initPromise = (async () => {
-    const ok = await tryInitKokoro()
-    if (ok) return
+    // Kokoro disabled — use browser speechSynthesis directly. No worker created.
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       _backend = 'speechsynthesis'
-      console.log('[AriaVoice] fallback: window.speechSynthesis')
+      console.log('[AriaVoice] speechSynthesis active (kokoro disabled)')
     }
   })()
   return _initPromise
@@ -726,25 +725,7 @@ export function speakAriaText(
     ? words.slice(0, 150).join(' ') + '…'
     : clean
 
-  if (_worker && _workerReady) {
-    // Part 4 — play a filler immediately to mask WASM generation latency (~9-15 s).
-    // One filler per question; exempt from utterance cancellation (only stop/panel-close kills it).
-    if (!_fillerPlaying && _fillerCache.length > 0) {
-      const filler = _fillerCache[Math.floor(Math.random() * _fillerCache.length)]
-      playFillerAudio(filler, onSchedule).catch(err =>
-        console.error('[AriaVoice] filler playback error:', err))
-    }
-    postSpeakToWorker(speechText, onSchedule)
-    return
-  }
-
-  if (_worker && !_workerReady) {
-    console.log('[AriaVoice] queued until ready:', speechText.slice(0, 40))
-    _queuedCb   = onSchedule
-    _queuedText = speechText
-    return
-  }
-
+  // Kokoro disabled — route directly to speechSynthesis.
   fallbackSpeechSynthesis(speechText, onSchedule)
 }
 
