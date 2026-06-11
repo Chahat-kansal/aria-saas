@@ -15,6 +15,7 @@ interface AutopilotAction {
   estimated_impact: string | null; status: string; created_at: string
   approved_at?: string; executed_at?: string
   outcome_note?: string | null; outcome_revenue_cents?: number | null
+  outcome?: string | null
 }
 
 export default function AutopilotPage() {
@@ -32,6 +33,7 @@ export default function AutopilotPage() {
   const [outcomeNote, setOutcomeNote] = useState('')
   const [outcomeRevenue, setOutcomeRevenue] = useState('')
   const [savingOutcome, setSavingOutcome] = useState(false)
+  const [feedbackSaving, setFeedbackSaving] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -93,6 +95,19 @@ export default function AutopilotPage() {
       setEditingOutcome(null)
     } catch (e) { console.warn('[non-fatal]', e) }
     setSavingOutcome(false)
+  }
+
+  async function submitFeedback(id: string, feedback: 'positive' | 'negative') {
+    setFeedbackSaving(id + feedback)
+    try {
+      await fetch('/api/aria/action-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, feedback }),
+      })
+      setHistory(prev => prev.map(a => a.id === id ? { ...a, outcome: feedback } : a))
+    } catch (e) { console.warn('[non-fatal]', e) }
+    setFeedbackSaving(null)
   }
 
   const byPriority = (p: string) => actions.filter(a => a.priority === p)
@@ -210,6 +225,25 @@ export default function AutopilotPage() {
                       </div>
                       {action.estimated_impact && <p style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{action.estimated_impact}</p>}
                       {action.approved_at && <p style={{ fontSize: 10, color: C.dim }}>{new Date(action.approved_at).toLocaleDateString('en-AU')}</p>}
+
+                      {/* Quick feedback buttons (👍/👎) */}
+                      {!action.outcome && (
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10, color: C.dim }}>Did this work?</span>
+                          {(['positive', 'negative'] as const).map(f => (
+                            <button key={f} disabled={feedbackSaving !== null}
+                              onClick={() => submitFeedback(action.id, f)}
+                              style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid ' + (f === 'positive' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'), background: 'transparent', color: f === 'positive' ? C.green : C.red, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', opacity: feedbackSaving ? 0.5 : 1 }}>
+                              {f === 'positive' ? '👍' : '👎'}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {action.outcome && (
+                        <div style={{ marginTop: 6, fontSize: 10, color: action.outcome === 'positive' ? C.green : action.outcome === 'negative' ? C.red : C.dim }}>
+                          {action.outcome === 'positive' ? '✓ Marked as worked' : action.outcome === 'negative' ? '✗ Marked as not worked' : `Outcome: ${action.outcome}`}
+                        </div>
+                      )}
 
                       {/* Outcome section */}
                       {action.outcome_note || action.outcome_revenue_cents ? (

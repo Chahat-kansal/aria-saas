@@ -101,6 +101,29 @@ async function logAICall(params: {
   } catch (e) { console.error('[non-fatal]', e) }
 }
 
+// ── Learning Context (LRN-1) ───────────────────────────────────────
+// Fetches last 5 resolved learning signals for this business and formats a
+// short prefix so the council brains are aware of recent outcome history.
+async function getRecentLearningContext(businessId: string): Promise<string> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('aria_ai_calls')
+      .select('learning_signal, agent_key, created_at')
+      .eq('business_id', businessId)
+      .not('learning_signal', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(5)
+    if (!data || data.length === 0) return ''
+    type Row = { learning_signal: string; agent_key: string }
+    const rows = data as Row[]
+    const pos = rows.filter(r => r.learning_signal === 'positive').length
+    const neg = rows.filter(r => r.learning_signal === 'negative').length
+    const unk = rows.filter(r => r.learning_signal === 'unknown' || r.learning_signal === 'clicked').length
+    return `RECENT OUTCOME SIGNALS (last ${rows.length} resolved): ${pos} positive, ${neg} negative, ${unk} uncertain. ` +
+      (pos > neg ? 'Recent advice has been well-received.' : neg > pos ? 'Some recent advice did not land — be more conservative.' : '')
+  } catch { return '' }
+}
+
 // ── Brain Prompts ──────────────────────────────────────────────────
 // Each brain has a single job and receives the owner's actual question.
 // They return JSON only. No prose, no preamble.
@@ -574,11 +597,12 @@ export async function runAriaCouncil(
     console.log('[council] cache MISS — epoch:', dataEpoch, 'hash:', hash, 'business:', businessId)
   }
 
-  // Assess quality + recall memories + fetch summaries in parallel before brains
-  const [quality, memories, recentSummaries] = await Promise.all([
+  // Assess quality + recall memories + fetch summaries + learning context in parallel
+  const [quality, memories, recentSummaries, learningContext] = await Promise.all([
     assessDataQuality(businessId).catch(() => ({ ...FALLBACK_QUALITY })),
     recallMemories(businessId, activeQuestion).catch(() => []),
     fetchRecentSummaries(businessId).catch(() => []),
+    getRecentLearningContext(businessId).catch(() => ''),
   ])
 
   const memoryBlock = formatMemoriesForPrompt(memories)
@@ -711,7 +735,7 @@ export async function runAriaCouncil(
     cleanContextStr = JSON.stringify(cleanCtxObj)
   } catch { /* non-fatal — fall back to raw businessContext */ }
 
-  const userPrompt = [verifiedFiguresBlock, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + cleanContextStr]
+  const userPrompt = [verifiedFiguresBlock, learningContext, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + cleanContextStr]
     .filter(Boolean)
     .join('\n\n')
 

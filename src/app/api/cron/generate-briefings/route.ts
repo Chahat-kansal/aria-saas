@@ -268,10 +268,25 @@ async function generateMorning(
       ? `DO NOT open with the same theme as these prior briefings: ${priorLeads.join(' | ')}`
       : null
 
+    // RECENT WINS: top 3 positive autopilot outcomes from last 30 days
+    const thirtyDaysAgoIso = new Date(now - 30 * 86_400_000).toISOString()
+    const { data: recentWins } = await supabaseAdmin
+      .from('aria_autopilot_actions')
+      .select('title')
+      .eq('business_id', biz.id)
+      .eq('outcome', 'positive')
+      .gte('created_at', thirtyDaysAgoIso)
+      .order('created_at', { ascending: false })
+      .limit(3)
+    const recentWinsSection = recentWins && recentWins.length > 0
+      ? `RECENT WINS (recommendations that worked): ${(recentWins as { title: string | null }[]).map(w => w.title ?? '').filter(Boolean).join(' | ')}`
+      : null
+
     const structuredPrefix = [
       revenueSection,
       stockSection,
       moversSection,
+      recentWinsSection,
       weatherSection,
       rssSection,
       recommendationSection,

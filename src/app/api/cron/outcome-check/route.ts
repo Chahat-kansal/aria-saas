@@ -4,7 +4,7 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { runOutcomeChecks } from '@/lib/aria/hypothesis/outcome-learning'
+import { runOutcomeChecks, runAutopilotOutcomeChecks } from '@/lib/aria/hypothesis/outcome-learning'
 
 export async function GET(req: Request) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -32,14 +32,19 @@ export async function GET(req: Request) {
       .eq('is_active', true)
       .in('subscription_status', ['active', 'trialing'])
 
-    let totalChecked = 0, totalMemories = 0
+    let totalChecked = 0, totalMemories = 0, totalBackfilled = 0, totalResolved = 0
     const errors: Array<{ business_id: string; error: string }> = []
 
     for (const biz of (businesses ?? [])) {
       try {
-        const { checked, memories_written } = await runOutcomeChecks(biz.id)
-        totalChecked  += checked
-        totalMemories += memories_written
+        const [{ checked, memories_written }, { backfilled, resolved }] = await Promise.all([
+          runOutcomeChecks(biz.id),
+          runAutopilotOutcomeChecks(biz.id),
+        ])
+        totalChecked    += checked
+        totalMemories   += memories_written
+        totalBackfilled += backfilled
+        totalResolved   += resolved
       } catch (e) {
         errors.push({ business_id: biz.id, error: (e as Error).message.slice(0, 200) })
       }
@@ -52,11 +57,13 @@ export async function GET(req: Request) {
       errors: {
         total_outcomes_checked: totalChecked,
         total_memories_written: totalMemories,
+        total_autopilot_backfilled: totalBackfilled,
+        total_autopilot_resolved: totalResolved,
         ...(errors.length ? { items: errors } : {}),
       },
     }).eq('id', cronLogId)
 
-    return NextResponse.json({ ok: true, outcomes_checked: totalChecked, memories_written: totalMemories })
+    return NextResponse.json({ ok: true, outcomes_checked: totalChecked, memories_written: totalMemories, autopilot_backfilled: totalBackfilled, autopilot_resolved: totalResolved })
   } catch (e) {
     const msg = (e as Error).message
     await supabaseAdmin.from('cron_logs').update({ status: 'failed', finished_at: new Date().toISOString(), errors: { message: msg } }).eq('id', cronLogId)

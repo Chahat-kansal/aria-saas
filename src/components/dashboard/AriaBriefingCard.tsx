@@ -371,7 +371,13 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
         {blocks.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             {blocks.map((block, i) => (
-              <BlockRenderer key={i} block={block} />
+              <BlockRenderer key={i} block={block} onChoice={(prompt) => {
+                fetch('/api/aria/action-feedback', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ business_id: businessId, event: 'clicked', prompt }),
+                }).catch(() => {})
+              }} />
             ))}
           </div>
         )}

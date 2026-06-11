@@ -34,10 +34,12 @@ export async function onActionApproved(actionId: string, businessId: string): Pr
   const confNum = confStr === 'high' ? 0.9 : confStr === 'medium' ? 0.7 : confStr === 'low' ? 0.5 : null
   await supabaseAdmin.from('aria_autopilot_actions').insert({
     business_id: businessId,
+    action_id: actionId,
     action_type: 'aria_recommendation_approved',
     title: (a.title as string).slice(0, 200),
     description: (a.recommendation as string | null)?.slice(0, 500) ?? null,
     status: 'approved',
+    outcome: 'pending',
     priority: (a.priority as string | null) ?? null,
     category: a.category as string | null,
     reasoning: (a.reason as string | null)?.slice(0, 500) ?? null,
@@ -171,6 +173,139 @@ async function snapshotBaseline(businessId: string, category: string): Promise<n
   } catch {
     return null
   }
+}
+
+// ── LRN-1: Autopilot outcome tracking ────────────────────────────────────────
+
+/**
+ * Phase 1: Backfill aria_autopilot_actions rows for any aria_actions that were approved
+ * but never got an outcome tracking row (e.g. approved before LRN-1 was deployed).
+ * Phase 2: Resolve 'pending' outcomes that are 7+ days old.
+ */
+export async function runAutopilotOutcomeChecks(businessId: string): Promise<{ backfilled: number; resolved: number }> {
+  const now = new Date()
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  let backfilled = 0, resolved = 0
+
+  // ── Phase 1: backfill approved aria_actions with no outcome row ──────────
+  const { data: approvedActions } = await supabaseAdmin
+    .from('aria_actions')
+    .select('id, title, category, priority, recommendation, reason, expected_impact, confidence, created_at')
+    .eq('business_id', businessId)
+    .eq('status', 'approved')
+
+  for (const aa of (approvedActions ?? []) as Record<string, unknown>[]) {
+    const actionId = aa.id as string
+    // Check if tracking row already exists (by action_id OR legacy triggered_by)
+    const { count } = await supabaseAdmin
+      .from('aria_autopilot_actions')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', businessId)
+      .or(`action_id.eq.${actionId},triggered_by.eq.aria_actions:${actionId}`)
+    if ((count ?? 0) > 0) continue
+
+    const confStr = (aa.confidence as string | null) ?? ''
+    const confNum = confStr === 'high' ? 0.9 : confStr === 'medium' ? 0.7 : confStr === 'low' ? 0.5 : null
+    await supabaseAdmin.from('aria_autopilot_actions').insert({
+      business_id: businessId,
+      action_id: actionId,
+      action_type: 'aria_recommendation_approved',
+      title: (aa.title as string).slice(0, 200),
+      description: (aa.recommendation as string | null)?.slice(0, 500) ?? null,
+      status: 'approved',
+      outcome: 'pending',
+      category: aa.category as string | null,
+      priority: aa.priority as string | null,
+      confidence: confNum,
+      estimated_impact: (aa.expected_impact as string | null) ?? null,
+      approved_at: now.toISOString(),
+      triggered_by: 'aria_actions:' + actionId,
+    })
+    backfilled++
+  }
+
+  // ── Phase 2: resolve pending outcomes that are 7+ days old ──────────────
+  const { data: pendingRows } = await supabaseAdmin
+    .from('aria_autopilot_actions')
+    .select('id, category, action_id, created_at')
+    .eq('business_id', businessId)
+    .eq('outcome', 'pending')
+    .lt('created_at', sevenDaysAgo)
+
+  for (const row of (pendingRows ?? []) as Record<string, unknown>[]) {
+    const rowId     = row.id as string
+    const category  = (row.category as string | null) ?? 'cashflow'
+    const createdAt = new Date(row.created_at as string)
+
+    const beforeStart = new Date(createdAt.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const beforeEnd   = createdAt.toISOString()
+    const afterStart  = createdAt.toISOString()
+    const afterEnd    = new Date(createdAt.getTime() +  7 * 24 * 60 * 60 * 1000).toISOString()
+
+    let verdict: 'positive' | 'negative' | 'unknown' = 'unknown'
+
+    try {
+      if (['cashflow', 'revenue', 'pricing', 'marketing', 'hours', 'promotions'].includes(category)) {
+        const [{ data: beforeSales }, { data: afterSales }] = await Promise.all([
+          supabaseAdmin.from('pos_sales').select('total_amount')
+            .eq('business_id', businessId).neq('status', 'voided')
+            .gte('created_at', beforeStart).lt('created_at', beforeEnd),
+          supabaseAdmin.from('pos_sales').select('total_amount')
+            .eq('business_id', businessId).neq('status', 'voided')
+            .gte('created_at', afterStart).lte('created_at', afterEnd),
+        ])
+        const beforeRev = (beforeSales ?? []).reduce((s, r) => s + Number((r as Record<string,unknown>).total_amount || 0), 0)
+        const afterRev  = (afterSales  ?? []).reduce((s, r) => s + Number((r as Record<string,unknown>).total_amount || 0), 0)
+        if (beforeRev > 0) {
+          const delta = (afterRev - beforeRev) / beforeRev
+          verdict = delta > 0.05 ? 'positive' : delta < -0.05 ? 'negative' : 'unknown'
+        }
+      } else if (['stock', 'inventory'].includes(category)) {
+        // Cleared = no critical low-stock items
+        const { count: lowStockCount } = await supabaseAdmin
+          .from('pos_products')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', businessId)
+          .eq('is_active', true)
+          .lte('stock_quantity', 2)
+        verdict = (lowStockCount ?? 0) === 0 ? 'positive' : 'unknown'
+      }
+    } catch { verdict = 'unknown' }
+
+    await supabaseAdmin.from('aria_autopilot_actions')
+      .update({ outcome: verdict })
+      .eq('id', rowId)
+
+    // Update linked aria_actions to 'completed'
+    if (row.action_id) {
+      await supabaseAdmin.from('aria_actions')
+        .update({ status: 'completed', updated_at: now.toISOString() })
+        .eq('id', row.action_id as string)
+        .eq('business_id', businessId)
+    }
+
+    // Write learning_signal to most recent aria_ai_calls for this business's council agents
+    const agentKey = category === 'cashflow' || category === 'revenue' || category === 'pricing' ? 'council_growth'
+      : category === 'stock' || category === 'inventory' ? 'council_risk'
+      : 'council_strategy'
+    const { data: latestCall } = await supabaseAdmin
+      .from('aria_ai_calls')
+      .select('id')
+      .eq('business_id', businessId)
+      .eq('agent_key', agentKey)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (latestCall) {
+      await supabaseAdmin.from('aria_ai_calls')
+        .update({ learning_signal: verdict })
+        .eq('id', (latestCall as { id: string }).id)
+    }
+
+    resolved++
+  }
+
+  return { backfilled, resolved }
 }
 
 async function adjustAdviceWeight(businessId: string, category: string, verdict: string): Promise<void> {
