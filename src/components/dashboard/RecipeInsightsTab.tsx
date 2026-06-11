@@ -1,7 +1,23 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Item { id: string; name: string; margin: number; weekly_sales: number; menu_price: number | null; cost_per_serve: number | null; quadrant: 'star' | 'gem' | 'workhorse' | 'review'; }
+
+interface WasteImpact {
+  period_days: number;
+  waste_cost_total: number;
+  revenue_total: number;
+  top_waste: Array<{ id: string; name: string; waste_cost: number }>;
+  effective_margins: Array<{
+    id: string;
+    name: string;
+    revenue: number;
+    ingredient_cost: number;
+    waste_cost: number;
+    eff_margin_pct: number | null;
+    base_margin_pct: number | null;
+  }>;
+}
 
 const Q_META = {
   star: { label: 'Stars', emoji: '⭐', color: '#22C55E' },
@@ -10,11 +26,31 @@ const Q_META = {
   review: { label: 'Review', emoji: '🔴', color: '#ef4444' },
 };
 
+const MARGIN_COLOR = (m: number | null | undefined) =>
+  m == null ? '#9ca3af' : m >= 50 ? '#22C55E' : m >= 30 ? '#f59e0b' : '#ef4444';
+
+function fmt(n: number) { return 'A$' + n.toFixed(2); }
+
 export default function RecipeInsightsTab({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<Item[]>([]);
   const [insight, setInsight] = useState('');
   const [loaded, setLoaded] = useState(false);
+
+  const [wasteImpact, setWasteImpact] = useState<WasteImpact | null>(null);
+  const [wasteLoading, setWasteLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchWasteImpact() {
+      setWasteLoading(true);
+      const r = await fetch(`/api/recipes/waste-impact?business_id=${businessId}`)
+        .then(r => r.json())
+        .catch(() => null);
+      setWasteImpact(r ?? null);
+      setWasteLoading(false);
+    }
+    fetchWasteImpact();
+  }, [businessId]);
 
   async function run() {
     setLoading(true);
@@ -33,6 +69,97 @@ export default function RecipeInsightsTab({ businessId }: { businessId: string }
 
   return (
     <div className="space-y-4">
+      {/* ── Waste-to-sales impact card ─────────────────────────────────── */}
+      <div className="rounded-xl p-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <span style={{ fontSize: 16 }}>🗑</span>
+          <h3 className="text-white font-semibold text-sm">This week&apos;s waste impact</h3>
+          <span className="text-xs ml-auto" style={{ color: '#4b5563' }}>last 7 days</span>
+        </div>
+
+        {wasteLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map(i => <div key={i} className="h-5 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />)}
+          </div>
+        ) : !wasteImpact ? (
+          <p className="text-xs" style={{ color: '#6b7280' }}>Could not load waste data.</p>
+        ) : (
+          <>
+            {/* Summary row */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="rounded-xl p-3" style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)' }}>
+                <div className="text-xs mb-1" style={{ color: '#9ca3af' }}>Recipe waste cost</div>
+                <div className="text-lg font-bold" style={{ color: wasteImpact.waste_cost_total > 0 ? '#ef4444' : '#22C55E' }}>
+                  {fmt(wasteImpact.waste_cost_total)}
+                </div>
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)' }}>
+                <div className="text-xs mb-1" style={{ color: '#9ca3af' }}>Revenue from recipes</div>
+                <div className="text-lg font-bold" style={{ color: wasteImpact.revenue_total > 0 ? '#1D9E75' : '#9ca3af' }}>
+                  {fmt(wasteImpact.revenue_total)}
+                </div>
+              </div>
+            </div>
+
+            {/* Waste ratio indicator */}
+            {wasteImpact.revenue_total > 0 && wasteImpact.waste_cost_total > 0 && (() => {
+              const ratio = (wasteImpact.waste_cost_total / wasteImpact.revenue_total) * 100;
+              const color = ratio > 10 ? '#ef4444' : ratio > 5 ? '#f59e0b' : '#22C55E';
+              return (
+                <div className="rounded-lg px-3 py-2 mb-4 flex items-center justify-between" style={{ background: color + '12', border: '1px solid ' + color + '33' }}>
+                  <span className="text-xs" style={{ color: '#9ca3af' }}>Waste as % of recipe revenue</span>
+                  <span className="text-sm font-bold" style={{ color }}>{ratio.toFixed(1)}%</span>
+                </div>
+              );
+            })()}
+
+            {/* Top wasteful recipes */}
+            {wasteImpact.top_waste.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Most wasteful recipes</p>
+                <div className="space-y-1.5">
+                  {wasteImpact.top_waste.map(w => (
+                    <div key={w.id} className="flex items-center justify-between">
+                      <span className="text-xs" style={{ color: '#d1d5db' }}>{w.name}</span>
+                      <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>{fmt(w.waste_cost)} wasted</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Per-recipe effective margin vs base */}
+            {wasteImpact.effective_margins.length > 0 && (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Effective margin (incl. waste)</p>
+                <div className="space-y-1.5">
+                  {wasteImpact.effective_margins.map(r => (
+                    <div key={r.id} className="flex items-center justify-between">
+                      <span className="text-xs" style={{ color: '#d1d5db' }}>{r.name}</span>
+                      <div className="flex items-center gap-2 text-xs">
+                        {r.base_margin_pct != null && (
+                          <span style={{ color: '#6b7280' }}>base {r.base_margin_pct}%</span>
+                        )}
+                        {r.eff_margin_pct != null && (
+                          <span className="font-semibold" style={{ color: MARGIN_COLOR(r.eff_margin_pct) }}>
+                            eff. {r.eff_margin_pct}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {wasteImpact.waste_cost_total === 0 && wasteImpact.revenue_total === 0 && (
+              <p className="text-xs" style={{ color: '#6b7280' }}>No waste logs or linked product sales found this week. Log waste via the Waste button on any recipe.</p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Menu optimisation ──────────────────────────────────────────── */}
       <div className="rounded-xl p-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
         <div className="flex items-center justify-between">
           <div>

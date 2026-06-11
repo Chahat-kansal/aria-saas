@@ -95,6 +95,8 @@ export default function RecipesPage() {
   const [scaleInput, setScaleInput] = useState('');
   const [scaleResult, setScaleResult] = useState<{ ingredients: Array<{ ingredient_name: string; quantity: number; unit: string; line_cost: number | null }>; total_cost: number; cost_per_serving: number | null } | null>(null);
   const [scaling, setScaling] = useState(false);
+  const [costOptimising, setCostOptimising] = useState<string | null>(null);
+  const [costSuggestions, setCostSuggestions] = useState<{ recipeId: string; suggestions: Array<{ original_ingredient: string; suggested_substitute: string; reason: string; estimated_saving_per_unit: number }> } | null>(null);
   // Filters
   const [filterCategory, setFilterCategory] = useState('');
   const [filterMarginTier, setFilterMarginTier] = useState('');
@@ -303,6 +305,19 @@ export default function RecipesPage() {
       if (res.ingredients) setScaleResult(res);
     } catch (e) { console.warn('[non-fatal]', e) }
     setScaling(false);
+  }
+
+  async function suggestCheaperIngredients(recipeId: string) {
+    if (!business?.id) return;
+    setCostOptimising(recipeId);
+    setCostSuggestions(null);
+    const res = await fetch('/api/aria/recipe-cost-optimiser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipe_id: recipeId, business_id: business.id }),
+    }).then(r => r.json()).catch(() => ({ suggestions: [] }));
+    setCostSuggestions({ recipeId, suggestions: res.suggestions ?? [] });
+    setCostOptimising(null);
   }
 
   function updateIng(index: number, field: string, value: unknown) {
@@ -703,6 +718,46 @@ export default function RecipesPage() {
                 <option value="" style={{ background: '#1a1a2e' }}>Not linked</option>
                 {products.map(p => <option key={p.id} value={p.id} style={{ background: '#1a1a2e' }}>{p.name}</option>)}
               </select>
+            </div>
+
+            {/* AI cost optimiser */}
+            <div className="mb-4">
+              <button
+                onClick={() => suggestCheaperIngredients(detailModal.id)}
+                disabled={costOptimising === detailModal.id}
+                className="w-full py-2 rounded-xl text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-1.5"
+                style={{ background: 'rgba(127,184,151,0.1)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.25)' }}>
+                {costOptimising === detailModal.id
+                  ? <><span className="inline-block w-2.5 h-2.5 border border-[#7FB897] border-t-transparent rounded-full animate-spin" />Analysing ingredients…</>
+                  : '✦ Suggest cheaper ingredients'}
+              </button>
+
+              {costSuggestions?.recipeId === detailModal.id && costSuggestions.suggestions.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {costSuggestions.suggestions.map((s, i) => (
+                    <div key={i} className="rounded-xl p-3" style={{ background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.2)' }}>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="text-xs">
+                          <span style={{ color: '#9ca3af' }}>Swap </span>
+                          <span className="font-medium text-white">{s.original_ingredient}</span>
+                          <span style={{ color: '#9ca3af' }}> → </span>
+                          <span className="font-medium" style={{ color: '#7FB897' }}>{s.suggested_substitute}</span>
+                        </div>
+                        {s.estimated_saving_per_unit > 0 && (
+                          <span className="text-xs font-semibold shrink-0" style={{ color: '#22C55E' }}>
+                            Save A${Number(s.estimated_saving_per_unit).toFixed(2)}/unit
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs" style={{ color: '#6b7280' }}>{s.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {costSuggestions?.recipeId === detailModal.id && costSuggestions.suggestions.length === 0 && (
+                <p className="text-xs mt-2" style={{ color: '#6b7280' }}>No substitution suggestions available for this recipe.</p>
+              )}
             </div>
 
             {/* Actions */}
