@@ -21,6 +21,7 @@ export interface CommunityMember {
   push_token: string | null
   push_enabled: boolean | null
   joined_at: string
+  user_id?: string | null
 }
 
 /**
@@ -72,6 +73,40 @@ export async function ensureCommunityMember(nickname?: string | null): Promise<C
   const existing = await getCommunityMember()
   if (existing) return existing
   return createCommunityMember(nickname)
+}
+
+/**
+ * Link an authenticated Supabase user to an existing anonymous member row.
+ * Called once when the member upgrades their account. Idempotent.
+ */
+export async function linkUserToMember(userId: string, memberId: string): Promise<void> {
+  await supabaseAdmin.from('community_members')
+    .update({ user_id: userId })
+    .eq('id', memberId)
+}
+
+/**
+ * On sign-in: find existing member linked to this userId first.
+ * If none found, link the current session's member row (if a session exists).
+ * Returns the resolved member or null.
+ */
+export async function resolveOrLinkMember(userId: string): Promise<CommunityMember | null> {
+  const { data: linked } = await supabaseAdmin
+    .from('community_members')
+    .select('id, session_token, nickname, push_token, push_enabled, joined_at, user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (linked) return linked as CommunityMember
+
+  const current = await getCommunityMember()
+  if (current) {
+    await supabaseAdmin.from('community_members')
+      .update({ user_id: userId })
+      .eq('id', current.id)
+    return { ...current, user_id: userId }
+  }
+
+  return null
 }
 
 /**

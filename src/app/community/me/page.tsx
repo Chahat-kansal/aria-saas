@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { C, RADIUS, MAX_W, FONT_DISPLAY } from '../theme'
 import { PushOptIn } from '../PushOptIn'
+import { supabase } from '@/lib/supabase'
 
 interface Member { id: string; nickname: string | null; joined_at: string }
 interface Follow {
@@ -21,12 +22,28 @@ export default function CommunityHomePage() {
   const [nickname, setNickname] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingNick, setEditingNick] = useState(false)
+  const [authUser, setAuthUser] = useState<{ id: string; email?: string } | null>(null)
+  const [accountLinked, setAccountLinked] = useState(false)
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const [upgradeEmail, setUpgradeEmail] = useState('')
+  const [upgradePassword, setUpgradePassword] = useState('')
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
 
   useEffect(() => {
     (async () => {
-      const d = await fetch('/api/community/follows').then(r => r.json())
+      const [d, authData] = await Promise.all([
+        fetch('/api/community/follows').then(r => r.json()),
+        supabase.auth.getUser(),
+      ])
       setMember(d.member ?? null)
       setFollows(d.follows ?? [])
+      if (authData.data.user) {
+        setAuthUser({ id: authData.data.user.id, email: authData.data.user.email })
+        // Check if community session is already linked to this auth user
+        const linkStatus = await fetch('/api/community/account-link').then(r => r.json())
+        setAccountLinked(!!linkStatus.linked)
+      }
       setLoading(false)
     })()
   }, [])
@@ -60,6 +77,38 @@ export default function CommunityHomePage() {
     await fetch('/api/community/session', { method: 'DELETE' })
     setMember(null); setFollows([]); setNickname(''); setEditingNick(false)
     setSaving(false)
+  }
+
+  async function upgradeAccount() {
+    setUpgrading(true)
+    setUpgradeError(null)
+    try {
+      const { data, error } = await supabase.auth.signUp({ email: upgradeEmail.trim(), password: upgradePassword })
+      if (error) { setUpgradeError(error.message); return }
+      if (data.user) {
+        setAuthUser({ id: data.user.id, email: data.user.email ?? undefined })
+        const link = await fetch('/api/community/account-link', { method: 'POST' }).then(r => r.json())
+        if (link.ok) { setAccountLinked(true); setShowUpgrade(false) }
+      }
+    } finally {
+      setUpgrading(false)
+    }
+  }
+
+  async function signInAndLink() {
+    setUpgrading(true)
+    setUpgradeError(null)
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: upgradeEmail.trim(), password: upgradePassword })
+      if (error) { setUpgradeError(error.message); return }
+      if (data.user) {
+        setAuthUser({ id: data.user.id, email: data.user.email ?? undefined })
+        const link = await fetch('/api/community/account-link', { method: 'POST' }).then(r => r.json())
+        if (link.ok) { setAccountLinked(true); setShowUpgrade(false) }
+      }
+    } finally {
+      setUpgrading(false)
+    }
   }
 
   async function togglePref(business_id: string, key: 'notifications_on' | 'is_hidden' | 'consent_marketing', value: boolean) {
@@ -195,6 +244,68 @@ export default function CommunityHomePage() {
           </div>
         )}
       </section>
+
+      {/* Account upgrade — shown when no auth link yet */}
+      {!accountLinked && !authUser && (
+        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 20 }}>
+          {!showUpgrade ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Create an account</p>
+                <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', lineHeight: 1.5 }}>
+                  Keep your follows across devices. Still anonymous to businesses.
+                </p>
+              </div>
+              <button onClick={() => setShowUpgrade(true)}
+                style={{ padding: '9px 16px', background: C.accent, color: C.ink, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minHeight: 40 }}>
+                Upgrade
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px' }}>Link an account</p>
+              <input
+                value={upgradeEmail}
+                onChange={e => setUpgradeEmail(e.target.value)}
+                placeholder="Email address"
+                type="email"
+                style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }}
+              />
+              <input
+                value={upgradePassword}
+                onChange={e => setUpgradePassword(e.target.value)}
+                placeholder="Password (min 8 chars)"
+                type="password"
+                style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }}
+              />
+              {upgradeError && <p style={{ fontSize: 12, color: C.danger, margin: '0 0 8px' }}>{upgradeError}</p>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={upgradeAccount} disabled={upgrading || !upgradeEmail || !upgradePassword}
+                  style={{ flex: 1, padding: '11px', background: C.accent, color: C.ink, border: 'none', borderRadius: RADIUS.sm, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: upgrading ? 0.6 : 1 }}>
+                  {upgrading ? 'Linking…' : 'Create account'}
+                </button>
+                <button onClick={signInAndLink} disabled={upgrading || !upgradeEmail || !upgradePassword}
+                  style={{ flex: 1, padding: '11px', background: 'transparent', color: C.text, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', opacity: upgrading ? 0.6 : 1 }}>
+                  Sign in
+                </button>
+              </div>
+              <button onClick={() => setShowUpgrade(false)} style={{ marginTop: 8, background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {accountLinked && (
+        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>✓</span>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Account linked</p>
+            <p style={{ fontSize: 11, color: C.textMuted, margin: '2px 0 0' }}>Your follows are preserved across devices.</p>
+          </div>
+        </section>
+      )}
 
       {/* Saved offers wallet link */}
       <Link href="/community/saved" prefetch={false} style={{
