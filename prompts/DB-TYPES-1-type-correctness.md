@@ -1,5 +1,5 @@
 # DB-TYPES-1 — DB Type Correctness Audit
-STATUS: READY | MODE: SOLO
+STATUS: AWAITING-VERIFY | MODE: SOLO
 Goal: Find and fix all DB columns whose TypeScript types or runtime assumptions are wrong.
       Prevent the class of bug where code reads `number` from DB but gets `string` (Postgres returns
       numeric/decimal as string through the JS driver unless explicitly cast).

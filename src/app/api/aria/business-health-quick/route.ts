@@ -133,11 +133,11 @@ export const GET = withErrorCapture('aria/business-health-quick', async (req: Re
     const currentData = (currentSalesResult.data ?? []) as SaleRow[];
     const previousData = (previousSalesResult.data ?? []) as SaleRow[];
     const currentTotal = currentData.reduce(
-      (sum: number, s: SaleRow) => sum + (s.total_amount ?? 0),
+      (sum: number, s: SaleRow) => sum + Number(s.total_amount ?? 0),
       0,
     );
     const previousTotal = previousData.reduce(
-      (sum: number, s: SaleRow) => sum + (s.total_amount ?? 0),
+      (sum: number, s: SaleRow) => sum + Number(s.total_amount ?? 0),
       0,
     );
     if (previousTotal > 0 && currentTotal < previousTotal * 0.8) {

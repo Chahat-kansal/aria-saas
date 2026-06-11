@@ -78,7 +78,7 @@ async function _POST(req: Request) {
     supabase.from("pos_customers").select(`id,name,last_visit,${CANONICAL_COLS.CUSTOMER_SPEND}`).eq("business_id", bid).order("last_visit", { ascending: true }).limit(50),
   ]);
 
-  const totalRevenue = (sales ?? []).reduce((s: number, r: {total_amount?: number}) => s + (r.total_amount ?? 0), 0);
+  const totalRevenue = (sales ?? []).reduce((s: number, r: {total_amount?: number}) => s + Number(r.total_amount ?? 0), 0);
   const lowStock = (products ?? []).filter(p => p.track_stock && (p.stock_quantity ?? 0) < 5);
   const winbackCustomers = (customers ?? []).filter(c => {
     if (!c.last_visit) return true;

@@ -102,7 +102,7 @@ async function _GET() {
         .from('invoice_reminders')
         .select('id')
         .eq('invoice_id', inv.id)
-        .eq('trigger_type', '7d_final')
+        .eq('trigger_type', 'day_of_overdue')
         .maybeSingle()
       if (existing) continue
 
@@ -122,7 +122,7 @@ async function _GET() {
           invoice_id: inv.id,
           business_id: inv.business_id,
           remind_at: new Date().toISOString(),
-          trigger_type: '7d_final',
+          trigger_type: 'day_of_overdue',
           sent_at: new Date().toISOString(),
         })
         await upsertAriaAction({

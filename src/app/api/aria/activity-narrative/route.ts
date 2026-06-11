@@ -182,7 +182,7 @@ async function _GET(req: Request) {
   if (!salesResult.error && salesResult.data) {
     for (const row of salesResult.data) {
       if (!row.created_at) continue;
-      const amount = row.total_amount ?? 0;
+      const amount = Number(row.total_amount ?? 0);
       const method = row.payment_method ?? 'unknown';
       rawEvents.push({
         ts: new Date(row.created_at).getTime(),

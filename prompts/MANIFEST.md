@@ -87,7 +87,7 @@ Generated: 2026-06-10 from roadmap-audit-2026-06-10.md
 | 47 | [WIRE-2-briefing-consolidation.md](WIRE-2-briefing-consolidation.md) | Briefing Table Consolidation | READY | SOLO |
 | 48 | [WIRE-3-aria-action-tables.md](WIRE-3-aria-action-tables.md) | Aria Action Canonical Tables | READY | SOLO |
 | 49 | [SH-4-security-verify.md](SH-4-security-verify.md) | Security Hardening Verify | READY | SOLO |
-| 50 | [DB-TYPES-1-type-correctness.md](DB-TYPES-1-type-correctness.md) | DB Type Correctness Audit | READY | SOLO |
+| 50 | [DB-TYPES-1-type-correctness.md](DB-TYPES-1-type-correctness.md) | DB Type Correctness Audit | AWAITING-VERIFY | SOLO |
 | 51 | [LRN-1-outcome-tracking.md](LRN-1-outcome-tracking.md) | Learning & Outcome Tracking | READY | SOLO |
 | 52 | [BRIEF-1-briefing-system.md](BRIEF-1-briefing-system.md) | BRIEF-1 (all parts) | DONE ✅ c0fbb7f7 | — |
 

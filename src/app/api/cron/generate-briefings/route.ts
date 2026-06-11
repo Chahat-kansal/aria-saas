@@ -23,8 +23,8 @@ interface BriefingBusinessWithSlack extends BriefingBusiness {
   slack_access_token?: string | null
   slack_channel_id?: string | null
   name?: string
-  latitude?: number | null
-  longitude?: number | null
+  lat?: number | null
+  lng?: number | null
   city?: string | null
 }
 
@@ -179,8 +179,8 @@ async function generateMorning(
   }
 
   // ── Weather (optional, skip on failure) ──────────────────────────────────
-  const weatherStr = (biz.latitude && biz.longitude)
-    ? await fetchWeatherSummary(biz.latitude, biz.longitude)
+  const weatherStr = (biz.lat && biz.lng)
+    ? await fetchWeatherSummary(biz.lat, biz.lng)
     : ''
 
   // ── AU RSS headlines ──────────────────────────────────────────────────────
@@ -331,7 +331,7 @@ async function _GET(req: NextRequest) {
 
   const { data: bizList, error } = await supabaseAdmin
     .from('businesses')
-    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_access_token, slack_channel_id, latitude, longitude, city')
+    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_access_token, slack_channel_id, lat, lng, city')
     .eq('is_active', true)
     .limit(500)
 

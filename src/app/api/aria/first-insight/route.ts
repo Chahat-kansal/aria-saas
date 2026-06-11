@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   const productCount = products.data?.length ?? 0
   if (productCount === 0) return NextResponse.json({ insight: null })
 
-  const totalRevenue = (sales.data ?? []).reduce((s, r) => s + (r.total_amount ?? 0), 0)
+  const totalRevenue = (sales.data ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
   const saleCount = sales.data?.length ?? 0
   const avgBasket = saleCount > 0 ? totalRevenue / saleCount : 0
   const topProducts = (products.data ?? []).slice(0, 5).map(p => `${p.name} ($${p.price})`).join(', ')
