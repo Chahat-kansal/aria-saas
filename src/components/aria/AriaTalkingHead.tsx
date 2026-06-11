@@ -101,6 +101,12 @@ function AvatarScene({ replyText, mood, gesture }: {
     initVoice()
   }, [])
 
+  // ── True unmount cleanup — stopAriaSpeech only fires when AvatarScene
+  //    leaves the DOM, NOT on context loss / VRM reload cycles.
+  useEffect(() => {
+    return () => { stopAriaSpeech() }
+  }, [])
+
   // ── Mood: update ref + apply expression immediately if VRM is ready ──────
   useEffect(() => {
     moodRef.current = mood
@@ -212,7 +218,6 @@ function AvatarScene({ replyText, mood, gesture }: {
       vrmReadyRef.current = false;
       frameErrorRef.current = false;
       isTalkingRef.current = false;
-      stopAriaSpeech();
     };
   }, []);
 
@@ -487,16 +492,19 @@ export default function AriaTalkingHead({
     <Canvas
       camera={{ position: [0, 1.1, 1.8], fov: 30 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
-      gl={{ alpha: true, antialias: true }}
+      gl={{ alpha: true, antialias: false, powerPreference: 'default' }}
       onCreated={({ camera, gl }) => {
         camera.lookAt(0, 1.2, 0)
-        gl.setClearColor(0x000000, 0) // transparent canvas background
+        gl.setClearColor(0x000000, 0)
+        gl.setPixelRatio(Math.min(devicePixelRatio, 1.5))
         gl.domElement.addEventListener('webglcontextlost', (e: Event) => {
           e.preventDefault()
           console.warn('[AriaTalkingHead] WebGL context lost — will restore when available')
         }, false)
         gl.domElement.addEventListener('webglcontextrestored', () => {
-          console.log('[AriaTalkingHead] WebGL context restored')
+          console.log('[AriaTalkingHead] WebGL context restored — reinitialising renderer state')
+          gl.setClearColor(0x000000, 0)
+          gl.setPixelRatio(Math.min(devicePixelRatio, 1.5))
         }, false)
       }}
     >

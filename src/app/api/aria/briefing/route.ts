@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -106,8 +107,9 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const businessId = searchParams.get('businessId');
   if (!businessId) return NextResponse.json({ error: 'businessId required' }, { status: 400 });
-  // fresh=true: caller signals a mutation just happened — briefing regenerates from live data (always true here, no cache)
-  const _forceRefresh = searchParams.get('fresh') === 'true' || searchParams.get('force_refresh') === 'true'
+  const forceRefresh = searchParams.get('fresh') === 'true'
+    || searchParams.get('force_refresh') === 'true'
+    || searchParams.get('force') === 'true'
 
   const { data: business } = await supabase
     .from('businesses')
@@ -117,6 +119,29 @@ async function _GET(req: Request) {
     .maybeSingle();
 
   if (!business) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // ── Cache gate: serve today's pre-generated aria_daily_briefings content
+  //    rather than running the full council on every page load.
+  if (!forceRefresh) {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: business.timezone || 'Australia/Melbourne' })
+    const { data: cached } = await supabaseAdmin
+      .from('aria_daily_briefings')
+      .select('content, generated_at')
+      .eq('business_id', businessId)
+      .eq('briefing_date', todayStr)
+      .not('content', 'is', null)
+      .maybeSingle()
+    if (cached?.content) {
+      return NextResponse.json({
+        briefing: cached.content as string,
+        recommendations: [],
+        ask_blocks: [],
+        council_mode: false,
+        from_cache: true,
+        generated_at: cached.generated_at,
+      })
+    }
+  }
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 

@@ -230,6 +230,7 @@ function armSpeakWatchdog(id: number, watchdogMs: number): void {
     if (!timedOutCb) return
     _pendingCb   = null
     _pendingText = ''
+    if (_worker) _worker.postMessage({ type: 'cancel', id })
     console.error(`[AriaVoice] speak timeout utterance=${id} (${watchdogMs / 1000}s) — falling back`)
     fallbackSpeechSynthesis(timedOutTxt, timedOutCb)
   }, watchdogMs)
@@ -326,7 +327,7 @@ function postSpeakToWorker(
   _streamEnded       = false
   clearSpeakWatchdog()
 
-  const watchdogMs = _utteranceCount === 0 ? 20_000 : 10_000
+  const watchdogMs = Math.min(30_000, Math.max(10_000, 3_000 + text.length * 150))
   _utteranceCount++
 
   // Delay arming the watchdog until the worker sends speak-started (actual WASM gen start).
