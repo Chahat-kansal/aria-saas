@@ -2,6 +2,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
+interface BasDraft {
+  id: string; quarter: string | null; period_start: string; period_end: string
+  due_date: string | null; status: string | null
+  g1_total_sales: number | null; field_1a_gst_on_sales: number | null
+  field_1b_gst_credits: number | null; net_gst: number | null
+  w1_total_salary_wages: number | null; w2_amounts_withheld: number | null
+  total_super: number | null; total_payable: number | null; notes: string | null
+}
+interface TaxCalendarEntry { label: string; type: string; date: string; days_until: number }
+interface BasData {
+  quarter: string; period_start: string; period_end: string
+  due_date: string; days_until_due: number
+  draft: BasDraft | null; total_expenses: number; gst_on_expenses: number
+  prior_gst: number | null; tax_calendar: TaxCalendarEntry[]
+}
+
 interface CheckItem {
   id: string; title: string; description: string; category: string
   due_date?: string | null; expiry_date?: string | null
@@ -67,9 +83,12 @@ export default function CompliancePage() {
   const [saving, setSaving] = useState<string | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'overdue' | 'done'>('all')
-  const [activeTab, setActiveTab] = useState<'checklist' | 'calendar'>('checklist')
+  const [activeTab, setActiveTab] = useState<'checklist' | 'calendar' | 'bas'>('checklist')
   const [calDate, setCalDate] = useState(new Date())
   const [calSelected, setCalSelected] = useState<number | null>(null)
+  const [basData, setBasData] = useState<BasData | null>(null)
+  const [basLoading, setBasLoading] = useState(false)
+  const [basCopied, setBasCopied] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const load = useCallback(async () => {
@@ -102,6 +121,16 @@ export default function CompliancePage() {
   }, [business?.id, business?.industry])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!business?.id) return
+    setBasLoading(true)
+    fetch('/api/compliance/bas?business_id=' + business.id)
+      .then(r => r.json())
+      .then(d => { if (!d.error) setBasData(d) })
+      .catch(() => null)
+      .finally(() => setBasLoading(false))
+  }, [business?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function patch(id: string, payload: Record<string, unknown>) {
     setSaving(id)
@@ -178,10 +207,14 @@ export default function CompliancePage() {
           <p style={{ fontSize: 13, color: C.muted }}>Stay on top of licenses, certifications, and legal obligations.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['checklist', 'calendar'] as const).map(t => (
-            <button key={t} onClick={() => setActiveTab(t)}
-              style={{ ...BTN, background: activeTab === t ? '#8B5CF6' : 'rgba(255,255,255,0.06)', color: activeTab === t ? '#fff' : C.muted, border: '1px solid ' + (activeTab === t ? 'transparent' : C.border), textTransform: 'capitalize' }}>
-              {t === 'calendar' ? '📅 Calendar' : '✅ Checklist'}
+          {([
+            { id: 'checklist', label: '✅ Checklist' },
+            { id: 'calendar',  label: '📅 Calendar' },
+            { id: 'bas',       label: '📋 BAS' },
+          ] as const).map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              style={{ ...BTN, background: activeTab === t.id ? '#8B5CF6' : 'rgba(255,255,255,0.06)', color: activeTab === t.id ? '#fff' : C.muted, border: '1px solid ' + (activeTab === t.id ? 'transparent' : C.border) }}>
+              {t.label}
             </button>
           ))}
         </div>
@@ -199,6 +232,30 @@ export default function CompliancePage() {
                 <div style={{ fontSize: 28, fontWeight: 700, color: s.color }}>{s.value}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── AU Tax Calendar — always visible ── */}
+      {basData?.tax_calendar && basData.tax_calendar.length > 0 && (
+        <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 16, padding: '18px 22px', marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>🗓️ AU Tax calendar</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+            {basData.tax_calendar.map((e, i) => {
+              const urgent = e.days_until <= 14
+              const overdue = e.days_until < 0
+              const col = overdue ? C.red : urgent ? C.amber : C.green
+              return (
+                <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid ' + (urgent ? col + '40' : C.border), borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{e.type === 'super' ? 'Super' : 'BAS/PAYG'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 3 }}>{e.label}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{new Date(e.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: col, marginTop: 4 }}>
+                    {overdue ? `${Math.abs(e.days_until)}d overdue` : e.days_until === 0 ? 'Due today' : `${e.days_until}d`}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -321,7 +378,7 @@ export default function CompliancePage() {
             </div>
           ))}
         </>
-      ) : (
+      ) : activeTab === 'calendar' ? (
         <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 16, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <button onClick={() => setCalDate(new Date(calYear, calMonth - 1, 1))}
@@ -363,6 +420,102 @@ export default function CompliancePage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      ) : (
+        /* ── BAS tab ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {basLoading ? (
+            <div style={{ color: C.muted, textAlign: 'center', padding: '40px 0' }}>Loading BAS data…</div>
+          ) : !basData ? (
+            <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: 32, textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: C.muted }}>BAS data not available. The BAS draft is generated automatically near quarter-end by Aria.</p>
+            </div>
+          ) : (
+            <>
+              {/* Quarter header */}
+              <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{basData.draft?.quarter ?? basData.quarter}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    {new Date(basData.period_start).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – {new Date(basData.period_end).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {' · '}Due {new Date(basData.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {basData.days_until_due <= 14 && basData.days_until_due > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: C.amber, background: 'rgba(245,158,11,0.1)', padding: '3px 10px', borderRadius: 6 }}>
+                      Due in {basData.days_until_due}d
+                    </span>
+                  )}
+                  {basData.draft?.status && (
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 6, background: basData.draft.status === 'lodged' ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', color: basData.draft.status === 'lodged' ? C.green : C.amber }}>
+                      {basData.draft.status === 'lodged' ? '✓ Lodged' : 'Draft'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* BAS fields */}
+              <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '18px 22px' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>BAS fields</div>
+                {([
+                  { code: 'G1',  label: 'Total sales (G1)',          val: basData.draft?.g1_total_sales,       note: 'All sales including GST' },
+                  { code: '1A',  label: 'GST on sales (1A)',         val: basData.draft?.field_1a_gst_on_sales, note: 'GST collected from customers' },
+                  { code: '1B',  label: 'GST credits (1B)',          val: basData.draft?.field_1b_gst_credits ?? basData.gst_on_expenses, note: 'GST paid on business purchases' },
+                  { code: 'NET', label: 'Net GST payable',           val: basData.draft?.net_gst,              note: '1A minus 1B', highlight: true },
+                  { code: 'W1',  label: 'Total wages (W1)',          val: basData.draft?.w1_total_salary_wages, note: 'Gross wages + allowances' },
+                  { code: 'W2',  label: 'PAYG withheld (W2)',        val: basData.draft?.w2_amounts_withheld,  note: 'Tax withheld from wages' },
+                  { code: 'S',   label: 'Super guarantee',           val: basData.draft?.total_super,          note: 'Quarterly SGC obligation' },
+                  { code: 'TOT', label: 'Total payable to ATO',      val: basData.draft?.total_payable,        note: '1A + W2 etc.', highlight: true },
+                ] as Array<{ code: string; label: string; val: number | null | undefined; note: string; highlight?: boolean }>).map(f => (
+                  <div key={f.code} style={{ display: 'flex', alignItems: 'center', padding: '9px 0', borderTop: '1px solid ' + C.border }}>
+                    <span style={{ width: 36, fontSize: 10, fontWeight: 700, color: C.dim, fontFamily: 'monospace' }}>{f.code}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: f.highlight ? C.text : C.muted, fontWeight: f.highlight ? 600 : 400 }}>{f.label}</span>
+                    <span style={{ fontSize: f.highlight ? 15 : 13, fontWeight: 700, color: f.highlight ? C.text : C.muted, fontFamily: 'monospace', minWidth: 90, textAlign: 'right' }}>
+                      {f.val != null ? '$' + Number(f.val).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                    </span>
+                    <span style={{ fontSize: 10, color: C.dim, marginLeft: 12, minWidth: 150, textAlign: 'right' }}>{f.note}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Copy for ATO button */}
+              <button
+                onClick={() => {
+                  const d = basData.draft
+                  const fmt = (v: number | null | undefined) => v != null ? '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 2 }) : '—'
+                  const text = [
+                    'BAS ' + (d?.quarter ?? basData.quarter),
+                    'Period: ' + new Date(basData.period_start).toLocaleDateString('en-AU') + ' – ' + new Date(basData.period_end).toLocaleDateString('en-AU'),
+                    'Due: ' + new Date(basData.due_date).toLocaleDateString('en-AU'),
+                    '',
+                    'G1  Total sales:              ' + fmt(d?.g1_total_sales),
+                    '1A  GST on sales:             ' + fmt(d?.field_1a_gst_on_sales),
+                    '1B  GST credits:              ' + fmt(d?.field_1b_gst_credits ?? basData.gst_on_expenses),
+                    '    Net GST payable:          ' + fmt(d?.net_gst),
+                    '',
+                    'W1  Total wages:              ' + fmt(d?.w1_total_salary_wages),
+                    'W2  PAYG withheld:            ' + fmt(d?.w2_amounts_withheld),
+                    'S   Super guarantee:          ' + fmt(d?.total_super),
+                    '',
+                    'TOTAL PAYABLE TO ATO:         ' + fmt(d?.total_payable),
+                    '',
+                    'Generated by Aria OS — verify with your accountant before lodging.',
+                  ].join('\n')
+                  navigator.clipboard.writeText(text).then(() => { setBasCopied(true); setTimeout(() => setBasCopied(false), 2000) }).catch(() => null)
+                }}
+                style={{ ...BTN, background: '#8B5CF6', color: '#fff', alignSelf: 'flex-start', fontSize: 13, padding: '8px 20px' }}
+              >
+                {basCopied ? '✓ Copied!' : '📋 Copy for ATO portal'}
+              </button>
+
+              {basData.draft?.notes && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 16px', fontSize: 12, color: C.muted }}>
+                  <strong style={{ color: C.text }}>Notes: </strong>{basData.draft.notes}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
