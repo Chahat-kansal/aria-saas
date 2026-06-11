@@ -39,6 +39,11 @@ const nextConfig = {
         './node_modules/sharp/**',
         './node_modules/@aws-sdk/**',
         './node_modules/canvas/**',
+        './node_modules/three/**/*',
+        './node_modules/fluent-ffmpeg/**/*',
+        './node_modules/@xenova/**/*',
+        './node_modules/onnxruntime-node/**/*',
+        './node_modules/sharp/**/*',
       ],
     },
     outputFileTracingIncludes: {
