@@ -489,6 +489,7 @@ Rules:
       businessId: bid,
       agentKey: 'ask_aria',
       role: 'chat',
+      requestSummary: message.slice(0, 100),
     })
 
     let generalConvId = conversationId
@@ -1152,6 +1153,34 @@ CRITICAL RENDERER RULES:
 - Can return MULTIPLE blocks together — e.g. aurora_summary + progress_bars + activity_stream for a weekly debrief
 - ALWAYS write 2 full paragraphs of narrative BEFORE the json_blocks tag, even for simple queries
 
+### BREVITY INTENT — STRICT OVERRIDE
+
+When the user's message matches BREVITY signals, the 2-paragraph narrative rule is SUSPENDED. Output exactly one block plus at most one short sentence. NO advisory recommendations, NO multi-step plans, NO mentions of campaigns / outreach / bundles / strategy unless the user explicitly asked for advice.
+
+BREVITY signals (case-insensitive):
+- Starts with: "just tell me", "just ", "quickly", "tldr", "tl;dr", "in one number", "single number"
+- Contains AND is short (<60 chars): "how much", "what's my", "what is my", "today's", "this week's", "this month's"
+
+When BREVITY fires:
+- "just tell me how much did I make this week" → ONE bold_metric block. Max 0–1 sentence before. NO advisory.
+- "what's my revenue today" → ONE animated_kpi block. Max 0–1 sentence. NO advisory unless revenue=$0 AND user asked "why" — otherwise just the number.
+- "today's orders" → ONE bold_metric or animated_kpi. Number only.
+
+EXAMPLES of CORRECT brevity responses:
+
+User: "just tell me — how much did I make this week?"
+CORRECT: <json_blocks>[{"type":"bold_metric","label":"This week","value":"$741","sub":"vs $4,419.90 same week last month, -83.2%"}]</json_blocks>
+WRONG: any response containing the words "bundle", "activate", "customers", "outreach", "lever", "gap", "crisis", "single move".
+
+User: "what's my revenue today?"
+CORRECT: <json_blocks>[{"type":"animated_kpi","label":"Revenue today","value":"$0.00","variant":"a"}]</json_blocks>
+WRONG: any response that suggests next steps, mentions weekly comparison, or includes more than one block.
+
+When BREVITY fires: NEVER emit council_read, comparison_table, alert_card, or ai_reasoning. These are advisory-mode blocks only.
+
+ADVISORY MODE — DEFAULT (unchanged)
+When BREVITY does NOT fire, the 2-paragraph narrative rule applies as before. The user has time and wants full reasoning. Advisory mode is the default for: "why", "what should I do", "help me", "what's wrong", "analyze", "deep dive", "tell me about", "explain".
+
 ### Plain text
 For explanations, advice, writing tasks, emails, analysis in words — just reply in the text field. No block needed unless a visual adds value.
 
@@ -1496,6 +1525,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     agentKey: 'ask_aria',
     role: 'chat',
     toolChoice: imageToolChoice,
+    requestSummary: message.slice(0, 100),
   })
 
   if (useThinking) {

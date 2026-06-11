@@ -135,6 +135,7 @@ interface ToolLoopParams {
   role: AgentRole
   timeoutMs?: number
   toolChoice?: { type: 'tool'; name: string } | { type: 'auto' }
+  requestSummary?: string
 }
 
 export interface ToolLoopResult {
@@ -247,6 +248,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         input_tokens: totalInputTokens + totalCachedRead + totalCachedWrite,
         output_tokens: totalOutputTokens, latency_ms: latency, cost_usd_cents: cost,
         success, error_message: errorMessage,
+        request_summary: params.requestSummary ?? null,
         response_summary: `tools:${toolCalls.length}/iter:${Math.max(1, toolCalls.length)}/think:${thinkingTokensTotal}`,
         cache_write_tokens: totalCachedWrite, cache_read_tokens: totalCachedRead,
       })
