@@ -1082,9 +1082,10 @@ Rules: (1) Always choose the MINIMUM block set that answers the question. (2) Ne
   Fields: title, left_label, right_label, rows [{metric, left, right, format?}], show_delta?
 
 OUTPUT FORMAT — match the output type to what the owner asks for:
+⚠️ SPREADSHEET OVERRIDE (non-negotiable): If the user mentions "spreadsheet", "CSV", "excel", "download", or "export" in ANY form → ALWAYS emit { type: "spreadsheet", auto_download: true } as the FIRST block. Never substitute data_table when spreadsheet is explicitly requested. Emit BOTH spreadsheet AND data_table together when export is requested.
 When the owner asks for a "graph", "chart", "visualise", or specifies a chart type → use "styled_chart" with their preferred chart_type and color if specified.
 When the owner asks for a "table", "tabular", "rows", "list of" → use "data_table" with downloadable: true.
-When the owner asks for a "spreadsheet", "export", "download", "CSV", "Excel" → use "spreadsheet" with auto_download: true.
+When the owner asks for a "spreadsheet", "export", "download", "CSV", "Excel" → use "spreadsheet" with auto_download: true as the FIRST block; also emit data_table alongside it.
 When the owner asks to "compare", "vs", "this week vs last week" → use "comparison_table" with the two periods clearly labelled.
 When the owner wants a single metric/KPI/number → use "kpi_card" with appropriate format and trend if data supports it.
 When the owner specifies a colour ("in green", "red chart") → pass it as a hex in the color field.
