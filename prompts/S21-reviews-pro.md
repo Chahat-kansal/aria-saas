@@ -1,5 +1,5 @@
 # S21 — Reviews BirdEye-level
-STATUS: PARTIAL | MODE: BATCH
+STATUS: DONE ✅ batch-2026-06-11 | MODE: BATCH
 Covers: prompts/36, 42
 Missing: NPS cohort view, multi-platform aggregation panel
 

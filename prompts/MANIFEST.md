@@ -53,7 +53,7 @@ Generated: 2026-06-10 from roadmap-audit-2026-06-10.md
 
 | # | Sprint File | Name | Status | Mode |
 |---|---|---|---|---|
-| 21 | [S21-reviews-pro.md](S21-reviews-pro.md) | Reviews BirdEye-level | PARTIAL | BATCH |
+| 21 | [S21-reviews-pro.md](S21-reviews-pro.md) | Reviews BirdEye-level | DONE ✅ batch-2026-06-11 | BATCH |
 | 22 | [S22-winback-pro.md](S22-winback-pro.md) | Winback Klaviyo-level | PARTIAL | SOLO |
 | 23 | [S23-compliance-pro.md](S23-compliance-pro.md) | Compliance Pro | PARTIAL | SOLO |
 | 24 | [S24-profit-leaks-pro.md](S24-profit-leaks-pro.md) | Profit Leaks Pro | PARTIAL | SOLO |
@@ -66,7 +66,7 @@ Generated: 2026-06-10 from roadmap-audit-2026-06-10.md
 | 31 | [S31-loyalty-pro.md](S31-loyalty-pro.md) | Loyalty LoyaltyLion-level | DONE | SOLO |
 | 32 | [S32-parcel-tracking.md](S32-parcel-tracking.md) | Parcel Tracking AfterShip-level | DONE | BATCH |
 | 33 | [S33-shift-reports-pro.md](S33-shift-reports-pro.md) | Shift Reports Deputy-level | DONE | BATCH |
-| 34 | [S34-weekly-reports-pro.md](S34-weekly-reports-pro.md) | Weekly Reports Databox-level | PARTIAL | BATCH |
+| 34 | [S34-weekly-reports-pro.md](S34-weekly-reports-pro.md) | Weekly Reports Databox-level | DONE ✅ batch-2026-06-11 | BATCH |
 | 35 | [S35-intelligence-centre.md](S35-intelligence-centre.md) | Intelligence Centre Pro | PARTIAL | SOLO |
 | 36 | [S36-variance-audit-pro.md](S36-variance-audit-pro.md) | Variance Audit Pro | PARTIAL | SOLO |
 | 37 | [S37-inventory-pro.md](S37-inventory-pro.md) | Inventory Pro | PARTIAL | SOLO |

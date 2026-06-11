@@ -26,23 +26,53 @@ async function _GET(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { data: responses } = await supabaseAdmin.from('nps_responses')
-    .select('id, score, comment, responded_at, customer_id').eq('business_id', business_id)
-    .order('responded_at', { ascending: false }).limit(200)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString()
+  const sixtyDaysAgo  = new Date(Date.now() - 60 * 86400_000).toISOString()
 
-  const all = responses ?? []
-  const promoters = all.filter(r => Number(r.score) >= 9).length
+  const [allRes, prevRes] = await Promise.all([
+    supabaseAdmin.from('nps_responses')
+      .select('id, score, comment, responded_at, customer_id').eq('business_id', business_id)
+      .order('responded_at', { ascending: false }).limit(500),
+    supabaseAdmin.from('nps_responses')
+      .select('score').eq('business_id', business_id)
+      .gte('responded_at', sixtyDaysAgo).lt('responded_at', thirtyDaysAgo),
+  ])
+
+  const all = allRes.data ?? []
+  const recent30 = all.filter(r => r.responded_at >= thirtyDaysAgo)
+  const promoters  = all.filter(r => Number(r.score) >= 9).length
   const passives   = all.filter(r => Number(r.score) >= 7 && Number(r.score) <= 8).length
   const detractors = all.filter(r => Number(r.score) <= 6).length
   const total = all.length
   const npsScore = total > 0 ? Math.round(((promoters - detractors) / total) * 100) : null
 
+  // 30-day window counts for trend
+  const p30 = recent30.filter(r => Number(r.score) >= 9).length
+  const pa30 = recent30.filter(r => Number(r.score) >= 7 && Number(r.score) <= 8).length
+  const d30 = recent30.filter(r => Number(r.score) <= 6).length
+
+  // Prior 30-day window for trend comparison
+  const prev = prevRes.data ?? []
+  const prevP  = prev.filter(r => Number(r.score) >= 9).length
+  const prevPa = prev.filter(r => Number(r.score) >= 7 && Number(r.score) <= 8).length
+  const prevD  = prev.filter(r => Number(r.score) <= 6).length
+  const prevTotal = prev.length
+  const prevScore = prevTotal > 0 ? Math.round(((prevP - prevD) / prevTotal) * 100) : null
+
   return NextResponse.json({
     score: npsScore,
     total,
     promoters: total > 0 ? Math.round((promoters / total) * 100) : 0,
-    passives: total > 0 ? Math.round((passives / total) * 100) : 0,
+    passives:  total > 0 ? Math.round((passives  / total) * 100) : 0,
     detractors: total > 0 ? Math.round((detractors / total) * 100) : 0,
+    promoter_count: promoters,
+    passive_count:  passives,
+    detractor_count: detractors,
+    recent_30_promoters: p30,
+    recent_30_passives:  pa30,
+    recent_30_detractors: d30,
+    prev_score: prevScore,
+    prev_total: prevTotal,
     recent: all.slice(0, 10),
   })
 }

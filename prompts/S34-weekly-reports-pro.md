@@ -1,5 +1,5 @@
 # S34 — Weekly Reports Databox-level
-STATUS: PARTIAL | MODE: BATCH
+STATUS: DONE ✅ batch-2026-06-11 | MODE: BATCH
 Covers: prompts/53
 Missing: custom KPI builder (let founder choose which metrics appear on weekly report), scheduled delivery
 

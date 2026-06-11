@@ -5,10 +5,10 @@ import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface Review { id: string; reviewer_name: string|null; reviewer_avatar: string|null; rating: number|null; comment: string|null; review_date: string|null; has_reply: boolean; reply_text: string|null; ai_drafted_reply: string|null; sentiment: string|null; status: string }
 interface Stats { google_place_id: string|null; average_rating: number|null; total_reviews: number|null; last_synced: string|null; local_count: number; distribution: Record<number, number> }
-interface Analytics { total: number; avg_rating: number; response_rate: number; unreplied: number; negative_unreplied: number; monthly_trend: Array<{month: string; count: number; avg_rating: number}> }
+interface Analytics { total: number; avg_rating: number; response_rate: number; unreplied: number; negative_unreplied: number; monthly_trend: Array<{month: string; count: number; avg_rating: number}>; platform_breakdown?: Array<{platform: string; avg_rating: number; count: number}> }
 interface Reputation { score: number|null; trend?: string; grade?: string; top_action?: string }
 interface CompResult { competitors: Array<{name: string; rating: number|null; review_count: number|null}>; analysis: {advantages: string[]; gaps: string[]; summary: string; action: string}; our_rating: number|null; our_reviews: number|null }
-interface NpsStats { score: number|null; total: number; promoters: number; passives: number; detractors: number; recent: Array<{id: string; score: number; responded_at: string}> }
+interface NpsStats { score: number|null; total: number; promoters: number; passives: number; detractors: number; promoter_count: number; passive_count: number; detractor_count: number; prev_score: number|null; recent_30_promoters: number; recent_30_passives: number; recent_30_detractors: number; recent: Array<{id: string; score: number; responded_at: string}> }
 interface BizSettings { facebook_page_id: string; yelp_url: string; google_review_link: string; auto_review_requests: boolean }
 
 const SC: Record<string, string> = { positive: '#22C55E', neutral: '#94A3B8', negative: '#EF4444' }
@@ -177,6 +177,42 @@ export default function ReviewsPage() {
             </div>
           )}
 
+          {/* Multi-platform aggregation panel */}
+          {analytics && (
+            <div style={{ marginBottom: 16, padding: '14px 18px', background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Platform Overview</p>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                {(['google','facebook','yelp'] as const).map(plat => {
+                  const pb = analytics.platform_breakdown?.find(p => p.platform === plat)
+                  const platColor = plat === 'google' ? '#4285F4' : plat === 'facebook' ? '#1877F2' : '#FF1A1A'
+                  const platLabel = plat.charAt(0).toUpperCase() + plat.slice(1)
+                  return (
+                    <div key={plat} style={{ flex: '1 1 140px', padding: '10px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--divider)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: platColor, display: 'inline-block' }} />
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{platLabel}</span>
+                      </div>
+                      {pb ? (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                            <span style={{ fontSize: 22, fontWeight: 800, color: platColor }}>{pb.avg_rating}</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>★</span>
+                          </div>
+                          <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-base)', marginBottom: 4 }}>
+                            <div style={{ width: (pb.avg_rating / 5 * 100) + '%', height: '100%', background: platColor, borderRadius: 2 }} />
+                          </div>
+                          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>{pb.count} review{pb.count !== 1 ? 's' : ''}</p>
+                        </>
+                      ) : (
+                        <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>Not connected</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Platform filter */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
             {['google','facebook','yelp','all'].map(p => (
@@ -342,15 +378,27 @@ export default function ReviewsPage() {
                   <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Based on {npsData.total} response{npsData.total !== 1 ? 's' : ''}</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
-                  {[{ label: 'Promoters (9-10)', pct: npsData.promoters, color: '#22C55E' }, { label: 'Passives (7-8)', pct: npsData.passives, color: '#F59E0B' }, { label: 'Detractors (0-6)', pct: npsData.detractors, color: '#EF4444' }].map(s => (
+                  {[
+                    { label: 'Promoters (9-10)', pct: npsData.promoters, count: npsData.promoter_count ?? 0, color: '#22C55E', trend30: npsData.recent_30_promoters ?? 0 },
+                    { label: 'Passives (7-8)',   pct: npsData.passives,  count: npsData.passive_count ?? 0,  color: '#F59E0B', trend30: npsData.recent_30_passives ?? 0 },
+                    { label: 'Detractors (0-6)', pct: npsData.detractors, count: npsData.detractor_count ?? 0, color: '#EF4444', trend30: npsData.recent_30_detractors ?? 0 },
+                  ].map(s => (
                     <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 12, color: 'var(--text-secondary)', width: 140, flexShrink: 0 }}>{s.label}</span>
                       <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: s.pct + '%', background: s.color, borderRadius: 4, transition: 'width 0.4s' }} />
                       </div>
                       <span style={{ fontSize: 13, fontWeight: 700, color: s.color, width: 36, textAlign: 'right' }}>{s.pct}%</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>{s.count} total · {s.trend30} last 30d</span>
                     </div>
                   ))}
+                  {npsData.prev_score !== null && npsData.score !== null && (
+                    <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      vs prior 30d: <strong style={{ color: npsData.score > npsData.prev_score ? '#22C55E' : npsData.score < npsData.prev_score ? '#EF4444' : 'var(--text-tertiary)' }}>
+                        {npsData.score > npsData.prev_score ? '↑' : npsData.score < npsData.prev_score ? '↓' : '→'} {Math.abs(npsData.score - npsData.prev_score)} pts
+                      </strong> (was {npsData.prev_score > 0 ? '+' : ''}{npsData.prev_score})
+                    </p>
+                  )}
                 </div>
               </div>
               {/* Recent responses */}

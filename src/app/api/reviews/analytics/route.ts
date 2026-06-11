@@ -17,7 +17,7 @@ async function _GET() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
   const [reviewsRes, requestsRes] = await Promise.all([
-    supabaseAdmin.from('google_reviews').select('id,rating,sentiment,has_reply,reply_date,review_date,reply_published_at,created_at').eq('business_id', bid),
+    supabaseAdmin.from('google_reviews').select('id,rating,sentiment,has_reply,reply_date,review_date,reply_published_at,created_at,platform').eq('business_id', bid),
     supabaseAdmin.from('review_requests').select('id,status,sent_at,clicked_at,review_id,created_at').eq('business_id', bid).gte('created_at', thirtyDaysAgo),
   ])
 
@@ -59,6 +59,21 @@ async function _GET() {
     })
   }
 
+  // Per-platform breakdown
+  const platformMap = new Map<string, { count: number; ratingSum: number }>()
+  for (const r of reviews) {
+    const plat = (r.platform as string | undefined) ?? 'google'
+    const entry = platformMap.get(plat) ?? { count: 0, ratingSum: 0 }
+    entry.count++
+    entry.ratingSum += Number(r.rating) || 0
+    platformMap.set(plat, entry)
+  }
+  const platform_breakdown = Array.from(platformMap.entries()).map(([platform, v]) => ({
+    platform,
+    avg_rating: v.count > 0 ? Math.round((v.ratingSum / v.count) * 10) / 10 : 0,
+    count: v.count,
+  }))
+
   return NextResponse.json({
     total: reviews.length,
     avg_rating: reviews.length > 0
@@ -74,6 +89,7 @@ async function _GET() {
     requests_clicked: requestsClicked,
     request_conversion_rate: requestsSent > 0 ? Math.round((requestsConverted / requestsSent) * 100) : 0,
     monthly_trend: monthlyTrend,
+    platform_breakdown,
   })
 }
 

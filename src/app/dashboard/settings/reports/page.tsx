@@ -12,6 +12,17 @@ interface ScheduledReport {
   created_at: string
 }
 
+const ALL_KPIS = [
+  { key: 'revenue',          label: 'Revenue',           desc: 'Total weekly revenue' },
+  { key: 'transactions',     label: 'Transactions',      desc: 'Number of sales' },
+  { key: 'avg_order_value',  label: 'Avg Order Value',   desc: 'Average ticket size' },
+  { key: 'labour_cost_pct',  label: 'Labour Cost %',     desc: 'Labour as % of revenue' },
+  { key: 'customer_count',   label: 'Customer Count',    desc: 'Unique customers served' },
+  { key: 'new_customers',    label: 'New Customers',     desc: 'First-time customers' },
+  { key: 'top_product',      label: 'Top Product',       desc: 'Best-selling item' },
+  { key: 'low_stock_count',  label: 'Low Stock Items',   desc: 'Products below reorder point' },
+]
+
 const PAGES = ['Overview', 'Cash Flow', 'Invoices', 'Sales & Revenue', 'Staff & Labour', 'Weekly Reports', 'Profit Leaks', 'Competitor Intelligence']
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -31,6 +42,10 @@ export default function ScheduledReportsPage() {
   const [showForm, setShowForm] = useState(false)
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState(DEFAULT_FORM)
+  const [selectedKpis, setSelectedKpis] = useState<string[]>(['revenue', 'transactions', 'avg_order_value', 'new_customers', 'top_product'])
+  const [kpiSaving, setKpiSaving] = useState(false)
+  const [kpiSaved, setKpiSaved] = useState(false)
+  const [reportEmail, setReportEmail] = useState<string | null>(null)
 
   const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: 'var(--bg-input,rgba(255,255,255,0.05))', border: '1px solid var(--divider,rgba(255,255,255,0.1))', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: 'var(--text-primary,#fff)', outline: 'none', fontFamily: 'inherit' }
   const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }
@@ -44,6 +59,25 @@ export default function ScheduledReportsPage() {
   }, [business?.id])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!business?.id) return
+    fetch('/api/settings/reports-kpi').then(r => r.json()).then(d => {
+      if (Array.isArray(d.kpis)) setSelectedKpis(d.kpis)
+      if (d.report_email) setReportEmail(d.report_email)
+    }).catch(() => {})
+  }, [business?.id])
+
+  async function saveKpis() {
+    setKpiSaving(true)
+    await fetch('/api/settings/reports-kpi', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kpis: selectedKpis }) }).catch(() => {})
+    setKpiSaving(false); setKpiSaved(true)
+    setTimeout(() => setKpiSaved(false), 1800)
+  }
+
+  function toggleKpi(key: string) {
+    setSelectedKpis(ks => ks.includes(key) ? ks.filter(k => k !== key) : [...ks, key])
+  }
 
   async function create() {
     if (!business?.id || !form.label || !form.recipients.some(r => r.email)) return
@@ -98,6 +132,41 @@ export default function ScheduledReportsPage() {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 800 }}>
+      {/* Weekly Report KPI Builder */}
+      <div style={{ marginBottom: 32, padding: '20px 24px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14 }}>
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Weekly Report KPIs</h2>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
+            Choose which metrics appear in your Monday morning weekly report email.
+            {reportEmail && <span style={{ color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>Sending to: {reportEmail}</span>}
+          </p>
+          <p style={{ fontSize: 11, color: 'rgba(127,184,151,0.7)', marginTop: 4 }}>Cron: every Monday at 10 PM AEST (0 22 * * 0)</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, marginBottom: 16 }}>
+          {ALL_KPIS.map(kpi => {
+            const active = selectedKpis.includes(kpi.key)
+            return (
+              <button key={kpi.key} onClick={() => toggleKpi(kpi.key)}
+                style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: `1px solid ${active ? '#7FB897' : 'rgba(255,255,255,0.1)'}`, background: active ? 'rgba(127,184,151,0.08)' : 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${active ? '#7FB897' : 'rgba(255,255,255,0.2)'}`, background: active ? '#7FB897' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', flexShrink: 0 }}>{active ? '✓' : ''}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#7FB897' : 'rgba(255,255,255,0.8)' }}>{kpi.label}</span>
+                </div>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: 0, paddingLeft: 22 }}>{kpi.desc}</p>
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={saveKpis} disabled={kpiSaving || selectedKpis.length === 0}
+            style={{ padding: '8px 20px', borderRadius: 9, border: 'none', background: selectedKpis.length === 0 ? 'rgba(255,255,255,0.05)' : '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: selectedKpis.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: kpiSaving ? 0.6 : 1 }}>
+            {kpiSaving ? 'Saving…' : 'Save KPI Selection'}
+          </button>
+          {kpiSaved && <span style={{ fontSize: 12, color: '#7FB897' }}>✓ Saved — applies to next weekly report</span>}
+          {selectedKpis.length === 0 && <span style={{ fontSize: 12, color: '#F59E0B' }}>Select at least one KPI</span>}
+        </div>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Scheduled PDF Reports</h1>
