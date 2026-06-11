@@ -282,11 +282,42 @@ async function generateMorning(
       ? `RECENT WINS (recommendations that worked): ${(recentWins as { title: string | null }[]).map(w => w.title ?? '').filter(Boolean).join(' | ')}`
       : null
 
+    // Monday only: weekly labour cost summary in briefing
+    let weeklyLabourSection: string | null = null
+    if (new Date(today + 'T12:00:00Z').getUTCDay() === 1) {
+      const [{ data: weekTs }, { data: weekSales }] = await Promise.all([
+        supabaseAdmin
+          .from('pos_timesheets')
+          .select('hours_worked, total_pay_cents, pay_rate_cents')
+          .eq('business_id', biz.id)
+          .gte('clock_in', sevenDaysAgo)
+          .limit(2000),
+        supabaseAdmin
+          .from('pos_sales')
+          .select('total_amount')
+          .eq('business_id', biz.id)
+          .gte('created_at', sevenDaysAgo)
+          .neq('status', 'voided')
+          .limit(5000),
+      ])
+      const weekLabourCents = (weekTs ?? []).reduce((s, t) => {
+        return s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0)))
+      }, 0)
+      const weekLabourDollars = weekLabourCents / 100
+      const weekRevenue = (weekSales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+      const weekLabourPct = weekRevenue > 0 ? (weekLabourDollars / weekRevenue * 100) : null
+      if (weekLabourDollars > 0 || weekRevenue > 0) {
+        const pctStr = weekLabourPct != null ? ` (${weekLabourPct.toFixed(1)}% of revenue${weekLabourPct > 30 ? ' — ⚠ above 30% benchmark' : weekLabourPct < 20 ? ' — well within benchmark' : ' — within benchmark'})` : ''
+        weeklyLabourSection = `WEEKLY LABOUR REVIEW (last 7 days): Labour cost A$${weekLabourDollars.toFixed(2)}, Revenue A$${weekRevenue.toFixed(2)}${pctStr}.`
+      }
+    }
+
     const structuredPrefix = [
       revenueSection,
       stockSection,
       moversSection,
       recentWinsSection,
+      weeklyLabourSection,
       weatherSection,
       rssSection,
       recommendationSection,

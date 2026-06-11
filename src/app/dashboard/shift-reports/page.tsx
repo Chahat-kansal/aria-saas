@@ -21,6 +21,14 @@ interface StaffSummary {
   days: number
 }
 
+interface LabourWeek {
+  total_labour_dollars: number
+  total_revenue: number
+  labour_pct: number | null
+  by_staff: Array<{ name: string; hours: number; pay_dollars: number }>
+  days: number
+}
+
 const fmt = (n: number) => 'A$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const dur = (start: string, end: string) => { const mins = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000); return mins >= 60 ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm' : mins + 'm' }
 const dt = (iso: string) => new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -64,6 +72,8 @@ export default function ShiftReportsPage() {
   const [analysis, setAnalysis] = useState<Record<string, { analysis: string; hourly_revenue: Record<string, number> }>>({})
   const [analysisLoading, setAnalysisLoading] = useState<string | null>(null)
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set())
+  const [labourWeek, setLabourWeek] = useState<LabourWeek | null>(null)
+  const [labourWeekLoading, setLabourWeekLoading] = useState(true)
   const today = new Date().toISOString().slice(0, 10)
   const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)
   const [payFrom, setPayFrom] = useState(monthAgo)
@@ -78,6 +88,15 @@ export default function ShiftReportsPage() {
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setLabourWeekLoading(true)
+    fetch('/api/pos/shift-reports/labour-this-week')
+      .then(r => r.json())
+      .then((d: LabourWeek) => setLabourWeek(d))
+      .catch(() => {})
+      .finally(() => setLabourWeekLoading(false))
+  }, [])
 
   useEffect(() => {
     if (view !== 'staff') return
@@ -125,6 +144,77 @@ export default function ShiftReportsPage() {
           ))}
         </div>
       </div>
+
+      {/* Labour cost this week card */}
+      {(labourWeekLoading || labourWeek) && (
+        <div style={{ background: S.surface, border: '1px solid ' + (labourWeek && (labourWeek.labour_pct ?? 0) > 30 ? 'rgba(239,68,68,0.3)' : S.border), borderRadius: 14, padding: 18, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <p style={{ fontSize: 11, color: S.dim, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Labour cost this week</p>
+              {labourWeek && (labourWeek.labour_pct ?? 0) > 30 && (
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(239,68,68,0.15)', color: S.red, fontWeight: 700 }}>⚠ High &gt;30%</span>
+              )}
+            </div>
+            {labourWeek && <span style={{ fontSize: 11, color: S.muted }}>last {labourWeek.days} days</span>}
+          </div>
+
+          {labourWeekLoading ? (
+            <div style={{ display: 'flex', gap: 12 }}>
+              {[1, 2, 3].map(i => <div key={i} style={{ height: 44, flex: 1, borderRadius: 8, background: 'rgba(255,255,255,0.04)', animation: 'pulse 1.5s infinite' }} />)}
+            </div>
+          ) : labourWeek ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: labourWeek.by_staff.length > 0 ? 14 : 0 }}>
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 10, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Labour cost</p>
+                  <p style={{ fontSize: 18, fontWeight: 700, color: S.amber, margin: 0 }}>{fmt(labourWeek.total_labour_dollars)}</p>
+                </div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 10, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Revenue</p>
+                  <p style={{ fontSize: 18, fontWeight: 700, color: S.green, margin: 0 }}>{fmt(labourWeek.total_revenue)}</p>
+                </div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid ' + ((labourWeek.labour_pct ?? 0) > 30 ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)') }}>
+                  <p style={{ fontSize: 10, color: S.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Labour %</p>
+                  <p style={{ fontSize: 18, fontWeight: 700, margin: 0, color: labourWeek.labour_pct == null ? S.dim : (labourWeek.labour_pct > 30 ? S.red : labourWeek.labour_pct > 20 ? S.amber : S.green) }}>
+                    {labourWeek.labour_pct != null ? labourWeek.labour_pct.toFixed(1) + '%' : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {labourWeek.by_staff.length > 0 && (
+                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid ' + S.border }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        {['Staff member', 'Hours', 'Pay (A$)', '% of labour'].map(h => (
+                          <th key={h} style={{ textAlign: h === 'Staff member' ? 'left' : 'right', padding: '8px 12px', fontSize: 10, fontWeight: 700, color: S.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {labourWeek.by_staff.map(s => {
+                        const sharePct = labourWeek.total_labour_dollars > 0 ? (s.pay_dollars / labourWeek.total_labour_dollars) * 100 : 0
+                        return (
+                          <tr key={s.name} style={{ borderTop: '1px solid ' + S.border }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 600 }}>{s.name}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', color: S.dim }}>{s.hours}h</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', color: S.amber }}>{fmt(s.pay_dollars)}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', color: S.muted }}>{sharePct.toFixed(0)}%</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {labourWeek.total_labour_dollars === 0 && labourWeek.total_revenue === 0 && (
+                <p style={{ fontSize: 12, color: S.dim }}>No timesheet or sales data found for this period.</p>
+              )}
+            </>
+          ) : null}
+        </div>
+      )}
 
       {/* Labour vs revenue chart */}
       {view === 'list' && reports.length > 0 && (
