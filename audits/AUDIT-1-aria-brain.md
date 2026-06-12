@@ -304,3 +304,219 @@ Two duplicate-purpose names worth a DB check: `20260507000002_receipt_templates.
 ---
 
 *Audit completed 2026-06-12. Read-only — no code changed. All file:line references current as of commit `fd7d1e8d`.*
+
+---
+---
+
+# AUDIT-1-COMPLETE — Sections 3 + 9 (expanded, authoritative)
+
+> Appended 2026-06-12 per AUDIT-1-COMPLETE. Supersedes the compact §3/§9 above where they conflict.
+> New evidence found during this pass: `src/lib/date-au.ts` (a full AEST date library, near-unused) and
+> `src/lib/aria/council.ts:742-745` (a calendar-Monday week definition that diverges from everything else).
+> One CORRECTION to AUDIT-1: top-customers is NOT computed two ways — see Metric 4.
+
+## Section 3 (expanded) — Data source divergence map
+
+**Headline discovery:** `src/lib/date-au.ts` already implements everything TZ/WEEK sprints need — `nowAEST()`, `startOfDayAEST()`, `startOfWeekAEST()` (Monday start), `buildDateRange('today'|'week'|'last_week'|'month'…)` — and is imported by exactly **two** files: `app/api/pos/dead-stock/route.ts:7` and `app/api/pos/reports/[type]/route.ts:7`. Every AI-brain path uses ad-hoc server-TZ (UTC on Vercel) date math instead.
+
+### Metric 1 — Today's revenue
+
+| File:line | Function/agent | Table | Filters | Column | Window definition (literal) |
+|---|---|---|---|---|---|
+| `app/api/aria/vitals/route.ts:22-30` | GET (ask-aria KPI row) | pos_sales | `neq('status','voided')` | sum total_amount | `const todayStart = new Date(); todayStart.setHours(0,0,0,0)` → **server/UTC midnight** |
+| `lib/aria/ask/business-context.ts:85,105` | buildAskAriaContext (main brain) | pos_sales | neq voided | sum total_amount | `todayStart.setHours(0,0,0,0)` — UTC midnight |
+| `lib/aria-tools.ts:411` | getPeriodStart('today') → query_sales / get_summary | pos_sales | voided via callers + SQL-GUARD-1 | sum total_amount | `case 'today': { const d = new Date(now); d.setHours(0,0,0,0); return d.toISOString(); }` — UTC midnight |
+| `lib/aria/ask/files.ts:129` | periodToDate('today') (exports) | pos_sales | (export path) | rows | same UTC midnight |
+| `lib/aria/live-monitor.ts:50-54` | todayStart() (live monitor) | pos_sales | — | sum | same UTC midnight |
+| `app/api/aria/live-intelligence/route.ts:76` | live intelligence | pos_sales | — | sum | same UTC midnight |
+| `app/api/pos/dashboard/route.ts:25`, `app/api/pos/daily-summary/route.ts:34`, `app/api/pos/revenue-comparison/route.ts:34-35` | POS surfaces | pos_sales | neq voided | sum total_amount | `setHours(0,0,0,0)` / `(23,59,59,999)` — UTC day |
+| `app/api/aria/pos-chat/route.ts:117`, `lib/agents/council.ts:327`, `lib/agents/flash-revenue-agent.ts:561`, `lib/agents/labour-optimisation-agent.ts:474`, `lib/agents/waste-elimination-agent.ts:357,420` | agent crons | pos_sales | neq voided (verified §7) | sum total_amount | UTC midnight each |
+| `app/api/pos/reports/[type]/route.ts:7` (via `lib/date-au.ts:39-40`) | POS reports 'today' | pos_sales | — | sum | `startOfDayAEST(now)` — **AEST midnight** |
+
+**DIVERGENCE VERDICT: Diverges — HIGH.** 13+ paths agree on server/UTC midnight (≈10–11am AEST), but POS Reports uses true AEST midnight via date-au. The POS report for "today" and the ask-aria/vitals "today" cover windows offset by 10–11 hours; before ~10am AEST the UTC paths still include most of *yesterday evening's* AEST trade. `businesses.timezone` is selected (daily-briefing-submit:118) and never used anywhere.
+
+### Metric 2 — This week's revenue
+
+| File:line | Function/agent | Table | Filters | Column | "This week" definition (literal) |
+|---|---|---|---|---|---|
+| `lib/aria/ask/business-context.ts:86,106` | main brain ctx (`revenue_week_cents`) | pos_sales | neq voided | sum total_amount | `const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)` — **rolling 7 days, anchored to request time-of-day** |
+| `lib/aria/get-business-context.ts:11,44-45` | council/business ctx (`rev7`) | pos_sales | neq voided | sum total_amount | `const d7 = new Date(now.getTime() - 7*86400000).toISOString()` — rolling 7d |
+| `lib/aria/ask/facts-packet.ts:80-93,134` | facts packet ('last 7 days' label) | pos_sales | neq voided | sum total_amount | `new Date(now - 7 * dayMs)` — rolling 7d, honestly labelled |
+| `app/api/cron/daily-briefing-submit/route.ts:83,87,101` | morning briefing ("Week so far") | pos_sales | neq voided | sum total_amount | `const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString()` → prompt line 141: `Week so far: A$${ctx.weekRevenue}` — **rolling 7d labelled as calendar week-to-date** |
+| `lib/aria/deliverables.ts:354-359` | fetchDashboardData (rev7) | pos_sales | neq voided | sum total_amount | `new Date(Date.now() - 7*86400000)` — rolling 7d |
+| `lib/aria-tools.ts:412` | getPeriodStart('7d') | pos_sales | guarded | sum | rolling 7d |
+| `lib/aria/ask/files.ts:130` | periodToDate('week') | pos_sales | export path | rows | `now - 7*86400_000` — rolling 7d |
+| `lib/aria/council.ts:742-745` | runAriaCouncil → Gemini context-brain ("Week starting: …") | (context label; feeds `runContextBrain(bi, weekStart, …)` `lib/aria/context-brain.ts:49,60`) | — | — | `weekStart.setDate(now.getDate() - ((now.getDay()+6)%7)); weekStart.setHours(0,0,0,0)` — **calendar Monday, server/UTC TZ** |
+| `lib/agents/clv-agent.ts:600`, `lib/agents/schedule-agent.ts:90` | CLV / schedule agents | pos_sales / rosters | per agent | per agent | `weekStart.setHours(0,0,0,0)` + Monday arithmetic — calendar week, server TZ |
+| `app/api/pos/reports/[type]/route.ts` (via `lib/date-au.ts:15-22,49-50`) | POS reports 'week' | pos_sales | — | sum | `startOfWeekAEST()` — **calendar Monday, AEST** |
+
+**DIVERGENCE VERDICT: Diverges THREE ways — HIGH.** (a) rolling-7-days (all main AI revenue paths), (b) calendar-Monday server-TZ (council's Gemini context + clv/schedule agents), (c) calendar-Monday AEST (POS reports). The same "how's this week?" question can produce three different windows depending on surface; and the briefing prompt mislabels (a) as week-to-date. This is the most likely mechanism behind the founder's "$722.50 vs $7" class of complaints when combined with Metric 1's UTC offset.
+
+### Metric 3 — Same week last month (the $4,419 / $4,442 / $4,553 comparator)
+
+Implementation A — `src/lib/aria/ask/facts-packet.ts:66-79` (verbatim):
+```ts
+case 'same_week_last_month':
+  return {
+    current:    { start: new Date(now - 7 * dayMs).toISOString(),  end: new Date(now).toISOString(),              label: 'last 7 days' },
+    comparison: { start: new Date(now - 35 * dayMs).toISOString(), end: new Date(now - 28 * dayMs).toISOString(), label: 'same week last month (d-35 to d-28)' },
+    same_length: true,
+  }
+```
+
+Implementation B — `src/lib/aria/get-business-context.ts:21-23` + query `:100-103` (verbatim):
+```ts
+// "Same week last month" = the 7-day window ending 28 days ago (4 weeks back)
+const d28 = new Date(now.getTime() - 28 * 86400000).toISOString()
+const d35 = new Date(now.getTime() - 35 * 86400000).toISOString()
+…
+db.from('pos_sales').select('total_amount')
+  .eq('business_id', businessId)
+  .gte('created_at', d35).lt('created_at', d28).neq('status', 'voided'),
+```
+
+Implementation C — `src/app/api/cron/generate-briefings/route.ts:85-86,104-107` (unscheduled cron, used as "28-35 day baseline for daily average"): same `now − 35d → now − 28d` window.
+
+| File:line | Window | Same as others? |
+|---|---|---|
+| facts-packet.ts:66-79 | `[now−35d, now−28d)` rolling, ms-precision anchored to request time | — |
+| get-business-context.ts:21-23,100-103 | `[now−35d, now−28d)` rolling | **identical formula** ✓ |
+| generate-briefings:85-86 | `[now−35d, now−28d]` (lte upper bound — 1ms overlap difference) | effectively identical |
+
+**DIVERGENCE VERDICT: Consistent with each other — all three use d-35→d-28 — but ALL embed the same 28-day-month assumption (HIGH vs ground truth).** Weekday-aligned (28=4×7 ✓) but lands 2 days early vs the same calendar dates last month for 30-day months, 3 days for 31-day months. Also: windows are anchored to request *time-of-day*, so the comparator drifts within a day (a 9am query and a 5pm query compare different 168-hour windows — consistent with the founder seeing $4,419 / $4,442 / $4,553 for "the same" comparator on different occasions). Contrast: the `last_month` case in the SAME file (facts-packet.ts:36-64) IS calendar-aligned — Aria is calendar-correct for "vs last month" and 28-day-rolling for "same week last month".
+
+### Metric 4 — Top customers by spend ⚠️ CORRECTION to AUDIT-1
+
+| File:line | Function/agent | Table | Filters | Column | Window |
+|---|---|---|---|---|---|
+| `lib/aria-tools.ts:670-674` | query_business_data entity=customers | pos_customers | gt guard via SQL-GUARD-1 fallback | **stored `total_spent`** (defaultOrder) | lifetime |
+| `lib/aria/ask/business-context.ts:126-130` | main brain ctx (`top_customers_alltime`) | pos_customers | — | stored `total_spent` desc | lifetime (honestly named) |
+| `lib/aria/deliverables.ts:107-123` | fetchRankedData subject='customers' | pos_customers | `gt(spendCol, 0)` | **stored `CANONICAL_COLS.CUSTOMER_SPEND` (total_spent)** desc | lifetime — `timeframe_days` intent field is **IGNORED** for this subject |
+
+**DIVERGENCE VERDICT: Consistent — all three read stored lifetime `pos_customers.total_spent`.** AUDIT-1 §3 flag 3 claimed the deliverable pipeline computes 30-day spend — that was WRONG; verified by reading deliverables.ts:107-123. The real (smaller, MED) issue: the deliverable intent classifier extracts `timeframe_days` (default 30, e.g. "top customers this week" → 7) but the customers branch ignores it and returns lifetime figures under a time-scoped title. Residual risk: `total_spent` is a denormalised stored column — whether it is kept in sync with pos_sales is **NEEDS-DB-VERIFY**.
+
+### Metric 5 — Orders today
+
+| File:line | Function/agent | Source | Filters | Counted as | Window |
+|---|---|---|---|---|---|
+| `app/api/aria/vitals/route.ts:33` | ask-aria KPI (`tx_count_today`) | pos_sales rows | neq voided | `(sales ?? []).length` | UTC midnight → now |
+| `lib/aria/ask/business-context.ts` (today rows length) | main brain ctx | pos_sales rows | neq voided | length | UTC midnight |
+| `app/api/pos/daily-summary/route.ts:34+`, `app/api/pos/dashboard/route.ts:25+` | POS surfaces | pos_sales | neq voided | count | UTC day |
+| `lib/aria-tools.ts` get_summary / query_sales 'today' | tools | pos_sales | guarded | count | UTC midnight |
+
+**DIVERGENCE VERDICT: Consistent definition (rows-after-UTC-midnight, voided excluded) — but inherits Metric 1's UTC-vs-AEST offset wholesale (HIGH only via TZ).**
+
+### Metric 6 — Orders this week
+
+| File:line | Function/agent | Source | Window |
+|---|---|---|---|
+| `lib/aria/deliverables.ts:354-359` | fetchDashboardData (`txn7Data.length`) | pos_sales rows, neq voided | rolling 7d |
+| `lib/aria/ask/business-context.ts:106` | week rows length | pos_sales, neq voided | rolling 7d (time-of-day anchored) |
+| `app/api/cron/daily-briefing-submit:87,100` | `yesterdayTransactions` + week revenue rows | pos_sales, neq voided | rolling 7d |
+| council Gemini context (via council.ts:745) | — | — | calendar Monday server-TZ |
+
+**DIVERGENCE VERDICT: Diverges — same 3-way split as Metric 2 (rolling-7d vs calendar-Mon). HIGH (inherited).**
+
+### Metric 7 — Avg basket today
+
+| File:line | Function/agent | Formula | Window |
+|---|---|---|---|
+| ask-aria KPI row (from `/api/aria/vitals` fields) | page-side `revenue_today / tx_count_today` | today's sum ÷ today's count | UTC today |
+| `lib/aria/deliverables.ts` fetchDashboardData | `avg ticket` = rev7 ÷ txn7 | 7-day | rolling 7d |
+| `lib/aria/context.ts:92` | council ctx `avg_ticket_last_28d` | 28-day avg | rolling 28d |
+| `lib/aria-tools.ts` get_summary 'today' | sum ÷ count from same query | UTC today |
+| `lib/aria/deliverables.ts:52,400` | single_answer avg_ticket intent | timeframe_days (default 7 per example) | rolling 7d |
+
+**DIVERGENCE VERDICT: Diverges — HIGH for cross-surface trust.** Three windows (today / 7d / 28d) all surface to the owner as "average ticket/basket" depending on which surface answers. Each is internally correct; none label the window consistently.
+
+### Cross-metric summary
+
+| Theme | Verdict |
+|---|---|
+| Column choice | Consistent ✓ — pos_sales.total_amount everywhere; line_total only for per-product splits |
+| Voided filter | Consistent ✓ on revenue paths (138 reads sampled §7); 2 briefing crons' pos_sale_items movers lack the join (MED) |
+| Day boundary | **UTC everywhere except date-au-based POS reports (AEST)** — systemic, HIGH |
+| Week definition | **3-way split: rolling-7d / calendar-Mon-UTC / calendar-Mon-AEST** — HIGH |
+| "Last month" week | 28-day assumption ×3 implementations (mutually consistent, calendar-wrong) — HIGH |
+| Window anchoring | rolling windows anchored to request time-of-day → same-day answer drift — MED |
+| Top customers | Consistent ✓ (AUDIT-1 corrected); timeframe ignored in deliverable ranking — MED |
+
+## Section 9 (expanded) — Recommended next sprints
+
+1. **TZ-1 — Business-timezone day boundaries**
+   - **Scope:** Create `lib/aria/time.ts` wrapping the existing `lib/date-au.ts` (already AEST-correct, near-unused) with a `businesses.timezone`-aware `dayBounds(businessId)`, and adopt it in the today/yesterday paths: vitals, business-context, aria-tools getPeriodStart, daily-briefing-submit, live-monitor.
+   - **Addresses:** Finding #1 (and the TZ half of #3).
+   - **Touches:** `lib/date-au.ts`, `lib/aria/ask/business-context.ts`, `app/api/aria/vitals/route.ts`, `lib/aria-tools.ts`, `app/api/cron/daily-briefing-submit/route.ts`, `lib/aria/live-monitor.ts`.
+   - **Dependencies:** none. **Risk:** MED (every "today" number shifts once — founder should expect a one-time step-change).
+
+2. **WEEK-1 — One canonical week definition**
+   - **Scope:** Add `thisWeek()` (calendar Mon→now, business TZ — `startOfWeekAEST` already exists) and `rolling7d()` named helpers; route every Metric-2 row through one of them and fix the "Week so far" label (daily-briefing-submit:141) to match its window.
+   - **Addresses:** Finding #3 + the council.ts:745 / clv / schedule calendar-Mon split discovered in this pass.
+   - **Touches:** `lib/date-au.ts`, `lib/aria/ask/business-context.ts`, `lib/aria/get-business-context.ts`, `lib/aria/council.ts`, `app/api/cron/daily-briefing-submit/route.ts`.
+   - **Dependencies:** requires TZ-1 first. **Risk:** MED.
+
+3. **SWLM-1 — Calendar-aligned "same week last month"**
+   - **Scope:** Replace the d-35→d-28 windows (facts-packet:66-79, get-business-context:21-23) with day-boundary-aligned windows (midnight-to-midnight, business TZ) and either month-aware alignment or an honest "4 weeks ago (d-35→d-28)" label in every prompt that cites it; also fixes the same-day drift (time-of-day anchoring).
+   - **Addresses:** Finding #2 (+$4,419/$4,442/$4,553 drift explanation).
+   - **Touches:** `lib/aria/ask/facts-packet.ts`, `lib/aria/get-business-context.ts`, `lib/aria/council.ts` (label strings).
+   - **Dependencies:** requires TZ-1 first. **Risk:** LOW (two formulas + labels).
+
+4. **SW-1 — Service-worker versioning + RSC cache fix**
+   - **Scope:** In `public/aria-sw.js` make non-navigate same-origin GETs network-first (or bypass `?_rsc=` requests entirely) and version the cache name per deploy so old caches purge on activate.
+   - **Addresses:** Finding #4 (founder hard-refresh).
+   - **Touches:** `public/aria-sw.js`, `components/PWARegister.tsx`.
+   - **Dependencies:** none. **Risk:** LOW (worst case = no offline shell).
+
+5. **BRIEF-1 — Briefing single source of truth**
+   - **Scope:** Pick ONE briefing table (`aria_daily_briefings` — already written by the live poll cron); point `api/aria/daily-briefing` (currently reads `daily_briefings`) and `api/aria/briefing` at it; decide generate-briefings' fate (delete or schedule); add the voided join to both crons' `pos_sale_items` movers.
+   - **Addresses:** Findings #6, #7, #10.
+   - **Touches:** `app/api/aria/daily-briefing/route.ts`, `app/api/aria/briefing/route.ts`, `app/api/cron/generate-briefings/route.ts`, `app/api/cron/daily-briefing-submit/route.ts`.
+   - **Dependencies:** none (TZ-1 improves its numbers but isn't required). **Risk:** MED (UI reads must keep their shape).
+
+6. **CRON-1 — Cron reconciliation**
+   - **Scope:** Verify the Vercel plan cron limit against the 54 scheduled; schedule-or-delete the 8 orphan cron folders (`clv-*`, `flash-*`, `generate-briefings`, `memory-consolidate`, `reviews-weekly-digest`, `run-scheduled-reorders`); document the survivors in vercel.json comments-by-README.
+   - **Addresses:** Findings #5, #6.
+   - **Touches:** `vercel.json`, up to 8 folders under `src/app/api/cron/`.
+   - **Dependencies:** BRIEF-1 should decide generate-briefings first. **Risk:** LOW-MED (deleting a manually-relied-on cron).
+
+7. **TOPCUST-1 — Honest time-scoping for top-customers (rescoped after correction)**
+   - **Scope:** All three paths already agree on lifetime `total_spent` (✓); make the deliverable ranking honour `timeframe_days` (compute from pos_sales when a window is requested) or retitle the output "all-time"; add a DB check that `pos_customers.total_spent` stays in sync with pos_sales.
+   - **Addresses:** Finding (Metric 4 residual) — replaces AUDIT-1's incorrect flag 3.
+   - **Touches:** `lib/aria/deliverables.ts` (customers branch), report verification SQL.
+   - **Dependencies:** none. **Risk:** LOW.
+
+8. **AVGBASKET-1 — Window-labelled average ticket**
+   - **Scope:** Make every avg-ticket/basket surface state its window ("today", "7-day", "28-day") in the rendered label, and align the ask-aria KPI card + deliverable single_answer + council ctx on one default window.
+   - **Addresses:** Metric 7 divergence (this pass).
+   - **Touches:** `app/dashboard/ask-aria/page.tsx` (KPI label), `lib/aria/deliverables.ts`, `lib/aria/context.ts`.
+   - **Dependencies:** TZ-1 for the "today" variant. **Risk:** LOW.
+
+9. **PROMPT-CLEAN-1 — Resolve the 2-paragraphs/BREVITY contradiction**
+   - **Scope:** One-line reword of route.ts:1153 ("even for simple queries" → "unless BREVITY (below) fires") so the prompt no longer contradicts itself two lines above the BREVITY block.
+   - **Addresses:** §7 row 2 (MED model-confusion risk).
+   - **Touches:** `src/app/api/aria/ask/route.ts` (1 line).
+   - **Dependencies:** none. **Risk:** LOW.
+
+10. **AVATAR-PERF-1 — Unmount the hidden desktop float avatar**
+    - **Scope:** Replace the FIX-3 CSS hide of `.aria-avatar-float` with a matchMedia-conditional render so the second Three.js/VRM canvas never initialises on desktop ask-aria.
+    - **Addresses:** §7 row 8 (wasted GPU on every desktop visit).
+    - **Touches:** `app/dashboard/ask-aria/page.tsx`.
+    - **Dependencies:** none. **Risk:** LOW (mobile behaviour unchanged).
+
+11. **BLOCK-1 — Merge the two BlockRenderers**
+    - **Scope:** Single shared block-rendering core consumed by `components/dashboard/BlockRenderer` users (ask-aria, AriaBriefingCard) and `components/aria/BlockRenderer` user (pos/ask), so new AskBlock types render everywhere.
+    - **Addresses:** Finding #8.
+    - **Touches:** `components/dashboard/BlockRenderer.tsx`, `components/aria/BlockRenderer.tsx`, 3 consumer files.
+    - **Dependencies:** none. **Risk:** MED (visual regression surface ×2 pages).
+
+12. **SYNC-CHECK-1 — Denormalised column drift audit (data hygiene)**
+    - **Scope:** One verification script comparing stored aggregates (`pos_customers.total_spent`, `visit_count`) against recomputed pos_sales sums per business; report-only, feeds TOPCUST-1.
+    - **Addresses:** Metric 4 NEEDS-DB-VERIFY.
+    - **Touches:** one new script/route + report.
+    - **Dependencies:** none. **Risk:** LOW (read-only).
+
+**Priority rationale:** TZ-1 → WEEK-1 → SWLM-1 form a dependency chain that together eliminates every HIGH time-window divergence (findings #1-#3); SW-1 is independent and kills the founder-visible staleness bug; BRIEF-1/CRON-1 clean the briefing/cron sprawl that generates wrong numbers nightly; the rest are LOW-risk single-file cleanups.
+
+---
+
+*AUDIT-1-COMPLETE appended 2026-06-12. Read-only — no source code changed. References current as of commit `276984bd`.*
