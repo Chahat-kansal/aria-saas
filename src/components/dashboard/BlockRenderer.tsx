@@ -523,6 +523,56 @@ export function BlockRenderer({ block, onChoice }: Props) {
     )
   }
 
+  // COUNCIL-FIX-1: ai_reasoning — was silently dropped by the fallback (no content/title fields)
+  if (block.type === 'ai_reasoning') {
+    const confC = block.confidence === 'high' ? G : block.confidence === 'low' ? R : A
+    return (
+      <div style={{ borderRadius: 12, border: '0.5px solid rgba(167,139,250,0.25)', marginBottom: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '7px 12px', background: 'rgba(167,139,250,0.08)', borderBottom: '0.5px solid rgba(167,139,250,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 9, fontWeight: 600, color: V, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Aria&apos;s reasoning</span>
+          {block.confidence && (
+            <span style={{ fontSize: 9, fontWeight: 600, color: confC, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{block.confidence} confidence</span>
+          )}
+        </div>
+        <div style={{ padding: '12px 14px' }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.85)', margin: '0 0 8px' }}>{block.question}</p>
+          {block.reasoning.split('\n').filter(Boolean).map((line, i) => (
+            <p key={i} style={{ fontSize: 12.5, lineHeight: 1.65, color: 'rgba(255,255,255,0.62)', margin: '0 0 5px', paddingLeft: 12, borderLeft: '2px solid rgba(167,139,250,0.25)' }}>{line}</p>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // COUNCIL-FIX-1: clay_chart — was rendering as bare title text via the fallback
+  if (block.type === 'clay_chart') {
+    const data = block.data ?? []
+    const maxV = Math.max(...data.map(d => d.value), 1)
+    const barC = block.color ?? G
+    return (
+      <div style={{ borderRadius: 12, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 12, overflow: 'hidden' }}>
+        {block.title && (
+          <div style={{ padding: '7px 12px', background: 'rgba(127,184,151,0.07)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: 9, fontWeight: 600, color: barC, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            {block.title}
+          </div>
+        )}
+        <div style={{ padding: 14 }}>
+          {data.map((d, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < data.length - 1 ? 8 : 0 }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', width: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>{d.name}</span>
+              <div style={{ flex: 1, height: 14, background: 'rgba(255,255,255,0.04)', borderRadius: 7, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.max(2, (d.value / maxV) * 100)}%`, height: '100%', borderRadius: 7, background: d.value === maxV ? barC : barC + '55' }} />
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: d.value === maxV ? barC : 'rgba(255,255,255,0.4)', width: 52, textAlign: 'right', flexShrink: 0 }}>
+                {d.value >= 1000 ? `${(d.value / 1000).toFixed(1)}k` : d.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   // Graceful fallback: any block type without a dedicated renderer renders as text
   const fallbackText = (block as { content?: string; title?: string; description?: string }).content
     ?? (block as { content?: string; title?: string; description?: string }).title

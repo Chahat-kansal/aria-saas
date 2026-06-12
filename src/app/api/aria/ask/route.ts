@@ -645,8 +645,14 @@ Rules:
     }
   }
 
+  // COUNCIL-FIX-1: Brevity gate — short factual questions skip the council and fall through to the
+  // main tool-loop where the BREVITY block + GROUNDING rule + RICH-1 renderers already live (OPS-AUDIT-1).
+  const BREVITY_SIGNALS = /^\s*(just tell me|just |quickly|tldr|tl;dr|in one number|single number)\b/i
+  const SHORT_FACTUAL = /^.{0,60}\b(how much|what'?s my|what is my|today'?s|this week'?s|this month'?s|revenue today|orders today)/i
+  const isBrevityQuestion = BREVITY_SIGNALS.test(message) || SHORT_FACTUAL.test(message)
+
   // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests
-  if (isStrategicQuestion || ariaIntent.intent_type === 'analytical') {
+  if (!isBrevityQuestion && (isStrategicQuestion || ariaIntent.intent_type === 'analytical')) {
     try {
       const [bizCtx, factsPacket] = await Promise.all([
         getBusinessContext(bid),
@@ -659,15 +665,38 @@ Rules:
         augCtx = JSON.stringify(ctxParsed)
       } catch { /* non-fatal — council still gets bizCtx */ }
       const council = await runAriaCouncil(augCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
+      // COUNCIL-PORT-1 Parts 6+7: run council synthesis through the HEAL-1/GROUND-1 validator.
+      // Council brains make zero LLM tool calls — their grounding is the pre-fetched context
+      // (getBusinessContext + facts packet). toolsUsed=1 when that context loaded (mirrors the
+      // deliverable path's grounded-source convention); 0 if it failed, arming Check 4.
+      let councilText = council?.final_briefing ?? ''
+      let councilBlocks = council?.ask_blocks ?? null
+      if (council?.final_briefing) {
+        try {
+          const councilToolCallCount = bizCtx && bizCtx.length > 50 ? 1 : 0
+          const councilValidated = await validateAndHeal({
+            userMessage: message,
+            blocks: councilBlocks,
+            rawResponse: councilText,
+            pipelinePath: 'council',
+            businessId: bid,
+            toolsUsed: councilToolCallCount,
+          })
+          if (councilValidated.healed) {
+            councilBlocks = councilValidated.blocks
+            if (councilValidated.healedText) councilText = councilValidated.healedText
+          }
+        } catch (e) { console.error('[aria/ask] council heal non-fatal:', (e as Error).message) }
+      }
       if (council?.final_briefing) {
         let savedConvId = conversationId
         try {
-          savedConvId = await upsertConversation(bid, user.id, conversationId, message, council.final_briefing, intent.type)
+          savedConvId = await upsertConversation(bid, user.id, conversationId, message, councilText, intent.type)
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
         // Fire-and-forget memory extraction + conversation summarisation for council responses
-        extractAndStoreMemories(bid, message, council.final_briefing, savedConvId).catch(() => {})
+        extractAndStoreMemories(bid, message, councilText, savedConvId).catch(() => {})
         if (savedConvId) {
           const _cid = savedConvId
           Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _cid).maybeSingle())
@@ -679,10 +708,10 @@ Rules:
             }).catch(() => {})
         }
         return NextResponse.json({
-          blocks: council.ask_blocks ?? [{ type: 'lead', content: council.final_briefing }],
+          blocks: (councilBlocks && councilBlocks.length > 0) ? councilBlocks : [{ type: 'lead', content: councilText }],
           followups: council.ask_followups ?? [],
           used_council: true,
-          response: council.final_briefing,
+          response: councilText,
           conversation_id: savedConvId ?? conversationId,
           intent: intent.type,
           action: null,

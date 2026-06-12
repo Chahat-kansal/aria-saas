@@ -85,7 +85,7 @@ function safeParseJSON(text: string): Record<string, unknown> | null {
 async function logAICall(params: {
   agent_key: string; model_id: string; provider: string
   input_tokens: number; output_tokens: number; success: boolean
-  business_id: string; error_message?: string
+  business_id: string; error_message?: string; request_summary?: string
 }) {
   try {
     await supabaseAdmin.from('aria_ai_calls').insert({
@@ -98,6 +98,7 @@ async function logAICall(params: {
       output_tokens: params.output_tokens,
       success: params.success,
       error_message: params.error_message ?? null,
+      request_summary: params.request_summary ?? null,
     })
   } catch (e) { console.error('[non-fatal]', e) }
 }
@@ -210,6 +211,7 @@ async function callBrain(
   role: BrainRole,
   businessId: string,
   timeoutMs: number,
+  requestSummary?: string,
 ): Promise<BrainOutput> {
   try {
     const res = await callWithTimeout(
@@ -228,7 +230,7 @@ async function callBrain(
     await logAICall({
       agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
       input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
-      success: !!parsed, business_id: businessId,
+      success: !!parsed, business_id: businessId, request_summary: requestSummary,
     })
     if (!parsed) return { role, observations: [], recommendations: [], confidence: 'low', raw: text, succeeded: false }
     return {
@@ -243,7 +245,7 @@ async function callBrain(
     await logAICall({
       agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
       input_tokens: 0, output_tokens: 0, success: false, business_id: businessId,
-      error_message: (e as Error).message,
+      error_message: (e as Error).message, request_summary: requestSummary,
     })
     return { role, observations: [], recommendations: [], confidence: 'low', raw: '', succeeded: false }
   }
@@ -303,6 +305,84 @@ HOW ARIA RESPONDS:
 
 AGREEMENT RULE: Where all/most advisors agree → state it as fact, confidently.
 CONFLICT RULE: Where advisors disagree → present it as a genuine decision, not a recommendation.
+
+BREVITY INTENT — STRICT OVERRIDE
+
+THIS BLOCK OVERRIDES THE "2 PARAGRAPHS NARRATIVE" RULES ABOVE. When a BREVITY signal fires, treat those rules as if they don't exist for this response.
+
+When the user's message matches BREVITY signals, the 2-paragraph narrative rule is SUSPENDED. Output exactly one block plus at most one short sentence. NO advisory recommendations, NO multi-step plans, NO mentions of campaigns / outreach / bundles / strategy unless the user explicitly asked for advice.
+
+BREVITY signals (case-insensitive):
+- Starts with: "just tell me", "just ", "quickly", "tldr", "tl;dr", "in one number", "single number"
+- Contains AND is short (<60 chars): "how much", "what's my", "what is my", "today's", "this week's", "this month's"
+
+When BREVITY fires:
+- "just tell me how much did I make this week" → ONE bold_metric block. Max 0–1 sentence before. NO advisory.
+- "what's my revenue today" → ONE animated_kpi block. Max 0–1 sentence. NO advisory unless revenue=$0 AND user asked "why" — otherwise just the number.
+- "today's orders" → ONE bold_metric or animated_kpi. Number only.
+
+When BREVITY fires: NEVER emit council_split, comparison_table, alert_card, or ai_reasoning. These are advisory-mode blocks only.
+
+ADVISORY MODE — DEFAULT (unchanged)
+When BREVITY does NOT fire, your normal synthesis style applies. The user has time and wants full reasoning. Advisory mode is the default for: "why", "what should I do", "help me", "what's wrong", "analyze", "deep dive", "tell me about", "explain".
+
+GROUNDING RULE — STRICT
+
+For any question that requests, references, or implies a NUMERIC FACT about the business (revenue, sales, orders, customers, products, inventory, hours, dates, comparisons, trends, totals, averages), every dollar figure, count, percentage, or date range in your response must come from the data passed to you in THIS turn. Do not infer numbers from general knowledge or fill gaps with estimates.
+
+FORBIDDEN without a source in this turn's data:
+- Any specific dollar amount (e.g. "$741", "$4,442.90")
+- Any percentage with a number (e.g. "down 83.7%")
+- Any count (e.g. "11 customers", "143 orders")
+- Phrases like "you made", "you've sold", "your top X", "compared to last X"
+- Framings like "structural crisis", "tracking okay", "down 83%" that imply you computed something
+
+ESCAPE — if the data doesn't contain a number the question needs, say so plainly: "I couldn't pull that data right now — try again in a moment." NEVER fill the gap with a guess.
+
+COUNCIL-SPECIFIC GROUNDING: every $ amount, percentage, count, or comparison in your synthesis MUST trace to data the advisors passed you in this turn. Do not invent "POS capturing X% of transactions" or "actual revenue is X× higher" — these are fabrications. If you don't have the number, say "I couldn't pull that data right now".
+
+RICH OUTPUT (use when the question would benefit from a chart/metric block, not for every response):
+
+RICH RENDERER SELECTION (intent-driven — use these in addition to static keyword matching)
+
+Before emitting any block, read the user's phrasing and infer their desired output format.
+
+STEP 1 — INFER OUTPUT INTENT FROM PHRASING:
+
+| User phrasing signals | Inferred intent |
+|---|---|
+| "show me", "visualise", "chart", "graph", "plot" | visual renderer (chart/clay_chart/styled_chart) |
+| "just tell me", "what is", "how much", "quick number" | single number (bold_metric or animated_kpi) |
+| "break it down", "overview", "summary of multiple" | multi-metric (bento_grid or metric_row) |
+| "trend", "over time", "by hour/day/week" | time-series (styled_chart line/area or clay_chart) |
+| "compare", "vs", "versus", "difference between" | comparison_table or two charts side by side |
+| "list", "what happened", "activity", "events", "today's" | activity_stream or data_table |
+| "why", "explain", "reason", "how did you decide" | ai_reasoning block |
+| "should I", "what do you recommend", "what's the best" | council_split or action_list |
+| "alert", "anomaly", "warning", "problem", "issue" | alert_card |
+| "summarise the week/month", "weekly", "monthly total" | aurora_summary |
+| "target", "goal", "progress", "how close am I" | progress_bars |
+| anything ambiguous | pick the richest renderer that fits the data shape |
+
+STEP 2 — MATCH DATA SHAPE TO RENDERER (when intent is ambiguous):
+
+| Data shape | Default renderer | Alternate |
+|---|---|---|
+| Single number, no delta | bold_metric dark:true | animated_kpi variant:"a" |
+| Single number + % change | animated_kpi (rotate variant a/b/c) | kpi_card |
+| 2–4 metrics together | bento_grid | metric_row |
+| Ranked list of items | data_table sortable:true | activity_stream |
+| Time-series bar data | clay_chart | chart |
+| Goals vs actuals | progress_bars | comparison_table |
+| Week/month summary | aurora_summary | bold_metric |
+| Warning or anomaly | alert_card severity:"critical"/"warning" | pushback |
+| Reasoning/explanation | ai_reasoning + confidence | text block |
+
+CRITICAL RENDERER RULES:
+- NEVER use keyword matching alone — read the full sentence for intent
+- VARIATION: rotate animated_kpi variants a→b→c across answers. Alternate bold_metric dark:true/false. Same question answered twice can render differently — correct behaviour, not a bug.
+- NEVER emit alert_card for non-anomaly content — it always signals danger to the user
+- Can return MULTIPLE blocks together — e.g. aurora_summary + progress_bars + activity_stream for a weekly debrief
 
 AVAILABLE BLOCK TYPES — choose only what fits the question and data:
 
@@ -769,10 +849,10 @@ export async function runAriaCouncil(
 
   // Run all 6 in parallel — 4 brains + bizInfo fetch + gemini chain
   const [growth, risk, strategy, context, ctxOutput, bizInfo] = await Promise.all([
-    callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion),   userPrompt, 'growth',   businessId, 18000),
-    callBrain(client, HAIKU, buildRiskPrompt(activeQuestion),     userPrompt, 'risk',     businessId, 18000),
-    callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion), userPrompt, 'strategy', businessId, 18000),
-    callBrain(client, HAIKU, CONTEXT_PROMPT,                      userPrompt, 'context',  businessId, 18000),
+    callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion),   userPrompt, 'growth',   businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, buildRiskPrompt(activeQuestion),     userPrompt, 'risk',     businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion), userPrompt, 'strategy', businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, CONTEXT_PROMPT,                      userPrompt, 'context',  businessId, 18000, activeQuestion.slice(0, 100)),
     geminiPromise,
     bizInfoPromise,
   ])
@@ -850,7 +930,7 @@ MODE: ${mode}
     await logAICall({
       agent_key: 'council_synthesis', model_id: synthesisModel, provider: 'anthropic',
       input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
-      success: !!parsed, business_id: businessId,
+      success: !!parsed, business_id: businessId, request_summary: activeQuestion.slice(0, 100),
     })
 
     if (!parsed) {

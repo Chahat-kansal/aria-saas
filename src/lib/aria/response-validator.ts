@@ -55,7 +55,7 @@ export async function validateAndHeal(args: {
   userMessage: string
   blocks: AskBlock[] | null
   rawResponse: string
-  pipelinePath: 'main' | 'deliverable'
+  pipelinePath: 'main' | 'deliverable' | 'council'
   businessId: string
   toolsUsed: number
 }): Promise<{
@@ -174,9 +174,9 @@ export async function validateAndHeal(args: {
     }
   }
 
-  // ── Check 3: Empty blocks on data question (main path only) ──────────────────
-  // Fires when response had no <json_blocks> at all but user clearly asked a data question
-  if (DATA_RE.test(userMessage) && blocks.length === 0 && pipelinePath === 'main') {
+  // ── Check 3: Empty blocks on data question (main + council paths) ────────────
+  // Fires when response had no blocks at all but user clearly asked a data question
+  if (DATA_RE.test(userMessage) && blocks.length === 0 && pipelinePath !== 'deliverable') {
     const t0 = Date.now()
     try {
       const res = await client.messages.create({
