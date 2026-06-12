@@ -780,8 +780,11 @@ Rules:
   // Pre-compute weekly tracking data for target/same-week questions (injected into system prompt)
   let weeklyTrackingBlock = ''
   try {
-    const d28str = new Date(Date.now() - 28 * 86400000).toISOString()
-    const d35str = new Date(Date.now() - 35 * 86400000).toISOString()
+    // SWLM-1: calendar-Monday-aligned window (Mon 4 weeks ago → Mon 3 weeks ago), was rolling d-35/d-28
+    const swlmMonShifted = startOfWeekAEST()
+    const swlmThisMonIso = toAESTStart(swlmMonShifted.toISOString().slice(0, 10))
+    const d35str = new Date(new Date(swlmThisMonIso).getTime() - 28 * 86400000).toISOString()
+    const d28str = new Date(new Date(swlmThisMonIso).getTime() - 21 * 86400000).toISOString()
     const [{ data: bizTarget }, { data: swlmRows }] = await Promise.all([
       supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', bid).maybeSingle(),
       supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid)
@@ -792,7 +795,7 @@ Rules:
       (s: number, x: { total_amount: number | null }) => s + Number(x.total_amount ?? 0), 0,
     )
     const currentWeek = ctx.revenue_week_cents / 100
-    const windowLabel = `${d35str.slice(0, 10)} to ${d28str.slice(0, 10)}`
+    const windowLabel = `Mon ${new Date(swlmMonShifted.getTime() - 28 * 86400000).toISOString().slice(0, 10)} to Sun ${new Date(swlmMonShifted.getTime() - 22 * 86400000).toISOString().slice(0, 10)} (calendar week, 4 weeks ago)`
     const lines: string[] = ['WEEKLY TRACKING DATA (live — use these exact figures):']
     if (wTarget) {
       const pct = Math.round((currentWeek / wTarget) * 100)

@@ -64,20 +64,30 @@ function windowPairForPeriod(period: ComparisonPeriod): WindowPair | null {
         same_length: true,
       }
     }
-    case 'same_week_last_month':
+    case 'same_week_last_month': {
+      // SWLM-1: calendar-Monday-aligned, 28-day-shifted — replaces the d-35/d-28 rolling window
+      // whose request-time anchoring caused the $4,419/$4,442/$4,553 drift (AUDIT-1 finding #2).
+      const monShifted = startOfWeekAEST() // shifted Date — its ISO date-part IS the AEST Monday
+      const thisMonIso = toAESTStart(monShifted.toISOString().slice(0, 10))
+      const swlmStartIso = new Date(new Date(thisMonIso).getTime() - 28 * dayMs).toISOString()
+      const swlmEndIso = new Date(new Date(thisMonIso).getTime() - 21 * dayMs).toISOString()
+      const swlmMonStr = new Date(monShifted.getTime() - 28 * dayMs).toISOString().slice(0, 10)
+      const swlmSunStr = new Date(monShifted.getTime() - 22 * dayMs).toISOString().slice(0, 10)
       return {
         current: {
-          start: new Date(now - 7 * dayMs).toISOString(),
+          start: thisMonIso,
           end: new Date(now).toISOString(),
-          label: 'last 7 days',
+          label: 'this week (Mon 00:00 AEST → now)',
         },
         comparison: {
-          start: new Date(now - 35 * dayMs).toISOString(),
-          end: new Date(now - 28 * dayMs).toISOString(),
-          label: 'same week last month (d-35 to d-28)',
+          start: swlmStartIso,
+          end: swlmEndIso,
+          label: `same calendar week last month (Mon ${swlmMonStr} → Sun ${swlmSunStr}, 4 weeks ago)`,
         },
-        same_length: true,
+        // week-to-date vs a FULL week — honestly flagged so pct_change is suppressed with a caveat
+        same_length: false,
       }
+    }
     case 'last_week':
       return {
         current: {
@@ -135,10 +145,15 @@ export async function buildFactsPacket(
   // the default current window is the CALENDAR week (Mon 00:00 AEST → now), not rolling 7 days —
   // on_track / pct_of_target below compare against the WEEKLY target, so the window must match.
   // Named comparison cases (last_week / SWLM / last_year) keep their own honest windows above.
-  const currentStart = pair?.current.start ?? toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
+  const calWeekStartIso = toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
+  const currentStart = pair?.current.start ?? calWeekStartIso
   const currentEnd = pair?.current.end ?? new Date(now).toISOString()
+  // SWLM-1 (WEEK-1-EXTEND flagged caveat): on_track / pct_of_target compare against the WEEKLY
+  // target, so they must always read the CALENDAR week — even when the named comparison case
+  // uses a different current window (last_week / last_year / last_month MTD).
+  const currentIsCalendarWeek = currentStart === calWeekStartIso
 
-  const [bizResult, currentResult, compResult] = await Promise.all([
+  const [bizResult, currentResult, compResult, calWeekResult] = await Promise.all([
     supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId)
       .gte('created_at', currentStart).lt('created_at', currentEnd).neq('status', 'voided'),
@@ -146,6 +161,10 @@ export async function buildFactsPacket(
       ? supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId)
           .gte('created_at', pair.comparison.start).lt('created_at', pair.comparison.end).neq('status', 'voided')
       : Promise.resolve({ data: null, error: null }),
+    currentIsCalendarWeek
+      ? Promise.resolve({ data: null, error: null })
+      : supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId)
+          .gte('created_at', calWeekStartIso).neq('status', 'voided'),
   ])
 
   const rawTarget = bizResult.data?.weekly_revenue_target
@@ -177,9 +196,16 @@ export async function buildFactsPacket(
   let on_track: 'on_track' | 'behind' | null = null
   let pct_of_target: number | null = null
 
+  // SWLM-1: target tracking ALWAYS reads the calendar week (Mon 00:00 AEST → now)
+  const calendar_week_revenue = currentIsCalendarWeek
+    ? current_period_revenue
+    : (calWeekResult.data ?? []).reduce(
+        (s: number, r: { total_amount: number | null }) => s + Number(r.total_amount ?? 0), 0,
+      )
+
   if (weekly_revenue_target && weekly_revenue_target > 0) {
-    pct_of_target = Math.round((current_period_revenue / weekly_revenue_target) * 100)
-    on_track = current_period_revenue >= weekly_revenue_target ? 'on_track' : 'behind'
+    pct_of_target = Math.round((calendar_week_revenue / weekly_revenue_target) * 100)
+    on_track = calendar_week_revenue >= weekly_revenue_target ? 'on_track' : 'behind'
   }
 
   return {

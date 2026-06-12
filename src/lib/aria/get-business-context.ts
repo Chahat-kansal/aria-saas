@@ -19,9 +19,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const ly30start = new Date(ly.getTime() - 30 * 86400000).toISOString()
   const ly30end   = ly.toISOString()
 
-  // "Same week last month" = the 7-day window ending 28 days ago (4 weeks back)
-  const d28 = new Date(now.getTime() - 28 * 86400000).toISOString()
-  const d35 = new Date(now.getTime() - 35 * 86400000).toISOString()
+  // SWLM-1: "Same week last month" = the CALENDAR week 4 weeks ago (Mon 00:00 AEST → Mon),
+  // replacing the rolling d-35/d-28 window whose request-time anchoring caused per-request drift
+  const swlmMonShifted = startOfWeekAEST() // shifted Date — ISO date-part IS the AEST Monday
+  const thisMonIso = toAESTStart(swlmMonShifted.toISOString().slice(0, 10))
+  const d35 = new Date(new Date(thisMonIso).getTime() - 28 * 86400000).toISOString() // SWLM window start (Mon, 4 weeks ago)
+  const d28 = new Date(new Date(thisMonIso).getTime() - 21 * 86400000).toISOString() // SWLM window end (Mon, 3 weeks ago)
+  const swlmMonStr = new Date(swlmMonShifted.getTime() - 28 * 86400000).toISOString().slice(0, 10)
+  const swlmSunStr = new Date(swlmMonShifted.getTime() - 22 * 86400000).toISOString().slice(0, 10)
 
   const monthStart = toAESTStart(todayAEST().slice(0, 7) + '-01') // TZ-1: AEST month start
 
@@ -99,7 +104,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
       .limit(20),
-    // "Same week last month" — 7-day window 4 weeks ago (d35 → d28)
+    // SWLM-1: "Same week last month" — calendar week 4 weeks ago (Mon AEST → Mon AEST)
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', d35).lt('created_at', d28).neq('status', 'voided'),
@@ -244,7 +249,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         ? (((revWeek - revSWLM) / revSWLM) * 100).toFixed(1) + '%' : null
       const onTrack = (target && revWeek != null)
         ? (revWeek >= target ? 'on_track' : 'behind') : null
-      const swlmWindow = `${d35.slice(0, 10)} to ${d28.slice(0, 10)}`
+      const swlmWindow = `Mon ${swlmMonStr} to Sun ${swlmSunStr} (calendar week, 4 weeks ago)`
       const parts: string[] = []
       if (revWeek != null) {
         if (target) {
