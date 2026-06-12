@@ -589,6 +589,7 @@ Rules:
         blocks: delivValidated.blocks.length > 0 ? delivValidated.blocks : undefined,
         healed: delivValidated.healed || undefined,
         heal_reason: delivValidated.healReason,
+        served_by: 'deliverable', // LOGGING-FIX-1 Part 3: serving-path observability (debug-only)
       })
     } catch (err) {
       console.error('[aria/ask] deliverable generation failed, falling back to text:', (err as Error).message)
@@ -757,6 +758,8 @@ Rules:
           cost_usd_cents: 0,
           downloads: null,
           tool_calls: [],
+          // LOGGING-FIX-1 Part 3: serving-path observability (debug-only)
+          served_by: council.served_from_cache ? 'council_cache' : 'council_fresh',
         })
       }
     } catch (e) {
@@ -1823,6 +1826,9 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     sonnet_percent_used: Math.min(100, Math.round((sonnetUsed / Math.max(1, sonnetBudget)) * 100)),
     healed: validated.healed || undefined,
     heal_reason: validated.healReason,
+    // LOGGING-FIX-1 Part 3: serving-path observability (debug-only) — 'brevity' when the
+    // COUNCIL-PORT-1 gate diverted a short-factual question here, otherwise plain main brain
+    served_by: isBrevityQuestion ? 'brevity' : 'main_brain',
   })
 }
 

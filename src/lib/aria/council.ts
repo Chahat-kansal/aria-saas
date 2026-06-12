@@ -33,6 +33,8 @@ export interface CouncilResult {
   data_quality_score?: number
   synthesis_model?: string
   escalation_reason?: string
+  // LOGGING-FIX-1 Part 3: set true when this output was served from council_cache
+  served_from_cache?: boolean
   meta: {
     brains_succeeded: number
     brains_failed: number
@@ -100,7 +102,23 @@ async function logAICall(params: {
       error_message: params.error_message ?? null,
       request_summary: params.request_summary ?? null,
     })
-  } catch (e) { console.error('[non-fatal]', e) }
+  } catch (e) {
+    // LOGGING-FIX-1 Part 2: silent insert failures were invisible — log WHY + a minimal fallback row
+    console.error('[non-fatal] aria_ai_calls insert failed for agent_key=' + params.agent_key + ':', (e as Error).message)
+    try {
+      await supabaseAdmin.from('aria_ai_calls').insert({
+        business_id: params.business_id,
+        agent_key: 'council_synthesis_log_failure',
+        provider: 'internal',
+        role: 'guard',
+        input_tokens: 0,
+        output_tokens: 0,
+        success: false,
+        request_summary: params.agent_key,
+        learning_signal: ('synthesis_logger_failed:' + (e as Error).message).slice(0, 120),
+      })
+    } catch (e2) { console.error('[non-fatal] fallback log also failed:', (e2 as Error).message) }
+  }
 }
 
 // ── Learning Context (LRN-1) ───────────────────────────────────────
@@ -554,16 +572,17 @@ async function getDataEpoch(businessId: string): Promise<string> {
   }
 }
 
-async function readCouncilCache(businessId: string, hash: string): Promise<CouncilOutput | null> {
+async function readCouncilCache(businessId: string, hash: string): Promise<{ result: CouncilOutput; expiresAt: string } | null> {
   try {
     const { data } = await supabaseAdmin
       .from('council_cache')
-      .select('result')
+      .select('result, expires_at')
       .eq('business_id', businessId)
       .eq('intent_hash', hash)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
-    return data ? (data.result as CouncilOutput) : null
+    // LOGGING-FIX-1 Part 1: expires_at returned so the cache-hit log can record TTL remaining
+    return data ? { result: data.result as CouncilOutput, expiresAt: data.expires_at as string } : null
   } catch { return null }
 }
 
@@ -673,7 +692,26 @@ export async function runAriaCouncil(
     const cached = await readCouncilCache(businessId, hash)
     if (cached) {
       console.log('[council] cache HIT — epoch:', dataEpoch, 'hash:', hash, 'business:', businessId)
-      return cached
+      // LOGGING-FIX-1 Part 1 (LOGGING-AUDIT-1 recommended fix): cache HITs were the only
+      // completed-council path with ZERO aria_ai_calls rows — log them before returning
+      const ttlRemaining = Math.max(0, Math.round((new Date(cached.expiresAt).getTime() - Date.now()) / 1000))
+      try {
+        await supabaseAdmin.from('aria_ai_calls').insert({
+          business_id: businessId,
+          agent_key: 'council_cache',
+          provider: 'cache',
+          model_id: 'council_cache',
+          role: 'cache',
+          input_tokens: 0,
+          output_tokens: 0,
+          latency_ms: Date.now() - start,
+          success: true,
+          request_summary: activeQuestion.slice(0, 100),
+          response_summary: 'cache_hit/ttl_remaining_seconds:' + ttlRemaining,
+          learning_signal: 'council_cache_hit',
+        })
+      } catch (e) { console.error('[council] cache-hit log failed (non-fatal):', (e as Error).message) }
+      return { ...cached.result, served_from_cache: true }
     }
     console.log('[council] cache MISS — epoch:', dataEpoch, 'hash:', hash, 'business:', businessId)
   }
@@ -987,6 +1025,13 @@ MODE: ${mode}
     if (mode === 'ask_aria') void writeCouncilCache(businessId, hash, councilResult)
     return councilResult
   } catch (e) {
+    // LOGGING-FIX-1 Part 2 (LOGGING-AUDIT-1): this fallback previously returned a CouncilOutput
+    // with ZERO synthesis logging — a council answer could reach the user with no synthesis row
+    await logAICall({
+      agent_key: 'council_synthesis', model_id: synthesisModel, provider: 'anthropic',
+      input_tokens: 0, output_tokens: 0, success: false, business_id: businessId,
+      error_message: (e as Error).message.slice(0, 200), request_summary: activeQuestion.slice(0, 100),
+    })
     // Synthesis failed — build fallback from brain outputs directly
     const fallbackBriefing = [
       growth.observations[0],
