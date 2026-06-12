@@ -103,3 +103,13 @@ Tables touched by the fix: `aria_business_memory` (read filter only), `aria_conv
 
 ---
 *Read-only. No source files modified. All claims file:line-cited; DB-content claims marked NEEDS-DB with the exact SQL.*
+
+---
+
+## ERRATUM (added by PUSHBACK-FIX-1, 2026-06-13)
+
+**Mechanism A ("filter asymmetry") was a FALSE finding.** `recall.ts` already contained `.is('deleted_at', null)` at line 39 — verified against the audit-time commit itself (`git show 298e6d2f:src/lib/aria/memory/recall.ts` shows both filters), and `git log` shows the file untouched since commit `77a34ddb` (pre-session). The audit's grep pattern (`is_active|archived|kind`) did not include "deleted_at", so line 39 never appeared in the output and absence was wrongly inferred. Lesson recorded: presence/absence claims require reading the file region, not pattern-limited greps.
+
+**Mechanism B stands** as the live explanation for pushback persistence: `aria_conversation_summaries.key_decisions` (7-day window, no archive flag) feeding the council synthesis — since cleaned at the data layer by chat Claude.
+
+Q5's reader inventory is also corrected by PUSHBACK-FIX-1's full grep: recall.ts, business-context.ts, memory/route.ts GET, memory-consolidate, hypothesis/generate.ts:56, and extract.ts dedupe ALL filter both flags. The only readers missing one or both filters are `aria-os/status/route.ts:33` (no flags — admin status surface) and `ask/memory-writer.ts:27-34` (dedup check, is_active only) — flagged for RECALL-PARITY-1, not edited.

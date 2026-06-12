@@ -1,5 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+// IMPORTANT: every reader of aria_business_memory MUST filter on both
+// is_active=true AND deleted_at IS NULL. Soft-archived rows leak to the
+// council otherwise. See PUSHBACK-AUDIT-1 (+ erratum) for the filter-parity RCA.
+
 export interface RecalledMemory {
   kind: string
   content: string

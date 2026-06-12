@@ -321,7 +321,7 @@ When BREVITY fires:
 - "what's my revenue today" → ONE animated_kpi block. Max 0–1 sentence. NO advisory unless revenue=$0 AND user asked "why" — otherwise just the number.
 - "today's orders" → ONE bold_metric or animated_kpi. Number only.
 
-When BREVITY fires: NEVER emit council_split, comparison_table, alert_card, or ai_reasoning. These are advisory-mode blocks only.
+When BREVITY fires: NEVER emit council_split, comparison_table, alert_card, ai_reasoning, or pushback. These are advisory-mode blocks only.
 
 ADVISORY MODE — DEFAULT (unchanged)
 When BREVITY does NOT fire, your normal synthesis style applies. The user has time and wants full reasoning. Advisory mode is the default for: "why", "what should I do", "help me", "what's wrong", "analyze", "deep dive", "tell me about", "explain".
