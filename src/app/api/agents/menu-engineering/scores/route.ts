@@ -5,6 +5,7 @@ export const maxDuration = 30;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayAEST, toAESTStart } from '@/lib/date-au';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 async function _GET(req: Request) {
@@ -38,8 +39,7 @@ async function _GET(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Fetch today's action stats
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = new Date(toAESTStart(todayAEST())); // TZ-1: true AEST-midnight instant
   const { data: todayActions } = await supabaseAdmin
     .from('menu_engineering_actions')
     .select('action_type,revenue_impact_actual')

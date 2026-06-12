@@ -1,4 +1,5 @@
 import { parseLLMJsonOr } from '@/lib/ai-json';
+import { todayAEST, toAESTStart } from '@/lib/date-au';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { trackUsage } from '@/lib/track-usage';
@@ -107,9 +108,8 @@ async function _POST(req: Request) {
 
   trackUsage({ business_id: business_id, event_type: 'daily_briefing' });
 
-  const today = new Date().toISOString().split('T')[0];
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const today = todayAEST(); // TZ-1: AEST calendar date, not UTC date
+  const todayStart = new Date(toAESTStart(todayAEST())); // TZ-1: true AEST-midnight instant
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setDate(yesterdayStart.getDate() - 1);
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();

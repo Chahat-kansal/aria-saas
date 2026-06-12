@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import type { AgentType, AgentDecisionInput, AgentRunResult } from './types'
 import { BaseAgent } from './base-agent'
 
@@ -341,7 +342,7 @@ export class WasteEliminationAgent extends BaseAgent {
   }
 
   async runNoonCheck(business_id: string): Promise<void> {
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = todayAEST() // TZ-1: AEST calendar date, was UTC date
 
     const { data: todayPreds } = await supabaseAdmin
       .from('prep_predictions')
@@ -353,8 +354,7 @@ export class WasteEliminationAgent extends BaseAgent {
       if (pred.promotion_triggered) continue
 
       // Get actual sales so far today
-      const midnightToday = new Date()
-      midnightToday.setHours(0, 0, 0, 0)
+      const midnightToday = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
       const { data: salesItems } = await supabaseAdmin
         .from('pos_sale_items')
         .select('quantity, pos_sales!inner(created_at, business_id, status)')
@@ -415,9 +415,8 @@ export class WasteEliminationAgent extends BaseAgent {
   }
 
   async runEndOfDay(business_id: string): Promise<void> {
-    const todayStr = new Date().toISOString().slice(0, 10)
-    const midnightToday = new Date()
-    midnightToday.setHours(0, 0, 0, 0)
+    const todayStr = todayAEST() // TZ-1: AEST calendar date, was UTC date
+    const midnightToday = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
 
     const { data: todayPreds } = await supabaseAdmin
       .from('prep_predictions')

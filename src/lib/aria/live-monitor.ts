@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runAriaModel, parseModelJson } from '@/lib/aria/model-router';
+import { todayAEST, toAESTStart, toAESTEnd, nowAEST } from '@/lib/date-au';
 
 type Row = Record<string, any>;
 
@@ -48,18 +49,14 @@ function daysAgo(days: number) {
 }
 
 function todayStart() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  // TZ-1: AEST midnight, not server/UTC midnight
+  return toAESTStart(todayAEST());
 }
 
 function yesterdayWindow() {
-  const start = new Date();
-  start.setDate(start.getDate() - 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(23, 59, 59, 999);
-  return { start: start.toISOString(), end: end.toISOString() };
+  // TZ-1: yesterday's AEST calendar date, bounded with +10:00 instants
+  const yday = new Date(nowAEST().getTime() - 86400000).toISOString().slice(0, 10);
+  return { start: toAESTStart(yday), end: toAESTEnd(yday) };
 }
 
 function lastWeekSameWindow() {

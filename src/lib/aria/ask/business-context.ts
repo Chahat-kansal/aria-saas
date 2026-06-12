@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 
 export interface ConversationSummary {
   id: string
@@ -82,10 +83,12 @@ export async function buildAskAriaContext(
 ): Promise<AskAriaContext> {
   const isQuick = scope === 'quick'
   const now = new Date()
-  const todayStart = new Date(now); todayStart.setHours(0,0,0,0)
+  // TZ-1: AEST-midnight boundaries via date-au (true instants with +10:00 offset)
+  const todayStartIso = toAESTStart(todayAEST())
+  const monthStartIso = toAESTStart(todayAEST().slice(0, 7) + '-01')
+  const [tzYear, tzMonth] = todayAEST().slice(0, 7).split('-').map(Number)
+  const lastMonthStartIso = toAESTStart(`${tzMonth === 1 ? tzYear - 1 : tzYear}-${String(tzMonth === 1 ? 12 : tzMonth - 1).padStart(2, '0')}-01`)
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30)
 
   const competitorRes = supabaseAdmin
@@ -102,9 +105,9 @@ export async function buildAskAriaContext(
     actionsExecutedRes,
   ] = await Promise.all([
     supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()).neq('status', 'voided'),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStartIso).neq('status', 'voided'),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()).neq('status', 'voided'),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()).neq('status', 'voided'),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStartIso).neq('status', 'voided'),
     supabaseAdmin.from('pos_outlet_inventory').select('id,product_id,items_on_hand,items_reorder_level,pos_products(name)').eq('business_id', businessId).lt('items_on_hand', 5).limit(10),
     supabaseAdmin.from('pos_users').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'open'),
@@ -120,7 +123,7 @@ export async function buildAskAriaContext(
       .select('product_name, line_total, quantity, pos_sales!inner(business_id, status, created_at)')
       .eq('pos_sales.business_id', businessId)
       .neq('pos_sales.status', 'voided')
-      .gte('pos_sales.created_at', monthStart.toISOString())
+      .gte('pos_sales.created_at', monthStartIso)
       .limit(500),
     // Top customers by total spent
     supabaseAdmin.from('pos_customers')
@@ -155,8 +158,8 @@ export async function buildAskAriaContext(
       .select('total_amount')
       .eq('business_id', businessId)
       .neq('status', 'voided')
-      .gte('created_at', lastMonthStart.toISOString())
-      .lt('created_at', monthStart.toISOString()),
+      .gte('created_at', lastMonthStartIso)
+      .lt('created_at', monthStartIso),
     // Subscription tier
     supabaseAdmin.from('business_subscriptions')
       .select('tier')

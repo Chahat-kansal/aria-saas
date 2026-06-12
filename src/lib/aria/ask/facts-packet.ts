@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import type { ComparisonPeriod } from './aria-intent'
 
 export interface FactsPacket {
@@ -106,13 +107,12 @@ function windowPairForPeriod(period: ComparisonPeriod): WindowPair | null {
         same_length: true,
       }
     case 'today': {
-      const midnight = new Date()
-      midnight.setHours(0, 0, 0, 0)
+      // TZ-1: AEST midnight, not server/UTC midnight
       return {
         current: {
-          start: midnight.toISOString(),
+          start: toAESTStart(todayAEST()),
           end: new Date(now).toISOString(),
-          label: 'today (since midnight)',
+          label: 'today (since midnight AEST)',
         },
         comparison: null,
         same_length: false,

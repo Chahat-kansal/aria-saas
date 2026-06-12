@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 
 async function sendEmail(to: string[], subject: string, html: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY ?? ''
@@ -34,8 +35,8 @@ export async function sendDailySummaryReport(
 ): Promise<boolean> {
   const supabase = createServerSupabaseClient()
 
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const yesterdayStart = new Date(Date.now() - 86400_000); yesterdayStart.setHours(0, 0, 0, 0)
+  const todayStart = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
+  const yesterdayStart = new Date(todayStart.getTime() - 86400_000)
 
   const [todayQ, yesterdayQ, lowStockQ, bizQ] = await Promise.all([
     supabase.from('pos_sales').select('total_amount')

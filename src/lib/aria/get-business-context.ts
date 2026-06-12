@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import { getWeatherContext } from './get-weather-context'
 import { CANONICAL_COLS } from './schema-registry'
 
@@ -22,7 +23,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const d28 = new Date(now.getTime() - 28 * 86400000).toISOString()
   const d35 = new Date(now.getTime() - 35 * 86400000).toISOString()
 
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const monthStart = toAESTStart(todayAEST().slice(0, 7) + '-01') // TZ-1: AEST month start
 
   const [
     business,
@@ -167,7 +168,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     ? ((posConsentCountRaw as any).value?.count ?? 0)
     : null
 
-  const todayStr = now.toISOString().slice(0, 10)
+  const todayStr = todayAEST() // TZ-1: AEST calendar date, was UTC date
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allPromos = (promotionsRaw as any).status === 'fulfilled'
     ? ((promotionsRaw as any).value?.data ?? []) as Array<{

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayAEST, toAESTStart } from '@/lib/date-au';
 import { sendSMS } from '@/lib/clicksend';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
@@ -557,8 +558,7 @@ Return ONLY valid JSON with no markdown.`;
   }
 
   private async checkLabourOverallocation(business_id: string, threshold: number): Promise<FiredTrigger | null> {
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
+    const midnight = new Date(toAESTStart(todayAEST())); // TZ-1: true AEST-midnight instant
 
     const [{ data: activeShifts }, { data: todaySales }] = await Promise.all([
       supabaseAdmin

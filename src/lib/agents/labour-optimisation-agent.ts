@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import type { AgentType, AgentRunResult } from './types'
 import { BaseAgent } from './base-agent'
 
@@ -470,8 +471,7 @@ export class LabourOptimisationAgent extends BaseAgent {
       }
 
       // STEP 10: Real-time labour % monitoring
-      const midnight = new Date(now)
-      midnight.setHours(0, 0, 0, 0)
+      const midnight = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
 
       const [activeStaffRes, revTodayRes] = await Promise.all([
         supabaseAdmin

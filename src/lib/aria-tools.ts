@@ -1,6 +1,7 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayAEST, toAESTStart } from '@/lib/date-au';
 import * as XLSX from 'xlsx';
 import { randomUUID } from 'crypto';
 
@@ -408,10 +409,10 @@ function getMonthKey(dateStr: string): string {
 function getPeriodStart(period: string): string {
   const now = new Date();
   switch (period) {
-    case 'today': { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.toISOString(); }
+    case 'today': return toAESTStart(todayAEST()); // TZ-1: AEST midnight
     case '7d': return new Date(now.getTime() - 7 * 86400000).toISOString();
     case '30d': return new Date(now.getTime() - 30 * 86400000).toISOString();
-    case 'month': return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    case 'month': return toAESTStart(todayAEST().slice(0, 7) + '-01'); // TZ-1: AEST month start
     case '90d': return new Date(now.getTime() - 90 * 86400000).toISOString();
     case 'year': return new Date(now.getFullYear(), 0, 1).toISOString();
     default: return new Date(now.getTime() - 30 * 86400000).toISOString();
@@ -1210,11 +1211,12 @@ async function queryBankBalance(input: { metric?: string }, businessId: string):
     return { recent: txns ?? [] };
   }
 
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  // TZ-1: AEST month start (transaction_date is a date column — use the AEST calendar date)
+  const monthStartDate = todayAEST().slice(0, 7) + '-01';
   const { data: rows } = await supabaseAdmin.from('bank_transactions')
     .select('amount, transaction_date, description, category')
     .eq('business_id', businessId)
-    .gte('transaction_date', monthStart.toISOString().slice(0, 10));
+    .gte('transaction_date', monthStartDate);
   const list = (rows ?? []) as BankTxnRow[];
   const income = list.filter(r => Number(r.amount ?? 0) > 0).reduce((a, r) => a + Number(r.amount ?? 0), 0);
   const expenses = list.filter(r => Number(r.amount ?? 0) < 0).reduce((a, r) => a + Math.abs(Number(r.amount ?? 0)), 0);
@@ -1485,10 +1487,10 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       const { period, status } = inp as { period: string; status?: string }
       const now = new Date()
       const from = period === 'today'
-        ? new Date(new Date().setHours(0,0,0,0)).toISOString()
+        ? toAESTStart(todayAEST()) // TZ-1: AEST midnight
         : period === 'week'
         ? new Date(Date.now() - 7 * 86400000).toISOString()
-        : new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        : toAESTStart(todayAEST().slice(0, 7) + '-01') // TZ-1: AEST month start
       let q = supabaseAdmin.from('pos_online_orders').select('total, fulfillment_type, status').eq('business_id', businessId).gte('created_at', from)
       if (status && status !== 'all') q = (q as typeof q).eq('status', status)
       const { data } = await q

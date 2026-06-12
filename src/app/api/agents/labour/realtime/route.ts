@@ -5,6 +5,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _GET() {
@@ -16,8 +17,7 @@ async function _GET() {
     .from('businesses').select('id').eq('user_id', user.id).eq('is_active', true).limit(1).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const midnight = new Date()
-  midnight.setHours(0, 0, 0, 0)
+  const midnight = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
   const now = new Date()
 
   const [activeStaffRes, revTodayRes, settingsRes] = await Promise.all([

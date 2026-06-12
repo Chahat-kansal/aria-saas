@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendSlackMessage } from '@/lib/integrations/slack'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
@@ -100,7 +101,7 @@ async function generateMorning(
     // Yesterday sales
     supabaseAdmin.from('pos_sales').select('total_amount')
       .eq('business_id', biz.id).neq('status', 'voided')
-      .gte('created_at', `${yday}T00:00:00Z`).lte('created_at', `${yday}T23:59:59Z`),
+      .gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)), // TZ-1: AEST-bounded day, was Z-pinned
     // 28-35 day baseline for daily average
     supabaseAdmin.from('pos_sales').select('total_amount, created_at')
       .eq('business_id', biz.id).neq('status', 'voided')
@@ -347,7 +348,7 @@ async function generateEvening(
     .select('total_amount, served_by, created_at')
     .eq('business_id', biz.id)
     .neq('status', 'voided')
-    .gte('created_at', `${today}T00:00:00Z`)
+    .gte('created_at', toAESTStart(today)) // TZ-1: AEST-bounded today, was Z-pinned
 
   const revenue = (sales ?? []).reduce((s, r) => s + (r.total_amount ?? 0), 0)
   const txCount = (sales ?? []).length

@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 45
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import { ARIA_VOICE } from '@/lib/aria-voice-guide'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
@@ -114,7 +115,7 @@ async function _POST(req: Request) {
   }
 
   const now = new Date()
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+  const todayStart = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
   const yesterdayStart = new Date(todayStart)
   yesterdayStart.setDate(yesterdayStart.getDate() - 1)
   const weekStart = new Date(todayStart)

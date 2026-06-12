@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import type { AgentType, AgentDecision, AgentCouncilSession, AgentCouncilProposal } from './types'
 
@@ -324,7 +325,7 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   }
 
   // STEP 6: FETCH BUSINESS SNAPSHOT + CALL SONNET
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const todayStart = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
   const yesterday = new Date(todayStart); yesterday.setDate(yesterday.getDate() - 1)
   const [todaySalesRes, yestSalesRes, cashRes, agentPerfRes] = await Promise.all([
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', business_id).gte('created_at', todayStart.toISOString()).neq('status', 'voided'),

@@ -7,6 +7,7 @@ export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { nowAEST, toAESTStart, toAESTEnd } from '@/lib/date-au';
 import { runAgent } from '@/lib/agents/orchestrator';
 import { generateInsight } from '@/lib/aria-insights';
 import type { AgentType } from '@/lib/agents/types';
@@ -59,10 +60,10 @@ async function _GET(req: Request, { params }: Params) {
 
     for (const business of businesses) {
       try {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const from = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
-        const to = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+        // TZ-1: yesterday's AEST calendar date, bounded with +10:00 instants
+        const yday = new Date(nowAEST().getTime() - 86400000).toISOString().slice(0, 10);
+        const from = toAESTStart(yday);
+        const to = toAESTEnd(yday);
 
         const { data: sales } = await supabase
           .from('pos_sales')

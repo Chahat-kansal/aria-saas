@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { submitBatch } from '@/lib/aria-batch'
+import { nowAEST, toAESTStart, toAESTEnd } from '@/lib/date-au'
 import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
@@ -77,9 +78,11 @@ function buildMarketPricesPromptBlock(market: MarketCtx | null, industry: string
 }
 
 async function buildBriefingContext(businessId: string) {
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const yStart = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString()
-  const yEnd   = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString()
+  // TZ-1: yesterday = yesterday's AEST calendar date, bounded with +10:00 instants
+  // (businesses.timezone is selected at the call site but date-au has no TZ param — AEST assumed, multi-TZ later)
+  const yday = new Date(nowAEST().getTime() - 86400000).toISOString().slice(0, 10)
+  const yStart = toAESTStart(yday)
+  const yEnd   = toAESTEnd(yday)
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [{ data: ySales }, { data: wSales }, { data: stock }, { data: items }] = await Promise.all([

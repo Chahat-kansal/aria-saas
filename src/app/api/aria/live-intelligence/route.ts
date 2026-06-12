@@ -73,7 +73,8 @@ async function _GET(_req: Request) {
   const { supabaseAdmin } = await import('@/lib/supabase-admin')
 
   // Get today's sales
-  const todayStart = new Date(); todayStart.setHours(0,0,0,0)
+  const { todayAEST, toAESTStart } = await import('@/lib/date-au')
+  const todayStart = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
   const { data: todaySales } = await supabaseAdmin
     .from('pos_sales').select('total_amount, created_at')
     .eq('business_id', bid).neq('status', 'voided')
