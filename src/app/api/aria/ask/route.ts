@@ -725,7 +725,7 @@ Rules:
       const pct = Math.round((currentWeek / wTarget) * 100)
       const gap = wTarget - currentWeek
       lines.push(`  Weekly revenue target: $${wTarget.toFixed(2)}`)
-      lines.push(`  Current 7-day revenue vs target: $${currentWeek.toFixed(2)} / $${wTarget.toFixed(2)} = ${pct}%${gap > 0 ? ' (BEHIND by $' + gap.toFixed(2) + ')' : ' (ON TRACK)'}`)
+      lines.push(`  This week (Mon 00:00 AEST → now) revenue vs target: $${currentWeek.toFixed(2)} / $${wTarget.toFixed(2)} = ${pct}%${gap > 0 ? ' (BEHIND by $' + gap.toFixed(2) + ')' : ' (ON TRACK)'}`)
     } else {
       lines.push('  Weekly revenue target: NOT SET')
     }

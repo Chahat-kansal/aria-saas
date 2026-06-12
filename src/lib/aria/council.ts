@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
+import { toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import type { AskBlock } from './ask-types'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
@@ -739,10 +740,8 @@ export async function runAriaCouncil(
     .filter(Boolean)
     .join('\n\n')
 
-  const now = new Date()
-  const weekStart = new Date(now)
-  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7)) // Monday
-  weekStart.setHours(0, 0, 0, 0)
+  // WEEK-1: AEST Monday (was server-TZ Monday — off by 10h on Vercel/UTC)
+  const weekStart = new Date(toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
 
   type BizInfo = { trading_name: string; industry: string; city: string; state: string }
 

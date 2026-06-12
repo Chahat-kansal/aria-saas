@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { startOfWeekAEST } from '@/lib/date-au';
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseLLMJsonOr } from '@/lib/ai-json';
@@ -41,7 +42,8 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
-  const weekStarting: string = body.week_starting ?? new Date(Date.now() - ((new Date().getDay() || 7) - 1) * 86400000).toISOString().split("T")[0];
+  // WEEK-1: default week_starting = this week's Monday in AEST (was server-TZ Monday)
+  const weekStarting: string = body.week_starting ?? startOfWeekAEST().toISOString().slice(0, 10);
 
   // Load the management team from staff_members (NOT pos_users — that's only the
   // in-POS register logins, which is usually just the owner). Availability lives

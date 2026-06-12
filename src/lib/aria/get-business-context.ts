@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { getWeatherContext } from './get-weather-context'
 import { CANONICAL_COLS } from './schema-registry'
 
@@ -40,6 +40,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     promotionsRaw,
     salesSameWeekLastMonth,
     ariaActionsRaw,
+    salesThisCalWeekRaw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -109,6 +110,11 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(10),
+    // WEEK-1: "this week" = calendar week (Monday 00:00 AEST → now) for week_tracking / on-track checks
+    db.from('pos_sales').select('total_amount')
+      .eq('business_id', businessId)
+      .gte('created_at', toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
+      .neq('status', 'voided'),
   ])
 
   // SKU aggregation from sale_items — use line_total (registry product_sales canonical, RULE 6)
@@ -135,6 +141,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const lyRev7  = sum(ly7)
   const lyRev30 = sum(ly30)
   const revSWLM = sum(salesSameWeekLastMonth)   // "same week last month" revenue
+  const revWeek = sum(salesThisCalWeekRaw)      // WEEK-1: calendar week (Mon 00:00 AEST → now)
 
   const yoy7  = rev7 != null && lyRev7  != null && lyRev7  > 0
     ? (((rev7  - lyRev7)  / lyRev7)  * 100).toFixed(1) + '%' : null
@@ -229,21 +236,22 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         : 'no prior year data available',
     },
     week_tracking: (() => {
+      // WEEK-1: "this week" / on-track checks use the CALENDAR week (Mon 00:00 AEST → now), not rolling 7d
       const target = biz?.weekly_revenue_target ? Number(biz.weekly_revenue_target) : null
-      const pctOfTarget = (target && target > 0 && rev7 != null)
-        ? Math.round((rev7 / target) * 100) : null
-      const vsSWLMPct = (revSWLM != null && revSWLM > 0 && rev7 != null)
-        ? (((rev7 - revSWLM) / revSWLM) * 100).toFixed(1) + '%' : null
-      const onTrack = (target && rev7 != null)
-        ? (rev7 >= target ? 'on_track' : 'behind') : null
+      const pctOfTarget = (target && target > 0 && revWeek != null)
+        ? Math.round((revWeek / target) * 100) : null
+      const vsSWLMPct = (revSWLM != null && revSWLM > 0 && revWeek != null)
+        ? (((revWeek - revSWLM) / revSWLM) * 100).toFixed(1) + '%' : null
+      const onTrack = (target && revWeek != null)
+        ? (revWeek >= target ? 'on_track' : 'behind') : null
       const swlmWindow = `${d35.slice(0, 10)} to ${d28.slice(0, 10)}`
       const parts: string[] = []
-      if (rev7 != null) {
+      if (revWeek != null) {
         if (target) {
-          const gap = target - rev7
-          parts.push(`7-day revenue $${rev7.toFixed(2)} vs weekly target $${target.toFixed(2)} — ${pctOfTarget}% of target${gap > 0 ? ', $' + gap.toFixed(2) + ' short' : ', on track'}.`)
+          const gap = target - revWeek
+          parts.push(`This week (Mon 00:00 AEST → now) revenue $${revWeek.toFixed(2)} vs weekly target $${target.toFixed(2)} — ${pctOfTarget}% of target${gap > 0 ? ', $' + gap.toFixed(2) + ' short' : ', on track'}.`)
         } else {
-          parts.push(`7-day revenue $${rev7.toFixed(2)}. Weekly target: NOT SET — if owner asks "on track?", say target not set and offer to set one. Never use any average as a proxy for a target.`)
+          parts.push(`This week (Mon 00:00 AEST → now) revenue $${revWeek.toFixed(2)}. Weekly target: NOT SET — if owner asks "on track?", say target not set and offer to set one. Never use any average as a proxy for a target.`)
         }
       }
       if (revSWLM != null) {
@@ -252,6 +260,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         parts.push(`Same week last month (${swlmWindow}): no sales data found for that window.`)
       }
       return {
+        current_week_revenue: revWeek,
         current_7d_revenue: rev7,
         same_week_last_month_revenue: revSWLM,
         same_week_window: swlmWindow,

@@ -1,7 +1,7 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { todayAEST, toAESTStart } from '@/lib/date-au';
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au';
 import * as XLSX from 'xlsx';
 import { randomUUID } from 'crypto';
 
@@ -1489,7 +1489,7 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       const from = period === 'today'
         ? toAESTStart(todayAEST()) // TZ-1: AEST midnight
         : period === 'week'
-        ? new Date(Date.now() - 7 * 86400000).toISOString()
+        ? toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)) // WEEK-1: calendar Mon AEST
         : toAESTStart(todayAEST().slice(0, 7) + '-01') // TZ-1: AEST month start
       let q = supabaseAdmin.from('pos_online_orders').select('total, fulfillment_type, status').eq('business_id', businessId).gte('created_at', from)
       if (status && status !== 'all') q = (q as typeof q).eq('status', status)

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { toAESTStart, startOfWeekAEST } from '@/lib/date-au';
 import { sendSMS } from '@/lib/clicksend';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
@@ -596,9 +597,8 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
 
     // ── STEP 8: Bulk upsert customer_clv_scores (weekly dedup in app code) ─────
     // Find customers already scored this week
-    const weekStart = new Date();
-    weekStart.setHours(0, 0, 0, 0);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Sunday
+    // WEEK-1: calendar week = Monday 00:00 AEST (was Sunday-anchored server-TZ)
+    const weekStart = new Date(toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)));
 
     const { data: alreadyScoredThisWeek } = await supabaseAdmin
       .from('customer_clv_scores')

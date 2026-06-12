@@ -96,7 +96,7 @@ export function buildBriefingTasks(businessId: string, _industry: string): Paral
         const revenue = (salesRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
         // GROUNDING: empty timesheets = "not tracked", NOT evidence of impossible/broken cost
         if (timesheetRows.length === 0) {
-          return 'Labour costs: not tracked (timesheet system unpopulated — no clock-in data this week). Revenue: ' + fmt(revenue) + '. Labour ratio cannot be calculated.'
+          return 'Labour costs: not tracked (timesheet system unpopulated — no clock-in data in the last 7 days). Revenue: ' + fmt(revenue) + '. Labour ratio cannot be calculated.'
         }
         const ratio = revenue > 0 ? ((labourCost / revenue) * 100).toFixed(1) : 'N/A'
         return '7-day labour cost: ' + fmt(labourCost) + '. Revenue: ' + fmt(revenue) + '. Labour ratio: ' + ratio + '%. Target: <35%.'

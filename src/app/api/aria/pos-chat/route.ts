@@ -3,7 +3,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 45
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { ARIA_VOICE } from '@/lib/aria-voice-guide'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
@@ -118,8 +118,8 @@ async function _POST(req: Request) {
   const todayStart = new Date(toAESTStart(todayAEST())) // TZ-1: true AEST-midnight instant
   const yesterdayStart = new Date(todayStart)
   yesterdayStart.setDate(yesterdayStart.getDate() - 1)
-  const weekStart = new Date(todayStart)
-  weekStart.setDate(weekStart.getDate() - 7)
+  // WEEK-1: "THIS WEEK" = calendar week, Monday 00:00 AEST → now (was rolling 7 days)
+  const weekStart = new Date(toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)

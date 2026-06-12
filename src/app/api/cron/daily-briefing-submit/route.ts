@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { submitBatch } from '@/lib/aria-batch'
-import { nowAEST, toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { nowAEST, toAESTStart, toAESTEnd, startOfWeekAEST } from '@/lib/date-au'
 import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
@@ -83,7 +83,8 @@ async function buildBriefingContext(businessId: string) {
   const yday = new Date(nowAEST().getTime() - 86400000).toISOString().slice(0, 10)
   const yStart = toAESTStart(yday)
   const yEnd   = toAESTEnd(yday)
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  // WEEK-1: "Week so far" = calendar week, Monday 00:00 AEST → now (was rolling 7 days — AUDIT-1 finding #3 mislabel)
+  const weekAgo = toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
 
   const [{ data: ySales }, { data: wSales }, { data: stock }, { data: items }] = await Promise.all([
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', yStart).lte('created_at', yEnd),

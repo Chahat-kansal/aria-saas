@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 
 export interface ConversationSummary {
   id: string
@@ -88,7 +88,8 @@ export async function buildAskAriaContext(
   const monthStartIso = toAESTStart(todayAEST().slice(0, 7) + '-01')
   const [tzYear, tzMonth] = todayAEST().slice(0, 7).split('-').map(Number)
   const lastMonthStartIso = toAESTStart(`${tzMonth === 1 ? tzYear - 1 : tzYear}-${String(tzMonth === 1 ? 12 : tzMonth - 1).padStart(2, '0')}-01`)
-  const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)
+  // WEEK-1: "this week" = calendar week, Monday 00:00 AEST → now (was rolling 7 days)
+  const weekStart = new Date(toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30)
 
   const competitorRes = supabaseAdmin

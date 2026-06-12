@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 
 export type ExportFormat = 'csv' | 'excel' | 'pdf'
 export type ExportSubject = 'sales' | 'inventory' | 'staff' | 'customers' | 'products'
@@ -128,7 +128,7 @@ function toPdf(title: string, headers: string[], rows: Record<string, string>[])
 function periodToDate(period: string): string {
   const now = new Date()
   if (period === 'today') return toAESTStart(todayAEST()) // TZ-1: AEST midnight
-  if (period === 'week') return new Date(now.getTime() - 7 * 86400_000).toISOString()
+  if (period === 'week') return toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)) // WEEK-1: calendar Mon AEST
   return new Date(now.getTime() - 30 * 86400_000).toISOString()
 }
 
