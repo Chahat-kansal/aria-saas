@@ -16,7 +16,18 @@ const NUMERIC_RE = /\$|\bdollar|revenue|sales|orders|customers|how much|how many
 const CURRENCY_OUT = /\$\s?[0-9]/
 const PERCENT_OUT = /[0-9]+(\.[0-9]+)?\s?%/
 
-type HealReason = 'malformed_json' | 'wrong_block_type' | 'empty_on_data_question' | 'ungrounded_numeric'
+type HealReason = 'malformed_json' | 'wrong_block_type' | 'empty_on_data_question' | 'ungrounded_numeric' | 'fabrication_stripped'
+
+// GROUNDING-TEETH Check 5: parse every number out of the grounding corpus for tolerance matching
+function extractNumbers(corpus: string): number[] {
+  const matches = corpus.match(/\d[\d,]*(?:\.\d+)?/g) ?? []
+  const out: number[] = []
+  for (const m of matches) {
+    const v = parseFloat(m.replace(/,/g, ''))
+    if (isFinite(v)) out.push(v)
+  }
+  return out
+}
 
 async function logHeal(businessId: string, healReason: HealReason, success: boolean, signal?: string): Promise<void> {
   try {
@@ -58,6 +69,7 @@ export async function validateAndHeal(args: {
   pipelinePath: 'main' | 'deliverable' | 'council'
   businessId: string
   toolsUsed: number
+  groundTruth?: string
 }): Promise<{
   blocks: AskBlock[]
   healed: boolean
@@ -65,7 +77,7 @@ export async function validateAndHeal(args: {
   healLatencyMs?: number
   healedText?: string
 }> {
-  const { userMessage, blocks: inputBlocks, rawResponse, pipelinePath, businessId, toolsUsed } = args
+  const { userMessage, blocks: inputBlocks, rawResponse, pipelinePath, businessId, toolsUsed, groundTruth } = args
   const blocks: AskBlock[] = inputBlocks ?? []
 
   // ── Check 1: Malformed JSON (main brain path only) ────────────────────────────
@@ -244,6 +256,38 @@ Respond now. Call the tool first, then answer. If the question warrants a visual
     } catch {
       await logHeal(businessId, 'ungrounded_numeric', false, 'guard_fired:ungrounded_numeric')
     }
+  }
+
+  // ── Check 5 (GROUNDING-TEETH): Fabrication scan — council path only ──────────
+  // Pure-code check (no LLM call): every risky numeric token in the synthesis text must
+  // appear in the council's grounded inputs (context + advisor outputs), verbatim or within
+  // 2% tolerance. Ungrounded sentences are stripped surgically — never blocks the response.
+  if (pipelinePath === 'council' && groundTruth && rawResponse.trim()) {
+    try {
+      const corpusNumbers = extractNumbers(groundTruth)
+      const RISKY = /(\$\s?[\d,]+(?:\.\d+)?)|(\b\d{1,3}(?:\.\d+)?\s?%)|(\b\d+(?:\.\d+)?\s?[x×]\s?(?:higher|lower|more|less))/gi
+      const sentences = rawResponse.split(/(?<=[.!?])\s+/)
+      const kept: string[] = []
+      let strippedCount = 0
+      for (const sentence of sentences) {
+        const matches = sentence.match(RISKY) ?? []
+        let fabricated = false
+        for (const m of matches) {
+          const v = parseFloat(m.replace(/[^0-9.]/g, ''))
+          if (!isFinite(v)) continue
+          const grounded = corpusNumbers.some(n => n === v || (n > 0 && Math.abs(n - v) / n <= 0.02))
+          if (!grounded) { fabricated = true; break }
+        }
+        if (fabricated) strippedCount++
+        else kept.push(sentence)
+      }
+      if (strippedCount > 0 && kept.length > 0) {
+        const healedText = kept.join(' ').trim() +
+          " I couldn't verify some specific figures from your data — focus on what's confirmed above."
+        await logHeal(businessId, 'fabrication_stripped', true, 'guard_fired:fabrication_stripped')
+        return { blocks, healed: true, healReason: 'fabrication_stripped', healedText }
+      }
+    } catch { /* graceful — never block the response */ }
   }
 
   return { blocks, healed: false }

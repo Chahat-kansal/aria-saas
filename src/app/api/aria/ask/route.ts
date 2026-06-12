@@ -33,6 +33,7 @@ import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 import { validateAndHeal } from '@/lib/aria/response-validator'
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
 import { buildNavGrounding } from '@/lib/aria/nav-grounding'
@@ -658,10 +659,45 @@ Rules:
         getBusinessContext(bid),
         buildFactsPacket(bid, ariaIntent.comparison_period),
       ])
+      // GROUNDING-TEETH Part 3: no grounded inputs → no strategic synthesis (graceful degradation)
+      if (!bizCtx || bizCtx.length < 50) {
+        const noDataMsg = "I don't have enough data yet for a strategic read — try a specific question."
+        let savedConvId = conversationId
+        try { savedConvId = await upsertConversation(bid, user.id, conversationId, message, noDataMsg, intent.type) } catch { /* non-fatal */ }
+        return NextResponse.json({
+          response: noDataMsg,
+          blocks: [{ type: 'lead', content: noDataMsg }],
+          conversation_id: savedConvId ?? conversationId,
+          intent: intent.type, action: null, cost_usd_cents: 0, downloads: null, tool_calls: [], used_council: false,
+        })
+      }
       let augCtx = bizCtx
       try {
         const ctxParsed = JSON.parse(bizCtx) as Record<string, unknown>
         ctxParsed.aria_facts_packet = factsPacket
+        // GROUNDING-TEETH Part 2: positive anchors — live-queried values that ARE safe to cite
+        try {
+          const gtTodayStart = toAESTStart(todayAEST())
+          const gtWeekStart = toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
+          const gtWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+          const [gtToday, gtWeek, gtConsent, gtSales7, gtPaid7] = await Promise.all([
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
+            supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
+            supabaseAdmin.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', bid).gte('created_at', gtWeekAgo).neq('status', 'voided'),
+            supabaseAdmin.from('pos_sale_payments').select('sale_id, pos_sales!inner(business_id, created_at)').eq('pos_sales.business_id', bid).gte('pos_sales.created_at', gtWeekAgo).limit(5000),
+          ])
+          const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+          const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
+          const totalSales7 = gtSales7.count ?? 0
+          ctxParsed.available_ground_truth = {
+            note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
+            revenue_today: +gtSum(gtToday.data as Array<{ total_amount: number | null }>).toFixed(2),
+            revenue_this_week_calendar: +gtSum(gtWeek.data as Array<{ total_amount: number | null }>).toFixed(2),
+            payment_coverage_real_pct: totalSales7 > 0 ? +((Math.min(paidSaleIds.size, totalSales7) / totalSales7) * 100).toFixed(1) : null,
+            customer_count_with_consent: gtConsent.count ?? 0,
+          }
+        } catch { /* non-fatal — council proceeds without anchors */ }
         augCtx = JSON.stringify(ctxParsed)
       } catch { /* non-fatal — council still gets bizCtx */ }
       const council = await runAriaCouncil(augCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
@@ -681,6 +717,9 @@ Rules:
             pipelinePath: 'council',
             businessId: bid,
             toolsUsed: councilToolCallCount,
+            // GROUNDING-TEETH Check 5 corpus: full context + advisor outputs — any number the
+            // synthesis cites must trace to this text (verbatim or ±2%)
+            groundTruth: augCtx + '\n' + JSON.stringify(council.raw_brain_outputs ?? []),
           })
           if (councilValidated.healed) {
             councilBlocks = councilValidated.blocks
