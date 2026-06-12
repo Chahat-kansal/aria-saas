@@ -566,12 +566,14 @@ Rules:
         console.error('[aria/ask] upsertConversation failed (deliverable):', (e as Error).message)
       }
       // HEAL-1: validate deliverable output — catches spreadsheet-class mismatches not caught by SPREADSHEET_RE gate
+      // GROUND-1: toolsUsed=1 — generateDeliverable fetches live DB data, so it counts as a grounded path
       const delivValidated = await validateAndHeal({
         userMessage: message,
         blocks: [],
         rawResponse: result.html ?? '',
         pipelinePath: 'deliverable',
         businessId: bid,
+        toolsUsed: 1,
       })
       return NextResponse.json({
         response: responseText,
@@ -1181,6 +1183,37 @@ When BREVITY fires: NEVER emit council_read, comparison_table, alert_card, or ai
 ADVISORY MODE — DEFAULT (unchanged)
 When BREVITY does NOT fire, the 2-paragraph narrative rule applies as before. The user has time and wants full reasoning. Advisory mode is the default for: "why", "what should I do", "help me", "what's wrong", "analyze", "deep dive", "tell me about", "explain".
 
+### GROUNDING RULE — STRICT
+
+For any question that requests, references, or implies a NUMERIC FACT about the business (revenue, sales, orders, customers, products, inventory, hours, dates, comparisons, trends, totals, averages), you MUST call query_business_data (or another data tool) at least once BEFORE composing the response. Do not infer numbers from context, recent messages, or business profile data. Every dollar figure, count, percentage, or date range in your response must come from a tool call made in THIS turn.
+
+This rule OVERRIDES quick-answer shortcuts. Even a "what's my revenue today" with an obvious $0 expected answer MUST be grounded — call the tool.
+
+NUMERIC SIGNALS (case-insensitive — if any match, tool use is mandatory):
+- Currency: $, dollar, AUD, cents, revenue, sales, profit, cost, spend, made, earned, lost
+- Counts: how many, how much, count, total, number of, sold, orders, customers, visits
+- Time windows: today, yesterday, this week, last week, this month, last month, since, vs, compared to, year to date, ytd
+- Comparisons: more than, less than, increased, decreased, dropped, up, down, %, percent
+- Specific products / customers / dates by name
+
+FORBIDDEN without a tool call this turn:
+- Any specific dollar amount (e.g. "$741", "$4,442.90")
+- Any percentage with a number (e.g. "down 83.7%")
+- Any count (e.g. "11 customers", "143 orders")
+- Phrases like "you made", "you've sold", "your top X", "compared to last X"
+- Framings like "structural crisis", "tracking okay", "down 83%" that imply you computed something
+
+CORRECT examples:
+- User: "what's my revenue today?"
+  CORRECT: [call query_business_data: entity=sales, period=today] then "Today's revenue is $0.00." (one block, from tool result)
+  WRONG: "Today's revenue is $0.00 — you're in a structural crisis. This week you've made $722.50..." (the framing and weekly number are fabricated)
+
+- User: "how many customers visited this week?"
+  CORRECT: [call query_business_data: entity=customers, period=this_week] then number from result
+  WRONG: any number stated without a tool call this turn
+
+ESCAPE — if a tool returns no data or an error, say so plainly: "I couldn't pull that data right now — try again in a moment." NEVER fill the gap with a guess.
+
 ### Plain text
 For explanations, advice, writing tasks, emails, analysis in words — just reply in the text field. No block needed unless a visual adds value.
 
@@ -1538,7 +1571,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
 
   const rawResponse = toolResult.raw
   const action = extractAction(rawResponse)
-  const cleanResponse = stripAction(rawResponse)
+  let cleanResponse = stripAction(rawResponse)
 
   // Phase 6: Haiku verification pass for complex Sonnet/Opus responses
   if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && cleanResponse.length > 100) {
@@ -1668,14 +1701,18 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // Extract rich blocks from the response if Aria included them
   let richBlocks = extractBlocks(rawResponse)
   // HEAL-1: validate and self-heal malformed/missing/wrong-type blocks
+  // GROUND-1: toolsUsed lets Check 4 catch numeric answers produced with zero tool calls
   const validated = await validateAndHeal({
     userMessage: message,
     blocks: richBlocks,
     rawResponse,
     pipelinePath: 'main',
     businessId: bid,
+    toolsUsed: toolResult.tool_calls.length,
   })
   if (validated.healed) richBlocks = validated.blocks
+  // GROUND-1: a grounded re-answer replaces the ungrounded narrative text too
+  if (validated.healed && validated.healedText) cleanResponse = validated.healedText
   // Phase 5.3: Prepend a task_plan block for complex analytical queries to show analysis steps
   if (intent.complexity === 'complex' && richBlocks && richBlocks.length > 0) {
     const analysisPlanBlock: import('@/lib/aria/ask-types').AskBlock = {

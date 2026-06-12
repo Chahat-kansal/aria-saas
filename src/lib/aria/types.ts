@@ -16,6 +16,7 @@ export type AgentKey =
   | 'long_doc_map' | 'long_doc_reduce'
   | 'conversation_summarizer'
   | 'ask_aria_verifier' | 'action_planner' | 'aria_intent_classifier'
+  | 'heal'
 
 export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document'
 

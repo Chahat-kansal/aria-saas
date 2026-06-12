@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
+import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import type { AskBlock } from '@/lib/aria/ask-types'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
@@ -9,9 +11,14 @@ const CHART_RE = /\bchart\b|visuali[sz]e|graph|plot/i
 const REASONING_RE = /\bwhy\b|reasoning|because|explain why/i
 const DATA_RE = /how much|how many|revenue|sales|customers|orders|top|best|worst|average|total|count/i
 
-type HealReason = 'malformed_json' | 'wrong_block_type' | 'empty_on_data_question'
+// GROUND-1 Check 4 signals
+const NUMERIC_RE = /\$|\bdollar|revenue|sales|orders|customers|how much|how many|today|yesterday|this week|last week|this month|last month|compared to|\bvs\b|\b\d+%/i
+const CURRENCY_OUT = /\$\s?[0-9]/
+const PERCENT_OUT = /[0-9]+(\.[0-9]+)?\s?%/
 
-async function logHeal(businessId: string, healReason: HealReason, success: boolean): Promise<void> {
+type HealReason = 'malformed_json' | 'wrong_block_type' | 'empty_on_data_question' | 'ungrounded_numeric'
+
+async function logHeal(businessId: string, healReason: HealReason, success: boolean, signal?: string): Promise<void> {
   try {
     await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: businessId,
@@ -22,7 +29,7 @@ async function logHeal(businessId: string, healReason: HealReason, success: bool
       success,
       request_summary: healReason,
       response_summary: success ? 'healed' : 'heal_failed',
-      learning_signal: 'healed:' + healReason,
+      learning_signal: signal ?? ('healed:' + healReason),
     })
   } catch { /* non-fatal */ }
 }
@@ -50,13 +57,15 @@ export async function validateAndHeal(args: {
   rawResponse: string
   pipelinePath: 'main' | 'deliverable'
   businessId: string
+  toolsUsed: number
 }): Promise<{
   blocks: AskBlock[]
   healed: boolean
   healReason?: HealReason
   healLatencyMs?: number
+  healedText?: string
 }> {
-  const { userMessage, blocks: inputBlocks, rawResponse, pipelinePath, businessId } = args
+  const { userMessage, blocks: inputBlocks, rawResponse, pipelinePath, businessId, toolsUsed } = args
   const blocks: AskBlock[] = inputBlocks ?? []
 
   // ── Check 1: Malformed JSON (main brain path only) ────────────────────────────
@@ -186,6 +195,54 @@ export async function validateAndHeal(args: {
       }
     } catch {
       await logHeal(businessId, 'empty_on_data_question', false)
+    }
+  }
+
+  // ── Check 4 (GROUND-1): Ungrounded numeric response ───────────────────────────
+  // Fires when the user asked a numeric question, the response states currency/percentages,
+  // but ZERO data tools were called this turn — re-prompts once with mandatory tool use.
+  if (
+    toolsUsed === 0 &&
+    NUMERIC_RE.test(userMessage) &&
+    (CURRENCY_OUT.test(rawResponse) || PERCENT_OUT.test(rawResponse))
+  ) {
+    const t0 = Date.now()
+    try {
+      const healPrompt = `The previous response contained numeric facts (dollar amounts or percentages) but no data tool was called. Per the GROUNDING RULE, every number must come from a tool call. Answer the user's question again — you MUST call query_business_data first to fetch the real numbers, then state them verbatim from the tool result. Do not include any number you cannot ground.
+
+User question: ${userMessage.slice(0, 100)}
+Previous (ungrounded) response: ${rawResponse.slice(0, 800)}
+
+Respond now. Call the tool first, then answer. If the question warrants a visual, wrap blocks in <json_blocks>[...]</json_blocks>.`
+
+      const groundingTools = ARIA_POS_TOOLS.filter((t: { name: string }) => ['query_business_data', 'compare_periods'].includes(t.name))
+      const healResult = await callAnthropicWithTools({
+        model: 'haiku',
+        systemPrompt: 'You are Aria, an AI business assistant for Australian small businesses. Every number you state MUST come from a tool result in this conversation. Be brief — answer the question with grounded numbers, nothing more.',
+        userPrompt: healPrompt,
+        tools: groundingTools,
+        executeTool: (name, input) => executePOSTool(name, input, businessId),
+        maxTokens: 1500,
+        maxIterations: 3,
+        timeoutMs: 25_000,
+        agentKey: 'heal',
+        role: 'other',
+      })
+      if (healResult.success && healResult.tool_calls.length > 0 && healResult.raw.trim()) {
+        const healedBlocks = extractJsonBlocks(healResult.raw)
+        const healedText = healResult.raw.replace(/<json_blocks>[\s\S]*?<\/json_blocks>/gi, '').trim()
+        await logHeal(businessId, 'ungrounded_numeric', true, 'guard_fired:ungrounded_numeric')
+        return {
+          blocks: healedBlocks && healedBlocks.length > 0 ? healedBlocks : blocks,
+          healed: true,
+          healReason: 'ungrounded_numeric',
+          healLatencyMs: Date.now() - t0,
+          healedText: healedText || undefined,
+        }
+      }
+      await logHeal(businessId, 'ungrounded_numeric', false, 'guard_fired:ungrounded_numeric')
+    } catch {
+      await logHeal(businessId, 'ungrounded_numeric', false, 'guard_fired:ungrounded_numeric')
     }
   }
 
