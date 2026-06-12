@@ -744,7 +744,9 @@ Rules:
               const msgs = Array.isArray((conv as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
                 ? (conv as { messages: Array<{ role: string; content: string }> }).messages
                 : []
-              summariseConversation(bid, msgs, _cid).catch(() => {})
+              // SUMMARIZER-FIX-1 Part 4: augCtx carries the AVAILABLE_GROUND_TRUTH anchors +
+              // verified business numbers — the summarizer's numeric-grounding corpus
+              summariseConversation(bid, msgs, _cid, augCtx).catch(() => {})
             }).catch(() => {})
         }
         return NextResponse.json({
@@ -1735,7 +1737,14 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
         const msgs = Array.isArray((conv as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
           ? (conv as { messages: Array<{ role: string; content: string }> }).messages
           : []
-        summariseConversation(bid, msgs, _scid).catch(() => {})
+        // SUMMARIZER-FIX-1 Part 4: main-path anchors from the already-built ctx (cents→dollars) —
+        // same role as GROUNDING-TEETH's AVAILABLE_GROUND_TRUTH without extra queries
+        const mainGroundTruth = JSON.stringify({
+          revenue_today: +(ctx.revenue_today_cents / 100).toFixed(2),
+          revenue_this_week_calendar: +(ctx.revenue_week_cents / 100).toFixed(2),
+          revenue_this_month: +(ctx.revenue_month_cents / 100).toFixed(2),
+        })
+        summariseConversation(bid, msgs, _scid, mainGroundTruth).catch(() => {})
       }).catch(() => {})
   }
 

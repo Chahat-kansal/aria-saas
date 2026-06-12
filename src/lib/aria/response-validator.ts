@@ -18,8 +18,10 @@ const PERCENT_OUT = /[0-9]+(\.[0-9]+)?\s?%/
 
 type HealReason = 'malformed_json' | 'wrong_block_type' | 'empty_on_data_question' | 'ungrounded_numeric' | 'fabrication_stripped'
 
-// GROUNDING-TEETH Check 5: parse every number out of the grounding corpus for tolerance matching
-function extractNumbers(corpus: string): number[] {
+// GROUNDING-TEETH Check 5 / SUMMARIZER-FIX-1 shared scanner: risky numeric tokens + corpus parsing
+export const RISKY_NUMERIC_RE = /(\$\s?[\d,]+(?:\.\d+)?)|(\b\d{1,3}(?:\.\d+)?\s?%)|(\b\d+(?:\.\d+)?\s?[x×]\s?(?:higher|lower|more|less))/gi
+
+export function extractNumbers(corpus: string): number[] {
   const matches = corpus.match(/\d[\d,]*(?:\.\d+)?/g) ?? []
   const out: number[] = []
   for (const m of matches) {
@@ -265,7 +267,7 @@ Respond now. Call the tool first, then answer. If the question warrants a visual
   if (pipelinePath === 'council' && groundTruth && rawResponse.trim()) {
     try {
       const corpusNumbers = extractNumbers(groundTruth)
-      const RISKY = /(\$\s?[\d,]+(?:\.\d+)?)|(\b\d{1,3}(?:\.\d+)?\s?%)|(\b\d+(?:\.\d+)?\s?[x×]\s?(?:higher|lower|more|less))/gi
+      const RISKY = RISKY_NUMERIC_RE
       const sentences = rawResponse.split(/(?<=[.!?])\s+/)
       const kept: string[] = []
       let strippedCount = 0
