@@ -714,7 +714,7 @@ export async function runAriaCouncil(
     ]
     const rev7 = revenue?.last_7_days
     const rev30 = revenue?.last_30_days
-    if (rev7 != null) lines.push(`  revenue_7d = ${Number(rev7).toFixed(2)}  ← exact figure for "last week" / "7-day" revenue — use verbatim`)
+    if (rev7 != null) lines.push(`  revenue_7d = ${Number(rev7).toFixed(2)}  ← ROLLING last-7-days trend figure. NOT "this week" — for "this week" use current_week_revenue below`)
     if (rev30 != null) lines.push(`  revenue_30d = ${Number(rev30).toFixed(2)}  ← exact figure for "30-day" / "monthly" revenue — use verbatim`)
     const posCount = customers?.pos_customer_count
     if (posCount != null) lines.push(`  pos_customer_count = ${posCount}  ← authoritative count; NEVER say "zero customers" unless this is 0`)
@@ -734,6 +734,7 @@ export async function runAriaCouncil(
     }
     // Week-tracking block — critical for "on track?" and "same week last month" questions
     const weekTracking = ctx?.week_tracking as {
+      current_week_revenue?: number | null
       same_week_last_month_revenue?: number | null
       weekly_revenue_target?: number | null
       on_track?: string | null
@@ -743,6 +744,11 @@ export async function runAriaCouncil(
       note?: string
     } | undefined
     if (weekTracking) {
+      // WEEK-1-EXTEND: surface the calendar-week figure — without this line the only weekly
+      // dollar figure the synthesis sees is rolling revenue_7d, which it mislabels "this week"
+      if (weekTracking.current_week_revenue != null) {
+        lines.push(`  current_week_revenue = ${Number(weekTracking.current_week_revenue).toFixed(2)}  ← "THIS WEEK" (calendar week, Mon 00:00 AEST → now). USE THIS for "this week" / "how am I doing this week" — NEVER revenue_7d`)
+      }
       if (weekTracking.same_week_last_month_revenue != null) {
         lines.push(`  same_week_last_month_revenue = ${Number(weekTracking.same_week_last_month_revenue).toFixed(2)}  ← USE THIS (not revenue_30d) when owner asks "same week last month"`)
       } else {

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import type { ComparisonPeriod } from './aria-intent'
 
 export interface FactsPacket {
@@ -131,7 +131,11 @@ export async function buildFactsPacket(
   const now = Date.now()
   const pair = windowPairForPeriod(comparisonPeriod)
 
-  const currentStart = pair?.current.start ?? new Date(now - 7 * 86_400_000).toISOString()
+  // WEEK-1-EXTEND: when NO comparison period was detected (e.g. "how am I doing this week?"),
+  // the default current window is the CALENDAR week (Mon 00:00 AEST → now), not rolling 7 days —
+  // on_track / pct_of_target below compare against the WEEKLY target, so the window must match.
+  // Named comparison cases (last_week / SWLM / last_year) keep their own honest windows above.
+  const currentStart = pair?.current.start ?? toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
   const currentEnd = pair?.current.end ?? new Date(now).toISOString()
 
   const [bizResult, currentResult, compResult] = await Promise.all([
@@ -151,7 +155,7 @@ export async function buildFactsPacket(
   const current_period_revenue = (currentResult.data ?? []).reduce(
     (s: number, r: { total_amount: number | null }) => s + Number(r.total_amount ?? 0), 0,
   )
-  const current_window = pair?.current.label ?? 'last 7 days'
+  const current_window = pair?.current.label ?? 'this week (Mon 00:00 AEST → now)'
 
   let comparison_revenue: number | null = null
   let pct_change: string | null = null
