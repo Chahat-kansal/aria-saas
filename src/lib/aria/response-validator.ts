@@ -31,6 +31,39 @@ export function extractNumbers(corpus: string): number[] {
   return out
 }
 
+// GROUNDING-TEETH-V2: owner-citation phrases are direct grounding (model reading aria_business_memory
+// decisions/goals correctly) — never strip a sentence that cites the owner, even with numbers.
+const OWNER_CITATION_RE = /you (mentioned|stated|said|told me|asked|committed|wanted|set)/i
+
+/**
+ * GROUNDING-TEETH-V2 Check 6 core (shared by the synthesis validator AND the per-advisor cleaner).
+ * Strips any sentence whose $/% number does NOT match a CLEAN ground-truth anchor within 2% — UNLIKE
+ * V1's Check 5, the anchor set here is ONLY the verified live-queried values, never the advisor
+ * outputs (which is how V1 let an advisor-invented "$480" self-ground). Surgical, never empties.
+ */
+export function stripUngroundedNumbers(text: string, anchorNumbers: number[]): { healedText: string; stripped: string[] } {
+  if (!text || !text.trim() || anchorNumbers.length === 0) return { healedText: text, stripped: [] }
+  const sentences = text.split(/(?<=[.!?])\s+/)
+  const kept: string[] = []
+  const stripped: string[] = []
+  for (const sentence of sentences) {
+    if (OWNER_CITATION_RE.test(sentence)) { kept.push(sentence); continue } // Part 4 bypass
+    const matches = sentence.match(RISKY_NUMERIC_RE) ?? []
+    let fabricated = false
+    for (const m of matches) {
+      const v = parseFloat(m.replace(/[^0-9.]/g, ''))
+      if (!isFinite(v)) continue
+      const grounded = anchorNumbers.some(n => n === v || (n > 0 && Math.abs(n - v) / n <= 0.02))
+      if (!grounded) { fabricated = true; break }
+    }
+    if (fabricated) stripped.push(sentence)
+    else kept.push(sentence)
+  }
+  // Safety: never strip if it leaves nothing
+  if (stripped.length === 0 || kept.length === 0) return { healedText: text, stripped: [] }
+  return { healedText: kept.join(' ').trim(), stripped }
+}
+
 async function logHeal(businessId: string, healReason: HealReason, success: boolean, signal?: string): Promise<void> {
   try {
     await supabaseAdmin.from('aria_ai_calls').insert({
@@ -72,6 +105,10 @@ export async function validateAndHeal(args: {
   businessId: string
   toolsUsed: number
   groundTruth?: string
+  // GROUNDING-TEETH-V2: CLEAN anchor values only (the verified available_ground_truth numbers, NOT
+  // the advisor-output corpus). Check 6 validates $/% against these so advisor-invented numbers cannot
+  // self-ground the way they did under V1's Check 5.
+  groundTruthAnchors?: string
 }): Promise<{
   blocks: AskBlock[]
   healed: boolean
@@ -79,7 +116,7 @@ export async function validateAndHeal(args: {
   healLatencyMs?: number
   healedText?: string
 }> {
-  const { userMessage, blocks: inputBlocks, rawResponse, pipelinePath, businessId, toolsUsed, groundTruth } = args
+  const { userMessage, blocks: inputBlocks, rawResponse, pipelinePath, businessId, toolsUsed, groundTruth, groundTruthAnchors } = args
   const blocks: AskBlock[] = inputBlocks ?? []
 
   // ── Check 1: Malformed JSON (main brain path only) ────────────────────────────
@@ -288,6 +325,22 @@ Respond now. Call the tool first, then answer. If the question warrants a visual
           " I couldn't verify some specific figures from your data — focus on what's confirmed above."
         await logHeal(businessId, 'fabrication_stripped', true, 'guard_fired:fabrication_stripped')
         return { blocks, healed: true, healReason: 'fabrication_stripped', healedText }
+      }
+    } catch { /* graceful — never block the response */ }
+  }
+
+  // ── Check 6 (GROUNDING-TEETH-V2): strict ground-truth — council path only ────
+  // Validates synthesis $/% against the CLEAN anchors ONLY (not advisor outputs). Catches numbers
+  // an advisor invented and the synthesis faithfully repeated — the exact V1 escape hatch. Runs
+  // AFTER Check 5 (Check 5 unchanged). Skips when no anchors (nothing to validate against → trust V1).
+  if (pipelinePath === 'council' && groundTruthAnchors && rawResponse.trim()) {
+    try {
+      const anchorNumbers = extractNumbers(groundTruthAnchors)
+      const { healedText, stripped } = stripUngroundedNumbers(rawResponse, anchorNumbers)
+      if (stripped.length > 0) {
+        const finalText = healedText + ' (Some figures couldn\'t be verified — focus on confirmed numbers above.)'
+        await logHeal(businessId, 'fabrication_stripped', true, 'guard_fired:strict_groundtruth_stripped')
+        return { blocks, healed: true, healReason: 'fabrication_stripped', healedText: finalText }
       }
     } catch { /* graceful — never block the response */ }
   }

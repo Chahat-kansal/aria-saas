@@ -5,6 +5,8 @@ import type { AskBlock } from './ask-types'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
 import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSummariesForPrompt } from './memory/recall'
+import { stripUngroundedNumbers, extractNumbers } from './response-validator'
+import { logAICallSafe } from './log-ai-call'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -920,6 +922,40 @@ export async function runAriaCouncil(
   const succeeded = brains.filter(b => b.succeeded)
 
   if (succeeded.length === 0) return null
+
+  // GROUNDING-TEETH-V2 Part 2: clean each advisor's observations/recommendations of numbers that
+  // don't trace to the CLEAN anchors BEFORE they enter the synthesis input. Fixes the V1 root cause —
+  // an advisor inventing "$480/month" no longer feeds that number into the corpus the synthesis cites.
+  try {
+    let v2Anchors: number[] = []
+    try {
+      const agt = (safeParseJSON(businessContext) ?? {}) as { available_ground_truth?: { _anchor_values?: number[] } }
+      v2Anchors = Array.isArray(agt.available_ground_truth?._anchor_values)
+        ? agt.available_ground_truth!._anchor_values!
+        : extractNumbers(verifiedFiguresBlock) // fallback: numbers from VERIFIED FIGURES if anchors absent
+    } catch { v2Anchors = [] }
+    if (v2Anchors.length > 0) {
+      for (const b of brains) {
+        const obs = stripUngroundedNumbers((b.observations ?? []).join('\n'), v2Anchors)
+        const rec = stripUngroundedNumbers((b.recommendations ?? []).join('\n'), v2Anchors)
+        const strippedAll = [...obs.stripped, ...rec.stripped]
+        if (strippedAll.length > 0) {
+          if (obs.stripped.length > 0) b.observations = obs.healedText.split('\n').filter(Boolean)
+          if (rec.stripped.length > 0) b.recommendations = rec.healedText.split('\n').filter(Boolean)
+          await logAICallSafe({
+            business_id: businessId,
+            agent_key: 'advisor_guard',
+            provider: 'other',
+            role: 'other',
+            success: true,
+            request_summary: strippedAll.join(' | ').slice(0, 100),
+            response_summary: `advisor:${b.role}/stripped:${strippedAll.length}`,
+            learning_signal: `guard_fired:advisor_fabrication_stripped:${b.role}`,
+          })
+        }
+      }
+    }
+  } catch { /* graceful — advisor cleaning never blocks the council */ }
 
   // Build synthesis input
   const qualitySynthesisBlock = quality.hedge_level !== 'none'

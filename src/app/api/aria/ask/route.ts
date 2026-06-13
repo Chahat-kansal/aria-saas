@@ -679,9 +679,16 @@ Rules:
         // GROUNDING-TEETH Part 2: positive anchors — live-queried values that ARE safe to cite
         try {
           const gtTodayStart = toAESTStart(todayAEST())
-          const gtWeekStart = toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
+          const gtThisMon = new Date(toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
+          const gtWeekStart = gtThisMon.toISOString()
           const gtWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7] = await Promise.all([
+          // GROUNDING-TEETH-V2 Part 3: calendar windows for last-week + same-week-last-month anchors
+          const gtLastWeekStart = new Date(gtThisMon.getTime() - 7 * 86400000).toISOString()
+          const gtSwlmStart = new Date(gtThisMon.getTime() - 28 * 86400000).toISOString()
+          const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
+          const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
+          const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -691,6 +698,14 @@ Rules:
             supabaseAdmin.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', bid).gte('created_at', gtWeekAgo).eq('status', 'completed'),
             // numerator: payments on COMPLETED sales only (matches the denominator)
             supabaseAdmin.from('pos_sale_payments').select('sale_id, pos_sales!inner(business_id, created_at, status)').eq('pos_sales.business_id', bid).gte('pos_sales.created_at', gtWeekAgo).eq('pos_sales.status', 'completed').limit(5000),
+            // V2 Part 3 new anchors
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtLastWeekStart).lt('created_at', gtWeekStart).neq('status', 'voided'),
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtSwlmStart).lt('created_at', gtSwlmEnd).neq('status', 'voided'),
+            supabaseAdmin.from('pos_sales').select('total_amount, created_at').eq('business_id', bid).gte('created_at', gt56dAgo).eq('status', 'completed'),
+            supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid),
+            supabaseAdmin.from('pos_customers').select('total_spent').eq('business_id', bid).order('total_spent', { ascending: false }).limit(5),
+            supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', bid).maybeSingle(),
+            supabaseAdmin.from('aria_actions').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('status', 'completed').gte('created_at', gt30dAgo).ilike('category', '%promo%'),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
@@ -701,15 +716,52 @@ Rules:
           const coveragePct = completedSales7 >= 10
             ? +((Math.min(paidSaleIds.size, completedSales7) / completedSales7) * 100).toFixed(1)
             : null
+          // V2 Part 3: Tuesday avg + overall daily avg → the real "Tuesday gap" a "$480 leak" must match.
+          // created_at is UTC; +10h ≈ AEST for day/DOW bucketing (fixed offset, matches date-au).
+          const rows56 = (gt56d.data ?? []) as Array<{ total_amount: number | null; created_at: string }>
+          const dayAgg = new Map<string, { tot: number; dow: number }>()
+          for (const r of rows56) {
+            const aest = new Date(new Date(r.created_at).getTime() + 10 * 3600000)
+            const key = aest.toISOString().slice(0, 10)
+            const cur = dayAgg.get(key) ?? { tot: 0, dow: aest.getUTCDay() }
+            cur.tot += Number(r.total_amount ?? 0); dayAgg.set(key, cur)
+          }
+          const days = [...dayAgg.values()]
+          const tueDays = days.filter(d => d.dow === 2)
+          const tuesdayAvg = tueDays.length ? +(tueDays.reduce((s, d) => s + d.tot, 0) / tueDays.length).toFixed(2) : null
+          const overallDailyAvg = days.length ? days.reduce((s, d) => s + d.tot, 0) / days.length : null
+          const tuesdayGap = (tuesdayAvg != null && overallDailyAvg != null) ? +(tuesdayAvg - overallDailyAvg).toFixed(2) : null
+          const topCustLTVs = ((gtTopCust.data ?? []) as Array<{ total_spent: number | null }>).map(c => +Number(c.total_spent ?? 0).toFixed(2)).filter(n => n > 0)
+          const targetWeekly = (gtBiz.data as { weekly_revenue_target?: number | null } | null)?.weekly_revenue_target
+            ? +Number((gtBiz.data as { weekly_revenue_target: number }).weekly_revenue_target).toFixed(2) : null
+          const revToday = +gtSum(gtToday.data as Array<{ total_amount: number | null }>).toFixed(2)
+          const revWeekCal = +gtSum(gtWeek.data as Array<{ total_amount: number | null }>).toFixed(2)
+          const revLastWeekCal = +gtSum(gtLastWeek.data as Array<{ total_amount: number | null }>).toFixed(2)
+          const revSwlm = +gtSum(gtSwlm.data as Array<{ total_amount: number | null }>).toFixed(2)
+          // _anchor_values: the CLEAN numeric set Check 6 + the advisor cleaner validate against
+          const anchorValues = [
+            revToday, revWeekCal, revLastWeekCal, revSwlm, coveragePct,
+            gtConsent.count ?? 0, gtTotalCust.count ?? 0, tuesdayAvg, tuesdayGap, targetWeekly, gtPromoActions.count ?? 0,
+            ...topCustLTVs,
+          ].filter((n): n is number => typeof n === 'number' && isFinite(n))
           ctxParsed.available_ground_truth = {
             note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
-            revenue_today: +gtSum(gtToday.data as Array<{ total_amount: number | null }>).toFixed(2),
-            revenue_this_week_calendar: +gtSum(gtWeek.data as Array<{ total_amount: number | null }>).toFixed(2),
+            revenue_today: revToday,
+            revenue_this_week_calendar: revWeekCal,
+            revenue_last_week_calendar: revLastWeekCal,
+            same_week_last_month: revSwlm,
             payment_coverage_real_pct: coveragePct,
             payment_coverage_note: completedSales7 < 10
               ? `Only ${completedSales7} completed sales in the last 7 days — too small a sample to assess payment coverage. Do NOT claim a coverage %, "data loss", or "POS failure" from this.`
               : `${paidSaleIds.size} of ${completedSales7} completed sales have payment records (${coveragePct}% — healthy unless <95%).`,
             customer_count_with_consent: gtConsent.count ?? 0,
+            total_customer_count: gtTotalCust.count ?? 0,
+            top_customer_lifetime_values: topCustLTVs,
+            tuesday_avg_revenue: tuesdayAvg,
+            tuesday_vs_average_gap_dollars: tuesdayGap,
+            target_weekly_revenue: targetWeekly,
+            recent_promotion_actions: gtPromoActions.count ?? 0,
+            _anchor_values: anchorValues,
           }
         } catch { /* non-fatal — council proceeds without anchors */ }
         augCtx = JSON.stringify(ctxParsed)
@@ -734,6 +786,12 @@ Rules:
             // GROUNDING-TEETH Check 5 corpus: full context + advisor outputs — any number the
             // synthesis cites must trace to this text (verbatim or ±2%)
             groundTruth: augCtx + '\n' + JSON.stringify(council.raw_brain_outputs ?? []),
+            // GROUNDING-TEETH-V2 Check 6: CLEAN anchor values ONLY (not advisor outputs) — catches
+            // numbers an advisor invented and the synthesis repeated (the V1 self-grounding escape).
+            groundTruthAnchors: (() => {
+              try { return JSON.stringify((JSON.parse(augCtx).available_ground_truth?._anchor_values) ?? []) }
+              catch { return '[]' }
+            })(),
           })
           if (councilValidated.healed) {
             councilBlocks = councilValidated.blocks
