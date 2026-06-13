@@ -90,34 +90,44 @@ async function logAICall(params: {
   business_id: string; error_message?: string; request_summary?: string
 }) {
   try {
-    await supabaseAdmin.from('aria_ai_calls').insert({
+    // COUNCIL-LOG-FIX-1: role was 'council' — NOT a valid AgentRole. supabaseAdmin bypasses RLS, so the
+    // only thing that can reject a service-role insert is a CHECK constraint; 'council' (and the cache-hit
+    // 'cache') are the only roles in the codebase outside the AgentRole set every WORKING logger uses
+    // ('guard','validator','chat',…). Supabase .insert() returns {error} WITHOUT throwing, so the old
+    // try/catch never fired and the rejection was invisible (also why LOGGING-FIX-1's fallback never ran).
+    // Fix: valid role ('analysis' — council synthesis IS analysis) + CHECK the returned error.
+    const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: params.business_id,
       agent_key: params.agent_key,
       provider: params.provider,
       model_id: params.model_id,
-      role: 'council',
+      role: 'analysis',
       input_tokens: params.input_tokens,
       output_tokens: params.output_tokens,
       success: params.success,
       error_message: params.error_message ?? null,
       request_summary: params.request_summary ?? null,
     })
-  } catch (e) {
-    // LOGGING-FIX-1 Part 2: silent insert failures were invisible — log WHY + a minimal fallback row
-    console.error('[non-fatal] aria_ai_calls insert failed for agent_key=' + params.agent_key + ':', (e as Error).message)
-    try {
+    if (error) {
+      console.error('[council-log] aria_ai_calls insert REJECTED for agent_key=' + params.agent_key + ':', error.message)
+      // Functional fallback (the LOGGING-FIX-1 version was dead — .insert() returns {error}, never throws,
+      // so its catch never ran). role='other' + provider='other' are both in the verified pg_constraint
+      // CHECK lists (1083 production rows on role='other' prove it lands; 'guard'/'internal' are NOT in the
+      // lists — which is why sql_guard/summarizer_guard never wrote either). Carries the exact rejection
+      // reason into the DB so it's queryable without Vercel log access.
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: params.business_id,
-        agent_key: 'council_synthesis_log_failure',
-        provider: 'internal',
-        role: 'guard',
-        input_tokens: 0,
-        output_tokens: 0,
-        success: false,
+        agent_key: 'council_log_failure',
+        provider: 'other',
+        role: 'other',
+        input_tokens: 0, output_tokens: 0, success: false,
         request_summary: params.agent_key,
-        learning_signal: ('synthesis_logger_failed:' + (e as Error).message).slice(0, 120),
+        learning_signal: ('council_log_rejected:' + error.message).slice(0, 120),
       })
-    } catch (e2) { console.error('[non-fatal] fallback log also failed:', (e2 as Error).message) }
+    }
+  } catch (e) {
+    // genuine network/throw path (kept — Supabase normally returns {error} rather than throwing)
+    console.error('[council-log] aria_ai_calls insert threw for agent_key=' + params.agent_key + ':', (e as Error).message)
   }
 }
 
@@ -696,12 +706,16 @@ export async function runAriaCouncil(
       // completed-council path with ZERO aria_ai_calls rows — log them before returning
       const ttlRemaining = Math.max(0, Math.round((new Date(cached.expiresAt).getTime() - Date.now()) / 1000))
       try {
-        await supabaseAdmin.from('aria_ai_calls').insert({
+        // COUNCIL-LOG-FIX-1 (amended): role 'cache' + provider 'cache' were invalid (same CHECK rejection
+        // as the brain/synthesis logger). Use role='other' + provider='other' — both verified present in
+        // the pg_constraint CHECK lists. ('internal' is NOT in the provider list — the earlier amend's
+        // assumption that sql_guard/summarizer_guard 'internal' rows landed was wrong; they never wrote.)
+        const { error: cacheLogErr } = await supabaseAdmin.from('aria_ai_calls').insert({
           business_id: businessId,
           agent_key: 'council_cache',
-          provider: 'cache',
+          provider: 'other',
           model_id: 'council_cache',
-          role: 'cache',
+          role: 'other',
           input_tokens: 0,
           output_tokens: 0,
           latency_ms: Date.now() - start,
@@ -710,7 +724,8 @@ export async function runAriaCouncil(
           response_summary: 'cache_hit/ttl_remaining_seconds:' + ttlRemaining,
           learning_signal: 'council_cache_hit',
         })
-      } catch (e) { console.error('[council] cache-hit log failed (non-fatal):', (e as Error).message) }
+        if (cacheLogErr) console.error('[council] cache-hit log REJECTED:', cacheLogErr.message)
+      } catch (e) { console.error('[council] cache-hit log threw (non-fatal):', (e as Error).message) }
       return { ...cached.result, served_from_cache: true }
     }
     console.log('[council] cache MISS — epoch:', dataEpoch, 'hash:', hash, 'business:', businessId)
