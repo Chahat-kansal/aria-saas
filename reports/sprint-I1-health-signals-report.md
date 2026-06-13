@@ -1,58 +1,97 @@
-# Sprint I1 — HEALTH-SIGNALS-1 (existing-table sourcing + full anchor coverage)
+# Sprint I1 — HEALTH-SIGNALS-1 (diagnostic facts in groundTruth, no prompt rules)
 **Date:** 2026-06-14
 **Status:** COMPLETE — build verified green
+**RULE 0 (UPGRADE_ONLY) + RULE 9 (no scaffolds/prompt-rules)**
 
-> Note: the base HEALTH-SIGNALS-1 feature shipped in commit `4c2d1a7f` (groundTruth.business_health,
-> the 5 signals, the council fact-pointer, and the `health_signals` logger). The named prompt file
-> `prompts/I1-health-signals.md` does not exist in the repo, so this run follows the typed I1 spec,
-> which adds two requirements the base sprint omitted: **read the EXISTING precomputed
-> `aria_wiring_health_checks` + `aria_signal_cache` tables**, and **push EVERY numeric into
-> `_anchor_values`**. Both done additively (RULE 0).
+> Builds on commits `4c2d1a7f` (base signals + groundTruth wiring + council fact-pointer + logger) and
+> `47d67603` (existing-table sourcing + `_anchor_numbers`). This run completes the full I1 spec:
+> `INSUFFICIENT_SAMPLE` status, `last_sync_at` from the wiring check, the 6th known-unknown,
+> a real **open-meteo** weather signal (cache-first, lat/lng-gated), and a dedicated DOW-baseline cache.
 
 ---
 
-## Files changed (2 + report)
-
+## Files changed this run (1 + report)
 | File | Change |
 |---|---|
-| `src/lib/aria/health-signals.ts` | I1: read `aria_wiring_health_checks` + `aria_signal_cache`; `wiring_health_status` on pos_health; real `stale_signals_count`; new `_anchor_numbers` (every numeric) |
-| `src/app/api/aria/ask/route.ts` | I1: `healthAnchors = gtHealth._anchor_numbers` (was a manual 4-field list) |
+| `src/lib/aria/health-signals.ts` | status enum → `INSUFFICIENT_SAMPLE`; `last_sync_at` ← wiring check; 6th known-unknown; weather via open-meteo (cache-first, lat/lng-gated); DOW-baseline cache write; weather `temp_c` into anchors |
 
-(Already present from `4c2d1a7f`, unchanged this run: `business_health` in groundTruth, the council fact-pointer line, the `health_signals` logAICallSafe logger, the `diagnostic_facts_note`.)
+(Already present & unchanged: `business_health` in groundTruth + `_anchor_numbers` spread + `health_signals` logger in `route.ts`; the ONE council fact-pointer line.)
 
 ---
 
-## PRE-FLIGHT
+## PRE-FLIGHT (verbatim)
 
-### pwd
+### 1. pwd
 `C:\Users\kansa\aria-saas-audit` ✓
 
-### Data-source tables (database.types.ts — verbatim columns)
-`aria_wiring_health_checks`: `business_id, check_name, status, value, threshold, details(Json), checked_at, id` — written by the daily `aria-health-monitor` cron; `check_name` includes `payments_coverage_pct`, `headless_sales`, `pending_aria_actions`, `briefing_table_writes_24h`; `status` ∈ green/amber/red; `value` is the numeric metric.
-`aria_signal_cache`: `business_id, cache_key, signal_type, payload(Json), created_at, expires_at, id` — existing signal cache; staleness = rows past `expires_at`.
-Both confirmed present (`grep -c` → 1 each).
+### 2. groundTruth construction (ask/route.ts — the object computeHealthSignals joins)
+```ts
+ctxParsed.available_ground_truth = {
+  note, revenue_today, revenue_this_week_calendar, revenue_last_week_calendar, same_week_last_month,
+  payment_coverage_real_pct, payment_coverage_note, customer_count_with_consent, total_customer_count,
+  top_customer_lifetime_values, tuesday_avg_revenue, tuesday_vs_average_gap_dollars, target_weekly_revenue,
+  recent_promotion_actions,
+  business_health: gtHealth ?? undefined,        // ← health signals
+  diagnostic_facts_note: '…ask the owner about [known_unknowns] rather than asserting…',
+  _anchor_values: anchorValues,                  // includes ...(gtHealth?._anchor_numbers ?? [])
+}
+```
 
-### `wh_payments_coverage` RPC
-The AUTOPILOT-FIX-1-fixed completed-only coverage — used as the authoritative LIVE coverage; the wiring check's `payments_coverage_pct` status corroborates it.
+### 3. council advisor input assembly (council.ts:880, with the I1 fact-pointer)
+```ts
+const diagnosticPointer = 'DIAGNOSTIC_FACTS: The system state is in business_health (within available_ground_truth). Reason from these facts. If you assert a cause (e.g. "POS broken"), it must be consistent with pos_health.status. known_unknowns lists what cannot be verified — ask the owner rather than asserting.'
+const userPrompt = [verifiedFiguresBlock, learningContext, summaryBlock, memoryBlock, qualityCtx, diagnosticPointer, 'Business data:\n' + cleanContextStr].filter(Boolean).join('\n\n')
+```
+(Same single line also injected into `synthesisInput`.)
+
+### 4. logAICallSafe import — CONFIRMED
+`route.ts` imports `{ logAICallSafe } from '@/lib/aria/log-ai-call'` (LOGGING-AUDIT-3 helper).
+
+### 5. wh_payments_coverage RPC (AUTOPILOT-FIX-1)
+`wh_payments_coverage(p_business_id uuid, p_since timestamptz) RETURNS (total_sales, paid_sales)` — `status = 'completed'` only (the fixed denominator). Used as the authoritative live coverage.
+
+### 6. aria_signal_cache signal_types — NEEDS-DB (chat-Claude)
+Audit reports existing: `day_of_week_pattern` (3 rows), `revenue_velocity_7d`/`churn_velocity`/`avg_basket_trend` (16 each). I1 reads cache staleness from all of them, reads/writes its OWN `weather_today` + `dow_baseline_health` types (dedicated, to avoid clobbering `day_of_week_pattern`'s anomaly payload — RULE 0).
+
+### Schema confirmations
+`businesses.lat` + `businesses.lng` (number|null) — present ✓. open-meteo already used by `flash-revenue-agent`/`labour-optimisation-agent` (free HTTP, no new dep) ✓. `aria_signal_cache` Insert = `{business_id, cache_key, signal_type, payload, expires_at}` ✓.
 
 ---
 
-## What I1 added (additive)
+## Parts 1–4 (additive)
 
-### health-signals.ts — three sources now feed the signals
-- `Promise.all` extended with two reads: latest 20 `aria_wiring_health_checks` rows (newest-first) and all `aria_signal_cache` rows for the business.
-- **pos_health.wiring_health_status** — the daily cron's latest green/amber/red verdict on `payments_coverage_pct`, appended to the reasoning ("(daily wiring check: green)"). The live RPC remains the authoritative coverage number + the small-sample guard (NO_DATA<5 / DEGRADED≥10&<95% / else OK) unchanged.
-- **data_freshness.stale_signals_count** — now the REAL count of expired `aria_signal_cache` rows (was hardcoded 0); reasoning notes the last health-check date from wiring.
-- **`_anchor_numbers: number[]`** — every numeric the signals expose: coverage %, completed_7d, hours_since_last_sale, dow baseline, dow rank, today's actual, deviation %, stale count, AND every `aria_wiring_health_checks.value` (finite-filtered). This is the "push EVERY numeric into _anchor_values" requirement.
+### Part 1 — computeHealthSignals reads existing tables (does NOT recompute what exists)
+- **pos_health**: live `wh_payments_coverage` RPC (coverage) + `max(created_at)` completed sale; `last_sync_at` = `max(checked_at)` from `aria_wiring_health_checks` where `check_name='payments_coverage_pct'` (fallback newest sale); `wiring_health_status` = that check's latest green/amber/red. Status: **OK** (≥95% & ≥5 sample & <48h), **DEGRADED** (<95% & ≥10 sample — AUTOPILOT-FIX-1 baseline), **INSUFFICIENT_SAMPLE** (<5 — "low revenue does NOT imply broken POS"), else OK ("quiet trade is not a failure").
+- **dow_context**: 56-day completed sales bucketed to AEST days → per-DOW avg, rank (1=best…7=worst), today's baseline (today excluded), actual, deviation %. Baselines cached 24h under dedicated `dow_baseline_health` signal_type.
+- **weather_context**: cache-first `aria_signal_cache.weather_today` (6h TTL); miss → **open-meteo** current weather (gated on `businesses.lat/lng`; null → `{available:false, reason:'no_location'}`); writes 6h cache. Surfaces conditions text + temp_c + rain_pct. (Historical rainy/clear averages stubbed null — no weather-history table yet.)
+- **data_freshness**: last sale, last executed action, **real** `stale_signals_count` (expired `aria_signal_cache` rows), last health-check date.
+- **known_unknowns**: 6 items (added "Whether private events / catering / wholesale moved revenue off-POS").
 
-### route.ts — full anchor coverage
-`healthAnchors` was a manual 4-field list; now `gtHealth?._anchor_numbers ?? []` — spread into `_anchor_values` so V2 Check 6 validates ANY figure derived from ANY health signal (not just the 4 hand-picked ones).
+### Part 2 — surfaced to groundTruth (route.ts)
+`business_health = computeHealthSignals(bid)`; `_anchor_numbers` (coverage, completed_7d, hours-since-sale, dow baseline/rank/actual/deviation, stale count, **weather temp**, every wiring-check value) spread into `_anchor_values` → V2 Check 6 validates any figure Aria derives.
 
-## RULE 0 / RULE 9 compliance
-- **Extended, never removed**: the base computeHealthSignals computation (live RPC + dow + weather + known_unknowns) is intact; I added the two table reads and folded their values in. ✓
-- **NO prompt rules (RULE 9)**: the council change is still the single neutral fact-pointer from `4c2d1a7f` — untouched this run, no new rules, no phrasing scripts. ✓
-- Logger unchanged: `health_signals`, role=`analysis`, provider=`other` (valid CHECK values, lands). ✓
-- No dependencies; weather still non-blocking (`available:false` when `weather_history` absent).
+### Part 3 — advisors + synthesis (council.ts), the ONE fact-pointer line (verbatim)
+> `DIAGNOSTIC_FACTS: The system state is in business_health (within available_ground_truth). Reason from these facts. If you assert a cause (e.g. "POS broken"), it must be consistent with pos_health.status. known_unknowns lists what cannot be verified — ask the owner rather than asserting.`
+
+NOT a phrasing rule — a fact-locator. No advisor system prompt (buildGrowthPrompt/Risk/Strategy/CONTEXT_PROMPT) modified. RULE 9 ✓.
+
+### Part 4 — logAICallSafe
+`{ agent_key:'health_signals', role:'analysis', provider:'other', request_summary: bid, response_summary: JSON({pos, dow_baseline, weather_avail}) }` — valid CHECK values (lands).
+
+## Sample healthSignals for Sip (NEEDS-DB to confirm live)
+```json
+{ "pos_health": { "status": "OK", "payment_coverage_pct": 100, "completed_sales_7d": 6,
+    "hours_since_last_sale": ~2, "last_sync_at": "2026-06-13T05:00:…", "wiring_health_status": "green",
+    "reasoning": "100% payment coverage on 6 completed sales; last sale ~2h ago — POS is healthy. (daily wiring check: green)" },
+  "dow_context": { "today_dow":"<today>", "today_baseline_revenue":~327.07, "today_baseline_rank":7,
+    "actual_revenue_so_far":7.00, "deviation_from_baseline_pct":~-97.9 },
+  "weather_context": { "available": true, "conditions_today":"rain 9°C, …", "temp_c":9, "rain_pct":80 }
+    // OR { available:false, reason:'no_location' } if lat/lng unset,
+  "data_freshness": { "stale_signals_count": <real>, … }, "known_unknowns": [6 items], "_anchor_numbers":[…], "computed_at":"…" }
+```
+
+## Additive confirmation (Parts 1-4)
+New table reads + open-meteo fetch + two dedicated cache writes + folded fields — the base live computation, RPC, dow, known_unknowns all intact. No prompt rules (RULE 9). No advisor system prompt changed beyond the one fact-pointer (added in 4c2d1a7f, untouched). Weather non-blocking on missing location. No dependencies. RULE 0 ✓.
 
 ## Build gate
 - `npx tsc --noEmit` → **0 errors** ✓
@@ -60,12 +99,5 @@ The AUTOPILOT-FIX-1-fixed completed-only coverage — used as the authoritative 
 - Commit: **STOP BEFORE PUSH**
 
 ## Verify post-deploy
-Fresh chat "How am I doing this week?":
-- `pos_health.status='OK'` with `wiring_health_status` corroboration → NO "POS broken" assertion
-- V2 anchors + all health numerics in `_anchor_values` → any figure Aria derives from the signals is validatable
-```sql
-select agent_key, response_summary from aria_ai_calls
-where business_id='ff5055a0-c351-4ada-817a-1804961035f3'
-  and agent_key='health_signals' and created_at > now() - interval '5 minutes';
-```
-Pass: a `health_signals` row with `{pos, dow_baseline, weather_avail}`; the response cites POS as healthy + asks the `known_unknowns`.
+1. `select * from aria_ai_calls where agent_key='health_signals' and business_id='ff5055a0-…' and created_at > now() - interval '5 minutes';` → row with `{pos, dow_baseline, weather_avail}`.
+2. Fresh chat "how am I doing this week?" → NO "POS payment sync is broken" (pos_health.status='OK'); Aria states POS healthy / asks known_unknowns; dow context surfaces ("Tuesday baseline $327, today's $7 still ~98% below").

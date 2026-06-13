@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 // list of what Aria CANNOT verify (so it asks rather than asserts). No prompt rules — just facts.
 
 export interface PosHealth {
-  status: 'OK' | 'DEGRADED' | 'NO_DATA'
+  status: 'OK' | 'DEGRADED' | 'INSUFFICIENT_SAMPLE'
   payment_coverage_pct: number | null
   last_sale_recorded_at: string | null
   last_sync_at: string | null
@@ -35,7 +35,7 @@ export interface DataFreshness {
 export interface HealthSignals {
   pos_health: PosHealth
   day_of_week_context: DayOfWeekContext
-  weather_context: { available: false; reason: string } | { available: true; conditions_today: string; historical_rainy_day_revenue_avg: number | null; historical_clear_day_revenue_avg: number | null; rain_factor: number | null; reasoning: string }
+  weather_context: { available: false; reason: string } | { available: true; conditions_today: string; temp_c?: number | null; rain_pct?: number | null; historical_rainy_day_revenue_avg: number | null; historical_clear_day_revenue_avg: number | null; rain_factor: number | null; reasoning: string }
   data_freshness: DataFreshness
   known_unknowns: string[]
   // I1: every numeric the signals expose — route.ts spreads these into _anchor_values for V2 Check 6
@@ -57,6 +57,7 @@ const KNOWN_UNKNOWNS: string[] = [
   'Whether there was a local event, closure, or disruption',
   'Whether a payment provider had an outage today',
   'Whether marketing/promo was running',
+  'Whether private events / catering / wholesale moved revenue off-POS',
 ]
 
 export async function computeHealthSignals(businessId: string): Promise<HealthSignals> {
@@ -67,7 +68,7 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
   const todayDow = todayAest.getUTCDay()
   const todayKey = todayAest.toISOString().slice(0, 10)
 
-  const [covRes, lastSaleRes, sales56Res, lastActionRes, wiringRes, signalRes] = await Promise.all([
+  const [covRes, lastSaleRes, sales56Res, lastActionRes, wiringRes, signalRes, bizLocRes, weatherCacheRes] = await Promise.all([
     supabaseAdmin.rpc('wh_payments_coverage', { p_business_id: businessId, p_since: since7d }).then(r => r, () => ({ data: null })),
     supabaseAdmin.from('pos_sales').select('created_at').eq('business_id', businessId).eq('status', 'completed').order('created_at', { ascending: false }).limit(1).maybeSingle().then(r => r, () => ({ data: null })),
     supabaseAdmin.from('pos_sales').select('total_amount, created_at').eq('business_id', businessId).eq('status', 'completed').gte('created_at', since56d).then(r => r, () => ({ data: null })),
@@ -76,6 +77,9 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
     supabaseAdmin.from('aria_wiring_health_checks').select('check_name, status, value, checked_at').eq('business_id', businessId).order('checked_at', { ascending: false }).limit(20).then(r => r, () => ({ data: null })),
     // I1: existing signal cache — for stale-signal counting + active signal awareness
     supabaseAdmin.from('aria_signal_cache').select('signal_type, expires_at').eq('business_id', businessId).then(r => r, () => ({ data: null })),
+    // I1: business location for weather + cache-first weather signal (6h TTL)
+    supabaseAdmin.from('businesses').select('lat, lng').eq('id', businessId).maybeSingle().then(r => r, () => ({ data: null })),
+    supabaseAdmin.from('aria_signal_cache').select('payload, expires_at').eq('business_id', businessId).eq('signal_type', 'weather_today').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(1).maybeSingle().then(r => r, () => ({ data: null })),
   ])
 
   // I1: latest wiring check per check_name (rows are newest-first)
@@ -100,7 +104,7 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
   let posStatus: PosHealth['status']
   let posReason: string
   if (completed7 < 5) {
-    posStatus = 'NO_DATA'
+    posStatus = 'INSUFFICIENT_SAMPLE'
     posReason = `Only ${completed7} completed sales in the last 7 days — too small a sample to draw any POS-health conclusion. Low revenue here does NOT imply a broken POS.`
   } else if (completed7 >= 10 && coveragePct != null && coveragePct < 95) {
     posStatus = 'DEGRADED'
@@ -117,7 +121,7 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
     status: posStatus,
     payment_coverage_pct: coveragePct,
     last_sale_recorded_at: lastSaleAt,
-    last_sync_at: lastSaleAt, // no dedicated sync column on pos_sales; newest recorded sale is the freshness proxy
+    last_sync_at: wiringCoverageCheck?.checked_at ?? lastSaleAt, // I1: last daily payments-coverage health check (fallback: newest sale)
     hours_since_last_sale: hoursSinceLastSale,
     completed_sales_7d: completed7,
     wiring_health_status: wiringCoverageCheck?.status ?? null, // I1: daily cron's green/amber/red corroboration
@@ -157,14 +161,59 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
       ? `${DOW_NAMES[todayDow]} averages $${todayBaseline.toFixed(2)} historically${todayRank ? ` (rank ${todayRank}/${dowAvgs.length} by revenue)` : ''}. Today's $${actualToday.toFixed(2)} is ${deviationPct != null ? deviationPct + '% vs that baseline' : 'within range'}.`
       : `Not enough ${DOW_NAMES[todayDow]} history in the last 56 days to set a baseline.`,
   }
+  // I1: cache the 56-day DOW baselines (24h TTL) under a DEDICATED signal_type so we don't clobber
+  // signal-engine's existing 'day_of_week_pattern' payload (which caches this-week anomalies, not baselines).
+  if (dowAvgs.length > 0) {
+    void supabaseAdmin.from('aria_signal_cache').insert({
+      business_id: businessId, signal_type: 'dow_baseline_health', cache_key: 'dow_baseline_health',
+      payload: { by_dow: dowAvgs.map(d => ({ dow: DOW_NAMES[d.dow], avg: +d.avg.toFixed(2) })), computed_at: new Date().toISOString() },
+      expires_at: new Date(now + 24 * 3600000).toISOString(),
+    }).then(undefined, () => {})
+  }
 
-  // ── weather_context (table not yet implemented — mark unavailable, never block) ──
-  let weather_context: HealthSignals['weather_context'] = { available: false, reason: 'weather_history not yet implemented' }
-  try {
-    const { error: whErr } = await supabaseAdmin.from('weather_history').select('id', { head: true, count: 'exact' }).eq('business_id', businessId).limit(1)
-    if (whErr) weather_context = { available: false, reason: 'weather_history not yet implemented' }
-    // If the table exists in future, populate the rainy/clear averages here. Until then: unavailable.
-  } catch { /* table absent — stays unavailable */ }
+  // ── weather_context (I1): cache-first (aria_signal_cache 'weather_today', 6h TTL) → open-meteo ──
+  // Gated on businesses.lat/lng; no location → unavailable (never blocks). No new dependency:
+  // open-meteo is a free HTTP fetch already used by the agent layer.
+  let weather_context: HealthSignals['weather_context'] = { available: false, reason: 'no_location' }
+  const loc = bizLocRes.data as { lat?: number | null; lng?: number | null } | null
+  const cachedWeather = (weatherCacheRes.data as { payload?: { conditions_today: string; temp_c: number | null; rain_pct: number | null } } | null)?.payload
+  if (cachedWeather) {
+    weather_context = {
+      available: true,
+      conditions_today: cachedWeather.conditions_today,
+      temp_c: cachedWeather.temp_c ?? null,
+      rain_pct: cachedWeather.rain_pct ?? null,
+      historical_rainy_day_revenue_avg: null,
+      historical_clear_day_revenue_avg: null,
+      rain_factor: null,
+      reasoning: `Today: ${cachedWeather.conditions_today}${cachedWeather.temp_c != null ? ` (${cachedWeather.temp_c}°C)` : ''} (cached).`,
+    }
+  } else if (loc && loc.lat != null && loc.lng != null) {
+    try {
+      const wUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&current=temperature_2m,precipitation,weather_code&timezone=Australia%2FSydney&forecast_days=1`
+      const wRes = await fetch(wUrl, { signal: AbortSignal.timeout(4000) })
+      if (wRes.ok) {
+        const wj = await wRes.json() as { current?: { temperature_2m?: number; precipitation?: number; weather_code?: number } }
+        const code = wj.current?.weather_code
+        const tempC = wj.current?.temperature_2m ?? null
+        const precip = wj.current?.precipitation ?? 0
+        const desc = code == null ? 'unknown' : code === 0 ? 'clear' : code <= 3 ? 'partly cloudy' : code <= 48 ? 'overcast/fog' : code <= 67 ? 'rain' : code <= 82 ? 'showers' : 'storms'
+        const conditions = `${desc}${tempC != null ? ` ${Math.round(tempC)}°C` : ''}${precip > 0 ? `, ${precip}mm rain` : ''}`
+        const rainPct = code != null && code >= 51 ? 80 : code != null && code >= 45 ? 30 : 0
+        weather_context = {
+          available: true, conditions_today: conditions, temp_c: tempC, rain_pct: rainPct,
+          historical_rainy_day_revenue_avg: null, historical_clear_day_revenue_avg: null, rain_factor: null,
+          reasoning: `Today: ${conditions}.`,
+        }
+        // cache 6h (fire-and-forget) so subsequent chats reuse it
+        void supabaseAdmin.from('aria_signal_cache').insert({
+          business_id: businessId, signal_type: 'weather_today', cache_key: 'weather_today',
+          payload: { conditions_today: conditions, temp_c: tempC, rain_pct: rainPct },
+          expires_at: new Date(now + 6 * 3600000).toISOString(),
+        }).then(undefined, () => {})
+      }
+    } catch { /* open-meteo unreachable — stays unavailable */ }
+  }
 
   // ── data_freshness ───────────────────────────────────────────────────────
   const lastActionAt = (lastActionRes.data as { updated_at?: string } | null)?.updated_at ?? null
@@ -179,10 +228,11 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
   }
 
   // I1: every numeric the signals expose → _anchor_values (so V2 Check 6 validates any derived figure)
+  const weatherTemp = weather_context.available ? (weather_context.temp_c ?? null) : null
   const anchorNumbers = [
     coveragePct, completed7, hoursSinceLastSale,
     todayBaseline, todayRank, +actualToday.toFixed(2), deviationPct,
-    staleSignalsCount,
+    staleSignalsCount, weatherTemp,
     ...[...latestCheck.values()].map(c => c.value),
   ].filter((n): n is number => typeof n === 'number' && isFinite(n))
 
