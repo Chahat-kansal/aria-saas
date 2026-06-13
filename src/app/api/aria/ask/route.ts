@@ -35,6 +35,7 @@ import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliver
 import { validateAndHeal } from '@/lib/aria/response-validator'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { computeHealthSignals } from '@/lib/aria/health-signals'
+import { computeGoalContext } from '@/lib/aria/goal-context'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
@@ -690,7 +691,7 @@ Rules:
           const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
           const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
           const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth] = await Promise.all([
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -710,6 +711,8 @@ Rules:
             supabaseAdmin.from('aria_actions').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('status', 'completed').gte('created_at', gt30dAgo).ilike('category', '%promo%'),
             // HEALTH-SIGNALS-1 Part 2: diagnostic facts (POS health, day-of-week baseline, freshness, known-unknowns)
             computeHealthSignals(bid).catch(() => null),
+            // GOAL-AWARE-1 (I2): weekly target trajectory (projection, pace, on-track status)
+            computeGoalContext(bid).catch(() => null),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
@@ -745,11 +748,16 @@ Rules:
           // HEALTH-SIGNALS-1 / I1: every numeric the health signals expose becomes an anchor so V2
           // Check 6 can validate any figure Aria derives from the diagnostic facts.
           const healthAnchors = gtHealth?._anchor_numbers ?? []
+          // GOAL-AWARE-1 (I2): goal-trajectory numerics → anchors (so Check 6 validates target/projection figures)
+          const goalAnchors = gtGoal
+            ? [gtGoal.weekly_target, gtGoal.projected_eow_revenue, gtGoal.gap_to_target, gtGoal.pace_required, gtGoal.on_track_pct, gtGoal.revenue_this_week, gtGoal.yesterday_actual]
+              .filter((n): n is number => typeof n === 'number' && isFinite(n))
+            : []
           // _anchor_values: the CLEAN numeric set Check 6 + the advisor cleaner validate against
           const anchorValues = [
             revToday, revWeekCal, revLastWeekCal, revSwlm, coveragePct,
             gtConsent.count ?? 0, gtTotalCust.count ?? 0, tuesdayAvg, tuesdayGap, targetWeekly, gtPromoActions.count ?? 0,
-            ...topCustLTVs, ...healthAnchors,
+            ...topCustLTVs, ...healthAnchors, ...goalAnchors,
           ].filter((n): n is number => typeof n === 'number' && isFinite(n))
           ctxParsed.available_ground_truth = {
             note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
@@ -771,6 +779,8 @@ Rules:
             // HEALTH-SIGNALS-1 Part 2+4: verifiable system state + what CANNOT be verified
             business_health: gtHealth ?? undefined,
             diagnostic_facts_note: 'business_health describes verifiable system state (POS health, day-of-week baseline, data freshness). known_unknowns lists what CANNOT be verified — ask the owner about those rather than asserting them. Any asserted cause (e.g. "POS broken") must be consistent with pos_health.status.',
+            // GOAL-AWARE-1 (I2): weekly target trajectory — frame recommendations against the gap/pace
+            goal_context: gtGoal ?? undefined,
             _anchor_values: anchorValues,
           }
           // HEALTH-SIGNALS-1 Part 5: audit what diagnostic facts Aria saw this turn
@@ -779,6 +789,14 @@ Rules:
               business_id: bid, agent_key: 'health_signals', role: 'analysis', provider: 'other', success: true,
               request_summary: bid,
               response_summary: JSON.stringify({ pos: gtHealth.pos_health.status, dow_baseline: gtHealth.day_of_week_context.today_baseline_revenue, weather_avail: gtHealth.weather_context.available }).slice(0, 200),
+            })
+          }
+          // GOAL-AWARE-1 (I2) Part 4: audit the goal trajectory Aria saw this turn
+          if (gtGoal) {
+            void logAICallSafe({
+              business_id: bid, agent_key: 'goal_context', role: 'analysis', provider: 'other', success: true,
+              request_summary: bid,
+              response_summary: JSON.stringify({ status: gtGoal.status, on_track_pct: gtGoal.on_track_pct, gap_to_target: gtGoal.gap_to_target }).slice(0, 200),
             })
           }
         } catch { /* non-fatal — council proceeds without anchors */ }

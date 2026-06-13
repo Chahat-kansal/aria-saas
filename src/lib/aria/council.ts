@@ -974,8 +974,11 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
       contradictions.map(c => '- Past decision: "' + c.past_decision + '" | Severity: ' + c.severity).join('\n') + '\n'
     : ''
 
+  // GOAL-AWARE-1 (I2): synthesis-only fact-pointer (not added to advisors) — frame against the goal.
+  const goalPointer = 'GOAL_CONTEXT: The owner\'s weekly target trajectory is in goal_context. Frame your recommendation against the gap or pace required if relevant. If goal_context.status="no_target", do NOT invent a target — ask the owner what their target is.'
   const synthesisInput = `
 ${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}${diagnosticPointer}
+${goalPointer}
 BUSINESS DATA:
 ${cleanContextStr}
 ${qualitySynthesisBlock}
