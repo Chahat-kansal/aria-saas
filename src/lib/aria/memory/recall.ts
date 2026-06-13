@@ -84,6 +84,10 @@ export function formatMemoriesForPrompt(memories: RecalledMemory[]): string {
 
   const lines: string[] = ['OWNER MEMORY (what Aria knows about this business from past conversations):']
 
+  // PATTERN-MEMORY-1 (I3): durable SQL-detected data patterns first (highest-value, capped at 5 to
+  // avoid token bloat); ordered by importance via the upstream recall sort. RECALL-PARITY-1 filters
+  // (is_active=true AND deleted_at IS NULL) are applied upstream — unchanged.
+  if (grouped.pattern) lines.push('DATA PATTERNS (detected from your sales — durable, data-grounded intelligence): ' + grouped.pattern.slice(0, 5).map(m => m.content).join(' | '))
   if (grouped.fact) lines.push('Facts: ' + grouped.fact.map(m => m.content).join(' | '))
   if (grouped.preference) lines.push('Owner preferences: ' + grouped.preference.map(m => m.content).join(' | '))
   if (grouped.goal) lines.push('Goals: ' + grouped.goal.map(m => m.content).join(' | '))

@@ -246,6 +246,10 @@
     {
       "path": "/api/cron/invoices-recurring",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/pattern-memory",
+      "schedule": "0 3 * * 1"
     }
   ]
 }
