@@ -106,7 +106,7 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
 
   if (params.businessId) {
     try {
-      await supabaseAdmin.from('aria_ai_calls').insert({
+      const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({  // LOGGING-AUDIT-3 Part 3
         business_id: params.businessId,
         agent_key: params.agentKey,
         provider: 'google',
@@ -119,6 +119,7 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
         success,
         error_message: errorMessage,
       })
+      if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
     } catch (e) { console.error('[non-fatal]', e) }
   }
 

@@ -60,7 +60,7 @@ async function _POST(req: Request) {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: businessId, agent_key: 'recipe_compare', provider: 'anthropic',
-        model_id: 'claude-sonnet-4-5-20250929', role: 'compare',
+        model_id: 'claude-sonnet-4-5-20250929', role: 'other',
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       })
     } catch (e) { console.error('[non-fatal]', e) }

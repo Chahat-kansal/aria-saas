@@ -81,7 +81,7 @@ Business: ${biz.name}, ${biz.industry ?? 'retail'}, ${biz.city ?? 'AU'}`
         agent_key: 'customer_summary',
         provider: 'anthropic',
         model_id: modelId,
-        role: 'summary',
+        role: 'narrative',
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         success,

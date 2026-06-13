@@ -111,8 +111,8 @@ export async function summariseConversation(
         await supabaseAdmin.from('aria_ai_calls').insert({
           business_id: businessId,
           agent_key: 'summarizer_guard',
-          provider: 'internal',
-          role: 'guard',
+          provider: 'other',
+          role: 'other',
           success: true,
           input_tokens: 0,
           output_tokens: 0,

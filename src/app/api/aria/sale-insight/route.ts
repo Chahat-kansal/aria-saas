@@ -72,7 +72,7 @@ async function _POST(req: Request) {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'sale_insight', provider: 'anthropic',
-        model_id: 'claude-haiku-4-5-20251001', role: 'sale_analysis',
+        model_id: 'claude-haiku-4-5-20251001', role: 'analysis',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch (e) { console.error('[non-fatal]', e) }

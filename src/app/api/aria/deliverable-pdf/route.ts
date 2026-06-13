@@ -32,9 +32,9 @@ export async function POST(req: Request) {
     await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: bid,
       agent_key: 'deliverable_pdf',
-      provider: 'system',
+      provider: 'other',
       model_id: 'puppeteer',
-      model_provider: 'system',
+      model_provider: 'other',
       role: 'document',
       cost_usd_cents: 0,
       latency_ms: Date.now() - start,

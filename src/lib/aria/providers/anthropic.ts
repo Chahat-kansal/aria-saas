@@ -96,7 +96,9 @@ export async function callAnthropic<T = Record<string, unknown>>(
 
   if (params.businessId) {
     try {
-      await supabaseAdmin.from('aria_ai_calls').insert({
+      // LOGGING-AUDIT-3 Part 3: check the returned error — .insert() resolves with {error}, never throws,
+      // so an off-list role/provider (CHECK violation) was silently dropped before this.
+      const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: params.businessId,
         agent_key: params.agentKey,
         provider: 'anthropic',
@@ -112,6 +114,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
         cache_write_tokens: cachedWriteTokens,
         cache_read_tokens: cachedReadTokens,
       })
+      if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
     } catch { /* non-fatal — table may not exist yet */ }
   }
 
@@ -242,7 +245,8 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
 
   if (params.businessId) {
     try {
-      await supabaseAdmin.from('aria_ai_calls').insert({
+      // LOGGING-AUDIT-3 Part 3: check the returned error (insert resolves with {error}, never throws)
+      const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: params.businessId, agent_key: params.agentKey,
         provider: 'anthropic', model_id: modelId, role: params.role,
         input_tokens: totalInputTokens + totalCachedRead + totalCachedWrite,
@@ -252,6 +256,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         response_summary: `tools:${toolCalls.length}/iter:${Math.max(1, toolCalls.length)}/think:${thinkingTokensTotal}`,
         cache_write_tokens: totalCachedWrite, cache_read_tokens: totalCachedRead,
       })
+      if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
     } catch (e) { console.error('[non-fatal]', e) }
   }
 

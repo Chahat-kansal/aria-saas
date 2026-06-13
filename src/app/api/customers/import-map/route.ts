@@ -64,7 +64,7 @@ export async function POST(req: Request) {
         agent_key: 'customer_import_map',
         provider: 'anthropic',
         model_id: 'claude-sonnet-4-5-20250929',
-        role: 'import',
+        role: 'data',
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         success,

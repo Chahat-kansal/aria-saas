@@ -53,7 +53,7 @@ async function _POST(req: Request) {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id, agent_key: 'recipe_scale', provider: 'anthropic',
-        model_id: 'claude-haiku-4-5-20251001', role: 'scale',
+        model_id: 'claude-haiku-4-5-20251001', role: 'other',
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       });
     } catch (e) { console.error('[non-fatal]', e) }

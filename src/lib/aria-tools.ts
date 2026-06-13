@@ -715,8 +715,8 @@ function logGuardEvent(businessId: string, summary: string, signal: string): voi
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: businessId,
         agent_key: 'sql_guard',
-        provider: 'internal',
-        role: 'guard',
+        provider: 'other',
+        role: 'other',
         success: true,
         request_summary: summary.slice(0, 200),
         learning_signal: signal,

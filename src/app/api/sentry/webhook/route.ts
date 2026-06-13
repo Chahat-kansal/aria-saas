@@ -130,7 +130,7 @@ async function runDiagnosis({
     db.from('aria_ai_calls').insert({
       agent_key: 'sentry_health_diagnosis',
       provider: 'anthropic',
-      role: 'diagnosis',
+      role: 'other',
       business_id: null,
       model_id: 'claude-sonnet-4-5-20250929',
       latency_ms: latencyMs,

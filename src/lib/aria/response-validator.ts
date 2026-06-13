@@ -38,7 +38,7 @@ async function logHeal(businessId: string, healReason: HealReason, success: bool
       agent_key: 'heal',
       provider: 'anthropic',
       model_id: 'claude-haiku-4-5-20251001',
-      role: 'validator',
+      role: 'other',
       success,
       request_summary: healReason,
       response_summary: success ? 'healed' : 'heal_failed',

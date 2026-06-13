@@ -98,7 +98,7 @@ export abstract class BaseAgent {
       if (opts.agent_key && opts.role) {
         const costUsdCents = this.computeCostCents(model, msg.usage.input_tokens, msg.usage.output_tokens);
         try {
-          await supabaseAdmin.from('aria_ai_calls').insert({
+          const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({  // LOGGING-AUDIT-3 Part 3
             business_id: opts.business_id ?? null,
             agent_key: opts.agent_key,
             provider: 'anthropic',
@@ -112,6 +112,7 @@ export abstract class BaseAgent {
             request_summary: opts.agent_key + ' reasoning call',
             response_summary: raw.slice(0, 120),
           });
+          if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: opts.agent_key, role: opts.role, reason: aiCallErr.message })
         } catch (e) { console.error('[non-fatal]', e) }
       }
 

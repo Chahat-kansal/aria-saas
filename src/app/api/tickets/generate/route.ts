@@ -58,7 +58,7 @@ async function _POST(req: Request) {
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Price Tickets — ${template.name}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#f3f4f6;font-family:Arial,sans-serif}.page{display:flex;flex-wrap:wrap;gap:4mm;padding:10mm;justify-content:flex-start}@media print{body{background:#fff}@page{size:${template.width_mm}mm ${template.height_mm}mm;margin:0}.page{gap:2mm;padding:0}.ticket{page-break-inside:avoid}}</style></head><body><div class="page">${ticketsHtml}</div><script>window.onload=()=>{window.print()}<\/script></body></html>`
 
-  void supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, agent_key: 'ticket_generator', provider: 'internal', model_id: 'none', role: 'generate', success: true, request_summary: `Generated ${productIds.length} tickets using template ${templateId}` }).then(undefined, () => {})
+  void supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, agent_key: 'ticket_generator', provider: 'other', model_id: 'none', role: 'generator', success: true, request_summary: `Generated ${productIds.length} tickets using template ${templateId}` }).then(undefined, () => {})
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
 }
 

@@ -110,7 +110,7 @@ Return ONLY the reminder text, no subject line, no preamble.`
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: inv.business_id, agent_key: 'invoice_reminder', provider: 'anthropic',
-        model_id: 'claude-sonnet-4-5-20250929', role: 'draft',
+        model_id: 'claude-sonnet-4-5-20250929', role: 'other',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       })
     } catch (e) { console.error('[non-fatal]', e) }

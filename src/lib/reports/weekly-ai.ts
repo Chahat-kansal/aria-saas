@@ -159,7 +159,7 @@ export async function generateWeeklyNarrative(
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: business.id, agent_key: 'weekly_promos', provider: 'anthropic',
-        model_id: 'claude-sonnet-4-5-20250929', role: 'promo',
+        model_id: 'claude-sonnet-4-5-20250929', role: 'pricing',
         input_tokens: promoInputTokens, output_tokens: promoOutputTokens, success: promoSuccess,
       })
     } catch (e) { console.error('[non-fatal]', e) }

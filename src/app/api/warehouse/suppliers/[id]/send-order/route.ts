@@ -125,7 +125,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
 
   // Log to aria_ai_calls
   void Promise.resolve(supabaseAdmin.from('aria_ai_calls').insert({
-    business_id, agent_key: 'send_supplier_order', provider: 'system',
+    business_id, agent_key: 'send_supplier_order', provider: 'other',
     model_id: 'email', role: 'other', success: emailSent,
   })).catch(() => {})
 

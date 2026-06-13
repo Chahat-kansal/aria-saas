@@ -65,7 +65,7 @@ async function _GET(req: Request) {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id, agent_key: 'competitive_brief', provider: 'anthropic',
-        model_id: 'claude-haiku-4-5-20251001', role: 'brief',
+        model_id: 'claude-haiku-4-5-20251001', role: 'briefing',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch (e) { console.error('[non-fatal]', e) }

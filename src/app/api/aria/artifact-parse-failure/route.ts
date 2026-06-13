@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: '00000000-0000-0000-0000-000000000000',
       agent_key: 'artifact_parse_failure',
-      provider: 'system',
+      provider: 'other',
       model_id: 'parser',
       success: false,
       error_message: `Failed to parse ${type ?? 'unknown'} artifact`,

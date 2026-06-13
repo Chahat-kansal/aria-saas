@@ -33,9 +33,9 @@ async function logCall(params: {
     await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: params.business_id,
       agent_key: 'council_context',
-      provider: 'gemini',
+      provider: 'google',
       model_id: 'gemini-2.5-flash',
-      role: 'council',
+      role: 'analysis',
       input_tokens: params.input_tokens,
       output_tokens: params.output_tokens,
       success: params.success,

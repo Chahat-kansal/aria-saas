@@ -90,7 +90,7 @@ async function _POST(req: Request) {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: businessId, agent_key: 'recipe_import', provider: 'anthropic',
-        model_id: 'claude-sonnet-4-5-20250929', role: 'import',
+        model_id: 'claude-sonnet-4-5-20250929', role: 'data',
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       })
     } catch (e) { console.error('[non-fatal]', e) }

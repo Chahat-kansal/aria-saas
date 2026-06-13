@@ -64,11 +64,12 @@ export async function callOpenAIChat<T = Record<string, unknown>>(
 
   if (params.businessId) {
     try {
-      await supabaseAdmin.from('aria_ai_calls').insert({
+      const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({  // LOGGING-AUDIT-3 Part 3
         business_id: params.businessId, agent_key: params.agentKey, provider: 'openai',
         model_id: modelId, role: params.role, input_tokens: inputTokens, output_tokens: outputTokens,
         latency_ms: latency, cost_usd_cents: cost, success, error_message: errorMessage,
       })
+      if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
     } catch (e) { console.error('[non-fatal]', e) }
   }
 
@@ -140,12 +141,13 @@ export async function callOpenAI(params: ChatParams & { model?: string }): Promi
 
   if (params.businessId) {
     try {
-      await supabaseAdmin.from('aria_ai_calls').insert({
+      const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({  // LOGGING-AUDIT-3 Part 3
         business_id: params.businessId, agent_key: params.agentKey, provider: 'openai',
         model_id: model, role: params.role,
         input_tokens: inputTokens, output_tokens: outputTokens,
         latency_ms: latency, cost_usd_cents: cost, success, error_message: errorMessage,
       })
+      if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
     } catch (e) { console.error('[non-fatal]', e) }
   }
 

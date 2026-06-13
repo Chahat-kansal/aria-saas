@@ -65,7 +65,7 @@ Return ONLY valid JSON — no preamble, no code fences:
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: businessId, agent_key: 'invoice_draft', provider: 'anthropic',
-        model_id: 'claude-sonnet-4-5-20250929', role: 'draft',
+        model_id: 'claude-sonnet-4-5-20250929', role: 'other',
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       })
     } catch (e) { console.error('[non-fatal]', e) }
