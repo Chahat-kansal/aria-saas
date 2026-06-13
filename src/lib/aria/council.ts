@@ -877,7 +877,10 @@ export async function runAriaCouncil(
     cleanContextStr = JSON.stringify(cleanCtxObj)
   } catch { /* non-fatal — fall back to raw businessContext */ }
 
-  const userPrompt = [verifiedFiguresBlock, learningContext, summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + cleanContextStr]
+  // HEALTH-SIGNALS-1 Part 3: ONE neutral fact-pointer (not a phrasing rule) — points advisors at the
+  // diagnostic facts already present in the data so a cause assertion stays consistent with system state.
+  const diagnosticPointer = 'DIAGNOSTIC_FACTS: The system state is in business_health (within available_ground_truth). Reason from these facts. If you assert a cause (e.g. "POS broken"), it must be consistent with pos_health.status. known_unknowns lists what cannot be verified — ask the owner rather than asserting.'
+  const userPrompt = [verifiedFiguresBlock, learningContext, summaryBlock, memoryBlock, qualityCtx, diagnosticPointer, 'Business data:\n' + cleanContextStr]
     .filter(Boolean)
     .join('\n\n')
 
@@ -972,7 +975,8 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
     : ''
 
   const synthesisInput = `
-${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}BUSINESS DATA:
+${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}${diagnosticPointer}
+BUSINESS DATA:
 ${cleanContextStr}
 ${qualitySynthesisBlock}
 GROWTH BRAIN (confidence: ${growth.confidence}):

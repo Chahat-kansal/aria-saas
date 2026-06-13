@@ -34,6 +34,8 @@ import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 import { validateAndHeal } from '@/lib/aria/response-validator'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { computeHealthSignals } from '@/lib/aria/health-signals'
+import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
 import { buildNavGrounding } from '@/lib/aria/nav-grounding'
@@ -688,7 +690,7 @@ Rules:
           const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
           const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
           const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions] = await Promise.all([
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -706,6 +708,8 @@ Rules:
             supabaseAdmin.from('pos_customers').select('total_spent').eq('business_id', bid).order('total_spent', { ascending: false }).limit(5),
             supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', bid).maybeSingle(),
             supabaseAdmin.from('aria_actions').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('status', 'completed').gte('created_at', gt30dAgo).ilike('category', '%promo%'),
+            // HEALTH-SIGNALS-1 Part 2: diagnostic facts (POS health, day-of-week baseline, freshness, known-unknowns)
+            computeHealthSignals(bid).catch(() => null),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
@@ -738,11 +742,18 @@ Rules:
           const revWeekCal = +gtSum(gtWeek.data as Array<{ total_amount: number | null }>).toFixed(2)
           const revLastWeekCal = +gtSum(gtLastWeek.data as Array<{ total_amount: number | null }>).toFixed(2)
           const revSwlm = +gtSum(gtSwlm.data as Array<{ total_amount: number | null }>).toFixed(2)
+          // HEALTH-SIGNALS-1: health-derived numbers also become anchors so V2 Check 6 can validate
+          // any figure Aria derives from the diagnostic facts (coverage %, dow baseline, deviation).
+          const healthAnchors = gtHealth
+            ? [gtHealth.pos_health.payment_coverage_pct, gtHealth.day_of_week_context.today_baseline_revenue,
+               gtHealth.day_of_week_context.actual_revenue_so_far, gtHealth.day_of_week_context.deviation_from_baseline_pct]
+              .filter((n): n is number => typeof n === 'number' && isFinite(n))
+            : []
           // _anchor_values: the CLEAN numeric set Check 6 + the advisor cleaner validate against
           const anchorValues = [
             revToday, revWeekCal, revLastWeekCal, revSwlm, coveragePct,
             gtConsent.count ?? 0, gtTotalCust.count ?? 0, tuesdayAvg, tuesdayGap, targetWeekly, gtPromoActions.count ?? 0,
-            ...topCustLTVs,
+            ...topCustLTVs, ...healthAnchors,
           ].filter((n): n is number => typeof n === 'number' && isFinite(n))
           ctxParsed.available_ground_truth = {
             note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
@@ -761,7 +772,18 @@ Rules:
             tuesday_vs_average_gap_dollars: tuesdayGap,
             target_weekly_revenue: targetWeekly,
             recent_promotion_actions: gtPromoActions.count ?? 0,
+            // HEALTH-SIGNALS-1 Part 2+4: verifiable system state + what CANNOT be verified
+            business_health: gtHealth ?? undefined,
+            diagnostic_facts_note: 'business_health describes verifiable system state (POS health, day-of-week baseline, data freshness). known_unknowns lists what CANNOT be verified — ask the owner about those rather than asserting them. Any asserted cause (e.g. "POS broken") must be consistent with pos_health.status.',
             _anchor_values: anchorValues,
+          }
+          // HEALTH-SIGNALS-1 Part 5: audit what diagnostic facts Aria saw this turn
+          if (gtHealth) {
+            void logAICallSafe({
+              business_id: bid, agent_key: 'health_signals', role: 'analysis', provider: 'other', success: true,
+              request_summary: bid,
+              response_summary: JSON.stringify({ pos: gtHealth.pos_health.status, dow_baseline: gtHealth.day_of_week_context.today_baseline_revenue, weather_avail: gtHealth.weather_context.available }).slice(0, 200),
+            })
           }
         } catch { /* non-fatal — council proceeds without anchors */ }
         augCtx = JSON.stringify(ctxParsed)
