@@ -214,16 +214,19 @@ async function runWiringHealthPass(since7d: string, since24h: string): Promise<{
       .rpc('wh_payments_coverage', { p_business_id: biz.id, p_since: since7d })
     if (!covErr && covData && (covData as Array<{ total_sales: number; paid_sales: number }>).length > 0) {
       const row = (covData as Array<{ total_sales: number; paid_sales: number }>)[0]
-      const totalSales = Number(row.total_sales)
+      const totalSales = Number(row.total_sales)   // PART 1b: now COMPLETED sales only (RPC fixed)
       const paidSales  = Number(row.paid_sales)
       const pct = totalSales > 0 ? Math.round((paidSales / totalSales) * 100) : 100
+      // AUTOPILOT-FIX-1 PART 2: <10 completed sales is too small a sample to call a "failure".
+      // Force green (insufficient-sample) rather than a red alert that becomes a fabricated crisis action.
+      const covStatus = totalSales < 10 ? 'green' : wiringStatus(pct, 95, 80, 'higher_better')
       checks.push({
         business_id: biz.id,
         check_name:  'payments_coverage_pct',
-        status:      wiringStatus(pct, 95, 80, 'higher_better'),
+        status:      covStatus,
         value:       pct,
-        threshold:   'green≥95%, amber=80–94%, red<80% of non-voided sales have payment records',
-        details:     { business_name: biz.name, total_sales: totalSales, paid_sales: paidSales, window_days: 7 },
+        threshold:   'green≥95% (or <10 completed sales — insufficient sample), amber=80–94%, red<80% of COMPLETED sales have payment records',
+        details:     { business_name: biz.name, total_sales: totalSales, paid_sales: paidSales, window_days: 7, sample_sufficient: totalSales >= 10 },
       })
     }
 

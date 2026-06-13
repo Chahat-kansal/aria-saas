@@ -134,6 +134,9 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
 
   if (actions.length > 0) {
     const VALID_PRIORITIES = new Set(['urgent', 'important', 'routine'])
+    // AUTOPILOT-FIX-1 PART 3: every autopilot action expires in 48h so stale/false alerts cannot
+    // persist as pending forever (and re-poison the council, which reads pending actions as context).
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
     const rows = (actions as Array<{category?: string; priority?: string; title?: string; description?: string; action_data?: unknown; estimated_impact?: string}>).map(a => {
       const rawP = a.priority ?? ''
       const priority = rawP === 'high' ? 'urgent' : rawP === 'medium' ? 'important' : VALID_PRIORITIES.has(rawP) ? rawP : 'routine'
@@ -146,6 +149,7 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
         action_data: a.action_data ?? {},
         estimated_impact: a.estimated_impact ?? null,
         status: "pending",
+        expires_at: expiresAt,
       }
     });
     await supabase.from("aria_autopilot_actions").insert(rows);

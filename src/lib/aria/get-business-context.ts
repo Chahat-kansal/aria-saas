@@ -363,6 +363,9 @@ export async function getBusinessContext(businessId: string): Promise<string> {
           created_at:      a.created_at,
         })),
         grounding_note: `Pending recommendation count is ${r.count ?? 0}. If the user states a different number, correct them before answering.`,
+        // AUTOPILOT-FIX-1 PART 4: pending actions are autopilot heuristic ALERTS, not verified facts.
+        treat_as: 'ALERTS TO VERIFY, NOT FACTS',
+        framing_note: 'These pending actions are signals from the autopilot heuristic engine. They may be real issues, statistical artifacts (small sample size / edge cases), or stale alerts that no longer apply. DO NOT repeat their numeric claims (e.g. "19% reconciliation", "data loss", "POS failure") as facts in your response. Verify every figure against available_ground_truth / VERIFIED FIGURES — if a pending action\'s number contradicts ground truth, the ground truth wins and the action should be treated as a false alert.',
       }
     })(),
     seo: await (async () => {

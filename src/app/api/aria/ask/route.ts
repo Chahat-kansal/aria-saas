@@ -681,21 +681,34 @@ Rules:
           const gtTodayStart = toAESTStart(todayAEST())
           const gtWeekStart = toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
           const gtWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtSales7, gtPaid7] = await Promise.all([
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
-            supabaseAdmin.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', bid).gte('created_at', gtWeekAgo).neq('status', 'voided'),
-            supabaseAdmin.from('pos_sale_payments').select('sale_id, pos_sales!inner(business_id, created_at)').eq('pos_sales.business_id', bid).gte('pos_sales.created_at', gtWeekAgo).limit(5000),
+            // AUTOPILOT-FIX-1 PART 1: payment-coverage DENOMINATOR is completed sales only — draft/pending/
+            // cancelled legitimately have no payment record. The old neq('voided') denominator counted them,
+            // producing the fabricated "19% reconciliation / 6 of 32" anchor fed to the council as fact.
+            supabaseAdmin.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', bid).gte('created_at', gtWeekAgo).eq('status', 'completed'),
+            // numerator: payments on COMPLETED sales only (matches the denominator)
+            supabaseAdmin.from('pos_sale_payments').select('sale_id, pos_sales!inner(business_id, created_at, status)').eq('pos_sales.business_id', bid).gte('pos_sales.created_at', gtWeekAgo).eq('pos_sales.status', 'completed').limit(5000),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
-          const totalSales7 = gtSales7.count ?? 0
+          const completedSales7 = gtCompleted7.count ?? 0
+          // AUTOPILOT-FIX-1 PART 2: a coverage % from a tiny sample is meaningless. Small cafes do ~5-15
+          // sales/day; <10 completed in 7d cannot support a "POS failure" conclusion. Emit null + a note
+          // so the council never receives a scary low % it would echo as a crisis.
+          const coveragePct = completedSales7 >= 10
+            ? +((Math.min(paidSaleIds.size, completedSales7) / completedSales7) * 100).toFixed(1)
+            : null
           ctxParsed.available_ground_truth = {
             note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
             revenue_today: +gtSum(gtToday.data as Array<{ total_amount: number | null }>).toFixed(2),
             revenue_this_week_calendar: +gtSum(gtWeek.data as Array<{ total_amount: number | null }>).toFixed(2),
-            payment_coverage_real_pct: totalSales7 > 0 ? +((Math.min(paidSaleIds.size, totalSales7) / totalSales7) * 100).toFixed(1) : null,
+            payment_coverage_real_pct: coveragePct,
+            payment_coverage_note: completedSales7 < 10
+              ? `Only ${completedSales7} completed sales in the last 7 days — too small a sample to assess payment coverage. Do NOT claim a coverage %, "data loss", or "POS failure" from this.`
+              : `${paidSaleIds.size} of ${completedSales7} completed sales have payment records (${coveragePct}% — healthy unless <95%).`,
             customer_count_with_consent: gtConsent.count ?? 0,
           }
         } catch { /* non-fatal — council proceeds without anchors */ }
