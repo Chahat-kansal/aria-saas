@@ -11,6 +11,8 @@ export interface PosHealth {
   last_sync_at: string | null
   hours_since_last_sale: number | null
   completed_sales_7d: number
+  // I1: corroborating verdict from the daily aria-health-monitor cron (aria_wiring_health_checks)
+  wiring_health_status: string | null
   reasoning: string
 }
 
@@ -36,6 +38,8 @@ export interface HealthSignals {
   weather_context: { available: false; reason: string } | { available: true; conditions_today: string; historical_rainy_day_revenue_avg: number | null; historical_clear_day_revenue_avg: number | null; rain_factor: number | null; reasoning: string }
   data_freshness: DataFreshness
   known_unknowns: string[]
+  // I1: every numeric the signals expose — route.ts spreads these into _anchor_values for V2 Check 6
+  _anchor_numbers: number[]
   computed_at: string
 }
 
@@ -63,12 +67,27 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
   const todayDow = todayAest.getUTCDay()
   const todayKey = todayAest.toISOString().slice(0, 10)
 
-  const [covRes, lastSaleRes, sales56Res, lastActionRes] = await Promise.all([
+  const [covRes, lastSaleRes, sales56Res, lastActionRes, wiringRes, signalRes] = await Promise.all([
     supabaseAdmin.rpc('wh_payments_coverage', { p_business_id: businessId, p_since: since7d }).then(r => r, () => ({ data: null })),
     supabaseAdmin.from('pos_sales').select('created_at').eq('business_id', businessId).eq('status', 'completed').order('created_at', { ascending: false }).limit(1).maybeSingle().then(r => r, () => ({ data: null })),
     supabaseAdmin.from('pos_sales').select('total_amount, created_at').eq('business_id', businessId).eq('status', 'completed').gte('created_at', since56d).then(r => r, () => ({ data: null })),
     supabaseAdmin.from('aria_actions').select('updated_at').eq('business_id', businessId).eq('status', 'completed').order('updated_at', { ascending: false }).limit(1).maybeSingle().then(r => r, () => ({ data: null })),
+    // I1: existing precomputed health checks (daily aria-health-monitor cron) — newest 20 across check_names
+    supabaseAdmin.from('aria_wiring_health_checks').select('check_name, status, value, checked_at').eq('business_id', businessId).order('checked_at', { ascending: false }).limit(20).then(r => r, () => ({ data: null })),
+    // I1: existing signal cache — for stale-signal counting + active signal awareness
+    supabaseAdmin.from('aria_signal_cache').select('signal_type, expires_at').eq('business_id', businessId).then(r => r, () => ({ data: null })),
   ])
+
+  // I1: latest wiring check per check_name (rows are newest-first)
+  const wiringRows = (wiringRes.data ?? []) as Array<{ check_name: string; status: string | null; value: number | null; checked_at: string | null }>
+  const latestCheck = new Map<string, { status: string | null; value: number | null; checked_at: string | null }>()
+  for (const r of wiringRows) if (!latestCheck.has(r.check_name)) latestCheck.set(r.check_name, { status: r.status, value: r.value, checked_at: r.checked_at })
+  const wiringCoverageCheck = latestCheck.get('payments_coverage_pct')
+  const lastHealthCheckAt = wiringRows[0]?.checked_at ?? null
+
+  // I1: stale signals = cached signals already past expiry
+  const signalRows = (signalRes.data ?? []) as Array<{ signal_type: string; expires_at: string }>
+  const staleSignalsCount = signalRows.filter(s => new Date(s.expires_at).getTime() < now).length
 
   // ── pos_health ───────────────────────────────────────────────────────────
   const covRow = (covRes.data as Array<{ total_sales: number; paid_sales: number }> | null)?.[0]
@@ -101,7 +120,8 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
     last_sync_at: lastSaleAt, // no dedicated sync column on pos_sales; newest recorded sale is the freshness proxy
     hours_since_last_sale: hoursSinceLastSale,
     completed_sales_7d: completed7,
-    reasoning: posReason,
+    wiring_health_status: wiringCoverageCheck?.status ?? null, // I1: daily cron's green/amber/red corroboration
+    reasoning: posReason + (wiringCoverageCheck?.status ? ` (daily wiring check: ${wiringCoverageCheck.status})` : ''),
   }
 
   // ── day_of_week_context ──────────────────────────────────────────────────
@@ -151,11 +171,20 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
   const data_freshness: DataFreshness = {
     last_pos_sync_at: lastSaleAt,
     last_action_executed_at: lastActionAt,
-    stale_signals_count: 0,
-    reasoning: lastSaleAt
+    stale_signals_count: staleSignalsCount, // I1: real count from aria_signal_cache
+    reasoning: (lastSaleAt
       ? `Newest recorded sale ${hoursSinceLastSale != null ? hoursSinceLastSale + 'h ago' : 'unknown'}; last executed action ${lastActionAt ? new Date(lastActionAt).toISOString().slice(0, 10) : 'none'}.`
-      : 'No completed sales recorded — cannot assess data freshness.',
+      : 'No completed sales recorded — cannot assess data freshness.')
+      + ` ${staleSignalsCount} stale cached signals${lastHealthCheckAt ? `; last health check ${new Date(lastHealthCheckAt).toISOString().slice(0, 10)}` : ''}.`,
   }
+
+  // I1: every numeric the signals expose → _anchor_values (so V2 Check 6 validates any derived figure)
+  const anchorNumbers = [
+    coveragePct, completed7, hoursSinceLastSale,
+    todayBaseline, todayRank, +actualToday.toFixed(2), deviationPct,
+    staleSignalsCount,
+    ...[...latestCheck.values()].map(c => c.value),
+  ].filter((n): n is number => typeof n === 'number' && isFinite(n))
 
   return {
     pos_health,
@@ -163,6 +192,7 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
     weather_context,
     data_freshness,
     known_unknowns: KNOWN_UNKNOWNS,
+    _anchor_numbers: anchorNumbers,
     computed_at: new Date().toISOString(),
   }
 }

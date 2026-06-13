@@ -742,13 +742,9 @@ Rules:
           const revWeekCal = +gtSum(gtWeek.data as Array<{ total_amount: number | null }>).toFixed(2)
           const revLastWeekCal = +gtSum(gtLastWeek.data as Array<{ total_amount: number | null }>).toFixed(2)
           const revSwlm = +gtSum(gtSwlm.data as Array<{ total_amount: number | null }>).toFixed(2)
-          // HEALTH-SIGNALS-1: health-derived numbers also become anchors so V2 Check 6 can validate
-          // any figure Aria derives from the diagnostic facts (coverage %, dow baseline, deviation).
-          const healthAnchors = gtHealth
-            ? [gtHealth.pos_health.payment_coverage_pct, gtHealth.day_of_week_context.today_baseline_revenue,
-               gtHealth.day_of_week_context.actual_revenue_so_far, gtHealth.day_of_week_context.deviation_from_baseline_pct]
-              .filter((n): n is number => typeof n === 'number' && isFinite(n))
-            : []
+          // HEALTH-SIGNALS-1 / I1: every numeric the health signals expose becomes an anchor so V2
+          // Check 6 can validate any figure Aria derives from the diagnostic facts.
+          const healthAnchors = gtHealth?._anchor_numbers ?? []
           // _anchor_values: the CLEAN numeric set Check 6 + the advisor cleaner validate against
           const anchorValues = [
             revToday, revWeekCal, revLastWeekCal, revSwlm, coveragePct,
