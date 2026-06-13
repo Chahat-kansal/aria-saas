@@ -1,3 +1,5 @@
+// READS of aria_business_memory MUST filter both is_active=true AND deleted_at IS NULL.
+// See PUSHBACK-FIX-1 + RECALL-PARITY-1 for the filter-asymmetry RCA.
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const MEMORY_TRIGGERS = [
@@ -30,6 +32,7 @@ export async function maybeWriteMemory(
       .eq('kind', trigger.kind)
       .eq('topic', trigger.topic)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .ilike('content', '%' + content.slice(0, 30) + '%')
       .maybeSingle()
 

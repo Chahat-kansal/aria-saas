@@ -30,7 +30,7 @@ async function _GET() {
   const [aiCalls, autopilot, memory, briefing, intel, compMon, custScore] = await Promise.all([
     supabase.from('aria_ai_calls').select('agent_key, model_id, input_tokens, output_tokens, created_at').eq('business_id', bid).gte('created_at', monthAgo).limit(2000),
     supabase.from('aria_autopilot_actions').select('id, action_type, status, created_at, details').eq('business_id', bid).gte('created_at', weekAgo).order('created_at', { ascending: false }).limit(50),
-    supabase.from('aria_business_memory').select('id, kind, content, topic, importance').eq('business_id', bid).order('importance', { ascending: false }).limit(20),
+    supabase.from('aria_business_memory').select('id, kind, content, topic, importance').eq('business_id', bid).eq('is_active', true).is('deleted_at', null).order('importance', { ascending: false }).limit(20),
     supabase.from('council_runs').select('mode, created_at').eq('business_id', bid).eq('mode', 'briefing').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('intelligence_events').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('acknowledged', false),
     supabase.from('competitor_snapshots').select('created_at').eq('business_id', bid).order('created_at', { ascending: false }).limit(1).maybeSingle(),
