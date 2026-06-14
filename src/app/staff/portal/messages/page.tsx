@@ -163,6 +163,12 @@ export default function StaffMessagesPage() {
 
   return (
     <div>
+      {/* AN-E spell 15 swipe-dismiss: entrance slide-in-from-right + transition prep on inbox rows */}
+      <style>{`
+        @keyframes anSwipeDismissIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+        .an-swipe-dismiss{animation:anSwipeDismissIn .42s cubic-bezier(.22,1,.36,1) both}
+        @media (prefers-reduced-motion: reduce){.an-swipe-dismiss{animation:none!important;transition:none!important}}
+      `}</style>
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <div style={{
@@ -270,11 +276,13 @@ export default function StaffMessagesPage() {
               const avatarColor = m.sender?.color ?? DEEP
 
               return (
-                <div key={m.id} style={{
+                <div key={m.id} className="an-swipe-dismiss" style={{
                   background: CARD, borderRadius: 16, boxShadow: SHADOW,
                   border: '1px solid ' + (unread ? 'rgba(127,184,151,.3)' : LINE),
                   borderLeft: '3px solid ' + (unread ? SAGE : LINE),
                   padding: '14px 16px',
+                  touchAction: 'pan-y',
+                  transition: 'transform 280ms cubic-bezier(.22,1,.36,1), opacity 280ms ease',
                 }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
 

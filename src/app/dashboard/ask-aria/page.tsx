@@ -959,10 +959,16 @@ export default function AskAriaPage() {
         @keyframes anListeningRing { 0% { transform: scale(.85); opacity: .55 } 100% { transform: scale(1.25); opacity: 0 } }
         .an-listening-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(127,184,151,.55); pointer-events: none; animation: anListeningRing 1.6s ease-out infinite }
         .an-listening-ring.delay { animation-delay: .8s }
+        /* AN-E spell 19 bottom-sheet: composer slides up from below on mobile only */
+        @keyframes anBottomSheetIn { 0% { transform: translateY(100%); opacity: 0 } 70% { transform: translateY(-4px); opacity: 1 } 100% { transform: translateY(0) } }
+        @media (max-width: 767px) {
+          .an-bottom-sheet { animation: anBottomSheetIn .55s cubic-bezier(.34,1.56,.64,1) both; will-change: transform }
+        }
         @media (prefers-reduced-motion: reduce) {
           .msg-reveal { animation: none !important; }
           .an-modal-spring { animation: none !important; }
           .an-listening-ring { animation: none !important; opacity: 0 !important; }
+          .an-bottom-sheet { animation: none !important; }
         }
         @media (max-width: 1023px) {
           .aria-split-grid { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr !important; }
@@ -1493,7 +1499,7 @@ export default function AskAriaPage() {
         )}
 
         {/* ── Composer ──────────────────────────────────────────────────── */}
-        <div style={{ padding: '10px 14px 14px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(22,24,26,0.98)', flexShrink: 0, position: 'relative' }}>
+        <div className="an-bottom-sheet" style={{ padding: '10px 14px 14px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(22,24,26,0.98)', flexShrink: 0, position: 'relative' }}>
           <input
             ref={fileInputRef}
             type="file"

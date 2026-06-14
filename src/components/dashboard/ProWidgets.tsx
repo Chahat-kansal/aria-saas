@@ -212,6 +212,12 @@ export function StaffOnShift({ businessId }: { businessId: string }) {
 
   return (
     <div style={CARD}>
+      {/* AN-E spell 17 activity-pulse: pulsing green dot on staff avatar (active on shift) */}
+      <style>{`
+        @keyframes anActivityPulse{0%,100%{box-shadow:0 0 0 0 rgba(29,158,117,.6)}50%{box-shadow:0 0 0 6px rgba(29,158,117,0)}}
+        .an-activity-pulse{animation:anActivityPulse 1.8s ease-in-out infinite}
+        @media (prefers-reduced-motion: reduce){.an-activity-pulse{animation:none!important}}
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <p style={{ ...LABEL, marginBottom: 0 }}>Staff on shift</p>
         <span style={{ fontSize: 11, color: staff.length > 0 ? G : 'rgba(255,255,255,0.3)' }}>{staff.length} clocked in</span>
@@ -224,8 +230,9 @@ export function StaffOnShift({ businessId }: { businessId: string }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           {staff.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(29,158,117,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: G, flexShrink: 0 }}>
+              <div style={{ position: 'relative', width: 32, height: 32, borderRadius: '50%', background: 'rgba(29,158,117,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: G, flexShrink: 0 }}>
                 {s.staff_name.split(' ').map((n: string) => n[0] ?? '').join('').slice(0, 2).toUpperCase()}
+                <span className="an-activity-pulse" style={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', background: G, border: '2px solid #13131a' }} aria-hidden />
               </div>
               <div>
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>{s.staff_name}</div>
