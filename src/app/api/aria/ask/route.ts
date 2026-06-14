@@ -691,7 +691,7 @@ Rules:
           const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
           const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
           const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal] = await Promise.all([
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -713,6 +713,10 @@ Rules:
             computeHealthSignals(bid).catch(() => null),
             // GOAL-AWARE-1 (I2): weekly target trajectory (projection, pace, on-track status)
             computeGoalContext(bid).catch(() => null),
+            // OUTCOME-LOOP-1 (I4) Part 4: learned advice weights — how past recommendations per
+            // category actually turned out (outcome-check cron → adjustAdviceWeight). Surfaces the
+            // per-category confidence so the council can hedge categories that historically backfired.
+            supabaseAdmin.from('aria_advice_weights').select('category,weight,positive_outcomes,negative_outcomes,neutral_outcomes').eq('business_id', bid),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
@@ -759,6 +763,25 @@ Rules:
             gtConsent.count ?? 0, gtTotalCust.count ?? 0, tuesdayAvg, tuesdayGap, targetWeekly, gtPromoActions.count ?? 0,
             ...topCustLTVs, ...healthAnchors, ...goalAnchors,
           ].filter((n): n is number => typeof n === 'number' && isFinite(n))
+          // OUTCOME-LOOP-1 (I4) Part 4: shape advice weights for the council. `weight` is the stored
+          // [0.3,2.0] multiplier (unchanged — 4 downstream consumers depend on that frame). `success_rate`
+          // is a Laplace-smoothed (positive+1)/(total+3) read-side view so a category with few/poor
+          // outcomes reads as low-confidence rather than spuriously certain. Meta-confidence, not a
+          // citeable dollar/% figure → deliberately NOT added to _anchor_values.
+          const adviceWeightsGT = ((gtWeights.data ?? []) as Array<{ category: string; weight: number; positive_outcomes: number; negative_outcomes: number; neutral_outcomes: number }>)
+            .map(w => {
+              const pos = Number(w.positive_outcomes) || 0
+              const neg = Number(w.negative_outcomes) || 0
+              const neu = Number(w.neutral_outcomes)  || 0
+              const total = pos + neg + neu
+              return {
+                category: w.category,
+                weight: +Number(w.weight).toFixed(3),
+                total_outcomes: total,
+                success_rate: +((pos + 1) / (total + 3)).toFixed(3),
+              }
+            })
+            .filter(w => w.total_outcomes > 0)
           ctxParsed.available_ground_truth = {
             note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
             revenue_today: revToday,
@@ -781,6 +804,11 @@ Rules:
             diagnostic_facts_note: 'business_health describes verifiable system state (POS health, day-of-week baseline, data freshness). known_unknowns lists what CANNOT be verified — ask the owner about those rather than asserting them. Any asserted cause (e.g. "POS broken") must be consistent with pos_health.status.',
             // GOAL-AWARE-1 (I2): weekly target trajectory — frame recommendations against the gap/pace
             goal_context: gtGoal ?? undefined,
+            // OUTCOME-LOOP-1 (I4): learned per-category advice confidence from real outcomes
+            advice_weights: adviceWeightsGT.length ? adviceWeightsGT : undefined,
+            advice_weights_note: adviceWeightsGT.length
+              ? 'advice_weights reflect how past recommendations per category actually performed. weight is a 0.3–2.0 confidence multiplier (1.0 = neutral); success_rate is Laplace-smoothed. LOWER weight / success_rate = be more cautious recommending that category again.'
+              : undefined,
             _anchor_values: anchorValues,
           }
           // HEALTH-SIGNALS-1 Part 5: audit what diagnostic facts Aria saw this turn
@@ -797,6 +825,14 @@ Rules:
               business_id: bid, agent_key: 'goal_context', role: 'analysis', provider: 'other', success: true,
               request_summary: bid,
               response_summary: JSON.stringify({ status: gtGoal.status, on_track_pct: gtGoal.on_track_pct, gap_to_target: gtGoal.gap_to_target }).slice(0, 200),
+            })
+          }
+          // OUTCOME-LOOP-1 (I4) Part 4: audit which learned advice weights Aria saw this turn
+          if (adviceWeightsGT.length) {
+            void logAICallSafe({
+              business_id: bid, agent_key: 'advice_weights', role: 'analysis', provider: 'other', success: true,
+              request_summary: bid,
+              response_summary: JSON.stringify({ categories: adviceWeightsGT.length, weights: adviceWeightsGT.map(w => `${w.category}:${w.weight}`) }).slice(0, 200),
             })
           }
         } catch { /* non-fatal — council proceeds without anchors */ }

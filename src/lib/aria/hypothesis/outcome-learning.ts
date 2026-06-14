@@ -308,6 +308,54 @@ export async function runAutopilotOutcomeChecks(businessId: string): Promise<{ b
   return { backfilled, resolved }
 }
 
+/**
+ * I4 OUTCOME-LOOP-1 PART 5 — Hypothesis outcome closure.
+ * Accepted hypotheses link to an aria_action (action_id) whose aria_outcomes row carries the
+ * verdict computed by runOutcomeChecks. This propagates that resolved verdict back onto the
+ * hypothesis row (outcome_verdict / outcome_*_cents / outcome_checked_at), finally closing the
+ * hypothesis learning loop. Single source of truth — it does NOT recompute; it reads the outcome
+ * the cron already resolved, so a hypothesis is only closed once its outcome has a verdict.
+ */
+export async function runHypothesisOutcomeClosure(businessId: string): Promise<{ closed: number }> {
+  const { data: hyps } = await supabaseAdmin
+    .from('aria_hypotheses')
+    .select('id, action_id')
+    .eq('business_id', businessId)
+    .eq('status', 'accepted')
+    .not('action_id', 'is', null)
+    .is('outcome_checked_at', null)
+
+  if (!hyps || hyps.length === 0) return { closed: 0 }
+
+  let closed = 0
+  for (const hyp of hyps as Array<{ id: string; action_id: string | null }>) {
+    if (!hyp.action_id) continue
+    // The linked outcome row already carries the computed verdict (runOutcomeChecks). If it has
+    // no verdict yet, the outcome isn't resolved — leave the hypothesis open for a later run.
+    const { data: outcome } = await supabaseAdmin
+      .from('aria_outcomes')
+      .select('outcome_verdict, outcome_7d_cents, outcome_30d_cents')
+      .eq('action_id', hyp.action_id)
+      .eq('business_id', businessId)
+      .not('outcome_verdict', 'is', null)
+      .order('outcome_checked_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!outcome) continue
+
+    const o = outcome as Record<string, unknown>
+    await supabaseAdmin.from('aria_hypotheses').update({
+      outcome_verdict:   o.outcome_verdict as string,
+      outcome_7d_cents:  (o.outcome_7d_cents  as number | null) ?? null,
+      outcome_30d_cents: (o.outcome_30d_cents as number | null) ?? null,
+      outcome_checked_at: new Date().toISOString(),
+    }).eq('id', hyp.id)
+    closed++
+  }
+
+  return { closed }
+}
+
 async function adjustAdviceWeight(businessId: string, category: string, verdict: string): Promise<void> {
   const delta   = verdict === 'worked' ? 0.1 : verdict === 'backfired' ? -0.15 : 0.0
   const posInc  = verdict === 'worked'                              ? 1 : 0
