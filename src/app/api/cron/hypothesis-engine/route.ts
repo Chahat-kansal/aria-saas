@@ -3,13 +3,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateHypothesesForBusiness, persistHypotheses } from '@/lib/aria/hypothesis/generate'
 
 export async function GET(req: Request) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const cronLogId = crypto.randomUUID()
   await supabaseAdmin.from('cron_logs').insert({

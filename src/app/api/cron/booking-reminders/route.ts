@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sendSMS } from '@/lib/clicksend'
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 
 function toMin(t: string | null): number | null {
   if (!t) return null
@@ -12,10 +13,8 @@ function toMin(t: string | null): number | null {
 }
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const now = new Date()
   const todayStr = now.toISOString().slice(0, 10)

@@ -3,13 +3,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { scoreCustomersForBusiness, generateWinbackRecommendations } from '@/lib/aria/rfm-engine'
 
 export async function GET(req: Request) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const cronLogId = crypto.randomUUID()
   await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, job_name: 'customer-scoring', status: 'running', started_at: new Date().toISOString() })

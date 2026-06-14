@@ -2,19 +2,17 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { runWeeklyReport } from '@/lib/reports/weekly-cron'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { withRetry } from '@/lib/api/retry'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
 async function _GET(req: Request) {
   return withRetry(async () => {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   // Select all active businesses that have weekly reports enabled
   // (weekly_report_enabled defaults to true — so include businesses without the column set too)

@@ -2,9 +2,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 const MAX_ISSUES = 30
 const PAGE_TIMEOUT_MS = 8000
 
@@ -57,10 +57,8 @@ function issueStillPresent(issueType: string, html: string, ttfbMs: number): boo
 }
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const { data: issues } = await supabaseAdmin

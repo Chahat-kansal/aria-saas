@@ -3,10 +3,10 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
 function calcNextDueDate(frequency: string, fromDate: string): string {
   const d = new Date(fromDate)
@@ -73,10 +73,8 @@ ${inv.notes ? `<p style="font-size:13px;color:#555;margin-top:16px;"><strong>Not
 }
 
 async function _GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const today = new Date().toISOString().slice(0, 10)
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''

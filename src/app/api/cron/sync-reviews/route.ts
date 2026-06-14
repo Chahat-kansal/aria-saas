@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { createClient } from '@supabase/supabase-js'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
@@ -14,21 +15,8 @@ function adminClient() {
 }
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    // On Mondays, also send the weekly digest
-  const isMonday = new Date().getDay() === 1
-  if (isMonday && process.env.RESEND_API_KEY) {
-    try {
-      await fetch(`${APP_URL}/api/cron/reviews-weekly-digest`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${CRON_SECRET}` },
-      })
-    } catch (e) { console.error('[non-fatal]', e) }
-  }
-
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   if (!process.env.GOOGLE_PLACES_API_KEY) {
     // On Mondays, also send the weekly digest

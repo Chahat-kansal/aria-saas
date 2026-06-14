@@ -3,13 +3,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { logger } from '@/lib/observability/logger'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
 interface PosSaleRow {
   total_amount: number
@@ -30,11 +30,8 @@ async function sendSms(to: string, body: string): Promise<void> {
 }
 
 async function _GET(req: Request) {
-  const secret = req.headers.get('x-vercel-cron-signature')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '')
-  if (!CRON_SECRET || secret !== CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)

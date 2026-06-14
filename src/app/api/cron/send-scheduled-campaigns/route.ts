@@ -5,6 +5,7 @@ export const maxDuration = 300
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 
 interface SequenceStep { delay_days: number; message: string; condition: string }
 type SendRow = { id: string; campaign_id: string | null; customer_id: string | null; channel: string | null; sequence_step: number | null }
@@ -15,7 +16,9 @@ type CampRow = {
   sequence_steps: SequenceStep[] | null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
   const { data: dueRaw } = await supabaseAdmin
     .from('campaign_sends')
     .select('*')

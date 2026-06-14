@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 const BIZ_CAP = 10
 
 async function checkGoogleRank(keyword: string, domain: string): Promise<number | null> {
@@ -37,11 +37,8 @@ async function checkGoogleRank(keyword: string, domain: string): Promise<number 
 }
 
 export async function GET(req: Request) {
-  const secret = req.headers.get('x-vercel-cron-signature')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '')
-  if (!CRON_SECRET || secret !== CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   // Load distinct businesses with keywords
   const { data: rows } = await supabaseAdmin

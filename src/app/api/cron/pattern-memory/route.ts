@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { detectPatterns } from '@/lib/aria/pattern-detection'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
@@ -10,9 +11,8 @@ import { logAICallSafe } from '@/lib/aria/log-ai-call'
 // PATTERN-MEMORY-1 (I3) — weekly cron. Detects DURABLE data patterns and writes them to
 // aria_business_memory (kind='pattern', source_type='signal'), superseding on content change.
 export async function GET(req: Request) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const { data: businesses } = await supabaseAdmin
     .from('businesses').select('id').eq('is_active', true)

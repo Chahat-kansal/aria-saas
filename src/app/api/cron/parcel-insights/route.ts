@@ -3,12 +3,12 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 const DEAD = ['delivered', 'cancelled', 'returned', 'lost']
 const BATCH = 40
 
@@ -31,8 +31,8 @@ function risk(p: Parcel): { late: boolean; reason: string } {
 }
 
 async function _GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   // Active parcels only — never spend AI on delivered/cancelled.
   const { data: parcels } = await supabaseAdmin.from('pos_parcel_tracking')

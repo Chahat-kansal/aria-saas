@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action';
@@ -22,7 +23,9 @@ async function sendReminderEmail(
   return res.ok
 }
 
-async function _GET() {
+async function _GET(req: Request) {
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
   const today = new Date().toISOString().slice(0, 10);
   const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);

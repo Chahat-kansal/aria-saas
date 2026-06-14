@@ -2,10 +2,10 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS } from '@/lib/clicksend'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
 function adminClient() {
   return createClient(
@@ -16,10 +16,8 @@ function adminClient() {
 }
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const sb = adminClient()
 

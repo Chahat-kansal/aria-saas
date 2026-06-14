@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
@@ -17,7 +18,9 @@ async function findPlace(name: string, city: string, key: string): Promise<Place
   } catch { return null; }
 }
 
-async function _GET() {
+async function _GET(req: Request) {
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) return NextResponse.json({ ok: false, error: 'no_places_key' });
 

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
@@ -17,7 +18,9 @@ function nowInAEST(): { dow: number; hhmm: string } {
   return { dow: dowMap[m[1]] ?? 0, hhmm: `${m[2]}:${m[3]}` };
 }
 
-async function _GET() {
+async function _GET(req: Request) {
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
   const { dow, hhmm } = nowInAEST();
   const { data: schedules } = await supabaseAdmin.from('scheduled_price_changes')
     .select('id, business_id, product_id, original_price, timed_price, days_of_week, start_time, end_time, is_active')

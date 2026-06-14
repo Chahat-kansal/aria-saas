@@ -3,15 +3,14 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // Measures actual revenue lift 2h after each flash intervention and updates
 // success rates in agent_settings so future interventions are better chosen.
 export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== 'Bearer ' + process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   // Find interventions that:
   // - Were executed 2–3 hours ago (measurement window)

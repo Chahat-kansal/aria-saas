@@ -1,6 +1,7 @@
 export const maxDuration = 300
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { withRetry } from '@/lib/api/retry'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
@@ -107,12 +108,8 @@ async function detectIntelligenceEvents(businessId: string): Promise<Intelligenc
 async function _GET(req: Request) {
   // Retry wrapper — 3 attempts with exponential backoff
   return withRetry(async () => {
-  // SECURITY: canonical Vercel cron check — x-vercel-cron-signature or Authorization Bearer
-  const secret = req.headers.get('x-vercel-cron-signature')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '')
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const startedAt = new Date().toISOString();
   const errors: { business_id: string; error: string }[] = [];

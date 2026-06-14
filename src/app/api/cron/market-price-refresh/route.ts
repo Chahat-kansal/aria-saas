@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withCronRetry } from '@/lib/api/retry'
 import { searchMarketPrice } from '@/lib/aria/market-prices'
@@ -11,15 +12,9 @@ const CRON_MAX_PRODUCTS = 10  // tighter budget than manual scan (20)
 const TWENTY_HOURS_MS = 20 * 60 * 60 * 1000
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 
-function authOk(req: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true
-  const auth = req.headers.get('authorization') ?? req.headers.get('x-cron-secret') ?? ''
-  return auth === `Bearer ${cronSecret}` || auth === cronSecret
-}
-
 async function _GET(req: Request) {
-  if (!authOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const now = Date.now()
   const thirtyDaysAgo = new Date(now - THIRTY_DAYS_MS).toISOString()

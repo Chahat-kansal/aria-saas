@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { FlashRevenueAgent } from '@/lib/agents/flash-revenue-agent';
 
@@ -12,10 +13,8 @@ import { FlashRevenueAgent } from '@/lib/agents/flash-revenue-agent';
 //   GET /api/cron/flash-revenue
 //   Authorization: Bearer <CRON_SECRET>
 export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== 'Bearer ' + process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const { data: businesses, error } = await supabaseAdmin
     .from('businesses')

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -16,11 +17,8 @@ function rfmScore(r: number, f: number, m: number): string {
 }
 
 async function _GET(req: Request) {
-  // Only allow Vercel cron or internal calls
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}` && process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const supabase = supabaseAdmin;
   const now = new Date();

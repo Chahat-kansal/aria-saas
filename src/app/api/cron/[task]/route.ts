@@ -6,6 +6,7 @@ export const maxDuration = 300;
 // Phase 2: add timezone per business from businesses table.
 
 import { NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { nowAEST, toAESTStart, toAESTEnd } from '@/lib/date-au';
 import { runAgent } from '@/lib/agents/orchestrator';
@@ -26,11 +27,8 @@ const TASK_TO_AGENT: Record<string, AgentType | null> = {
 async function _GET(req: Request, { params }: Params) {
   const { task } = await params;
 
-  const cronSecret = req.headers.get('x-cron-secret')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '');
-  if (cronSecret !== process.env.CRON_SECRET && process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   if (!(task in TASK_TO_AGENT)) {
     return NextResponse.json({ error: `Unknown task: ${task}` }, { status: 400 });

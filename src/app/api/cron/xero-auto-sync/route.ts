@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { refreshXeroToken } from '@/lib/integrations/oauth-clients/xero'
 
@@ -60,7 +61,9 @@ async function pushManualJournal(
   return json?.ManualJournals?.[0]?.ManualJournalID ?? ''
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
   const today = new Date().toISOString().split('T')[0]
 
   // Only process businesses with auto_sync enabled

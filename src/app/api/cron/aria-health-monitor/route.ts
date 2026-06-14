@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 import { sendAlert } from '@/lib/monitoring/alert'
@@ -470,9 +471,8 @@ function buildRedRecommendation(check: WiringCheck): string {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const now = Date.now()
   const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString()

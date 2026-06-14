@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
@@ -10,13 +11,6 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendSlackMessage } from '@/lib/integrations/slack'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
-
-function authOk(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true  // dev — no secret configured
-  const auth = req.headers.get('authorization') ?? req.headers.get('x-cron-secret') ?? ''
-  return auth === `Bearer ${cronSecret}` || auth === cronSecret
-}
 
 interface BriefingBusinessWithSlack extends BriefingBusiness {
   slack_connected?: boolean
@@ -372,9 +366,8 @@ async function generateEvening(
 }
 
 async function _GET(req: NextRequest) {
-  if (!authOk(req)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const { data: bizList, error } = await supabaseAdmin
     .from('businesses')
