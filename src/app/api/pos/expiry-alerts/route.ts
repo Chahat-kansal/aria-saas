@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -19,6 +20,8 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const bid = searchParams.get('business_id') ?? await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ alerts: [] })
+  const denied = await verifyBusinessAccess(user.id, bid)
+  if (denied) return denied
 
   const { data: alerts } = await supabase
     .from('pos_expiry_alerts')

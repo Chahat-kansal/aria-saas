@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -36,6 +37,8 @@ async function _GET(req: Request) {
   // Use explicit business_id from POS terminal (staff PIN mode) or fall back to auth lookup
   const bid = explicitBid ?? await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ customers: [] });
+  const denied = await verifyBusinessAccess(user.id, bid);
+  if (denied) return denied;
 
   // Fetch a single customer by ID
   if (id) {
