@@ -311,6 +311,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
         overflowX: 'hidden',
       }}
     >
+      {/* AN-A spell 1: icon-micro — subtle scale/tilt on nav icon hover */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .an-nav-icon{transition:transform 220ms cubic-bezier(.34,1.56,.64,1)}
+        a:hover>.an-nav-icon,button:hover>.an-nav-icon{transform:scale(1.18) rotate(-4deg)}
+        @media (prefers-reduced-motion: reduce){.an-nav-icon{transition:none!important}a:hover>.an-nav-icon,button:hover>.an-nav-icon{transform:none!important}}
+      ` }} />
       {/* Logo */}
       <div className="pt-[22px] pb-3 flex-shrink-0" style={{ padding: collapsed ? '22px 0 12px' : '22px 20px 12px' }}>
         {collapsed ? (
@@ -466,7 +472,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                       (isActive ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]' : 'text-white hover:bg-[rgba(255,255,255,0.07)] hover:text-white')
                     }
                   >
-                    <item.icon className="w-[13px] h-[13px] flex-shrink-0" />
+                    <item.icon className="an-nav-icon w-[13px] h-[13px] flex-shrink-0" />
                     {!collapsed && (
                       <>
                         <span className="flex-1">{item.label}</span>

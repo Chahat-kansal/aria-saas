@@ -249,6 +249,14 @@ export function RetailDashboard({ business }: { business: Business }) {
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+      {/* AN-A spell 21: ripple — press feedback on quick-action tiles */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .an-tile-ripple{position:relative;overflow:hidden}
+        .an-tile-ripple::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(circle at center, rgba(29,158,117,.35) 0%, rgba(29,158,117,0) 60%);opacity:0;transform:scale(.4);pointer-events:none}
+        .an-tile-ripple:active::after{animation:an-tile-ripple-anim 520ms ease-out}
+        @keyframes an-tile-ripple-anim{0%{opacity:.85;transform:scale(.4)}100%{opacity:0;transform:scale(1.6)}}
+        @media (prefers-reduced-motion: reduce){.an-tile-ripple:active::after{animation:none!important;opacity:0!important}}
+      ` }} />
 
       {/* ─── Aria Value Surface ──────────────────────────────── */}
       <FirstInsightBanner />
@@ -528,7 +536,7 @@ export function RetailDashboard({ business }: { business: Business }) {
                 key={action.label}
                 onClick={() => { router.prefetch(action.href); router.push(action.href); }}
                 onMouseEnter={() => router.prefetch(action.href)}
-                className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl flex-shrink-0 relative transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+                className="an-tile-ripple flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl flex-shrink-0 relative transition-colors hover:bg-[rgba(255,255,255,0.06)]"
                 style={{ minWidth: '72px' }}>
                 <span className="text-xl">{action.icon === '✦' ? <span className="text-[#1D9E75] text-lg font-bold">✦</span> : action.icon}</span>
                 <span className="text-[10px] text-[rgba(255,255,255,0.5)] whitespace-nowrap">{action.label}</span>
