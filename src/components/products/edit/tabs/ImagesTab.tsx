@@ -1,7 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { Trash2, Plus, Star } from 'lucide-react'
+import { Trash2, Plus, Star, Scissors } from 'lucide-react'
 import { inp } from '../shared'
+import { removeBackground } from '@/lib/image/bg-removal'
 
 interface Image { id: string; image_url: string; is_primary: boolean; sort_order: number; alt_text: string | null }
 interface Props { images: Image[]; onChange: (images: Image[], deletedIds: string[]) => void }
@@ -10,9 +11,28 @@ export default function ImagesTab({ images: init, onChange }: Props) {
   const [rows, setRows] = useState<Image[]>(init)
   const [deleted, setDeleted] = useState<string[]>([])
   const [urlInput, setUrlInput] = useState('')
+  const [bgBusyId, setBgBusyId] = useState<string | null>(null)
 
   const emit = (r: Image[], d: string[]) => { setRows(r); setDeleted(d); onChange(r, d) }
   const setPrimary = (i: number) => emit(rows.map((r, j) => ({ ...r, is_primary: j === i })), deleted)
+  // FA-2.4 (CDN): fetch the image → blob → removeBackground (loads the lib from CDN on first use) →
+  // swap the row to the processed transparent-PNG preview. removeBackground returns the original on any
+  // failure, and the fetch is guarded, so this is always safe and never blocks.
+  const removeBg = async (i: number) => {
+    const img = rows[i]
+    setBgBusyId(img.id)
+    try {
+      const resp = await fetch(img.image_url, { mode: 'cors' })
+      if (!resp.ok) return
+      const blob = await resp.blob()
+      const out = await removeBackground(blob)
+      if (out && out !== blob) emit(rows.map((r, j) => (j === i ? { ...r, image_url: URL.createObjectURL(out) } : r)), deleted)
+    } catch (e) {
+      console.warn('[ImagesTab] background removal skipped:', e)
+    } finally {
+      setBgBusyId(null)
+    }
+  }
   const remove = (i: number) => {
     const row = rows[i]
     const next = rows.filter((_, j) => j !== i).map((r, j) => ({ ...r, sort_order: j }))
@@ -61,6 +81,11 @@ export default function ImagesTab({ images: init, onChange }: Props) {
                     <Trash2 size={12} />
                   </button>
                 </div>
+                {/* FA-2.4 (CDN): optional in-browser background removal — zero-dep, loads from CDN on click */}
+                <button onClick={() => removeBg(i)} disabled={bgBusyId === img.id} title="Remove background (in your browser)"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '5px', borderRadius: 6, border: 'none', background: 'var(--bg-input)', color: 'var(--text-secondary)', cursor: bgBusyId === img.id ? 'wait' : 'pointer', fontSize: 11, fontFamily: 'inherit', opacity: bgBusyId === img.id ? 0.6 : 1 }}>
+                  <Scissors size={11} /> {bgBusyId === img.id ? 'Removing…' : 'Remove background'}
+                </button>
               </div>
             </div>
           ))}
