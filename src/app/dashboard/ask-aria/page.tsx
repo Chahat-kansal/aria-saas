@@ -952,7 +952,18 @@ export default function AskAriaPage() {
         @keyframes msgIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes haloSpin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .msg-reveal { animation: none !important; } }
+        /* AN-B spell 3 modal-spring: panel entrance pop-spring */
+        @keyframes anModalSpring { 0% { opacity: 0; transform: scale(.94) } 60% { opacity: 1; transform: scale(1.02) } 100% { transform: scale(1) } }
+        .an-modal-spring { animation: anModalSpring .55s cubic-bezier(.34,1.56,.64,1) both }
+        /* AN-B spell 2 listening-ring: expanding ring around orb only in listening state */
+        @keyframes anListeningRing { 0% { transform: scale(.85); opacity: .55 } 100% { transform: scale(1.25); opacity: 0 } }
+        .an-listening-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(127,184,151,.55); pointer-events: none; animation: anListeningRing 1.6s ease-out infinite }
+        .an-listening-ring.delay { animation-delay: .8s }
+        @media (prefers-reduced-motion: reduce) {
+          .msg-reveal { animation: none !important; }
+          .an-modal-spring { animation: none !important; }
+          .an-listening-ring { animation: none !important; opacity: 0 !important; }
+        }
         @media (max-width: 1023px) {
           .aria-split-grid { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr !important; }
           .aria-left-panel { flex-direction: row !important; padding: 10px 14px !important; gap: 10px !important; min-height: 60px !important; overflow: hidden !important; flex-shrink: 0 !important; }
@@ -969,7 +980,7 @@ export default function AskAriaPage() {
       `}</style>
 
       {/* ── Split-screen grid ── */}
-      <div className="aria-split-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(380px, 420px) 1fr', height: '100%', overflow: 'hidden' }}>
+      <div className="aria-split-grid an-modal-spring" style={{ display: 'grid', gridTemplateColumns: 'minmax(380px, 420px) 1fr', height: '100%', overflow: 'hidden' }}>
 
         {/* ══ LEFT PANEL — clay-glass-bento ══ */}
         <div className="aria-left-panel" style={{
@@ -1006,6 +1017,9 @@ export default function AskAriaPage() {
           {/* Avatar zone */}
           <div className="aria-left-avatar" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 0 }}>
             <div style={{ position: 'relative', width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {/* AN-B spell 2 listening-ring — only while Aria is in the existing "listening" state */}
+              {!isAriaActive && !sending && <span className="an-listening-ring" aria-hidden />}
+              {!isAriaActive && !sending && <span className="an-listening-ring delay" aria-hidden />}
               <div style={{ position: 'absolute', inset: -10, borderRadius: '50%', border: '1.5px dashed rgba(90,138,110,0.3)', animation: 'haloSpin 24s linear infinite' }} />
               <div style={{ width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 10px 40px rgba(45,82,64,0.15), inset 0 2px 4px rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                 <div style={{ width: 120, height: 160, marginTop: -20 }}>

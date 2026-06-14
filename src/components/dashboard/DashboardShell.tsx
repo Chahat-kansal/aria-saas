@@ -49,6 +49,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-[#0f0f13] overflow-hidden">
+      {/* AN-B spell 4: reduced-motion fallback for spring sidebar */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media (prefers-reduced-motion: reduce){
+          .an-spring-sidebar{transition:transform 200ms ease!important}
+        }
+      ` }} />
       {/* Desktop sidebar — always visible */}
       <div className="hidden md:block flex-shrink-0">
         <Sidebar />
@@ -67,12 +73,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         }}
         onClick={() => setMobileOpen(false)}
       />
-      {/* Sidebar panel */}
+      {/* Sidebar panel — AN-B spell 4 spring-sidebar: springy overshoot cubic-bezier */}
       <div
-        className="fixed left-0 top-0 bottom-0 z-50 md:hidden"
+        className="an-spring-sidebar fixed left-0 top-0 bottom-0 z-50 md:hidden"
         style={{
           transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'transform 360ms cubic-bezier(.34,1.56,.64,1)',
           willChange: 'transform',
         }}
       >
