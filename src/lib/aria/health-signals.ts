@@ -35,7 +35,7 @@ export interface DataFreshness {
 export interface HealthSignals {
   pos_health: PosHealth
   day_of_week_context: DayOfWeekContext
-  weather_context: { available: false; reason: string } | { available: true; conditions_today: string; temp_c?: number | null; rain_pct?: number | null; historical_rainy_day_revenue_avg: number | null; historical_clear_day_revenue_avg: number | null; rain_factor: number | null; reasoning: string }
+  weather_context: { available: false; reason: string } | { available: true; conditions_today: string; temp_c?: number | null; rain_pct?: number | null; as_of?: string | null; historical_rainy_day_revenue_avg: number | null; historical_clear_day_revenue_avg: number | null; rain_factor: number | null; reasoning: string }
   data_freshness: DataFreshness
   known_unknowns: string[]
   // I1: every numeric the signals expose — route.ts spreads these into _anchor_values for V2 Check 6
@@ -171,22 +171,25 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
     }).then(undefined, () => {})
   }
 
-  // ── weather_context (I1): cache-first (aria_signal_cache 'weather_today', 6h TTL) → open-meteo ──
+  // ── weather_context (I1): cache-first (aria_signal_cache 'weather_today', 2h TTL) → open-meteo ──
   // Gated on businesses.lat/lng; no location → unavailable (never blocks). No new dependency:
-  // open-meteo is a free HTTP fetch already used by the agent layer.
+  // open-meteo is a free HTTP fetch already used by the agent layer. I3-FIX: TTL 6h→2h + as_of stamp
+  // so any surface can render "as of HH:MM" and stale weather is refreshed sooner.
+  const weatherAsOf = new Date(now).toISOString()
   let weather_context: HealthSignals['weather_context'] = { available: false, reason: 'no_location' }
   const loc = bizLocRes.data as { lat?: number | null; lng?: number | null } | null
-  const cachedWeather = (weatherCacheRes.data as { payload?: { conditions_today: string; temp_c: number | null; rain_pct: number | null } } | null)?.payload
+  const cachedWeather = (weatherCacheRes.data as { payload?: { conditions_today: string; temp_c: number | null; rain_pct: number | null; as_of?: string | null } } | null)?.payload
   if (cachedWeather) {
     weather_context = {
       available: true,
       conditions_today: cachedWeather.conditions_today,
       temp_c: cachedWeather.temp_c ?? null,
       rain_pct: cachedWeather.rain_pct ?? null,
+      as_of: cachedWeather.as_of ?? null,
       historical_rainy_day_revenue_avg: null,
       historical_clear_day_revenue_avg: null,
       rain_factor: null,
-      reasoning: `Today: ${cachedWeather.conditions_today}${cachedWeather.temp_c != null ? ` (${cachedWeather.temp_c}°C)` : ''} (cached).`,
+      reasoning: `Today: ${cachedWeather.conditions_today}${cachedWeather.temp_c != null ? ` (${cachedWeather.temp_c}°C)` : ''} (cached${cachedWeather.as_of ? ` as of ${cachedWeather.as_of.slice(11, 16)}` : ''}).`,
     }
   } else if (loc && loc.lat != null && loc.lng != null) {
     try {
@@ -201,15 +204,15 @@ export async function computeHealthSignals(businessId: string): Promise<HealthSi
         const conditions = `${desc}${tempC != null ? ` ${Math.round(tempC)}°C` : ''}${precip > 0 ? `, ${precip}mm rain` : ''}`
         const rainPct = code != null && code >= 51 ? 80 : code != null && code >= 45 ? 30 : 0
         weather_context = {
-          available: true, conditions_today: conditions, temp_c: tempC, rain_pct: rainPct,
+          available: true, conditions_today: conditions, temp_c: tempC, rain_pct: rainPct, as_of: weatherAsOf,
           historical_rainy_day_revenue_avg: null, historical_clear_day_revenue_avg: null, rain_factor: null,
-          reasoning: `Today: ${conditions}.`,
+          reasoning: `Today: ${conditions} (as of ${weatherAsOf.slice(11, 16)}).`,
         }
-        // cache 6h (fire-and-forget) so subsequent chats reuse it
+        // I3-FIX: cache 2h (fire-and-forget) so subsequent chats reuse it but stale weather refreshes sooner
         void supabaseAdmin.from('aria_signal_cache').insert({
           business_id: businessId, signal_type: 'weather_today', cache_key: 'weather_today',
-          payload: { conditions_today: conditions, temp_c: tempC, rain_pct: rainPct },
-          expires_at: new Date(now + 6 * 3600000).toISOString(),
+          payload: { conditions_today: conditions, temp_c: tempC, rain_pct: rainPct, as_of: weatherAsOf },
+          expires_at: new Date(now + 2 * 3600000).toISOString(),
         }).then(undefined, () => {})
       }
     } catch { /* open-meteo unreachable — stays unavailable */ }
