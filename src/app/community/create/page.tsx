@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS, FONT, MAX_W } from '../theme'
 import { supabase } from '@/lib/supabase'
+import { isLikelyNSFW } from '@/lib/moderation/nsfw-check'
 
 const BG = PALETTE.ink
 const FG = PALETTE.surface
@@ -70,10 +71,23 @@ export default function CreatePost() {
     setTimeout(() => setToast(''), 3000)
   }
 
-  function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     if (!f || !biz) return
     const vid = f.type.startsWith('video/')
+    // FA-2.5 (CDN): client-side NSFW gate for still images only (the model classifies images, not
+    // video). Fails OPEN — isLikelyNSFW returns {flagged:false} on any CDN/model error, so it never
+    // blocks uploads if the check can't load. Zero server call, zero logging.
+    if (!vid && f.type.startsWith('image/')) {
+      setUploading(true)
+      const verdict = await isLikelyNSFW(f)
+      setUploading(false)
+      if (verdict.flagged) {
+        showToast('This image looks inappropriate and can’t be posted.')
+        e.target.value = ''
+        return
+      }
+    }
     setIsVideo(vid)
     setPreview(URL.createObjectURL(f))
     setUploading(true)
