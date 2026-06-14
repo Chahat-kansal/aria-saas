@@ -169,6 +169,9 @@ export type AskBlock =
   | { type: 'clay_chart'; title?: string; data: Array<{ name: string; value: number }>; color?: string }
   | { type: 'kinetic_text'; words: string[]; colors?: string[] }
   | { type: 'aurora_summary'; title: string; value: string | number; sub?: string; format?: 'currency' | 'number' | 'percent' }
+  // RICH-3: interactive proposal card — title, claim, ONE action button. The button emits its `prompt`
+  // through the existing onAction handler (no DB call here); render-only, like action_single/action_card.
+  | { type: 'proposal_card'; title: string; claim: string; action_label?: string; prompt: string; accent?: string }
 
 export interface AskResponse {
   blocks: AskBlock[]

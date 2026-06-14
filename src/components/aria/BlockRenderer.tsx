@@ -1002,6 +1002,21 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
       )
     }
 
+    // RICH-3: interactive proposal card — title + claim + ONE action button → onAction(prompt).
+    case 'proposal_card': {
+      const accent = block.accent ?? 'var(--violet)'
+      return (
+        <div style={{ borderRadius: 10, border: '1px solid var(--divider)', borderLeft: '3px solid ' + accent, background: 'var(--bg-surface)', padding: '14px 16px' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>{block.title}</p>
+          <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 12px' }}>{block.claim}</p>
+          <button type="button" onClick={() => onAction?.(block.prompt)} aria-label={'Ask Aria: ' + (block.action_label ?? block.title)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {block.action_label ?? 'Explore this'}
+          </button>
+        </div>
+      )
+    }
+
     default:
       return (
         <span style={{ display: 'inline-block', fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', color: '#F87171', fontFamily: 'monospace' }}>
