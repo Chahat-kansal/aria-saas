@@ -274,7 +274,8 @@ async function _POST(req: Request) {
     if (!p?.track_stock) continue;
     stockOps.push(
       (async () => {
-        const { data: newStock } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity });
+        const { data: newStock, error: decErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity });
+        if (decErr) logger.error('pos/sale decrement_stock_quantity failed', { route: 'pos/sale', businessId: business.id, productId: i.product_id, error: decErr.message });
         try {
           await supabase.from('stock_movements').insert({
             business_id: business.id,
@@ -297,24 +298,28 @@ async function _POST(req: Request) {
       : payment_method === 'split' ? (split_cash ?? 0) : 0;
     const cardAmt = payment_method === 'eftpos' ? total_amount
       : payment_method === 'split' ? (split_card ?? 0) : 0;
-    await supabase.rpc('increment_session_totals', {
+    const { error: sessErr } = await supabase.rpc('increment_session_totals', {
       p_session_id: openSession.id,
       p_cash_delta: cashAmt,
       p_card_delta: cardAmt,
       p_transaction_delta: 1,
     }).maybeSingle();
+    if (sessErr) logger.error('pos/sale increment_session_totals failed', { route: 'pos/sale', businessId: business.id, sessionId: openSession.id, error: sessErr.message });
   }
 
   // Update customer loyalty + stats — atomic RPCs prevent concurrent-sale race
   if (customer_id) {
     waitUntil((async () => {
       try {
-        await Promise.all([
+        const custResults = await Promise.all([
           supabase.rpc('increment_loyalty_points', { customer_id, points: Math.floor(total_amount) }).maybeSingle(),
           supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'total_spent', p_amount: total_amount }),
           supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'visit_count', p_amount: 1 }),
           supabase.from('pos_customers').update({ last_visit: new Date().toISOString() }).eq('id', customer_id),
         ])
+        for (const r of custResults) {
+          if (r?.error) logger.error('pos/sale customer stats update failed', { route: 'pos/sale', businessId: business.id, customerId: customer_id, error: r.error.message });
+        }
       } catch (e) { console.error('[sale] loyalty update failed:', e) }
     })())
   }
@@ -355,7 +360,8 @@ async function _POST(req: Request) {
         for (const ing of (recipe as any).recipe_ingredients as Array<{ product_id: string | null; quantity: number }>) {
           if (!ing.product_id) continue
           const deduct = (ing.quantity * item.quantity) / ((recipe as any).serves || 1)
-          await supabase.rpc('decrement_stock_quantity', { p_product_id: ing.product_id, p_amount: deduct })
+          const { error: ingErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: ing.product_id, p_amount: deduct })
+          if (ingErr) logger.error('pos/sale ingredient decrement failed', { route: 'pos/sale', businessId: business.id, productId: ing.product_id, error: ingErr.message })
         }
       }
     } catch (e) { console.error('[non-fatal]', e) }
