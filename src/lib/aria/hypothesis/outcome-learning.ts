@@ -356,7 +356,7 @@ export async function runHypothesisOutcomeClosure(businessId: string): Promise<{
   return { closed }
 }
 
-async function adjustAdviceWeight(businessId: string, category: string, verdict: string): Promise<void> {
+export async function adjustAdviceWeight(businessId: string, category: string, verdict: string): Promise<void> {
   const delta   = verdict === 'worked' ? 0.1 : verdict === 'backfired' ? -0.15 : 0.0
   const posInc  = verdict === 'worked'                              ? 1 : 0
   const negInc  = verdict === 'backfired'                           ? 1 : 0

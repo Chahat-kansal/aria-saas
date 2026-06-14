@@ -36,6 +36,7 @@ import { validateAndHeal } from '@/lib/aria/response-validator'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { computeHealthSignals } from '@/lib/aria/health-signals'
 import { computeGoalContext } from '@/lib/aria/goal-context'
+import { getOpenLoops } from '@/lib/aria/open-loops'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
@@ -691,7 +692,7 @@ Rules:
           const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
           const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
           const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights] = await Promise.all([
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights, gtOpenLoops] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -717,6 +718,8 @@ Rules:
             // category actually turned out (outcome-check cron → adjustAdviceWeight). Surfaces the
             // per-category confidence so the council can hedge categories that historically backfired.
             supabaseAdmin.from('aria_advice_weights').select('category,weight,positive_outcomes,negative_outcomes,neutral_outcomes').eq('business_id', bid),
+            // PLAN-PERSISTENCE-1 (I5) Part 2: actions the owner executed but Aria never followed up on
+            getOpenLoops(bid).catch(() => []),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
@@ -782,6 +785,11 @@ Rules:
               }
             })
             .filter(w => w.total_outcomes > 0)
+          // PLAN-PERSISTENCE-1 (I5) Part 2: only surface loops past the 7-day statistical floor
+          // (DO-NOT push 'too_soon'). 5 most recent. getOpenLoops already orders by executed_at desc.
+          const openLoopsGT = ((gtOpenLoops ?? []) as Array<{ outcome_status: string }>)
+            .filter(l => l.outcome_status === 'ready_to_review')
+            .slice(0, 5)
           ctxParsed.available_ground_truth = {
             note: 'VERIFIED LIVE QUERIES THIS TURN — these numbers are SAFE TO CITE. Any other specific figure must come from VERIFIED FIGURES or INTENT-GROUNDED FACTS.',
             revenue_today: revToday,
@@ -809,6 +817,11 @@ Rules:
             advice_weights_note: adviceWeightsGT.length
               ? 'advice_weights reflect how past recommendations per category actually performed. weight is a 0.3–2.0 confidence multiplier (1.0 = neutral); success_rate is Laplace-smoothed. LOWER weight / success_rate = be more cautious recommending that category again.'
               : undefined,
+            // PLAN-PERSISTENCE-1 (I5): executed actions awaiting follow-up (≥7d, not yet outcome-tracked)
+            open_loops: openLoopsGT.length ? openLoopsGT : undefined,
+            open_loops_note: openLoopsGT.length
+              ? 'open_loops are things the owner ACTED ON but you have not asked about. observed_delta is an early revenue read (not a verdict). If relevant, ask naturally how one went — do NOT assert it worked/failed from observed_delta alone.'
+              : undefined,
             _anchor_values: anchorValues,
           }
           // HEALTH-SIGNALS-1 Part 5: audit what diagnostic facts Aria saw this turn
@@ -834,6 +847,17 @@ Rules:
               request_summary: bid,
               response_summary: JSON.stringify({ categories: adviceWeightsGT.length, weights: adviceWeightsGT.map(w => `${w.category}:${w.weight}`) }).slice(0, 200),
             })
+          }
+          // PLAN-PERSISTENCE-1 (I5) Part 6: audit the open loops Aria saw this turn
+          {
+            const totalOpen = (gtOpenLoops ?? []).length
+            if (totalOpen > 0) {
+              void logAICallSafe({
+                business_id: bid, agent_key: 'open_loops', role: 'analysis', provider: 'other', success: true,
+                request_summary: bid,
+                response_summary: JSON.stringify({ open_count: totalOpen, ready_to_review_count: openLoopsGT.length }).slice(0, 200),
+              })
+            }
           }
         } catch { /* non-fatal — council proceeds without anchors */ }
         augCtx = JSON.stringify(ctxParsed)

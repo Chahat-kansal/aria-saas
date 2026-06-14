@@ -976,9 +976,12 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
 
   // GOAL-AWARE-1 (I2): synthesis-only fact-pointer (not added to advisors) — frame against the goal.
   const goalPointer = 'GOAL_CONTEXT: The owner\'s weekly target trajectory is in goal_context. Frame your recommendation against the gap or pace required if relevant. If goal_context.status="no_target", do NOT invent a target — ask the owner what their target is.'
+  // PLAN-PERSISTENCE-1 (I5): synthesis-only fact-pointer — surface follow-ups the owner is owed.
+  const openLoopsPointer = 'OPEN_LOOPS: actions the owner executed but you have not followed up on are in open_loops. If any has outcome_status="ready_to_review", ASK naturally how it went somewhere in your response — this makes the owner feel seen and captures outcome data for better future advice. Do NOT interrupt the main question; weave it in. Never assert it worked/failed from observed_delta alone — that is an early read, not a verdict.'
   const synthesisInput = `
 ${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}${diagnosticPointer}
 ${goalPointer}
+${openLoopsPointer}
 BUSINESS DATA:
 ${cleanContextStr}
 ${qualitySynthesisBlock}
