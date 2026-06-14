@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { buildPlan } from '@/lib/aria/radar/plan-builder'
 import { rollbackAction } from '@/lib/aria/ask/action-rollback'
+import { onActionExecuted } from '@/lib/aria/hypothesis/outcome-learning'
 import type { LossSignal } from '@/lib/aria/radar/loss-detector'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -96,6 +97,10 @@ async function _POST(req: Request) {
         .update({ status: 'executed', executed_at: new Date().toISOString(), executed_by_user_id: user.id })
         .eq('id', String(aria_action_id))
         .eq('business_id', String(business_id))
+      // I4-VERIFY: this auto-execute path skips the 'approved' PATCH branch, so it was creating NO
+      // linked outcome. Create it here at the terminal state (idempotent). Fire-and-forget.
+      void onActionExecuted(String(aria_action_id), String(business_id))
+        .catch((e) => console.error('[aria/plan] onActionExecuted failed:', (e as Error).message))
     }
 
     const sig = signal as LossSignal

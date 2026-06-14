@@ -1,6 +1,17 @@
 # Sprint I4 — OUTCOME-LOOP-1 (wire the dormant outcome → learning loop)
 **Date:** 2026-06-14
-**Status:** COMPLETE — tsc 0 errors, build PASS. RULE 0 UPGRADE_ONLY. **STOP before push.**
+**Status:** SUPERSEDED IN PART by I4-VERIFY — see erratum below. PARTS 4 & 5 stand; PART 1's "already wired" claim was WRONG.
+
+> **⚠️ ERRATUM (I4-VERIFY, 14 Jun, live DB):** This report claimed (a) aria_actions has no `'executed'`
+> status and 'approved' is the terminal trigger, and (b) PART 1 (action→outcome) was already wired and
+> "ZERO acted_on" was just a usage gap. **Both were wrong.** Live: statuses include `executed` (7 rows);
+> lifecycle is pending→approved→executed; the PATCH route's `ALLOWED_STATUSES` excluded `'executed'`, and
+> actions auto-execute via `plan/route.ts` **skipping** the 'approved' branch — so `onActionApproved`
+> never fired and **zero** linked outcomes were ever created (the 6 aria_outcomes rows are legacy
+> business-chat, action_id=null). Additionally `snapshotBaseline` returned **null** for the real action
+> category `'sales'`, so even a created outcome had no baseline. **Fixed + proven live in
+> `sprint-I4-VERIFY-report.md`** (new linked outcome `e965d21b…`, baseline 6900). The advice-weights
+> (PART 4) and hypothesis-closure (PART 5) work in this report is unaffected and stands.
 
 > The audit framed this as "infrastructure fully built, wiring missing." The pre-flight proved the
 > wiring is **mostly already present and correct** — `onActionApproved`, `runOutcomeChecks`,

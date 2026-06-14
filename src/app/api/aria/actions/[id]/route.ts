@@ -3,9 +3,11 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { onActionApproved } from '@/lib/aria/hypothesis/outcome-learning'
+import { onActionApproved, onActionExecuted } from '@/lib/aria/hypothesis/outcome-learning'
 
-const ALLOWED_STATUSES = new Set(['pending', 'approved', 'ignored', 'completed', 'edited']);
+// I4-VERIFY: 'executed' is the terminal lifecycle state (pending→approved→executed). It was missing
+// here, so the action API could not mark an action executed or create its linked outcome.
+const ALLOWED_STATUSES = new Set(['pending', 'approved', 'ignored', 'completed', 'edited', 'executed']);
 const ALLOWED_PRIORITIES = new Set(['high', 'medium', 'low']);
 const EDITABLE_FIELDS = ['title', 'category', 'recommendation', 'reason', 'expected_impact', 'confidence', 'source', 'outcome_status', 'outcome_notes'] as const;
 
@@ -30,6 +32,8 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
     update.status = body.status;
     if (['approved', 'ignored', 'edited'].includes(body.status)) update.reviewed_at = new Date().toISOString();
     if (body.status === 'completed') update.completed_at = new Date().toISOString();
+    // I4-VERIFY: stamp the executor on the terminal transition (executed_by_user_id exists on aria_actions)
+    if (body.status === 'executed') update.executed_by_user_id = user.id;
   }
   if (typeof body.priority === 'string') {
     if (!ALLOWED_PRIORITIES.has(body.priority)) return NextResponse.json({ error: 'Invalid priority' }, { status: 400 });
@@ -57,6 +61,18 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
         await onActionApproved(params.id, String(existing.business_id))
       } catch (e) {
         console.error('[aria/actions] onActionApproved failed:', (e as Error).message)
+      }
+    })())
+  }
+
+  // I4-VERIFY: create the linked outcome at the TERMINAL state. Idempotent — onActionExecuted skips
+  // if onActionApproved already created the outcome, so approved→executed never double-inserts.
+  if (body.status === 'executed' && existing?.business_id) {
+    waitUntil((async () => {
+      try {
+        await onActionExecuted(params.id, String(existing.business_id))
+      } catch (e) {
+        console.error('[aria/actions] onActionExecuted failed:', (e as Error).message)
       }
     })())
   }

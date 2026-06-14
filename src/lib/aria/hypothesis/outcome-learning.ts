@@ -60,6 +60,53 @@ export async function onActionApproved(actionId: string, businessId: string): Pr
 }
 
 /**
+ * I4-VERIFY — Called when an aria_action reaches its TERMINAL state 'executed'.
+ * Lifecycle is pending→approved→executed; many actions skip the 'approved' PATCH branch entirely
+ * (auto-execute paths set status='executed' directly), so onActionApproved never fired and NO linked
+ * outcome was ever created — the dead-end that left aria_outcomes with 0 action_id rows and the cron
+ * with nothing to verdict. This creates the linked outcome (action_id + baseline_metric_cents) at
+ * 'executed'. IDEMPOTENT: if an acted-on outcome already exists for this action (e.g. created at
+ * 'approved'), it does nothing — so it never duplicates onActionApproved's row.
+ */
+export async function onActionExecuted(actionId: string, businessId: string): Promise<void> {
+  // Idempotency guard — already tracked by an acted-on outcome? (approved path, or a prior execute)
+  const { data: existing } = await supabaseAdmin
+    .from('aria_outcomes')
+    .select('id')
+    .eq('business_id', businessId)
+    .eq('action_id', actionId)
+    .eq('acted_on', true)
+    .limit(1)
+    .maybeSingle()
+  if (existing) return
+
+  const { data: action } = await supabaseAdmin
+    .from('aria_actions')
+    .select('id,title,category,recommendation,source')
+    .eq('id', actionId)
+    .maybeSingle()
+  if (!action) return
+
+  const a = action as Record<string, unknown>
+  const baseline = await snapshotBaseline(businessId, (a.category as string | null) ?? 'cashflow')
+  const nowIso = new Date().toISOString()
+
+  const { error } = await supabaseAdmin.from('aria_outcomes').insert({
+    business_id: businessId,
+    action_id: actionId,
+    recommendation_type: (a.source as string | null) ?? 'aria_action',
+    recommendation_detail: `${a.title as string}: ${(a.recommendation as string | null) ?? ''}`.slice(0, 1000),
+    recommended_at: nowIso,
+    acted_on: true,
+    acted_on_at: nowIso,
+    category: a.category as string | null,
+    baseline_metric_cents: baseline,
+  })
+  if (error) { console.error('[outcome-learning] onActionExecuted insert failed:', error.message); return }
+  console.log('[outcome-learning] action executed, linked outcome created for', actionId, 'baseline_cents', baseline)
+}
+
+/**
  * Called by the outcome-check cron.
  * Computes 7d/30d verdicts, adjusts advice weights, writes memories.
  */
@@ -144,15 +191,11 @@ export async function runOutcomeChecks(businessId: string): Promise<{ checked: n
 async function snapshotBaseline(businessId: string, category: string): Promise<number | null> {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   try {
-    if (['cashflow', 'pricing', 'inventory', 'marketing', 'hours'].includes(category)) {
-      const { data } = await supabaseAdmin
-        .from('pos_sales')
-        .select('total_amount')
-        .eq('business_id', businessId)
-        .neq('status', 'voided')
-        .gte('created_at', since)
-      return (data ?? []).reduce((s, r) => s + Math.round(Number((r as Record<string,unknown>).total_amount || 0) * 100), 0)
-    }
+    // customers / staff use a head-count metric; EVERY other category (cashflow, pricing, inventory,
+    // marketing, hours, sales, revenue, promotions, …) uses 7-day revenue in cents. I4-VERIFY: the
+    // revenue branch is now the DEFAULT — previously unlisted categories (e.g. 'sales', the real
+    // category on Sip's actions) returned null, leaving the outcome with no baseline so the cron could
+    // never verdict it. Revenue is the universal baseline; this only turns nulls into real numbers.
     if (category === 'customers') {
       const { count } = await supabaseAdmin
         .from('pos_customers')
@@ -169,7 +212,13 @@ async function snapshotBaseline(businessId: string, category: string): Promise<n
         .eq('is_active', true)
       return count ?? 0
     }
-    return null
+    const { data } = await supabaseAdmin
+      .from('pos_sales')
+      .select('total_amount')
+      .eq('business_id', businessId)
+      .neq('status', 'voided')
+      .gte('created_at', since)
+    return (data ?? []).reduce((s, r) => s + Math.round(Number((r as Record<string,unknown>).total_amount || 0) * 100), 0)
   } catch {
     return null
   }
