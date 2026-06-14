@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCountUp } from '@/lib/anim/use-count-up'
 
 const G = '#1D9E75'
 const CARD: React.CSSProperties = { padding: '16px 20px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', background: '#13131a' }
@@ -59,6 +60,8 @@ export function LiveRevenueTicker({ businessId }: { businessId: string }) {
   }, [businessId])
 
   const avg = count > 0 ? revenue / count : 0
+  // AN-D spell 12 number-counter — animate revenue display value
+  const revenueDisplay = useCountUp(revenue)
 
   return (
     <div style={{ ...CARD, border: `1px solid ${flash ? G : 'rgba(255,255,255,0.07)'}`, background: flash ? 'rgba(29,158,117,0.1)' : '#13131a', transition: 'all 0.4s ease' }}>
@@ -67,7 +70,7 @@ export function LiveRevenueTicker({ businessId }: { businessId: string }) {
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: G, display: 'inline-block', animation: 'pulse 2s infinite' }} />
       </div>
       <div style={{ fontSize: 28, fontWeight: 700, color: flash ? G : '#fff', transition: 'color 0.4s', lineHeight: 1 }}>
-        A${revenue.toFixed(0)}
+        A${revenueDisplay.toFixed(0)}
       </div>
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
         {count} transaction{count !== 1 ? 's' : ''}{count > 0 ? ` · avg A$${avg.toFixed(0)}` : ''}
@@ -97,10 +100,12 @@ export function ThreeWayRevenue({ businessId }: { businessId: string }) {
 
   function RevCol({ label, value, compare, compareLabel }: { label: string; value: number; compare?: number; compareLabel?: string }) {
     const p = compare !== undefined ? pctDiff(value, compare) : null
+    // AN-D spell 12 number-counter — animate KPI value
+    const display = useCountUp(value)
     return (
       <div style={{ flex: 1, minWidth: 140, padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
         <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', lineHeight: 1 }}>A${value.toFixed(0)}</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', lineHeight: 1 }}>A${display.toFixed(0)}</div>
         {p !== null && (
           <div style={{ fontSize: 11, marginTop: 6, color: p >= 0 ? G : '#f87171' }}>
             {p >= 0 ? '↑' : '↓'} {Math.abs(p)}% vs {compareLabel}

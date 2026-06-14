@@ -143,9 +143,15 @@ export default function OnboardingWizard() {
 
   return (
     <div className="min-h-screen bg-[#f0f5f2] flex flex-col items-center px-4 py-12" style={{ fontFamily: 'var(--font-body)' }}>
+      {/* AN-D spell 20 keyboard-onboarding: per-step spring fade-in for desktop wizard */}
+      <style>{`
+        @keyframes anKbdOnboardingIn{0%{opacity:0;transform:translateY(14px) scale(.985)}60%{opacity:1;transform:translateY(-2px) scale(1.005)}100%{transform:translateY(0) scale(1)}}
+        .an-kbd-onboarding{animation:anKbdOnboardingIn .5s cubic-bezier(.22,1,.36,1) both}
+        @media (prefers-reduced-motion: reduce){.an-kbd-onboarding{animation:none!important}}
+      `}</style>
       <div className="text-2xl font-semibold mb-8 text-[#2D5240]" style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}>aria</div>
       <ProgressBar current={idx + 1} />
-      <div className="w-full max-w-xl bg-white rounded-2xl border border-[rgba(45,82,64,0.12)] shadow-sm p-8 mt-6">
+      <div key={idx} className="an-kbd-onboarding w-full max-w-xl bg-white rounded-2xl border border-[rgba(45,82,64,0.12)] shadow-sm p-8 mt-6">
         <h1 className="text-xl font-semibold text-[#2D5240] mb-1" style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}>
           {HEADINGS[idx]}
         </h1>
