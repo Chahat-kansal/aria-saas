@@ -5,6 +5,7 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
+import { sendAlert } from '@/lib/monitoring/alert'
 
 // ─── SH-3 types ──────────────────────────────────────────────────────────────
 
@@ -555,6 +556,32 @@ export async function GET(req: Request) {
   const greenCount = checks.filter(c => c.status === 'green').length
 
   console.log(`[aria-health-monitor] SH-4: ${checksWritten} checks written — ${redCount} red / ${amberCount} amber / ${greenCount} green — ${redActions} aria_actions created`)
+
+  // ── MONITOR-1: surface failures (AI anomalies, red wiring checks, failed crons) to the alert
+  // channel. Fire-and-forget; no-ops if ALERT_WEBHOOK is unset. Read-only (no table writes here).
+  let failedCrons = 0
+  try {
+    const { count } = await supabaseAdmin
+      .from('cron_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'failed')
+      .gte('started_at', since24h)
+    failedCrons = count ?? 0
+  } catch (e) {
+    console.warn('[aria-health-monitor] cron_logs failure read failed:', (e as Error).message)
+  }
+  if (anomalies.length > 0 || redCount > 0 || failedCrons > 0) {
+    void sendAlert({
+      title: 'Aria health: failures detected (last 24h)',
+      summary: `${anomalies.length} AI anomaly(ies) · ${redCount} red wiring check(s) · ${failedCrons} failed cron run(s).`,
+      severity: redCount > 0 || failedCrons > 0 || anomalies.some(a => a.priority === 'high') ? 'high' : 'normal',
+      details: {
+        ai_anomalies: anomalies.map(a => a.category),
+        red_checks: checks.filter(c => c.status === 'red').map(c => c.check_name),
+        failed_crons: failedCrons,
+      },
+    })
+  }
 
   return NextResponse.json({
     ok: true,
