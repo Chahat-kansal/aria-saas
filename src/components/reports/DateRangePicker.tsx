@@ -189,12 +189,19 @@ export default function DateRangePicker({ value, onChange }: Props) {
         <div style={{ fontSize: 11, color: 'var(--violet)', marginTop: 4, fontWeight: 600 }}>{selectionHint}</div>
       )}
       {open && (
-        <div style={{
+        <div className="an-bouncy-dropdown" style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50,
           background: 'var(--bg-elevated)', borderRadius: 14, padding: 16,
           boxShadow: 'var(--shadow-lg)', display: 'flex', gap: 20,
           border: '1px solid var(--border-default)',
+          transformOrigin: 'top left',
         }}>
+          {/* AN-C spell 10 bouncy-dropdown: pop+spring entrance for date picker popup */}
+          <style>{`
+            @keyframes anBouncyDropdown{0%{opacity:0;transform:translateY(-6px) scale(.94)}55%{opacity:1;transform:translateY(2px) scale(1.02)}100%{transform:translateY(0) scale(1)}}
+            .an-bouncy-dropdown{animation:anBouncyDropdown .35s cubic-bezier(.34,1.56,.64,1) both}
+            @media (prefers-reduced-motion: reduce){.an-bouncy-dropdown{animation:none!important}}
+          `}</style>
           <Calendar
             month={month1}
             from={customFrom ?? value.from}

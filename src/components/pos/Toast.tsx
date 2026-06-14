@@ -21,7 +21,7 @@ export default function Toast({ message, type = 'success', onDismiss }: ToastPro
   const c = colors[type];
 
   return (
-    <div style={{
+    <div className="an-bouncy-toast" style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
       background: 'var(--bg-base)', border: `1px solid ${c.border}`,
       borderLeft: `3px solid ${c.text}`, borderRadius: 10,
@@ -30,6 +30,12 @@ export default function Toast({ message, type = 'success', onDismiss }: ToastPro
       display: 'flex', alignItems: 'center', gap: 10,
       fontFamily: 'Manrope, system-ui, sans-serif',
     }}>
+      {/* AN-C spell 13 bouncy-toast: pop+spring entrance for all confirmation toasts */}
+      <style>{`
+        @keyframes anBouncyToastIn{0%{opacity:0;transform:translateY(28px) scale(.9)}55%{opacity:1;transform:translateY(-6px) scale(1.04)}80%{transform:translateY(2px) scale(.99)}100%{transform:translateY(0) scale(1)}}
+        .an-bouncy-toast{animation:anBouncyToastIn .55s cubic-bezier(.34,1.56,.64,1) both}
+        @media (prefers-reduced-motion: reduce){.an-bouncy-toast{animation:none!important}}
+      `}</style>
       <span style={{ fontSize: 16 }}>
         {type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}
       </span>
