@@ -47,9 +47,23 @@ async function _DELETE(req: Request) {
     await supabaseAdmin.from('businesses').delete().in('id', businessIds)
   }
 
+  // SEC-4 Part 5 — record the deletion (business_id null so the audit row survives the cascade)
+  await supabaseAdmin.from('deletion_audit_log').insert({
+    table_name: 'businesses',
+    row_id: null,
+    action: 'account_delete',
+    old_data: { user_id: user.id, email: user.email ?? null, business_ids: businessIds },
+    performed_by: user.id,
+    business_id: null,
+    reason: 'owner_requested_account_deletion',
+    performed_at: new Date().toISOString(),
+  })
+
   await supabaseAdmin.auth.admin.deleteUser(user.id)
 
   return NextResponse.json({ deleted: true })
 }
 
 export const DELETE = withErrorCapture('account/delete', _DELETE)
+// SEC-4 — also expose as POST per spec (same confirmation-gated handler)
+export const POST = withErrorCapture('account/delete', _DELETE)

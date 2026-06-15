@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
+import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -116,6 +117,8 @@ async function _POST(req: Request) {
       business_id: bid, name,
       email: email || null, phone: phone || null,
       birthday: birthday || null, notes: notes || null,
+      // SEC-4 — dual-write encrypted PII alongside retained plaintext
+      ...encryptCustomerPII({ name, email: email || null, phone: phone || null, notes: notes || null }, bid),
       tags: tags ?? [], marketing_consent: !!marketing_consent,
       loyalty_points: 0, points_balance: 0, stamps_count: 0,
       total_spent: 0, visit_count: 0,
@@ -145,7 +148,8 @@ async function _PATCH(req: Request) {
   const body = await req.json();
   const { error } = await supabase
     .from('pos_customers')
-    .update(body)
+    // SEC-4 — dual-write encrypted PII for any of email/phone/name/notes present in the update
+    .update({ ...body, ...encryptCustomerPII(body, bid) })
     .eq('id', id)
     .eq('business_id', bid);
 
