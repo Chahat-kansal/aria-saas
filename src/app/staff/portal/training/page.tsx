@@ -1,5 +1,9 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+
+// Lazy — the game engine JS only loads when a staff member actually plays a game lesson.
+const AriaGameRound = dynamic(() => import('@/components/training/AriaGameRound'), { ssr: false })
 
 // TP-2 — Staff "My Training". Lists the staff member's enrolments and lets them step through
 // video/document/text/acknowledge/recipe lessons, marking each complete (progress rolls up,
@@ -100,12 +104,16 @@ export default function MyTrainingPage() {
   )
 }
 
+interface LessonResult { ok: boolean; lesson_score: number | null; passed: boolean; pass_mark: number; progress_pct: number; status: string; certified: boolean }
+
 function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => void }) {
-  const [course, setCourse] = useState<{ title: string; description: string | null; tier: string | null } | null>(null)
+  const [course, setCourse] = useState<{ title: string; description: string | null; tier: string | null; pass_mark?: number } | null>(null)
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [done, setDone] = useState<Set<string>>(new Set())
+  const [scores, setScores] = useState<Record<string, number | null>>({})
   const [enrolId, setEnrolId] = useState<string | null>(null)
   const [enrol, setEnrol] = useState<{ status: string; progress_pct: number; certified: boolean } | null>(null)
+  const [gamePass, setGamePass] = useState(60)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState('')
@@ -113,21 +121,25 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const d = await api<{ enrolment: { id: string; status: string; progress_pct: number; certified: boolean }; course: typeof course; lessons: Lesson[]; completed_lesson_ids: string[] }>(`/api/staff/portal/training?course_id=${courseId}`)
-      setCourse(d.course); setLessons(d.lessons ?? []); setDone(new Set(d.completed_lesson_ids ?? [])); setEnrolId(d.enrolment.id); setEnrol(d.enrolment)
+      const d = await api<{ enrolment: { id: string; status: string; progress_pct: number; certified: boolean }; course: typeof course; lessons: Lesson[]; completed_lesson_ids: string[]; lesson_scores?: Record<string, number | null>; game_pass?: number }>(`/api/staff/portal/training?course_id=${courseId}`)
+      setCourse(d.course); setLessons(d.lessons ?? []); setDone(new Set(d.completed_lesson_ids ?? [])); setScores(d.lesson_scores ?? {}); setEnrolId(d.enrolment.id); setEnrol(d.enrolment); if (d.game_pass) setGamePass(d.game_pass)
     } catch (e) { setErr((e as Error).message) } finally { setLoading(false) }
   }, [courseId])
   useEffect(() => { load() }, [load])
 
-  async function complete(lessonId: string) {
-    if (!enrolId) return
+  // Single completion path for ALL lesson types: view-complete, quiz (answers), game (score).
+  async function complete(lessonId: string, extra?: { answers?: Array<{ question_id: string; option_id: string }>; score?: number }): Promise<LessonResult | null> {
+    if (!enrolId) return null
     setBusy(lessonId); setErr('')
     try {
-      const r = await api<{ progress_pct: number; status: string; certified: boolean }>('/api/staff/portal/training', { method: 'POST', body: { enrolment_id: enrolId, lesson_id: lessonId } })
-      setDone(prev => new Set(prev).add(lessonId))
+      const r = await api<LessonResult>('/api/staff/portal/training', { method: 'POST', body: { enrolment_id: enrolId, lesson_id: lessonId, ...extra } })
+      setDone(prev => { const n = new Set(prev); if (r.passed) n.add(lessonId); else n.delete(lessonId); return n })
+      if (r.lesson_score != null) setScores(s => ({ ...s, [lessonId]: Math.max(Number(s[lessonId] ?? 0), r.lesson_score ?? 0) }))
       setEnrol(e => e ? { ...e, progress_pct: r.progress_pct, status: r.status, certified: r.certified } : e)
-    } catch (e) { setErr((e as Error).message) } finally { setBusy(null) }
+      return r
+    } catch (e) { setErr((e as Error).message); return null } finally { setBusy(null) }
   }
+  const passMark = Number(course?.pass_mark ?? 80)
 
   const tier = course?.tier ? TIER_COLOR[course.tier] : SAGE
   return (
@@ -145,7 +157,7 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
                   <div style={{ height: '100%', width: `${enrol.progress_pct}%`, background: enrol.status === 'complete' ? DEEP : SAGE, borderRadius: 99, transition: 'width .3s' }} />
                 </div>
                 <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
-                  {enrol.progress_pct}% complete{enrol.certified ? ' · ✓ Certified' : enrol.status === 'complete' ? ' · awaiting quiz (coming soon)' : ''}
+                  {enrol.progress_pct}% complete{enrol.certified ? ' · ✓ Certified' : ''}
                 </div>
               </div>
             )}
@@ -157,31 +169,51 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
             {lessons.map((l, i) => {
               const isDone = done.has(l.id)
               const graded = GRADED.has(l.type)
+              const score = scores[l.id]
+              const threshold = l.type === 'game' ? gamePass : passMark
               return (
                 <div key={l.id} style={{ background: CARD, borderRadius: 14, boxShadow: SHADOW, border: `1px solid ${LINE}`, padding: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ width: 24, height: 24, borderRadius: '50%', background: isDone ? DEEP : '#eef2ef', color: isDone ? '#fff' : MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{isDone ? '✓' : i + 1}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: INK }}>{l.title || TYPE_LABEL[l.type]}</div>
-                      <span style={{ ...pill(MUTED), marginTop: 3 }}>{TYPE_LABEL[l.type] ?? l.type}{graded ? ' · interactive soon' : ''}</span>
+                      <span style={{ ...pill(MUTED), marginTop: 3 }}>{TYPE_LABEL[l.type] ?? l.type}{graded && score != null ? ` · best ${score}%` : ''}</span>
                     </div>
                   </div>
-                  {/* Lesson body */}
-                  {l.url && ['video', 'document', 'image'].includes(l.type) && (
-                    <a href={l.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, fontSize: 13, color: DEEP, fontWeight: 600 }}>Open {TYPE_LABEL[l.type].toLowerCase()} →</a>
+
+                  {/* ── Interactive bodies ── */}
+                  {l.type === 'video' && l.url && <VideoEmbed url={l.url} />}
+                  {l.type === 'image' && l.url && <img src={l.url} alt={l.title ?? ''} style={{ marginTop: 10, maxWidth: '100%', borderRadius: 10 }} />}
+                  {l.type === 'document' && l.url && (
+                    <a href={l.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, fontSize: 13, color: DEEP, fontWeight: 600 }}>Open document →</a>
                   )}
                   {l.content && ['text', 'document', 'acknowledge'].includes(l.type) && (
                     <p style={{ marginTop: 10, fontSize: 13, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{l.content}</p>
                   )}
-                  {graded && <p style={{ marginTop: 10, fontSize: 12.5, color: MUTED, fontStyle: 'italic' }}>{l.type === 'quiz' ? 'A graded quiz will run here soon. For now, continue.' : 'An interactive game round is coming soon. For now, continue.'}</p>}
-                  {/* Action */}
-                  <div style={{ marginTop: 12 }}>
-                    {isDone
-                      ? <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Completed</span>
-                      : <button onClick={() => complete(l.id)} disabled={busy === l.id} style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: l.type === 'acknowledge' ? DEEP : SAGE, color: l.type === 'acknowledge' ? '#fff' : '#0c130f', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy === l.id ? 0.6 : 1 }}>
-                          {busy === l.id ? 'Saving…' : l.type === 'acknowledge' ? 'I acknowledge' : graded ? 'Continue' : 'Mark complete'}
-                        </button>}
-                  </div>
+                  {l.type === 'recipe' && (
+                    <p style={{ marginTop: 10, fontSize: 12.5, color: MUTED }}>Recipe walkthrough{l.recipe_id ? '' : ' (link a recipe in the builder)'}.</p>
+                  )}
+
+                  {l.type === 'quiz' && (
+                    <QuizPlayer lessonId={l.id} passMark={passMark} busy={busy === l.id} bestScore={score ?? null} done={isDone}
+                      onSubmit={(answers) => complete(l.id, { answers })} />
+                  )}
+
+                  {l.type === 'game' && (
+                    <GameLesson roundId={l.game_round || 'pos'} busy={busy === l.id} bestScore={score ?? null} threshold={threshold} done={isDone}
+                      onScore={(s) => complete(l.id, { score: s })} />
+                  )}
+
+                  {/* ── Action for non-interactive lessons ── */}
+                  {!['quiz', 'game'].includes(l.type) && (
+                    <div style={{ marginTop: 12 }}>
+                      {isDone
+                        ? <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Completed</span>
+                        : <button onClick={() => complete(l.id)} disabled={busy === l.id} style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: l.type === 'acknowledge' ? DEEP : SAGE, color: l.type === 'acknowledge' ? '#fff' : '#0c130f', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy === l.id ? 0.6 : 1 }}>
+                            {busy === l.id ? 'Saving…' : l.type === 'acknowledge' ? 'I acknowledge' : 'Mark complete'}
+                          </button>}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -190,4 +222,106 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
       )}
     </div>
   )
+}
+
+// ── Quiz player — questions arrive WITHOUT the answer key; scoring is server-side. ──
+interface QQ { id: string; question: string; options: Array<{ id: string; text: string }>; points: number }
+function QuizPlayer({ lessonId, passMark, busy, bestScore, done, onSubmit }: { lessonId: string; passMark: number; busy: boolean; bestScore: number | null; done: boolean; onSubmit: (answers: Array<{ question_id: string; option_id: string }>) => Promise<LessonResult | null> }) {
+  const [questions, setQuestions] = useState<QQ[]>([])
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(!done)
+  const [result, setResult] = useState<{ score: number | null; passed: boolean } | null>(null)
+
+  useEffect(() => {
+    api<{ questions: QQ[] }>(`/api/staff/portal/training?lesson_id=${lessonId}`).then(d => setQuestions(d.questions ?? [])).catch(() => {}).finally(() => setLoading(false))
+  }, [lessonId])
+
+  async function submit() {
+    const payload = Object.entries(answers).map(([question_id, option_id]) => ({ question_id, option_id }))
+    const r = await onSubmit(payload)
+    if (r) { setResult({ score: r.lesson_score, passed: r.passed }); if (r.passed) setOpen(false) }
+  }
+
+  if (done && !open && !result) {
+    return (
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Passed{bestScore != null ? ` · ${bestScore}%` : ''}</span>
+        <button onClick={() => { setResult(null); setAnswers({}); setOpen(true) }} style={{ ...pill(MUTED), cursor: 'pointer', border: `1px solid ${LINE}`, background: '#fff' }}>Retake</button>
+      </div>
+    )
+  }
+  if (loading) return <p style={{ marginTop: 10, fontSize: 12.5, color: MUTED }}>Loading quiz…</p>
+
+  const allAnswered = questions.length > 0 && questions.every(q => answers[q.id])
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {questions.map((q, qi) => (
+        <div key={q.id}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: INK, marginBottom: 6 }}>{qi + 1}. {q.question}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {q.options.map(o => (
+              <label key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${answers[q.id] === o.id ? SAGE : LINE}`, background: answers[q.id] === o.id ? `${SAGE}14` : '#fff', cursor: 'pointer' }}>
+                <input type="radio" name={`q-${q.id}`} checked={answers[q.id] === o.id} onChange={() => setAnswers(a => ({ ...a, [q.id]: o.id }))} />
+                {o.text}
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+      {result && (
+        <div style={{ fontSize: 13, fontWeight: 600, color: result.passed ? DEEP : RED, background: result.passed ? `${SAGE}14` : `${RED}10`, border: `1px solid ${result.passed ? SAGE : RED}40`, borderRadius: 10, padding: '10px 12px' }}>
+          {result.passed ? `✓ Passed — ${result.score}% (pass mark ${passMark}%)` : `Not passed — ${result.score}% (need ${passMark}%). Try again.`}
+        </div>
+      )}
+      <button onClick={submit} disabled={busy || !allAnswered} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: SAGE, color: '#0c130f', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy || !allAnswered ? 0.5 : 1, alignSelf: 'flex-start' }}>
+        {busy ? 'Scoring…' : result && !result.passed ? 'Submit again' : 'Submit answers'}
+      </button>
+    </div>
+  )
+}
+
+// ── Game lesson — plays a ported TRAIN-1 round; the round reports a 0-100 score. ──
+function GameLesson({ roundId, busy, bestScore, threshold, done, onScore }: { roundId: string; busy: boolean; bestScore: number | null; threshold: number; done: boolean; onScore: (score: number) => Promise<LessonResult | null> }) {
+  const [playing, setPlaying] = useState(false)
+  const [result, setResult] = useState<{ score: number; passed: boolean } | null>(null)
+
+  async function handleScore(score: number) {
+    setPlaying(false)
+    const r = await onScore(score)
+    if (r) setResult({ score: r.lesson_score ?? score, passed: r.passed })
+  }
+
+  if (playing) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <AriaGameRound roundId={roundId} onComplete={handleScore} />
+      </div>
+    )
+  }
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {result && (
+        <div style={{ fontSize: 13, fontWeight: 600, color: result.passed ? DEEP : RED, background: result.passed ? `${SAGE}14` : `${RED}10`, border: `1px solid ${result.passed ? SAGE : RED}40`, borderRadius: 10, padding: '10px 12px' }}>
+          {result.passed ? `✓ Passed — scored ${result.score}% (pass ${threshold}%)` : `Scored ${result.score}% — need ${threshold}% to pass. Have another go.`}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={() => { setResult(null); setPlaying(true) }} disabled={busy} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: DEEP, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy ? 0.6 : 1, alignSelf: 'flex-start' }}>
+          {busy ? 'Saving…' : done ? 'Play again' : '▶ Play round'}
+        </button>
+        {done && <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Passed{bestScore != null ? ` · best ${bestScore}%` : ''}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Video embed — YouTube/Vimeo iframe (owner hosts free) or HTML5 <video> for direct files. ──
+function VideoEmbed({ url }: { url: string }) {
+  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/)
+  const vimeo = url.match(/vimeo\.com\/(\d+)/)
+  const frame: React.CSSProperties = { width: '100%', aspectRatio: '16 / 9', border: 'none', borderRadius: 10, marginTop: 10 }
+  if (yt) return <iframe style={frame} src={`https://www.youtube.com/embed/${yt[1]}`} title="Lesson video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+  if (vimeo) return <iframe style={frame} src={`https://player.vimeo.com/video/${vimeo[1]}`} title="Lesson video" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />
+  return <video src={url} controls style={{ ...frame, background: '#000' }} />
 }
