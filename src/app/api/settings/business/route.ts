@@ -21,7 +21,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug')
+    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug, weekly_revenue_target')
     .eq('id', bid)
     .maybeSingle()
 
@@ -55,12 +55,20 @@ async function _PATCH(req: Request) {
     const s = String(body.booking_link_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
     payload.booking_link_slug = s || null
   }
+  // I2 GOAL-AWARE — weekly revenue target (numeric, >= 0, max 9,999,999)
+  if (body.weekly_revenue_target !== undefined) {
+    const n = Number(body.weekly_revenue_target)
+    if (!Number.isFinite(n) || n < 0 || n > 9_999_999) {
+      return NextResponse.json({ error: 'weekly_revenue_target must be a number between 0 and 9,999,999' }, { status: 400 })
+    }
+    payload.weekly_revenue_target = Math.round(n * 100) / 100
+  }
 
   if (Object.keys(payload).length === 0) return NextResponse.json({ ok: true })
 
   const { error } = await supabaseAdmin.from('businesses').update(payload).eq('id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, ...(payload.weekly_revenue_target !== undefined ? { weekly_revenue_target: payload.weekly_revenue_target } : {}) })
 }
 
 export const PATCH = withErrorCapture('settings/business', _PATCH)

@@ -270,6 +270,12 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         same_week_last_month_revenue: revSWLM,
         same_week_window: swlmWindow,
         weekly_revenue_target: target,
+        // I2 GOAL-AWARE — explicit, never-divide-by-zero goal fields:
+        weekly_target_set: !!(target && target > 0),
+        weekly_target_gap: (target && target > 0 && revWeek != null)
+          ? Math.round((revWeek - target) * 100) / 100   // negative = behind, positive = ahead
+          : null,
+        weekly_target_pct: pctOfTarget,
         pct_of_target: pctOfTarget,
         vs_same_week_pct: vsSWLMPct,
         on_track: onTrack,

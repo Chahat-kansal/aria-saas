@@ -14,6 +14,7 @@ export default function BusinessHubSettingsPage() {
   const [reviewLink, setReviewLink] = useState('')
   const [bookingSlug, setBookingSlug] = useState('')
   const [slug, setSlug] = useState('')
+  const [weeklyTarget, setWeeklyTarget] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -26,6 +27,7 @@ export default function BusinessHubSettingsPage() {
         setReviewLink(d.business.google_review_link ?? '')
         setBookingSlug(d.business.booking_link_slug ?? '')
         setSlug(d.business.slug ?? '')
+        setWeeklyTarget(d.business.weekly_revenue_target != null && Number(d.business.weekly_revenue_target) > 0 ? String(d.business.weekly_revenue_target) : '')
       }
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -41,7 +43,7 @@ export default function BusinessHubSettingsPage() {
     try {
       const r = await fetch('/api/settings/business', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ google_review_link: reviewLink.trim(), booking_link_slug: bookingSlug.trim() || slug }),
+        body: JSON.stringify({ google_review_link: reviewLink.trim(), booking_link_slug: bookingSlug.trim() || slug, weekly_revenue_target: weeklyTarget.trim() === '' ? 0 : Number(weeklyTarget) }),
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error ?? 'Save failed')
@@ -71,6 +73,21 @@ export default function BusinessHubSettingsPage() {
             <label style={lbl}>Booking link slug</label>
             <input style={inp} value={bookingSlug} onChange={e => setBookingSlug(e.target.value)} placeholder={slug || 'your-shop'} />
             <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '8px 0 0', lineHeight: 1.5 }}>Your booking page will be <code style={{ color: 'var(--text-secondary)' }}>ariaos.site/book/{effectiveBooking || 'your-shop'}</code>. Defaults to your hub slug.</p>
+          </div>
+
+          <div style={card}>
+            <label style={lbl}>Weekly revenue target</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>$</span>
+              <input
+                style={{ ...inp, paddingLeft: 24 }}
+                type="number" min={0} max={9999999} step={50} inputMode="decimal"
+                value={weeklyTarget}
+                onChange={e => setWeeklyTarget(e.target.value)}
+                placeholder="e.g. 5000"
+              />
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '8px 0 0', lineHeight: 1.5 }}>Aria uses this to track progress and alert you when you&apos;re falling behind. Leave blank or 0 to turn target tracking off.</p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -14,6 +14,7 @@ import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { runAriaCouncil, insertCouncilRun } from '@/lib/aria/council'
 import type { CouncilOutput } from '@/lib/aria/council'
 import { runOrchestrator } from '@/lib/aria/agents/orchestrator'
+import { logAICallSafe } from '@/lib/aria/log-ai-call'
 
 // ── Briefing recommendation builder ───────────────────────────────────────────
 // Maps the council's structured brain outputs into the modal's Recommendation type.
@@ -225,6 +226,18 @@ Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{fa
   let usedFallback = false
   try {
     const _bizCtx = await getBusinessContext(businessId)
+    // I2 GOAL-AWARE — log that Aria was fed the owner's weekly target (or that none is set)
+    try {
+      const _wt = (JSON.parse(_bizCtx)?.week_tracking ?? {}) as { weekly_target_set?: boolean; weekly_target_pct?: number | null }
+      await logAICallSafe({
+        business_id: businessId,
+        agent_key: 'goal_aware',
+        role: 'briefing',
+        provider: 'anthropic',
+        success: true,
+        request_summary: JSON.stringify({ weekly_target_set: _wt.weekly_target_set ?? false, weekly_target_pct: _wt.weekly_target_pct ?? null }),
+      })
+    } catch { /* logging is best-effort, never block the briefing */ }
     council = await runAriaCouncil(_bizCtx, businessId, 'briefing')
   } catch (e) {
     console.error('[briefing] council failed, using single-model fallback:', (e as Error).message)
