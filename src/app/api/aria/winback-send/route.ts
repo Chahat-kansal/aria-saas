@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { requireFeature } from '@/lib/features'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -27,6 +28,8 @@ async function _POST(req: Request) {
 
   const { data: biz } = await supabase.from('businesses').select('id, name').eq('id', business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const gate = await requireFeature(business_id, 'winback_sms')  // SS — Growth+ feature
+  if (gate) return gate
 
   const ch: string = channel ?? 'both'
   const baseName: string = campaign_name ?? `Winback — ${new Date().toLocaleDateString('en-AU')}`

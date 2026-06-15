@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { getWeatherContext } from './get-weather-context'
 import { CANONICAL_COLS } from './schema-registry'
+import { getEffectivePlan } from '@/lib/plans/resolve-plan'
 
 export async function getBusinessContext(businessId: string): Promise<string> {
   const supabase = createServerSupabaseClient()
@@ -224,6 +225,9 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       city:             biz.city ?? biz.suburb ?? 'AU',
       owner_name:       biz.owner_name ?? biz.contact_name ?? 'the owner',
       plan:             biz.plan,
+      // SS — effective entitlement plan (trial→Pro, expired→starter, override wins).
+      effective_plan:   getEffectivePlan(biz),
+      plan_note:        'effective_plan is what the business can ACCESS now. Never recommend a Pro/Growth-only action to a starter business without noting it requires an upgrade.',
       pos_enabled:      biz.pos_enabled ?? false,
       entity_type:      biz.entity_type ?? null,
       business_model:   biz.business_model ?? null,

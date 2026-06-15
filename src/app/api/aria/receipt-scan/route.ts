@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { requireFeature } from '@/lib/features'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { geminiVision } from '@/lib/gemini'
@@ -99,6 +100,8 @@ async function _POST(req: Request) {
   const { data: business } = await supabase.from('businesses').select('id, data_source')
     .eq('id', business_id).eq('user_id', user.id).single();
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+  const gate = await requireFeature(business_id, 'ai_receipt');  // SS — Growth+ feature
+  if (gate) return gate;
 
   // Convert file to base64
   const buffer = await file.arrayBuffer();

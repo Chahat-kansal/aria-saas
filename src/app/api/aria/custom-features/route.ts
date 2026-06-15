@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { requireFeature } from '@/lib/features'
 
 async function _GET(req: Request) {
   try {
@@ -18,6 +19,8 @@ async function _GET(req: Request) {
 
     const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
     if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const gate = await requireFeature(business_id, 'custom_features');  // SS — Pro feature
+    if (gate) return gate;
 
     const { data, error } = await supabase
       .from('business_features')

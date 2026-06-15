@@ -8,6 +8,7 @@ import { parseLLMJsonOr } from '@/lib/ai-json'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { requireFeature } from '@/lib/features'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
@@ -27,6 +28,8 @@ async function _POST(req: Request) {
     const { data: biz } = await supabase.from('businesses')
       .select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle()
     if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const gate = await requireFeature(business_id, 'competitor_analysis')  // SS — Pro feature
+    if (gate) return gate
 
     // Own product price
     const { data: ownProduct } = await supabase.from('pos_products')

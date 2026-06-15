@@ -14,6 +14,7 @@ type NavItemDef = {
   badge?: string;
   section: string;
   target?: string;
+  flag?: string; // SS — gates this item behind a feature_flags key (lock badge + upgrade link when plan lacks it)
 };
 
 function SocialIcon({ className }: { className?: string }) {
@@ -40,8 +41,8 @@ function DeliveryIcon({ className }: { className?: string }) {
 
 const ALL_ITEMS: Record<string, NavItemDef> = {
   'reels':                       { href: '/dashboard/reels',                    label: 'Reel Studio',         icon: SocialIcon,          badge: 'NEW', section: 'Marketing'  },
-  'social':                     { href: '/dashboard/social',                   label: 'Social Media',      icon: SocialIcon,         badge: 'AI',  section: 'Marketing'    },
-  'orders':                     { href: '/dashboard/orders',                   label: 'Weekly Orders',     icon: OrdersIcon,         badge: 'AI',  section: 'Operations'   },
+  'social':                     { href: '/dashboard/social',                   label: 'Social Media',      icon: SocialIcon,         badge: 'AI',  section: 'Marketing', flag: 'social_media'    },
+  'orders':                     { href: '/dashboard/orders',                   label: 'Weekly Orders',     icon: OrdersIcon,         badge: 'AI',  section: 'Operations', flag: 'weekly_orders'   },
   'delivery':                   { href: '/dashboard/delivery',                 label: 'Delivery platforms', icon: DeliveryIcon,       section: 'Operations'   },
   'parcel-tracking':            { href: '/dashboard/parcel-tracking',           label: 'Parcel tracking',    icon: TruckOutlineIcon,               section: 'Operations'   },
   'cash-up':                    { href: '/dashboard/cash-up',                  label: 'Daily cash-up',      icon: GridIcon,           section: 'Operations'   },
@@ -52,7 +53,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'locations':                  { href: '/dashboard/locations',                label: 'Locations',          icon: GridIcon,           section: 'Overview'     },
   'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
-  'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview' },
+  'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview', flag: 'custom_features' },
   'staff':                      { href: '/dashboard/staff',                    label: 'Team',              icon: TeamIcon,           section: 'Overview'     },
   'pos':                        { href: '/pos',                                label: 'AriaPOS',           icon: RegisterIcon,       badge: 'New', section: 'Modules', target: '_blank' },
   'winback':                    { href: '/dashboard/winback',                  label: 'Customer winback',  icon: UsersIcon,          section: 'Revenue'      },
@@ -61,7 +62,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'seo':                        { href: '/dashboard/seo',                      label: 'SEO',               icon: GlobeIcon,          badge: 'AI', section: 'Reputation' },
   'profit-leaks':               { href: '/dashboard/profit-leaks',             label: 'Profit leaks',      icon: AlertIcon,          section: 'Intelligence' },
   'cash-flow':                  { href: '/dashboard/cash-flow',               label: 'Cash flow',         icon: TrendingUpIcon,     section: 'Intelligence' },
-  'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation'   },
+  'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation', flag: 'competitor_analysis'   },
   'suppliers':                  { href: '/dashboard/suppliers',                label: 'Supplier prices',   icon: SearchIcon,         section: 'Inventory'    },
   'churn':                      { href: '/dashboard/churn',                    label: 'Churn prevention',  icon: TrendingDownIcon,   section: 'Intelligence' },
   'invoices':                   { href: '/dashboard/invoices',                 label: 'Invoices',          icon: FileTextIcon,       badge: 'AI', section: 'Revenue' },
@@ -161,7 +162,7 @@ const SECTION_ORDER = ['Overview', 'Customer surfaces', 'Growth', 'Marketing', '
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const { business: b, allBusinesses, switchBusiness } = useBusinessContext();
+  const { business: b, allBusinesses, switchBusiness, hasFlag } = useBusinessContext();
   const business = b!;
   const pathname = usePathname();
   const router = useRouter();
@@ -458,14 +459,17 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 const isActive = item.href === '/dashboard'
                   ? pathname === '/dashboard'
                   : pathname === item.href || pathname.startsWith(item.href + '/');
+                // SS — plan gating: if this item's flag isn't in the effective plan, lock it
+                // and point the click at billing (upgrade opportunity, never a dead end).
+                const locked = !!item.flag && !hasFlag(item.flag);
                 return (
                   <Link
                     key={item.href + item.label}
-                    href={item.href}
-                    target={item.target}
-                    rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
-                    onClick={item.target === '_blank' ? undefined : onNavigate}
-                    title={collapsed ? item.label : undefined}
+                    href={locked ? `/dashboard/billing?upgrade=${item.flag}` : item.href}
+                    target={locked ? undefined : item.target}
+                    rel={!locked && item.target === '_blank' ? 'noopener noreferrer' : undefined}
+                    onClick={item.target === '_blank' && !locked ? undefined : onNavigate}
+                    title={collapsed ? (locked ? `${item.label} — upgrade to unlock` : item.label) : undefined}
                     className={
                       'flex items-center gap-2.5 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] font-semibold transition-colors mb-0.5 ' +
                       (collapsed ? 'justify-center px-0 ' : 'px-3 ') +
@@ -476,8 +480,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                     {!collapsed && (
                       <>
                         <span className="flex-1">{item.label}</span>
+                        {/* SS — lock badge when the plan lacks this feature */}
+                        {locked && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-[rgba(245,158,11,0.18)] text-amber-400" title="Upgrade to unlock">🔒</span>
+                        )}
                         {/* Live count badge */}
-                        {(() => {
+                        {!locked && (() => {
                           const countKey = BADGE_MAP[item.href];
                           const liveCount = countKey ? (badgeCounts[countKey] ?? 0) : 0;
                           if (liveCount > 0) return (

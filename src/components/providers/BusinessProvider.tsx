@@ -1,6 +1,15 @@
 'use client';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getEffectivePlan, trialEndingSoon as calcTrialEndingSoon, type Plan } from '@/lib/plans/resolve-plan';
+
+// SS — client mirror of the feature_flags → plan mapping (server is the source of truth;
+// this lets the UI show lock badges without a round-trip). Server still enforces via requireFeature.
+const PLAN_FEATURES: Record<Plan, string[]> = {
+  starter: ['pos_terminal'],
+  growth:  ['pos_terminal', 'social_media', 'winback_sms', 'weekly_orders', 'mobile_scanner', 'ai_receipt'],
+  pro:     ['pos_terminal', 'social_media', 'winback_sms', 'weekly_orders', 'mobile_scanner', 'ai_receipt', 'warehouse', 'competitor_analysis', 'advanced_reports', 'custom_features'],
+};
 
 export interface Business {
   id: string;
@@ -40,6 +49,9 @@ interface BusinessContextType {
   business: Business | null;
   allBusinesses: Business[];
   loading: boolean;
+  effectivePlan: Plan;
+  hasFlag: (flagKey: string) => boolean;
+  trialEndingSoon: boolean;
   switchBusiness: (id: string) => Promise<void>;
   refreshBusiness: () => Promise<void>;
   refreshAllBusinesses: () => Promise<void>;
@@ -49,6 +61,9 @@ const BusinessContext = createContext<BusinessContextType>({
   business: null,
   allBusinesses: [],
   loading: true,
+  effectivePlan: 'starter',
+  hasFlag: () => false,
+  trialEndingSoon: false,
   switchBusiness: async () => {},
   refreshBusiness: async () => {},
   refreshAllBusinesses: async () => {},
@@ -160,14 +175,31 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     setAllBusinesses(businesses);
   }, [fetchAllBusinesses]);
 
+  // SS — effective plan + flag access for client gating (server still enforces).
+  const effectivePlan: Plan = getEffectivePlan(business ?? undefined);
+  const hasFlag = useCallback(
+    (flagKey: string) => (PLAN_FEATURES[effectivePlan] ?? []).includes(flagKey),
+    [effectivePlan]
+  );
+  const trialEndingSoon = calcTrialEndingSoon(business ?? undefined);
+
   return (
     <BusinessContext.Provider value={{
       business, allBusinesses, loading,
+      effectivePlan, hasFlag, trialEndingSoon,
       switchBusiness, refreshBusiness, refreshAllBusinesses,
     }}>
       {children}
     </BusinessContext.Provider>
   );
+}
+
+/** SS — convenience hooks for client gating. */
+export function useEffectivePlan(): Plan {
+  return useContext(BusinessContext).effectivePlan;
+}
+export function useFeatureFlag(flagKey: string): boolean {
+  return useContext(BusinessContext).hasFlag(flagKey);
 }
 
 export function useBusiness(): Business | null {
