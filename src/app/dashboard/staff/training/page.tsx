@@ -37,6 +37,23 @@ interface Staff { id: string; first_name: string; last_name: string; position: s
 const staffName = (s: Staff) => `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || 'Staff'
 
 const card: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 18 }
+
+// TP-CARDS — approved "white cards on dark" tokens (training surface only; not the global theme).
+const WHITE = '#fff', CARD_SHADOW = '0 10px 30px rgba(0,0,0,.28)'
+const INK = '#1A1D23', META = '#8896A5'
+const whiteCard: React.CSSProperties = { background: WHITE, borderRadius: 16, boxShadow: CARD_SHADOW, border: '1px solid #ECEFF1' }
+// tier/type → header tint strip + tile colour
+const TINT = {
+  required: { strip: '#E7F1EA', tile: '#E7F1EA', icon: '#3a6b50', emoji: '🛡️' },
+  game: { strip: '#F7EFDD', tile: '#FAF0DC', icon: AMBER, emoji: '🎮' },
+  skill: { strip: '#F0E9E2', tile: '#F0E9E2', icon: '#7a6a58', emoji: '🎓' },
+}
+function courseTint(c: { is_mandatory: boolean; tier: string | null }, hasGame: boolean) {
+  if (c.is_mandatory || c.tier === 'compliance') return TINT.required
+  if (c.tier === 'systems' || hasGame) return TINT.game
+  return TINT.skill
+}
+const tierEmoji = (tier: string | null) => tier === 'compliance' ? '🛡️' : tier === 'systems' ? '🎮' : tier === 'culture' ? '🌿' : '🎓'
 const inp: React.CSSProperties = { padding: '8px 11px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#e8ede7', fontSize: 13, fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }
 const lbl: React.CSSProperties = { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, marginBottom: 5, display: 'block', letterSpacing: '0.02em' }
 const btn = (bg: string, fg = '#0c130f'): React.CSSProperties => ({ padding: '8px 16px', borderRadius: 8, border: 'none', background: bg, color: fg, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' })
@@ -95,6 +112,7 @@ export default function TrainingBuilderPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 1180, color: '#e8ede7', margin: '0 auto' }}>
+      <style>{`.tp-card{transition:transform .14s ease, box-shadow .18s ease}.tp-card:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(0,0,0,.34)}`}</style>
       {/* Sub-nav back to Team */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
         <Link href="/dashboard/staff" style={ghost('rgba(255,255,255,0.4)')}>← Team</Link>
@@ -139,50 +157,62 @@ export default function TrainingBuilderPage() {
 
 function EmptyState({ onCreate, onDraft }: { onCreate: () => void; onDraft: () => void }) {
   return (
-    <div style={{ ...card, padding: '48px 28px', textAlign: 'center', background: `linear-gradient(160deg, ${D}22, rgba(255,255,255,0.02))`, borderColor: `${G}33` }}>
+    <div style={{ ...whiteCard, background: '#F4F1EA', padding: '48px 28px', textAlign: 'center', border: '1px solid #E6E0D2' }}>
       <div style={{ fontSize: 38, marginBottom: 6 }}>🎓</div>
-      <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 26, fontWeight: 600, margin: '0 0 8px' }}>Turn your know-how into a training academy</h2>
-      <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.55)', maxWidth: 480, margin: '0 auto 22px', lineHeight: 1.6 }}>
+      <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 27, fontWeight: 600, margin: '0 0 8px', color: D }}>Turn your know-how into a training academy</h2>
+      <p style={{ fontSize: 13.5, color: '#4A5568', maxWidth: 480, margin: '0 auto 22px', lineHeight: 1.6 }}>
         Onboard new starters in days, not weeks. Certify staff on food safety, your POS, recipes and culture —
         with quizzes that prove they got it. Mandatory courses auto-assign by role; compliance courses auto-expire and re-trigger.
       </p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <button onClick={onCreate} style={btn(G)}>+ Build a course</button>
-        <button onClick={onDraft} style={{ ...ghost(GOLD), padding: '8px 16px', fontSize: 13 }}>✦ Let Aria draft one from your recipes</button>
+        <button onClick={onCreate} style={{ ...btn(D, '#fff') }}>+ Build a course</button>
+        <button onClick={onDraft} style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${D}`, background: '#fff', color: D, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>✦ Let Aria draft one from your recipes</button>
       </div>
-      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 14 }}>Or let Aria suggest the legally-correct starter library for your business.</p>
+      <p style={{ fontSize: 11, color: '#8896A5', marginTop: 14 }}>Or let Aria suggest the legally-correct starter library for your business.</p>
     </div>
   )
 }
 
+// TP-CARDS pill on white card background.
+const wPill = (c: string): React.CSSProperties => ({ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.03em', background: 'rgba(255,255,255,0.9)', color: c, border: '1px solid #ECEFF1', boxShadow: '0 1px 3px rgba(0,0,0,.08)' })
+
 function CourseGrid({ courses, skills, onOpen }: { courses: Course[]; skills: Skill[]; onOpen: (id: string) => void }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
       {courses.map(c => {
-        const tm = tierMeta(c.tier)
         const lessons = c.training_lessons ?? []
         const hasGame = lessons.some(l => l.type === 'game')
         const hasQuiz = lessons.some(l => l.type === 'quiz')
         const cert = skills.find(s => s.id === c.cert_skill_id)
+        const tint = courseTint(c, hasGame)
+        const metaBits = [`${lessons.length} lesson${lessons.length === 1 ? '' : 's'}`]
+        if (c.est_minutes) metaBits.push(`${c.est_minutes} min`)
+        if (hasQuiz) metaBits.push('Quiz')
         return (
-          <button key={c.id} onClick={() => onOpen(c.id)} style={{ ...card, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              {tm && <span style={pill(tm.color)}>{tm.label}</span>}
-              {c.is_mandatory && <span style={pill(RED)}>Required</span>}
-              {hasGame && <span style={pill(GOLD)}>Game</span>}
-              {hasQuiz && <span style={pill(G)}>Quiz</span>}
-              <span style={{ ...pill(c.status === 'published' ? G : c.status === 'archived' ? 'rgba(255,255,255,0.35)' : AMBER), marginLeft: 'auto' }}>{c.status}</span>
+          <button key={c.id} onClick={() => onOpen(c.id)}
+            className="tp-card"
+            style={{ ...whiteCard, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', color: INK }}>
+            {/* tinted header strip */}
+            <div style={{ position: 'relative', height: 96, background: tint.strip, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 40 }}>{tint.emoji ?? tierEmoji(c.tier)}</span>
+              <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {c.is_mandatory && <span style={wPill(RED)}>REQUIRED</span>}
+                {hasGame && <span style={wPill(AMBER)}>GAME</span>}
+              </div>
+              <div style={{ position: 'absolute', bottom: 10, left: 12 }}>
+                <span style={{ ...wPill(c.status === 'published' ? '#3a6b50' : c.status === 'archived' ? META : AMBER), fontWeight: 700, textTransform: 'capitalize' }}>{c.status}</span>
+              </div>
             </div>
-            <div>
-              <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600 }}>{c.title}</div>
-              {c.description && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</div>}
-            </div>
-            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 'auto', flexWrap: 'wrap' }}>
-              <span>{lessons.length} lesson{lessons.length === 1 ? '' : 's'}</span>
-              {c.est_minutes ? <span>~{c.est_minutes} min</span> : null}
-              {c.expires_months ? <span>renews {c.expires_months}mo</span> : null}
-              {(c.enrolled_count ?? 0) > 0 ? <span style={{ color: G }}>{c.enrolled_count} assigned</span> : null}
-              {cert && <span style={{ color: cert.color }}>certifies {cert.name}</span>}
+            {/* body */}
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+              <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 21, fontWeight: 600, color: INK, lineHeight: 1.15 }}>{c.title}</div>
+              {c.description && <div style={{ fontSize: 12, color: META, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</div>}
+              <div style={{ fontSize: 11.5, color: META, marginTop: 'auto' }}>{metaBits.join(' · ')}</div>
+              <div style={{ display: 'flex', gap: 12, fontSize: 11, color: META, flexWrap: 'wrap' }}>
+                {c.expires_months ? <span>renews {c.expires_months}mo</span> : null}
+                {(c.enrolled_count ?? 0) > 0 ? <span style={{ color: '#3a6b50', fontWeight: 600 }}>{c.enrolled_count} assigned</span> : null}
+                {cert && <span>certifies {cert.name}</span>}
+              </div>
             </div>
           </button>
         )
@@ -545,19 +575,23 @@ const statusPill = (s: string): React.CSSProperties => pill(s === 'certified' ||
 const statusLabel = (e: CohortEnrol) => e.certified ? 'Certified' : e.status === 'overdue' ? 'Overdue' : e.status === 'in_progress' ? 'In progress' : e.status === 'complete' ? 'Complete' : 'Assigned'
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
-function Kpi({ label, value, accent, sub }: { label: string; value: string | number; accent: string; sub?: string }) {
+// accent colour → soft icon-tile tint (TP-CARDS mockup).
+const TILE_TINT: Record<string, string> = { [G]: '#E7F1EA', [AMBER]: '#FAF0DC', [GOLD]: '#FAF0DC', [RED]: '#FBE7E6' }
+function Kpi({ label, value, accent, sub, icon }: { label: string; value: string | number; accent: string; sub?: string; icon?: string }) {
+  const tile = TILE_TINT[accent] ?? '#EAF1FB'
   return (
-    <div style={{ ...card, flex: 1, minWidth: 150 }}>
-      <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 38, fontWeight: 600, color: accent, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 6, fontWeight: 600 }}>{label}</div>
-      {sub && <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{sub}</div>}
+    <div style={{ ...whiteCard, flex: 1, minWidth: 150, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ width: 38, height: 38, borderRadius: 11, background: tile, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19 }}>{icon ?? '•'}</div>
+      <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 36, fontWeight: 600, color: INK, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 12, color: META, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 10.5, color: META, opacity: 0.8 }}>{sub}</div>}
     </div>
   )
 }
 
 function ProgressBar({ pct, ok }: { pct: number; ok?: boolean }) {
   return <div style={{ height: 6, borderRadius: 99, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', minWidth: 60 }}>
-    <div style={{ height: '100%', width: `${pct}%`, background: ok ? G : '#7FB897', borderRadius: 99 }} />
+    <div style={{ height: '100%', width: `${pct}%`, background: ok ? 'linear-gradient(90deg,#7FB897,#3a6b50)' : 'linear-gradient(90deg,#7FB897,#3a6b50)', borderRadius: 99 }} />
   </div>
 }
 
@@ -571,16 +605,16 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
 
   if (d.empty) {
     return (
-      <div style={{ ...card, padding: '48px 28px', textAlign: 'center', background: `linear-gradient(160deg, ${D}22, rgba(255,255,255,0.02))`, borderColor: `${G}33` }}>
+      <div style={{ ...whiteCard, background: '#F4F1EA', padding: '48px 28px', textAlign: 'center', border: '1px solid #E6E0D2' }}>
         <div style={{ fontSize: 38, marginBottom: 6 }}>📊</div>
-        <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 26, fontWeight: 600, margin: '0 0 8px' }}>Your training dashboard is ready to fill</h2>
-        <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.55)', maxWidth: 460, margin: '0 auto 22px', lineHeight: 1.6 }}>
+        <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 27, fontWeight: 600, margin: '0 0 8px', color: D }}>Your training dashboard is ready to fill</h2>
+        <p style={{ fontSize: 13.5, color: '#4A5568', maxWidth: 460, margin: '0 auto 22px', lineHeight: 1.6 }}>
           Build a course and assign it to your team — then this view shows who&apos;s trained, who&apos;s overdue, who&apos;s certified, and an inspector-ready audit export.
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onDraft} style={btn(GOLD, '#1a1208')}>✦ Let Aria set you up</button>
-          <button onClick={onCreate} style={btn(G)}>+ Build a course</button>
-          <button onClick={onBuild} style={ghost('rgba(255,255,255,0.5)')}>View courses</button>
+          <button onClick={onDraft} style={btn(D, '#fff')}>✦ Let Aria set you up</button>
+          <button onClick={onCreate} style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${D}`, background: '#fff', color: D, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>+ Build a course</button>
+          <button onClick={onBuild} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #C9C2B2', background: 'transparent', color: '#6E7A70', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>View courses</button>
         </div>
       </div>
     )
@@ -597,11 +631,11 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="Active courses" value={d.kpis.active_courses} accent={G} />
-        <Kpi label="In progress" value={d.kpis.in_progress} accent={AMBER} />
-        <Kpi label="Overdue" value={d.kpis.overdue} accent={d.kpis.overdue > 0 ? RED : G} />
-        <Kpi label="Team certified" value={`${d.kpis.team_certified_pct}%`} accent={GOLD} sub={`${d.kpis.certified_staff} of ${d.kpis.active_staff} active staff`} />
-        <Kpi label="Not compliant" value={d.kpis.non_compliant} accent={d.kpis.non_compliant > 0 ? RED : G} sub="staff missing a mandatory cert" />
+        <Kpi label="Active courses" value={d.kpis.active_courses} accent={G} icon="📚" />
+        <Kpi label="In progress" value={d.kpis.in_progress} accent={AMBER} icon="⏳" />
+        <Kpi label="Overdue" value={d.kpis.overdue} accent={d.kpis.overdue > 0 ? RED : G} icon="⚠️" />
+        <Kpi label="Team certified" value={`${d.kpis.team_certified_pct}%`} accent={GOLD} sub={`${d.kpis.certified_staff} of ${d.kpis.active_staff} active staff`} icon="🏅" />
+        <Kpi label="Not compliant" value={d.kpis.non_compliant} accent={d.kpis.non_compliant > 0 ? RED : G} sub="staff missing a mandatory cert" icon="🔒" />
       </div>
 
       {/* Overdue + expiring alerts */}
