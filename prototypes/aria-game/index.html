@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>ariaOS Training — Learn by Playing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;1,500;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">ariaOS</span>
+      <span class="sub">Training Academy</span>
+    </div>
+    <div class="hud">
+      <div class="chip badge hidden" id="certBadge">✦ ariaOS Certified</div>
+      <div class="chip"><span class="dot"></span><b id="hudStars">0</b>/24 ★</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <!-- Aria host (persists across menu + rounds) -->
+    <aside class="aria">
+      <div class="aria-name">Aria</div>
+      <div class="aria-figure" id="ariaFig">
+        <img data-pose="pos" src="./aria/pos.png" alt="" />
+        <img data-pose="welcome" src="./aria/welcome.png" alt="" />
+        <img data-pose="eyes" src="./aria/eyes.png" alt="" />
+        <img data-pose="cheer" src="./aria/cheer.png" alt="" />
+        <img data-pose="point" src="./aria/point.png" alt="" />
+      </div>
+      <div class="bubble" id="bubble">Pick a challenge — let's see what you've got ☕</div>
+    </aside>
+
+    <!-- Dynamic view: menu or active round -->
+    <section class="view" id="view"></section>
+  </div>
+
+  <div class="footnote">Sandbox prototype · not wired to the app · plays fully offline</div>
+</div>
+
+<!-- End-of-round overlay -->
+<div class="overlay" id="endOverlay">
+  <div class="card">
+    <div class="roundlabel" id="endRoundName">Round</div>
+    <div class="stars" id="endStars">★★★</div>
+    <div class="scorebig"><span id="endScore">0</span><small>/100</small></div>
+    <div class="verdict" id="endVerdict">Nicely done.</div>
+    <p class="lead" id="endAria">—</p>
+    <div class="endbtns">
+      <button class="btn btn-ghost" id="endRetry">Retry</button>
+      <button class="btn btn-primary" id="endMenu">Back to menu</button>
+    </div>
+  </div>
+</div>
+
+<div class="fx" id="fx"></div>
+<div class="toast" id="toast"></div>
+
+<script src="./game.js"></script>
+</body>
+</html>
