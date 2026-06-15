@@ -30,8 +30,10 @@ const typeLabel = (t: string) => LESSON_TYPES.find(x => x.id === t)?.label ?? t
 interface QuizOption { id: string; text: string }
 interface QuizQ { id: string; lesson_id: string; sort_order: number; question: string; options: QuizOption[]; correct: string | null; points: number }
 interface Lesson { id: string; course_id: string; sort_order: number; type: string; title: string | null; content: string | null; url: string | null; recipe_id: string | null; game_round: string | null; duration_seconds: number | null; training_quiz_questions?: QuizQ[] }
-interface Course { id: string; title: string; description: string | null; tier: string | null; role_tags: string[]; is_mandatory: boolean; pass_mark: number; cert_skill_id: string | null; est_minutes: number | null; expires_months: number | null; status: string; training_lessons?: Lesson[] }
+interface Course { id: string; title: string; description: string | null; tier: string | null; role_tags: string[]; is_mandatory: boolean; pass_mark: number; cert_skill_id: string | null; est_minutes: number | null; expires_months: number | null; status: string; training_lessons?: Lesson[]; enrolled_count?: number }
 interface Skill { id: string; name: string; color: string }
+interface Staff { id: string; first_name: string; last_name: string; position: string | null }
+const staffName = (s: Staff) => `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || 'Staff'
 
 const card: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 18 }
 const inp: React.CSSProperties = { padding: '8px 11px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#e8ede7', fontSize: 13, fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }
@@ -54,6 +56,7 @@ async function api<T = unknown>(url: string, opts?: { method?: string; body?: un
 export default function TrainingBuilderPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
+  const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [err, setErr] = useState('')
@@ -61,9 +64,10 @@ export default function TrainingBuilderPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const d = await api<{ courses: Course[]; skills: Skill[] }>('/api/training/courses')
+      const d = await api<{ courses: Course[]; skills: Skill[]; staff: Staff[] }>('/api/training/courses')
       setCourses(d.courses ?? [])
       setSkills(d.skills ?? [])
+      setStaff(d.staff ?? [])
     } catch (e) { setErr((e as Error).message) } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
@@ -98,7 +102,7 @@ export default function TrainingBuilderPage() {
       {err && <div style={{ ...card, borderColor: `${RED}55`, color: RED, marginBottom: 16, fontSize: 13 }}>{err}</div>}
 
       {editing
-        ? <CourseBuilder course={editing} skills={skills} onClose={() => setEditingId(null)} onChange={load} />
+        ? <CourseBuilder course={editing} skills={skills} staff={staff} onClose={() => setEditingId(null)} onChange={load} />
         : loading
           ? <div style={{ color: 'rgba(255,255,255,0.35)', padding: 40, textAlign: 'center' }}>Loading…</div>
           : courses.length === 0
@@ -156,6 +160,7 @@ function CourseGrid({ courses, skills, onOpen }: { courses: Course[]; skills: Sk
               <span>{lessons.length} lesson{lessons.length === 1 ? '' : 's'}</span>
               {c.est_minutes ? <span>~{c.est_minutes} min</span> : null}
               {c.expires_months ? <span>renews {c.expires_months}mo</span> : null}
+              {(c.enrolled_count ?? 0) > 0 ? <span style={{ color: G }}>{c.enrolled_count} assigned</span> : null}
               {cert && <span style={{ color: cert.color }}>certifies {cert.name}</span>}
             </div>
           </button>
@@ -165,11 +170,12 @@ function CourseGrid({ courses, skills, onOpen }: { courses: Course[]; skills: Sk
   )
 }
 
-function CourseBuilder({ course, skills, onClose, onChange }: { course: Course; skills: Skill[]; onClose: () => void; onChange: () => void }) {
+function CourseBuilder({ course, skills, staff, onClose, onChange }: { course: Course; skills: Skill[]; staff: Staff[]; onClose: () => void; onChange: () => void }) {
   const [c, setC] = useState<Course>(course)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  const [showAssign, setShowAssign] = useState(false)
   useEffect(() => { setC(course) }, [course])
 
   const lessons = course.training_lessons ?? []
@@ -208,6 +214,7 @@ function CourseBuilder({ course, skills, onClose, onChange }: { course: Course; 
         <span style={{ ...pill(c.status === 'published' ? G : c.status === 'archived' ? 'rgba(255,255,255,0.35)' : AMBER) }}>{c.status}</span>
         {saving && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>saving…</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {c.status === 'published' && <button onClick={() => setShowAssign(true)} style={btn(GOLD)}>Assign{(course.enrolled_count ?? 0) > 0 ? ` · ${course.enrolled_count}` : ''}</button>}
           <button onClick={publish} style={btn(c.status === 'published' ? 'rgba(255,255,255,0.1)' : G, c.status === 'published' ? '#e8ede7' : '#0c130f')}>{c.status === 'published' ? 'Unpublish' : 'Publish'}</button>
           <button onClick={archive} style={ghost(AMBER)}>Archive</button>
           <button onClick={del} disabled={busy} style={ghost(RED)}>Delete</button>
@@ -215,6 +222,8 @@ function CourseBuilder({ course, skills, onClose, onChange }: { course: Course; 
       </div>
 
       {msg && <div style={{ ...card, borderColor: `${RED}55`, color: RED, fontSize: 13 }}>{msg}</div>}
+
+      {showAssign && <AssignPanel course={course} staff={staff} onClose={() => setShowAssign(false)} onChange={onChange} />}
 
       {/* Course settings */}
       <div style={card}>
@@ -394,6 +403,100 @@ function QuestionRow({ q, onChange, setMsg }: { q: QuizQ; onChange: () => void; 
         <span style={{ ...lbl, marginBottom: 0 }}>Points</span>
         <input style={{ ...inp, width: 70 }} type="number" value={state.points} onChange={e => setState({ ...state, points: Number(e.target.value) })} onBlur={() => state.points !== q.points && save({ points: state.points })} />
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>● green radio marks the correct answer</span>
+      </div>
+    </div>
+  )
+}
+
+interface Enrolment { id: string; staff_member_id: string; status: string; progress_pct: number; due_at: string | null; certified: boolean; staff_members: { first_name: string; last_name: string; position: string | null } | null }
+
+function AssignPanel({ course, staff, onClose, onChange }: { course: Course; staff: Staff[]; onClose: () => void; onChange: () => void }) {
+  const [mode, setMode] = useState<'role' | 'manual'>('role')
+  const [dueAt, setDueAt] = useState('')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [enrols, setEnrols] = useState<Enrolment[]>([])
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const loadEnrols = useCallback(async () => {
+    try { const d = await api<{ enrolments: Enrolment[] }>(`/api/training/enrolments?course_id=${course.id}`); setEnrols(d.enrolments ?? []) } catch { /* non-fatal */ }
+  }, [course.id])
+  useEffect(() => { loadEnrols() }, [loadEnrols])
+
+  const roleTags = (course.role_tags ?? []).map(r => r.trim().toLowerCase())
+  const roleMatched = staff.filter(s => roleTags.includes(String(s.position ?? '').trim().toLowerCase()))
+
+  async function assign() {
+    setBusy(true); setMsg('')
+    try {
+      const body: Record<string, unknown> = { course_id: course.id, mode, due_at: dueAt || null }
+      if (mode === 'manual') body.staff_member_ids = [...picked]
+      const r = await api<{ assigned: number; total_enrolled: number; error?: string }>('/api/training/enrolments', { method: 'POST', body })
+      setMsg(`Assigned to ${r.assigned} staff (${r.total_enrolled} enrolled total).`)
+      await loadEnrols(); await onChange()
+    } catch (e) { setMsg((e as Error).message) } finally { setBusy(false) }
+  }
+  async function unassign(id: string) {
+    try { await api(`/api/training/enrolments?id=${id}`, { method: 'DELETE' }); await loadEnrols(); await onChange() } catch (e) { setMsg((e as Error).message) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ ...card, maxWidth: 540, width: '100%', background: '#13201a', borderColor: 'rgba(255,255,255,0.12)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, margin: 0 }}>Assign “{course.title}”</h2>
+          <button onClick={onClose} style={ghost('rgba(255,255,255,0.4)')}>✕</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          <button onClick={() => setMode('role')} style={mode === 'role' ? btn(G) : ghost(G)}>By role</button>
+          <button onClick={() => setMode('manual')} style={mode === 'manual' ? btn(G) : ghost(G)}>Pick staff</button>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={lbl}>Due date (optional)</label>
+          <input style={inp} type="date" value={dueAt} onChange={e => setDueAt(e.target.value)} />
+        </div>
+
+        {mode === 'role'
+          ? <div style={{ marginBottom: 14 }}>
+              <label style={lbl}>Roles on this course: {roleTags.length ? roleTags.join(', ') : '— none set (edit course to add roles)'}</label>
+              <div style={{ fontSize: 13, color: roleMatched.length ? G : 'rgba(255,255,255,0.4)' }}>
+                {roleMatched.length
+                  ? `${roleMatched.length} active staff match: ${roleMatched.map(staffName).join(', ')}`
+                  : 'No active staff currently match these roles.'}
+              </div>
+            </div>
+          : <div style={{ marginBottom: 14, maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {staff.length === 0 ? <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>No active staff.</span> : staff.map(s => (
+                <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '5px 8px', borderRadius: 7, background: picked.has(s.id) ? 'rgba(127,184,151,0.1)' : 'transparent', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={picked.has(s.id)} onChange={e => setPicked(prev => { const n = new Set(prev); e.target.checked ? n.add(s.id) : n.delete(s.id); return n })} />
+                  {staffName(s)} <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{s.position}</span>
+                </label>
+              ))}
+            </div>}
+
+        <button onClick={assign} disabled={busy || (mode === 'manual' && picked.size === 0)} style={{ ...btn(G), width: '100%', opacity: busy || (mode === 'manual' && picked.size === 0) ? 0.5 : 1 }}>
+          {busy ? 'Assigning…' : mode === 'role' ? `Assign to ${roleMatched.length} by role` : `Assign to ${picked.size} selected`}
+        </button>
+        {msg && <div style={{ fontSize: 12.5, color: G, marginTop: 10 }}>{msg}</div>}
+
+        {/* Currently enrolled */}
+        <div style={{ marginTop: 18, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
+          <label style={lbl}>Enrolled ({enrols.length})</label>
+          {enrols.length === 0
+            ? <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.35)' }}>Nobody assigned yet.</span>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {enrols.map(e => (
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                    <span style={{ flex: 1 }}>{e.staff_members ? `${e.staff_members.first_name} ${e.staff_members.last_name}` : 'Staff'}</span>
+                    <span style={pill(e.status === 'complete' ? G : e.status === 'in_progress' ? AMBER : 'rgba(255,255,255,0.4)')}>{e.progress_pct}% {e.status}</span>
+                    {e.certified && <span style={pill(GOLD)}>cert</span>}
+                    <button onClick={() => unassign(e.id)} style={{ ...ghost(RED), padding: '2px 8px' }}>remove</button>
+                  </div>
+                ))}
+              </div>}
+        </div>
       </div>
     </div>
   )

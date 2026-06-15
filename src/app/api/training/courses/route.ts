@@ -23,13 +23,14 @@ async function _GET() {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ courses: [], skills: [] })
 
-  const [coursesQ, skillsQ] = await Promise.all([
+  const [coursesQ, skillsQ, staffQ] = await Promise.all([
     supabase
       .from('training_courses')
-      .select('*, training_lessons(*, training_quiz_questions(*))')
+      .select('*, training_lessons(*, training_quiz_questions(*)), training_enrolments(count)')
       .eq('business_id', bid)
       .order('created_at', { ascending: false }),
     supabase.from('staff_skills').select('id, name, color').eq('business_id', bid).order('sort_order'),
+    supabase.from('staff_members').select('id, first_name, last_name, position').eq('business_id', bid).eq('status', 'active').order('first_name'),
   ])
   if (coursesQ.error) return NextResponse.json({ error: coursesQ.error.message }, { status: 500 })
 
@@ -38,10 +39,11 @@ async function _GET() {
     const lessons = ((c.training_lessons as Array<Record<string, unknown>>) ?? [])
       .map(l => ({ ...l, training_quiz_questions: ((l.training_quiz_questions as Array<Record<string, unknown>>) ?? []).slice().sort((a, b) => Number(a.sort_order) - Number(b.sort_order)) }) as Record<string, unknown>)
       .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
-    return { ...c, training_lessons: lessons }
+    const enrolCount = Array.isArray(c.training_enrolments) ? Number((c.training_enrolments[0] as { count?: number })?.count ?? 0) : 0
+    return { ...c, training_lessons: lessons, enrolled_count: enrolCount }
   })
 
-  return NextResponse.json({ courses, skills: skillsQ.data ?? [] })
+  return NextResponse.json({ courses, skills: skillsQ.data ?? [], staff: staffQ.data ?? [] })
 }
 
 // POST — create a course (always starts as draft, business_id from the verified session).
