@@ -41,7 +41,7 @@ export async function detectPatterns(businessId: string): Promise<DetectedPatter
         .map(([d, s]) => `${DOW_NAMES[d]} $${(s.tot / s.days).toFixed(0)}`)
       const confidence = Math.min(1, dayAgg.size / 14)
       if (confidence >= CONFIDENCE_THRESHOLD && parts.length > 0)
-        out.push({ kind: 'pattern', source_type: 'signal', topic: 'trading_patterns', confidence: +confidence.toFixed(2), importance: 7,
+        out.push({ kind: 'pattern', source_type: 'signal', topic: 'weekday_baseline', confidence: +confidence.toFixed(2), importance: 7,
           content: `Weekday revenue baseline (last 56 days): ${parts.join(', ')}.` })
     }
   } catch { /* skip detector */ }
@@ -58,7 +58,7 @@ export async function detectPatterns(businessId: string): Promise<DetectedPatter
       const top = [...hours.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
       const confidence = Math.min(1, rows.length / 100)
       if (confidence >= CONFIDENCE_THRESHOLD)
-        out.push({ kind: 'pattern', source_type: 'signal', topic: 'trading_patterns', confidence: +confidence.toFixed(2), importance: 6,
+        out.push({ kind: 'pattern', source_type: 'signal', topic: 'peak_hours', confidence: +confidence.toFixed(2), importance: 6,
           content: `Peak hours (last 30 days): ${top.map(([h, c]) => `${h}:00 (~${(c / days).toFixed(1)} txns/day)`).join(', ')}.` })
     }
   } catch { /* skip */ }
@@ -87,7 +87,7 @@ export async function detectPatterns(businessId: string): Promise<DetectedPatter
       const pct = base > 0 ? Math.round((topPair[1] / base) * 100) : 0
       const confidence = Math.min(1, topPair[1] / 20)
       if (confidence >= CONFIDENCE_THRESHOLD && pct >= 25)
-        out.push({ kind: 'pattern', source_type: 'signal', topic: 'product_patterns', confidence: +confidence.toFixed(2), importance: 6,
+        out.push({ kind: 'pattern', source_type: 'signal', topic: 'item_co_occurrence', confidence: +confidence.toFixed(2), importance: 6,
           content: `"${aName}" and "${bName}" sell together in ~${pct}% of baskets containing either (last 30 days, ${topPair[1]} co-occurrences).` })
     }
   } catch { /* skip */ }
@@ -127,7 +127,7 @@ export async function detectPatterns(businessId: string): Promise<DetectedPatter
         const pct = Math.round((repeatRev / totalRev) * 100)
         const confidence = Math.min(1, byCust.size / 30)
         if (confidence >= CONFIDENCE_THRESHOLD)
-          out.push({ kind: 'pattern', source_type: 'signal', topic: 'customer_patterns', confidence: +confidence.toFixed(2), importance: 7,
+          out.push({ kind: 'pattern', source_type: 'signal', topic: 'customer_retention', confidence: +confidence.toFixed(2), importance: 7,
             content: `${pct}% of revenue (last 90 days) comes from repeat customers (≥2 visits); ${byCust.size} identified customers.` })
       }
     }

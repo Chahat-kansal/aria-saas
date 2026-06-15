@@ -48,11 +48,13 @@ export async function GET(req: Request) {
           .select('id, content').eq('business_id', bid).eq('kind', 'pattern').eq('topic', p.topic)
           .eq('is_active', true).is('deleted_at', null).limit(1).maybeSingle()
         if (existing && existing.content === p.content) continue // unchanged → no duplicate
-        // Insert the new pattern
-        const { data: inserted } = await supabaseAdmin.from('aria_business_memory').insert({
+        // Insert the new pattern. NOTE: aria_business_memory has no `source` column — provenance
+        // is carried by source_type='signal' (writing `source` previously errored → 0 rows).
+        const { data: inserted, error: insErr } = await supabaseAdmin.from('aria_business_memory').insert({
           business_id: bid, kind: 'pattern', source_type: 'signal', topic: p.topic,
-          content: p.content, confidence: p.confidence, importance: p.importance, source: 'pattern_detector',
+          content: p.content, confidence: p.confidence, importance: p.importance,
         }).select('id').maybeSingle()
+        if (insErr || !inserted?.id) { console.error('[pattern-memory] insert failed:', bid, p.topic, insErr?.message); continue }
         written++
         // Supersede the old one (preserve history)
         if (existing && inserted?.id) {
