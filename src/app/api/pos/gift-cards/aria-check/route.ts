@@ -16,7 +16,7 @@ async function _POST(_req: Request) {
     .eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'No business' }, { status: 404 })
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const { data: txns } = await supabase.from('pos_gift_card_transactions')
+  const { data: txns } = await supabase.from('gift_card_transactions')
     .select('type, amount, balance_after, created_at, gift_card_id')
     .eq('business_id', biz.id).gte('created_at', yesterday).order('created_at', { ascending: false })
   if (!txns?.length) return NextResponse.json({ ok: true, insight: 'No gift card activity in the last 24 hours.' })

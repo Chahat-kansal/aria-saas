@@ -80,6 +80,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
     { data: posToday },
     { data: posYesterday },
     { data: lowStock },
+    { data: giftCards },
   ] = await Promise.all([
     supabase.from('activity_log').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(10),
     supabase.from('profit_leaks').select('*').eq('business_id', business.id).eq('status', 'detected').limit(5),
@@ -89,6 +90,8 @@ async function RetailCafeDashboard({ business }: { business: any }) {
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${today}T00:00:00`).eq('status', 'completed'),
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${today}T00:00:00`).eq('status', 'completed'),
     supabase.from('pos_products').select('id, name, stock_quantity, low_stock_threshold').eq('business_id', business.id).eq('track_stock', true).lte('stock_quantity', 5),
+    // WIRE-2 — gift card liability for the overview KPI (owners forget this exists)
+    supabase.from('pos_gift_cards').select('balance, voided_at').eq('business_id', business.id).eq('is_active', true),
   ]);
 
   const revenueThisMonth = (bookings ?? []).reduce((s: number, b: any) => s + (b.amount || 0), 0);
@@ -96,6 +99,8 @@ async function RetailCafeDashboard({ business }: { business: any }) {
   const posSalesYesterday = (posYesterday ?? []).reduce((s: number, s2: any) => s + (s2.total_amount || 0), 0);
   const posDeltaPct = posSalesYesterday > 0 ? Math.round(((posSalesToday - posSalesYesterday) / posSalesYesterday) * 100) : null;
   const totalLeakSavings = (leaks ?? []).reduce((s: number, l: any) => s + (l.monthly_loss || 0), 0);
+  const activeGiftCards = (giftCards ?? []).filter((c: any) => !c.voided_at);
+  const giftCardLiability = activeGiftCards.reduce((s: number, c: any) => s + Number(c.balance || 0), 0);
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -112,6 +117,11 @@ async function RetailCafeDashboard({ business }: { business: any }) {
           <StatCard label="POS sales today"       value={`$${posSalesToday.toFixed(2)}`}          change={posDeltaPct !== null ? `${posDeltaPct > 0 ? '+' : ''}${posDeltaPct}% vs yesterday` : `${(posToday ?? []).length} transactions`} gradient="linear-gradient(135deg,rgba(37,99,235,0.2),rgba(37,99,235,0.05))"   border="rgba(37,99,235,0.3)" />
           <StatCard label="Google rating"         value={business.google_rating ? `${business.google_rating}★` : '—'} change={`${business.google_review_count || 0} reviews`} gradient="linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05))" border="rgba(245,158,11,0.3)" />
           <StatCard label="Recoverable leaks"     value={`$${totalLeakSavings.toLocaleString()}/mo`} change="from profit leak fixes"  gradient="linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.03))"  border="rgba(239,68,68,0.2)" />
+          {activeGiftCards.length > 0 && (
+            <Link href="/dashboard/gift-cards" className="contents">
+              <StatCard label="Gift card liability"  value={`$${giftCardLiability.toLocaleString()}`} change={`${activeGiftCards.length} active card${activeGiftCards.length === 1 ? '' : 's'} outstanding`} gradient="linear-gradient(135deg,rgba(201,163,122,0.22),rgba(201,163,122,0.05))" border="rgba(201,163,122,0.35)" />
+            </Link>
+          )}
         </div>
 
         {business?.id && <RevenueChart businessId={business.id} />}

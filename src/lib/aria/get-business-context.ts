@@ -331,6 +331,23 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // WIRE-2 — gift card liability (outstanding balances) so Aria surfaces the forgotten liability
+    gift_cards: await (async () => {
+      try {
+        const { data: cards } = await db.from('pos_gift_cards')
+          .select('balance, is_active, voided_at, expires_at')
+          .eq('business_id', businessId).eq('is_active', true)
+        const rows = (cards ?? []) as Array<{ balance: number | null; voided_at: string | null; expires_at: string | null }>
+        const live = rows.filter(c => !c.voided_at)
+        if (live.length === 0) return { active_cards: 0, liability_dollars: 0, note: 'No active gift cards.' }
+        const liability = live.reduce((s, c) => s + Number(c.balance ?? 0), 0)
+        return {
+          active_cards: live.length,
+          liability_dollars: Math.round(liability * 100) / 100,
+          note: `$${(Math.round(liability * 100) / 100).toFixed(2)} in unredeemed gift cards — a real liability. If high, suggest a redemption push or expiry reminder. Never invent gift card numbers.`,
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },

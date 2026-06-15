@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -84,7 +83,7 @@ async function _POST(req: Request) {
   // Fetch the card
   const { data: card, error: fetchErr } = await supabase
     .from('pos_gift_cards')
-    .select('id, balance, is_active, expires_at')
+    .select('id, balance, is_active, expires_at, redeemed_amount, voided_at')
     .eq('business_id', bid)
     .eq('code', code)
     .maybeSingle();
@@ -94,32 +93,51 @@ async function _POST(req: Request) {
   if (!card) return NextResponse.json({ error: 'Gift card not found' }, { status: 404 });
   if (!card.is_active) return NextResponse.json({ error: 'Gift card is cancelled' }, { status: 400 });
   if (card.expires_at && new Date(card.expires_at) < new Date()) return NextResponse.json({ error: 'Gift card has expired' }, { status: 400 });
+  if (card.voided_at) return NextResponse.json({ error: 'Gift card has been voided' }, { status: 400 });
 
   const currentBalance = parseFloat(String(card.balance ?? 0));
+  if (currentBalance <= 0) return NextResponse.json({ error: 'Gift card has no remaining balance' }, { status: 400 });
   const actualCharge = Math.min(charge, currentBalance);
   const newBalance = Math.max(0, currentBalance - actualCharge);
 
-  // Velocity fraud check — flag if 3+ redemptions on same card in 10 mins
-  const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-  const { count: recentCount } = await supabase
-    .from('pos_gift_card_transactions')
-    .select('id', { count: 'exact', head: true })
-    .eq('gift_card_id', card.id).eq('type', 'redeem').gte('created_at', tenMinsAgo)
-  if ((recentCount ?? 0) >= 2) {
-    await supabase.from('pos_gift_cards').update({
-      is_flagged: true,
-      flag_reason: `${(recentCount ?? 0) + 1} redemptions in 10 minutes`,
-    }).eq('id', card.id)
+  // WIRE-2 — write the redeem transaction FIRST as the idempotency gate (canonical table =
+  // gift_card_transactions). The unique index gift_card_txn_redeem_per_sale (gift_card_id, sale_id
+  // where type='redeem') makes a retried tender CONFLICT rather than double-deducting the card.
+  const { error: txnErr } = await supabase.from('gift_card_transactions').insert({
+    gift_card_id: card.id, business_id: bid, type: 'redeem',
+    amount: actualCharge, balance_after: newBalance, sale_id,
+    staff_name: user.email ?? null, created_at: new Date().toISOString(),
+  });
+  if (txnErr) {
+    if (/duplicate|unique/i.test(txnErr.message)) {
+      const { data: prior } = await supabase.from('gift_card_transactions')
+        .select('amount, balance_after').eq('gift_card_id', card.id).eq('sale_id', sale_id).eq('type', 'redeem').maybeSingle();
+      return NextResponse.json({ ok: true, charged: Number(prior?.amount ?? actualCharge), remaining_balance: Number(prior?.balance_after ?? currentBalance), idempotent: true });
+    }
+    return NextResponse.json({ error: txnErr.message }, { status: 500 });
   }
 
+  // Apply to the card balance + audit fields (only after the ledger row is committed)
   const { error: updateErr } = await supabase
     .from('pos_gift_cards')
-    .update({ balance: newBalance, is_active: newBalance > 0 })
+    .update({
+      balance: newBalance,
+      is_active: newBalance > 0,
+      redeemed_amount: Number(card.redeemed_amount ?? 0) + actualCharge,
+      last_used_at: new Date().toISOString(),
+    })
     .eq('id', card.id);
-
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-  waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: card.id, business_id: bid, type: 'redeem', amount: actualCharge, balance_after: newBalance, sale_id: sale_id || null }) } catch (e) { console.error('[silent-catch]', e) } })())
+  // Velocity fraud check — flag 3+ redemptions on the same card within 10 minutes
+  const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { count: recentCount } = await supabase
+    .from('gift_card_transactions')
+    .select('id', { count: 'exact', head: true })
+    .eq('gift_card_id', card.id).eq('type', 'redeem').gte('created_at', tenMinsAgo);
+  if ((recentCount ?? 0) >= 3) {
+    await supabase.from('pos_gift_cards').update({ is_flagged: true, flag_reason: `${recentCount} redemptions in 10 minutes` }).eq('id', card.id);
+  }
 
   await supabase.from('pos_sales').update({
     gift_card_id: card.id, gift_card_code: code, gift_card_amount: actualCharge,
@@ -128,7 +146,7 @@ async function _POST(req: Request) {
   return NextResponse.json({
     ok: true, charged: actualCharge, remaining_balance: newBalance,
     short_paid: charge > actualCharge ? charge - actualCharge : 0,
-    flagged: (recentCount ?? 0) >= 2,
+    flagged: (recentCount ?? 0) >= 3,
   });
 }
 

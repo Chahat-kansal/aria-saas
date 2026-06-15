@@ -82,7 +82,8 @@ async function _POST(req: Request) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: data.id, business_id: biz.id, type: 'issue', amount, balance_after: amount, note: body.recipient_name ? `Issued to ${body.recipient_name}` : 'Issued' }) } catch (e) { console.error('[silent-catch]', e) } })())
+  // WIRE-2 — canonical ledger = gift_card_transactions (+staff_name for audit)
+  waitUntil((async () => { try { await supabase.from('gift_card_transactions').insert({ gift_card_id: data.id, business_id: biz.id, type: 'issue', amount, balance_after: amount, staff_name: user.email ?? null, note: body.recipient_name ? `Issued to ${body.recipient_name}` : 'Issued' }) } catch (e) { console.error('[silent-catch]', e) } })())
   return NextResponse.json({ gift_card: data })
 }
 
@@ -110,7 +111,7 @@ async function _PATCH(req: Request) {
     const { data, error } = await supabase.from('pos_gift_cards')
       .update({ balance: newBalance, is_active: true }).eq('id', id).eq('business_id', biz.id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: id, business_id: biz.id, type: 'reload', amount: reload, balance_after: newBalance, note: body.note || null }) } catch (e) { console.error('[silent-catch]', e) } })())
+    waitUntil((async () => { try { await supabase.from('gift_card_transactions').insert({ gift_card_id: id, business_id: biz.id, type: 'reload', amount: reload, balance_after: newBalance, staff_name: user.email ?? null, note: body.note || null }) } catch (e) { console.error('[silent-catch]', e) } })())
     return NextResponse.json({ gift_card: data })
   }
 
