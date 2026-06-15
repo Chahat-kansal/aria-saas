@@ -17,6 +17,9 @@ const SHADOW = '0 1px 2px rgba(45,82,64,.06), 0 8px 24px rgba(45,82,64,.06)'
 const DISPLAY = "var(--font-display, 'Cormorant', Georgia, serif)"
 
 const TIER_COLOR: Record<string, string> = { compliance: RED, skill: SAGE, systems: GOLD, culture: AMBER }
+// TP-SEED — display label only (DB tier value stays 'compliance'); 'compliance' shows as 'Required'.
+const TIER_LABEL: Record<string, string> = { compliance: 'Required', skill: 'Skill', systems: 'Systems', culture: 'Culture' }
+const tierLabel = (t: string | null) => t ? (TIER_LABEL[t] ?? t) : ''
 const TYPE_LABEL: Record<string, string> = { video: 'Video', document: 'Document', image: 'Image', text: 'Reading', quiz: 'Quiz', game: 'Game', recipe: 'Recipe', acknowledge: 'Acknowledge', practical: 'POS practical exam' }
 const GRADED = new Set(['quiz', 'game', 'practical'])
 
@@ -60,7 +63,7 @@ export default function MyTrainingPage() {
     <div>
       <header style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: 0 }}>My Training</h1>
-        <p style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>Courses assigned to you. Complete them to earn certifications.</p>
+        <p style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>Courses assigned to you. Complete them to earn a certificate of completion.</p>
       </header>
 
       {err && <div style={{ background: `${RED}10`, border: `1px solid ${RED}40`, color: RED, borderRadius: 12, padding: 12, fontSize: 13, marginBottom: 14 }}>{err}</div>}
@@ -81,8 +84,8 @@ export default function MyTrainingPage() {
                 return (
                   <button key={e.id} onClick={() => setOpenId(e.course_id)} style={{ textAlign: 'left', background: CARD, borderRadius: 18, boxShadow: SHADOW, border: `1px solid ${overdue ? RED + '55' : LINE}`, borderLeft: `3px solid ${overdue ? RED : tier ?? SAGE}`, padding: 16, cursor: 'pointer', fontFamily: 'inherit' }}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-                      {c?.tier && tier && <span style={pill(tier)}>{c.tier}</span>}
-                      {e.certified && <span style={pill(DEEP)}>✓ Certified</span>}
+                      {c?.tier && tier && <span style={pill(tier)}>{tierLabel(c.tier)}</span>}
+                      {e.certified && <span style={pill(DEEP)}>✓ Completed</span>}
                       {overdue
                         ? <span style={{ ...pill(RED), marginLeft: 'auto' }}>Overdue</span>
                         : <span style={{ ...pill(e.status === 'complete' ? DEEP : e.status === 'in_progress' ? AMBER : MUTED), marginLeft: 'auto' }}>{e.status === 'in_progress' ? 'In progress' : e.status}</span>}
@@ -104,6 +107,12 @@ export default function MyTrainingPage() {
             </div>}
 
       <CertificatesSection />
+
+      {/* TP-SEED — persistent honest line (presence permanent; honest naming is the shield). */}
+      <p style={{ fontSize: 11, color: MUTED, marginTop: 26, lineHeight: 1.5 }}>
+        Internal training records — for your own onboarding and reference. Not an accredited qualification.
+        Staff must hold any legally required certificates (e.g. Food Safety, RSA) from a registered training organisation (RTO).
+      </p>
     </div>
   )
 }
@@ -151,7 +160,7 @@ function CertificateModal({ cert, onClose }: { cert: Certificate; onClose: () =>
         <div style={{ border: `2px solid ${DEEP}`, margin: 14, borderRadius: 12, padding: '28px 24px', textAlign: 'center', position: 'relative' }}>
           <div style={{ fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase', color: AMBER, fontWeight: 700 }}>Certificate of Completion</div>
           <div style={{ fontSize: 34, margin: '10px 0 2px' }}>🏅</div>
-          <div style={{ fontSize: 12, color: MUTED }}>This certifies that</div>
+          <div style={{ fontSize: 12, color: MUTED }}>This confirms that</div>
           <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 30, fontWeight: 600, color: DEEP, lineHeight: 1.1, margin: '4px 0' }}>{cert.staff_name ?? 'Team member'}</div>
           <div style={{ fontSize: 12, color: MUTED }}>has successfully completed</div>
           <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: INK, margin: '4px 0 10px' }}>{cert.course_title}</div>
@@ -162,6 +171,7 @@ function CertificateModal({ cert, onClose }: { cert: Certificate; onClose: () =>
           </div>
           {cert.expires_at && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>Valid until {new Date(cert.expires_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>}
           <div style={{ fontSize: 10, color: AMBER, letterSpacing: '.1em', marginTop: 8, fontWeight: 600 }}>ariaOS Training Academy</div>
+          <div style={{ fontSize: 9.5, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>Internal training record — not an accredited qualification.</div>
         </div>
         <div className="aria-cert-noprint" style={{ display: 'flex', gap: 8, padding: '0 14px 16px' }}>
           <button onClick={() => window.print()} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1px solid ${DEEP}`, background: '#fff', color: DEEP, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Print / Save PDF</button>
@@ -217,7 +227,7 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
       {loading ? <div style={{ color: MUTED, textAlign: 'center', padding: 40 }}>Loading…</div> : (
         <>
           <header style={{ marginBottom: 14 }}>
-            {course?.tier && <span style={pill(tier)}>{course.tier}</span>}
+            {course?.tier && <span style={pill(tier)}>{tierLabel(course.tier)}</span>}
             <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: '8px 0 2px' }}>{course?.title}</h1>
             {course?.description && <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>{course.description}</p>}
             {enrol && (
@@ -226,7 +236,7 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
                   <div style={{ height: '100%', width: `${enrol.progress_pct}%`, background: enrol.status === 'complete' ? DEEP : SAGE, borderRadius: 99, transition: 'width .3s' }} />
                 </div>
                 <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
-                  {enrol.progress_pct}% complete{enrol.certified ? ' · ✓ Certified' : ''}
+                  {enrol.progress_pct}% complete{enrol.certified ? ' · ✓ Completed' : ''}
                 </div>
               </div>
             )}

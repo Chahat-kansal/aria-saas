@@ -6,9 +6,11 @@ import Link from 'next/link'
 // cohort dashboard / Aria auto-draft are TP-2..TP-5). Brand palette + Cormorant/Outfit.
 const G = '#7FB897', D = '#2D5240', GOLD = '#C9A37A', AMBER = '#BA7517', RED = '#E24B4A'
 const DISPLAY = "var(--font-display, 'Cormorant', Georgia, serif)"
+// TP-SEED — honest naming IS the shield (no heavy disclaimer). Presence is permanent; wording is region-editable later.
+const HONEST_LINE = 'Internal training records — for your own onboarding and reference. Not an accredited qualification. Staff must hold any legally required certificates (e.g. Food Safety, RSA) from a registered training organisation (RTO).'
 
 const TIERS = [
-  { id: 'compliance', label: 'Compliance', color: RED },
+  { id: 'compliance', label: 'Required training', color: RED },
   { id: 'skill', label: 'Skill', color: G },
   { id: 'systems', label: 'Systems', color: GOLD },
   { id: 'culture', label: 'Culture', color: AMBER },
@@ -122,7 +124,7 @@ export default function TrainingBuilderPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <div>
           <h1 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 34, fontWeight: 600, margin: 0, lineHeight: 1.1 }}>Training Academy</h1>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>Build courses, certify your team, stay compliant. Microlearning that sticks.</p>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>Build courses, train your team, keep an internal record. Microlearning that sticks.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setDraft({ tab: 'starter' })} style={ghost(GOLD)}>✦ Let Aria set you up</button>
@@ -151,6 +153,9 @@ export default function TrainingBuilderPage() {
               : <CourseGrid courses={courses} skills={skills} onOpen={setEditingId} />}
 
       {draft && <AriaDraftModal initial={draft} onClose={() => setDraft(null)} onDone={async (openId) => { setDraft(null); await load(); setView('courses'); if (openId) setEditingId(openId) }} />}
+
+      {/* TP-SEED — persistent honest line (presence not removable; text may be region-edited in settings). */}
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 28, lineHeight: 1.5, maxWidth: 720 }}>{HONEST_LINE}</p>
     </div>
   )
 }
@@ -211,7 +216,7 @@ function CourseGrid({ courses, skills, onOpen }: { courses: Course[]; skills: Sk
               <div style={{ display: 'flex', gap: 12, fontSize: 11, color: META, flexWrap: 'wrap' }}>
                 {c.expires_months ? <span>renews {c.expires_months}mo</span> : null}
                 {(c.enrolled_count ?? 0) > 0 ? <span style={{ color: '#3a6b50', fontWeight: 600 }}>{c.enrolled_count} assigned</span> : null}
-                {cert && <span>certifies {cert.name}</span>}
+                {cert && <span>grants {cert.name}</span>}
               </div>
             </div>
           </button>
@@ -572,7 +577,7 @@ function downloadCSV(rows: Record<string, unknown>[], cols: { key: string; label
 }
 
 const statusPill = (s: string): React.CSSProperties => pill(s === 'certified' || s === 'complete' ? G : s === 'overdue' ? RED : s === 'in_progress' ? AMBER : 'rgba(255,255,255,0.4)')
-const statusLabel = (e: CohortEnrol) => e.certified ? 'Certified' : e.status === 'overdue' ? 'Overdue' : e.status === 'in_progress' ? 'In progress' : e.status === 'complete' ? 'Complete' : 'Assigned'
+const statusLabel = (e: CohortEnrol) => e.certified ? 'Completed' : e.status === 'overdue' ? 'Overdue' : e.status === 'in_progress' ? 'In progress' : e.status === 'complete' ? 'Complete' : 'Assigned'
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
 // accent colour → soft icon-tile tint (TP-CARDS mockup).
@@ -623,7 +628,7 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
   const auditCols = [
     { key: 'staff_name', label: 'Staff' }, { key: 'position', label: 'Role' }, { key: 'course_title', label: 'Course' },
     { key: 'tier', label: 'Tier' }, { key: 'status', label: 'Status' }, { key: 'score', label: 'Score' },
-    { key: 'completed_at', label: 'Completed' }, { key: 'certified', label: 'Certified' }, { key: 'cert_number', label: 'Cert #' },
+    { key: 'completed_at', label: 'Completed' }, { key: 'certified', label: 'Record issued' }, { key: 'cert_number', label: 'Record #' },
     { key: 'issued_at', label: 'Issued' }, { key: 'expires_at', label: 'Expires' },
   ]
 
@@ -634,8 +639,8 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
         <Kpi label="Active courses" value={d.kpis.active_courses} accent={G} icon="📚" />
         <Kpi label="In progress" value={d.kpis.in_progress} accent={AMBER} icon="⏳" />
         <Kpi label="Overdue" value={d.kpis.overdue} accent={d.kpis.overdue > 0 ? RED : G} icon="⚠️" />
-        <Kpi label="Team certified" value={`${d.kpis.team_certified_pct}%`} accent={GOLD} sub={`${d.kpis.certified_staff} of ${d.kpis.active_staff} active staff`} icon="🏅" />
-        <Kpi label="Not compliant" value={d.kpis.non_compliant} accent={d.kpis.non_compliant > 0 ? RED : G} sub="staff missing a mandatory cert" icon="🔒" />
+        <Kpi label="Team trained" value={`${d.kpis.team_certified_pct}%`} accent={GOLD} sub={`${d.kpis.certified_staff} of ${d.kpis.active_staff} active staff`} icon="🏅" />
+        <Kpi label="Not up to date" value={d.kpis.non_compliant} accent={d.kpis.non_compliant > 0 ? RED : G} sub="staff missing required training" icon="🔒" />
       </div>
 
       {/* Overdue + expiring alerts */}
@@ -679,18 +684,18 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
         <button onClick={() => downloadCSV(d.audit as unknown as Record<string, unknown>[], auditCols, `training-audit-${new Date().toISOString().slice(0, 10)}`)} disabled={d.audit.length === 0} style={{ ...btn(GOLD), opacity: d.audit.length === 0 ? 0.4 : 1 }}>📤 Export audit CSV</button>
       </div>
 
-      {/* Mandatory compliance gate (display-only — shows who isn't compliant; does not block POS/clock-in) */}
+      {/* Required-training status (display-only — shows who isn't up to date; does not block POS/clock-in) */}
       {d.compliance.length > 0 && (
         <div style={{ ...card, borderColor: `${RED}44` }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: RED, margin: '0 0 3px' }}>🔒 Mandatory compliance gate</h3>
-          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.4)', margin: '0 0 12px' }}>Staff assigned a mandatory course who aren&apos;t certified (or whose cert expired). This shows compliance — it does not lock anyone out of the POS.</p>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: RED, margin: '0 0 3px' }}>🔒 Required-training status</h3>
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.4)', margin: '0 0 12px' }}>Staff assigned a required course who haven&apos;t completed it yet (or whose training record has lapsed). This shows who&apos;s up to date — it does not lock anyone out of the POS.</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {d.compliance.map(c => (
               <div key={c.course_id}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 700 }}>{c.title}</span>
                   <span style={pill(RED)}>Required</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{c.non_compliant.length} of {c.total} not compliant</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{c.non_compliant.length} of {c.total} not up to date</span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {c.non_compliant.map((s, i) => (
@@ -791,7 +796,7 @@ function AriaDraftModal({ initial, onClose, onDone }: { initial: { tab: 'starter
 
         {tab === 'starter' && (
           <div>
-            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>The legally-correct starter set for your business. Compliance courses are shells that <b>track</b> your team&apos;s certification — you upload the official material. Pick what to create as drafts.</p>
+            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>The recommended starter set for your business. Required/reference courses are shells you <b>track</b> against — you upload the official material from an RTO; Aria keeps the internal training record. Pick what to create as drafts.</p>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 12, cursor: 'pointer' }}>
               <input type="checkbox" checked={alcohol} onChange={e => setAlcohol(e.target.checked)} /> We serve alcohol (adds RSA)
             </label>

@@ -9,6 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { CAFE_CATEGORIES, CAFE_SEED_PRODUCTS } from '@/lib/pos/cafe-seed-products'
+import { seedDefaultTrainingPack } from '@/lib/training/seed-default-pack'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -184,6 +185,9 @@ async function runProvision(
     steps[3].status = 'done' // non-fatal — briefing regenerates on next cron
   }
   await writeSteps(bizId, steps)
+
+  // TP-SEED — default day-one training pack (Run the POS game + Welcome). Non-fatal, idempotent.
+  try { await seedDefaultTrainingPack(bizId, null, bizName) } catch (e) { console.error('[non-fatal] training seed', e) }
 
   // Step 5: finalize
   steps[4].status = 'running'
