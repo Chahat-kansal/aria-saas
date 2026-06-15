@@ -60,6 +60,7 @@ export default function TrainingBuilderPage() {
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [view, setView] = useState<'overview' | 'courses'>('overview')
   const [err, setErr] = useState('')
 
   const load = useCallback(async () => {
@@ -100,15 +101,25 @@ export default function TrainingBuilderPage() {
         {courses.length > 0 && <button onClick={createCourse} style={btn(G)}>+ New course</button>}
       </div>
 
+      {/* Tabs */}
+      {!editing && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 12 }}>
+          <button onClick={() => setView('overview')} style={view === 'overview' ? btn(G) : ghost('rgba(255,255,255,0.5)')}>Dashboard</button>
+          <button onClick={() => setView('courses')} style={view === 'courses' ? btn(G) : ghost('rgba(255,255,255,0.5)')}>Courses</button>
+        </div>
+      )}
+
       {err && <div style={{ ...card, borderColor: `${RED}55`, color: RED, marginBottom: 16, fontSize: 13 }}>{err}</div>}
 
       {editing
         ? <CourseBuilder course={editing} skills={skills} staff={staff} onClose={() => setEditingId(null)} onChange={load} />
-        : loading
-          ? <div style={{ color: 'rgba(255,255,255,0.35)', padding: 40, textAlign: 'center' }}>Loading…</div>
-          : courses.length === 0
-            ? <EmptyState onCreate={createCourse} />
-            : <CourseGrid courses={courses} skills={skills} onOpen={setEditingId} />}
+        : view === 'overview'
+          ? <OverviewDashboard onBuild={() => setView('courses')} onCreate={createCourse} />
+          : loading
+            ? <div style={{ color: 'rgba(255,255,255,0.35)', padding: 40, textAlign: 'center' }}>Loading…</div>
+            : courses.length === 0
+              ? <EmptyState onCreate={createCourse} />
+              : <CourseGrid courses={courses} skills={skills} onOpen={setEditingId} />}
     </div>
   )
 }
@@ -499,6 +510,162 @@ function AssignPanel({ course, staff, onClose, onChange }: { course: Course; sta
               </div>}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ───────────────────────── TP-5 — Owner dashboard / reporting / audit export ─────────────────────────
+interface CohortEnrol { enrolment_id: string; name: string; position: string; progress_pct: number; score: number | null; certified: boolean; status: string; due_at: string | null }
+interface Cohort { id: string; title: string; tier: string | null; is_mandatory: boolean; status: string; enrolments: CohortEnrol[] }
+interface OverdueRow { enrolment_id: string; name: string; position: string; course_title: string; due_at: string | null; progress_pct: number; days_overdue: number }
+interface ExpiringRow { cert_number: string; staff_name: string | null; course_title: string | null; expires_at: string | null; days_left: number }
+interface AuditRow { staff_name: string; position: string; course_title: string; tier: string; status: string; score: number | string; completed_at: string; certified: string; cert_number: string; issued_at: string; expires_at: string }
+interface DashData { empty: boolean; kpis: { active_courses: number; in_progress: number; overdue: number; team_certified_pct: number; certified_staff: number; active_staff: number }; courses: Cohort[]; overdue: OverdueRow[]; expiring: ExpiringRow[]; audit: AuditRow[] }
+
+// CSV download — mirrors the app's proven pattern (BOM + RFC-4180 escaping + Blob).
+function downloadCSV(rows: Record<string, unknown>[], cols: { key: string; label: string }[], filename: string) {
+  if (!rows.length) return
+  const esc = (v: unknown) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+  const csv = '﻿' + [cols.map(c => c.label).join(','), ...rows.map(r => cols.map(c => esc(r[c.key])).join(','))].join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+  const a = document.createElement('a'); a.href = url; a.download = `${filename}.csv`; a.click(); URL.revokeObjectURL(url)
+}
+
+const statusPill = (s: string): React.CSSProperties => pill(s === 'certified' || s === 'complete' ? G : s === 'overdue' ? RED : s === 'in_progress' ? AMBER : 'rgba(255,255,255,0.4)')
+const statusLabel = (e: CohortEnrol) => e.certified ? 'Certified' : e.status === 'overdue' ? 'Overdue' : e.status === 'in_progress' ? 'In progress' : e.status === 'complete' ? 'Complete' : 'Assigned'
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+function Kpi({ label, value, accent, sub }: { label: string; value: string | number; accent: string; sub?: string }) {
+  return (
+    <div style={{ ...card, flex: 1, minWidth: 150 }}>
+      <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 38, fontWeight: 600, color: accent, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 6, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function ProgressBar({ pct, ok }: { pct: number; ok?: boolean }) {
+  return <div style={{ height: 6, borderRadius: 99, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', minWidth: 60 }}>
+    <div style={{ height: '100%', width: `${pct}%`, background: ok ? G : '#7FB897', borderRadius: 99 }} />
+  </div>
+}
+
+function OverviewDashboard({ onBuild, onCreate }: { onBuild: () => void; onCreate: () => void }) {
+  const [d, setD] = useState<DashData | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => { api<DashData>('/api/training/dashboard').then(setD).catch(e => setErr((e as Error).message)) }, [])
+
+  if (err) return <div style={{ ...card, borderColor: `${RED}55`, color: RED, fontSize: 13 }}>{err}</div>
+  if (!d) return <div style={{ color: 'rgba(255,255,255,0.35)', padding: 40, textAlign: 'center' }}>Loading dashboard…</div>
+
+  if (d.empty) {
+    return (
+      <div style={{ ...card, padding: '48px 28px', textAlign: 'center', background: `linear-gradient(160deg, ${D}22, rgba(255,255,255,0.02))`, borderColor: `${G}33` }}>
+        <div style={{ fontSize: 38, marginBottom: 6 }}>📊</div>
+        <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 26, fontWeight: 600, margin: '0 0 8px' }}>Your training dashboard is ready to fill</h2>
+        <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.55)', maxWidth: 460, margin: '0 auto 22px', lineHeight: 1.6 }}>
+          Build a course and assign it to your team — then this view shows who&apos;s trained, who&apos;s overdue, who&apos;s certified, and an inspector-ready audit export.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onCreate} style={btn(G)}>+ Build a course</button>
+          <button onClick={onBuild} style={ghost(GOLD)}>View courses</button>
+        </div>
+      </div>
+    )
+  }
+
+  const auditCols = [
+    { key: 'staff_name', label: 'Staff' }, { key: 'position', label: 'Role' }, { key: 'course_title', label: 'Course' },
+    { key: 'tier', label: 'Tier' }, { key: 'status', label: 'Status' }, { key: 'score', label: 'Score' },
+    { key: 'completed_at', label: 'Completed' }, { key: 'certified', label: 'Certified' }, { key: 'cert_number', label: 'Cert #' },
+    { key: 'issued_at', label: 'Issued' }, { key: 'expires_at', label: 'Expires' },
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <Kpi label="Active courses" value={d.kpis.active_courses} accent={G} />
+        <Kpi label="In progress" value={d.kpis.in_progress} accent={AMBER} />
+        <Kpi label="Overdue" value={d.kpis.overdue} accent={d.kpis.overdue > 0 ? RED : G} />
+        <Kpi label="Team certified" value={`${d.kpis.team_certified_pct}%`} accent={GOLD} sub={`${d.kpis.certified_staff} of ${d.kpis.active_staff} active staff`} />
+      </div>
+
+      {/* Overdue + expiring alerts */}
+      {(d.overdue.length > 0 || d.expiring.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+          {d.overdue.length > 0 && (
+            <div style={{ ...card, borderColor: `${RED}44` }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: RED, margin: '0 0 10px' }}>⚠ Overdue ({d.overdue.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {d.overdue.slice(0, 8).map(o => (
+                  <div key={o.enrolment_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, gap: 8 }}>
+                    <span><b>{o.name}</b> <span style={{ color: 'rgba(255,255,255,0.4)' }}>· {o.course_title}</span></span>
+                    <span style={{ color: RED, whiteSpace: 'nowrap' }}>{o.days_overdue}d late</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {d.expiring.length > 0 && (
+            <div style={{ ...card, borderColor: `${AMBER}44` }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: AMBER, margin: '0 0 10px' }}>⏳ Certs expiring soon ({d.expiring.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {d.expiring.slice(0, 8).map(c => (
+                  <div key={c.cert_number} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, gap: 8 }}>
+                    <span><b>{c.staff_name}</b> <span style={{ color: 'rgba(255,255,255,0.4)' }}>· {c.course_title}</span></span>
+                    <span style={{ color: c.days_left < 0 ? RED : AMBER, whiteSpace: 'nowrap' }}>{c.days_left < 0 ? 'expired' : `${c.days_left}d`}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Audit export */}
+      <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Inspector-ready audit export</h3>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', margin: '3px 0 0' }}>{d.audit.length} completion record{d.audit.length === 1 ? '' : 's'} — staff, course, status, score, cert number, dates.</p>
+        </div>
+        <button onClick={() => downloadCSV(d.audit as unknown as Record<string, unknown>[], auditCols, `training-audit-${new Date().toISOString().slice(0, 10)}`)} disabled={d.audit.length === 0} style={{ ...btn(GOLD), opacity: d.audit.length === 0 ? 0.4 : 1 }}>📤 Export audit CSV</button>
+      </div>
+
+      {/* Cohort tables */}
+      {d.courses.map(c => (
+        <div key={c.id} style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <h3 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, margin: 0 }}>{c.title}</h3>
+            {c.is_mandatory && <span style={pill(RED)}>Required</span>}
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>{c.enrolments.length} enrolled</span>
+          </div>
+          {c.enrolments.length === 0
+            ? <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.35)' }}>Published but nobody assigned yet — assign from the Courses tab.</p>
+            : <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead><tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left' }}>
+                    <th style={{ padding: '4px 8px', fontWeight: 600 }}>Staff</th><th style={{ padding: '4px 8px', fontWeight: 600 }}>Role</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 600, minWidth: 90 }}>Progress</th><th style={{ padding: '4px 8px', fontWeight: 600 }}>Score</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 600 }}>Status</th><th style={{ padding: '4px 8px', fontWeight: 600 }}>Due</th>
+                  </tr></thead>
+                  <tbody>
+                    {c.enrolments.map(e => (
+                      <tr key={e.enrolment_id} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '7px 8px', fontWeight: 600 }}>{e.name}</td>
+                        <td style={{ padding: '7px 8px', color: 'rgba(255,255,255,0.5)' }}>{e.position || '—'}</td>
+                        <td style={{ padding: '7px 8px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ProgressBar pct={e.progress_pct} ok={e.certified} /><span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{e.progress_pct}%</span></div></td>
+                        <td style={{ padding: '7px 8px' }}>{e.score != null ? `${e.score}%` : '—'}</td>
+                        <td style={{ padding: '7px 8px' }}><span style={statusPill(e.certified ? 'certified' : e.status)}>{statusLabel(e)}</span></td>
+                        <td style={{ padding: '7px 8px', color: e.status === 'overdue' ? RED : 'rgba(255,255,255,0.5)' }}>{fmtDate(e.due_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>}
+        </div>
+      ))}
     </div>
   )
 }

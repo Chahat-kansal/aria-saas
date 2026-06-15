@@ -374,6 +374,36 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // TP-5 — training compliance facts so Aria can flag overdue / expiring / under-certified (read-only).
+    training: await (async () => {
+      try {
+        const now = Date.now()
+        const in30 = new Date(now + 30 * 86400000).toISOString()
+        const [enrRes, certRes, staffRes] = await Promise.all([
+          db.from('training_enrolments').select('status, due_at, certified, staff_member_id, training_courses(title, is_mandatory)').eq('business_id', businessId).limit(2000),
+          db.from('training_certificates').select('staff_name, course_title, expires_at').eq('business_id', businessId).gte('expires_at', new Date(now).toISOString()).lte('expires_at', in30).limit(50),
+          db.from('staff_members').select('id').eq('business_id', businessId).eq('status', 'active'),
+        ])
+        const enrols = (enrRes.data ?? []) as Array<{ status: string; due_at: string | null; certified: boolean; staff_member_id: string; training_courses: { title?: string } | { title?: string }[] | null }>
+        const expiring = (certRes.data ?? []) as Array<{ staff_name: string | null; course_title: string | null; expires_at: string | null }>
+        if (enrols.length === 0 && expiring.length === 0) return null
+        const titleOf = (tc: { title?: string } | { title?: string }[] | null) => Array.isArray(tc) ? tc[0]?.title : tc?.title
+        const overdue = enrols.filter(e => e.status !== 'complete' && e.due_at != null && new Date(e.due_at).getTime() < now)
+        const certifiedStaff = new Set(enrols.filter(e => e.certified).map(e => e.staff_member_id)).size
+        const activeStaff = (staffRes.data ?? []).length
+        const pct = activeStaff > 0 ? Math.round((certifiedStaff / activeStaff) * 100) : 0
+        return {
+          overdue_count: overdue.length,
+          overdue_examples: overdue.slice(0, 5).map(o => ({ course: titleOf(o.training_courses) ?? 'a course', due: o.due_at?.slice(0, 10) })),
+          certs_expiring_30d: expiring.length,
+          expiring_examples: expiring.slice(0, 5).map(c => ({ staff: c.staff_name, course: c.course_title, expires: c.expires_at?.slice(0, 10) })),
+          team_certified_pct: pct,
+          certified_staff: certifiedStaff,
+          active_staff: activeStaff,
+          note: `${overdue.length} overdue training item(s); ${expiring.length} certificate(s) expiring within 30 days; ${pct}% of active staff certified (${certifiedStaff}/${activeStaff}). Cite these exact counts; never invent training numbers.`,
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },
