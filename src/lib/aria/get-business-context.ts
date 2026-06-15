@@ -311,6 +311,26 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       })),
     },
     low_stock_alerts: alts,
+    // WIRE-1 — loyalty stats so Aria can recommend loyalty actions (winback, redemption pushes)
+    loyalty: await (async () => {
+      try {
+        const { getLoyaltyStats } = await import('./loyalty-intelligence')
+        const s = await getLoyaltyStats(db, businessId)
+        if (!s.configured) return { configured: false, note: 'Loyalty not configured.' }
+        const { data: lcfg } = await db.from('pos_loyalty_config').select('point_value_cents, program_type').eq('business_id', businessId).maybeSingle()
+        const pvc = Number(lcfg?.point_value_cents ?? 1)
+        return {
+          configured: true,
+          program_type: lcfg?.program_type ?? 'points',
+          members: s.members,
+          new_members_30d: s.newMembers30d,
+          points_outstanding: s.pointsOutstanding,
+          points_liability_dollars: Math.round(s.pointsOutstanding * pvc) / 100,
+          redemptions_30d: s.redemptions30d,
+          note: 'Liability = outstanding points × point_value_cents / 100. If members are inactive 30d+, suggest a winback. Never invent loyalty numbers — cite these.',
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },

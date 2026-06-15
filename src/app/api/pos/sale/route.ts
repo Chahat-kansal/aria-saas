@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions'
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
 import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture'
 import { logger } from '@/lib/observability/logger'
@@ -311,14 +312,42 @@ async function _POST(req: Request) {
   if (customer_id) {
     waitUntil((async () => {
       try {
+        // WIRE-1 — config-aware loyalty earn: points_per_dollar × total (points mode) or +1 stamp (stamps mode)
+        const { data: loyCfg } = await supabase.from('pos_loyalty_config')
+          .select('program_type, points_per_dollar').eq('business_id', business.id).maybeSingle()
+        const stampsMode = (loyCfg?.program_type ?? 'points') === 'stamps'
+        const earnedPoints = stampsMode ? 0 : Math.max(0, Math.floor(Number(loyCfg?.points_per_dollar ?? 1) * (total_amount ?? 0)))
+        const earnedStamps = stampsMode ? 1 : 0
+
         const custResults = await Promise.all([
-          supabase.rpc('increment_loyalty_points', { customer_id, points: Math.floor(total_amount) }).maybeSingle(),
+          stampsMode
+            ? supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'stamps_count', p_amount: 1 })
+            : supabase.rpc('increment_loyalty_points', { customer_id, points: earnedPoints }).maybeSingle(),
           supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'total_spent', p_amount: total_amount }),
           supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'visit_count', p_amount: 1 }),
           supabase.from('pos_customers').update({ last_visit: new Date().toISOString() }).eq('id', customer_id),
         ])
         for (const r of custResults) {
           if (r?.error) logger.error('pos/sale customer stats update failed', { route: 'pos/sale', businessId: business.id, customerId: customer_id, error: r.error.message });
+        }
+
+        // WIRE-1 — keep points_balance (the canonical balance the redeem path reads) in sync with
+        // loyalty_points, so the dashboard liability and customer balance are consistent.
+        if (!stampsMode && earnedPoints > 0) {
+          await supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'points_balance', p_amount: earnedPoints });
+        }
+
+        // WIRE-1 — write the loyalty LEDGER (the previously-dark transactional layer).
+        // Idempotent: unique index pos_loyalty_txn_earn_per_sale (sale_id where type='earn').
+        if (earnedPoints > 0 || earnedStamps > 0) {
+          const { error: ledgerErr } = await supabaseAdmin.from('pos_loyalty_transactions').insert({
+            business_id: business.id, customer_id, sale_id: sale.id,
+            type: 'earn', points_delta: earnedPoints, stamps_delta: earnedStamps,
+            created_at: new Date().toISOString(),
+          })
+          if (ledgerErr && !/duplicate|unique/i.test(ledgerErr.message)) {
+            logger.error('pos/sale loyalty ledger insert failed', { route: 'pos/sale', businessId: business.id, error: ledgerErr.message });
+          }
         }
       } catch (e) { console.error('[sale] loyalty update failed:', e) }
     })())
