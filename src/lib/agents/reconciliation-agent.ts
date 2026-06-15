@@ -46,6 +46,9 @@ export class ReconciliationAgent extends BaseAgent {
       const { decisions: anomalyDecisions, totalAnomalyValue } = await this.detectAnomalies(business_id)
       decisions.push(...anomalyDecisions)
 
+      // STEP 3b: WIRE-4 — weekly cash-flow forecast (fills cash_flow_forecasts; daily via this cron)
+      await this.generateCashFlowForecast(business_id)
+
       // Add reconciliation quality summary when there are match gaps or anomalies
       const totalValueAtRisk = matchStats.unmatchedValue + totalAnomalyValue
       if (totalValueAtRisk > 10 && matchStats.total > 0) {
@@ -102,19 +105,46 @@ export class ReconciliationAgent extends BaseAgent {
     // POS sales totals for the day
     const { data: sales } = await supabaseAdmin
       .from('pos_sales')
-      .select('total_amount,payment_method')
+      .select('id,total_amount,payment_method')
       .eq('business_id', business_id)
       .neq('status', 'voided')
       .gte('created_at', dayStart)
       .lte('created_at', dayEnd)
 
     const salesArr = sales ?? []
-    const pos_sales_count = salesArr.length
     const pos_sales_total = salesArr.reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
-    const pos_cash_total = salesArr.filter(r => String(r.payment_method).toLowerCase() === 'cash').reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+
+    // WIRE-4 — split cash/card/other from pos_sale_payments (amount_cents = CENTS) for the day's
+    // sales; fall back to the sale's payment_method when no itemised payment rows exist.
     const cardMethods = ['card', 'eftpos', 'credit', 'debit', 'visa', 'mastercard']
-    const pos_card_total = salesArr.filter(r => cardMethods.includes(String(r.payment_method).toLowerCase())).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
-    const pos_other_total = pos_sales_total - pos_cash_total - pos_card_total
+    let pos_cash_total = 0, pos_card_total = 0, pos_other_total = 0
+    const saleIds = salesArr.map(r => String(r.id))
+    let usedPayments = false
+    if (saleIds.length) {
+      const { data: pays } = await supabaseAdmin.from('pos_sale_payments').select('method,amount_cents').in('sale_id', saleIds)
+      if (pays && pays.length) {
+        usedPayments = true
+        for (const p of pays) {
+          const dollars = Number(p.amount_cents ?? 0) / 100
+          const m = String(p.method).toLowerCase()
+          if (m === 'cash') pos_cash_total += dollars
+          else if (cardMethods.includes(m)) pos_card_total += dollars
+          else pos_other_total += dollars
+        }
+      }
+    }
+    if (!usedPayments) {
+      pos_cash_total = salesArr.filter(r => String(r.payment_method).toLowerCase() === 'cash').reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+      pos_card_total = salesArr.filter(r => cardMethods.includes(String(r.payment_method).toLowerCase())).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+      pos_other_total = pos_sales_total - pos_cash_total - pos_card_total
+    }
+
+    // Cash-drawer variance from pos_cash_sessions closed that day (variance_cents = CENTS).
+    const { data: cashSessions } = await supabaseAdmin
+      .from('pos_cash_sessions').select('variance_cents,closed_at').eq('business_id', business_id)
+      .gte('closed_at', dayStart).lte('closed_at', dayEnd)
+    const drawerVarianceDollars = (cashSessions ?? []).reduce((s, c) => s + Number(c.variance_cents ?? 0) / 100, 0)
+    const hadCashSession = (cashSessions ?? []).length > 0
 
     // Bank data — only if Basiq is connected
     let bank_deposits_total = 0
@@ -142,19 +172,22 @@ export class ReconciliationAgent extends BaseAgent {
       } catch { bank_data_source = 'not_available' }
     }
 
-    const variance_amount = pos_sales_total - (bank_data_source === 'not_available' ? pos_sales_total : bank_deposits_total)
+    // Variance: prefer the bank-feed delta when available; otherwise use the cash-drawer variance
+    // (POS-side reconciliation) so the row is meaningful without a bank feed.
+    const variance_amount = bank_data_source !== 'not_available'
+      ? pos_sales_total - bank_deposits_total
+      : drawerVarianceDollars
     const variance_pct = pos_sales_total > 0 ? Math.abs(variance_amount) / pos_sales_total * 100 : 0
 
     let status: 'balanced' | 'variance' | 'pending' | 'explained' = 'pending'
-    if (bank_data_source === 'not_available') status = 'pending'
+    if (bank_data_source === 'not_available' && !hadCashSession) status = 'pending'
     else if (Math.abs(variance_amount) < 5) status = 'balanced'
     else status = 'variance'
 
-    // Upsert reconciliation row
+    // Upsert reconciliation row (no pos_sales_count column on this table).
     await supabaseAdmin.from('daily_reconciliations').upsert({
       business_id,
       recon_date: dateStr,
-      pos_sales_count,
       pos_sales_total: Math.round(pos_sales_total * 100) / 100,
       pos_cash_total: Math.round(pos_cash_total * 100) / 100,
       pos_card_total: Math.round(pos_card_total * 100) / 100,
@@ -164,6 +197,7 @@ export class ReconciliationAgent extends BaseAgent {
       variance_amount: Math.round(variance_amount * 100) / 100,
       variance_pct: Math.round(variance_pct * 100) / 100,
       status,
+      notes: hadCashSession ? `Cash-drawer variance $${drawerVarianceDollars.toFixed(2)} across ${(cashSessions ?? []).length} session(s).` : null,
       expected_settlement_date: bank_data_source !== 'not_available' ?
         new Date(date.getTime() + 2 * 86400000).toISOString().slice(0, 10) : null,
     }, { onConflict: 'business_id,recon_date' })
@@ -328,6 +362,72 @@ export class ReconciliationAgent extends BaseAgent {
     }
 
     return { decisions, totalAnomalyValue }
+  }
+
+  // WIRE-4 — next-week cash-flow forecast, grounded in real 4-week trends. Idempotent per
+  // (business_id, forecast_week). All amounts DOLLARS.
+  async generateCashFlowForecast(business_id: string): Promise<void> {
+    const now = Date.now()
+    const since28 = new Date(now - 28 * 86400000).toISOString()
+    const since7 = new Date(now - 7 * 86400000).toISOString()
+
+    // Weekly POS revenue = (last 28d completed revenue) / 4.
+    const { data: sales } = await supabaseAdmin.from('pos_sales')
+      .select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', since28)
+    const rev28 = (sales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+    const predicted_pos_revenue = Math.round((rev28 / 4) * 100) / 100
+
+    // Weekly payroll from last 7d timesheets (total_pay_cents ?? rate×hours), CENTS → DOLLARS.
+    const { data: ts } = await supabaseAdmin.from('pos_timesheets')
+      .select('hours_worked,total_pay_cents,pay_rate_cents').eq('business_id', business_id).gte('clock_in', since7)
+    const predicted_payroll = Math.round((ts ?? []).reduce((s, t) => s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0))), 0) / 100 * 100) / 100
+
+    // Weekly expense buckets from last 28d business_expenses (by expense_date), /4.
+    const { data: exps } = await supabaseAdmin.from('business_expenses')
+      .select('amount,category').eq('business_id', business_id).gte('expense_date', since28.slice(0, 10))
+    let supplier = 0, rentUtil = 0, otherFixed = 0
+    for (const e of exps ?? []) {
+      const cat = String(e.category ?? '').toLowerCase(); const amt = Number(e.amount ?? 0)
+      if (cat.includes('supplier') || cat.includes('stock') || cat.includes('cogs') || cat.includes('inventory')) supplier += amt
+      else if (cat.includes('rent') || cat.includes('utilit') || cat.includes('electric') || cat.includes('water') || cat.includes('gas')) rentUtil += amt
+      else otherFixed += amt
+    }
+    const predicted_supplier_payments = Math.round(supplier / 4 * 100) / 100
+    const predicted_rent_utilities = Math.round(rentUtil / 4 * 100) / 100
+    const predicted_other_fixed = Math.round(otherFixed / 4 * 100) / 100
+    // GST set-aside: ~1/11 of GST-inclusive revenue, spread weekly.
+    const predicted_bas_gst = Math.round((predicted_pos_revenue / 11) * 100) / 100
+
+    const outflow = predicted_payroll + predicted_supplier_payments + predicted_rent_utilities + predicted_other_fixed + predicted_bas_gst
+    const net = predicted_pos_revenue - outflow
+    // Opening cash proxy = max(0, trailing 4-week net) — documented estimate (no bank feed).
+    const opening_cash_position = Math.max(0, Math.round((rev28 - (predicted_payroll + predicted_supplier_payments + predicted_rent_utilities + predicted_other_fixed) * 4) * 100) / 100)
+    const closing_cash_position = Math.round((opening_cash_position + net) * 100) / 100
+
+    let risk_level: 'low' | 'medium' | 'high' = 'low'
+    let risk_reason = 'Projected inflows cover the week\'s outflows.'
+    const actions: Array<{ label: string }> = []
+    if (closing_cash_position < 0) {
+      risk_level = 'high'; risk_reason = `Projected closing cash $${closing_cash_position.toFixed(0)} is negative — outflows ($${outflow.toFixed(0)}) exceed inflows ($${predicted_pos_revenue.toFixed(0)}).`
+      actions.push({ label: 'Delay non-urgent supplier payments' }, { label: 'Review the week\'s roster vs forecast revenue' })
+    } else if (net < 0) {
+      risk_level = 'medium'; risk_reason = `This week runs a deficit of $${Math.abs(net).toFixed(0)}; the opening buffer absorbs it.`
+      actions.push({ label: 'Watch discretionary spend this week' })
+    }
+
+    // forecast_week = start of next week (Mon).
+    const d = new Date(now + 7 * 86400000); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+    const forecast_week = d.toISOString().slice(0, 10)
+    const week_number = Math.ceil((d.getTime() - new Date(d.getFullYear(), 0, 1).getTime()) / (7 * 86400000))
+
+    await supabaseAdmin.from('cash_flow_forecasts').upsert({
+      business_id, week_number, forecast_week,
+      predicted_pos_revenue, predicted_supplier_payments, predicted_payroll,
+      predicted_rent_utilities, predicted_other_fixed, predicted_bas_gst,
+      opening_cash_position, closing_cash_position,
+      reorder_events: [], reorder_total_cost: 0,
+      risk_level, risk_reason, actions,
+    }, { onConflict: 'business_id,forecast_week,week_number' })
   }
 
   async generateMonthlyPL(business_id: string, month: number, year: number): Promise<void> {

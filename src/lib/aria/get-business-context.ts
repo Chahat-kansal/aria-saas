@@ -424,6 +424,42 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // WIRE-4 — finance facts (P&L last 30d, cash risk, recon variance, anomaly count). Grounded.
+    finance: await (async () => {
+      try {
+        const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
+        const [salesR, tsR, expR, extR, fcR, reconR, anomR] = await Promise.all([
+          db.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status', 'completed').gte('created_at', since30).limit(10000),
+          db.from('pos_timesheets').select('hours_worked, total_pay_cents, pay_rate_cents').eq('business_id', businessId).gte('clock_in', since30).limit(2000),
+          db.from('business_expenses').select('amount, category').eq('business_id', businessId).gte('expense_date', since30.slice(0, 10)).limit(2000),
+          db.from('aria_external_costs').select('cost_cents').eq('business_id', businessId).gte('created_at', since30).limit(5000),
+          db.from('cash_flow_forecasts').select('forecast_week, risk_level, risk_reason, closing_cash_position').eq('business_id', businessId).order('forecast_week', { ascending: false }).limit(1),
+          db.from('daily_reconciliations').select('recon_date, variance_amount, status').eq('business_id', businessId).order('recon_date', { ascending: false }).limit(1),
+          db.from('expense_anomalies').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'open'),
+        ])
+        const revenue = (salesR.data ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+        if (revenue <= 0 && (expR.data ?? []).length === 0) return null
+        const labour = (tsR.data ?? []).reduce((s, t) => s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0))), 0) / 100
+        let cogs = 0, opex = 0
+        for (const e of expR.data ?? []) { const amt = Number(e.amount ?? 0); if (/supplier|stock|cogs|inventory|ingredient|produce/i.test(String(e.category ?? ''))) cogs += amt; else opex += amt }
+        const ext = (extR.data ?? []).reduce((s, r) => s + Number(r.cost_cents ?? 0), 0) / 100
+        const netProfit = Math.round((revenue - cogs - labour - opex - ext) * 100) / 100
+        const fc = (fcR.data ?? [])[0] as { risk_level?: string; risk_reason?: string; closing_cash_position?: number } | undefined
+        const recon = (reconR.data ?? [])[0] as { recon_date?: string; variance_amount?: number; status?: string } | undefined
+        const anomalies = anomR.count ?? 0
+        return {
+          period: 'last_30_days',
+          revenue: Math.round(revenue * 100) / 100,
+          net_profit: netProfit,
+          net_margin_pct: revenue > 0 ? Math.round((netProfit / revenue) * 1000) / 10 : null,
+          cash_risk_level: fc?.risk_level ?? null,
+          cash_risk_reason: fc?.risk_reason ?? null,
+          latest_recon: recon ? { date: recon.recon_date, variance_dollars: recon.variance_amount, status: recon.status } : null,
+          open_expense_anomalies: anomalies,
+          note: `Last 30 days: revenue $${Math.round(revenue)}, net profit $${Math.round(netProfit)}${revenue > 0 ? ` (${Math.round((netProfit / revenue) * 1000) / 10}% margin)` : ''}. Cash-flow risk: ${fc?.risk_level ?? 'not forecast yet'}. ${anomalies} open expense anomaly(ies). Cite these exact figures; never invent finance numbers.`,
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },
