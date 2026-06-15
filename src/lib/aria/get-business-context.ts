@@ -460,6 +460,35 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // WIRE-5 — returns/store-credit/layby facts. Store credit + returns are DOLLARS; laybys CENTS.
+    returns_credit_layby: await (async () => {
+      try {
+        const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
+        const [creditR, laybyR, salesR, returnsR] = await Promise.all([
+          db.from('pos_store_credits').select('balance').eq('business_id', businessId).eq('is_active', true).limit(2000),
+          db.from('pos_laybys').select('total_cents, paid_cents, status').eq('business_id', businessId).neq('status', 'completed').limit(2000),
+          db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since30).not('status', 'in', '("voided","refunded")'),
+          db.from('pos_returns').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since30),
+        ])
+        const credits = creditR.data ?? []
+        const laybys = laybyR.data ?? []
+        const creditLiability = Math.round(credits.reduce((s, c) => s + Number(c.balance ?? 0), 0) * 100) / 100
+        const laybyOutstandingDollars = Math.round(laybys.reduce((s, l) => s + (Number(l.total_cents ?? 0) - Number(l.paid_cents ?? 0)), 0)) / 100
+        const salesN = salesR.count ?? 0
+        const returnsN = returnsR.count ?? 0
+        if (credits.length === 0 && laybys.length === 0 && returnsN === 0) return null
+        const returnRate = salesN > 0 ? Math.round((returnsN / salesN) * 1000) / 10 : null
+        return {
+          store_credit_liability_dollars: creditLiability,
+          active_store_credits: credits.length,
+          active_laybys: laybys.length,
+          layby_outstanding_dollars: laybyOutstandingDollars,
+          returns_30d: returnsN,
+          return_rate_pct: returnRate,
+          note: `$${creditLiability.toFixed(2)} outstanding store-credit liability across ${credits.length} card(s); ${laybys.length} active layby(s) with $${laybyOutstandingDollars.toFixed(2)} still owing; ${returnsN} return(s) in 30 days${returnRate != null ? ` (${returnRate}% return rate)` : ''}. Cite these exact figures; never invent.`,
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },

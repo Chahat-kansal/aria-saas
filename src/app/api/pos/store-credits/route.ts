@@ -52,20 +52,32 @@ async function _POST(req: Request) {
   const { data: credit } = await supabase.from('pos_store_credits')
     .select('*').eq('business_id', bid).eq('code', String(code).toUpperCase()).eq('is_active', true).maybeSingle()
   if (!credit) return NextResponse.json({ error: 'Store credit not found' }, { status: 404 })
-  const currentBalance = Number(credit.balance) || 0
-  if (currentBalance < amount) {
-    return NextResponse.json({ error: `Insufficient balance. Available: A$${currentBalance.toFixed(2)}` }, { status: 400 })
-  }
   if (credit.expires_at && new Date(credit.expires_at) < new Date()) {
     return NextResponse.json({ error: 'Store credit has expired' }, { status: 400 })
   }
 
-  const newBalance = Math.max(0, currentBalance - amount)
-  await supabase.from('pos_store_credits').update({
+  // WIRE-5 — IDEMPOTENT: if this sale already redeemed this credit, return the prior result
+  // (a retried POST must NOT double-spend). Dollars throughout (pos_store_credits is DOLLARS).
+  if (sale_id) {
+    const { data: prior } = await supabase.from('pos_store_credit_txns')
+      .select('balance_after').eq('credit_id', credit.id).eq('sale_id', sale_id).eq('type', 'redeem').maybeSingle()
+    if (prior) return NextResponse.json({ ok: true, balance_after: Number(prior.balance_after), credit_id: credit.id, idempotent: true })
+  }
+
+  const currentBalance = Number(credit.balance) || 0
+  if (currentBalance < amount) {
+    return NextResponse.json({ error: `Insufficient balance. Available: A$${currentBalance.toFixed(2)}` }, { status: 400 })
+  }
+  const newBalance = Math.round((currentBalance - amount) * 100) / 100
+
+  // ATOMIC guard against double-spend: only update if the balance is still what we read
+  // (optimistic lock). A concurrent redeem changes the balance → 0 rows → 409, no double-spend.
+  const { data: updated } = await supabase.from('pos_store_credits').update({
     balance: newBalance,
     is_active: newBalance > 0,
     redeemed_at: newBalance === 0 ? new Date().toISOString() : null,
-  }).eq('id', credit.id)
+  }).eq('id', credit.id).eq('balance', currentBalance).select('id').maybeSingle()
+  if (!updated) return NextResponse.json({ error: 'Balance changed during redemption — please retry' }, { status: 409 })
 
   await supabase.from('pos_store_credit_txns').insert({
     business_id: bid,
