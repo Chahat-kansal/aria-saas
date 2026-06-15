@@ -22,8 +22,31 @@ async function _PATCH(req: Request, { params }: Params) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const body = await req.json()
-  const allowed: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (body.status !== undefined) allowed.status = body.status
+  const now = new Date().toISOString()
+  const allowed: Record<string, unknown> = { updated_at: now }
+  // WIRE-6 — advance the state machine, stamping the matching timestamp column for each transition.
+  if (body.status !== undefined) {
+    allowed.status = body.status
+    if (body.status === 'accepted' || body.status === 'confirmed') allowed.accepted_at = now
+    if (body.status === 'rejected' || body.status === 'cancelled') { allowed.rejected_at = now; if (body.rejection_reason) allowed.rejection_reason = body.rejection_reason }
+    if (body.status === 'ready') allowed.ready_at = now
+    if (body.status === 'completed') allowed.picked_up_at = now
+  }
+
+  // On accept, optionally create a POS sale and link it (sale_id) so the online order flows into
+  // takings — idempotent (skip if this order already has a sale_id).
+  if ((body.status === 'accepted' || body.status === 'confirmed') && body.create_sale) {
+    const { data: ord } = await supabase.from('pos_online_orders')
+      .select('order_number, total, sale_id, fulfillment_type').eq('id', id).eq('business_id', bid).maybeSingle()
+    if (ord && !ord.sale_id) {
+      const { data: sale } = await supabase.from('pos_sales').insert({
+        business_id: bid, sale_number: String(ord.order_number ?? 'ONL'), payment_method: 'other',
+        total_amount: Number(ord.total ?? 0), subtotal: Number(ord.total ?? 0), tax_amount: 0, discount_amount: 0,
+        status: 'completed', notes: `Online order ${ord.order_number} (${ord.fulfillment_type ?? 'pickup'})`,
+      }).select('id').single()
+      if (sale?.id) allowed.sale_id = sale.id
+    }
+  }
 
   const { error } = await supabase.from('pos_online_orders').update(allowed).eq('id', id).eq('business_id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

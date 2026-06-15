@@ -489,6 +489,29 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // WIRE-6 — online ordering facts (today's orders, pending-accept, online revenue). Grounded.
+    online_ordering: await (async () => {
+      try {
+        const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
+        const { data: orders } = await db.from('pos_online_orders')
+          .select('status, total, created_at').eq('business_id', businessId).gte('created_at', dayStart.toISOString()).limit(2000)
+        const { data: settings } = await db.from('pos_online_settings').select('store_slug, accept_orders, enabled').eq('business_id', businessId).maybeSingle()
+        const rows = orders ?? []
+        if (rows.length === 0 && !settings) return null
+        const pending = rows.filter(o => o.status === 'pending').length
+        const liveStatuses = ['voided', 'cancelled', 'rejected']
+        const revenue = rows.filter(o => !liveStatuses.includes(String(o.status))).reduce((s, o) => s + Number(o.total ?? 0), 0)
+        return {
+          orders_today: rows.length,
+          pending_accept: pending,
+          online_revenue_today: Math.round(revenue * 100) / 100,
+          store_enabled: settings?.enabled ?? false,
+          accepting_orders: settings?.accept_orders ?? false,
+          store_slug: settings?.store_slug ?? null,
+          note: `${rows.length} online order(s) today${pending > 0 ? `, ${pending} awaiting accept` : ''}; $${Math.round(revenue * 100) / 100} online revenue today. ${settings?.enabled ? (settings.accept_orders ? 'Store is live and accepting.' : 'Store enabled but NOT accepting orders.') : 'Online store not enabled.'} Cite these exact figures.`,
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },
