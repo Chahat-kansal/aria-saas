@@ -7,6 +7,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { logAICallSafe } from '@/lib/aria/log-ai-call'
+import { CAFE_CATEGORIES, CAFE_SEED_PRODUCTS } from '@/lib/pos/cafe-seed-products'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -62,13 +64,28 @@ async function runProvision(
   try {
     if (businessModel !== 'service') {
       if (industry === 'cafe') {
-        // Run the same upsert logic as the cafe seed route (categories only — products seeded separately)
-        const cafeCats = INDUSTRY_CATEGORIES.cafe
-        for (const cat of cafeCats) {
-          await supabaseAdmin.from('pos_categories').upsert(
-            { business_id: bizId, name: cat.name, color: cat.color },
-            { onConflict: 'business_id,name' }
-          )
+        // PP STEP 2 — seed the full cafe menu (6 categories + 80+ products), idempotent.
+        const { count: prodCount } = await supabaseAdmin
+          .from('pos_products').select('id', { count: 'exact', head: true }).eq('business_id', bizId)
+        if (!prodCount) {
+          const CAFE_CAT_COLORS: Record<string, string> = { Coffee: '#6F4E37', Tea: '#7FB897', Breakfast: '#F59E0B', Lunch: '#10B981', Bakery: '#EC4899', 'Cold Drinks': '#4A9EBA' }
+          const categoryMap: Record<string, string> = {}
+          for (const catName of CAFE_CATEGORIES) {
+            const { data: cat } = await supabaseAdmin.from('pos_categories').upsert(
+              { business_id: bizId, name: catName, color: CAFE_CAT_COLORS[catName] ?? '#7FB897' },
+              { onConflict: 'business_id,name' }
+            ).select('id').single()
+            if (cat) categoryMap[catName] = cat.id as string
+          }
+          const products = CAFE_SEED_PRODUCTS.map(p => ({
+            business_id: bizId, name: p.name, category_id: categoryMap[p.category] ?? null,
+            price: p.price, cost_price: p.cost_price, description: p.description ?? null,
+            image_url: p.image_url ?? null, image_source: p.image_url ? 'owner' : 'pending',
+            stock_quantity: 999, track_stock: false, is_active: true,
+          }))
+          for (let i = 0; i < products.length; i += 20) {
+            await supabaseAdmin.from('pos_products').insert(products.slice(i, i + 20))
+          }
         }
       } else {
         const cats = INDUSTRY_CATEGORIES[industry ?? ''] ?? DEFAULT_CATEGORIES
@@ -177,6 +194,16 @@ async function runProvision(
     provisioning_status: 'complete',
     provisioning_steps: steps.map(s => ({ ...s, status: s.status === 'running' ? 'done' : s.status })),
   }).eq('business_id', bizId)
+
+  // ARIA INTELLIGENCE — log onboarding completion (PP)
+  await logAICallSafe({
+    business_id: bizId,
+    agent_key: 'onboarding',
+    role: 'briefing',
+    provider: 'anthropic',
+    success: true,
+    request_summary: JSON.stringify({ event: 'onboarding_complete', industry: industry ?? null, business_model: businessModel ?? null }),
+  })
 }
 
 async function _GET(_req: Request) {

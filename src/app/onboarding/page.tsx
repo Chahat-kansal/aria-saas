@@ -44,7 +44,7 @@ type FD = {
   industry: string; industry_subtype: string; address: string; city: string;
   business_state: string; postcode: string; year_established: string;
   staff_count: string; monthly_revenue: string; website: string; google_business_url: string;
-  biggest_challenge: string[]; goals_notes: string;
+  biggest_challenge: string[]; goals_notes: string; weekly_revenue_target: string;
 };
 
 const EMPTY: FD = {
@@ -53,7 +53,7 @@ const EMPTY: FD = {
   business_model: '',
   industry: '', industry_subtype: '', address: '', city: '', business_state: '', postcode: '', year_established: '',
   staff_count: '', monthly_revenue: '', website: '', google_business_url: '',
-  biggest_challenge: [], goals_notes: '',
+  biggest_challenge: [], goals_notes: '', weekly_revenue_target: '',
 };
 
 function isStepValid(step: number, f: FD): boolean {
@@ -401,6 +401,20 @@ function Goals({ form, set }: { form: FD; set: Setter }) {
   }
   return (
     <div className="space-y-4">
+      {/* PP STEP 3 — first goal (ties to I2 weekly_revenue_target). Skippable. */}
+      <div>
+        <label className="block text-xs font-medium text-[#2D5240] mb-1">Weekly revenue target (optional)</label>
+        <div style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'rgba(0,0,0,0.35)', pointerEvents: 'none' }}>$</span>
+          <input
+            type="number" min={0} max={9999999} step={50} inputMode="decimal"
+            value={form.weekly_revenue_target}
+            onChange={e => set('weekly_revenue_target', e.target.value)}
+            placeholder="e.g. 5000"
+            className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg pl-6 pr-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
+        </div>
+        <p className="text-xs text-[rgba(0,0,0,0.4)] mt-1.5">Aria tracks your progress against this and flags when you&apos;re falling behind. You can set or change it later in Settings.</p>
+      </div>
       <div>
         <label className="block text-xs font-medium text-[#2D5240] mb-2">What are your biggest challenges? (select all that apply)</label>
         <div className="flex flex-wrap gap-2">

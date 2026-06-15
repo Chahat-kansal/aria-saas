@@ -59,6 +59,11 @@ export async function POST(request: NextRequest) {
       : (form.biggest_challenge as string) || '',
     business_model: (form.business_model as string) || 'product',
     pos_enabled: (form.business_model as string) !== 'service',
+    // PP STEP 3 / I2 — capture the owner's weekly revenue goal (skippable → 0)
+    weekly_revenue_target: (() => {
+      const n = Number(form.weekly_revenue_target)
+      return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n * 100) / 100, 9_999_999) : 0
+    })(),
   };
 
   if (abnIsValid) {
