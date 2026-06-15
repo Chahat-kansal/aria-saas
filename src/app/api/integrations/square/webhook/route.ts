@@ -68,7 +68,8 @@ async function handleEvent(event: any) {
       // Trigger a re-sync for this business's catalogue
       await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/square/sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // SEC-3 — internal _cron call must present CRON_SECRET (sync route now enforces verifyCronAuth)
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.CRON_SECRET ?? ''}` },
         body: JSON.stringify({ business_id, _cron: true }),
       }).catch(console.error);
       break;

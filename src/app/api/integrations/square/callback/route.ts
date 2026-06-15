@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { runSquareFullSync } from '@/lib/integrations/square'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
@@ -23,9 +25,11 @@ async function _GET(req: Request) {
 
   // Decode state — supports both base64url ({bid,uid,ts}) and "bid:timestamp" formats
   let businessId: string
+  let stateUid: string | undefined
   try {
     const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'))
     businessId = decoded.bid
+    stateUid = decoded.uid
     if (!businessId) throw new Error('No bid')
     if (Date.now() - (decoded.ts ?? 0) > 600_000) throw new Error('State expired')
   } catch {
@@ -33,6 +37,18 @@ async function _GET(req: Request) {
     businessId = state.split(':')[0]
     if (!businessId) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=invalid_state`)
   }
+
+  // SEC-3 — the state value is unsigned and client-forgeable, so trust nothing in it until
+  // the LIVE session is confirmed to own the target business. This binds the Square connection
+  // to the authenticated user and rejects cross-business / cross-user (CSRF) binding.
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=not_authenticated`)
+  if (stateUid && stateUid !== user.id) {
+    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=state_user_mismatch`)
+  }
+  const denied = await verifyBusinessAccess(user.id, businessId)
+  if (denied) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=forbidden_business`)
 
   // Exchange code for tokens
   const tokenRes = await fetch(`${SQUARE_BASE}/oauth2/token`, {

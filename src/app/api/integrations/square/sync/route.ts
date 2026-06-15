@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { runSquareFullSync } from '@/lib/integrations/square'
+import { verifyCronAuth } from '@/lib/auth/cron'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -22,10 +23,11 @@ async function _POST(req: Request) {
   let bid: string | null = null
 
   if (body._cron && body.business_id) {
-    const authHeader = req.headers.get('authorization')
-    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // SEC-3 — internal/cron calls that pass an explicit business_id MUST present the
+    // CRON_SECRET (SEC-1 verifyCronAuth). Without it, an unauthenticated caller could
+    // trigger a full sync for an arbitrary business_id.
+    const denied = verifyCronAuth(req)
+    if (denied) return denied
     bid = body.business_id
   } else {
     const { data: { user } } = await supabase.auth.getUser()
