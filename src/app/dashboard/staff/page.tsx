@@ -742,6 +742,7 @@ export default function StaffPage() {
         <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.08)', margin: '0 2px', flexShrink: 0 }} />
         <Link href="/dashboard/staff/messages" style={{ ...tabBtnStyle(false), textDecoration: 'none' }}>Messages</Link>
         <Link href="/dashboard/staff/announcements" style={{ ...tabBtnStyle(false), textDecoration: 'none' }}>Announcements</Link>
+        <Link href="/dashboard/staff/training" style={{ ...tabBtnStyle(false), textDecoration: 'none' }}>Training</Link>
       </div>
       {tab === 'schedule' && bid && <ScheduleTab bid={bid} />}
       {tab === 'timesheets' && bid && <TimesheetTab bid={bid} />}
