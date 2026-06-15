@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { getLastSync } from '@/lib/integrations/sync-logger'
 
@@ -20,11 +21,12 @@ async function _GET(_req: Request) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ connected: false })
 
-  const { data: conn } = await supabase.from('square_connections')
-    .select('square_merchant_id, sync_status, last_synced_at, sync_error, connected_at')
-    .eq('business_id', bid).maybeSingle()
+  // SEC-5 — read from the encrypted store (no tokens selected); connected only when status='connected'
+  const { data: conn } = await supabaseAdmin.from('pos_oauth_integrations')
+    .select('external_account_id, status, last_sync_at, last_error, created_at')
+    .eq('business_id', bid).eq('integration_key', 'square').maybeSingle()
 
-  if (!conn) return NextResponse.json({ connected: false })
+  if (!conn || conn.status !== 'connected') return NextResponse.json({ connected: false })
 
   const lastSync = await getLastSync(bid, 'square')
   const [prodCount, custCount, saleCount] = await Promise.all([
@@ -35,11 +37,11 @@ async function _GET(_req: Request) {
 
   return NextResponse.json({
     connected: true,
-    merchant_id: conn.square_merchant_id,
-    sync_status: conn.sync_status,
-    last_synced_at: conn.last_synced_at,
-    sync_error: conn.sync_error,
-    connected_at: conn.connected_at,
+    merchant_id: conn.external_account_id,
+    sync_status: conn.status,
+    last_synced_at: conn.last_sync_at,
+    sync_error: conn.last_error,
+    connected_at: conn.created_at,
     counts: { products: prodCount.count ?? 0, customers: custCount.count ?? 0, sales: saleCount.count ?? 0 },
     last_sync: lastSync,
   })

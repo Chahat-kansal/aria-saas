@@ -40,12 +40,13 @@ async function handleEvent(event: any) {
   const merchantId = event.merchant_id;
   const type = event.type;
 
-  // Resolve business_id from merchant_id
+  // SEC-5 — resolve business_id from merchant_id via the encrypted store
   const { data: conn } = await supabaseAdmin
-    .from('square_connections')
+    .from('pos_oauth_integrations')
     .select('business_id')
-    .eq('square_merchant_id', merchantId)
-    .single();
+    .eq('integration_key', 'square')
+    .eq('external_account_id', merchantId)
+    .maybeSingle();
 
   if (!conn?.business_id) return;
   const business_id = conn.business_id;

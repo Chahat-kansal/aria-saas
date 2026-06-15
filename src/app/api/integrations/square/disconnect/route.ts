@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -17,8 +18,9 @@ async function _DELETE(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Delete the connection record (keeps square_items/sales/customers for historical analysis)
-  await supabase.from('square_connections').delete().eq('business_id', business_id);
+  // SEC-5 — delete the encrypted connection record (keeps square_items/sales/customers for history)
+  await supabaseAdmin.from('pos_oauth_integrations').delete()
+    .eq('business_id', business_id).eq('integration_key', 'square');
 
   // Revert data source
   await supabase.from('businesses').update({

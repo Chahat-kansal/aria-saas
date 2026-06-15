@@ -150,7 +150,8 @@ export async function collectBusinessData(
     imports,
     previousActions,
   ] = await Promise.all([
-    safeSelect(db, 'square_connections', q => q.eq('business_id', businessId).limit(5)),
+    // SEC-5 — Square connection now lives in the encrypted store; select only non-token columns
+    safeSelect(db, 'pos_oauth_integrations', q => q.select('id, business_id, integration_key, status, last_sync_at, external_account_id, token_expires_at').eq('integration_key', 'square').eq('business_id', businessId).limit(5)),
     safeSelect(db, 'square_sales', q => q.eq('business_id', businessId).gte('sold_at', since90).order('sold_at', { ascending: false }).limit(RECENT_LIMIT)),
     safeSelect(db, 'pos_sales', q => q.eq('business_id', businessId).gte('created_at', since90).order('created_at', { ascending: false }).limit(RECENT_LIMIT)),
     safeSelect(db, 'square_items', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),

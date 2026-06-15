@@ -1187,7 +1187,7 @@ TROUBLESHOOTING PLAYBOOK:
 "Returns empty / shows nothing": Check RLS — use supabaseAdmin in the route. Check business_id filter matches user_active_business.
 "404 on staff member": Use explicit FK staff_leave!staff_leave_staff_id_fkey in select query.
 "Cron not running": Check cron_logs for stuck 'running' row (finished_at IS NULL) — update to 'failed'. Vercel Hobby crons are daily max only.
-"Square sync failing": Check square_connections exists AND token_expires_at > now(). square_connected=true on businesses table can be stale.
+"Square sync failing": Check pos_oauth_integrations (integration_key='square') exists with status='connected' AND token_expires_at > now() (tokens are encrypted there as of SEC-5). square_connected=true on businesses table can be stale.
 "POS terminal login fails": Check pos_users exists for business_id with is_active=true.
 "Trial expired warning": Check businesses.trial_ends_at and business_subscriptions.status.
 "Vercel timeout": Vercel functions have 10s limit on Hobby. Split long operations into chunks (e.g. 250-row CSV batches).

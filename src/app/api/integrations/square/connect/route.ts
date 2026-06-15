@@ -2,8 +2,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { randomUUID } from 'crypto'
 
 const OAUTH_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
@@ -44,7 +46,17 @@ async function _GET(req: Request) {
 
   const redirectUri = `${origin}/api/integrations/square/callback`;
 
-  const state = Buffer.from(JSON.stringify({ bid, uid: user.id, ts: Date.now() })).toString('base64url');
+  // SEC-5 — TRUE CSRF: generate a random state token, persist it on a pending row in the
+  // encrypted store, and pass ONLY the token as the OAuth state. The callback proves the
+  // round-trip by matching the returned state to the stored auth_state_token.
+  const state = randomUUID();
+  await supabaseAdmin.from('pos_oauth_integrations').upsert({
+    business_id: bid,
+    integration_key: 'square',
+    status: 'pending',
+    auth_state_token: state,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'business_id,integration_key' });
 
   const params = new URLSearchParams({
     client_id: process.env.SQUARE_APPLICATION_ID,

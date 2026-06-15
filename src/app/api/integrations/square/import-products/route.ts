@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { decryptFieldSafe } from '@/lib/encryption';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getSquareTokens, setSquareSyncStatus } from '@/lib/integrations/square'
 
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
@@ -24,14 +24,11 @@ async function _POST(req: Request) {
     .eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  // Get Square connection
-  const { data: conn } = await supabase.from('square_connections')
-    .select('access_token, square_merchant_id')
-    .eq('business_id', business_id).maybeSingle();
-  if (!conn) return NextResponse.json({ error: 'Square not connected. Connect via Settings → Integrations first.' }, { status: 400 });
+  // SEC-5 — read + decrypt the Square token from the encrypted store
+  const tokens = await getSquareTokens(business_id);
+  if (!tokens?.access_token) return NextResponse.json({ error: 'Square not connected. Connect via Settings → Integrations first.' }, { status: 400 });
 
-  const token = decryptFieldSafe(conn.access_token, business_id);
-  if (!token) return NextResponse.json({ error: 'Failed to decrypt Square token' }, { status: 500 });
+  const token = tokens.access_token;
 
   const authHeader = { 'Authorization': `Bearer ${token}`, 'Square-Version': '2024-01-17' };
 
@@ -130,11 +127,8 @@ async function _POST(req: Request) {
     }
   }
 
-  // Update sync status
-  await supabase.from('square_connections').update({
-    last_synced_at: new Date().toISOString(),
-    sync_status: 'synced',
-  }).eq('business_id', business_id);
+  // SEC-5 — update sync status on the encrypted store
+  await setSquareSyncStatus(business_id, 'connected');
 
   return NextResponse.json({ ok: true, total: allItems.length, imported, updated, skipped });
 }

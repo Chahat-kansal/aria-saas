@@ -80,8 +80,8 @@ export async function GET(req: Request) {
     if (hourAEST === 3) {
       try {
         const { runSquareFullSync } = await import('@/lib/integrations/square')
-        const { data: sqConn } = await supabaseAdmin.from('square_connections')
-          .select('id').eq('business_id', businessId).eq('sync_status', 'connected').maybeSingle()
+        const { data: sqConn } = await supabaseAdmin.from('pos_oauth_integrations')
+          .select('id').eq('business_id', businessId).eq('integration_key', 'square').eq('status', 'connected').maybeSingle()
         if (sqConn) {
           await runSquareFullSync(businessId)
         }

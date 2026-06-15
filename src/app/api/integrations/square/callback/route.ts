@@ -4,7 +4,7 @@ export const maxDuration = 10
 
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { runSquareFullSync } from '@/lib/integrations/square'
+import { runSquareFullSync, writeSquareTokens } from '@/lib/integrations/square'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
@@ -23,30 +23,24 @@ async function _GET(req: Request) {
   if (error) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=${encodeURIComponent(error)}`)
   if (!code || !state) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=missing_params`)
 
-  // Decode state — supports both base64url ({bid,uid,ts}) and "bid:timestamp" formats
-  let businessId: string
-  let stateUid: string | undefined
-  try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'))
-    businessId = decoded.bid
-    stateUid = decoded.uid
-    if (!businessId) throw new Error('No bid')
-    if (Date.now() - (decoded.ts ?? 0) > 600_000) throw new Error('State expired')
-  } catch {
-    // Fallback for "bid:timestamp" format
-    businessId = state.split(':')[0]
-    if (!businessId) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=invalid_state`)
+  // SEC-5 — TRUE CSRF: `state` is a random token persisted on a pending row by /connect.
+  // Look it up server-side; absence = forged/stale state → reject. This is now the primary
+  // binding (replaces SEC-3's unsigned-state decode).
+  const { data: pending } = await supabaseAdmin
+    .from('pos_oauth_integrations')
+    .select('id, business_id')
+    .eq('integration_key', 'square')
+    .eq('auth_state_token', state)
+    .maybeSingle()
+  if (!pending?.business_id) {
+    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=invalid_state`)
   }
+  const businessId = pending.business_id as string
 
-  // SEC-3 — the state value is unsigned and client-forgeable, so trust nothing in it until
-  // the LIVE session is confirmed to own the target business. This binds the Square connection
-  // to the authenticated user and rejects cross-business / cross-user (CSRF) binding.
+  // Defence in depth (SEC-3) — the live session must also own this business.
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=not_authenticated`)
-  if (stateUid && stateUid !== user.id) {
-    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=state_user_mismatch`)
-  }
   const denied = await verifyBusinessAccess(user.id, businessId)
   if (denied) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=forbidden_business`)
 
@@ -70,15 +64,14 @@ async function _GET(req: Request) {
 
   const tokens = await tokenRes.json() as Record<string, unknown>
 
-  await supabaseAdmin.from('square_connections').upsert({
-    business_id: businessId,
-    square_merchant_id: String(tokens.merchant_id ?? ''),
+  // SEC-5 — write ENCRYPTED tokens to pos_oauth_integrations and consume the CSRF state token.
+  await writeSquareTokens(businessId, pending.id as string, {
     access_token: String(tokens.access_token ?? ''),
     refresh_token: String(tokens.refresh_token ?? ''),
-    token_expires_at: tokens.expires_at ?? null,
-    sync_status: 'connected',
-    connected_at: new Date().toISOString(),
-  }, { onConflict: 'business_id' })
+    token_expires_at: (tokens.expires_at as string | null) ?? null,
+    merchant_id: String(tokens.merchant_id ?? '') || null,
+    scopes: typeof tokens.scope === 'string' ? (tokens.scope as string).split(' ').filter(Boolean) : null,
+  })
 
   await supabaseAdmin.from('businesses').update({
     square_connected: true,

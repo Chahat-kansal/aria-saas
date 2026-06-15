@@ -1,5 +1,71 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { logSyncStart, logSyncComplete } from './sync-logger'
+import { encryptFieldSafe, decryptFieldSafe } from '@/lib/encryption'
+
+// ── SEC-5 — Square tokens live ENCRYPTED in pos_oauth_integrations (integration_key='square').
+//    Single read/write helpers so the 6+ consumers don't each re-implement table + crypto. ──
+export const SQUARE_KEY = 'square' as const
+
+export type SquareTokens = {
+  integration_id: string
+  access_token: string | null
+  refresh_token: string | null
+  merchant_id: string | null
+  location_id: string | null
+  token_expires_at: string | null
+  status: string | null
+}
+
+/** Read + decrypt the Square tokens for a business from the encrypted store. Null if not connected. */
+export async function getSquareTokens(businessId: string): Promise<SquareTokens | null> {
+  const { data } = await supabaseAdmin
+    .from('pos_oauth_integrations')
+    .select('id, access_token_encrypted, refresh_token_encrypted, external_account_id, config, token_expires_at, status')
+    .eq('business_id', businessId)
+    .eq('integration_key', SQUARE_KEY)
+    .maybeSingle()
+  if (!data) return null
+  const cfg = (data.config as Record<string, unknown> | null) ?? null
+  return {
+    integration_id: data.id as string,
+    access_token: decryptFieldSafe(data.access_token_encrypted as string | null, businessId),
+    refresh_token: decryptFieldSafe(data.refresh_token_encrypted as string | null, businessId),
+    merchant_id: (data.external_account_id as string | null) ?? null,
+    location_id: (cfg?.location_id as string | null) ?? null,
+    token_expires_at: (data.token_expires_at as string | null) ?? null,
+    status: (data.status as string | null) ?? null,
+  }
+}
+
+/** Encrypt + persist Square tokens to the encrypted store (used by the OAuth callback). */
+export async function writeSquareTokens(businessId: string, integrationId: string, t: {
+  access_token: string; refresh_token: string; token_expires_at?: string | null
+  merchant_id?: string | null; location_id?: string | null; scopes?: string[] | null
+}): Promise<void> {
+  await supabaseAdmin.from('pos_oauth_integrations').update({
+    status: 'connected',
+    access_token_encrypted: encryptFieldSafe(t.access_token, businessId),
+    refresh_token_encrypted: encryptFieldSafe(t.refresh_token, businessId),
+    token_expires_at: t.token_expires_at ?? null,
+    external_account_id: t.merchant_id ?? null,
+    ...(t.location_id ? { config: { location_id: t.location_id } } : {}),
+    ...(t.scopes ? { scopes: t.scopes } : {}),
+    auth_state_token: null, // consume the CSRF token
+    last_sync_at: new Date().toISOString(),
+    last_error: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', integrationId)
+}
+
+/** Update the Square integration sync status on the encrypted store. */
+export async function setSquareSyncStatus(businessId: string, status: string, error?: string | null): Promise<void> {
+  await supabaseAdmin.from('pos_oauth_integrations').update({
+    status,
+    last_sync_at: new Date().toISOString(),
+    ...(error !== undefined ? { last_error: error } : {}),
+    updated_at: new Date().toISOString(),
+  }).eq('business_id', businessId).eq('integration_key', SQUARE_KEY)
+}
 
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
@@ -307,14 +373,12 @@ async function syncSquareSalesToPosSales(businessId: string): Promise<void> {
 export async function runSquareFullSync(businessId: string): Promise<{
   products: number; customers: number; sales: number
 }> {
-  const { data: conn } = await supabaseAdmin.from('square_connections')
-    .select('access_token').eq('business_id', businessId).maybeSingle()
-  if (!conn?.access_token) throw new Error('No Square connection found')
+  // SEC-5 — read the decrypted token from the encrypted pos_oauth_integrations store
+  const tokens = await getSquareTokens(businessId)
+  if (!tokens?.access_token) throw new Error('No Square connection found')
 
-  const token = String(conn.access_token)
-  await supabaseAdmin.from('square_connections').update({
-    sync_status: 'syncing', last_synced_at: new Date().toISOString(),
-  }).eq('business_id', businessId)
+  const token = tokens.access_token
+  await setSquareSyncStatus(businessId, 'syncing')
 
   try {
     const [products, customers, sales] = await Promise.all([
@@ -323,16 +387,12 @@ export async function runSquareFullSync(businessId: string): Promise<{
       syncSquareSales(businessId, token, 12),
     ])
 
-    await supabaseAdmin.from('square_connections').update({
-      sync_status: 'connected', last_synced_at: new Date().toISOString(), sync_error: null,
-    }).eq('business_id', businessId)
+    await setSquareSyncStatus(businessId, 'connected', null)
     await supabaseAdmin.from('businesses').update({ square_connected: true }).eq('id', businessId)
 
     return { products, customers, sales }
   } catch (e) {
-    await supabaseAdmin.from('square_connections').update({
-      sync_status: 'error', sync_error: String(e),
-    }).eq('business_id', businessId)
+    await setSquareSyncStatus(businessId, 'error', String(e))
     throw e
   }
 }

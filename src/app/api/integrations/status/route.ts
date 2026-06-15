@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { isKountaConfigured } from '@/lib/integrations/kounta'
 
@@ -21,7 +22,7 @@ async function _GET(_req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const [squareConn, shopifyConn, lsXConn, kountaConn] = await Promise.all([
-    supabase.from('square_connections').select('sync_status, last_synced_at, connected_at, sync_error').eq('business_id', bid).maybeSingle(),
+    supabaseAdmin.from('pos_oauth_integrations').select('sync_status:status, last_synced_at:last_sync_at, connected_at:created_at, sync_error:last_error').eq('business_id', bid).eq('integration_key', 'square').maybeSingle(),
     supabase.from('shopify_connections').select('sync_status, last_synced_at, shop_name, store_url, sync_error').eq('business_id', bid).maybeSingle(),
     supabase.from('lightspeed_connections').select('sync_status, last_synced_at, domain_prefix, sync_error, connected_at').eq('business_id', bid).eq('integration_type', 'x_series').maybeSingle(),
     supabase.from('lightspeed_connections').select('sync_status, last_synced_at, kounta_company_id, sync_error, connected_at').eq('business_id', bid).eq('integration_type', 'kounta').maybeSingle(),
@@ -36,7 +37,7 @@ async function _GET(_req: Request) {
   ])
 
   return NextResponse.json({
-    square: squareConn.data
+    square: squareConn.data && (squareConn.data as { sync_status?: string }).sync_status === 'connected'
       ? { connected: true, ...squareConn.data, product_count: squareCount.count ?? 0 }
       : { connected: false },
     shopify: shopifyConn.data
