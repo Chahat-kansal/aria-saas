@@ -75,6 +75,9 @@ export default function OnboardingWizard() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/login'); return; }
+      // AUTH-FIX BUG 2 — gate: unconfirmed email cannot enter onboarding. Google OAuth users
+      // have email_confirmed_at set by the provider, so they pass straight through.
+      if (!user.email_confirmed_at) { router.push(`/verify-email?email=${encodeURIComponent(user.email ?? '')}`); return; }
 
       const { data: biz } = await supabase
         .from('businesses')
@@ -281,7 +284,7 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
             className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
           <button type="button" onClick={verifyABN} disabled={!canVerify || verifying}
             className="px-3 py-3 rounded-lg bg-[#2D5240] text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap hover:bg-[#1e3d2e] transition-colors">
-            {verifying ? 'Checking…' : 'Verify with ABR'}
+            {verifying ? 'Checking…' : 'Verify ABN'}
           </button>
         </div>
         {abnState === 'valid' && !verifyResult && <p className="text-xs text-green-600 mt-1">✓ Valid ABN format</p>}

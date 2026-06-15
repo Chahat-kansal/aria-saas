@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState('');
@@ -11,6 +13,21 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErr, setFieldErr] = useState<{ name?: string; email?: string; password?: string }>({});
+
+  // BUG 1 — validate every required field; the button reflects this, and handleSubmit re-checks.
+  const nameValid = name.trim().length > 0;
+  const emailValid = EMAIL_RE.test(email.trim());
+  const passwordValid = password.length >= 8;
+  const formValid = nameValid && emailValid && passwordValid;
+
+  function validate() {
+    const errs: { name?: string; email?: string; password?: string } = {};
+    if (!nameValid) errs.name = 'Please enter your full name';
+    if (!emailValid) errs.email = 'Enter a valid email address';
+    if (!passwordValid) errs.password = 'Password must be at least 8 characters';
+    return errs;
+  }
 
   if (!supabase) {
     return (
@@ -22,20 +39,29 @@ export default function SignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
+    // BUG 1 — never trust the disabled state alone; re-validate on submit.
+    const errs = validate();
+    setFieldErr(errs);
+    if (Object.keys(errs).length > 0) { setError(''); return; }
     setLoading(true);
     setError('');
     try {
-      const { error: err } = await supabase.auth.signUp({
-        email,
+      const { data, error: err } = await supabase.auth.signUp({
+        email: email.trim(),
         password,
         options: {
-          data: { full_name: name },
+          data: { full_name: name.trim() },
           emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? location.origin}/auth/callback`,
         },
       });
       if (err) { setError(err.message); return; }
-      router.push('/onboarding');
+      // BUG 2 — flow gate. With "Confirm email" ON, signUp returns no session → the user must
+      // verify before onboarding. With it OFF, a session is returned (already confirmed) → proceed.
+      if (!data.session) {
+        router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+      } else {
+        router.push('/onboarding');
+      }
     } catch (e: any) {
       setError(e?.message ?? 'An unexpected error occurred. Please try again.');
     } finally {
@@ -82,30 +108,42 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="text"
-              placeholder="Full name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              required
-              className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
-            />
-            <input
-              type="password"
-              placeholder="Password (min 8 characters)"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
-            />
+            <div>
+              <input
+                type="text"
+                placeholder="Full name"
+                value={name}
+                onChange={e => { setName(e.target.value); if (fieldErr.name) setFieldErr(p => ({ ...p, name: undefined })); }}
+                onBlur={() => { if (!nameValid) setFieldErr(p => ({ ...p, name: 'Please enter your full name' })); }}
+                required
+                className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
+              />
+              {fieldErr.name && <p className="text-xs text-red-500 mt-1 px-1">{fieldErr.name}</p>}
+            </div>
+            <div>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); if (fieldErr.email) setFieldErr(p => ({ ...p, email: undefined })); }}
+                onBlur={() => { if (!emailValid) setFieldErr(p => ({ ...p, email: 'Enter a valid email address' })); }}
+                required
+                className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
+              />
+              {fieldErr.email && <p className="text-xs text-red-500 mt-1 px-1">{fieldErr.email}</p>}
+            </div>
+            <div>
+              <input
+                type="password"
+                placeholder="Password (min 8 characters)"
+                value={password}
+                onChange={e => { setPassword(e.target.value); if (fieldErr.password) setFieldErr(p => ({ ...p, password: undefined })); }}
+                onBlur={() => { if (!passwordValid) setFieldErr(p => ({ ...p, password: 'Password must be at least 8 characters' })); }}
+                required
+                className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
+              />
+              {fieldErr.password && <p className="text-xs text-red-500 mt-1 px-1">{fieldErr.password}</p>}
+            </div>
 
             {error && (
               <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
@@ -113,8 +151,8 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-[#1a1a16] hover:bg-[#2d2d25] disabled:opacity-60 text-white py-3 rounded-full font-medium text-sm transition-colors"
+              disabled={loading || !formValid}
+              className="w-full bg-[#1a1a16] hover:bg-[#2d2d25] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 rounded-full font-medium text-sm transition-colors"
             >
               {loading ? 'Creating account…' : 'Create account'}
             </button>
