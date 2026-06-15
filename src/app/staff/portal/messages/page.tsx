@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 interface Message {
   id: string
@@ -94,18 +94,51 @@ export default function StaffMessagesPage() {
   const [messages,      setMessages]      = useState<Message[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading,       setLoading]       = useState(true)
+  // STAFF-MSG-FIX — open + reply state
+  const [selected,  setSelected]  = useState<Message | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [sending,   setSending]   = useState(false)
+  const [replyMsg,  setReplyMsg]  = useState('')
 
-  // ── Data fetch — PRESERVED EXACTLY ───────────────────────────────────────
-  useEffect(() => {
-    fetch('/api/staff/portal/messages')
-      .then(r => r.json())
-      .then((j: { messages?: Message[]; announcements?: Announcement[] }) => {
-        setMessages(j.messages ?? [])
-        setAnnouncements(j.announcements ?? [])
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch('/api/staff/portal/messages')
+      const j = await r.json() as { messages?: Message[]; announcements?: Announcement[] }
+      setMessages(j.messages ?? [])
+      setAnnouncements(j.announcements ?? [])
+    } catch { /* keep previous state */ }
+    setLoading(false)
   }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Open a message → show detail + mark it read (server + optimistic local clear).
+  function openMessage(m: Message) {
+    setSelected(m); setReplyText(''); setReplyMsg('')
+    if (!m.read_at) {
+      setMessages(prev => prev.map(x => x.id === m.id ? { ...x, read_at: new Date().toISOString() } : x))
+      fetch('/api/staff/portal/messages', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_id: m.id }),
+      }).catch(() => {})
+    }
+  }
+
+  async function sendReply() {
+    if (!selected || !replyText.trim()) return
+    setSending(true); setReplyMsg('')
+    try {
+      const r = await fetch('/api/staff/portal/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reply_to_id: selected.id, body: replyText.trim() }),
+      })
+      const j = await r.json()
+      if (!r.ok) { setReplyMsg(j.error ?? 'Could not send reply'); return }
+      setReplyMsg('Reply sent ✓'); setReplyText('')
+      await load()
+    } catch { setReplyMsg('Could not send reply') }
+    finally { setSending(false) }
+  }
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (loading) return (
@@ -276,12 +309,16 @@ export default function StaffMessagesPage() {
               const avatarColor = m.sender?.color ?? DEEP
 
               return (
-                <div key={m.id} className="an-swipe-dismiss" style={{
+                <div key={m.id} className="an-swipe-dismiss"
+                  role="button" tabIndex={0}
+                  onClick={() => openMessage(m)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMessage(m) } }}
+                  style={{
                   background: CARD, borderRadius: 16, boxShadow: SHADOW,
                   border: '1px solid ' + (unread ? 'rgba(127,184,151,.3)' : LINE),
                   borderLeft: '3px solid ' + (unread ? SAGE : LINE),
                   padding: '14px 16px',
-                  touchAction: 'pan-y',
+                  touchAction: 'pan-y', cursor: 'pointer',
                   transition: 'transform 280ms cubic-bezier(.22,1,.36,1), opacity 280ms ease',
                 }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -360,6 +397,91 @@ export default function StaffMessagesPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── STAFF-MSG-FIX — message detail + reply ───────────────────────── */}
+      {selected && (
+        <div
+          onClick={() => setSelected(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(29,42,36,.45)', backdropFilter: 'blur(2px)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: CARD, width: '100%', maxWidth: 560,
+              borderRadius: '20px 20px 0 0', boxShadow: SHADOW,
+              padding: '20px 20px 24px', maxHeight: '88vh', overflowY: 'auto',
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                  background: selected.sender?.color ?? DEEP,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: 13, fontWeight: 700,
+                }}>
+                  {selected.sender ? selected.sender.first_name[0] + selected.sender.last_name[0] : 'M'}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>
+                    {selected.sender ? selected.sender.first_name + ' ' + selected.sender.last_name : 'Manager'}
+                  </div>
+                  <div style={{ fontSize: 12, color: MUTED }}>{timeAgo(selected.created_at)}{selected.is_broadcast ? ' · All staff' : ''}</div>
+                </div>
+              </div>
+              <button onClick={() => setSelected(null)} aria-label="Close" style={{
+                border: 'none', background: SAGE_TINT, color: DEEP, borderRadius: 10,
+                width: 32, height: 32, fontSize: 16, cursor: 'pointer', flexShrink: 0,
+              }}>×</button>
+            </div>
+
+            {selected.subject && (
+              <div style={{ fontFamily: 'var(--font-display, serif)', fontSize: 18, fontWeight: 600, color: INK, marginBottom: 8 }}>
+                {selected.subject}
+              </div>
+            )}
+            <div style={{ fontSize: 14, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: 18 }}>
+              {selected.body}
+            </div>
+
+            {/* Reply */}
+            <div style={{ borderTop: '1px solid ' + LINE, paddingTop: 14 }}>
+              <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: MUTED, fontWeight: 600, marginBottom: 8 }}>Reply</div>
+              <textarea
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder="Write a reply to your manager…"
+                rows={3}
+                style={{
+                  width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                  border: '1px solid ' + LINE, borderRadius: 12, padding: '10px 12px',
+                  fontSize: 14, color: INK, outline: 'none', fontFamily: 'inherit',
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                <button
+                  onClick={sendReply}
+                  disabled={sending || !replyText.trim()}
+                  style={{
+                    border: 'none', borderRadius: 99, padding: '9px 18px',
+                    background: DEEP, color: '#fff', fontSize: 13, fontWeight: 700,
+                    cursor: sending || !replyText.trim() ? 'not-allowed' : 'pointer',
+                    opacity: sending || !replyText.trim() ? 0.55 : 1,
+                  }}
+                >
+                  {sending ? 'Sending…' : 'Send reply'}
+                </button>
+                {replyMsg && <span style={{ fontSize: 12, color: replyMsg.includes('✓') ? DEEP : RED }}>{replyMsg}</span>}
+              </div>
+            </div>
           </div>
         </div>
       )}
