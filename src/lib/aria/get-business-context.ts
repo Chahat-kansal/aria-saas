@@ -348,6 +348,32 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // WIRE-3 — labour cost % vs revenue (the rostering moat). Aria flags over/under-staffing.
+    labour: await (async () => {
+      try {
+        const since7 = new Date(Date.now() - 7 * 86400000).toISOString()
+        const [tsRes, salesRes] = await Promise.all([
+          db.from('pos_timesheets').select('hours_worked, total_pay_cents, pay_rate_cents').eq('business_id', businessId).gte('clock_in', since7).limit(2000),
+          db.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', since7).neq('status', 'voided').limit(5000),
+        ])
+        const ts = (tsRes.data ?? []) as Array<{ hours_worked: number | null; total_pay_cents: number | null; pay_rate_cents: number | null }>
+        const labourCents = ts.reduce((s, t) => s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0))), 0)
+        const labourDollars = Math.round(labourCents) / 100
+        const revenue = (salesRes.data ?? []).reduce((s, x) => s + Number((x as { total_amount?: number }).total_amount ?? 0), 0)
+        if (labourDollars <= 0 && revenue <= 0) return null
+        const pct = revenue > 0 ? Math.round((labourDollars / revenue) * 1000) / 10 : null
+        return {
+          period: 'last_7_days',
+          labour_dollars: Math.round(labourDollars * 100) / 100,
+          revenue_dollars: Math.round(revenue * 100) / 100,
+          labour_pct: pct,
+          benchmark_pct: '25-35 (hospitality)',
+          note: pct == null
+            ? 'No revenue this week to compute labour %.'
+            : `Labour is ${pct}% of revenue (benchmark 25–35%). ${pct > 35 ? 'ABOVE benchmark — flag over-staffing relative to revenue.' : pct < 20 ? 'Below benchmark — may be under-staffed at peak.' : 'Within healthy range.'} Cite this exact figure; never invent labour numbers.`,
+        }
+      } catch { return null }
+    })(),
     recent_aria_outcomes: outs,
     aria_intelligence: {
       suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },

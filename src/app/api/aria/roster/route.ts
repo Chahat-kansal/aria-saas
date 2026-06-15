@@ -11,6 +11,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { logAICallSafe } from '@/lib/aria/log-ai-call'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -229,6 +230,16 @@ Return ONLY a valid JSON object with this exact structure:
 
   if (rErr?.code === "42P01") return NextResponse.json({ error: "Run migration 20260508000000_complete_features.sql in Supabase first" }, { status: 500 });
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
+
+  // WIRE-3 — log the AI roster generation so it surfaces in aria_ai_calls (cost in DOLLARS, never raw cents).
+  await logAICallSafe({
+    business_id: bid,
+    agent_key: "roster",
+    role: "rostering",
+    provider: "anthropic",
+    success: true,
+    request_summary: JSON.stringify({ week_starting: weekStarting, shifts: shifts.length, total_hours: totalHours, total_cost_dollars: Math.round(totalCostCents) / 100 }),
+  });
 
   return NextResponse.json({ roster, shifts, reasoning, warnings, total_hours: totalHours, total_cost_cents: totalCostCents });
 }
