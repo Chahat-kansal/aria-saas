@@ -22,6 +22,7 @@ const LESSON_TYPES = [
   { id: 'text', label: 'Text / Reading' },
   { id: 'quiz', label: 'Quiz' },
   { id: 'game', label: 'Game round' },
+  { id: 'practical', label: 'POS practical exam' },
   { id: 'recipe', label: 'Recipe' },
   { id: 'acknowledge', label: 'Acknowledge doc' },
 ]

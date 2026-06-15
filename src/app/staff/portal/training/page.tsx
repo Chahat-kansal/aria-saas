@@ -2,8 +2,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 
-// Lazy — the game engine JS only loads when a staff member actually plays a game lesson.
+// Lazy — these only load when a staff member actually plays a game / practical lesson.
 const AriaGameRound = dynamic(() => import('@/components/training/AriaGameRound'), { ssr: false })
+const PosPracticalExam = dynamic(() => import('@/components/training/PosPracticalExam'), { ssr: false })
 
 // TP-2 — Staff "My Training". Lists the staff member's enrolments and lets them step through
 // video/document/text/acknowledge/recipe lessons, marking each complete (progress rolls up,
@@ -13,10 +14,11 @@ const AriaGameRound = dynamic(() => import('@/components/training/AriaGameRound'
 const CARD = '#ffffff', INK = '#1d2a24', MUTED = '#6b7d74', LINE = '#e6ece8'
 const SAGE = '#7FB897', DEEP = '#2D5240', AMBER = '#BA7517', RED = '#E24B4A', GOLD = '#C9A37A'
 const SHADOW = '0 1px 2px rgba(45,82,64,.06), 0 8px 24px rgba(45,82,64,.06)'
+const DISPLAY = "var(--font-display, 'Cormorant', Georgia, serif)"
 
 const TIER_COLOR: Record<string, string> = { compliance: RED, skill: SAGE, systems: GOLD, culture: AMBER }
-const TYPE_LABEL: Record<string, string> = { video: 'Video', document: 'Document', image: 'Image', text: 'Reading', quiz: 'Quiz', game: 'Game', recipe: 'Recipe', acknowledge: 'Acknowledge' }
-const GRADED = new Set(['quiz', 'game'])
+const TYPE_LABEL: Record<string, string> = { video: 'Video', document: 'Document', image: 'Image', text: 'Reading', quiz: 'Quiz', game: 'Game', recipe: 'Recipe', acknowledge: 'Acknowledge', practical: 'POS practical exam' }
+const GRADED = new Set(['quiz', 'game', 'practical'])
 
 interface Enrolment { id: string; course_id: string; status: string; progress_pct: number; due_at: string | null; completed_at: string | null; certified: boolean; total_lessons: number; training_courses: { title: string; description: string | null; tier: string | null; est_minutes: number | null } | null }
 interface Lesson { id: string; sort_order: number; type: string; title: string | null; content: string | null; url: string | null; recipe_id: string | null; game_round: string | null; duration_seconds: number | null }
@@ -100,6 +102,73 @@ export default function MyTrainingPage() {
                 )
               })}
             </div>}
+
+      <CertificatesSection />
+    </div>
+  )
+}
+
+// ── My Certificates — earned certs live here under the user. Viewable + printable. ──
+interface Certificate { id: string; cert_number: string; course_title: string; staff_name: string | null; score: number | null; issued_at: string; expires_at: string | null }
+function CertificatesSection() {
+  const [certs, setCerts] = useState<Certificate[]>([])
+  const [open, setOpen] = useState<Certificate | null>(null)
+  useEffect(() => { api<{ certificates: Certificate[] }>('/api/staff/portal/training?certificates=1').then(d => setCerts(d.certificates ?? [])).catch(() => {}) }, [])
+  if (certs.length === 0) return null
+  return (
+    <div style={{ marginTop: 26 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 4px' }}>My Certificates</h2>
+      <p style={{ fontSize: 12.5, color: MUTED, marginBottom: 12 }}>Proof of what you&apos;ve earned. Tap to view or print.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {certs.map(c => {
+          const expired = c.expires_at != null && new Date(c.expires_at).getTime() < Date.now()
+          return (
+            <button key={c.id} onClick={() => setOpen(c)} style={{ textAlign: 'left', background: `linear-gradient(135deg, ${DEEP}, #1c3528)`, color: '#fff', borderRadius: 16, border: 'none', padding: 16, cursor: 'pointer', fontFamily: 'inherit', boxShadow: SHADOW }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: '#C9A37A', fontWeight: 700 }}>Certificate</span>
+                <span style={{ fontSize: 22 }}>🏅</span>
+              </div>
+              <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, marginTop: 4 }}>{c.course_title}</div>
+              <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'rgba(255,255,255,.7)', marginTop: 6, flexWrap: 'wrap' }}>
+                <span>{c.cert_number}</span>
+                {c.score != null && <span>{c.score}%</span>}
+                <span>{new Date(c.issued_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                {c.expires_at && <span style={{ color: expired ? '#ffb4b0' : 'rgba(255,255,255,.7)' }}>{expired ? 'Expired' : 'Renews'} {new Date(c.expires_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {open && <CertificateModal cert={open} onClose={() => setOpen(null)} />}
+    </div>
+  )
+}
+
+function CertificateModal({ cert, onClose }: { cert: Certificate; onClose: () => void }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(20,30,24,.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} className="aria-cert-print" style={{ background: '#FBF7F0', borderRadius: 18, maxWidth: 440, width: '100%', padding: 0, overflow: 'hidden', boxShadow: '0 30px 70px -20px rgba(20,30,24,.7)' }}>
+        <div style={{ border: `2px solid ${DEEP}`, margin: 14, borderRadius: 12, padding: '28px 24px', textAlign: 'center', position: 'relative' }}>
+          <div style={{ fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase', color: AMBER, fontWeight: 700 }}>Certificate of Completion</div>
+          <div style={{ fontSize: 34, margin: '10px 0 2px' }}>🏅</div>
+          <div style={{ fontSize: 12, color: MUTED }}>This certifies that</div>
+          <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 30, fontWeight: 600, color: DEEP, lineHeight: 1.1, margin: '4px 0' }}>{cert.staff_name ?? 'Team member'}</div>
+          <div style={{ fontSize: 12, color: MUTED }}>has successfully completed</div>
+          <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: INK, margin: '4px 0 10px' }}>{cert.course_title}</div>
+          {cert.score != null && <div style={{ fontSize: 13, color: DEEP, fontWeight: 700 }}>Score: {cert.score}%</div>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20, fontSize: 10.5, color: MUTED }}>
+            <span>{cert.cert_number}</span>
+            <span>Issued {new Date(cert.issued_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+          </div>
+          {cert.expires_at && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>Valid until {new Date(cert.expires_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>}
+          <div style={{ fontSize: 10, color: AMBER, letterSpacing: '.1em', marginTop: 8, fontWeight: 600 }}>ariaOS Training Academy</div>
+        </div>
+        <div className="aria-cert-noprint" style={{ display: 'flex', gap: 8, padding: '0 14px 16px' }}>
+          <button onClick={() => window.print()} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1px solid ${DEEP}`, background: '#fff', color: DEEP, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Print / Save PDF</button>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: DEEP, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Close</button>
+        </div>
+      </div>
+      <style>{`@media print{body *{visibility:hidden!important}.aria-cert-print,.aria-cert-print *{visibility:visible!important}.aria-cert-noprint{display:none!important}.aria-cert-print{position:fixed;inset:0;margin:auto;box-shadow:none!important}}`}</style>
     </div>
   )
 }
@@ -204,8 +273,13 @@ function CoursePlayer({ courseId, onBack }: { courseId: string; onBack: () => vo
                       onScore={(s) => complete(l.id, { score: s })} />
                   )}
 
+                  {l.type === 'practical' && (
+                    <PracticalLesson busy={busy === l.id} bestScore={score ?? null} threshold={passMark} done={isDone}
+                      onScore={(s) => complete(l.id, { score: s })} />
+                  )}
+
                   {/* ── Action for non-interactive lessons ── */}
-                  {!['quiz', 'game'].includes(l.type) && (
+                  {!['quiz', 'game', 'practical'].includes(l.type) && (
                     <div style={{ marginTop: 12 }}>
                       {isDone
                         ? <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Completed</span>
@@ -309,6 +383,36 @@ function GameLesson({ roundId, busy, bestScore, threshold, done, onScore }: { ro
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={() => { setResult(null); setPlaying(true) }} disabled={busy} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: DEEP, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy ? 0.6 : 1, alignSelf: 'flex-start' }}>
           {busy ? 'Saving…' : done ? 'Play again' : '▶ Play round'}
+        </button>
+        {done && <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Passed{bestScore != null ? ` · best ${bestScore}%` : ''}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Practical exam lesson — the SANDBOXED POS simulator (writes no real pos_* rows). ──
+function PracticalLesson({ busy, bestScore, threshold, done, onScore }: { busy: boolean; bestScore: number | null; threshold: number; done: boolean; onScore: (score: number) => Promise<LessonResult | null> }) {
+  const [playing, setPlaying] = useState(false)
+  const [result, setResult] = useState<{ score: number; passed: boolean } | null>(null)
+
+  async function handleScore(score: number) {
+    setPlaying(false)
+    const r = await onScore(score)
+    if (r) setResult({ score: r.lesson_score ?? score, passed: r.passed })
+  }
+
+  if (playing) return <PosPracticalExam onComplete={handleScore} />
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12.5, color: MUTED, fontStyle: 'italic' }}>A hands-on POS exam on the practice till. Nothing here touches real sales — it&apos;s a safe sandbox.</div>
+      {result && (
+        <div style={{ fontSize: 13, fontWeight: 600, color: result.passed ? DEEP : RED, background: result.passed ? `${SAGE}14` : `${RED}10`, border: `1px solid ${result.passed ? SAGE : RED}40`, borderRadius: 10, padding: '10px 12px' }}>
+          {result.passed ? `✓ Passed — scored ${result.score}% (pass ${threshold}%)` : `Scored ${result.score}% — need ${threshold}% to pass. Try again.`}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={() => { setResult(null); setPlaying(true) }} disabled={busy} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: DEEP, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy ? 0.6 : 1, alignSelf: 'flex-start' }}>
+          {busy ? 'Saving…' : done ? 'Retake exam' : '▶ Start practical exam'}
         </button>
         {done && <span style={{ fontSize: 12.5, color: DEEP, fontWeight: 600 }}>✓ Passed{bestScore != null ? ` · best ${bestScore}%` : ''}</span>}
       </div>

@@ -13,7 +13,9 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 //  - video/document/text/image/acknowledge/recipe: completed by viewing/acknowledging (no score).
 // A lesson counts as DONE for course completion only when: non-graded → viewed; graded → best score ≥ threshold.
 // Course completes + certifies only when EVERY lesson is done (graded lessons PASSED). Best score is kept on retake.
-const GRADED = new Set(['quiz', 'game'])
+// 'practical' = the sandboxed POS exam (TP-4); scored like a game round but gated on the course
+// pass_mark (not the looser game threshold). All three are graded → must be PASSED to complete.
+const GRADED = new Set(['quiz', 'game', 'practical'])
 const GAME_PASS = 60
 
 type LessonRow = { id: string; type: string; score?: number | null }
@@ -29,6 +31,25 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const courseId = searchParams.get('course_id')
   const lessonId = searchParams.get('lesson_id')
+
+  // ── Read-only menu for the sandboxed practical simulator (pos_products, business-scoped) ──
+  // SELECT only. The simulator never writes any pos_* row; this is the only pos_ table it touches.
+  if (searchParams.get('menu')) {
+    const { data: products } = await db.from('pos_products')
+      .select('id, name, price, category, image_url')
+      .eq('business_id', identity.business_id).eq('is_active', true)
+      .order('category').order('name').limit(60)
+    return NextResponse.json({ products: products ?? [] })
+  }
+
+  // ── My certificates (staff portal "My Certificates") ──
+  if (searchParams.get('certificates')) {
+    const { data: certs } = await db.from('training_certificates')
+      .select('id, cert_number, course_title, staff_name, score, issued_at, expires_at, course_id')
+      .eq('staff_member_id', identity.staff_member_id).eq('business_id', identity.business_id)
+      .order('issued_at', { ascending: false })
+    return NextResponse.json({ certificates: certs ?? [] })
+  }
 
   // ── Quiz questions for a lesson — SECURITY: never return `correct` to the client ──
   if (lessonId) {
@@ -130,9 +151,9 @@ async function _POST(req: Request) {
     }
     attemptScore = totalPts > 0 ? Math.round((earned / totalPts) * 100) : 100
     passed = attemptScore >= passMark
-  } else if (lesson.type === 'game') {
+  } else if (lesson.type === 'game' || lesson.type === 'practical') {
     attemptScore = Math.max(0, Math.min(100, Math.round(Number(body.score ?? 0))))
-    passed = attemptScore >= GAME_PASS
+    passed = attemptScore >= (lesson.type === 'game' ? GAME_PASS : passMark)
   }
 
   // ── Persist progress, keeping the BEST score on retake ──
@@ -179,11 +200,18 @@ async function _POST(req: Request) {
   const patch: Record<string, unknown> = { progress_pct: progressPct }
   if (courseScore != null) patch.score = courseScore
   let certWritten = false
+  let certificateNumber: string | null = null
   if (allDone) {
     patch.status = 'complete'
     patch.completed_at = enrol.completed_at ?? new Date().toISOString()
     patch.certified = true
     certWritten = await maybeCertify(db, enrol.course_id, identity.business_id, identity.staff_member_id, enrol.certified)
+    // Issue the portable certificate (idempotent via UNIQUE(enrolment_id)).
+    const staffName = [identity.first_name, identity.last_name].filter(Boolean).join(' ').trim() || identity.preferred_name || 'Team member'
+    certificateNumber = await issueCertificate(db, {
+      enrolmentId: enrolment_id, courseId: enrol.course_id, businessId: identity.business_id,
+      staffMemberId: identity.staff_member_id, staffName, courseScore,
+    })
   } else if (doneCount > 0 || progById.size > 0) {
     patch.status = 'in_progress'
   }
@@ -200,7 +228,45 @@ async function _POST(req: Request) {
     status: patch.status ?? 'assigned',
     certified: patch.certified === true,
     cert_written: certWritten,
+    certificate_number: certificateNumber,
   })
+}
+
+// Issue a portable certificate for a completed enrolment. Idempotent (UNIQUE(enrolment_id)):
+// returns the existing cert_number if already issued; otherwise mints ARIA-<biz4>-<seq>.
+async function issueCertificate(
+  db: typeof supabaseAdmin,
+  p: { enrolmentId: string; courseId: string; businessId: string; staffMemberId: string; staffName: string; courseScore: number | null },
+): Promise<string | null> {
+  const { data: existing } = await db.from('training_certificates').select('cert_number').eq('enrolment_id', p.enrolmentId).maybeSingle()
+  if (existing) return existing.cert_number as string
+
+  const { data: course } = await db.from('training_courses')
+    .select('title, expires_months, cert_skill_id').eq('id', p.courseId).eq('business_id', p.businessId).maybeSingle()
+
+  const shortBiz = p.businessId.replace(/-/g, '').slice(0, 4).toUpperCase()
+  const { count } = await db.from('training_certificates').select('id', { count: 'exact', head: true }).eq('business_id', p.businessId)
+  const certNumber = `ARIA-${shortBiz}-${String((count ?? 0) + 1).padStart(4, '0')}`
+
+  const expiresAt = course?.expires_months
+    ? new Date(Date.now() + Number(course.expires_months) * 30 * 86400000).toISOString()
+    : null
+
+  const { error } = await db.from('training_certificates').insert({
+    business_id: p.businessId, staff_member_id: p.staffMemberId, course_id: p.courseId, enrolment_id: p.enrolmentId,
+    cert_number: certNumber, staff_name: p.staffName, course_title: course?.title ?? 'Course',
+    score: p.courseScore, expires_at: expiresAt, skill_id: course?.cert_skill_id ?? null,
+  })
+  if (error) {
+    // A racing insert may have created it — fetch and return rather than fail the completion.
+    if ((error as { code?: string }).code === '23505') {
+      const { data: c2 } = await db.from('training_certificates').select('cert_number').eq('enrolment_id', p.enrolmentId).maybeSingle()
+      return c2?.cert_number ?? null
+    }
+    console.error('[training cert issue failed]', error.message)
+    return null
+  }
+  return certNumber
 }
 
 // Insert the course's cert into staff_member_skills (3 cols), idempotent (skip if already held).
