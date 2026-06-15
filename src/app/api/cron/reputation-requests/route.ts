@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { ReputationDefenceAgent } from '@/lib/agents/reputation-defence-agent'
+import { runTrainingReminders } from '@/lib/training/reminders'
 
 export async function GET(req: Request) {
   const denied = verifyCronAuth(req)
@@ -28,5 +29,10 @@ export async function GET(req: Request) {
     } catch { errors++ }
   }
 
-  return NextResponse.json({ ok: true, processed, errors, businesses: businesses?.length ?? 0 })
+  // TP-7 — piggyback the daily training reminders on this existing daily cron (no new vercel cron
+  // entry). Isolated in try/catch so it can never break the reputation job.
+  let trainingNotified = 0
+  try { const r = await runTrainingReminders(); trainingNotified = r.businesses_notified } catch (e) { console.error('[training reminders] failed', (e as Error).message) }
+
+  return NextResponse.json({ ok: true, processed, errors, businesses: businesses?.length ?? 0, training_notified: trainingNotified })
 }

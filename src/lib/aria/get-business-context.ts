@@ -388,11 +388,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
           db.from('training_courses').select('title').eq('business_id', businessId),
           db.from('businesses').select('business_subtype, industry_subtype').eq('id', businessId).maybeSingle(),
         ])
-        const enrols = (enrRes.data ?? []) as Array<{ status: string; due_at: string | null; certified: boolean; staff_member_id: string; training_courses: { title?: string } | { title?: string }[] | null }>
+        const enrols = (enrRes.data ?? []) as Array<{ status: string; due_at: string | null; certified: boolean; staff_member_id: string; training_courses: { title?: string; is_mandatory?: boolean } | { title?: string; is_mandatory?: boolean }[] | null }>
         const expiring = (certRes.data ?? []) as Array<{ staff_name: string | null; course_title: string | null; expires_at: string | null }>
         if (enrols.length === 0 && expiring.length === 0) return null
-        const titleOf = (tc: { title?: string } | { title?: string }[] | null) => Array.isArray(tc) ? tc[0]?.title : tc?.title
+        const tcOf = (tc: { title?: string; is_mandatory?: boolean } | { title?: string; is_mandatory?: boolean }[] | null) => Array.isArray(tc) ? tc[0] : tc
+        const titleOf = (tc: typeof enrols[number]['training_courses']) => tcOf(tc)?.title
         const overdue = enrols.filter(e => e.status !== 'complete' && e.due_at != null && new Date(e.due_at).getTime() < now)
+        // Non-compliant: distinct staff with a MANDATORY enrolment they are not certified on (display-only fact).
+        const nonCompliant = new Set(enrols.filter(e => tcOf(e.training_courses)?.is_mandatory && !e.certified).map(e => e.staff_member_id)).size
         const certifiedStaff = new Set(enrols.filter(e => e.certified).map(e => e.staff_member_id)).size
         const activeStaff = (staffRes.data ?? []).length
         const pct = activeStaff > 0 ? Math.round((certifiedStaff / activeStaff) * 100) : 0
@@ -416,7 +419,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
           recipes_total: recipes.length,
           recipes_without_course: recipesWithoutCourse,
           licensed_no_rsa: licensedNoRsa,
-          note: `${overdue.length} overdue training item(s); ${expiring.length} certificate(s) expiring within 30 days; ${pct}% of active staff certified (${certifiedStaff}/${activeStaff}). ${recipesWithoutCourse} of ${recipes.length} recipes have no training course — Aria can draft one.${licensedNoRsa ? ' This is a licensed venue with NO RSA course set up — flag it.' : ''} Cite these exact counts; never invent training numbers.`,
+          non_compliant_count: nonCompliant,
+          note: `${overdue.length} overdue training item(s); ${expiring.length} certificate(s) expiring within 30 days; ${pct}% of active staff certified (${certifiedStaff}/${activeStaff}); ${nonCompliant} staff not compliant on a mandatory course. ${recipesWithoutCourse} of ${recipes.length} recipes have no training course — Aria can draft one.${licensedNoRsa ? ' This is a licensed venue with NO RSA course set up — flag it.' : ''} Cite these exact counts; never invent training numbers.`,
         }
       } catch { return null }
     })(),

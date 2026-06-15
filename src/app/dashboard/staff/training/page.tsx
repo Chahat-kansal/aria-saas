@@ -529,7 +529,8 @@ interface Cohort { id: string; title: string; tier: string | null; is_mandatory:
 interface OverdueRow { enrolment_id: string; name: string; position: string; course_title: string; due_at: string | null; progress_pct: number; days_overdue: number }
 interface ExpiringRow { cert_number: string; staff_name: string | null; course_title: string | null; expires_at: string | null; days_left: number }
 interface AuditRow { staff_name: string; position: string; course_title: string; tier: string; status: string; score: number | string; completed_at: string; certified: string; cert_number: string; issued_at: string; expires_at: string }
-interface DashData { empty: boolean; kpis: { active_courses: number; in_progress: number; overdue: number; team_certified_pct: number; certified_staff: number; active_staff: number }; courses: Cohort[]; overdue: OverdueRow[]; expiring: ExpiringRow[]; audit: AuditRow[] }
+interface ComplianceRow { course_id: string; title: string; total: number; non_compliant: Array<{ name: string; position: string; reason: string }> }
+interface DashData { empty: boolean; kpis: { active_courses: number; in_progress: number; overdue: number; team_certified_pct: number; certified_staff: number; active_staff: number; non_compliant: number }; courses: Cohort[]; overdue: OverdueRow[]; expiring: ExpiringRow[]; audit: AuditRow[]; compliance: ComplianceRow[] }
 
 // CSV download — mirrors the app's proven pattern (BOM + RFC-4180 escaping + Blob).
 function downloadCSV(rows: Record<string, unknown>[], cols: { key: string; label: string }[], filename: string) {
@@ -600,6 +601,7 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
         <Kpi label="In progress" value={d.kpis.in_progress} accent={AMBER} />
         <Kpi label="Overdue" value={d.kpis.overdue} accent={d.kpis.overdue > 0 ? RED : G} />
         <Kpi label="Team certified" value={`${d.kpis.team_certified_pct}%`} accent={GOLD} sub={`${d.kpis.certified_staff} of ${d.kpis.active_staff} active staff`} />
+        <Kpi label="Not compliant" value={d.kpis.non_compliant} accent={d.kpis.non_compliant > 0 ? RED : G} sub="staff missing a mandatory cert" />
       </div>
 
       {/* Overdue + expiring alerts */}
@@ -642,6 +644,32 @@ function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void
         </div>
         <button onClick={() => downloadCSV(d.audit as unknown as Record<string, unknown>[], auditCols, `training-audit-${new Date().toISOString().slice(0, 10)}`)} disabled={d.audit.length === 0} style={{ ...btn(GOLD), opacity: d.audit.length === 0 ? 0.4 : 1 }}>📤 Export audit CSV</button>
       </div>
+
+      {/* Mandatory compliance gate (display-only — shows who isn't compliant; does not block POS/clock-in) */}
+      {d.compliance.length > 0 && (
+        <div style={{ ...card, borderColor: `${RED}44` }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: RED, margin: '0 0 3px' }}>🔒 Mandatory compliance gate</h3>
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.4)', margin: '0 0 12px' }}>Staff assigned a mandatory course who aren&apos;t certified (or whose cert expired). This shows compliance — it does not lock anyone out of the POS.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {d.compliance.map(c => (
+              <div key={c.course_id}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{c.title}</span>
+                  <span style={pill(RED)}>Required</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{c.non_compliant.length} of {c.total} not compliant</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {c.non_compliant.map((s, i) => (
+                    <span key={i} style={{ fontSize: 12, padding: '4px 9px', borderRadius: 8, background: `${RED}12`, border: `1px solid ${RED}33`, color: '#e8ede7' }}>
+                      {s.name}{s.position ? <span style={{ color: 'rgba(255,255,255,0.4)' }}> · {s.position}</span> : null} <span style={{ color: RED }}>({s.reason})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Cohort tables */}
       {d.courses.map(c => (

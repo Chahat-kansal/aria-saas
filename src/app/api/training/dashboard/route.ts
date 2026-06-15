@@ -103,10 +103,27 @@ async function _GET() {
     }
   }).sort((a, b) => a.staff_name.localeCompare(b.staff_name))
 
+  // Mandatory-compliance gate (DISPLAY-ONLY — shows who isn't compliant; does NOT block POS/clock-in).
+  // A mandatory enrolment is compliant when certified AND its cert (if any) is not expired.
+  const certExpired = (enrolId: string) => { const c = certByEnrol.get(enrolId); return c?.expires_at != null && new Date(c.expires_at).getTime() < now }
+  const nonCompliantStaff = new Set<string>()
+  const compliance = courses
+    .filter(c => c.is_mandatory && c.status !== 'archived')
+    .map(c => {
+      const rows = (byCourse.get(c.id) ?? [])
+        .filter(e => !e.certified || certExpired(e.id))
+        .map(e => {
+          nonCompliantStaff.add(e.staff_member_id)
+          return { name: nameOf(e.staff_members), position: e.staff_members?.position ?? '', reason: certExpired(e.id) ? 'cert expired' : isOverdue(e) ? 'overdue' : e.status === 'complete' ? 'not certified' : 'not yet certified' }
+        })
+      return { course_id: c.id, title: c.title, total: (byCourse.get(c.id) ?? []).length, non_compliant: rows }
+    })
+    .filter(c => c.non_compliant.length > 0)
+
   return NextResponse.json({
     empty: courses.length === 0 && enrols.length === 0,
-    kpis: { active_courses: activeCourses, in_progress: inProgress, overdue: overdueCount, team_certified_pct: teamCertifiedPct, certified_staff: certifiedStaff, active_staff: activeStaff },
-    courses: cohorts, overdue, expiring, audit,
+    kpis: { active_courses: activeCourses, in_progress: inProgress, overdue: overdueCount, team_certified_pct: teamCertifiedPct, certified_staff: certifiedStaff, active_staff: activeStaff, non_compliant: nonCompliantStaff.size },
+    courses: cohorts, overdue, expiring, audit, compliance,
   })
 }
 
