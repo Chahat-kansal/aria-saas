@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Aria POS Training — Café Rush</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;1,500;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --sage:#7FB897;
+    --green:#2D5240;
+    --green-soft:#3c6b54;
+    --sand:#C9A37A;
+    --amber:#BA7517;
+    --red:#E24B4A;
+    --cream:#FBF7F0;
+    --cream-2:#F3EBDD;
+    --ink:#2b332e;
+    --glass:rgba(255,255,255,0.55);
+    --line:rgba(45,82,64,0.12);
+    --shadow:0 18px 50px -22px rgba(45,82,64,0.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:'Outfit',system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 12% -8%, #eaf4ec 0%, transparent 55%),
+      radial-gradient(900px 700px at 110% 10%, #f6ecdb 0%, transparent 50%),
+      linear-gradient(160deg, var(--cream) 0%, var(--cream-2) 100%);
+    min-height:100%;
+    overflow-x:hidden;
+  }
+  .wrap{
+    max-width:1080px;
+    margin:0 auto;
+    padding:18px 16px 40px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- Header ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:12px;margin-bottom:14px;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;}
+  .brand .mark{
+    font-family:'Cormorant',serif;font-style:italic;font-weight:600;
+    font-size:30px;color:var(--green);line-height:1;
+  }
+  .brand .sub{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--sand);font-weight:600;}
+  .hud{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+  .chip{
+    background:var(--glass);border:1px solid var(--line);border-radius:999px;
+    padding:7px 13px;font-size:13px;font-weight:600;color:var(--green);
+    display:flex;align-items:center;gap:6px;backdrop-filter:blur(8px);
+  }
+  .chip b{font-weight:700;}
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--sage);}
+
+  /* ---------- Main layout ---------- */
+  .stage{
+    display:grid;grid-template-columns:230px 1fr;gap:16px;flex:1;
+  }
+  @media(max-width:760px){ .stage{grid-template-columns:1fr;} }
+
+  /* ---------- Aria panel ---------- */
+  .aria{
+    background:linear-gradient(165deg, rgba(127,184,151,.22), rgba(255,255,255,.5));
+    border:1px solid var(--line);border-radius:24px;padding:16px;
+    display:flex;flex-direction:column;align-items:center;gap:12px;
+    box-shadow:var(--shadow);position:relative;min-height:320px;
+  }
+  @media(max-width:760px){ .aria{flex-direction:row;min-height:0;align-items:flex-start;} }
+  .aria-name{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:22px;color:var(--green);}
+  .aria-figure{
+    position:relative;width:150px;height:170px;flex:none;
+    display:flex;align-items:flex-end;justify-content:center;
+  }
+  @media(max-width:760px){ .aria-figure{width:96px;height:110px;} }
+  .aria-figure img{
+    position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+    opacity:0;transition:opacity .25s ease, transform .25s ease;
+    filter:drop-shadow(0 14px 18px rgba(45,82,64,.22));transform:translateY(6px) scale(.98);
+  }
+  .aria-figure img.on{opacity:1;transform:translateY(0) scale(1);}
+  .aria-fallback{
+    width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--sage), var(--green));
+    display:flex;align-items:center;justify-content:center;color:#fff;
+    font-family:'Cormorant',serif;font-style:italic;font-size:44px;font-weight:600;
+    box-shadow:0 14px 22px rgba(45,82,64,.3);
+  }
+  .bubble{
+    position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;
+    padding:11px 14px;font-size:14px;line-height:1.35;color:var(--ink);
+    box-shadow:0 8px 20px -12px rgba(45,82,64,.4);width:100%;text-align:center;
+    min-height:58px;display:flex;align-items:center;justify-content:center;
+    transition:transform .2s ease;
+  }
+  .bubble.pulse{animation:pulse .4s ease;}
+  @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.05)}100%{transform:scale(1)}}
+  @media(max-width:760px){ .bubble{text-align:left;} }
+  .aria-col{display:flex;flex-direction:column;gap:10px;flex:1;width:100%;align-items:center;}
+  @media(max-width:760px){ .aria-col{align-items:flex-start;} }
+
+  /* ---------- Terminal ---------- */
+  .terminal{
+    background:var(--glass);border:1px solid var(--line);border-radius:24px;
+    padding:16px;box-shadow:var(--shadow);backdrop-filter:blur(10px);
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .order-card{
+    background:linear-gradient(120deg, var(--green), var(--green-soft));
+    color:#fff;border-radius:18px;padding:14px 16px;display:flex;
+    align-items:center;justify-content:space-between;gap:12px;
+    box-shadow:0 12px 26px -16px rgba(45,82,64,.8);position:relative;overflow:hidden;
+  }
+  .order-card .label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.8;font-weight:600;}
+  .order-card .want{font-size:16px;font-weight:600;margin-top:3px;line-height:1.3;}
+  .order-card .cust{font-size:40px;line-height:1;filter:drop-shadow(0 4px 6px rgba(0,0,0,.25));}
+  .timerbar{position:absolute;left:0;bottom:0;height:4px;background:var(--sage);width:100%;transition:width .12s linear;}
+  .timerbar.warn{background:var(--amber);}
+  .timerbar.danger{background:var(--red);}
+
+  .panes{display:grid;grid-template-columns:1fr 280px;gap:14px;}
+  @media(max-width:680px){ .panes{grid-template-columns:1fr;} }
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  @media(max-width:680px){ .grid{grid-template-columns:repeat(3,1fr);} }
+  .tile{
+    background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 8px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;
+    transition:transform .08s ease, box-shadow .15s ease, border-color .15s ease;
+    box-shadow:0 6px 14px -10px rgba(45,82,64,.5);user-select:none;
+  }
+  .tile:hover{border-color:var(--sage);}
+  .tile:active{transform:scale(.93);}
+  .tile.flash{animation:tileflash .35s ease;}
+  @keyframes tileflash{0%{box-shadow:0 0 0 0 rgba(127,184,151,.7)}100%{box-shadow:0 0 0 14px rgba(127,184,151,0)}}
+  .tile .emoji{font-size:30px;}
+  .tile .nm{font-size:12px;font-weight:600;text-align:center;line-height:1.15;}
+  .tile .pr{font-size:12px;color:var(--amber);font-weight:700;}
+  .tile.disabled{opacity:.45;pointer-events:none;filter:grayscale(.4);}
+
+  .ticket{
+    background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;
+    display:flex;flex-direction:column;gap:8px;min-height:220px;
+  }
+  .ticket h3{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:20px;color:var(--green);
+    display:flex;align-items:center;justify-content:space-between;}
+  .ticket h3 .pill{font-family:'Outfit';font-style:normal;font-size:11px;background:var(--cream-2);
+    color:var(--green);border-radius:999px;padding:3px 9px;font-weight:600;}
+  .items{display:flex;flex-direction:column;gap:6px;flex:1;overflow:auto;max-height:240px;}
+  .empty{color:#9aa69e;font-size:13px;text-align:center;padding:24px 6px;font-style:italic;}
+  .row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    background:var(--cream);border-radius:10px;padding:7px 10px;font-size:13px;
+    animation:slidein .25s ease;
+  }
+  @keyframes slidein{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:translateX(0)}}
+  .row .ql{display:flex;align-items:center;gap:7px;}
+  .row .q{background:var(--green);color:#fff;border-radius:7px;font-size:11px;font-weight:700;padding:2px 6px;min-width:24px;text-align:center;}
+  .row .lt{font-weight:700;color:var(--green);}
+  .row .x{margin-left:4px;color:var(--red);cursor:pointer;font-weight:700;font-size:14px;padding:0 4px;border-radius:6px;}
+  .row .x:hover{background:rgba(226,75,74,.12);}
+  .total{display:flex;align-items:center;justify-content:space-between;border-top:1px dashed var(--line);padding-top:10px;margin-top:4px;}
+  .total .lbl{font-size:13px;color:#7d8a82;font-weight:600;}
+  .total .amt{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:26px;color:var(--green);}
+
+  .btn{
+    border:none;border-radius:14px;padding:13px 16px;font-family:'Outfit';font-size:15px;font-weight:700;
+    cursor:pointer;transition:transform .08s ease, box-shadow .15s ease, opacity .15s;letter-spacing:.01em;
+  }
+  .btn:active{transform:translateY(1px) scale(.99);}
+  .btn-primary{background:linear-gradient(120deg,var(--green),var(--green-soft));color:#fff;box-shadow:0 12px 24px -12px rgba(45,82,64,.9);width:100%;}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--green);}
+
+  /* ---------- Payment ---------- */
+  .pay{display:flex;flex-direction:column;gap:12px;}
+  .pay .panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;text-align:center;}
+  .pay .due{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--sand);font-weight:600;}
+  .pay .duebig{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:34px;color:var(--green);margin:2px 0 10px;}
+  .pay .hands{font-size:14px;color:var(--ink);background:var(--cream);border-radius:12px;padding:10px;}
+  .pay .hands b{color:var(--amber);font-size:18px;}
+  .pay .q{font-size:14px;font-weight:600;margin-top:4px;color:var(--green);}
+  .change-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .change-opt{
+    background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:20px;
+    font-weight:700;color:var(--green);cursor:pointer;font-family:'Cormorant',serif;font-style:italic;
+    transition:transform .08s,border-color .15s,background .15s;
+  }
+  .change-opt:hover{border-color:var(--sage);}
+  .change-opt:active{transform:scale(.96);}
+  .change-opt.right{background:linear-gradient(120deg,var(--sage),var(--green));color:#fff;border-color:transparent;}
+  .change-opt.wrong{background:rgba(226,75,74,.12);border-color:var(--red);color:var(--red);}
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(33,49,40,.5);backdrop-filter:blur(6px);
+    display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;
+    opacity:0;pointer-events:none;transition:opacity .3s;
+  }
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .card{
+    background:var(--cream);border:1px solid var(--line);border-radius:28px;padding:28px 26px;
+    max-width:440px;width:100%;text-align:center;box-shadow:0 30px 70px -20px rgba(33,49,40,.6);
+    animation:pop .35s cubic-bezier(.2,1.3,.4,1);
+  }
+  @keyframes pop{from{opacity:0;transform:scale(.9) translateY(10px)}to{opacity:1;transform:none}}
+  .card h1{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:34px;color:var(--green);margin-bottom:6px;}
+  .card p{font-size:15px;color:var(--ink);line-height:1.5;margin-bottom:8px;}
+  .card .lead{font-size:15px;color:#6c776f;}
+  .stars{font-size:40px;letter-spacing:8px;margin:10px 0 4px;}
+  .scorebig{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:64px;color:var(--green);line-height:1;}
+  .scorebig small{font-size:22px;color:var(--sand);}
+  .verdict{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:23px;color:var(--amber);margin:8px 0 14px;}
+  .statline{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin:12px 0 18px;}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:9px 14px;min-width:84px;}
+  .stat .n{font-family:'Cormorant',serif;font-style:italic;font-weight:600;font-size:24px;color:var(--green);}
+  .stat .l{font-size:11px;color:#8a958d;text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
+  .roundlabel{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--sand);font-weight:700;margin-bottom:4px;}
+
+  /* ---------- Confetti ---------- */
+  .fx{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden;}
+  .confetti{position:absolute;width:9px;height:14px;border-radius:2px;will-change:transform,opacity;}
+  @keyframes fall{
+    0%{transform:translateY(-20px) rotate(0);opacity:1;}
+    100%{transform:translateY(110vh) rotate(720deg);opacity:0;}
+  }
+  .toast{
+    position:fixed;left:50%;top:18%;transform:translateX(-50%) translateY(-12px);
+    background:var(--green);color:#fff;border-radius:14px;padding:11px 20px;font-weight:700;font-size:16px;
+    box-shadow:0 16px 40px -16px rgba(45,82,64,.9);z-index:70;opacity:0;transition:opacity .2s,transform .2s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.bad{background:var(--red);}
+  .hidden{display:none !important;}
+  .footnote{text-align:center;font-size:11px;color:#a6b0a8;margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">Aria</span>
+      <span class="sub">POS Training</span>
+    </div>
+    <div class="hud">
+      <div class="chip"><span class="dot"></span>Round <b id="hudRound">1</b>/3</div>
+      <div class="chip">Customer <b id="hudCust">1</b></div>
+      <div class="chip">Score <b id="hudScore">0</b></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <!-- Aria -->
+    <div class="aria">
+      <div class="aria-name">Aria</div>
+      <div class="aria-figure" id="ariaFig">
+        <img data-pose="pos" src="./aria/pos.png" alt="" />
+        <img data-pose="welcome" src="./aria/welcome.png" alt="" />
+        <img data-pose="eyes" src="./aria/eyes.png" alt="" />
+        <img data-pose="cheer" src="./aria/cheer.png" alt="" />
+        <img data-pose="point" src="./aria/point.png" alt="" />
+      </div>
+      <div class="aria-col">
+        <div class="bubble" id="bubble">Ready? Let's run the register together!</div>
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div class="terminal">
+      <div class="order-card">
+        <div>
+          <div class="label">Customer order</div>
+          <div class="want" id="orderText">—</div>
+        </div>
+        <div class="cust" id="custFace">🙂</div>
+        <div class="timerbar hidden" id="timerbar"></div>
+      </div>
+
+      <!-- ORDER STAGE -->
+      <div class="panes" id="orderStage">
+        <div class="grid" id="grid"></div>
+        <div class="ticket">
+          <h3>Ticket <span class="pill" id="ticketCount">0 items</span></h3>
+          <div class="items" id="items"><div class="empty">Tap items the customer ordered…</div></div>
+          <div class="total"><span class="lbl">Total</span><span class="amt" id="ticketTotal">$0.00</span></div>
+          <button class="btn btn-primary" id="chargeBtn" disabled>Charge</button>
+        </div>
+      </div>
+
+      <!-- PAYMENT STAGE -->
+      <div class="pay hidden" id="payStage">
+        <div class="panel">
+          <div class="due">Amount due</div>
+          <div class="duebig" id="payDue">$0.00</div>
+          <div class="hands">Customer pays with a <b id="payNote">$20</b> note</div>
+          <div class="q">How much change do they get?</div>
+        </div>
+        <div class="change-grid" id="changeGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">Sandbox prototype · not wired to the app · plays fully offline</div>
+</div>
+
+<!-- Round / intermission overlay -->
+<div class="overlay" id="roundOverlay">
+  <div class="card">
+    <div class="roundlabel" id="ovLabel">Round 1</div>
+    <h1 id="ovTitle">Take the order</h1>
+    <p class="lead" id="ovBody">Tap the items the customer asks for.</p>
+    <button class="btn btn-primary" id="ovBtn" style="margin-top:14px;">Start</button>
+  </div>
+</div>
+
+<!-- End overlay -->
+<div class="overlay" id="endOverlay">
+  <div class="card">
+    <div class="roundlabel">Shift complete</div>
+    <div class="scorebig"><span id="finalScore">0</span><small>/100</small></div>
+    <div class="stars" id="finalStars">★★★</div>
+    <div class="verdict" id="finalVerdict">Café-ready ☕</div>
+    <div class="statline">
+      <div class="stat"><div class="n" id="stOrders">0</div><div class="l">Orders</div></div>
+      <div class="stat"><div class="n" id="stChange">0</div><div class="l">Change</div></div>
+      <div class="stat"><div class="n" id="stMiss">0</div><div class="l">Mistakes</div></div>
+      <div class="stat"><div class="n" id="stTime">0s</div><div class="l">Time</div></div>
+    </div>
+    <p id="endAria" class="lead" style="margin-bottom:16px;">Perfect! You're a natural at this.</p>
+    <button class="btn btn-primary" id="playAgain">Play again</button>
+  </div>
+</div>
+
+<div class="fx" id="fx"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- Data ---------------- */
+  const PRODUCTS = [
+    {id:"flatwhite", name:"Flat White",  price:4.50, emoji:"☕"},
+    {id:"latte",     name:"Latte",       price:4.80, emoji:"🥛"},
+    {id:"capp",      name:"Cappuccino",  price:4.50, emoji:"☕"},
+    {id:"croissant", name:"Croissant",   price:5.00, emoji:"🥐"},
+    {id:"muffin",    name:"Muffin",      price:4.20, emoji:"🧁"},
+    {id:"cookie",    name:"Cookie",      price:3.50, emoji:"🍪"},
+    {id:"oj",        name:"Orange Juice",price:5.50, emoji:"🧃"},
+    {id:"sandwich",  name:"Sandwich",    price:9.00, emoji:"🥪"},
+  ];
+  const FACES = ["🙂","😀","😊","🤓","😎","🥰","🧑","👩","🧔","👵"];
+  const NOTES = [5,10,20,50];
+
+  const ROUNDS = [
+    {label:"Round 1", title:"Take the order", body:"Tap the items the customer asks for, then hit Charge.",
+     customers:1, needsChange:false, timed:false, maxItems:2},
+    {label:"Round 2", title:"Take payment", body:"Build the order, charge it, then give the right change.",
+     customers:1, needsChange:true, timed:false, maxItems:2},
+    {label:"Round 3", title:"The rush!", body:"Four customers back-to-back, on the clock. Stay fast and accurate!",
+     customers:4, needsChange:true, timed:true, maxItems:3, seconds:14},
+  ];
+
+  /* ---------------- State ---------------- */
+  let roundIdx = 0;
+  let custInRound = 0;
+  let order = [];          // {id, name, price, qty} desired
+  let ticket = {};         // id -> qty
+  let score = 0;
+  let stats = {orders:0, change:0, mistakes:0, perfectChange:0};
+  let startTime = 0;
+  let timer = null, timeLeft = 0, timeTotal = 0;
+  let stage = "order";     // order | pay
+  let payNote = 20, payChange = 0;
+  let busy = false;
+
+  /* ---------------- Elements ---------------- */
+  const $ = id => document.getElementById(id);
+  const grid = $("grid"), itemsEl = $("items"), bubble = $("bubble");
+  const ariaFig = $("ariaFig");
+
+  /* ---------------- Audio (WebAudio, generated) ---------------- */
+  let actx = null;
+  function ac(){ if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return actx; }
+  function tone(freq, dur, type, gain, delay){
+    const c = ac(); if(!c) return;
+    const t0 = c.currentTime + (delay||0);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type||"sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain||0.18, t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }
+  const sfx = {
+    tap(){ tone(520,0.08,"triangle",0.10); },
+    chaching(){ tone(1318,0.12,"square",0.10,0); tone(1760,0.18,"square",0.10,0.07); tone(2093,0.22,"sine",0.08,0.14); },
+    good(){ tone(660,0.12,"sine",0.16,0); tone(880,0.16,"sine",0.16,0.10); tone(1175,0.2,"sine",0.14,0.20); },
+    bad(){ tone(220,0.18,"sawtooth",0.10,0); tone(180,0.22,"sawtooth",0.10,0.08); },
+    win(){ [523,659,784,1047,1319].forEach((f,i)=>tone(f,0.3,"triangle",0.14,i*0.10)); },
+  };
+
+  /* ---------------- Aria poses ---------------- */
+  // build fallback handling
+  ariaFig.querySelectorAll("img").forEach(img=>{
+    img.addEventListener("error", ()=>{
+      const pose = img.getAttribute("data-pose");
+      img.dataset.broken = "1";
+      img.replaceWith(makeFallback(pose, img.classList.contains("on")));
+    });
+  });
+  function makeFallback(pose, on){
+    const d = document.createElement("div");
+    d.className = "aria-fallback" + (on ? " on-fb" : "");
+    d.setAttribute("data-pose", pose);
+    d.style.position="absolute"; d.style.inset="0"; d.style.margin="auto";
+    d.style.opacity = on ? "1" : "0";
+    d.style.transition = "opacity .25s ease";
+    d.textContent = "A";
+    ariaFig.appendChild(d);
+    return d;
+  }
+  function setPose(pose){
+    ariaFig.querySelectorAll("[data-pose]").forEach(el=>{
+      const match = el.getAttribute("data-pose") === pose;
+      if(el.tagName === "IMG"){ el.classList.toggle("on", match); }
+      else { el.style.opacity = match ? "1" : "0"; }
+    });
+  }
+  function say(text, pose){
+    if(pose) setPose(pose);
+    bubble.textContent = text;
+    bubble.classList.remove("pulse"); void bubble.offsetWidth; bubble.classList.add("pulse");
+  }
+
+  /* ---------------- HUD ---------------- */
+  function syncHUD(){
+    $("hudRound").textContent = roundIdx+1;
+    $("hudCust").textContent = custInRound+1;
+    $("hudScore").textContent = score;
+  }
+
+  /* ---------------- Toast ---------------- */
+  let toastT=null;
+  function toast(msg, bad){
+    const t = $("toast"); t.textContent = msg;
+    t.classList.toggle("bad", !!bad); t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove("show"), 1100);
+  }
+
+  /* ---------------- Confetti ---------------- */
+  function confetti(){
+    const fx = $("fx");
+    const cols = ["#7FB897","#2D5240","#C9A37A","#BA7517","#E24B4A","#ffffff"];
+    for(let i=0;i<70;i++){
+      const c = document.createElement("div");
+      c.className="confetti";
+      c.style.left = Math.random()*100+"vw";
+      c.style.background = cols[Math.floor(Math.random()*cols.length)];
+      const dur = 1.6 + Math.random()*1.4;
+      c.style.animation = `fall ${dur}s ${Math.random()*0.3}s ease-in forwards`;
+      c.style.top = "-20px";
+      c.style.transform = `rotate(${Math.random()*360}deg)`;
+      fx.appendChild(c);
+      setTimeout(()=>c.remove(), (dur+0.4)*1000);
+    }
+  }
+
+  /* ---------------- Build product grid ---------------- */
+  function buildGrid(){
+    grid.innerHTML = "";
+    PRODUCTS.forEach(p=>{
+      const t = document.createElement("div");
+      t.className = "tile"; t.dataset.id = p.id;
+      t.innerHTML = `<div class="emoji">${p.emoji}</div><div class="nm">${p.name}</div><div class="pr">$${p.price.toFixed(2)}</div>`;
+      t.addEventListener("click", ()=>onTile(p, t));
+      grid.appendChild(t);
+    });
+  }
+
+  /* ---------------- Order generation ---------------- */
+  function rand(n){ return Math.floor(Math.random()*n); }
+  function newOrder(maxItems){
+    const pool = PRODUCTS.slice();
+    const count = 1 + rand(Math.max(1,maxItems)); // 1..maxItems distinct items
+    const chosen = [];
+    for(let i=0;i<count && pool.length;i++){
+      const p = pool.splice(rand(pool.length),1)[0];
+      const qty = 1 + (Math.random()<0.4 ? 1 : 0); // mostly 1, sometimes 2
+      chosen.push({...p, qty});
+    }
+    return chosen;
+  }
+  function orderToText(o){
+    return o.map(i=>`${i.qty}× ${i.name}`).join(", ");
+  }
+  function orderTotal(o){ return o.reduce((s,i)=>s+i.price*i.qty,0); }
+
+  /* ---------------- Ticket rendering ---------------- */
+  function renderTicket(){
+    const ids = Object.keys(ticket).filter(id=>ticket[id]>0);
+    if(ids.length===0){
+      itemsEl.innerHTML = `<div class="empty">Tap items the customer ordered…</div>`;
+    } else {
+      itemsEl.innerHTML = "";
+      ids.forEach(id=>{
+        const p = PRODUCTS.find(x=>x.id===id);
+        const qty = ticket[id];
+        const row = document.createElement("div");
+        row.className="row";
+        row.innerHTML = `<div class="ql"><span class="q">${qty}×</span><span>${p.emoji} ${p.name}</span></div>
+          <span class="lt">$${(p.price*qty).toFixed(2)}</span><span class="x" title="remove">✕</span>`;
+        row.querySelector(".x").addEventListener("click",(e)=>{ e.stopPropagation(); removeItem(id); });
+        itemsEl.appendChild(row);
+      });
+    }
+    const total = ids.reduce((s,id)=>s + PRODUCTS.find(x=>x.id===id).price*ticket[id],0);
+    const count = ids.reduce((s,id)=>s+ticket[id],0);
+    $("ticketTotal").textContent = "$"+total.toFixed(2);
+    $("ticketCount").textContent = count+" item"+(count===1?"":"s");
+    $("chargeBtn").disabled = !matchesOrder();
+  }
+  function removeItem(id){
+    if(ticket[id]>0){ ticket[id]--; if(ticket[id]<=0) delete ticket[id]; renderTicket(); }
+  }
+  function matchesOrder(){
+    // ticket must equal order exactly
+    const want = {}; order.forEach(i=>want[i.id]=i.qty);
+    const haveIds = Object.keys(ticket).filter(id=>ticket[id]>0);
+    const wantIds = Object.keys(want);
+    if(haveIds.length !== wantIds.length) return false;
+    return wantIds.every(id => ticket[id]===want[id]);
+  }
+
+  /* ---------------- Tile click ---------------- */
+  function onTile(p, el){
+    if(busy || stage!=="order") return;
+    sfx.tap();
+    el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    const want = order.find(i=>i.id===p.id);
+    const current = ticket[p.id]||0;
+    if(!want){
+      // wrong item
+      stats.mistakes++;
+      score = Math.max(0, score-3); syncHUD();
+      say("Oops — they didn't order that. Tap ✕ to remove it.", "eyes");
+      sfx.bad();
+    } else if(current >= want.qty){
+      stats.mistakes++;
+      say(`They only wanted ${want.qty}× ${p.name}.`, "eyes");
+      sfx.bad();
+    }
+    ticket[p.id] = current + 1;
+    renderTicket();
+    if(matchesOrder()){
+      say("That's the order — hit Charge!", "point");
+    }
+  }
+
+  /* ---------------- Round / customer flow ---------------- */
+  function showRoundOverlay(){
+    const r = ROUNDS[roundIdx];
+    $("ovLabel").textContent = r.label;
+    $("ovTitle").textContent = r.title;
+    $("ovBody").textContent = r.body;
+    $("ovBtn").textContent = roundIdx===0 ? "Start shift" : "Continue";
+    $("roundOverlay").classList.add("show");
+    setPose(roundIdx===0 ? "welcome" : "point");
+  }
+
+  function startCustomer(){
+    busy=false; stage="order";
+    const r = ROUNDS[roundIdx];
+    order = newOrder(r.maxItems);
+    ticket = {};
+    $("orderText").textContent = orderToText(order);
+    $("custFace").textContent = FACES[rand(FACES.length)];
+    // toggle stages
+    $("orderStage").classList.remove("hidden");
+    $("payStage").classList.add("hidden");
+    enableGrid(true);
+    renderTicket();
+    syncHUD();
+    say(r.timed ? "Quick — tap their order!" : "Tap the items they ordered.", "point");
+    if(r.timed){ startTimer(r.seconds); } else { stopTimer(); }
+  }
+
+  function enableGrid(on){
+    grid.querySelectorAll(".tile").forEach(t=>t.classList.toggle("disabled", !on));
+  }
+
+  /* ---------------- Timer ---------------- */
+  function startTimer(seconds){
+    stopTimer();
+    timeTotal = seconds; timeLeft = seconds;
+    const bar = $("timerbar");
+    bar.classList.remove("hidden","warn","danger"); bar.style.width="100%";
+    timer = setInterval(()=>{
+      timeLeft -= 0.1;
+      const pct = Math.max(0, timeLeft/timeTotal)*100;
+      bar.style.width = pct+"%";
+      bar.classList.toggle("warn", pct<55 && pct>=28);
+      bar.classList.toggle("danger", pct<28);
+      if(timeLeft<=0){ timeUp(); }
+    },100);
+  }
+  function stopTimer(){ if(timer){ clearInterval(timer); timer=null; } $("timerbar").classList.add("hidden"); }
+  function timeUp(){
+    stopTimer();
+    stats.mistakes++;
+    score = Math.max(0, score-4); syncHUD();
+    say("Time's up on that one! Keep moving.", "eyes");
+    sfx.bad();
+    nextCustomer();
+  }
+
+  /* ---------------- Charge ---------------- */
+  $("chargeBtn").addEventListener("click", ()=>{
+    if(stage!=="order" || !matchesOrder() || busy) return;
+    busy=true;
+    const r = ROUNDS[roundIdx];
+    stats.orders++;
+    // speed bonus if timed
+    let gained = 10;
+    if(r.timed){ gained += Math.round(Math.max(0, timeLeft) * 1.2); }
+    score += gained; syncHUD();
+    stopTimer();
+    sfx.chaching();
+    say("Nice — order's in! 🛎️", "cheer");
+
+    if(!r.needsChange){
+      // exact payment, no change step
+      toast("+"+gained+" pts");
+      setTimeout(()=>{ nextCustomer(); }, 800);
+    } else {
+      setTimeout(()=>openPayment(), 650);
+    }
+  });
+
+  /* ---------------- Payment / change ---------------- */
+  function openPayment(){
+    stage="pay"; busy=false;
+    const due = orderTotal(order);
+    // choose a note >= due
+    const valid = NOTES.filter(n=>n>=Math.ceil(due));
+    payNote = valid.length ? valid[0] : 50;
+    // sometimes a bigger note for variety
+    if(valid.length>1 && Math.random()<0.4) payNote = valid[1];
+    payChange = +(payNote - due).toFixed(2);
+
+    $("payDue").textContent = "$"+due.toFixed(2);
+    $("payNote").textContent = "$"+payNote;
+    $("orderStage").classList.add("hidden");
+    $("payStage").classList.remove("hidden");
+    buildChangeOptions(payChange);
+    say(`They paid $${payNote}. What's the change?`, "point");
+    const r = ROUNDS[roundIdx];
+    if(r.timed) startTimer(Math.max(8, (r.seconds||12)-2));
+  }
+
+  function buildChangeOptions(correct){
+    const opts = new Set([correct]);
+    const deltas = [0.50,1.00,-0.50,2.00,-1.00,0.20,5.00];
+    let di=0;
+    while(opts.size<4 && di<deltas.length*3){
+      let cand = +(correct + deltas[di%deltas.length]*(1+Math.floor(di/deltas.length))).toFixed(2);
+      if(cand>=0 && Math.abs(cand-correct)>0.001) opts.add(cand);
+      di++;
+    }
+    while(opts.size<4){ opts.add(+(correct+ (opts.size)).toFixed(2)); }
+    const arr = Array.from(opts).slice(0,4);
+    // ensure correct present
+    if(!arr.includes(correct)){ arr[0]=correct; }
+    // shuffle
+    for(let i=arr.length-1;i>0;i--){ const j=rand(i+1); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+
+    const cg = $("changeGrid"); cg.innerHTML="";
+    arr.forEach(v=>{
+      const b = document.createElement("button");
+      b.className="change-opt"; b.textContent = "$"+v.toFixed(2);
+      b.addEventListener("click", ()=>pickChange(v, b, correct));
+      cg.appendChild(b);
+    });
+  }
+
+  function pickChange(val, btn, correct){
+    if(busy) return;
+    const r = ROUNDS[roundIdx];
+    if(Math.abs(val-correct)<0.001){
+      busy=true;
+      btn.classList.add("right");
+      stats.change++; stats.perfectChange++;
+      let gained = 12;
+      if(r.timed){ gained += Math.round(Math.max(0,timeLeft)*1.0); }
+      score += gained; syncHUD();
+      stopTimer();
+      sfx.good(); confetti();
+      say("Perfect change! 🎉", "cheer");
+      toast("+"+gained+" pts");
+      setTimeout(()=>nextCustomer(), 950);
+    } else {
+      stats.mistakes++;
+      score = Math.max(0, score-3); syncHUD();
+      btn.classList.add("wrong");
+      sfx.bad();
+      const diff = correct - val;
+      say(diff>0 ? "Not quite — that's too little. Try again." : "Too much! Count it again.", "eyes");
+      setTimeout(()=>btn.classList.remove("wrong"), 600);
+    }
+  }
+
+  /* ---------------- Advance ---------------- */
+  function nextCustomer(){
+    custInRound++;
+    const r = ROUNDS[roundIdx];
+    if(custInRound < r.customers){
+      startCustomer();
+    } else {
+      // next round
+      roundIdx++;
+      custInRound = 0;
+      if(roundIdx < ROUNDS.length){
+        stopTimer();
+        $("payStage").classList.add("hidden");
+        $("orderStage").classList.remove("hidden");
+        showRoundOverlay();
+      } else {
+        endGame();
+      }
+    }
+  }
+
+  /* ---------------- Start / End ---------------- */
+  $("ovBtn").addEventListener("click", ()=>{
+    ac(); // unlock audio on user gesture
+    $("roundOverlay").classList.remove("show");
+    if(startTime===0) startTime = Date.now();
+    startCustomer();
+  });
+
+  function endGame(){
+    stopTimer();
+    const elapsed = Math.round((Date.now()-startTime)/1000);
+    // clamp score 0..100
+    let final = Math.min(100, Math.max(0, score));
+    // bonus: low mistakes
+    if(stats.mistakes===0) final = Math.min(100, final+6);
+    final = Math.round(final);
+
+    let stars = final>=85 ? 3 : final>=60 ? 2 : 1;
+    let verdict, ariaLine, pose;
+    if(stars===3){ verdict="Verdict: Café-ready ☕"; ariaLine="Perfect! You're a natural at this. The register's in safe hands."; pose="cheer"; }
+    else if(stars===2){ verdict="Solid first shift!"; ariaLine="Nicely done — a little more practice on change and you'll fly."; pose="point"; }
+    else { verdict="Let's practice once more?"; ariaLine="Good effort! Run it again and watch the order card closely."; pose="eyes"; }
+
+    $("finalScore").textContent = final;
+    $("finalStars").textContent = "★★★☆☆".slice(3-stars, 6-stars); // show filled then empty
+    $("finalStars").textContent = "★".repeat(stars) + "☆".repeat(3-stars);
+    $("finalVerdict").textContent = verdict;
+    $("endAria").textContent = ariaLine;
+    $("stOrders").textContent = stats.orders;
+    $("stChange").textContent = stats.change;
+    $("stMiss").textContent = stats.mistakes;
+    $("stTime").textContent = elapsed+"s";
+    setPose(pose);
+    if(stars>=2){ sfx.win(); confetti(); setTimeout(confetti, 400); }
+    $("endOverlay").classList.add("show");
+  }
+
+  $("playAgain").addEventListener("click", ()=>{
+    roundIdx=0; custInRound=0; score=0; startTime=0;
+    stats={orders:0,change:0,mistakes:0,perfectChange:0};
+    $("endOverlay").classList.remove("show");
+    syncHUD();
+    showRoundOverlay();
+  });
+
+  /* ---------------- Boot ---------------- */
+  buildGrid();
+  setPose("welcome");
+  syncHUD();
+  showRoundOverlay();
+})();
+</script>
+</body>
+</html>
