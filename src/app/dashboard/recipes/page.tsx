@@ -541,6 +541,8 @@ export default function RecipesPage() {
                       <button onClick={() => setScaleModal(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>Scale</button>
                       <button onClick={() => setWasteModal(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>Waste</button>
                       <button onClick={() => openEdit(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>Edit</button>
+                      {/* TP-6 push: draft a training course from this recipe in the Training Academy */}
+                      <a href={`/dashboard/staff/training?draft_recipe=${r.id}`} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(201,163,122,0.12)', color: '#C9A37A', textDecoration: 'none' }} title="Let Aria draft a training course from this recipe">✦ Training</a>
                       <button onClick={() => deleteRecipe(r.id)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.06)', color: '#ef4444' }}>Delete</button>
                     </div>
                   </div>

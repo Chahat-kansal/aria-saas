@@ -379,10 +379,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       try {
         const now = Date.now()
         const in30 = new Date(now + 30 * 86400000).toISOString()
-        const [enrRes, certRes, staffRes] = await Promise.all([
+        const [enrRes, certRes, staffRes, recipesRes, recipeLessonRes, courseRes, bizRes] = await Promise.all([
           db.from('training_enrolments').select('status, due_at, certified, staff_member_id, training_courses(title, is_mandatory)').eq('business_id', businessId).limit(2000),
           db.from('training_certificates').select('staff_name, course_title, expires_at').eq('business_id', businessId).gte('expires_at', new Date(now).toISOString()).lte('expires_at', in30).limit(50),
           db.from('staff_members').select('id').eq('business_id', businessId).eq('status', 'active'),
+          db.from('recipes').select('id').eq('business_id', businessId).is('deleted_at', null).limit(1000),
+          db.from('training_lessons').select('recipe_id').eq('business_id', businessId).not('recipe_id', 'is', null),
+          db.from('training_courses').select('title').eq('business_id', businessId),
+          db.from('businesses').select('business_subtype, industry_subtype').eq('id', businessId).maybeSingle(),
         ])
         const enrols = (enrRes.data ?? []) as Array<{ status: string; due_at: string | null; certified: boolean; staff_member_id: string; training_courses: { title?: string } | { title?: string }[] | null }>
         const expiring = (certRes.data ?? []) as Array<{ staff_name: string | null; course_title: string | null; expires_at: string | null }>
@@ -392,6 +396,15 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         const certifiedStaff = new Set(enrols.filter(e => e.certified).map(e => e.staff_member_id)).size
         const activeStaff = (staffRes.data ?? []).length
         const pct = activeStaff > 0 ? Math.round((certifiedStaff / activeStaff) * 100) : 0
+        // Proactive draft hooks (TP-6): recipes with no training course, and licensed-but-no-RSA.
+        const recipes = recipesRes.data ?? []
+        const covered = new Set((recipeLessonRes.data ?? []).map(l => String((l as { recipe_id: string }).recipe_id)))
+        const recipesWithoutCourse = recipes.filter(r => !covered.has(String((r as { id: string }).id))).length
+        const courseTitles = (courseRes.data ?? []).map(c => String((c as { title: string }).title).toLowerCase())
+        const subtype = String((bizRes.data as { business_subtype?: string; industry_subtype?: string } | null)?.business_subtype ?? (bizRes.data as { industry_subtype?: string } | null)?.industry_subtype ?? '')
+        const licensed = /bar|pub|licensed|liquor|tavern|club|brewery|winery/i.test(subtype)
+        const hasRsa = courseTitles.some(t => t.includes('rsa') || t.includes('responsible service'))
+        const licensedNoRsa = licensed && !hasRsa
         return {
           overdue_count: overdue.length,
           overdue_examples: overdue.slice(0, 5).map(o => ({ course: titleOf(o.training_courses) ?? 'a course', due: o.due_at?.slice(0, 10) })),
@@ -400,7 +413,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
           team_certified_pct: pct,
           certified_staff: certifiedStaff,
           active_staff: activeStaff,
-          note: `${overdue.length} overdue training item(s); ${expiring.length} certificate(s) expiring within 30 days; ${pct}% of active staff certified (${certifiedStaff}/${activeStaff}). Cite these exact counts; never invent training numbers.`,
+          recipes_total: recipes.length,
+          recipes_without_course: recipesWithoutCourse,
+          licensed_no_rsa: licensedNoRsa,
+          note: `${overdue.length} overdue training item(s); ${expiring.length} certificate(s) expiring within 30 days; ${pct}% of active staff certified (${certifiedStaff}/${activeStaff}). ${recipesWithoutCourse} of ${recipes.length} recipes have no training course — Aria can draft one.${licensedNoRsa ? ' This is a licensed venue with NO RSA course set up — flag it.' : ''} Cite these exact counts; never invent training numbers.`,
         }
       } catch { return null }
     })(),

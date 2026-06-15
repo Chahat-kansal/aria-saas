@@ -61,6 +61,7 @@ export default function TrainingBuilderPage() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [view, setView] = useState<'overview' | 'courses'>('overview')
+  const [draft, setDraft] = useState<null | { tab: 'starter' | 'recipe'; recipeId?: string }>(null)
   const [err, setErr] = useState('')
 
   const load = useCallback(async () => {
@@ -73,6 +74,13 @@ export default function TrainingBuilderPage() {
     } catch (e) { setErr((e as Error).message) } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  // Push entry: /dashboard/staff/training?draft_recipe=<id> auto-opens the draft modal on that recipe.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const rid = new URLSearchParams(window.location.search).get('draft_recipe')
+    if (rid) { setDraft({ tab: 'recipe', recipeId: rid }); setView('courses') }
+  }, [])
 
   async function createCourse() {
     setErr('')
@@ -98,7 +106,10 @@ export default function TrainingBuilderPage() {
           <h1 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 34, fontWeight: 600, margin: 0, lineHeight: 1.1 }}>Training Academy</h1>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>Build courses, certify your team, stay compliant. Microlearning that sticks.</p>
         </div>
-        {courses.length > 0 && <button onClick={createCourse} style={btn(G)}>+ New course</button>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setDraft({ tab: 'starter' })} style={ghost(GOLD)}>✦ Let Aria set you up</button>
+          {courses.length > 0 && <button onClick={createCourse} style={btn(G)}>+ New course</button>}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -114,17 +125,19 @@ export default function TrainingBuilderPage() {
       {editing
         ? <CourseBuilder course={editing} skills={skills} staff={staff} onClose={() => setEditingId(null)} onChange={load} />
         : view === 'overview'
-          ? <OverviewDashboard onBuild={() => setView('courses')} onCreate={createCourse} />
+          ? <OverviewDashboard onBuild={() => setView('courses')} onCreate={createCourse} onDraft={() => setDraft({ tab: 'starter' })} />
           : loading
             ? <div style={{ color: 'rgba(255,255,255,0.35)', padding: 40, textAlign: 'center' }}>Loading…</div>
             : courses.length === 0
-              ? <EmptyState onCreate={createCourse} />
+              ? <EmptyState onCreate={createCourse} onDraft={() => setDraft({ tab: 'recipe' })} />
               : <CourseGrid courses={courses} skills={skills} onOpen={setEditingId} />}
+
+      {draft && <AriaDraftModal initial={draft} onClose={() => setDraft(null)} onDone={async (openId) => { setDraft(null); await load(); setView('courses'); if (openId) setEditingId(openId) }} />}
     </div>
   )
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({ onCreate, onDraft }: { onCreate: () => void; onDraft: () => void }) {
   return (
     <div style={{ ...card, padding: '48px 28px', textAlign: 'center', background: `linear-gradient(160deg, ${D}22, rgba(255,255,255,0.02))`, borderColor: `${G}33` }}>
       <div style={{ fontSize: 38, marginBottom: 6 }}>🎓</div>
@@ -135,13 +148,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button onClick={onCreate} style={btn(G)}>+ Build a course</button>
-        <button
-          onClick={onCreate}
-          title="Aria can draft a course from your recipes — coming soon"
-          style={{ ...ghost(GOLD), padding: '8px 16px', fontSize: 13 }}
-        >✦ Let Aria draft one from your recipes</button>
+        <button onClick={onDraft} style={{ ...ghost(GOLD), padding: '8px 16px', fontSize: 13 }}>✦ Let Aria draft one from your recipes</button>
       </div>
-      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 14 }}>Aria auto-draft arrives soon — start one manually now.</p>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 14 }}>Or let Aria suggest the legally-correct starter library for your business.</p>
     </div>
   )
 }
@@ -551,7 +560,7 @@ function ProgressBar({ pct, ok }: { pct: number; ok?: boolean }) {
   </div>
 }
 
-function OverviewDashboard({ onBuild, onCreate }: { onBuild: () => void; onCreate: () => void }) {
+function OverviewDashboard({ onBuild, onCreate, onDraft }: { onBuild: () => void; onCreate: () => void; onDraft: () => void }) {
   const [d, setD] = useState<DashData | null>(null)
   const [err, setErr] = useState('')
   useEffect(() => { api<DashData>('/api/training/dashboard').then(setD).catch(e => setErr((e as Error).message)) }, [])
@@ -568,8 +577,9 @@ function OverviewDashboard({ onBuild, onCreate }: { onBuild: () => void; onCreat
           Build a course and assign it to your team — then this view shows who&apos;s trained, who&apos;s overdue, who&apos;s certified, and an inspector-ready audit export.
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onDraft} style={btn(GOLD, '#1a1208')}>✦ Let Aria set you up</button>
           <button onClick={onCreate} style={btn(G)}>+ Build a course</button>
-          <button onClick={onBuild} style={ghost(GOLD)}>View courses</button>
+          <button onClick={onBuild} style={ghost('rgba(255,255,255,0.5)')}>View courses</button>
         </div>
       </div>
     )
@@ -666,6 +676,100 @@ function OverviewDashboard({ onBuild, onCreate }: { onBuild: () => void; onCreat
               </div>}
         </div>
       ))}
+    </div>
+  )
+}
+
+// ───────────────────────── TP-6 — Aria draft modal (starter library + draft-from-recipe) ─────────────────────────
+interface StarterC { key: string; title: string; description: string; tier: string; is_mandatory: boolean; expires_months: number | null; role_tags: string[]; game_round?: string; already_exists: boolean }
+interface RecipeOpt { id: string; name: string; category: string | null; allergens: string[] | null }
+
+function AriaDraftModal({ initial, onClose, onDone }: { initial: { tab: 'starter' | 'recipe'; recipeId?: string }; onClose: () => void; onDone: (openId?: string) => void }) {
+  const [tab, setTab] = useState<'starter' | 'recipe'>(initial.tab)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  // Starter library
+  const [alcohol, setAlcohol] = useState(false)
+  const [starter, setStarter] = useState<StarterC[] | null>(null)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const loadStarter = useCallback(async (alc: boolean) => {
+    try { const d = await api<{ courses: StarterC[]; alcohol: boolean }>(`/api/training/starter-library?alcohol=${alc}`); setStarter(d.courses); setPicked(new Set(d.courses.filter(c => c.is_mandatory && !c.already_exists).map(c => c.key))) } catch (e) { setMsg((e as Error).message) }
+  }, [])
+  useEffect(() => { if (tab === 'starter') loadStarter(alcohol) }, [tab, alcohol, loadStarter])
+
+  // Recipes
+  const [recipes, setRecipes] = useState<RecipeOpt[] | null>(null)
+  const [recipeId, setRecipeId] = useState(initial.recipeId ?? '')
+  useEffect(() => { if (tab === 'recipe') api<{ recipes: RecipeOpt[] }>('/api/training/draft-from-recipe').then(d => setRecipes(d.recipes)).catch(e => setMsg((e as Error).message)) }, [tab])
+
+  async function createStarter() {
+    setBusy(true); setMsg('')
+    try { const d = await api<{ created: number }>('/api/training/starter-library', { method: 'POST', body: { keys: [...picked], alcohol } }); setMsg(`Created ${d.created} draft course(s).`); setTimeout(() => onDone(), 700) }
+    catch (e) { setMsg((e as Error).message) } finally { setBusy(false) }
+  }
+  async function draftRecipe() {
+    if (!recipeId) { setMsg('Pick a recipe first.'); return }
+    setBusy(true); setMsg('')
+    try { const d = await api<{ course_id: string; ai: boolean; quiz_questions: number; allergen_lesson: boolean }>('/api/training/draft-from-recipe', { method: 'POST', body: { recipe_id: recipeId } }); setMsg(`Drafted (${d.quiz_questions} quiz Qs${d.allergen_lesson ? ' + allergen step' : ''}). Opening…`); setTimeout(() => onDone(d.course_id), 800) }
+    catch (e) { setMsg((e as Error).message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ ...card, maxWidth: 560, width: '100%', background: '#13201a', borderColor: 'rgba(255,255,255,0.12)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <h2 style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: 0 }}>Let Aria set up your training</h2>
+          <button onClick={onClose} style={ghost('rgba(255,255,255,0.4)')}>✕</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, margin: '12px 0 16px' }}>
+          <button onClick={() => setTab('starter')} style={tab === 'starter' ? btn(G) : ghost(G)}>Starter library</button>
+          <button onClick={() => setTab('recipe')} style={tab === 'recipe' ? btn(G) : ghost(G)}>From a recipe</button>
+        </div>
+
+        {tab === 'starter' && (
+          <div>
+            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>The legally-correct starter set for your business. Compliance courses are shells that <b>track</b> your team&apos;s certification — you upload the official material. Pick what to create as drafts.</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={alcohol} onChange={e => setAlcohol(e.target.checked)} /> We serve alcohol (adds RSA)
+            </label>
+            {!starter ? <div style={{ color: 'rgba(255,255,255,0.35)', padding: 16 }}>Loading…</div>
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 320, overflowY: 'auto' }}>
+                  {starter.map(c => (
+                    <label key={c.key} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '9px 11px', borderRadius: 9, border: `1px solid ${picked.has(c.key) ? G + '55' : 'rgba(255,255,255,0.08)'}`, background: picked.has(c.key) ? 'rgba(127,184,151,0.08)' : 'transparent', cursor: c.already_exists ? 'default' : 'pointer', opacity: c.already_exists ? 0.5 : 1 }}>
+                      <input type="checkbox" disabled={c.already_exists} checked={picked.has(c.key)} onChange={e => setPicked(p => { const n = new Set(p); e.target.checked ? n.add(c.key) : n.delete(c.key); return n })} style={{ marginTop: 3 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{c.title}</span>
+                          <span style={pill(c.tier === 'compliance' ? RED : c.tier === 'skill' ? G : c.tier === 'systems' ? GOLD : AMBER)}>{c.tier}</span>
+                          {c.is_mandatory && <span style={pill(RED)}>Required</span>}
+                          {c.game_round && <span style={pill(GOLD)}>Game</span>}
+                          {c.already_exists && <span style={{ fontSize: 10.5, color: G }}>✓ exists</span>}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', marginTop: 2, lineHeight: 1.4 }}>{c.description}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>}
+            <button onClick={createStarter} disabled={busy || picked.size === 0} style={{ ...btn(G), width: '100%', marginTop: 14, opacity: busy || picked.size === 0 ? 0.5 : 1 }}>{busy ? 'Creating…' : `Create ${picked.size} draft course(s)`}</button>
+          </div>
+        )}
+
+        {tab === 'recipe' && (
+          <div>
+            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>Aria drafts a course from a recipe — method lesson, a knowledge quiz, and an allergen step if the recipe has allergens. You review and publish.</p>
+            {!recipes ? <div style={{ color: 'rgba(255,255,255,0.35)', padding: 16 }}>Loading recipes…</div>
+              : recipes.length === 0 ? <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>No recipes yet. Add recipes first, then Aria can draft from them.</p>
+                : <select value={recipeId} onChange={e => setRecipeId(e.target.value)} style={inp}>
+                    <option value="">Pick a recipe…</option>
+                    {recipes.map(r => <option key={r.id} value={r.id}>{r.name}{r.allergens && r.allergens.length ? ` (allergens: ${r.allergens.join(', ')})` : ''}</option>)}
+                  </select>}
+            <button onClick={draftRecipe} disabled={busy || !recipeId} style={{ ...btn(GOLD, '#1a1208'), width: '100%', marginTop: 14, opacity: busy || !recipeId ? 0.5 : 1 }}>{busy ? 'Drafting…' : '✦ Draft course from recipe'}</button>
+          </div>
+        )}
+
+        {msg && <div style={{ fontSize: 12.5, color: G, marginTop: 12 }}>{msg}</div>}
+      </div>
     </div>
   )
 }
