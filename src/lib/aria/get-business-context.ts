@@ -348,6 +348,25 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // AM-1 — owner behaviour pattern (when the owner works, what they do most) derived from
+    // activity_log. Cache-first (aria_signal_cache 'owner_pattern', 24h). Facts only — Aria adapts
+    // timing/tone/suggestions to the owner; small-sample-guarded so few actions never assert a pattern.
+    owner_pattern: await (async () => {
+      try {
+        const { getOrRefreshOwnerPattern } = await import('@/lib/aria/owner-patterns')
+        const p = await getOrRefreshOwnerPattern(businessId)
+        if (!p) return null
+        if (!p.available) return { available: false, note: p.reason ?? 'Not enough owner activity to infer a pattern yet.' }
+        return {
+          peak_daypart: p.peak_daypart,
+          peak_hours: p.peak_hours.map(h => h.hour),
+          busiest_day: p.busiest_day,
+          top_actions: p.top_actions,
+          sample_size: p.sample_size,
+          note: p.reasoning + ' Cite these owner-behaviour facts to adapt timing/tone; never invent them.',
+        }
+      } catch { return null }
+    })(),
     // WIRE-3 — labour cost % vs revenue (the rostering moat). Aria flags over/under-staffing.
     labour: await (async () => {
       try {
