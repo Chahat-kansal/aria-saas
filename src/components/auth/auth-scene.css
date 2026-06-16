@@ -5,10 +5,12 @@
 .aria-auth {
   --sage:#7FB897; --green:#2D5240; --green2:#3a6b50; --sand:#C9A37A; --amber:#BA7517; --red:#E24B4A;
   --ink:#1A1D23; --ink2:#4A5568; --ink3:#8896A5; --ink4:#B0BEC5; --border:#E8E2D6;
-  font-family:'Outfit',system-ui,sans-serif; background:#0c0f0d; min-height:100vh;
+  font-family:'Outfit',system-ui,sans-serif; background:#0c0f0d; min-height:100vh; min-height:100dvh;
   display:flex; align-items:center; justify-content:center; padding:20px; -webkit-font-smoothing:antialiased;
 }
-.aria-auth .stage{position:relative;width:100%;max-width:980px;display:flex;border-radius:26px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.55);min-height:660px;background:#fff}
+/* AUTH-SIZING-FIX: cap the stage to the viewport so it never overflows (no clipping / black-band
+   margins). min-height keeps the comfortable card size on tall screens; max-height wins on short ones. */
+.aria-auth .stage{position:relative;width:100%;max-width:980px;display:flex;border-radius:26px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.55);min-height:660px;max-height:calc(100dvh - 40px);background:#fff}
 
 /* LEFT — full cafe scene */
 .aria-auth .left{position:relative;flex:1.15;overflow:hidden}
@@ -38,7 +40,11 @@
 .aria-auth .speech b{color:var(--green)}
 
 /* RIGHT — form */
-.aria-auth .right{position:relative;flex:1;background:#FBFAF7;padding:46px 40px;display:flex;flex-direction:column;justify-content:center}
+/* AUTH-SIZING-FIX: the form column scrolls internally if its content is taller than the (capped)
+   stage, so Sign in / Forgot password are always reachable on short screens. `safe center` keeps it
+   visually centred when there's room but aligns to the top (scrollable) when it overflows. */
+.aria-auth .right{position:relative;flex:1;background:#FBFAF7;padding:46px 40px;display:flex;flex-direction:column;justify-content:safe center;overflow-y:auto;min-height:0}
+@media(max-height:680px){.aria-auth .right{padding:28px 34px}}
 .aria-auth .tabs{display:flex;gap:3px;background:#F0ECE3;padding:4px;border-radius:11px;margin-bottom:24px}
 .aria-auth .tab{flex:1;text-align:center;padding:10px;border-radius:8px;font-size:.85rem;font-weight:600;color:var(--ink3);cursor:pointer;transition:.2s;border:none;background:transparent;font-family:'Outfit'}
 .aria-auth .tab.active{background:#fff;color:var(--green);box-shadow:0 2px 6px rgba(0,0,0,.08)}
