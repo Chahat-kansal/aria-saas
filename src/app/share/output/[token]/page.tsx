@@ -30,7 +30,7 @@ export default async function ShareOutputPage({ params }: Props) {
 
   const { data: output } = await supabaseAdmin
     .from('aria_task_outputs')
-    .select('id, title, render_html, kind, created_at')
+    .select('id, title, render_html, output_kind, created_at')
     .eq('share_token', token)
     .eq('is_public', true)
     .maybeSingle()
