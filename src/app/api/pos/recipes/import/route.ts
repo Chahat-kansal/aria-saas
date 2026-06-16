@@ -15,6 +15,7 @@ interface ParsedIngredient {
   quantity: number
   unit: string
   cost_per_unit: number | null
+  allergens?: string[] | null
 }
 
 interface ParsedRecipe {
@@ -25,6 +26,19 @@ interface ParsedRecipe {
   total_cost: number | null
   category: string | null
   ingredients: ParsedIngredient[]
+  allergens?: string[] | null
+}
+
+// Common AU allergen vocabulary — keep AI output normalised to these where possible.
+const ALLERGEN_VOCAB = ['gluten', 'wheat', 'dairy', 'milk', 'eggs', 'fish', 'shellfish', 'crustacean', 'tree nuts', 'nuts', 'peanuts', 'soy', 'soya', 'sesame', 'lupin', 'sulphites', 'mustard', 'celery']
+function normaliseAllergens(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  const out = new Set<string>()
+  for (const a of input) {
+    const v = String(a ?? '').trim().toLowerCase()
+    if (v) out.add(v)
+  }
+  return [...out]
 }
 
 // ── CSV parser ──────────────────────────────────────────────────────────────
@@ -57,6 +71,8 @@ function parseCSV(text: string): ParsedRecipe[] {
     const costPerServing = parseFloat(cols[idx('cost_per_serving')] ?? cols[idx('cost')] ?? '') || null
     const totalCost = costPerServing != null && yieldQty != null ? costPerServing * yieldQty : costPerServing
 
+    const allergens = (cols[idx('allergens')] ?? '').split(';').map(s => s.trim().toLowerCase()).filter(Boolean)
+
     results.push({
       name,
       yield_qty: yieldQty,
@@ -64,6 +80,7 @@ function parseCSV(text: string): ParsedRecipe[] {
       notes: null,
       total_cost: totalCost,
       category: cols[idx('category')]?.trim() || null,
+      allergens: allergens.length ? allergens : null,
       ingredients,
     })
   }
@@ -115,8 +132,10 @@ async function aiParseText(text: string, businessId: string): Promise<ParsedReci
   "notes": string|null,
   "total_cost": number|null,
   "category": string|null,
-  "ingredients": [{ "name": string, "quantity": number, "unit": string, "cost_per_unit": number|null }]
+  "allergens": string[],
+  "ingredients": [{ "name": string, "quantity": number, "unit": string, "cost_per_unit": number|null, "allergens": string[] }]
 }]
+For each ingredient, list any food allergens it contains using these lowercase names where they apply: ${ALLERGEN_VOCAB.join(', ')}. The recipe-level "allergens" is the union of all its ingredients' allergens. Use [] when none apply — never invent an allergen that is not implied by the ingredient.
 Text:
 ${text.slice(0, 8000)}
 Return ONLY the JSON array, no other text.`
@@ -135,7 +154,8 @@ async function aiParseImage(base64: string, mediaType: 'image/jpeg' | 'image/png
   if (!process.env.ANTHROPIC_API_KEY) return []
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const prompt = `Look at this recipe image. Extract all recipes you can see. Return a JSON array:
-[{ "name": string, "yield_qty": number|null, "yield_unit": string|null, "notes": string|null, "total_cost": number|null, "category": string|null, "ingredients": [{ "name": string, "quantity": number, "unit": string, "cost_per_unit": number|null }] }]
+[{ "name": string, "yield_qty": number|null, "yield_unit": string|null, "notes": string|null, "total_cost": number|null, "category": string|null, "allergens": string[], "ingredients": [{ "name": string, "quantity": number, "unit": string, "cost_per_unit": number|null, "allergens": string[] }] }]
+For each ingredient list any food allergens it contains using these lowercase names where they apply: ${ALLERGEN_VOCAB.join(', ')}. Recipe-level "allergens" = union of ingredient allergens. Use [] when none apply; never invent one.
 Return ONLY the JSON array.`
 
   const msg = await trackAICall(
@@ -170,24 +190,43 @@ async function matchProduct(name: string, businessId: string): Promise<{ id: str
 interface InsertResult {
   imported: number
   failed: number
+  skipped: number
   recipes: Array<{ name: string; total_cost: number | null; cost_per_serving: number | null; ingredient_count: number }>
 }
 
 async function insertRecipes(businessId: string, parsed: ParsedRecipe[], source: string): Promise<InsertResult> {
-  let imported = 0; let failed = 0
+  let imported = 0; let failed = 0; let skipped = 0
   const insertedRecipes: InsertResult['recipes'] = []
+  // Idempotent within this batch too — don't double-insert if the same name appears twice in one file.
+  const seenThisBatch = new Set<string>()
 
   for (const r of parsed) {
     if (!r.name?.trim()) { failed++; continue }
+    const cleanName = r.name.trim()
+    const nameKey = cleanName.toLowerCase()
+
+    // Idempotent dedupe by name + business_id (case-insensitive, ignoring soft-deleted recipes).
+    if (seenThisBatch.has(nameKey)) { skipped++; continue }
+    const { data: existing } = await supabaseAdmin.from('recipes')
+      .select('id').eq('business_id', businessId).ilike('name', cleanName).is('deleted_at', null).limit(1).maybeSingle()
+    if (existing) { skipped++; seenThisBatch.add(nameKey); continue }
+    seenThisBatch.add(nameKey)
+
     try {
+      // recipe-level allergens: explicit if provided, else union of ingredient allergens
+      const recipeAllergens = r.allergens && r.allergens.length
+        ? normaliseAllergens(r.allergens)
+        : normaliseAllergens(r.ingredients.flatMap(i => i.allergens ?? []))
+
       const { data: recipe, error: recErr } = await supabaseAdmin.from('recipes').insert({
         business_id: businessId,
-        name: r.name.trim(),
+        name: cleanName,
         yield_qty: r.yield_qty ?? null,
         yield_unit: r.yield_unit ?? null,
         notes: r.notes ?? null,
         total_cost: r.total_cost ?? null,
         category: r.category ?? null,
+        allergens: recipeAllergens.length ? recipeAllergens : null,
         source,
         is_active: true,
         created_at: new Date().toISOString(),
@@ -203,6 +242,7 @@ async function insertRecipes(businessId: string, parsed: ParsedRecipe[], source:
           r.ingredients.map(async (ing) => {
             const match = await matchProduct(ing.name, businessId)
             const costPerUnit = ing.cost_per_unit ?? match?.price ?? null
+            const ingAllergens = normaliseAllergens(ing.allergens)
             return {
               recipe_id: recipe.id,
               business_id: businessId,
@@ -212,6 +252,7 @@ async function insertRecipes(businessId: string, parsed: ParsedRecipe[], source:
               unit: ing.unit,
               cost_per_unit: costPerUnit,
               cost_cents: costPerUnit != null ? Math.round(costPerUnit * 100) : null,
+              allergens: ingAllergens.length ? ingAllergens : null,
               wastage_pct: 0,
               created_at: new Date().toISOString(),
             }
@@ -246,7 +287,7 @@ async function insertRecipes(businessId: string, parsed: ParsedRecipe[], source:
     } catch { failed++ }
   }
 
-  return { imported, failed, recipes: insertedRecipes }
+  return { imported, failed, skipped, recipes: insertedRecipes }
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -254,6 +295,25 @@ async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Paste path (spec: "owner pastes/uploads"): a JSON body { text, business_id } is AI-parsed directly.
+  if ((req.headers.get('content-type') ?? '').includes('application/json')) {
+    const body = await req.json().catch(() => ({})) as { text?: string; business_id?: string }
+    const pastedText = (body.text ?? '').trim()
+    const pasteBid = (body.business_id ?? '').trim()
+    if (!pastedText || pastedText.length < 10) return NextResponse.json({ error: 'text required (paste a recipe)' }, { status: 400 })
+    if (!pasteBid) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+    const { data: pbiz } = await supabase.from('businesses').select('id').eq('id', pasteBid).eq('user_id', user.id).maybeSingle()
+    if (!pbiz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const pasteParsed = await aiParseText(pastedText, pasteBid)
+    if (pasteParsed.length === 0) return NextResponse.json({ error: 'No recipes found in pasted text', imported: 0, failed: 0, skipped: 0, recipes: [] })
+    const pasteResult = await insertRecipes(pasteBid, pasteParsed, 'paste')
+    await supabaseAdmin.from('recipe_imports').insert({
+      business_id: pasteBid, file_name: 'pasted text', rows_imported: pasteResult.imported, rows_failed: pasteResult.failed, imported_at: new Date().toISOString(),
+    })
+    return NextResponse.json({ imported: pasteResult.imported, failed: pasteResult.failed, skipped: pasteResult.skipped, recipes: pasteResult.recipes })
+  }
 
   const formData = await req.formData().catch(() => null)
   if (!formData) return NextResponse.json({ error: 'Multipart form required' }, { status: 400 })
@@ -303,7 +363,7 @@ async function _POST(req: Request) {
     imported_at: new Date().toISOString(),
   })
 
-  return NextResponse.json({ imported: result.imported, failed: result.failed, recipes: result.recipes })
+  return NextResponse.json({ imported: result.imported, failed: result.failed, skipped: result.skipped, recipes: result.recipes })
 }
 
 async function _GET(req: Request) {
