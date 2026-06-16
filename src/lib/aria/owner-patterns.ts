@@ -88,34 +88,45 @@ export async function computeOwnerPatterns(businessId: string): Promise<OwnerPat
   return { available: true, sample_size: total, window_days: WINDOW_DAYS, peak_hours, peak_daypart, busiest_day, top_actions, reasoning, computed_at: now }
 }
 
-// Cache-first read (aria_signal_cache 'owner_pattern', 24h TTL). On miss/expiry, recompute and
-// refresh idempotently: delete any prior owner_pattern rows for this business, then insert the fresh
-// one — so a refresh never duplicates rows.
-export async function getOrRefreshOwnerPattern(businessId: string): Promise<OwnerPattern | null> {
+// Generic cache-first read + idempotent refresh for a per-business pattern signal in
+// aria_signal_cache. Shared by AM-1 (owner_pattern) and AM-2 (customer_pattern) so the caching
+// machinery exists once: read the freshest non-expired row; on miss/expiry recompute, delete any
+// prior rows for this (business_id, signal_type) then insert the fresh one (refresh never duplicates).
+export async function getOrRefreshSignalPattern<T>(
+  businessId: string,
+  signalType: string,
+  ttlMs: number,
+  compute: (bid: string) => Promise<T>,
+): Promise<T | null> {
   try {
     const { data: cached } = await supabaseAdmin
       .from('aria_signal_cache')
       .select('payload')
       .eq('business_id', businessId)
-      .eq('signal_type', 'owner_pattern')
+      .eq('signal_type', signalType)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    if (cached?.payload) return cached.payload as OwnerPattern
+    if (cached?.payload) return cached.payload as T
 
-    const pattern = await computeOwnerPatterns(businessId)
+    const result = await compute(businessId)
     await supabaseAdmin.from('aria_signal_cache')
-      .delete().eq('business_id', businessId).eq('signal_type', 'owner_pattern')
+      .delete().eq('business_id', businessId).eq('signal_type', signalType)
     await supabaseAdmin.from('aria_signal_cache').insert({
       business_id: businessId,
-      signal_type: 'owner_pattern',
-      cache_key: 'owner_pattern',
-      payload: pattern as unknown as Record<string, unknown>,
-      expires_at: new Date(Date.now() + TTL_MS).toISOString(),
+      signal_type: signalType,
+      cache_key: signalType,
+      payload: result as unknown as Record<string, unknown>,
+      expires_at: new Date(Date.now() + ttlMs).toISOString(),
     })
-    return pattern
+    return result
   } catch {
     return null
   }
+}
+
+// Cache-first owner pattern (aria_signal_cache 'owner_pattern', 24h TTL), via the shared helper.
+export async function getOrRefreshOwnerPattern(businessId: string): Promise<OwnerPattern | null> {
+  return getOrRefreshSignalPattern(businessId, 'owner_pattern', TTL_MS, computeOwnerPatterns)
 }

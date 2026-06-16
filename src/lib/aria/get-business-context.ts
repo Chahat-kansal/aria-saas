@@ -367,6 +367,28 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         }
       } catch { return null }
     })(),
+    // AM-2 — customer-base visit/purchase pattern (peak visit times, repeat rate, avg basket,
+    // new-vs-returning, frequency) from pos_sales + pos_customers. Cache-first (aria_signal_cache
+    // 'customer_pattern', 24h). Facts only — Aria tailors timing/offers to how customers actually buy.
+    customer_pattern: await (async () => {
+      try {
+        const { getOrRefreshCustomerPattern } = await import('@/lib/aria/customer-patterns')
+        const c = await getOrRefreshCustomerPattern(businessId)
+        if (!c) return null
+        if (!c.available) return { available: false, note: c.reason ?? 'Not enough POS history to infer a customer pattern yet.' }
+        return {
+          peak_visit_daypart: c.peak_visit_daypart,
+          peak_visit_hours: c.peak_visit_hours,
+          busiest_day: c.busiest_day,
+          avg_basket: c.avg_basket,
+          repeat_rate_pct: c.repeat_rate_pct,
+          new_customers: c.new_customers,
+          returning_customers: c.returning_customers,
+          avg_visit_frequency: c.avg_visit_frequency,
+          note: c.reasoning + ' Cite these customer-behaviour facts to tailor timing/offers; never invent them.',
+        }
+      } catch { return null }
+    })(),
     // WIRE-3 — labour cost % vs revenue (the rostering moat). Aria flags over/under-staffing.
     labour: await (async () => {
       try {
