@@ -22,6 +22,7 @@ function agentToCategory(key: AgentKey): string {
     ask_aria_verifier: 'sales', action_planner: 'sales',
     aria_intent_classifier: 'sales',
     heal: 'sales',
+    counterfactual: 'sales',
   }
   return map[key] ?? 'sales'
 }

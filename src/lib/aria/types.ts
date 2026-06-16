@@ -17,8 +17,9 @@ export type AgentKey =
   | 'conversation_summarizer'
   | 'ask_aria_verifier' | 'action_planner' | 'aria_intent_classifier'
   | 'heal'
+  | 'counterfactual'
 
-export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document'
+export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document' | 'forecast'
 
 export interface ProductContext {
   id: string

@@ -38,6 +38,7 @@ import { computeHealthSignals } from '@/lib/aria/health-signals'
 import { computeGoalContext } from '@/lib/aria/goal-context'
 import { getOpenLoops } from '@/lib/aria/open-loops'
 import { computeBenchmarkContext } from '@/lib/aria/benchmark-context'
+import { computeHypothesisContext } from '@/lib/aria/hypothesis-context'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
@@ -693,7 +694,7 @@ Rules:
           const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
           const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
           const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights, gtOpenLoops, gtBenchmark] = await Promise.all([
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights, gtOpenLoops, gtBenchmark, gtHypotheses] = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -724,6 +725,9 @@ Rules:
             // I10 BENCHMARK Part 3: where this business sits vs anonymized industry peers (only when
             // its industry has passed the >=5-business privacy floor; otherwise available:false).
             computeBenchmarkContext(bid).catch(() => null),
+            // I11 COUNTERFACTUAL Part 1: top open hypotheses the nightly engine generated (so the
+            // council can proactively surface testable ideas the owner has not seen).
+            computeHypothesisContext(bid).catch(() => null),
           ])
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
@@ -766,11 +770,13 @@ Rules:
             : []
           // I10 BENCHMARK: industry percentile figures (p25/p50/p75 + own values) → anchors
           const benchmarkAnchors = gtBenchmark?.available ? gtBenchmark._anchor_numbers : []
+          // I11 COUNTERFACTUAL: predicted-impact dollars of surfaced hypotheses → anchors
+          const hypothesisAnchors = gtHypotheses?.available ? gtHypotheses._anchor_numbers : []
           // _anchor_values: the CLEAN numeric set Check 6 + the advisor cleaner validate against
           const anchorValues = [
             revToday, revWeekCal, revLastWeekCal, revSwlm, coveragePct,
             gtConsent.count ?? 0, gtTotalCust.count ?? 0, tuesdayAvg, tuesdayGap, targetWeekly, gtPromoActions.count ?? 0,
-            ...topCustLTVs, ...healthAnchors, ...goalAnchors, ...benchmarkAnchors,
+            ...topCustLTVs, ...healthAnchors, ...goalAnchors, ...benchmarkAnchors, ...hypothesisAnchors,
           ].filter((n): n is number => typeof n === 'number' && isFinite(n))
           // OUTCOME-LOOP-1 (I4) Part 4: shape advice weights for the council. `weight` is the stored
           // [0.3,2.0] multiplier (unchanged — 4 downstream consumers depend on that frame). `success_rate`
@@ -833,6 +839,11 @@ Rules:
             industry_benchmarks_note: gtBenchmark?.available
               ? 'INDUSTRY_BENCHMARKS: industry_benchmarks compares this business to anonymized industry peers (aggregates only). Cite these when relevant. ALWAYS include sample_size when citing a benchmark.'
               : undefined,
+            // I11 COUNTERFACTUAL Part 1: open hypotheses the owner has not acted on yet
+            live_hypotheses: gtHypotheses?.available ? gtHypotheses.live_hypotheses : undefined,
+            live_hypotheses_note: gtHypotheses?.available
+              ? 'live_hypotheses are testable ideas Aria generated from this week\'s data that the owner has NOT yet seen/accepted. If relevant, proactively surface one or two with their predicted_impact_dollars. If the owner asks a "what if I do X" question, call counterfactual_simulate to run a fresh grounded prediction.'
+              : undefined,
             _anchor_values: anchorValues,
           }
           // HEALTH-SIGNALS-1 Part 5: audit what diagnostic facts Aria saw this turn
@@ -849,6 +860,14 @@ Rules:
               business_id: bid, agent_key: 'goal_context', role: 'analysis', provider: 'other', success: true,
               request_summary: bid,
               response_summary: JSON.stringify({ status: gtGoal.status, on_track_pct: gtGoal.on_track_pct, gap_to_target: gtGoal.gap_to_target }).slice(0, 200),
+            })
+          }
+          // I11 COUNTERFACTUAL Part 5: audit the open hypotheses Aria surfaced this turn
+          if (gtHypotheses?.available) {
+            void logAICallSafe({
+              business_id: bid, agent_key: 'hypothesis_surface', role: 'analysis', provider: 'other', success: true,
+              request_summary: bid,
+              response_summary: JSON.stringify({ count: gtHypotheses.live_hypotheses.length, top: gtHypotheses.live_hypotheses.map(h => `${h.category}:${h.predicted_impact_dollars}`) }).slice(0, 200),
             })
           }
           // I10 BENCHMARK Part 5: audit the industry comparison Aria saw this turn

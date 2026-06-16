@@ -109,6 +109,18 @@ export const ARIA_POS_TOOLS: Tool[] = [
     },
   },
   {
+    // I11 COUNTERFACTUAL — live "what if" simulation grounded in this business's real 30-day data.
+    name: 'counterfactual_simulate',
+    description: 'Run a live "what if" simulation for a SPECIFIC action the owner is weighing (e.g. "what would happen if I ran a Tuesday lunch bundle", "should I raise coffee prices 5%", "what if I opened an hour earlier"). Returns a grounded prediction: predicted dollar impact, confidence, and risk, and saves it as a testable hypothesis. Use ONLY for concrete hypothetical / should-I / what-would-happen questions about an action.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        scenario: { type: 'string', description: 'The concrete action/scenario to simulate, in plain language (e.g. "introduce a $12 Tuesday lunch bundle").' },
+      },
+      required: ['scenario'],
+    },
+  },
+  {
     name: 'query_online_orders',
     description: 'Query online order data — count, revenue, fulfilment type, avg order value for a time period.',
     input_schema: {
@@ -1531,6 +1543,14 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
         } catch { /* non-blocking */ }
       })()
       return { days_ahead: daysAhead, from: today, until, trading_hours, upcoming_bookings, staff_on_leave }
+    }
+    case 'counterfactual_simulate': {
+      // I11 COUNTERFACTUAL — delegate to the grounded simulator (logs agent_key='counterfactual'
+      // role='forecast' via callAnthropic; inserts a testable aria_hypotheses row, status='active').
+      const scenario = String((inp as { scenario?: string }).scenario ?? '').trim()
+      if (!scenario) return { error: 'scenario required: describe the what-if action to simulate' }
+      const { simulateCounterfactual } = await import('@/lib/aria/hypothesis/counterfactual')
+      return simulateCounterfactual(businessId, scenario.slice(0, 500))
     }
     case 'query_online_orders': {
       const { period, status } = inp as { period: string; status?: string }
