@@ -250,6 +250,10 @@
     {
       "path": "/api/cron/pattern-memory",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/industry-benchmarks",
+      "schedule": "0 2 * * 0"
     }
   ]
 }
