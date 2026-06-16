@@ -583,25 +583,23 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       try {
         const [seoCtx, kwRankings] = await Promise.all([
           db.from('aria_seo_context').select('health_score, critical_issues, top_keyword, top_keyword_rank, updated_at').eq('business_id', businessId).maybeSingle(),
-          db.from('seo_keyword_rankings').select('keyword, current_position, position_history, last_checked_at').eq('business_id', businessId).order('current_position', { ascending: true }).limit(10),
+          // SEO-4 fix: read the table the keyword-tracking flow actually writes (seo_keywords:
+          // current_rank/previous_rank), not the empty parallel seo_keyword_rankings.
+          db.from('seo_keywords').select('keyword, current_rank, previous_rank, last_checked_at').eq('business_id', businessId).order('current_rank', { ascending: true, nullsFirst: false }).limit(10),
         ])
         const seo = seoCtx.data
-        const rankings = (kwRankings.data ?? []) as Array<{ keyword: string; current_position: number | null; position_history: unknown; last_checked_at: string | null }>
+        const rankings = (kwRankings.data ?? []) as Array<{ keyword: string; current_rank: number | null; previous_rank: number | null; last_checked_at: string | null }>
 
         const top5 = rankings
-          .filter(r => r.current_position != null)
+          .filter(r => r.current_rank != null)
           .slice(0, 5)
-          .map(r => ({ keyword: r.keyword, position: r.current_position }))
+          .map(r => ({ keyword: r.keyword, position: r.current_rank }))
 
         const movers: Array<{ keyword: string; from: number; to: number; change: number }> = []
         for (const r of rankings) {
-          if (r.current_position == null) continue
-          const hist = Array.isArray(r.position_history) ? (r.position_history as Array<{ position: number | null }>) : []
-          if (hist.length < 2) continue
-          const prev = hist[hist.length - 2].position
-          if (prev == null) continue
-          const change = prev - r.current_position
-          if (Math.abs(change) > 3) movers.push({ keyword: r.keyword, from: prev, to: r.current_position, change })
+          if (r.current_rank == null || r.previous_rank == null) continue
+          const change = r.previous_rank - r.current_rank // positive = improved (moved up)
+          if (Math.abs(change) > 3) movers.push({ keyword: r.keyword, from: r.previous_rank, to: r.current_rank, change })
         }
 
         return {
