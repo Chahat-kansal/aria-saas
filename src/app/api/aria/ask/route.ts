@@ -39,6 +39,7 @@ import { computeGoalContext } from '@/lib/aria/goal-context'
 import { getOpenLoops } from '@/lib/aria/open-loops'
 import { computeBenchmarkContext } from '@/lib/aria/benchmark-context'
 import { computeHypothesisContext } from '@/lib/aria/hypothesis-context'
+import { gateSignals } from '@/lib/aria/signal-gate'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
@@ -1264,7 +1265,7 @@ Subscription: ${ctx.subscription_tier ?? 'unknown'}
 ${weeklyTrackingBlock}
 
 FRESH SIGNALS (from monitoring engine, last 30 min):
-${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}
+${gateSignals(ctx.fresh_signals).map(s => `- ${s.signal_type} (${s.payload?.severity ?? 'info'}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}
 
 ADVICE CONFIDENCE — calibrate based on outcome learning only (memories are at top of prompt):
 

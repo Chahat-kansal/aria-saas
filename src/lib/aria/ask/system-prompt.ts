@@ -1,4 +1,5 @@
 import type { AskAriaContext } from './business-context'
+import { gateSignals } from '@/lib/aria/signal-gate'
 
 function fmt(cents: number, currency: string) {
   return `${currency} $${(cents / 100).toFixed(2)}`
@@ -20,11 +21,12 @@ export function buildSystemPrompt(ctx: AskAriaContext): string {
         .join('\n')}`
     : ''
 
-  // Fresh signals from monitoring engine
-  const signalsBlock = ctx.fresh_signals && ctx.fresh_signals.length > 0
-    ? `\n## Live signals Aria detected\n${ctx.fresh_signals
-        .slice(0, 5)
-        .map(s => `- ${s.signal_type}: ${JSON.stringify(s.payload).slice(0, 120)}`)
+  // Fresh signals from monitoring engine — AM-3 gate: only material (severity >= watch), ranked,
+  // capped; baseline patterns + low-signal 'info' excluded (they have their own context blocks).
+  const gatedSignals = gateSignals(ctx.fresh_signals)
+  const signalsBlock = gatedSignals.length > 0
+    ? `\n## Live signals Aria detected\n${gatedSignals
+        .map(s => `- ${s.signal_type}${s.payload?.severity ? ` (${s.payload.severity})` : ''}: ${JSON.stringify(s.payload).slice(0, 120)}`)
         .join('\n')}`
     : ''
 
