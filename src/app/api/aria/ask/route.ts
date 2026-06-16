@@ -1820,27 +1820,39 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   const action = extractAction(rawResponse)
   let cleanResponse = stripAction(rawResponse)
 
-  // Phase 6: Haiku verification pass for complex Sonnet/Opus responses
+  // I8 SELF-VERIFY — Aria self-checks complex non-haiku responses BEFORE emitting (moved out of the
+  // fire-and-forget waitUntil so a flagged contradiction can actually shape the output). The reviewer
+  // FLAGS contradictions only — it never restates/asserts numbers, so nothing here enters _anchor_values.
+  // On a CORRECTION verdict: prepend a light, traceable hedge (option c — surgical, lowest cost; never a
+  // silent delete) and log the contradiction. Complementary to V2 Check 6 / advisor_guard (which run later).
   if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && cleanResponse.length > 100) {
-    waitUntil((async () => {
-      try {
-        const verifierResult = await callAnthropic<{ verdict: string }>(
-          {
-            model: 'haiku',
-            systemPrompt: 'You are a factual accuracy reviewer for an AI business assistant. Given the business context, question, and response — check only for clear numerical errors or invented facts. If accurate, respond "OK". If you find an error, respond "CORRECTION: [brief description]". Be lenient — only flag obvious factual errors.',
-            userPrompt: 'Context: revenue this month AUD ' + Math.round(ctx.revenue_month_cents / 100) + ', top products: ' + (ctx.top_products_month ?? []).slice(0, 3).map((p: { name: string }) => p.name).join(', ') + '\nQuestion: ' + message.slice(0, 200) + '\nResponse: ' + cleanResponse.slice(0, 800),
-            maxTokens: 150,
-            businessId: bid,
-            agentKey: 'ask_aria_verifier',
-            role: 'classify',
-          },
-          { verdict: 'OK' },
-        )
-        if (verifierResult.raw.startsWith('CORRECTION:')) {
-          console.warn('[aria/verifier] factual correction flagged:', verifierResult.raw, 'for question:', message.slice(0, 80))
-        }
-      } catch (e) { console.error('[aria/ask] verifier failed (non-blocking):', e) }
-    })())
+    try {
+      const verifierResult = await callAnthropic<{ verdict: string }>(
+        {
+          model: 'haiku',
+          systemPrompt: 'You are a factual accuracy reviewer for an AI business assistant. Given the business context, question, and response — check only for clear numerical errors or invented facts. If accurate, respond "OK". If you find an error, respond "CORRECTION: [brief description]". Be lenient — only flag obvious factual errors. Do NOT restate or assert any numbers yourself.',
+          userPrompt: 'Context: revenue this month AUD ' + Math.round(ctx.revenue_month_cents / 100) + ', top products: ' + (ctx.top_products_month ?? []).slice(0, 3).map((p: { name: string }) => p.name).join(', ') + '\nQuestion: ' + message.slice(0, 200) + '\nResponse: ' + cleanResponse.slice(0, 800),
+          maxTokens: 150,
+          businessId: bid,
+          agentKey: 'ask_aria_verifier',
+          role: 'analysis', // REWRITE: role='analysis'
+        },
+        { verdict: 'OK' },
+      )
+      const contradiction = verifierResult.raw.startsWith('CORRECTION:') ? verifierResult.raw.trim().slice(0, 200) : null
+      if (contradiction) {
+        // Option (c): light hedge prepended before emission — visible + traceable, no silent deletion.
+        cleanResponse = 'I want to double-check one figure here before you rely on it. ' + cleanResponse
+        console.warn('[aria/verifier] self-verify flagged:', contradiction, 'for question:', message.slice(0, 80))
+      }
+      // PART 3 — log every invocation (no table writes beyond the audit log).
+      void logAICallSafe({
+        business_id: bid, agent_key: 'ask_aria_verifier', role: 'analysis', provider: 'other', success: true,
+        request_summary: 'verify_synthesis',
+        response_summary: JSON.stringify({ ok: !contradiction, contradiction_count: contradiction ? 1 : 0 }).slice(0, 200),
+        learning_signal: contradiction ? `self_verify:${contradiction}`.slice(0, 100) : 'self_verify:passed',
+      })
+    } catch (e) { console.error('[aria/ask] self-verify failed (non-blocking):', e) }
   }
   // Tool call context is logged separately, NOT appended to user-visible message
   if (toolResult.tool_calls.length > 0) {
