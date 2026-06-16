@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { skillEnabledForIndustry } from '@/lib/aria/industry-skills'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -58,6 +59,10 @@ async function ensureBuiltInSeeded(bid: string) {
     .select('id', { count: 'exact', head: true })
     .eq('business_id', bid).eq('built_in', true)
   if ((count ?? 0) > 0) return
+  // I6 — enable by default per the business's industry (universal skills always; industry-specific
+  // where matched; null industry → only universal). Owner can still toggle via PUT.
+  const { data: biz } = await supabaseAdmin.from('businesses').select('industry').eq('id', bid).maybeSingle()
+  const industry = (biz?.industry as string | null) ?? null
   await supabaseAdmin.from('aria_skills').insert(BUILT_IN_SKILLS.map(s => ({
     business_id: bid,
     name: s.name,
@@ -65,7 +70,7 @@ async function ensureBuiltInSeeded(bid: string) {
     description: s.description,
     system_prompt_addition: s.system_prompt_addition,
     built_in: true,
-    enabled: false, // start all off — owner opts in
+    enabled: skillEnabledForIndustry(s.name, industry),
   })))
 }
 

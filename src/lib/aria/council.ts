@@ -7,6 +7,7 @@ import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './d
 import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSummariesForPrompt } from './memory/recall'
 import { stripUngroundedNumbers, extractNumbers } from './response-validator'
 import { logAICallSafe } from './log-ai-call'
+import { buildSkillInjection, type EnabledSkill } from './industry-skills'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -911,12 +912,33 @@ export async function runAriaCouncil(
       bi ? runContextBrain(bi, weekStart, businessId).catch((): null => null) : Promise.resolve(null)
   )
 
+  // I6 INDUSTRY-KNOWLEDGE Part 3/5 — each advisor adopts the owner-enabled expert lenses mapped to
+  // its role (≤2 per advisor). Fetch once; inject system_prompt_addition into the brain prompts.
+  let enabledSkills: EnabledSkill[] = []
+  try {
+    const { data: sk } = await supabaseAdmin.from('aria_skills')
+      .select('name, system_prompt_addition').eq('business_id', businessId).eq('enabled', true)
+    enabledSkills = ((sk ?? []) as Array<{ name: string; system_prompt_addition: string | null }>)
+      .filter(s => s.system_prompt_addition).map(s => ({ name: s.name, system_prompt_addition: s.system_prompt_addition as string }))
+  } catch (e) { console.error('[council] skill fetch failed (non-blocking):', (e as Error).message) }
+  const growthSkills   = buildSkillInjection('growth', enabledSkills)
+  const riskSkills     = buildSkillInjection('risk', enabledSkills)
+  const strategySkills = buildSkillInjection('strategy', enabledSkills)
+  const contextSkills  = buildSkillInjection('context', enabledSkills)
+  const injectedNames = [...new Set([...growthSkills.names, ...riskSkills.names, ...strategySkills.names, ...contextSkills.names])]
+  if (injectedNames.length > 0) {
+    void logAICallSafe({
+      business_id: businessId, agent_key: 'skill_inject', role: 'classify', provider: 'other', success: true,
+      response_summary: JSON.stringify({ advisors: { growth: growthSkills.names, risk: riskSkills.names, strategy: strategySkills.names, context: contextSkills.names }, skills_injected: injectedNames }).slice(0, 200),
+    })
+  }
+
   // Run all 6 in parallel — 4 brains + bizInfo fetch + gemini chain
   const [growth, risk, strategy, context, ctxOutput, bizInfo] = await Promise.all([
-    callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion),   userPrompt, 'growth',   businessId, 18000, activeQuestion.slice(0, 100)),
-    callBrain(client, HAIKU, buildRiskPrompt(activeQuestion),     userPrompt, 'risk',     businessId, 18000, activeQuestion.slice(0, 100)),
-    callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion), userPrompt, 'strategy', businessId, 18000, activeQuestion.slice(0, 100)),
-    callBrain(client, HAIKU, CONTEXT_PROMPT,                      userPrompt, 'context',  businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion)   + growthSkills.text,   userPrompt, 'growth',   businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, buildRiskPrompt(activeQuestion)     + riskSkills.text,     userPrompt, 'risk',     businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion) + strategySkills.text, userPrompt, 'strategy', businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(client, HAIKU, CONTEXT_PROMPT                      + contextSkills.text,  userPrompt, 'context',  businessId, 18000, activeQuestion.slice(0, 100)),
     geminiPromise,
     bizInfoPromise,
   ])
