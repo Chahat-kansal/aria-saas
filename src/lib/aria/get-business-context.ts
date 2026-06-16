@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { resolveBusinessTimezone } from '@/lib/aria/business-timezone'
 import { getWeatherContext } from './get-weather-context'
 import { CANONICAL_COLS } from './schema-registry'
 import { getEffectivePlan } from '@/lib/plans/resolve-plan'
@@ -9,6 +10,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const supabase = createServerSupabaseClient()
   const db = supabaseAdmin
   const now = new Date()
+  // TZ-3: AU-local date boundaries in THIS business's timezone (defaults to Melbourne).
+  const tz = await resolveBusinessTimezone(businessId)
 
   const d7  = new Date(now.getTime() - 7  * 86400000).toISOString()
   const d30 = new Date(now.getTime() - 30 * 86400000).toISOString()
@@ -22,14 +25,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
 
   // SWLM-1: "Same week last month" = the CALENDAR week 4 weeks ago (Mon 00:00 AEST → Mon),
   // replacing the rolling d-35/d-28 window whose request-time anchoring caused per-request drift
-  const swlmMonShifted = startOfWeekAEST() // shifted Date — ISO date-part IS the AEST Monday
-  const thisMonIso = toAESTStart(swlmMonShifted.toISOString().slice(0, 10))
+  const swlmMonShifted = startOfWeekAEST(tz) // shifted Date — ISO date-part IS the local Monday
+  const thisMonIso = toAESTStart(swlmMonShifted.toISOString().slice(0, 10), tz)
   const d35 = new Date(new Date(thisMonIso).getTime() - 28 * 86400000).toISOString() // SWLM window start (Mon, 4 weeks ago)
   const d28 = new Date(new Date(thisMonIso).getTime() - 21 * 86400000).toISOString() // SWLM window end (Mon, 3 weeks ago)
   const swlmMonStr = new Date(swlmMonShifted.getTime() - 28 * 86400000).toISOString().slice(0, 10)
   const swlmSunStr = new Date(swlmMonShifted.getTime() - 22 * 86400000).toISOString().slice(0, 10)
 
-  const monthStart = toAESTStart(todayAEST().slice(0, 7) + '-01') // TZ-1: AEST month start
+  const monthStart = toAESTStart(todayAEST(tz).slice(0, 7) + '-01', tz) // local month start
 
   const [
     business,
@@ -119,7 +122,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     // WEEK-1: "this week" = calendar week (Monday 00:00 AEST → now) for week_tracking / on-track checks
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
-      .gte('created_at', toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
+      .gte('created_at', toAESTStart(startOfWeekAEST(tz).toISOString().slice(0, 10), tz))
       .neq('status', 'voided'),
   ])
 
@@ -181,7 +184,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     ? ((posConsentCountRaw as any).value?.count ?? 0)
     : null
 
-  const todayStr = todayAEST() // TZ-1: AEST calendar date, was UTC date
+  const todayStr = todayAEST(tz) // local calendar date in this business's timezone
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allPromos = (promotionsRaw as any).status === 'fulfilled'
     ? ((promotionsRaw as any).value?.data ?? []) as Array<{
