@@ -98,6 +98,17 @@ export const ARIA_POS_TOOLS: Tool[] = [
     },
   },
   {
+    // I7 TOOL-USE — read-only calendar: trading hours + upcoming bookings + staff on leave.
+    name: 'query_calendar',
+    description: 'Look ahead at the schedule: trading hours, upcoming bookings, and staff on leave over the next N days. Read-only. Use when the owner asks "what\'s coming up", who is rostered/away, or whether they\'re open on a day.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        days_ahead: { type: 'integer', minimum: 1, maximum: 90, description: 'How many days ahead to look (default 14).' },
+      },
+    },
+  },
+  {
     name: 'query_online_orders',
     description: 'Query online order data — count, revenue, fulfilment type, avg order value for a time period.',
     input_schema: {
@@ -433,7 +444,10 @@ async function querySales(
     .from('pos_sales')
     .select('id, total_amount, payment_method, served_by, created_at, status')
     .eq('business_id', businessId)
-    .neq('status', 'voided')
+    // I7 TOOL-USE revenue rule: completed sales only (dollars). 'completed' is a strict subset of
+    // non-voided that also excludes refunded — a refunded sale must NOT count as revenue. Matches the
+    // WIRE-4 P&L convention. (CLAUDE.md RULE 6's `!= voided` is the looser anti-void guard.)
+    .eq('status', 'completed')
     .gte('created_at', `${input.date_from}T00:00:00`)
     .lte('created_at', `${input.date_to}T23:59:59`)
     .order('created_at');
@@ -1482,6 +1496,41 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       const confirmed = rows.filter(r => (r as Record<string,unknown>).status === 'confirmed').length
       const totalGuests = rows.reduce((s, r) => s + (Number((r as Record<string,unknown>).party_size) || 1), 0)
       return { total_bookings: total, confirmed, no_shows: noShows, no_show_rate: total > 0 ? `${Math.round(noShows/total*100)}%` : '0%', total_guests: totalGuests, period }
+    }
+    case 'query_calendar': {
+      // I7 TOOL-USE — READ-ONLY. business_id-scoped on every query; selects only, never writes.
+      const daysAhead = Math.max(1, Math.min(90, Math.round(Number((inp as { days_ahead?: number }).days_ahead ?? 14))))
+      const today = todayAEST() // AEST date (YYYY-MM-DD)
+      const until = new Date(Date.now() + daysAhead * 86400000).toISOString().slice(0, 10)
+      const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      const [hoursRes, bookingsRes, leaveRes] = await Promise.all([
+        supabaseAdmin.from('business_hours').select('day_of_week, open_time, close_time, is_closed').eq('business_id', businessId).order('day_of_week'),
+        supabaseAdmin.from('bookings').select('booking_date, status, customer_name, party_size').eq('business_id', businessId).gte('booking_date', today).lte('booking_date', until).order('booking_date').limit(50),
+        supabaseAdmin.from('staff_leave').select('staff_name, leave_type, start_date, end_date, status').eq('business_id', businessId).lte('start_date', until).gte('end_date', today).limit(50),
+      ])
+      const trading_hours = (hoursRes.data ?? []).map(h => {
+        const hr = h as Record<string, unknown>
+        return { day: DOW[Number(hr.day_of_week) % 7] ?? String(hr.day_of_week), closed: !!hr.is_closed, open: hr.is_closed ? null : hr.open_time, close: hr.is_closed ? null : hr.close_time }
+      })
+      const upcoming_bookings = (bookingsRes.data ?? []).map(b => {
+        const br = b as Record<string, unknown>
+        return { date: br.booking_date, status: br.status, customer: br.customer_name ?? null, party_size: br.party_size ?? null }
+      })
+      const staff_on_leave = (leaveRes.data ?? []).map(l => {
+        const lr = l as Record<string, unknown>
+        return { staff: lr.staff_name ?? null, type: lr.leave_type, from: lr.start_date, to: lr.end_date, status: lr.status }
+      })
+      // Fire-and-forget audit (agent_key=tool name, role 'data', provider 'other') — matches logGuardEvent.
+      void (async () => {
+        try {
+          await supabaseAdmin.from('aria_ai_calls').insert({
+            business_id: businessId, agent_key: 'query_calendar', provider: 'other', role: 'data', success: true,
+            request_summary: `days_ahead:${daysAhead}`,
+            response_summary: JSON.stringify({ hours: trading_hours.length, bookings: upcoming_bookings.length, on_leave: staff_on_leave.length }).slice(0, 200),
+          })
+        } catch { /* non-blocking */ }
+      })()
+      return { days_ahead: daysAhead, from: today, until, trading_hours, upcoming_bookings, staff_on_leave }
     }
     case 'query_online_orders': {
       const { period, status } = inp as { period: string; status?: string }
