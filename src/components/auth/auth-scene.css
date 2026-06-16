@@ -1,0 +1,71 @@
+/* AUTH-BRAND-FIX — approved unified auth scene (prompts/aria-auth-scene-APPROVED.html), ported
+   faithfully and scoped under .aria-auth so it never leaks into the rest of the app. */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Cormorant:ital,wght@0,500;0,600;1,500;1,600&display=swap');
+
+.aria-auth {
+  --sage:#7FB897; --green:#2D5240; --green2:#3a6b50; --sand:#C9A37A; --amber:#BA7517; --red:#E24B4A;
+  --ink:#1A1D23; --ink2:#4A5568; --ink3:#8896A5; --ink4:#B0BEC5; --border:#E8E2D6;
+  font-family:'Outfit',system-ui,sans-serif; background:#0c0f0d; min-height:100vh;
+  display:flex; align-items:center; justify-content:center; padding:20px; -webkit-font-smoothing:antialiased;
+}
+.aria-auth .stage{position:relative;width:100%;max-width:980px;display:flex;border-radius:26px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.55);min-height:660px;background:#fff}
+
+/* LEFT — full cafe scene */
+.aria-auth .left{position:relative;flex:1.15;overflow:hidden}
+.aria-auth .scene-layer{position:absolute;inset:0;overflow:hidden}
+.aria-auth .scene{position:absolute;inset:-4%;width:108%;height:108%;object-fit:cover;object-position:center;opacity:0;transition:opacity .6s ease;will-change:opacity,transform}
+.aria-auth .scene.on{opacity:1}
+.aria-auth .scene-zoom{animation:ariaAuthKenburns 18s ease-in-out infinite alternate}
+@keyframes ariaAuthKenburns{0%{transform:scale(1) translate(0,0)}100%{transform:scale(1.06) translate(-1%,-1%)}}
+.aria-auth .scene-overlay{position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(180deg,rgba(45,82,64,.05) 0%,transparent 30%,transparent 60%,rgba(45,82,64,.25) 100%),
+  radial-gradient(ellipse 80% 60% at 50% 40%,transparent 40%,rgba(20,30,24,.18) 100%)}
+
+.aria-auth .brand{position:absolute;top:28px;left:28px;display:flex;align-items:center;gap:10px;z-index:5}
+.aria-auth .brand-mark{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--sage),var(--green));display:grid;place-items:center;box-shadow:0 8px 22px rgba(0,0,0,.3)}
+.aria-auth .brand-mark::after{content:"✦";color:#fff;font-size:.9rem}
+.aria-auth .brand-name{font-size:1.2rem;font-weight:300;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.3)}
+.aria-auth .brand-name b{font-weight:700}
+.aria-auth .tagline{position:absolute;top:80px;left:28px;z-index:5;max-width:280px}
+.aria-auth .tagline h2{font-family:'Cormorant';font-style:italic;font-weight:600;font-size:1.6rem;color:#fff;line-height:1.18;text-shadow:0 2px 14px rgba(0,0,0,.35)}
+.aria-auth .tagline h2 .a{color:#cde6d6}
+
+.aria-auth .speech{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);z-index:6;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);
+  border-radius:18px 18px 18px 5px;padding:12px 18px;font-size:.85rem;color:var(--ink);font-weight:500;
+  box-shadow:0 14px 34px rgba(0,0,0,.28);max-width:80%;text-align:center;line-height:1.4;transition:opacity .35s,transform .35s}
+.aria-auth .speech.hide{opacity:0;transform:translateX(-50%) translateY(6px)}
+.aria-auth .speech b{color:var(--green)}
+
+/* RIGHT — form */
+.aria-auth .right{position:relative;flex:1;background:#FBFAF7;padding:46px 40px;display:flex;flex-direction:column;justify-content:center}
+.aria-auth .tabs{display:flex;gap:3px;background:#F0ECE3;padding:4px;border-radius:11px;margin-bottom:24px}
+.aria-auth .tab{flex:1;text-align:center;padding:10px;border-radius:8px;font-size:.85rem;font-weight:600;color:var(--ink3);cursor:pointer;transition:.2s;border:none;background:transparent;font-family:'Outfit'}
+.aria-auth .tab.active{background:#fff;color:var(--green);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.aria-auth .ftitle{font-family:'Cormorant';font-style:italic;font-size:1.75rem;font-weight:600;color:var(--ink)}
+.aria-auth .fsub{font-size:.84rem;color:var(--ink3);margin-bottom:22px}
+.aria-auth .gbtn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:11px;background:#fff;font-family:'Outfit';font-size:.86rem;font-weight:600;color:var(--ink2);cursor:pointer;transition:.15s}
+.aria-auth .gbtn:hover{border-color:var(--sage);background:#FAFCFA}
+.aria-auth .gi{width:17px;height:17px;border-radius:50%;background:conic-gradient(from -45deg,#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0)}
+.aria-auth .dv{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink4);font-size:.74rem}
+.aria-auth .dv::before,.aria-auth .dv::after{content:"";flex:1;height:1px;background:var(--border)}
+.aria-auth .field{margin-bottom:15px}
+.aria-auth .fl{display:block;font-size:.7rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.aria-auth .fw{position:relative}
+.aria-auth .fin{width:100%;padding:12px 38px 12px 14px;background:#fff;border:1.5px solid var(--border);border-radius:10px;font-family:'Outfit';font-size:.9rem;color:var(--ink);outline:none;transition:.15s}
+.aria-auth .fin:focus{border-color:var(--sage);background:#fff;box-shadow:0 0 0 4px rgba(127,184,151,.12)}
+.aria-auth .fin.valid{border-color:var(--sage);background:#F4FAF6}
+.aria-auth .fin.error{border-color:var(--red);background:#FDF5F5}
+.aria-auth .fic{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:.85rem;opacity:0;transition:.15s;pointer-events:none}
+.aria-auth .fic.show{opacity:1}.aria-auth .fic.ok{color:var(--green)}.aria-auth .fic.err{color:var(--red)}
+.aria-auth .fhint{font-size:.7rem;max-height:0;overflow:hidden;color:var(--red);transition:.2s}
+.aria-auth .fhint.show{max-height:30px;margin-top:5px}
+.aria-auth .cta{width:100%;padding:13px;border-radius:11px;border:none;background:var(--green);color:#fff;font-family:'Outfit';font-size:.9rem;font-weight:600;cursor:pointer;transition:.15s;box-shadow:0 6px 18px rgba(45,82,64,.25);margin-top:6px}
+.aria-auth .cta:hover:not(:disabled){background:var(--green2);transform:translateY(-1px)}
+.aria-auth .cta:disabled{background:var(--ink4);box-shadow:none;cursor:not-allowed}
+.aria-auth .errbox{background:rgba(226,75,74,.08);border:1px solid rgba(226,75,74,.25);border-radius:10px;padding:10px 14px;color:var(--red);font-size:.8rem;margin-top:14px}
+.aria-auth .foot{text-align:center;margin-top:18px;font-size:.82rem;color:var(--ink3)}
+.aria-auth .foot a{color:var(--green);font-weight:600;text-decoration:none;cursor:pointer}
+.aria-auth .staff{text-align:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:.78rem;color:var(--ink3)}
+.aria-auth .staff a{color:var(--green);text-decoration:none;font-weight:500}
+@media(max-width:820px){.aria-auth .left{display:none}.aria-auth .stage{max-width:440px}}
