@@ -18,8 +18,17 @@ const PERCENT_OUT = /[0-9]+(\.[0-9]+)?\s?%/
 
 type HealReason = 'malformed_json' | 'wrong_block_type' | 'empty_on_data_question' | 'ungrounded_numeric' | 'fabrication_stripped'
 
-// GROUNDING-TEETH Check 5 / SUMMARIZER-FIX-1 shared scanner: risky numeric tokens + corpus parsing
-export const RISKY_NUMERIC_RE = /(\$\s?[\d,]+(?:\.\d+)?)|(\b\d{1,3}(?:\.\d+)?\s?%)|(\b\d+(?:\.\d+)?\s?[x×]\s?(?:higher|lower|more|less))/gi
+// GROUNDING-TEETH Check 5 / SUMMARIZER-FIX-1 shared scanner: risky numeric tokens + corpus parsing.
+// V3 widens the format coverage so a fabricated number can't slip through in a shape V1/V2 missed:
+//   1. $-currency ($1,234.50)                            [V1]
+//   2. word-form dollars (480 dollars) — V3
+//   3. percentages (4.8%)                                [V1]
+//   4. multiplier comparisons (3x higher/lower/more/less) [V1]
+//   5. bare COUNT + data-noun (23 customers / 45 orders) — V3. Restricted to >=10 (\d{2,}) and a
+//      genuine data noun so presentational list-sizes ("top 3 products") are NOT swept in.
+// Every matched token is still validated against the CLEAN ground-truth anchors / source corpus —
+// grounded counts (e.g. "19 customers" when 19 is an anchor) pass; fabricated ones are stripped.
+export const RISKY_NUMERIC_RE = /(\$\s?[\d,]+(?:\.\d+)?)|(\b\d[\d,]*(?:\.\d+)?\s?dollars?\b)|(\b\d{1,3}(?:\.\d+)?\s?%)|(\b\d+(?:\.\d+)?\s?[x×]\s?(?:higher|lower|more|less))|(\b\d{2,}(?:,\d{3})*\s?(?:customers?|sales|orders?|transactions?|bookings?|reviews?|visits?|sign[\s-]?ups?))/gi
 
 export function extractNumbers(corpus: string): number[] {
   const matches = corpus.match(/\d[\d,]*(?:\.\d+)?/g) ?? []
