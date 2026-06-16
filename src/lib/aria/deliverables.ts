@@ -763,12 +763,22 @@ export async function generateDeliverable(
     ? { metric: resolvedMetric, ...singleData }
     : dashData as unknown as Record<string, unknown>
 
+  // aria_task_outputs.output_kind CHECK only allows [dashboard, comparison, ranked_list, scorecard].
+  // We render two richer kinds (single_answer, trend) — persist them under their nearest valid bucket
+  // so they no longer fail the CHECK (single-answer KPI card → scorecard; trend chart → dashboard).
+  // render_html holds the true visualisation; the returned result.kind keeps the real kind.
+  const PERSIST_KIND: Record<DeliverableKind, 'dashboard' | 'comparison' | 'ranked_list' | 'scorecard'> = {
+    dashboard: 'dashboard', comparison: 'comparison', ranked_list: 'ranked_list',
+    scorecard: 'scorecard', single_answer: 'scorecard', trend: 'dashboard',
+  }
+  const persistedKind = PERSIST_KIND[resolvedKind] ?? 'dashboard'
+
   const { data: inserted, error } = await supabaseAdmin.from('aria_task_outputs').insert({
     business_id: businessId,
     conversation_id: conversationId,
     title: resolvedTitle,
     task_prompt: taskPrompt,
-    output_kind: resolvedKind,
+    output_kind: persistedKind,
     render_html: html,
     data_snapshot: snapshot as Record<string, unknown>,
     status: 'ready',
