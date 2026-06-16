@@ -254,6 +254,10 @@
     {
       "path": "/api/cron/industry-benchmarks",
       "schedule": "0 2 * * 0"
+    },
+    {
+      "path": "/api/cron/causal-analysis",
+      "schedule": "0 4 * * *"
     }
   ]
 }
