@@ -879,7 +879,7 @@ export default function AgentsPage() {
                       {p.conflicts_with && p.conflicts_with.length > 0 && (
                         <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
                           <span style={{ color: '#EF4444', fontSize: 12 }}>
-                            ⚠ Conflicts with {p.conflicts_with.join(', ')} agent — council chose this because {p.council_reasoning ?? 'higher projected impact'}
+                            ⚠ Conflicts with {p.conflicts_with.map(ref => council.proposals.find(pp => pp.id === ref)?.agent_type ?? ref).join(', ')} agent — council chose this because {p.council_reasoning ?? 'higher projected impact'}
                           </span>
                         </div>
                       )}

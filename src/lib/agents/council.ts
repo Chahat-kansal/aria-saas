@@ -104,6 +104,12 @@ function getUrgency(impactDollars: number): 'critical' | 'high' | 'normal' | 'lo
   return 'low'
 }
 
+// I9 DEEP-REASONING: conflicts_with / synergises_with store the *proposal id* (uuid) of the
+// conflicting/synergising proposal — a precise reference, not the ambiguous agent_type string
+// (an agent can emit several proposals). Display/planner surfaces resolve id → agent_type for
+// readability (see runCouncilSession grouped context + dashboard agents page). The one exception
+// is the RULE_2 reorder→inventory_financing hint, which points at an agent that did NOT propose
+// today, so there is no proposal id to reference — that entry stays the agent_type string.
 function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription[] {
   const conflicts: ConflictDescription[] = []
 
@@ -121,8 +127,8 @@ function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription
           rule: 'RULE_1',
           description: 'Pricing agent raises price while flash revenue agent runs discount on same product',
         })
-        pc.conflicts_with = [...(pc.conflicts_with ?? []), d.agent_type]
-        d.conflicts_with = [...(d.conflicts_with ?? []), pc.agent_type]
+        pc.conflicts_with = [...(pc.conflicts_with ?? []), d.id]
+        d.conflicts_with = [...(d.conflicts_with ?? []), pc.id]
       }
     }
   }
@@ -158,8 +164,8 @@ function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription
           rule: 'RULE_3',
           description: 'Menu agent wants to deprioritise product while waste agent wants to promote it',
         })
-        mh.conflicts_with = [...(mh.conflicts_with ?? []), wp.agent_type]
-        wp.conflicts_with = [...(wp.conflicts_with ?? []), mh.agent_type]
+        mh.conflicts_with = [...(mh.conflicts_with ?? []), wp.id]
+        wp.conflicts_with = [...(wp.conflicts_with ?? []), mh.id]
       }
     }
   }
@@ -172,8 +178,8 @@ function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription
       const cSeg = String(c.proposal_data.segment ?? c.proposal_data.customer_segment ?? '')
       const fSeg = String(f.proposal_data.segment ?? f.proposal_data.customer_segment ?? '')
       if (cSeg && fSeg && cSeg === fSeg) {
-        c.synergises_with = [...(c.synergises_with ?? []), f.agent_type]
-        f.synergises_with = [...(f.synergises_with ?? []), c.agent_type]
+        c.synergises_with = [...(c.synergises_with ?? []), f.id]
+        f.synergises_with = [...(f.synergises_with ?? []), c.id]
         conflicts.push({
           proposal_ids: [c.id, f.id],
           rule: 'RULE_4',
@@ -194,8 +200,8 @@ function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription
           rule: 'RULE_5',
           description: 'Labour agent says labour % too high but schedule agent wants to add a shift',
         })
-        la.conflicts_with = [...(la.conflicts_with ?? []), as_.agent_type]
-        as_.conflicts_with = [...(as_.conflicts_with ?? []), la.agent_type]
+        la.conflicts_with = [...(la.conflicts_with ?? []), as_.id]
+        as_.conflicts_with = [...(as_.conflicts_with ?? []), la.id]
       }
     }
   }
@@ -343,6 +349,9 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
     agentPerf[d.agent_type] = (agentPerf[d.agent_type] ?? 0) + 1
   }
 
+  // conflicts_with now holds proposal ids — resolve them to agent_type names so the planner
+  // reads "pricing", not an opaque uuid (the readable conflict descriptions also flow in below).
+  const idToAgentType = new Map(proposals.map(p => [p.id, p.agent_type]))
   const grouped: Record<string, unknown[]> = {}
   for (const p of proposals) {
     if (!grouped[p.agent_type]) grouped[p.agent_type] = []
@@ -353,7 +362,7 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
       impact_dollars: p.projected_impact_dollars,
       confidence: p.confidence,
       urgency: p.urgency,
-      conflicts: p.conflicts_with,
+      conflicts: (p.conflicts_with ?? []).map(ref => idToAgentType.get(ref) ?? ref),
     })
   }
 
