@@ -8,6 +8,7 @@ import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSu
 import { stripUngroundedNumbers, extractNumbers } from './response-validator'
 import { logAICallSafe } from './log-ai-call'
 import { buildSkillInjection, type EnabledSkill } from './industry-skills'
+import { detectCouncilConflicts, formatConflictsForSynthesis } from './council-conflicts'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +23,8 @@ interface BrainOutput {
   observations: string[]
   recommendations: string[]
   confidence: 'high' | 'medium' | 'low'
+  plan?: string            // I9: advisor's PLAN step (what the question needs)
+  verify_findings?: string // I9: advisor's VERIFY step (what the data says)
   raw: string
   succeeded: boolean
 }
@@ -161,6 +164,15 @@ async function getRecentLearningContext(businessId: string): Promise<string> {
 // Each brain has a single job and receives the owner's actual question.
 // They return JSON only. No prose, no preamble.
 
+// I9 DEEP-REASONING — each advisor reasons plan→verify→conclude inside its turn (better inference
+// at bounded output cost). Appended to each advisor prompt; adds plan + verify_findings to the JSON.
+const THREE_STEP_REASONING =
+  'Reason in 3 steps BEFORE concluding:\n' +
+  '1) PLAN — what is the question really asking, and which specific facts do you need?\n' +
+  '2) VERIFY — look at the relevant numbers in the business data; what do they actually say? Cite them.\n' +
+  '3) CONCLUDE — only then write your observations + recommendations.\n' +
+  'Put a one-sentence "plan" and a short "verify_findings" (what the data showed) in your JSON.\n'
+
 function buildGrowthPrompt(question: string): string {
   return 'You are the Growth Advisor in Aria\'s council. Your ONLY job is revenue growth opportunities.\n' +
     'Owner question: "' + question + '"\n\n' +
@@ -178,8 +190,9 @@ function buildGrowthPrompt(question: string): string {
     '- Plain English. No jargon. Say "your top seller" not "revenue concentration from 1 SKU".\n' +
     '- PROMOTIONS: if promotions.scheduled contains a promotion, recommend activating it as a future opportunity — do NOT say it is already working or driving revenue.\n' +
     '- CUSTOMERS: use customers.pos_customer_count as the customer count — never guess or default to zero.\n\n' +
+    THREE_STEP_REASONING +
     'Return ONLY valid JSON:\n' +
-    '{"observations":["specific finding with number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low"}'
+    '{"plan":"one sentence","verify_findings":"what the numbers showed","observations":["specific finding with number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low"}'
 }
 
 function buildRiskPrompt(question: string): string {
@@ -197,8 +210,9 @@ function buildRiskPrompt(question: string): string {
     '- Distinguish between structural problems vs one-off blips\n' +
     '- Be precise about severity — not everything is critical\n' +
     '- Write like a trusted advisor. Say "sales have been quiet" not "revenue collapsed".\n\n' +
+    THREE_STEP_REASONING +
     'Return ONLY valid JSON:\n' +
-    '{"observations":["specific problem with evidence number"],"recommendations":["specific fix with expected impact"],"confidence":"high|medium|low"}'
+    '{"plan":"one sentence","verify_findings":"what the numbers showed","observations":["specific problem with evidence number"],"recommendations":["specific fix with expected impact"],"confidence":"high|medium|low"}'
 }
 
 function buildStrategyPrompt(question: string): string {
@@ -213,8 +227,9 @@ function buildStrategyPrompt(question: string): string {
     '- One clear recommendation trumps five vague ones\n' +
     '- PROMOTIONS: check promotions.scheduled — a promotion that is not yet active is a future opportunity, not current performance. Never state it is producing results.\n' +
     '- CUSTOMERS: use customers.pos_customer_count as the authoritative count — do not guess.\n\n' +
+    THREE_STEP_REASONING +
     'Return ONLY valid JSON:\n' +
-    '{"observations":["strategic read with timeframe"],"recommendations":["prioritised action with rationale"],"confidence":"high|medium|low","primary_lever":"the single most important thing","time_horizon":"7d|30d"}'
+    '{"plan":"one sentence","verify_findings":"what the numbers showed","observations":["strategic read with timeframe"],"recommendations":["prioritised action with rationale"],"confidence":"high|medium|low","primary_lever":"the single most important thing","time_horizon":"7d|30d"}'
 }
 
 const CONTEXT_PROMPT = `You are Aria's Context Brain. One job: find external signals that change the interpretation of the internal data.
@@ -230,8 +245,9 @@ Rules:
 - Do not invent external context not supported by the data
 - If no external signals are material, say so — do not pad
 
+Reason in 3 steps BEFORE concluding: 1) PLAN — which external signals could change the read? 2) VERIFY — are they actually visible in the data? 3) CONCLUDE — only signals you can evidence. Put a one-sentence "plan" and short "verify_findings" in the JSON.
 Return ONLY valid JSON:
-{"observations":["external signal with evidence"],"recommendations":["how to respond to this signal"],"confidence":"high|medium|low"}`
+{"plan":"one sentence","verify_findings":"what the data showed","observations":["external signal with evidence"],"recommendations":["how to respond to this signal"],"confidence":"high|medium|low"}`
 
 // ── Brain Runner ───────────────────────────────────────────────────
 async function callBrain(
@@ -269,6 +285,8 @@ async function callBrain(
       observations: Array.isArray(parsed.observations) ? parsed.observations as string[] : [],
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations as string[] : [],
       confidence: (parsed.confidence as 'high'|'medium'|'low') ?? 'medium',
+      plan: typeof parsed.plan === 'string' ? parsed.plan : undefined,
+      verify_findings: typeof parsed.verify_findings === 'string' ? parsed.verify_findings : undefined,
       raw: text,
       succeeded: true,
     }
@@ -1000,6 +1018,23 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
   const goalPointer = 'GOAL_CONTEXT: The owner\'s weekly target trajectory is in goal_context. Frame your recommendation against the gap or pace required if relevant. If goal_context.status="no_target", do NOT invent a target — ask the owner what their target is.'
   // PLAN-PERSISTENCE-1 (I5): synthesis-only fact-pointer — surface follow-ups the owner is owed.
   const openLoopsPointer = 'OPEN_LOOPS: actions the owner executed but you have not followed up on are in open_loops. If any has outcome_status="ready_to_review", ASK naturally how it went somewhere in your response — this makes the owner feel seen and captures outcome data for better future advice. Do NOT interrupt the main question; weave it in. Never assert it worked/failed from observed_delta alone — that is an early read, not a verdict.'
+  // I9 DEEP-REASONING Part 2/4 — detect advisor conflicts before synthesis and surface them so Aria
+  // addresses disagreements honestly. Detection is on the (V2-cleaned) brains. Also log a learning
+  // signal carrying the per-advisor plan→verify→conclude confidence (no table writes; audit log only).
+  const councilConflicts = detectCouncilConflicts(brains)
+  const conflictBlock = formatConflictsForSynthesis(councilConflicts)
+  const confScore = (() => {
+    const map: Record<string, number> = { high: 0.9, medium: 0.6, low: 0.3 }
+    const vals = brains.filter(b => b.succeeded).map(b => map[b.confidence] ?? 0.6)
+    return vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100 : 0
+  })()
+  void logAICallSafe({
+    business_id: businessId, agent_key: 'council_reasoning', role: 'analysis', provider: 'other', success: true,
+    request_summary: 'plan_verify_conclude',
+    response_summary: JSON.stringify({ conflicts: councilConflicts.length, advisors: succeeded.length }).slice(0, 200),
+    learning_signal: `plan_verify_conclude:${confScore}` + (councilConflicts.length ? `|conflicts:${councilConflicts.length}` : ''),
+  })
+
   const synthesisInput = `
 ${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}${diagnosticPointer}
 ${goalPointer}
@@ -1029,7 +1064,7 @@ Factors: ${ctxOutput.external_factors.join(', ') || 'none found'}
 Risks: ${ctxOutput.risk_flags.join(', ') || 'none'}
 Opportunities: ${ctxOutput.opportunities.join(', ') || 'none'}
 Note: this is real-time web data — verify if acting on it.` : ''}
-MODE: ${mode}
+${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
 `.trim()
 
   const synthesisSystemPrompt = buildSynthesisPrompt(
