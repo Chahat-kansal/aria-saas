@@ -17,11 +17,16 @@ interface Customer {
   tax_exempt_type?: string | null;
   tax_exempt_certificate?: string | null;
   tax_exempt_expires_at?: string | null;
+  marketing_consent?: boolean;
+  sms_consent?: boolean;
+  email_consent?: boolean;
+  consent_source?: string | null;
+  consent_captured_at?: string | null;
 }
 interface Sale { id: string; created_at: string; total_amount: number; payment_method: string; sale_number?: string; }
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: '#D9D9D9', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#006AFF', green: '#00B140', red: '#EF4444', amber: '#F59E0B' };
-const TABS = ['Purchase History','Loyalty','Notes','Tax Settings'];
+const TABS = ['Purchase History','Loyalty','Marketing','Notes','Tax Settings'];
 
 const SEGMENT_COLORS: Record<string, string> = {
   Champions: '#00B140', Loyal: '#60A5FA', Promising: '#A78BFA',
@@ -48,6 +53,8 @@ export default function CustomerDetailPage() {
   const [notesSaving, setNotesSaving] = useState(false);
   const [taxForm, setTaxForm] = useState<{ abn: string; tax_exempt: boolean; tax_exempt_type: string; tax_exempt_certificate: string; tax_exempt_expires_at: string }>({ abn: '', tax_exempt: false, tax_exempt_type: '', tax_exempt_certificate: '', tax_exempt_expires_at: '' });
   const [taxSaving, setTaxSaving] = useState(false);
+  const [consentForm, setConsentForm] = useState<{ sms_consent: boolean; email_consent: boolean }>({ sms_consent: false, email_consent: false });
+  const [consentSaving, setConsentSaving] = useState(false);
   const [insight, setInsight] = useState<string[] | null>(null);
   const [insightLoading, setInsightLoading] = useState(true);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -95,6 +102,7 @@ export default function CustomerDetailPage() {
       setCustomer(custRef);
       setNotes(custRef?.notes ?? '');
       setTaxForm({ abn: custRef?.abn ?? '', tax_exempt: custRef?.tax_exempt ?? false, tax_exempt_type: custRef?.tax_exempt_type ?? '', tax_exempt_certificate: custRef?.tax_exempt_certificate ?? '', tax_exempt_expires_at: custRef?.tax_exempt_expires_at ?? '' });
+      setConsentForm({ sms_consent: !!custRef?.sms_consent, email_consent: !!custRef?.email_consent });
       setLoading(false);
       tryInsight();
     }).catch(() => { setLoading(false); tryInsight(); });
@@ -141,6 +149,14 @@ export default function CustomerDetailPage() {
     setNotesSaving(true);
     await fetch(`/api/pos/customers?id=${customer.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes }) }).catch(() => {});
     setNotesSaving(false);
+  }
+
+  async function saveConsent() {
+    if (!customer) return;
+    setConsentSaving(true);
+    await fetch(`/api/pos/customers?id=${customer.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sms_consent: consentForm.sms_consent, email_consent: consentForm.email_consent }) }).catch(() => {});
+    setConsentSaving(false);
+    load();
   }
 
   async function saveTaxSettings() {
@@ -307,6 +323,28 @@ export default function CustomerDetailPage() {
                 {customer.rfm_score && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>Score: {customer.rfm_score}</div>}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Marketing consent — CONSENT-COLLECTION-1 */}
+        {activeTab === 'Marketing' && (
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 12, color: C.muted }}>Express opt-in per channel. Toggling re-records consent with today&apos;s date (provenance: staff_update). Marketing is only ever sent on an explicit opt-in.</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, cursor: 'pointer' }}>
+              <input type="checkbox" checked={consentForm.sms_consent} onChange={e => setConsentForm(f => ({ ...f, sms_consent: e.target.checked }))} />
+              Receive offers by SMS
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, cursor: 'pointer' }}>
+              <input type="checkbox" checked={consentForm.email_consent} onChange={e => setConsentForm(f => ({ ...f, email_consent: e.target.checked }))} />
+              Receive offers by email
+            </label>
+            <div style={{ fontSize: 11, color: C.dim }}>
+              {customer.consent_source ? `Source: ${customer.consent_source}` : 'No consent record'}{customer.consent_captured_at ? ` · captured ${new Date(customer.consent_captured_at).toLocaleDateString('en-AU')}` : ''}
+            </div>
+            <button onClick={saveConsent} disabled={consentSaving}
+              style={{ alignSelf: 'flex-start', padding: '8px 20px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: consentSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: consentSaving ? 0.6 : 1 }}>
+              {consentSaving ? 'Saving…' : 'Save Consent'}
+            </button>
           </div>
         )}
 

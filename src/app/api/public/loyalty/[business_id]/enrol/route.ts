@@ -48,7 +48,12 @@ export async function POST(req: Request, { params }: Params) {
     email: email || null,
     phone,
     birthday: birthday || null,
+    // CONSENT-COLLECTION-1: online self-enrolment is an express opt-in act — stamp provenance.
     marketing_consent: true,
+    sms_consent: true,
+    email_consent: !!email,
+    consent_captured_at: new Date().toISOString(),
+    consent_source: 'online',
     source: 'loyalty_enrol',
     points_balance: 0,
     stamps_count: 0,

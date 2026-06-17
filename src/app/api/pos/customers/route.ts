@@ -62,7 +62,7 @@ async function _GET(req: Request) {
 
   let query = supabase
     .from('pos_customers')
-    .select('id, name, phone, email, birthday, tags, points_balance, stamps_count, loyalty_points, total_spent, visit_count, last_visit_at, last_visit, marketing_consent, notes, created_at')
+    .select('id, name, phone, email, birthday, tags, points_balance, stamps_count, loyalty_points, total_spent, visit_count, last_visit_at, last_visit, marketing_consent, sms_consent, email_consent, consent_source, consent_captured_at, notes, created_at')
     .eq('business_id', bid)
     .is('deleted_at', null)
     .range(offset, offset + limit - 1);
@@ -91,8 +91,15 @@ async function _POST(req: Request) {
   const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { name, email, phone, birthday, notes, tags, marketing_consent, group_id, group_name, account_number } = await req.json();
+  const { name, email, phone, birthday, notes, tags, marketing_consent, sms_consent, email_consent, group_id, group_name, account_number } = await req.json();
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
+
+  // CONSENT-COLLECTION-1: capture express per-channel consent at add-time. The form's two opt-in
+  // toggles arrive as sms_consent/email_consent (default OFF). Stamp provenance; keep the legacy
+  // marketing_consent flag in sync (true if either channel opted in) for back-compat.
+  const smsOptIn = !!sms_consent;
+  const emailOptIn = !!email_consent;
+  const anyOptIn = smsOptIn || emailOptIn;
 
   // Duplicate phone check
   if (phone) {
@@ -119,7 +126,10 @@ async function _POST(req: Request) {
       birthday: birthday || null, notes: notes || null,
       // SEC-4 — dual-write encrypted PII alongside retained plaintext
       ...encryptCustomerPII({ name, email: email || null, phone: phone || null, notes: notes || null }, bid),
-      tags: tags ?? [], marketing_consent: !!marketing_consent,
+      tags: tags ?? [],
+      marketing_consent: !!marketing_consent || anyOptIn,
+      sms_consent: smsOptIn, email_consent: emailOptIn,
+      consent_captured_at: new Date().toISOString(), consent_source: 'pos_add',
       loyalty_points: 0, points_balance: 0, stamps_count: 0,
       total_spent: 0, visit_count: 0,
       group_id: group_id || null, group_name: group_name || null,
@@ -146,10 +156,26 @@ async function _PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const body = await req.json();
+
+  // CONSENT-COLLECTION-1: when an owner toggles a consent channel on the detail view, re-stamp
+  // provenance (withdrawal as easy as giving) + keep the legacy marketing_consent flag in sync.
+  const consentPatch: Record<string, unknown> = {};
+  if ('sms_consent' in body || 'email_consent' in body) {
+    const { data: cur } = await supabase.from('pos_customers')
+      .select('sms_consent, email_consent').eq('id', id).eq('business_id', bid).maybeSingle();
+    const newSms = 'sms_consent' in body ? !!body.sms_consent : !!cur?.sms_consent;
+    const newEmail = 'email_consent' in body ? !!body.email_consent : !!cur?.email_consent;
+    consentPatch.sms_consent = newSms;
+    consentPatch.email_consent = newEmail;
+    consentPatch.marketing_consent = newSms || newEmail;
+    consentPatch.consent_captured_at = new Date().toISOString();
+    consentPatch.consent_source = 'staff_update';
+  }
+
   const { error } = await supabase
     .from('pos_customers')
     // SEC-4 — dual-write encrypted PII for any of email/phone/name/notes present in the update
-    .update({ ...body, ...encryptCustomerPII(body, bid) })
+    .update({ ...body, ...consentPatch, ...encryptCustomerPII(body, bid) })
     .eq('id', id)
     .eq('business_id', bid);
 

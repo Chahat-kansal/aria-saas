@@ -26,7 +26,7 @@ const iS: React.CSSProperties = {
 export default function NewCustomerPage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
-  const [data, setData] = useState({ first_name: '', last_name: '', group_id: '', group_name: '', account_code: '', phone: '', email: '' })
+  const [data, setData] = useState({ first_name: '', last_name: '', group_id: '', group_name: '', account_code: '', phone: '', email: '', sms_consent: false, email_consent: false })
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([])
   const [groupOpen, setGroupOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -59,6 +59,8 @@ export default function NewCustomerPage() {
           group_id: data.group_id || null, group_name: data.group_name || null,
           account_number: data.account_code || null,
           phone: data.phone || null, email: data.email || null,
+          // CONSENT-COLLECTION-1: express per-channel opt-in (default OFF — never pre-ticked)
+          sms_consent: data.sms_consent, email_consent: data.email_consent,
         }),
       })
     } catch (e) { console.error('[silent-catch]', e) }
@@ -130,6 +132,23 @@ export default function NewCustomerPage() {
             <input type="email" placeholder="Email address" value={data.email}
               onChange={e => setData(d => ({ ...d, email: e.target.value }))}
               onKeyDown={e => { if (e.key === 'Enter') finish() }} style={iS} />
+            {/* CONSENT-COLLECTION-1: explicit opt-in toggles — DEFAULT OFF (un-ticked). A pre-ticked
+                box is NOT valid consent under the Spam Act. */}
+            <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.12)', borderRadius: 6, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, opacity: 0.9 }}>Marketing — only with the customer&apos;s express OK:</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, cursor: 'pointer' }}>
+                <input type="checkbox" checked={data.sms_consent}
+                  onChange={e => setData(d => ({ ...d, sms_consent: e.target.checked }))}
+                  style={{ width: 18, height: 18 }} />
+                Receive offers by SMS?
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, cursor: 'pointer' }}>
+                <input type="checkbox" checked={data.email_consent}
+                  onChange={e => setData(d => ({ ...d, email_consent: e.target.checked }))}
+                  style={{ width: 18, height: 18 }} />
+                Receive offers by email?
+              </label>
+            </div>
           </div>
         )}
       </div>

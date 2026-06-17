@@ -63,6 +63,9 @@ export async function POST(req: Request) {
         points_balance: 0,
         stamps_count: 0,
         source: 'instore-kiosk',
+        // CONSENT-COLLECTION-1: kiosk captures email for loyalty but asks no marketing opt-in —
+        // record provenance only; channel consent stays false (DB default) until expressly given.
+        consent_source: 'online',
       }).select('id, name, loyalty_points, points_balance, stamps_count, visit_count, total_spent, total_spend').single()
 
       if (insertErr || !created) {

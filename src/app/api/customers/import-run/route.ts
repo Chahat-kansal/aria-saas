@@ -29,15 +29,31 @@ function mapRow(
 // AI mapper can produce (company/address/city/postcode/…) is preserved in custom_fields jsonb rather
 // than dropped. name is NOT NULL on pos_customers, so fall back to email/phone when missing.
 const POS_DIRECT_FIELDS = new Set(['name', 'email', 'phone', 'notes', 'tags'])
+const CONSENT_FIELDS = new Set(['marketing_consent', 'sms_consent', 'email_consent'])
+const CONSENT_TRUTHY = new Set(['true', 'yes', 'y', '1', 'opted in', 'opt-in', 'opt in', 'subscribed'])
 function toPosCustomerRow(mapped: Record<string, unknown>, businessId: string): Record<string, unknown> {
   const row: Record<string, unknown> = { business_id: businessId, source: 'csv_import' }
   const custom: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(mapped)) {
     if (POS_DIRECT_FIELDS.has(k)) row[k] = v
-    else custom[k] = v
+    else if (!CONSENT_FIELDS.has(k)) custom[k] = v
   }
   if (!row.name) row.name = (mapped.email as string) || (mapped.phone as string) || 'Imported customer'
   if (Object.keys(custom).length > 0) row.custom_fields = custom
+
+  // CONSENT-COLLECTION-1: importing a list is NOT consent. Default both channel flags false
+  // (DB default) + provenance 'import'. Honour an explicit consent column ONLY if the owner
+  // mapped one in the file — then stamp captured_at.
+  row.consent_source = 'import'
+  const truthy = (v: unknown) => CONSENT_TRUTHY.has(String(v ?? '').trim().toLowerCase())
+  if ([...CONSENT_FIELDS].some(k => k in mapped)) {
+    const sms = 'sms_consent' in mapped ? truthy(mapped.sms_consent) : truthy(mapped.marketing_consent)
+    const email = 'email_consent' in mapped ? truthy(mapped.email_consent) : truthy(mapped.marketing_consent)
+    row.sms_consent = sms
+    row.email_consent = email
+    row.marketing_consent = sms || email
+    row.consent_captured_at = new Date().toISOString()
+  }
   return row
 }
 
