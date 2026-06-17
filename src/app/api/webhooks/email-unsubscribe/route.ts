@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { suppressEmail } from '@/lib/external-apis'
 import { verifyUnsubToken } from '@/lib/unsubscribe-token'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
 // MSG-COMPLIANCE-2 — email List-Unsubscribe One-Click endpoint. The token (minted by sendEmail) is
 // HMAC-signed and carries business + customer/email, so it can't be forged to suppress an arbitrary
@@ -27,6 +28,9 @@ async function handle(token: string | null): Promise<{ status: number; ok: boole
 }
 
 export async function POST(req: Request) {
+  const rl = await rateLimit(`wh:unsub:${clientIp(req)}`, 60, 60)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
+
   const url = new URL(req.url)
   let token = url.searchParams.get('token')
   if (!token) {
@@ -38,6 +42,9 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const rl = await rateLimit(`wh:unsub:${clientIp(req)}`, 60, 60)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
+
   const token = new URL(req.url).searchParams.get('token')
   const r = await handle(token)
   if (r.ok) {

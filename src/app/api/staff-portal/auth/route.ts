@@ -4,11 +4,19 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
 async function _POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const email = String(body.email ?? '').toLowerCase().trim()
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+
+  // SEC-H1: throttle OTP issuance per IP and per email (fail-closed — limits OTP-email cost abuse
+  // and brute-force; the generic 429 + the existing always-{ok:true} response avoid enumeration).
+  const rlIp = await rateLimit(`otp:ip:${clientIp(req)}`, 10, 300, { failClosed: true })
+  if (!rlIp.allowed) return tooManyRequests(rlIp.retryAfter)
+  const rlEmail = await rateLimit(`otp:email:${email}`, 5, 300, { failClosed: true })
+  if (!rlEmail.allowed) return tooManyRequests(rlEmail.retryAfter)
 
   const { data: member } = await supabaseAdmin
     .from('staff_members')

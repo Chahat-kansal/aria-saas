@@ -1,7 +1,12 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
 export async function POST(req: Request) {
+  // SEC-H1: per-IP throttle on the public contact form (spam guard).
+  const rl = await rateLimit(`contact:${clientIp(req)}`, 5, 60)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
+
   let body: { name?: string; email?: string; message?: string }
   try {
     body = await req.json()

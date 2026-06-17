@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { suppressNumber, normalisePhone } from '@/lib/clicksend'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
 // MSG-COMPLIANCE-2 — inbound SMS handler. ClickSend POSTs replies here; a STOP-keyword reply auto-feeds
 // sms_suppression (reason='stop'), START/UNSTOP removes it. PUBLIC endpoint (ClickSend calls it with no
@@ -38,6 +39,10 @@ async function parseInbound(req: Request): Promise<{ from: string; body: string 
 }
 
 export async function POST(req: Request) {
+  // SEC-H1: per-IP throttle BEFORE the secret check, so secret-guessing/flooding is also limited.
+  const rl = await rateLimit(`wh:clicksend:${clientIp(req)}`, 60, 60)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
+
   const url = new URL(req.url)
   if (!authorised(req, url)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

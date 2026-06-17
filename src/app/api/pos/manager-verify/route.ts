@@ -3,11 +3,16 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { signManagerToken } from '@/lib/pos/manager-token'
+import { rateLimit, tooManyRequests } from '@/lib/security/rate-limit'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // SEC-H1: throttle manager-PIN attempts per session (fail-closed — brute-force guard).
+  const rl = await rateLimit(`pin:mgr:${user.id}`, 10, 60, { failClosed: true })
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
 
   const { pin } = await req.json()
   if (!pin) return NextResponse.json({ error: 'PIN required' }, { status: 400 })

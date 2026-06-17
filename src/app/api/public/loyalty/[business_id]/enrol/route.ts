@@ -2,11 +2,17 @@ export const dynamic = 'force-dynamic'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
 export async function POST(req: Request, { params }: Params) {
   const { business_id } = 'then' in params ? await params : params
+
+  // SEC-H1: per-IP throttle on the public self-enrolment endpoint (signup-spam guard).
+  const rl = await rateLimit(`enrol:${clientIp(req)}`, 10, 60)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
+
   const db = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!

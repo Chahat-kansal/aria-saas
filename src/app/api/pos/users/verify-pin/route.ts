@@ -4,11 +4,16 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { rateLimit, tooManyRequests } from '@/lib/security/rate-limit'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // SEC-H1: throttle cashier-PIN attempts per session (fail-closed — brute-force guard).
+  const rl = await rateLimit(`pin:verify:${user.id}`, 15, 60, { failClosed: true });
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter);
 
   const body = await req.json().catch(() => ({}));
   const { business_id, user_id, pin } = body;
