@@ -66,12 +66,26 @@ export default function ProfilePage() {
     router.push('/login');
   }
 
+  // SEC-H3: revoke EVERY session of this user server-side (all devices), then redirect to login.
+  async function handleSignOutAllDevices() {
+    setSigningOut(true);
+    localStorage.removeItem('aria_active_business_id');
+    await supabase.auth.signOut({ scope: 'global' });
+    router.push('/login');
+  }
+
   async function changePassword() {
     if (newPw !== confirmPw) { setPwMsg('Passwords do not match'); return; }
     if (newPw.length < 8) { setPwMsg('Password must be at least 8 characters'); return; }
     setPwSaving(true);
     const { error } = await supabase.auth.updateUser({ password: newPw });
-    if (error) { setPwMsg(error.message); } else { setPwMsg('Password updated'); setNewPw(''); setConfirmPw(''); setShowPwForm(false); }
+    if (error) { setPwMsg(error.message); }
+    else {
+      // SEC-H3: a password change revokes every OTHER session (keeps the current one) so a leaked
+      // token on another device cannot survive the change.
+      await supabase.auth.signOut({ scope: 'others' });
+      setPwMsg('Password updated — signed out of all other devices'); setNewPw(''); setConfirmPw(''); setShowPwForm(false);
+    }
     setPwSaving(false);
   }
 
@@ -102,6 +116,14 @@ export default function ProfilePage() {
               <path d="M10 8H2m0 0l3-3m-3 3l3 3M6 5V3a1 1 0 011-1h6a1 1 0 011 1v10a1 1 0 01-1 1H7a1 1 0 01-1-1v-2"/>
             </svg>
             {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+          <button onClick={handleSignOutAllDevices} disabled={signingOut}
+            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-600 disabled:opacity-50 transition-colors"
+            title="Revoke every session on all devices (use after a suspected compromise)">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M10 8H2m0 0l3-3m-3 3l3 3M6 5V3a1 1 0 011-1h6a1 1 0 011 1v10a1 1 0 01-1 1H7a1 1 0 01-1-1v-2"/>
+            </svg>
+            {signingOut ? 'Signing out…' : 'Sign out all devices'}
           </button>
         </div>
 

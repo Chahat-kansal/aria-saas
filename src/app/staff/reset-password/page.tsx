@@ -101,7 +101,8 @@ export default function StaffResetPasswordPage() {
 
     setStatus('success')
     setMessage('Password updated! Redirecting to sign in…')
-    await supabase.auth.signOut({ scope: 'local' })
+    // SEC-H3: a password RESET (forgotten / possible compromise) revokes ALL sessions, every device.
+    await supabase.auth.signOut({ scope: 'global' })
     setTimeout(() => router.replace('/staff/login'), 1500)
   }
 
