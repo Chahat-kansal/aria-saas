@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { sendSMS } from '@/lib/clicksend'
 import { BaseAgent } from './base-agent'
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 
@@ -207,17 +208,14 @@ export class ReputationDefenceAgent extends BaseAgent {
         .eq('business_id', business_id).eq('response_status', 'approved')
       try {
         const { data: biz } = await supabaseAdmin.from('businesses').select('user_id,name').eq('id', business_id).maybeSingle()
-        if (biz?.user_id && process.env.TWILIO_ACCOUNT_SID) {
+        if (biz?.user_id) {
           const { data: profile } = await supabaseAdmin.from('staff_members').select('phone').eq('user_id', biz.user_id).maybeSingle()
           if (profile?.phone) {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const twilio = require('twilio') as { default: (sid: string, token: string | undefined) => { messages: { create: (opts: Record<string, string>) => Promise<unknown> } } }
-            const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-            await client.messages.create({
-              body: 'URGENT: ' + String(bizName) + ' has received ' + String(neg24h) + ' negative reviews in the last 24 hours. Auto-responses have been paused. Log in to manage your reputation.',
-              from: process.env.TWILIO_FROM_NUMBER ?? '',
-              to: String(profile.phone),
-            })
+            // AUD-1: ClickSend SMS helper (Twilio npm pkg dropped); no-op if SMS unconfigured.
+            await sendSMS(
+              String(profile.phone),
+              'URGENT: ' + String(bizName) + ' has received ' + String(neg24h) + ' negative reviews in the last 24 hours. Auto-responses have been paused. Log in to manage your reputation.',
+            )
           }
         }
       } catch (e) { console.error('[non-fatal]', e) }
@@ -303,13 +301,11 @@ export class ReputationDefenceAgent extends BaseAgent {
         const msg = 'Hi ' + firstName + '! Hope you enjoyed your visit to ' + String(bizName) + '. Mind leaving us a quick Google review? It means a lot: ' + reviewLink
         let channel: 'sms' | 'email' | null = null
 
-        if (customer.phone && process.env.TWILIO_ACCOUNT_SID) {
+        if (customer.phone) {
+          // AUD-1: ClickSend SMS helper (Twilio npm pkg dropped); ok=false → email fallback.
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const twilio = require('twilio') as { default: (sid: string, token: string | undefined) => { messages: { create: (opts: Record<string, string>) => Promise<unknown> } } }
-            const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-            await client.messages.create({ body: msg, from: process.env.TWILIO_FROM_NUMBER ?? '', to: String(customer.phone) })
-            channel = 'sms'
+            const sms = await sendSMS(String(customer.phone), msg)
+            if (sms.ok) channel = 'sms'
           } catch { /* try email */ }
         }
         if (!channel && customer.email && process.env.RESEND_API_KEY) {

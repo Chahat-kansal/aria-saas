@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart } from '@/lib/date-au'
 import type { AgentType, AgentDecisionInput, AgentRunResult } from './types'
 import { BaseAgent } from './base-agent'
+import { sendSMS } from '@/lib/clicksend'
 
 // Australian public holidays 2026 (national + key states)
 const PUBLIC_HOLIDAYS_2026: string[] = [
@@ -258,7 +259,7 @@ export class WasteEliminationAgent extends BaseAgent {
         .upsert(predictions, { onConflict: 'business_id,product_id,prediction_date' })
 
       // STEP 5: Send SMS prep guide (9pm trigger)
-      if (process.env.TWILIO_ACCOUNT_SID) {
+      {
         const { data: bizContact } = await supabaseAdmin
           .from('businesses')
           .select('phone')
@@ -266,12 +267,10 @@ export class WasteEliminationAgent extends BaseAgent {
           .maybeSingle()
         const phone = (bizContact as { phone?: string } | null)?.phone
         if (phone) {
+          // AUD-1: ClickSend SMS helper (Twilio npm pkg dropped); no-op if SMS unconfigured.
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const twilio = require('twilio') as { default: (sid: string, token: string | undefined) => { messages: { create: (opts: Record<string, string>) => Promise<unknown> } } }
-            const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
             const smsBody = 'Aria Prep Guide for ' + tomorrowStr + ':\n' + narrative.slice(0, 300)
-            await client.messages.create({ body: smsBody, from: process.env.TWILIO_FROM_NUMBER ?? '', to: phone })
+            await sendSMS(phone, smsBody)
           } catch { /* SMS non-fatal */ }
         }
       }

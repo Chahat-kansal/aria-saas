@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { sendSMS } from '@/lib/clicksend'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -31,13 +32,12 @@ async function _POST(req: Request) {
 
   let channel: 'sms' | 'email' | null = null
 
-  if (customer.phone && process.env.TWILIO_ACCOUNT_SID) {
+  if (customer.phone) {
+    // AUD-1: send via the app's ClickSend SMS helper (Twilio npm pkg was dropped); sendSMS
+    // checks its own credentials and returns ok=false when SMS isn't configured → email fallback.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const twilio = require('twilio') as { default: (sid: string, token: string | undefined) => { messages: { create: (opts: Record<string, string>) => Promise<unknown> } } }
-      const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-      await client.messages.create({ body: msg, from: process.env.TWILIO_FROM_NUMBER ?? '', to: String(customer.phone) })
-      channel = 'sms'
+      const sms = await sendSMS(String(customer.phone), msg)
+      if (sms.ok) channel = 'sms'
     } catch { /* try email */ }
   }
 

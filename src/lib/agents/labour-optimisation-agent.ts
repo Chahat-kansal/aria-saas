@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart } from '@/lib/date-au'
 import type { AgentType, AgentRunResult } from './types'
 import { BaseAgent } from './base-agent'
+import { sendSMS } from '@/lib/clicksend'
 
 // Australian state school holiday dates 2026
 const SCHOOL_HOLIDAYS_2026: Record<string, Array<{ start: Date; end: Date }>> = {
@@ -388,13 +389,11 @@ export class LabourOptimisationAgent extends BaseAgent {
           labour_cost_saving: Math.round(saving * 100) / 100,
         })
 
-        if (agentMode === 'auto' && target.phone && process.env.TWILIO_ACCOUNT_SID) {
+        if (agentMode === 'auto' && target.phone) {
+          // AUD-1: ClickSend SMS helper (Twilio npm pkg dropped); no-op if SMS unconfigured.
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const twilio = require('twilio') as { default: (sid: string, token: string | undefined) => { messages: { create: (opts: Record<string, string>) => Promise<unknown> } } }
-            const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-            await client.messages.create({ body: msg, from: process.env.TWILIO_FROM_NUMBER ?? '', to: target.phone })
-          } catch { /* SMS non-fatal — twilio may not be installed */ }
+            await sendSMS(target.phone, msg)
+          } catch { /* SMS non-fatal */ }
         }
 
         decisions.push({
@@ -460,13 +459,11 @@ export class LabourOptimisationAgent extends BaseAgent {
           labour_cost_saving: 0,
         })
 
-        if (agentMode === 'auto' && target.phone && process.env.TWILIO_ACCOUNT_SID) {
+        if (agentMode === 'auto' && target.phone) {
+          // AUD-1: ClickSend SMS helper (Twilio npm pkg dropped); no-op if SMS unconfigured.
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const twilio = require('twilio') as { default: (sid: string, token: string | undefined) => { messages: { create: (opts: Record<string, string>) => Promise<unknown> } } }
-            const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-            await client.messages.create({ body: msg, from: process.env.TWILIO_FROM_NUMBER ?? '', to: target.phone })
-          } catch { /* SMS non-fatal — twilio may not be installed */ }
+            await sendSMS(target.phone, msg)
+          } catch { /* SMS non-fatal */ }
         }
       }
 
