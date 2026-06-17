@@ -3,6 +3,7 @@
  * All third-party data sources with graceful fallbacks.
  * Works without any API keys — keys only unlock additional data.
  */
+import { signUnsubToken } from '@/lib/unsubscribe-token'
 
 // ─── 2A: Open Food Facts (barcode lookup) ────────────────────────────────────
 export async function lookupBarcode(barcode: string): Promise<{
@@ -304,7 +305,11 @@ export async function sendEmail(
     const { supabaseAdmin } = await import('@/lib/supabase-admin')
 
     // Unsubscribe mechanism (Spam Act requires a functional unsubscribe facility on marketing).
-    const unsub = `mailto:unsubscribe@${domain}?subject=unsubscribe`
+    // MSG-COMPLIANCE-2: a signed One-Click URL hitting the email-unsubscribe webhook → email_suppression.
+    // Prefer the opaque customerId in the token (no raw PII in the URL); fall back to email otherwise.
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_URL ?? 'https://www.ariaos.site'
+    const token = signUnsubToken({ b: businessId, c: opts.customerId ?? null, e: opts.customerId ? null : toNorm })
+    const unsub = `${appUrl}/api/webhooks/email-unsubscribe?token=${encodeURIComponent(token)}`
     headers['List-Unsubscribe'] = `<${unsub}>`
     headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'
     if (!/unsubscribe/i.test(html)) {

@@ -1,32 +1,14 @@
-import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { NextResponse } from 'next/server'
 
-// Receives inbound SMS replies from Twilio (winback / review request responses)
-export async function POST(req: Request) {
-  const form = await req.formData();
-  const from = form.get('From') as string;
-  const body = (form.get('Body') as string ?? '').trim().toLowerCase();
+// RETIRED (MSG-COMPLIANCE-2): Twilio was dropped; inbound SMS now arrives via ClickSend at
+// /api/webhooks/clicksend-inbound (which feeds sms_suppression on STOP). This orphaned endpoint
+// previously logged replies to the legacy `customers` table and did no opt-out handling. Kept as a
+// 410 Gone (not deleted) so any stale Twilio config gets a clear, correct signal instead of a 404.
+const GONE = { error: 'gone', message: 'Twilio inbound is retired. Inbound SMS is handled at /api/webhooks/clicksend-inbound.' }
 
-  if (!from) return new Response('', { status: 200 });
-
-  // Find the customer by phone number
-  const { data: customer } = await supabaseAdmin
-    .from('customers')
-    .select('id, business_id, name')
-    .eq('phone', from)
-    .single();
-
-  if (customer) {
-    await supabaseAdmin.from('activity_log').insert({
-      business_id: customer.business_id,
-      type: 'sms_reply',
-      description: `SMS reply from ${customer.name ?? from}: "${form.get('Body')}"`,
-      metadata: { from, body: form.get('Body'), customer_id: customer.id },
-    });
-  }
-
-  // Respond with empty TwiML — no auto-reply
-  return new Response('<Response></Response>', {
-    headers: { 'Content-Type': 'text/xml' },
-  });
+export function POST() {
+  return NextResponse.json(GONE, { status: 410 })
+}
+export function GET() {
+  return NextResponse.json(GONE, { status: 410 })
 }
