@@ -163,7 +163,7 @@ export class FlashRevenueAgent extends BaseAgent {
     const bizContext = {
       industry: biz.industry,
       active_loyalty_members: loyaltyCount ?? 0,
-      twilio_enabled: !!process.env.TWILIO_ACCOUNT_SID,
+      sms_enabled: !!process.env.CLICKSEND_API_KEY,
       expiring_products: expiringProducts.slice(0, 5),
       last_intervention_types: (lastInterventions ?? []).map(i => i.intervention_type),
       best_interventions: config.best_interventions ?? [],

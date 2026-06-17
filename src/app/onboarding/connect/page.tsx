@@ -128,12 +128,9 @@ export default function ConnectPage() {
           <div className="border border-[rgba(0,0,0,0.08)] rounded-xl p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <div className="text-sm font-medium mb-1">SMS (Twilio)</div>
+                <div className="text-sm font-medium mb-1">SMS</div>
                 <p className="text-[12px] text-[rgba(26,26,22,0.45)]">
                   Send winback messages, review requests, and booking reminders via SMS.
-                  {process.env.NEXT_PUBLIC_TWILIO_NUMBER && (
-                    <span className="ml-1 font-medium text-[#1a1a16]">Your number: {process.env.NEXT_PUBLIC_TWILIO_NUMBER}</span>
-                  )}
                 </p>
               </div>
               <button

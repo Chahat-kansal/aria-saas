@@ -430,7 +430,7 @@ export default function CustomerDetailPage() {
               <span style={{ color: smsText.length > 140 ? '#FBBF24' : C.dim }}>{smsText.length}/160</span>
             </div>
             {smsResult === 'sent' && <div style={{ marginBottom: 12, color: '#00B140', fontSize: 13, fontWeight: 600 }}>✓ SMS sent</div>}
-            {smsResult === 'error' && <div style={{ marginBottom: 12, color: '#F87171', fontSize: 13 }}>Send failed — check TWILIO_* env vars in Settings</div>}
+            {smsResult === 'error' && <div style={{ marginBottom: 12, color: '#F87171', fontSize: 13 }}>Send failed — please try again.</div>}
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowSmsModal(false)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
               <button onClick={sendSms} disabled={smsSending || !smsText.trim()} style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: smsText.trim() ? C.violet : 'var(--bg-elevated)', color: smsText.trim() ? '#fff' : C.dim, fontSize: 13, fontWeight: 700, cursor: (!smsText.trim() || smsSending) ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
