@@ -93,7 +93,7 @@ export async function sendSMS(to: string, body: string, opts: SendSMSOptions = {
     finalBody = body.trimEnd() + '\n\n' + STOP_NOTICE
   }
 
-  // MARKETING only: opt-out (suppression) + marketing_consent gating. Transactional skips both.
+  // MARKETING only: opt-out (suppression) + per-channel SMS consent gating. Transactional skips both.
   let suppressed = false
   let consentOk: boolean | null = null
   if (category === 'marketing') {
@@ -110,17 +110,20 @@ export async function sendSMS(to: string, body: string, opts: SendSMSOptions = {
 
     if (!suppressed) {
       try {
+        // CONSENT-COLLECTION-1: SMS marketing must check the per-channel sms_consent flag, NOT the
+        // combined marketing_consent (which is true if EITHER channel opted in) — otherwise an
+        // email-only opt-in would leak into SMS sends.
         if (opts.customerId && businessId) {
           const { data: c } = await supabaseAdmin
-            .from('pos_customers').select('marketing_consent')
+            .from('pos_customers').select('sms_consent')
             .eq('id', opts.customerId).eq('business_id', businessId).maybeSingle()
-          if (c) consentOk = !!c.marketing_consent
+          if (c) consentOk = !!c.sms_consent
         } else if (businessId) {
           // Best-effort consent resolution by phone when no customerId was supplied.
           const { data: c } = await supabaseAdmin
-            .from('pos_customers').select('marketing_consent')
+            .from('pos_customers').select('sms_consent')
             .eq('business_id', businessId).eq('phone', to).maybeSingle()
-          if (c) consentOk = !!c.marketing_consent
+          if (c) consentOk = !!c.sms_consent
         }
       } catch (err) {
         console.error('[sms] consent check failed:', err instanceof Error ? err.message : String(err))
