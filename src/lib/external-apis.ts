@@ -238,20 +238,140 @@ export async function searchNearbyCompetitors(
 }
 
 // ─── 2G: Resend Email ─────────────────────────────────────────────────────────
-export async function sendEmail(params: { to: string; subject: string; html: string; from_name?: string }): Promise<boolean> {
+// MSG-COMPLIANCE-EMAIL — the single email chokepoint. Spam Act guardrails mirror sendSMS:
+//  - MARKETING emails: carry a List-Unsubscribe header + visible unsubscribe footer, honour the
+//    email_suppression opt-out list, and require pos_customers.email_consent when the customer is
+//    resolvable. TRANSACTIONAL (default): exempt (receipts/invoices/OTP/owner reports always send).
+//  - EVERY attempt (sent/skipped/failed) is written to email_send_log (audit record).
+// supabaseAdmin is dynamically imported (matches this file's lazy-import pattern) so importing other
+// external-apis helpers never pulls the service-role client into a client bundle.
+export type EmailCategory = 'marketing' | 'transactional'
+export interface SendEmailOptions {
+  category?: EmailCategory
+  businessId?: string | null
+  customerId?: string | null
+}
+
+async function logEmailSend(row: {
+  business_id: string | null
+  to_email: string
+  subject: string
+  category: EmailCategory
+  consent_ok: boolean | null
+  suppressed: boolean
+  resend_id: string | null
+  status: 'sent' | 'failed' | 'skipped'
+  error: string | null
+}): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    await supabaseAdmin.from('email_send_log').insert(row)
+  } catch (err) {
+    console.error('[email] email_send_log insert failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+/** Add an address to the email opt-out list (for unsubscribe handling + manual/admin). */
+export async function suppressEmail(
+  businessId: string | null,
+  email: string,
+  reason: 'unsubscribe' | 'manual' | 'bounce' | 'complaint' = 'manual',
+): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    await supabaseAdmin.from('email_suppression')
+      .upsert({ business_id: businessId, email: email.toLowerCase().trim(), reason }, { onConflict: 'business_id,email' })
+  } catch (err) {
+    console.error('[email] suppressEmail failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+export async function sendEmail(
+  params: { to: string; subject: string; html: string; from_name?: string },
+  opts: SendEmailOptions = {},
+): Promise<boolean> {
+  const category: EmailCategory = opts.category ?? 'transactional'
+  const businessId = opts.businessId ?? null
+  const toNorm = (params.to ?? '').toLowerCase().trim()
+  const domain = process.env.RESEND_FROM_DOMAIN ?? 'aria.com.au'
+
+  let html = params.html
+  let suppressed = false
+  let consentOk: boolean | null = null
+  const headers: Record<string, string> = {}
+
+  if (category === 'marketing') {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+
+    // Unsubscribe mechanism (Spam Act requires a functional unsubscribe facility on marketing).
+    const unsub = `mailto:unsubscribe@${domain}?subject=unsubscribe`
+    headers['List-Unsubscribe'] = `<${unsub}>`
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'
+    if (!/unsubscribe/i.test(html)) {
+      html = html + `<p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:16px;">You received this because you opted in to offers. <a href="${unsub}">Unsubscribe</a>.</p>`
+    }
+
+    // Opt-out list
+    try {
+      let q = supabaseAdmin.from('email_suppression').select('id').eq('email', toNorm)
+      q = businessId ? q.eq('business_id', businessId) : q.is('business_id', null)
+      const { data: sup } = await q.limit(1).maybeSingle()
+      if (sup) suppressed = true
+    } catch (err) {
+      console.error('[email] suppression check failed (fail-open):', err instanceof Error ? err.message : String(err))
+    }
+
+    // Per-channel email_consent (resolvable by customerId, else best-effort by address)
+    if (!suppressed) {
+      try {
+        if (opts.customerId && businessId) {
+          const { data: c } = await supabaseAdmin.from('pos_customers').select('email_consent')
+            .eq('id', opts.customerId).eq('business_id', businessId).maybeSingle()
+          if (c) consentOk = !!c.email_consent
+        } else if (businessId) {
+          const { data: c } = await supabaseAdmin.from('pos_customers').select('email_consent')
+            .eq('business_id', businessId).eq('email', params.to).maybeSingle()
+          if (c) consentOk = !!c.email_consent
+        }
+      } catch (err) {
+        console.error('[email] consent check failed:', err instanceof Error ? err.message : String(err))
+      }
+    }
+  }
+
+  if (suppressed || consentOk === false) {
+    await logEmailSend({
+      business_id: businessId, to_email: toNorm, subject: params.subject, category,
+      consent_ok: consentOk, suppressed, resend_id: null, status: 'skipped',
+      error: suppressed ? 'suppressed' : 'no_consent',
+    })
+    return false
+  }
+
   const key = process.env.RESEND_API_KEY;
-  if (!key) { console.log('[email] Resend not configured'); return false; }
+  if (!key) {
+    console.log('[email] Resend not configured');
+    await logEmailSend({ business_id: businessId, to_email: toNorm, subject: params.subject, category, consent_ok: consentOk, suppressed, resend_id: null, status: 'failed', error: 'Email not configured' })
+    return false;
+  }
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: `${params.from_name ?? 'Aria'} <aria@${process.env.RESEND_FROM_DOMAIN ?? 'aria.com.au'}>`,
-        to: params.to, subject: params.subject, html: params.html,
+        from: `${params.from_name ?? 'Aria'} <aria@${domain}>`,
+        to: params.to, subject: params.subject, html,
+        ...(Object.keys(headers).length ? { headers } : {}),
       }),
     });
+    let resendId: string | null = null
+    try { const d = await res.json() as { id?: string }; resendId = d?.id ?? null } catch { /* body not json */ }
+    await logEmailSend({ business_id: businessId, to_email: toNorm, subject: params.subject, category, consent_ok: consentOk, suppressed, resend_id: resendId, status: res.ok ? 'sent' : 'failed', error: res.ok ? null : `resend_http_${res.status}` })
     return res.ok;
-  } catch { return false; }
+  } catch (e) {
+    await logEmailSend({ business_id: businessId, to_email: toNorm, subject: params.subject, category, consent_ok: consentOk, suppressed, resend_id: null, status: 'failed', error: e instanceof Error ? e.message : 'send_failed' })
+    return false;
+  }
 }
 
 // ─── 2H: SMS ─────────────────────────────────────────────────────────────────

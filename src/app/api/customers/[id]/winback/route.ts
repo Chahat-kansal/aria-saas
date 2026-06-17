@@ -78,7 +78,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
       subject: 'We miss you, ' + customer.name + '!',
       html: '<p>' + message + '</p>',
       from_name: biz.name,
-    })
+    }, { category: 'marketing', businessId: customer.business_id, customerId: params.id })
     channel = emailSent ? 'email' : 'email_failed'
   }
 
