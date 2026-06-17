@@ -81,7 +81,7 @@ export async function POST(req: Request) {
 
   const phone = customer.phone.replace(/\s/g, '').replace(/^0/, '+61')
 
-  const smsRes = await sendSMS(phone, message)
+  const smsRes = await sendSMS(phone, message, { category: 'marketing', businessId: business_id, customerId: customer.id })
 
   if (!smsRes.ok) {
     return NextResponse.json({ skipped: true, reason: 'SMS send failed' })

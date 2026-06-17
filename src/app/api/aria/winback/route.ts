@@ -63,7 +63,7 @@ async function _POST(req: Request) {
     for (const c of customers ?? []) {
       if (!c.phone) continue;
 
-      const result = await sendSMS(c.phone, message);
+      const result = await sendSMS(c.phone, message, { category: 'marketing', businessId: business_id, customerId: c.id });
       const smsOk = result.ok;
       if (smsOk) sent++; else errors++;
 
@@ -116,7 +116,7 @@ await trackAICall({ route: 'aria/winback', model: 'claude-sonnet-4-5-20250929', 
     messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
   }
 
-  const result = await sendSMS(customer.phone, messageText);
+  const result = await sendSMS(customer.phone, messageText, { category: 'marketing', businessId: business_id, customerId });
 
   await supabase.from('campaigns').insert({
     business_id, customer_id: customerId, type: 'winback', message: messageText,

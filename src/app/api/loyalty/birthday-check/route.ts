@@ -39,7 +39,7 @@ async function _POST(req: Request) {
 
   for (const c of customers ?? []) {
     const msg = `Happy Birthday, ${c.name?.split(' ')[0] ?? 'there'}! 🎂 ${config.birthday_reward_text} Show this message in store to redeem. Reply STOP to unsubscribe.`
-    const result = await sendSMS(c.phone!, msg)
+    const result = await sendSMS(c.phone!, msg, { category: 'marketing', businessId: business_id, customerId: c.id })
     if (result.ok) {
       await supabaseAdmin.from('pos_loyalty_transactions').insert({
         business_id, customer_id: c.id, type: 'birthday',

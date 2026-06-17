@@ -102,7 +102,7 @@ export async function GET(req: Request) {
     if (ch !== 'email' && customer.phone && smsMessage) {
       const phone = (customer.phone as string).replace(/\s/g, '').replace(/^0/, '+61')
       const msgBody = smsMessage.replace('{name}', (customer.name as string) ?? '')
-      const smsResult = await sendSMS(phone, msgBody)
+      const smsResult = await sendSMS(phone, msgBody, { category: 'marketing', businessId: campaign.business_id as string, customerId: customer.id as string })
       if (!smsResult.ok) ok = false
     }
 

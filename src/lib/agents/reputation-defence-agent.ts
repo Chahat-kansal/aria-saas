@@ -304,7 +304,7 @@ export class ReputationDefenceAgent extends BaseAgent {
         if (customer.phone) {
           // AUD-1: ClickSend SMS helper (Twilio npm pkg dropped); ok=false → email fallback.
           try {
-            const sms = await sendSMS(String(customer.phone), msg)
+            const sms = await sendSMS(String(customer.phone), msg, { category: 'marketing', businessId: business_id, customerId: sale.customer_id })
             if (sms.ok) channel = 'sms'
           } catch { /* try email */ }
         }

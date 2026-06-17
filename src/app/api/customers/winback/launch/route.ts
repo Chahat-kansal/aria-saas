@@ -53,7 +53,7 @@ async function _POST(req: Request) {
       const message = applyTemplate(message_template, {
         first_name: firstName, days_since_visit: String(c.days_since_visit ?? 'a while'), business_name: String(b.name),
       })
-      const result = await sendSMS(c.phone, message)
+      const result = await sendSMS(c.phone, message, { category: 'marketing', businessId: business_id, customerId: c.id })
       recipients.push({ campaign_id: campaign.id, customer_id: c.id, contacted_at: result.ok ? new Date().toISOString() : null })
       if (result.ok) sentCount++
     }

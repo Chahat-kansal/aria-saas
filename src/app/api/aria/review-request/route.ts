@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   const message = `Hi ${firstName}! Thanks for visiting ${(biz as any).name ?? 'us'} today. We'd love your feedback — helps other locals find us. Takes 30 sec: ${reviewUrl}`
 
-  const result = await sendSMS(customer_phone, message)
+  const result = await sendSMS(customer_phone, message, { category: 'marketing', businessId: business_id })
 
   if (!result.ok)
     return NextResponse.json({ error: result.error ?? 'SMS failed' }, { status: 500 })

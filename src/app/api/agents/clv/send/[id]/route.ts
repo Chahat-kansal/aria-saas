@@ -42,7 +42,7 @@ async function _POST(req: Request, { params }: { params: Promise<{ id: string }>
   let sent = false;
 
   if (customer.phone && customer.marketing_consent) {
-    const result = await sendSMS(customer.phone, score.recommended_message);
+    const result = await sendSMS(customer.phone, score.recommended_message, { category: 'marketing', businessId: score.business_id, customerId: score.customer_id });
     sent = result.ok;
     channel = 'sms';
     if (!result.ok) {

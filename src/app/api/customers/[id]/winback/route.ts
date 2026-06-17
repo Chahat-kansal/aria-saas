@@ -58,7 +58,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
 
   // Try SMS first if phone exists (ClickSend — the app's SMS channel)
   if (customer.phone) {
-    const r = await sendSMS(customer.phone, message)
+    const r = await sendSMS(customer.phone, message, { category: 'marketing', businessId: customer.business_id, customerId: params.id })
     smsSent = r.ok
     channel = r.ok ? 'sms' : 'sms_failed'
     await supabaseAdmin.from('campaigns').insert({

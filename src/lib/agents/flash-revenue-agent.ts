@@ -730,7 +730,7 @@ Return ONLY valid JSON with no markdown.`;
 
     let sent = 0;
     for (const customer of eligible.slice(0, 100)) {
-      const result = await sendSMS(customer.phone!, choice.message_text);
+      const result = await sendSMS(customer.phone!, choice.message_text, { category: 'marketing', businessId: business_id, customerId: customer.id });
       if (result.ok) sent++;
     }
 

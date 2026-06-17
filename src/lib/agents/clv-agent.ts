@@ -681,7 +681,7 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
         try {
           let sent = false;
           if (f.phone && f.marketing_consent) {
-            const result = await sendSMS(f.phone, f.recommended_message!);
+            const result = await sendSMS(f.phone, f.recommended_message!, { category: 'marketing', businessId: business_id, customerId: f.customer_id });
             sent = result.ok;
           } else if (f.email) {
             const resendKey = process.env.RESEND_API_KEY;

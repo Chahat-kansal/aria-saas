@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     if (!cfg.birthday_reward_text) continue
 
     const msg = `Happy Birthday, ${c.name?.split(' ')[0] ?? 'there'}! 🎂 ${cfg.birthday_reward_text} Show this message to redeem. Reply STOP to unsubscribe.`
-    const { ok } = await sendSMS(c.phone!, msg)
+    const { ok } = await sendSMS(c.phone!, msg, { category: 'marketing', businessId: c.business_id, customerId: c.id })
     if (ok) {
       // Log transaction
       await sb.from('pos_loyalty_transactions').insert({

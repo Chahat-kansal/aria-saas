@@ -60,7 +60,7 @@ async function _POST(req: Request) {
 
   if (customer.phone) {
     try {
-      const r = await sendSMS(customer.phone, messageText)
+      const r = await sendSMS(customer.phone, messageText, { category: 'marketing', businessId: bid, customerId: customer.id })
       sendStatus = r.ok ? 'sent' : 'failed'
       if (!r.ok) errorMsg = r.error ?? 'SMS error'
     } catch (e) { sendStatus = 'failed'; errorMsg = String(e) }

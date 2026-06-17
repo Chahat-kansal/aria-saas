@@ -36,7 +36,7 @@ async function _POST(req: Request) {
     // AUD-1: send via the app's ClickSend SMS helper (Twilio npm pkg was dropped); sendSMS
     // checks its own credentials and returns ok=false when SMS isn't configured → email fallback.
     try {
-      const sms = await sendSMS(String(customer.phone), msg)
+      const sms = await sendSMS(String(customer.phone), msg, { category: 'marketing', businessId: biz.id, customerId: body.customer_id })
       if (sms.ok) channel = 'sms'
     } catch { /* try email */ }
   }

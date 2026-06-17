@@ -84,7 +84,7 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
         continue
       }
       try {
-        const smsResult = await sendSMS(cu.phone as string, messageText)
+        const smsResult = await sendSMS(cu.phone as string, messageText, { category: 'marketing', businessId: c.business_id as string, customerId: cu.id as string })
         const rId = (recipientRow as Record<string,unknown>)?.id as string
         if (smsResult.ok) {
           if (rId) await supabaseAdmin.from('campaign_recipients').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rId)

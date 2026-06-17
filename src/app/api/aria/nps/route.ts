@@ -111,7 +111,7 @@ async function _POST(req: Request) {
     if (recentSet.has(c.id)) { skipped++; continue }
     const phone = (c.phone as string).replace(/\s/g, '').replace(/^0/, '+61')
     const body = `Hi ${(c.name as string).split(' ')[0]}! How likely are you to recommend ${biz.name} to a friend? Reply 0-10 (10 = extremely likely) 🙏`
-    const r = await sendSMS(phone, body)
+    const r = await sendSMS(phone, body, { category: 'marketing', businessId: business_id, customerId: c.id })
     if (r.ok) sent++; else skipped++
   }
 

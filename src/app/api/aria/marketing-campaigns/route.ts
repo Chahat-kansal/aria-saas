@@ -71,7 +71,7 @@ async function _POST(req: Request) {
       if ((campaign as any).channel !== 'email' && c.phone) {
         try {
           const msgText = ((campaign as any).message_template ?? '').replace('{name}', c.name.split(' ')[0])
-          const smsResult = await sendSMS(c.phone, msgText)
+          const smsResult = await sendSMS(c.phone, msgText, { category: 'marketing', businessId: bid, customerId: c.id })
           if (smsResult.ok) sentCount++
           await supabaseAdmin.from('pos_campaign_sends').insert({ campaign_id: body.campaign_id, business_id: bid, customer_id: c.id, customer_name: c.name, customer_phone: c.phone, message_sent: msgText, channel: 'sms', send_status: smsResult.ok ? 'sent' : 'failed', sent_at: smsResult.ok ? new Date().toISOString() : null })
         } catch (e) { console.error('[non-fatal]', e) }

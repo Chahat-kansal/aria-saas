@@ -55,7 +55,7 @@ export async function GET(req: Request) {
     for (const c of lapsed ?? []) {
       const firstName = (c.name ?? 'there').split(' ')[0]
       const msg = `Hey ${firstName}, we miss you! ☕ ${cfg.winback_reward_text} Come back and show this message. Reply STOP to unsubscribe.`
-      const ok = await sendSMS(c.phone!, msg)
+      const ok = await sendSMS(c.phone!, msg, { category: 'marketing', businessId: cfg.business_id, customerId: c.id })
       if (ok.ok) {
         await sb.from('pos_loyalty_transactions').insert({
           business_id: cfg.business_id,
