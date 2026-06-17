@@ -26,7 +26,9 @@ async function _POST(req: Request, { params }: Params) {
   if (!sale) return NextResponse.json({ error: 'Sale not found' }, { status: 404 })
   if (sale.status === 'voided') return NextResponse.json({ error: 'Sale already voided' }, { status: 400 })
 
-  await supabase.from('pos_sales').update({ status: 'voided', last_edited_at: new Date().toISOString() }).eq('id', id)
+  // void_reason feeds the log_sale_void trigger → deletion_audit_log.reason. Use the cashier's
+  // free-text note, falling back to the reason code; nullable so legacy/empty voids still succeed.
+  await supabase.from('pos_sales').update({ status: 'voided', void_reason: reason_note || reason_code || null, last_edited_at: new Date().toISOString() }).eq('id', id)
 
   // Restore stock for all items — atomic increment prevents concurrent-void race
   const { data: items } = await supabase.from('pos_sale_items').select('product_id, quantity').eq('sale_id', id)
