@@ -16,36 +16,17 @@ async function _DELETE(req: Request) {
     return NextResponse.json({ error: 'Confirmation required: send { confirm: "DELETE MY DATA" }' }, { status: 400 })
   }
 
-  const { data: businesses } = await supabaseAdmin
-    .from('businesses')
-    .select('id')
-    .eq('user_id', user.id)
-
-  const businessIds = (businesses ?? []).map((b: { id: string }) => b.id)
-
-  if (businessIds.length > 0) {
-    // Collect sale IDs so we can delete pos_sale_items (no business_id — join through pos_sales)
-    const { data: salesData } = await supabaseAdmin
-      .from('pos_sales')
-      .select('id')
-      .in('business_id', businessIds)
-    const saleIds = (salesData ?? []).map((s: { id: string }) => s.id)
-
-    if (saleIds.length > 0) {
-      await supabaseAdmin.from('pos_sale_items').delete().in('sale_id', saleIds)
-    }
-
-    // Delete child tables (business_id) before businesses
-    await supabaseAdmin.from('aria_conversations').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('aria_ai_calls').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('aria_autopilot_actions').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('pos_sales').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('pos_customers').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('pos_products').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('pos_shift_reports').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('seo_audits').delete().in('business_id', businessIds)
-    await supabaseAdmin.from('businesses').delete().in('id', businessIds)
+  // DELETE-RIGHTS-FIX: purge through the sanctioned SECURITY DEFINER path. purge_account_data()
+  // derives the owner from auth.uid() (the verified session above), sets a transaction-local flag
+  // that protect_critical_data honours, then removes only the caller's OWN business data across the
+  // guarded tables — atomically and FK-safe (children before parents). Called via the user-scoped
+  // client so auth.uid() resolves; it can never touch another owner's data. Replaces the prior
+  // per-table service-role deletes, which the hard-delete guard blocked at the first guarded table.
+  const { data: deletedIds, error: purgeErr } = await supabase.rpc('purge_account_data')
+  if (purgeErr) {
+    return NextResponse.json({ error: 'Failed to delete account data: ' + purgeErr.message }, { status: 500 })
   }
+  const businessIds = (deletedIds as string[] | null) ?? []
 
   // SEC-4 Part 5 — record the deletion (business_id null so the audit row survives the cascade)
   await supabaseAdmin.from('deletion_audit_log').insert({
