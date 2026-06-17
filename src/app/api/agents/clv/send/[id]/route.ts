@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { sendSMS } from '@/lib/clicksend';
+import { sendEmail } from '@/lib/external-apis';
 
 async function _POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,23 +50,14 @@ async function _POST(req: Request, { params }: { params: Promise<{ id: string }>
       return NextResponse.json({ error: 'SMS send failed' }, { status: 500 });
     }
   } else if (customer.email) {
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) return NextResponse.json({ error: 'No email provider configured' }, { status: 503 });
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + resendKey },
-      body: JSON.stringify({
-        from: 'noreply@' + (process.env.RESEND_DOMAIN ?? 'mail.aria-os.com.au'),
-        to: customer.email,
-        subject: 'A personal note from us',
-        text: score.recommended_message,
-      }),
-      signal: AbortSignal.timeout(8000),
-    });
-    sent = res.ok;
+    // EMAIL-CONSOLIDATE: route through the sendEmail chokepoint (consent + suppression + log + unsubscribe)
+    sent = await sendEmail(
+      { to: customer.email, subject: 'A personal note from us', html: score.recommended_message },
+      { category: 'marketing', businessId: score.business_id, customerId: score.customer_id },
+    );
     channel = 'email';
-    if (!res.ok) {
-      return NextResponse.json({ error: 'Email send failed' }, { status: 500 });
+    if (!sent) {
+      return NextResponse.json({ error: 'Email not sent (no consent or send failed)' }, { status: 500 });
     }
   } else {
     return NextResponse.json({ error: 'Customer has no contactable channel (no phone/SMS consent or email)' }, { status: 422 });

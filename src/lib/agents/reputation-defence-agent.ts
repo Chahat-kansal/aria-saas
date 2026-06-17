@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sendSMS } from '@/lib/clicksend'
+import { sendEmail } from '@/lib/external-apis'
 import { BaseAgent } from './base-agent'
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 
@@ -295,7 +296,8 @@ export class ReputationDefenceAgent extends BaseAgent {
           .select('name,phone,email,marketing_consent')
           .eq('id', sale.customer_id)
           .maybeSingle()
-        if (!customer || !customer.marketing_consent) continue
+        // EMAIL-CONSOLIDATE: per-channel consent enforced at the send chokepoints below.
+        if (!customer) continue
 
         const firstName = String(customer.name ?? 'there').split(' ')[0]
         const msg = 'Hi ' + firstName + '! Hope you enjoyed your visit to ' + String(bizName) + '. Mind leaving us a quick Google review? It means a lot: ' + reviewLink
@@ -308,19 +310,13 @@ export class ReputationDefenceAgent extends BaseAgent {
             if (sms.ok) channel = 'sms'
           } catch { /* try email */ }
         }
-        if (!channel && customer.email && process.env.RESEND_API_KEY) {
+        if (!channel && customer.email) {
           try {
-            await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                from: 'Aria <noreply@ariaos.site>',
-                to: String(customer.email),
-                subject: 'How was your visit to ' + String(bizName) + '?',
-                html: '<p>' + msg.replace(reviewLink, '<a href="' + reviewLink + '">Leave a Google review</a>') + '</p>',
-              }),
-            })
-            channel = 'email'
+            const emailed = await sendEmail(
+              { to: String(customer.email), subject: 'How was your visit to ' + String(bizName) + '?', html: '<p>' + msg.replace(reviewLink, '<a href="' + reviewLink + '">Leave a Google review</a>') + '</p>' },
+              { category: 'marketing', businessId: business_id, customerId: sale.customer_id },
+            )
+            if (emailed) channel = 'email'
           } catch (e) { console.error('[non-fatal]', e) }
         }
 

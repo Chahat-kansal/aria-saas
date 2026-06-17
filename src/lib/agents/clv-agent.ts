@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { toAESTStart, startOfWeekAEST } from '@/lib/date-au';
 import { sendSMS } from '@/lib/clicksend';
+import { sendEmail } from '@/lib/external-apis';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types';
@@ -684,21 +685,11 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
             const result = await sendSMS(f.phone, f.recommended_message!, { category: 'marketing', businessId: business_id, customerId: f.customer_id });
             sent = result.ok;
           } else if (f.email) {
-            const resendKey = process.env.RESEND_API_KEY;
-            if (resendKey) {
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + resendKey },
-                body: JSON.stringify({
-                  from: 'noreply@' + (process.env.RESEND_DOMAIN ?? 'mail.aria-os.com.au'),
-                  to: f.email,
-                  subject: 'A personal note from us',
-                  text: f.recommended_message!,
-                }),
-                signal: AbortSignal.timeout(5000),
-              });
-              sent = true;
-            }
+            // EMAIL-CONSOLIDATE: route through the sendEmail chokepoint (consent + suppression + log + unsubscribe)
+            sent = await sendEmail(
+              { to: f.email, subject: 'A personal note from us', html: f.recommended_message! },
+              { category: 'marketing', businessId: business_id, customerId: f.customer_id },
+            );
           }
 
           if (sent) {

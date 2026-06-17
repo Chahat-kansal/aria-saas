@@ -6,6 +6,7 @@ export const maxDuration = 300
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
+import { sendEmail } from '@/lib/external-apis'
 
 interface SequenceStep { delay_days: number; message: string; condition: string }
 type SendRow = { id: string; campaign_id: string | null; customer_id: string | null; channel: string | null; sequence_step: number | null }
@@ -77,7 +78,6 @@ export async function GET(req: Request) {
   }
 
   const skippedSet = new Set(skippedIds)
-  const resendKey = process.env.RESEND_API_KEY
   const sentIds: string[] = []
   const failedIds: string[] = []
 
@@ -106,18 +106,15 @@ export async function GET(req: Request) {
       if (!smsResult.ok) ok = false
     }
 
-    if (ch !== 'sms' && customer.email && campaign.email_body && resendKey) {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: `${campaign.name ?? 'Aria'} <onboarding@resend.dev>`,
-          to: customer.email as string,
-          subject: (campaign.email_subject as string) ?? 'We miss you!',
-          html: (campaign.email_body as string).replace(/\{name\}/g, (customer.name as string) ?? 'there'),
-        }),
-      })
-      if (!res.ok) ok = false
+    if (ch !== 'sms' && customer.email && campaign.email_body) {
+      // EMAIL-CONSOLIDATE: route through the sendEmail chokepoint (consent + suppression + log + unsubscribe)
+      const emailed = await sendEmail({
+        from_name: (campaign.name as string) ?? 'Aria',
+        to: customer.email as string,
+        subject: (campaign.email_subject as string) ?? 'We miss you!',
+        html: (campaign.email_body as string).replace(/\{name\}/g, (customer.name as string) ?? 'there'),
+      }, { category: 'marketing', businessId: campaign.business_id as string, customerId: customer.id as string })
+      if (!emailed) ok = false
     }
 
     if (ok) sentIds.push(send.id)

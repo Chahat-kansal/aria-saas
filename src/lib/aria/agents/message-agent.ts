@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { sendSMS } from '@/lib/clicksend'
+import { sendEmail } from '@/lib/external-apis'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export type MessageDraft = {
@@ -45,23 +46,6 @@ async function draftMessage(
   return res.content.filter((b: { type: string; text?: string }) => b.type === 'text').map((b: { type: string; text?: string }) => b.text ?? '').join('').trim()
 }
 
-async function sendSms(phone: string, body: string): Promise<boolean> {
-  const normalized = phone.replace(/\s/g, '').replace(/^0/, '+61')
-  const result = await sendSMS(normalized, body)
-  return result.ok
-}
-
-async function sendEmail(to: string, subject: string, body: string): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY
-  if (!key) return false
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: 'Aria <aria@ariaos.site>', to, subject, html: body }),
-    signal: AbortSignal.timeout(10_000),
-  })
-  return res.ok
-}
 
 export async function messageAgent(
   intent: string,
@@ -136,9 +120,11 @@ export async function messageAgent(
       for (const d of drafts) {
         const c = customers.find(x => x.id === d.customer_id)
         if (!c) continue
+        // EMAIL-CONSOLIDATE + SMS straggler: route both channels through the compliance chokepoints
+        // as marketing (consent + suppression + log + unsubscribe).
         let ok = false
-        if (channel === 'sms' && c.phone) ok = await sendSms(c.phone, d.body)
-        else if (channel === 'email' && c.email) ok = await sendEmail(c.email, d.subject ?? 'Hello', d.body)
+        if (channel === 'sms' && c.phone) { const sr = await sendSMS(c.phone, d.body, { category: 'marketing', businessId, customerId: c.id }); ok = sr.ok }
+        else if (channel === 'email' && c.email) ok = await sendEmail({ to: c.email, subject: d.subject ?? 'Hello', html: d.body }, { category: 'marketing', businessId, customerId: c.id })
         if (ok) sent++
       }
       void sent

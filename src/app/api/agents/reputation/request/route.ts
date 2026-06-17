@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendSMS } from '@/lib/clicksend'
+import { sendEmail } from '@/lib/external-apis'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -23,7 +24,8 @@ async function _POST(req: Request) {
   const { data: customer } = await supabaseAdmin
     .from('pos_customers').select('name,phone,email,marketing_consent').eq('id', body.customer_id).eq('business_id', biz.id).maybeSingle()
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
-  if (!customer.marketing_consent) return NextResponse.json({ error: 'Customer has not opted in to marketing' }, { status: 422 })
+  // EMAIL-CONSOLIDATE: per-channel consent (sms_consent / email_consent) is enforced at the send
+  // chokepoints below — no ad-hoc combined marketing_consent pre-gate here.
 
   const placeId = String(biz.google_place_id ?? '')
   const reviewLink = placeId ? 'https://g.page/' + placeId + '/review' : ''
@@ -41,18 +43,12 @@ async function _POST(req: Request) {
     } catch { /* try email */ }
   }
 
-  if (!channel && customer.email && process.env.RESEND_API_KEY) {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'Aria <noreply@ariaos.site>',
-        to: String(customer.email),
-        subject: 'How was your visit to ' + String(biz.name) + '?',
-        html: '<p>' + msg + '</p>',
-      }),
-    })
-    channel = 'email'
+  if (!channel && customer.email) {
+    const emailed = await sendEmail(
+      { to: String(customer.email), subject: 'How was your visit to ' + String(biz.name) + '?', html: '<p>' + msg + '</p>' },
+      { category: 'marketing', businessId: biz.id, customerId: body.customer_id },
+    )
+    if (emailed) channel = 'email'
   }
 
   if (!channel) return NextResponse.json({ error: 'No contact method available' }, { status: 422 })

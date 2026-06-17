@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { todayAEST, toAESTStart } from '@/lib/date-au';
 import { sendSMS } from '@/lib/clicksend';
+import { sendEmail } from '@/lib/external-apis';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
 import type { AgentType, AgentRunResult } from './types';
@@ -946,29 +947,23 @@ Return ONLY valid JSON with no markdown.`;
       return 0;
     }
 
+    // EMAIL-CONSOLIDATE: consent is now enforced per-channel at the sendEmail chokepoint
+    // (email_consent), so no ad-hoc marketing_consent pre-filter here.
     const { data: customers } = await supabaseAdmin
       .from('pos_customers')
-      .select('email,name')
+      .select('id,email,name')
       .eq('business_id', business_id)
-      .eq('marketing_consent', true)
       .not('email', 'is', null)
       .limit(50);
 
     let sent = 0;
     for (const customer of (customers ?? []).slice(0, 20)) {
       try {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + resendKey },
-          body: JSON.stringify({
-            from: 'noreply@' + (process.env.RESEND_DOMAIN ?? 'mail.aria-os.com.au'),
-            to: customer.email,
-            subject: 'Flash Deal from ' + (biz.name as string ?? 'us') + '!',
-            text: choice.message_text,
-          }),
-          signal: AbortSignal.timeout(5000),
-        });
-        sent++;
+        const emailed = await sendEmail(
+          { to: customer.email as string, subject: 'Flash Deal from ' + ((biz.name as string) ?? 'us') + '!', html: choice.message_text },
+          { category: 'marketing', businessId: business_id, customerId: customer.id as string },
+        );
+        if (emailed) sent++;
       } catch (e) { console.error('[non-fatal]', e) }
     }
 
