@@ -8,9 +8,11 @@
   font-family:'Outfit',system-ui,sans-serif; background:#0c0f0d; min-height:100vh; min-height:100dvh;
   display:flex; align-items:center; justify-content:center; padding:20px; -webkit-font-smoothing:antialiased;
 }
-/* AUTH-SIZING-FIX: cap the stage to the viewport so it never overflows (no clipping / black-band
-   margins). min-height keeps the comfortable card size on tall screens; max-height wins on short ones. */
-.aria-auth .stage{position:relative;width:100%;max-width:980px;display:flex;border-radius:26px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.55);min-height:660px;max-height:calc(100dvh - 40px);background:#fff}
+/* AUTH-SIZING-FIX-2: the card FILLS the viewport height (minus the 20px frame) instead of a fixed
+   660px block — kills the black bands above/below on normal laptops. height == the wrapper's content
+   area, so flex-centering has no leftover space. The form column (.right) scrolls internally if its
+   content is taller than the card, so nothing clips on short screens. */
+.aria-auth .stage{position:relative;width:100%;max-width:980px;height:calc(100dvh - 40px);max-height:calc(100dvh - 40px);display:flex;border-radius:26px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.55);background:#fff}
 
 /* LEFT — full cafe scene */
 .aria-auth .left{position:relative;flex:1.15;overflow:hidden}
