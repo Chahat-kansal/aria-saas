@@ -119,6 +119,16 @@ const nextConfig = {
               "child-src 'self' blob: data:",
             ].join('; '),
           },
+          // SEC-H2: the remaining security headers, applied GLOBALLY here (the CSP above already is).
+          // They previously lived only in middleware, whose matcher covers ~15 paths, so most routes
+          // (most /pos/*, /community/*, public business pages, staff portal, nearly all /api/*) were
+          // missing them. next.config headers() on /(.*) covers every route. Values match middleware.
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'X-Frame-Options', value: 'DENY' }, // clickjacking; Aria never frames its own pages
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // camera=(self) keeps POS barcode scanning (getUserMedia) working on same-origin pages.
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(self)' },
         ],
       },
     ]
