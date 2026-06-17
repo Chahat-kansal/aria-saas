@@ -13,10 +13,27 @@ async function _GET(req: Request) {
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const business_id = searchParams.get('business_id')
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+  let business_id = searchParams.get('business_id')
 
-  // Verify ownership
+  // EXPORT-TRIAL-FIX — data export is an AU Privacy Act (APP) right that must work regardless of
+  // subscription/trial status, so resolve from OWNERSHIP, never from the active-context pointer
+  // (which is cleared/blocked when a trial ends). If the caller didn't pass an explicit business_id
+  // (the billing page + trial-banner links don't), pick the user's owned business: active-if-owned
+  // first, then oldest. Never throw "business_id required" for a logged-in owner with ≥1 business.
+  if (!business_id) {
+    const { data: owned } = await supabase.from('businesses')
+      .select('id')
+      .eq('user_id', user.id)
+      .order('is_active', { ascending: false })
+      .order('created_at', { ascending: true })
+    if (!owned || owned.length === 0) {
+      return NextResponse.json({ error: 'No business found for your account' }, { status: 404 })
+    }
+    business_id = owned[0].id
+  }
+
+  // Verify ownership — works for lapsed/expired owners (ownership never lapses); a business the
+  // user does not own returns null → 404, so a lapsed owner can export THEIR data, not anyone's.
   const { data: biz } = await supabase.from('businesses')
     .select('id, name, industry, created_at')
     .eq('id', business_id)
