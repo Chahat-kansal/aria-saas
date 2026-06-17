@@ -30,7 +30,7 @@ async function _POST(req: Request) {
     items, customer_id, payment_method,
     subtotal, tax_amount, discount_amount, total_amount,
     cash_tendered, change_given, notes,
-    split_cash, split_card, outlet_id, served_by, pos_user_id,
+    split_cash, split_card, outlet_id, register_id, served_by, pos_user_id,
     session_id: bodySessionId, age_verified,
     table_id, order_type, applied_discounts,
     idempotency_key,
@@ -159,10 +159,29 @@ async function _POST(req: Request) {
   // Get open session
   const { data: openSession } = await supabase
     .from('pos_cash_sessions')
-    .select('id, total_cash_sales, total_card_sales')
+    .select('id, total_cash_sales, total_card_sales, register_id')
     .eq('business_id', business.id)
     .eq('status', 'open')
     .maybeSingle();
+
+  // WIRE-DB-2: stamp register_id on every sale (was previously never captured here, the
+  // primary live checkout path). Prefer the client value, else the open cash session's
+  // register (the sale belongs to that session), else the first active register for the
+  // outlet. Mirrors the resolution already used in /api/pos/sales. served_by is stamped
+  // below from the request body unchanged.
+  let resolvedRegisterId: string | null =
+    (typeof register_id === 'string' && register_id) ? register_id : null;
+  if (!resolvedRegisterId) resolvedRegisterId = openSession?.register_id ?? null;
+  if (!resolvedRegisterId && outlet_id) {
+    const { data: firstReg } = await supabase
+      .from('pos_registers')
+      .select('id')
+      .eq('outlet_id', outlet_id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    resolvedRegisterId = firstReg?.id ?? null;
+  }
 
   // Create sale record
   const { data: sale, error: saleErr } = await supabase
@@ -184,6 +203,7 @@ async function _POST(req: Request) {
       split_cash: split_cash ?? null,
       split_card: split_card ?? null,
       outlet_id: outlet_id ?? null,
+      register_id: resolvedRegisterId,
       notes: notes ?? null,
       served_by: served_by ?? null,
       age_verified: age_verified ?? false,
