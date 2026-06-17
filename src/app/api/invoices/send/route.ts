@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
+import { sendSMS } from '@/lib/clicksend'
 import { z } from 'zod'
 import { validateBody } from '@/lib/api/validate'
 
@@ -191,28 +192,16 @@ async function _POST(req: Request) {
       return NextResponse.json({ error: `Email failed: ${errText}` }, { status: 502 })
     }
   } else {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID
-    const authToken = process.env.TWILIO_AUTH_TOKEN
-    const from = process.env.TWILIO_PHONE_NUMBER
-    if (!accountSid || !authToken || !from) return NextResponse.json({ error: 'SMS not configured' }, { status: 503 })
-
     const rawPhone = (inv.bill_to_phone ?? '') as string
     if (!rawPhone) return NextResponse.json({ error: 'No phone on invoice' }, { status: 400 })
     const phone = rawPhone.replace(/\s/g, '').replace(/^0/, '+61')
     const dueStr = inv.due_date ? ` due ${new Date(inv.due_date as string).toLocaleDateString('en-AU')}` : ''
     const smsBody = `Invoice ${inv.invoice_number} from ${biz.name} for $${(Number(inv.total) || 0).toFixed(2)} AUD${dueStr}.${pdfUrl ? ' View: ' + pdfUrl : ''}`
 
-    const smsRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-      method: 'POST',
-      headers: {
-        Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ To: phone, From: from, Body: smsBody }).toString(),
-    })
+    // SMS via ClickSend (the app's SMS channel). status='sent' is set below only when ok.
+    const smsRes = await sendSMS(phone, smsBody)
     if (!smsRes.ok) {
-      const err = await smsRes.json().catch(() => ({}))
-      return NextResponse.json({ error: (err as Record<string, unknown>).message ?? 'SMS failed' }, { status: 502 })
+      return NextResponse.json({ error: smsRes.error ?? 'SMS failed' }, { status: 502 })
     }
   }
 

@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { sendSMS } from '@/lib/clicksend'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -88,11 +89,6 @@ async function _POST(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id, name').eq('id', business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken  = process.env.TWILIO_AUTH_TOKEN
-  const twilioFrom = process.env.TWILIO_PHONE_NUMBER
-  if (!accountSid || !authToken || !twilioFrom) return NextResponse.json({ error: 'SMS not configured' }, { status: 503 })
-
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86400_000).toISOString()
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString()
 
@@ -115,12 +111,7 @@ async function _POST(req: Request) {
     if (recentSet.has(c.id)) { skipped++; continue }
     const phone = (c.phone as string).replace(/\s/g, '').replace(/^0/, '+61')
     const body = `Hi ${(c.name as string).split(' ')[0]}! How likely are you to recommend ${biz.name} to a friend? Reply 0-10 (10 = extremely likely) 🙏`
-    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-      method: 'POST',
-      headers: { Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ To: phone, From: twilioFrom, Body: body }).toString(),
-      signal: AbortSignal.timeout(10_000),
-    })
+    const r = await sendSMS(phone, body)
     if (r.ok) sent++; else skipped++
   }
 

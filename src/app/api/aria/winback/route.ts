@@ -15,6 +15,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { sendSMS } from '@/lib/clicksend'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -25,20 +26,6 @@ const WinbackSchema = z.object({
   customerId: z.string().uuid().optional(),
   message: z.string().max(1600).optional(),
 })
-
-async function sendTwilio(from: string, to: string, body: string, sid: string, token: string) {
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ From: from, To: to, Body: body }),
-  });
-  const data = await res.json();
-  return { ok: res.ok, sid: data.sid, error: data.message };
-}
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -61,11 +48,6 @@ async function _POST(req: Request) {
   const { data: business } = await supabase.from('businesses').select('*').eq('id', business_id).eq('user_id', user.id).single();
   if (!business) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER;
-  const twilioConfigured = !!(twilioSid && twilioToken && twilioFrom);
-
   // === BATCH MODE ===
   if (isBatch) {
     const customerIds: string[] = body.customer_ids ?? [];
@@ -80,18 +62,10 @@ async function _POST(req: Request) {
     let sent = 0; let errors = 0;
     for (const c of customers ?? []) {
       if (!c.phone) continue;
-      let smsOk = false; let smsSid: string | null = null; let smsError: string | null = null;
 
-      if (twilioConfigured) {
-        const result = await sendTwilio(twilioFrom!, c.phone, message, twilioSid!, twilioToken!);
-        smsOk = result.ok;
-        smsSid = result.sid ?? null;
-        smsError = result.error ?? null;
-        if (smsOk) sent++; else errors++;
-      } else {
-        // Log as pending_twilio
-        smsOk = false; smsError = 'Twilio not configured';
-      }
+      const result = await sendSMS(c.phone, message);
+      const smsOk = result.ok;
+      if (smsOk) sent++; else errors++;
 
       await supabase.from('campaigns').insert({
         business_id,
@@ -99,21 +73,12 @@ async function _POST(req: Request) {
         type: 'winback',
         message,
         sms_sent: smsOk,
-        status: smsOk ? 'sent' : (twilioConfigured ? 'failed' : 'pending_twilio'),
-        twilio_sid: smsSid,
-        error: smsError,
+        status: smsOk ? 'sent' : 'failed',
+        twilio_sid: result.message_id ?? null,
+        error: result.error ?? null,
         sent_at: smsOk ? new Date().toISOString() : null,
-        failed_at: (!smsOk && twilioConfigured) ? new Date().toISOString() : null,
+        failed_at: !smsOk ? new Date().toISOString() : null,
       }).then(() => null, () => null);
-    }
-
-    if (!twilioConfigured) {
-      await supabase.from('activity_log').insert({
-        business_id,
-        action_type: 'winback',
-        description: `Winback campaign queued for ${customerIds.length} customers (Twilio not configured)`,
-      }).then(() => null, () => null);
-      return NextResponse.json({ sent: 0, errors: 0, customers_targeted: customerIds.length, pending_twilio: true, message_used: message });
     }
 
     await supabase.from('activity_log').insert({
@@ -132,10 +97,6 @@ async function _POST(req: Request) {
   const { data: customer } = await supabase.from('pos_customers').select('*').eq('id', customerId).eq('business_id', business_id).single();
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
 
-  if (!twilioConfigured) {
-    await supabase.from('campaigns').insert({ business_id, customer_id: customerId, type: 'winback', status: 'pending_twilio', sms_sent: false }).then(() => null, () => null);
-    return NextResponse.json({ error: 'SMS not configured', code: 'TWILIO_NOT_CONFIGURED', sms_sent: false }, { status: 503 });
-  }
   if (!customer.phone) return NextResponse.json({ error: 'No phone number', sms_sent: false, code: 'NO_PHONE' }, { status: 400 });
 
   const daysSince = customer.last_visit ? Math.floor((Date.now() - new Date(customer.last_visit).getTime()) / 86400000) : null;
@@ -155,11 +116,11 @@ await trackAICall({ route: 'aria/winback', model: 'claude-sonnet-4-5-20250929', 
     messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
   }
 
-  const result = await sendTwilio(twilioFrom!, customer.phone, messageText, twilioSid!, twilioToken!);
+  const result = await sendSMS(customer.phone, messageText);
 
   await supabase.from('campaigns').insert({
     business_id, customer_id: customerId, type: 'winback', message: messageText,
-    sms_sent: result.ok, twilio_sid: result.sid ?? null, error: result.error ?? null,
+    sms_sent: result.ok, twilio_sid: result.message_id ?? null, error: result.error ?? null,
     sent_at: result.ok ? new Date().toISOString() : null,
     failed_at: !result.ok ? new Date().toISOString() : null,
     status: result.ok ? 'sent' : 'failed',
@@ -171,13 +132,13 @@ await trackAICall({ route: 'aria/winback', model: 'claude-sonnet-4-5-20250929', 
   }).then(() => null, () => null);
 
   if (!result.ok) {
-    Sentry.captureException(new Error(`Twilio delivery failed: ${result.error}`), {
+    Sentry.captureException(new Error(`SMS delivery failed: ${result.error}`), {
       tags: { route: 'aria/winback' },
       extra: { business_id, customer_id: customerId },
     });
     return NextResponse.json({ error: 'SMS delivery failed', message: result.error, sms_sent: false }, { status: 500 });
   }
-  return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: result.sid });
+  return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: result.message_id });
 }
 
 export const POST = withErrorCapture('aria/winback', _POST)

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 
 // Called by POS terminal after a sale completes
 // Auto-sends a review request SMS if conditions are met
@@ -74,28 +75,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ skipped: true, reason: `cooldown active (${cooldownDays}d)` })
   }
 
-  // Send SMS via Twilio
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_PHONE_NUMBER
-
-  if (!accountSid || !authToken || !from) {
-    return NextResponse.json({ skipped: true, reason: 'Twilio not configured' })
-  }
-
+  // Send SMS via ClickSend (the app's SMS channel)
   const reviewLink = `https://search.google.com/local/writereview?placeid=${biz.google_place_id}`
   const message = `Hi ${customer.name?.split(' ')[0] ?? 'there'}! Thanks for stopping by ${biz.name}. If you enjoyed it, we'd love a quick Google review: ${reviewLink} 🙏`
 
   const phone = customer.phone.replace(/\s/g, '').replace(/^0/, '+61')
 
-  const smsRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ To: phone, From: from, Body: message }).toString(),
-  })
+  const smsRes = await sendSMS(phone, message)
 
   if (!smsRes.ok) {
     return NextResponse.json({ skipped: true, reason: 'SMS send failed' })

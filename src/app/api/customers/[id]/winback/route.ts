@@ -8,23 +8,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { sendEmail } from '@/lib/external-apis'
+import { sendSMS } from '@/lib/clicksend'
 
 const MODEL = 'claude-haiku-4-5-20251001'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-async function sendTwilio(from: string, to: string, body: string, sid: string, token: string) {
-  const url = 'https://api.twilio.com/2010-04-01/Accounts/' + sid + '/Messages.json'
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(sid + ':' + token).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ From: from, To: to, Body: body }),
-  })
-  const data = await res.json()
-  return { ok: res.ok, sid: data.sid as string | undefined, error: data.message as string | undefined }
-}
 
 async function _POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient()
@@ -67,22 +54,17 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
 
   if (!message) return NextResponse.json({ error: 'Could not generate message' }, { status: 500 })
 
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN
-  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER
-  const twilioOk = !!(twilioSid && twilioToken && twilioFrom)
-
   let smsSent = false, emailSent = false, channel = 'queued'
 
-  // Try SMS first if phone exists
-  if (customer.phone && twilioOk) {
-    const r = await sendTwilio(twilioFrom!, customer.phone, message, twilioSid!, twilioToken!)
+  // Try SMS first if phone exists (ClickSend — the app's SMS channel)
+  if (customer.phone) {
+    const r = await sendSMS(customer.phone, message)
     smsSent = r.ok
     channel = r.ok ? 'sms' : 'sms_failed'
     await supabaseAdmin.from('campaigns').insert({
       business_id: customer.business_id, customer_id: params.id,
       type: 'winback', message, sms_sent: r.ok,
-      twilio_sid: r.sid ?? null, error: r.error ?? null,
+      twilio_sid: r.message_id ?? null, error: r.error ?? null,
       status: r.ok ? 'sent' : 'failed',
       sent_at: r.ok ? new Date().toISOString() : null,
       failed_at: !r.ok ? new Date().toISOString() : null,
@@ -100,8 +82,8 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
     channel = emailSent ? 'email' : 'email_failed'
   }
 
-  // Queue if nothing sent
-  if (!smsSent && !emailSent && !twilioOk) {
+  // Queue if nothing sent (no phone + no email, or both channels failed)
+  if (!smsSent && !emailSent) {
     await supabaseAdmin.from('campaigns').insert({
       business_id: customer.business_id, customer_id: params.id,
       type: 'winback', message, status: 'pending_twilio', sms_sent: false,
@@ -121,7 +103,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
     status: (smsSent || emailSent) ? 'executed' : 'pending',
   }).then(() => null, () => null)
 
-  return NextResponse.json({ ok: smsSent || emailSent || !twilioOk, message, sms_sent: smsSent, email_sent: emailSent, channel })
+  return NextResponse.json({ ok: smsSent || emailSent, message, sms_sent: smsSent, email_sent: emailSent, channel })
 }
 
 export const POST = withErrorCapture('customers/[id]/winback', _POST)

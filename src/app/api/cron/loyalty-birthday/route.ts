@@ -4,6 +4,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { createClient } from '@supabase/supabase-js'
+import { sendSMS } from '@/lib/clicksend'
 
 
 function adminClient() {
@@ -12,22 +13,6 @@ function adminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
   )
-}
-
-async function sendSMS(to: string, body: string): Promise<boolean> {
-  const sid   = process.env.TWILIO_ACCOUNT_SID
-  const token = process.env.TWILIO_AUTH_TOKEN
-  const from  = process.env.TWILIO_PHONE_NUMBER
-  if (!sid || !token || !from) return false
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ From: from, To: to, Body: body }),
-  })
-  return res.ok
 }
 
 export async function GET(req: Request) {
@@ -68,7 +53,7 @@ export async function GET(req: Request) {
     if (!cfg.birthday_reward_text) continue
 
     const msg = `Happy Birthday, ${c.name?.split(' ')[0] ?? 'there'}! 🎂 ${cfg.birthday_reward_text} Show this message to redeem. Reply STOP to unsubscribe.`
-    const ok = await sendSMS(c.phone!, msg)
+    const { ok } = await sendSMS(c.phone!, msg)
     if (ok) {
       // Log transaction
       await sb.from('pos_loyalty_transactions').insert({

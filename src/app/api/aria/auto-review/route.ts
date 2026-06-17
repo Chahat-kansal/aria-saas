@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
+import { sendSMS } from '@/lib/clicksend'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -55,21 +56,15 @@ async function _POST(req: Request) {
     if (gen.length > 10 && gen.length <= 160) messageText = gen
   } catch { /* use default */ }
 
-  const sid = process.env.TWILIO_ACCOUNT_SID; const tok = process.env.TWILIO_AUTH_TOKEN; const from = process.env.TWILIO_PHONE_NUMBER
   let sendStatus = 'pending'; let errorMsg = ''
 
-  if (sid && tok && from && customer.phone) {
+  if (customer.phone) {
     try {
-      const res = await fetch('https://api.twilio.com/2010-04-01/Accounts/' + sid + '/Messages.json', {
-        method: 'POST',
-        headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ From: from, To: customer.phone, Body: messageText }),
-        signal: AbortSignal.timeout(10_000),
-      })
-      sendStatus = res.ok ? 'sent' : 'failed'
-      if (!res.ok) { const d = await res.json() as any; errorMsg = d?.message ?? 'Twilio error' }
+      const r = await sendSMS(customer.phone, messageText)
+      sendStatus = r.ok ? 'sent' : 'failed'
+      if (!r.ok) errorMsg = r.error ?? 'SMS error'
     } catch (e) { sendStatus = 'failed'; errorMsg = String(e) }
-  } else { sendStatus = 'skipped'; errorMsg = !sid ? 'Twilio not configured' : 'No phone' }
+  } else { sendStatus = 'skipped'; errorMsg = 'No phone' }
 
   await supabaseAdmin.from('pos_review_requests').insert({
     business_id: bid, customer_id: customer.id, sale_id: body.sale_id ?? null,

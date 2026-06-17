@@ -9,24 +9,13 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { logger } from '@/lib/observability/logger'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
+import { sendSMS } from '@/lib/clicksend'
 
 
 interface PosSaleRow {
   total_amount: number
   tax_amount: number | null
   payment_method: string | null
-}
-
-async function sendSms(to: string, body: string): Promise<void> {
-  const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER } = process.env
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) return
-  const credentials = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64')
-  await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
-    method: 'POST',
-    headers: { 'Authorization': `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ To: to, From: TWILIO_FROM_NUMBER, Body: body }),
-    signal: AbortSignal.timeout(10_000),
-  })
 }
 
 async function _GET(req: Request) {
@@ -116,7 +105,7 @@ async function _GET(req: Request) {
 
       if (biz.alert_sms_enabled && biz.owner_phone) {
         try {
-          await sendSms(
+          await sendSMS(
             biz.owner_phone as string,
             `Aria: Your Xero sync for ${dateStr} is ready. $${totalSales.toFixed(2)} sales, $${totalGst.toFixed(2)} GST. Review at ariaos.site/dashboard/integrations`,
           )
