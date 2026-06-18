@@ -21,6 +21,10 @@ const TYPE_CARDS: { id: PostType; emoji: string; label: string; desc: string }[]
 
 const TAGS = ['#local', '#food', '#sale', '#new', '#event', '#weekend', '#business']
 
+// Map create PostType → ai-draft post_type (TYPE_GUIDANCE keys: update/offer/new_stock/event/story).
+// 'photo' and 'reel' have no dedicated guidance → fall back to a warm general 'update'.
+const AI_DRAFT_TYPE: Record<PostType, string> = { photo: 'update', reel: 'update', story: 'story', update: 'offer' }
+
 function Dots({ step, total }: { step: number; total: number }) {
   return (
     <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
@@ -52,6 +56,7 @@ export default function CreatePost() {
   const [body, setBody]           = useState('')
   const [schedDate, setSchedDate] = useState('')
   const [publishing, setPublishing] = useState(false)
+  const [drafting, setDrafting]   = useState(false)
   const [toast, setToast]         = useState('')
 
   useEffect(() => {
@@ -119,6 +124,31 @@ export default function CreatePost() {
   function appendTag(tag: string) {
     if (body.includes(tag)) return
     setBody(b => b + (b === '' || b.endsWith(' ') ? '' : ' ') + tag + ' ')
+  }
+
+  async function draftWithAria() {
+    if (!biz || drafting) return
+    setDrafting(true)
+    try {
+      const res = await fetch('/api/community/owner/ai-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Use whatever the owner has already typed as the hint (may be empty).
+        body: JSON.stringify({ post_type: AI_DRAFT_TYPE[type], hint: body.trim() }),
+      })
+      if (!res.ok) { showToast('Aria couldn’t draft right now'); return }
+      const d = await res.json() as { draft?: { title?: string | null; body?: string } }
+      if (d.draft?.body) {
+        setBody(d.draft.body.slice(0, 500))           // fills the textarea — owner can still edit
+        if (d.draft.title && !title) setTitle(d.draft.title)
+      } else {
+        showToast('Aria couldn’t draft right now')
+      }
+    } catch {
+      showToast('Aria couldn’t draft right now')
+    } finally {
+      setDrafting(false)
+    }
   }
 
   async function publish() {
@@ -253,6 +283,11 @@ export default function CreatePost() {
         <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: FG }}>Add details</h2>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title (optional)"
           style={{ width: '100%', padding: '14px 16px', borderRadius: RADIUS.md, background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.15)', color: FG, fontSize: 15, outline: 'none', boxSizing: 'border-box' }} />
+        {/* Draft with Aria — fills the caption from real business data; owner can edit or ignore */}
+        <button onClick={draftWithAria} disabled={drafting}
+          style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: RADIUS.pill, background: '#7FB897', color: PALETTE.ink, border: 'none', fontSize: 13, fontWeight: 700, cursor: drafting ? 'default' : 'pointer', opacity: drafting ? 0.6 : 1, fontFamily: 'inherit' }}>
+          {drafting ? '✦ Drafting…' : '✦ Draft with Aria'}
+        </button>
         <div style={{ position: 'relative' }}>
           <textarea value={body} onChange={e => setBody(e.target.value.slice(0, 500))}
             placeholder="Write something..." rows={5}
