@@ -3,7 +3,7 @@ import { useState, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play } from 'lucide-react'
-import { PALETTE, BORDER, RADIUS } from './theme'
+import { PALETTE, BORDER, RADIUS, SIGNAL_COLORS } from './theme'
 
 export interface PostCardData {
   id: string
@@ -21,6 +21,41 @@ export interface PostCardData {
   stream_id?: string | null
   counts?: { like: number; comment: number; save: number }
   mine?: { liked: boolean; saved: boolean }
+  // CX-0 POS-signal chips (data-driven; only shown when the signal is real)
+  busy_now?: number
+  fresh_batch?: boolean
+  fresh_product?: boolean
+  promo_live?: boolean
+  // CX-0 cold-start AI insight card variant (rendered by <AiInsightCard/>)
+  ai_card?: boolean
+  card_text?: string
+}
+
+// CX-0 — POS-signal chips computed from real feed data. BUSY shows at >= 3 sales/2h.
+function signalChips(post: PostCardData): Array<{ label: string; color: string }> {
+  const chips: Array<{ label: string; color: string }> = []
+  if ((post.busy_now ?? 0) >= 3) chips.push({ label: '🔴 BUSY NOW', color: SIGNAL_COLORS.busy })
+  if (post.fresh_product || post.fresh_batch) chips.push({ label: '🌿 FRESH', color: SIGNAL_COLORS.fresh })
+  if (post.promo_live) chips.push({ label: '📣 PROMO LIVE', color: SIGNAL_COLORS.promo })
+  return chips
+}
+
+// CX-0 cold-start — a lightweight "Aria" insight card; copy is grounded in real POS figures upstream.
+export function AiInsightCard({ post }: { post: PostCardData }) {
+  return (
+    <article style={{ background: PALETTE.surface, borderRadius: RADIUS.xl, border: BORDER, marginBottom: 14, padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ width: 30, height: 30, borderRadius: 10, background: PALETTE.ink, color: PALETTE.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, flexShrink: 0 }}>✦</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: PALETTE.inkSoft, margin: '2px 0 4px' }}>✦ Aria · local right now</p>
+        <p style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4, color: PALETTE.ink, margin: 0 }}>{post.card_text ?? ''}</p>
+        {post.business_id && (
+          <Link href={`/community/businesses/${post.business_id}`} style={{ fontSize: 11, fontWeight: 700, color: PALETTE.ink, textDecoration: 'underline', display: 'inline-block', marginTop: 8 }}>
+            visit {(post.business?.name ?? 'shop').toLowerCase()} →
+          </Link>
+        )}
+      </div>
+    </article>
+  )
 }
 
 interface Props {
@@ -174,6 +209,15 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
           )}
         </div>
       </header>
+
+      {/* CX-0 — POS-signal chips (only when the signal is real) */}
+      {signalChips(post).length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 14px 10px' }}>
+          {signalChips(post).map((c, i) => (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', background: c.color, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.03em', padding: '3px 9px', borderRadius: RADIUS.pill }}>{c.label}</span>
+          ))}
+        </div>
+      )}
 
       {/* Hero — full-bleed */}
       {(firstMedia || isLive) && (

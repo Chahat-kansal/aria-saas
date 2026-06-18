@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Search, Compass, Store } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS, MAX_W } from './theme'
-import { PostCard, type PostCardData } from './PostCard'
+import { PostCard, AiInsightCard, type PostCardData } from './PostCard'
 import { StoriesRow, type StoryBubble } from './StoriesRow'
 import { supabase } from '@/lib/supabase'
 
@@ -208,7 +208,9 @@ export default function CommunityFeedPage() {
         ) : (
           <div style={{ marginTop: 16 }}>
             {posts.map(p => (
-              <PostCard key={p.id} post={p} onHideBusiness={mode === 'followed' ? hideBusiness : undefined} showHide={mode === 'followed'} />
+              p.ai_card
+                ? <AiInsightCard key={p.id} post={p} />
+                : <PostCard key={p.id} post={p} onHideBusiness={mode === 'followed' ? hideBusiness : undefined} showHide={mode === 'followed'} />
             ))}
             {cursor && (
               <div ref={sentinelRef} style={{ textAlign: 'center', padding: 20 }}>

@@ -77,10 +77,27 @@ export async function GET() {
         followerCount[row.business_id] = (followerCount[row.business_id] ?? 0) + 1
       }
     }
+    // CX-0: POS-signal enrichment — which businesses are active right now (busy/promo), data-driven.
+    const busyMap: Record<string, number> = {}
+    const promoMap: Record<string, boolean> = {}
+    if (ids.length > 0) {
+      const nowIso = new Date().toISOString()
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      const { data: salesRows } = await supabaseAdmin.from('pos_sales')
+        .select('business_id').in('business_id', ids).eq('status', 'completed').gte('created_at', twoHoursAgo)
+      for (const s of (salesRows ?? []) as { business_id: string }[]) busyMap[s.business_id] = (busyMap[s.business_id] ?? 0) + 1
+      const { data: promoRows } = await supabaseAdmin.from('pos_promotions')
+        .select('business_id').in('business_id', ids).eq('is_active', true)
+        .or(`valid_from.is.null,valid_from.lte.${nowIso}`).or(`valid_until.is.null,valid_until.gte.${nowIso}`)
+      for (const pr of (promoRows ?? []) as { business_id: string }[]) promoMap[pr.business_id] = true
+    }
+
     const decorate = (b: BizRow & { score: number }) => ({
       id: b.id, name: b.name, industry: b.industry, suburb: b.suburb, city: b.city,
       logo_url: b.logo_url, community_verified: b.community_verified, community_bio: b.community_bio,
       followers: followerCount[b.id] ?? 0,
+      busy_now: busyMap[b.id] ?? 0,
+      promo_live: !!promoMap[b.id],
     })
 
     return NextResponse.json({

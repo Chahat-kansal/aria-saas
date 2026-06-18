@@ -15,6 +15,14 @@ export const PALETTE = {
   live: '#ff3b5e',        // LIVE pill, urgent badges only
 } as const
 
+// CX-0 POS-signal chips — Aria-brand signal colours (data-driven badges only, never decorative).
+// Centralised here so /community pages stay free of inline hex.
+export const SIGNAL_COLORS = {
+  busy:  '#E24B4A',  // 🔴 BUSY NOW
+  fresh: '#7FB897',  // 🌿 FRESH
+  promo: '#BA7517',  // 📣 PROMO LIVE
+} as const
+
 // Back-compat aliases — older code referenced C.text / C.muted / C.border etc.
 // All resolved to the locked palette so nothing reads a stray grey.
 export const C = {
