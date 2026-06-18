@@ -116,10 +116,19 @@ export async function GET(req: Request) {
     const post_id = searchParams.get('post_id')
     if (!post_id) return NextResponse.json({ error: 'post_id required' }, { status: 400 })
 
-    const { data } = await supabaseAdmin.from('community_post_engagement')
-      .select('id, comment_text, created_at, community_members(nickname)')
-      .eq('post_id', post_id).eq('engagement_type', 'comment')
-      .order('created_at', { ascending: false }).limit(50)
+    // CX-1-P3: also return the post itself (PostCardData-compatible) so the post-detail page renders
+    // from one call. Backward-compatible — `comments` is unchanged.
+    const [{ data }, { data: postRow }, { data: engRows }] = await Promise.all([
+      supabaseAdmin.from('community_post_engagement')
+        .select('id, comment_text, created_at, community_members(nickname)')
+        .eq('post_id', post_id).eq('engagement_type', 'comment')
+        .order('created_at', { ascending: false }).limit(50),
+      supabaseAdmin.from('community_posts')
+        .select('id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, businesses(name, logo_url, community_verified, industry, suburb, city)')
+        .eq('id', post_id).eq('status', 'published').maybeSingle(),
+      supabaseAdmin.from('community_post_engagement')
+        .select('engagement_type').eq('post_id', post_id).in('engagement_type', ['like', 'save', 'comment']),
+    ])
 
     const comments = ((data ?? []) as unknown as Array<{ id: string; comment_text: string | null; created_at: string; community_members: { nickname: string | null } | null }>).map((c) => ({
       id: c.id,
@@ -127,7 +136,21 @@ export async function GET(req: Request) {
       nickname: c.community_members?.nickname ?? 'Anonymous',
       created_at: c.created_at,
     }))
-    return NextResponse.json({ comments })
+
+    const counts = { like: 0, comment: 0, save: 0 }
+    for (const e of (engRows ?? []) as Array<{ engagement_type: string }>) {
+      if (e.engagement_type === 'like' || e.engagement_type === 'save' || e.engagement_type === 'comment') counts[e.engagement_type]++
+    }
+    const pr = postRow as Record<string, unknown> | null
+    const post = pr ? {
+      id: pr.id, business_id: pr.business_id, business: pr.businesses,
+      post_type: pr.post_type, title: pr.title, body: pr.body,
+      media_urls: Array.isArray(pr.media_urls) ? pr.media_urls : [],
+      media_type: pr.media_type, ai_generated: pr.ai_generated ?? false,
+      published_at: pr.published_at, counts, mine: { liked: false, saved: false },
+    } : null
+
+    return NextResponse.json({ post, comments })
   } catch (err) {
     console.error('[community/engagement GET]', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

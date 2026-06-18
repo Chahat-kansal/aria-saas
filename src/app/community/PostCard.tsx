@@ -63,6 +63,8 @@ interface Props {
   onAfterAction?: (id: string, change: { liked?: boolean; saved?: boolean }) => void
   onHideBusiness?: (business_id: string) => void
   showHide?: boolean
+  // CX-1-P3: when set, tapping the post body opens the post-detail page (used in the feed).
+  detailHref?: string
 }
 
 function fmtRel(iso: string | null) {
@@ -95,7 +97,7 @@ function renderBodyWithPrices(text: string) {
   )
 }
 
-export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true }: Props) {
+export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true, detailHref }: Props) {
   const router = useRouter()
   const [liked, setLiked] = useState(!!post.mine?.liked)
   const [saved, setSaved] = useState(!!post.mine?.saved)
@@ -262,7 +264,8 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
 
       {/* Body */}
       {bodyText && (
-        <div style={{ padding: '14px 14px 4px' }}>
+        <div style={{ padding: '14px 14px 4px', cursor: detailHref ? 'pointer' : 'default' }}
+          onClick={detailHref ? () => router.push(detailHref) : undefined}>
           {post.title && post.body
             ? (<>
                 <p style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', margin: 0, lineHeight: 1.3, color: PALETTE.ink }}>{renderBodyWithPrices(post.title)}</p>

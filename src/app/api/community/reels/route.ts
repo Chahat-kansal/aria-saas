@@ -11,6 +11,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const limit = Math.min(30, Math.max(5, parseInt(searchParams.get('limit') ?? '15')))
     const before = searchParams.get('before')
+    const businessId = searchParams.get('business_id')  // CX-1-P3: optional per-business filter
 
     const member = await getCommunityMember()
 
@@ -20,6 +21,7 @@ export async function GET(req: Request) {
       .eq('media_type', 'reel')
       .order('published_at', { ascending: false })
       .limit(limit + 1)
+    if (businessId) q = q.eq('business_id', businessId)  // network-wide when absent (unchanged)
     if (before) q = q.lt('published_at', before)
 
     const { data: rows, error } = await q

@@ -44,7 +44,8 @@ export default function BusinessProfilePage() {
   const [existing, setExisting] = useState<ExistingFollow | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [tab, setTab] = useState<'posts' | 'menu' | 'reviews'>('posts')
+  const [tab, setTab] = useState<'posts' | 'reels' | 'menu' | 'reviews'>('posts')
+  const [reels, setReels] = useState<Array<{ id: string; video_url: string | null; thumbnail_url: string | null; title: string | null }> | null>(null)
   const [busy, setBusy] = useState(false)
   const [showFollowPanel, setShowFollowPanel] = useState(false)
   const [consentMarketing, setConsentMarketing] = useState(false)
@@ -75,6 +76,14 @@ export default function BusinessProfilePage() {
   }, [businessId])
 
   useEffect(() => { load() }, [load])
+
+  // CX-1-P3: lazy-load this business's reels the first time the Reels tab is opened.
+  useEffect(() => {
+    if (tab === 'reels' && reels === null && businessId) {
+      fetch('/api/community/reels?business_id=' + businessId).then(r => r.ok ? r.json() : { reels: [] })
+        .then(d => setReels(d.reels ?? [])).catch(() => setReels([]))
+    }
+  }, [tab, reels, businessId])
 
   async function follow() {
     setBusy(true)
@@ -221,7 +230,7 @@ export default function BusinessProfilePage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, marginTop: 18, borderBottom: `1.5px solid ${PALETTE.surfaceAlt}` }}>
-        {(['posts', 'menu', 'reviews'] as const).map(t => {
+        {(['posts', 'reels', 'menu', 'reviews'] as const).map(t => {
           const active = tab === t
           return (
             <button key={t} onClick={() => setTab(t)} style={{
@@ -245,7 +254,7 @@ export default function BusinessProfilePage() {
               {profile.recent_posts.map(p => {
                 const media = p.media_urls?.[0]
                 return (
-                  <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 9, overflow: 'hidden', background: PALETTE.ink, border: BORDER }}>
+                  <Link key={p.id} href={'/community/posts/' + p.id} prefetch={false} style={{ display: 'block', position: 'relative', aspectRatio: '1', borderRadius: 9, overflow: 'hidden', background: PALETTE.ink, border: BORDER }}>
                     {media ? (
                       (p.media_type === 'video' || p.media_type === 'reel')
                         ? <video src={media} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -256,9 +265,31 @@ export default function BusinessProfilePage() {
                         {(p.title ?? p.body ?? '').slice(0, 36)}
                       </div>
                     )}
-                  </div>
+                  </Link>
                 )
               })}
+            </div>
+          )
+        ) : tab === 'reels' ? (
+          reels === null ? (
+            <p style={{ fontSize: 12, color: PALETTE.inkSoft, textAlign: 'center', padding: 28, fontWeight: 500 }}>loading reels…</p>
+          ) : reels.length === 0 ? (
+            <p style={{ fontSize: 12, color: PALETTE.inkSoft, textAlign: 'center', padding: 28, fontWeight: 500 }}>No reels yet.</p>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+              {reels.map(r => (
+                <Link key={r.id} href={'/community/posts/' + r.id} prefetch={false} style={{ display: 'block', position: 'relative', aspectRatio: '9/16', borderRadius: 9, overflow: 'hidden', background: PALETTE.ink, border: BORDER }}>
+                  {r.video_url ? (
+                    <video src={r.video_url} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : r.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={r.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: PALETTE.accent, fontSize: 11, fontWeight: 600, padding: 6, textAlign: 'center', lineHeight: 1.3 }}>{(r.title ?? '').slice(0, 36)}</div>
+                  )}
+                  <span style={{ position: 'absolute', bottom: 6, right: 6, color: '#fff', fontSize: 13, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>▶</span>
+                </Link>
+              ))}
             </div>
           )
         ) : tab === 'menu' ? (

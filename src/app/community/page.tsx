@@ -210,7 +210,7 @@ export default function CommunityFeedPage() {
             {posts.map(p => (
               p.ai_card
                 ? <AiInsightCard key={p.id} post={p} />
-                : <PostCard key={p.id} post={p} onHideBusiness={mode === 'followed' ? hideBusiness : undefined} showHide={mode === 'followed'} />
+                : <PostCard key={p.id} post={p} detailHref={'/community/posts/' + p.id} onHideBusiness={mode === 'followed' ? hideBusiness : undefined} showHide={mode === 'followed'} />
             ))}
             {cursor && (
               <div ref={sentinelRef} style={{ textAlign: 'center', padding: 20 }}>
