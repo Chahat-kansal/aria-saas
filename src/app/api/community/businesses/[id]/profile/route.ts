@@ -14,9 +14,9 @@ export async function GET(_req: Request, { params }: Params) {
     const { id } = await params
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-    const [bizRes, followCountRes, postCountRes, recentPostsRes, b2bFollowingRes, b2bFollowersRes] = await Promise.all([
+    const [bizRes, followCountRes, postCountRes, recentPostsRes, b2bFollowingRes, b2bFollowersRes, highlightsRes] = await Promise.all([
       supabaseAdmin.from('businesses')
-        .select('id, name, industry, city, suburb, logo_url, website, community_verified, community_bio, community_cover_url, google_rating')
+        .select('id, name, industry, city, suburb, logo_url, website, community_verified, community_bio, community_cover_url, google_rating, phone, address, email')
         .eq('id', id).maybeSingle(),
       supabaseAdmin.from('community_follows')
         .select('id', { count: 'exact', head: true })
@@ -34,6 +34,10 @@ export async function GET(_req: Request, { params }: Params) {
       supabaseAdmin.from('community_business_follows')
         .select('id', { count: 'exact', head: true })
         .eq('following_business_id', id),
+      // CX-OWNER-TRUST-2: owner-curated story highlights for the public profile.
+      supabaseAdmin.from('community_story_highlights')
+        .select('id, title, cover_url, post_ids, display_order')
+        .eq('business_id', id).order('display_order', { ascending: true }).order('created_at', { ascending: true }),
     ])
 
     if (!bizRes.data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -47,6 +51,7 @@ export async function GET(_req: Request, { params }: Params) {
         rating: (bizRes.data as { google_rating?: number | null }).google_rating ?? null,
       },
       recent_posts: recentPostsRes.data ?? [],
+      highlights: highlightsRes.data ?? [],
       b2b_following: ((b2bFollowingRes.data ?? []) as unknown as Array<{ following_business_id: string; businesses: { name: string | null; logo_url: string | null } | null }>).map((r) => ({
         id: r.following_business_id,
         name: r.businesses?.name,

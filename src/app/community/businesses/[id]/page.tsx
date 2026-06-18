@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { BadgeCheck, ExternalLink, Bell, BellOff, EyeOff, Eye, Loader2, ArrowLeft, MoreHorizontal, X } from 'lucide-react'
+import { BadgeCheck, ExternalLink, Bell, BellOff, EyeOff, Eye, Loader2, ArrowLeft, MoreHorizontal, X, Phone, MapPin } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS, MAX_W } from '../../theme'
 
 interface BusinessProfile {
@@ -16,8 +16,12 @@ interface BusinessProfile {
   community_verified: boolean | null
   community_bio: string | null
   community_cover_url: string | null
+  phone: string | null
+  address: string | null
+  email: string | null
 }
 interface ProfileStats { followers: number; post_count: number; b2b_followers: number; rating?: number | null }
+interface StoryHighlight { id: string; title: string; cover_url: string | null; post_ids: string[]; display_order: number }
 interface ExistingFollow { consent_marketing: boolean; notifications_on: boolean; is_hidden: boolean }
 interface RecentPost {
   id: string; post_type: string; title: string | null; body: string | null
@@ -28,6 +32,7 @@ interface ProfileResponse {
   business: BusinessProfile
   stats: ProfileStats
   recent_posts: RecentPost[]
+  highlights: StoryHighlight[]
   b2b_following: Array<{ id: string; name: string | null; logo_url: string | null }>
 }
 
@@ -207,19 +212,29 @@ export default function BusinessProfilePage() {
           <p style={{ fontSize: 10, fontWeight: 500, color: PALETTE.ink, margin: '8px 0 0', lineHeight: 1.5, opacity: 0.85, whiteSpace: 'pre-wrap' }}>{biz.community_bio}</p>
         )}
 
-        {/* Website chip */}
-        {biz.website && host && (
-          <a href={biz.website} target="_blank" rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12,
-              background: PALETTE.accent, color: PALETTE.ink, border: BORDER,
-              fontSize: 11, fontWeight: 700, padding: '6px 12px', borderRadius: RADIUS.pill,
-              textDecoration: 'none',
-            }}>
-            <ExternalLink size={13} /> {host}
-          </a>
-        )}
       </div>
+
+      {/* CX-OWNER-TRUST-2 — consolidated contact row (website + phone + address). Shown only when ≥1 exists. */}
+      {((biz.website && host) || biz.phone || biz.address) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+          {biz.website && host && (
+            <a href={biz.website} target="_blank" rel="noopener noreferrer" style={contactPill}>
+              <ExternalLink size={13} style={{ flexShrink: 0 }} /> {host}
+            </a>
+          )}
+          {biz.phone && (
+            <a href={`tel:${biz.phone.replace(/\s+/g, '')}`} style={contactPill}>
+              <Phone size={13} style={{ flexShrink: 0 }} /> {biz.phone}
+            </a>
+          )}
+          {biz.address && (
+            <a href={`https://maps.google.com/?q=${encodeURIComponent([biz.address, biz.suburb, biz.city].filter(Boolean).join(', '))}`}
+              target="_blank" rel="noopener noreferrer" style={contactPill}>
+              <MapPin size={13} style={{ flexShrink: 0 }} /> {biz.address}
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Stats strip — rating on lime, others surface-alt */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 16 }}>
@@ -227,6 +242,36 @@ export default function BusinessProfilePage() {
         <StatCard value={ratingDisplay} label="★ rating" lime />
         <StatCard value={fmtK(stats.post_count)} label="posts" />
       </div>
+
+      {/* CX-OWNER-TRUST-2 — story highlights (owner-curated). Hidden entirely when none exist. */}
+      {profile.highlights && profile.highlights.length > 0 && (
+        <div className="community-hide-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', marginTop: 16, paddingBottom: 2 }}>
+          {profile.highlights.map(h => {
+            const circle = (
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%', flexShrink: 0,
+                background: h.cover_url ? `url(${h.cover_url}) center/cover` : PALETTE.accent,
+                border: `1.5px solid ${PALETTE.ink}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: PALETTE.ink, fontWeight: 800, fontSize: 22,
+              }}>
+                {!h.cover_url && (h.title?.[0]?.toUpperCase() ?? '★')}
+              </div>
+            )
+            const label = (
+              <span style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink, marginTop: 5, maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{h.title}</span>
+            )
+            const inner = (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 64, flexShrink: 0 }}>
+                {circle}{label}
+              </div>
+            )
+            return h.post_ids && h.post_ids.length > 0
+              ? <Link key={h.id} href={`/community/posts/${h.post_ids[0]}`} prefetch={false} style={{ textDecoration: 'none' }}>{inner}</Link>
+              : <div key={h.id}>{inner}</div>
+          })}
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, marginTop: 18, borderBottom: `1.5px solid ${PALETTE.surfaceAlt}` }}>
@@ -379,4 +424,11 @@ const whitePill: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 5,
   background: PALETTE.surface, color: PALETTE.ink, border: BORDER, borderRadius: RADIUS.pill,
   fontSize: 12, fontWeight: 700, padding: '8px 16px', cursor: 'pointer', minHeight: 38, textDecoration: 'none', fontFamily: 'inherit',
+}
+// CX-OWNER-TRUST-2 — contact pill (outline, same family as whitePill; truncates long values).
+const contactPill: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: PALETTE.surface, color: PALETTE.ink, border: BORDER, borderRadius: RADIUS.pill,
+  fontSize: 11, fontWeight: 700, padding: '7px 13px', cursor: 'pointer', minHeight: 36, textDecoration: 'none', fontFamily: 'inherit',
+  maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }

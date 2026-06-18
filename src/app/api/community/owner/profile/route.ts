@@ -40,7 +40,7 @@ async function _GET() {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const { data } = await supabaseAdmin.from('businesses')
-    .select('id, name, website, community_bio, community_cover_url, community_verified, logo_url, industry, suburb, city')
+    .select('id, name, website, community_bio, community_cover_url, community_verified, logo_url, industry, suburb, city, phone, address')
     .eq('id', bid).maybeSingle()
   return NextResponse.json({ profile: data })
 }
