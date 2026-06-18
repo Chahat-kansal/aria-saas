@@ -13,23 +13,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
     const { data: member } = await supabaseAdmin.from('community_members')
-      .select('id, nickname, joined_at') // scoped fields only — no token/user_id/push_token
+      .select('id, nickname, joined_at, avatar_url, bio') // scoped fields only — no token/user_id/push_token/email
       .eq('id', id).maybeSingle()
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
-    const [{ count: followCount }, { count: likeCount }] = await Promise.all([
+    const [{ count: followCount }, { count: likeCount }, { count: savedCount }] = await Promise.all([
       supabaseAdmin.from('community_follows')
         .select('id', { count: 'exact', head: true }).eq('member_id', id).is('unfollowed_at', null),
       supabaseAdmin.from('community_post_engagement')
         .select('id', { count: 'exact', head: true }).eq('member_id', id).eq('engagement_type', 'like'),
+      supabaseAdmin.from('community_post_engagement')
+        .select('id', { count: 'exact', head: true }).eq('member_id', id).eq('engagement_type', 'save'),
     ])
 
     return NextResponse.json({
       id: member.id,
       nickname: member.nickname ?? null,
+      avatar_url: member.avatar_url ?? null,
+      bio: member.bio ?? null,
       joined_at: member.joined_at,
       follow_count: followCount ?? 0,
       like_count: likeCount ?? 0,
+      saved_count: savedCount ?? 0,
     })
   } catch (err) {
     console.error('[community/members]', err)

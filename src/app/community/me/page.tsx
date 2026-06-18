@@ -1,11 +1,17 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { C, RADIUS, MAX_W, FONT_DISPLAY } from '../theme'
 import { PushOptIn } from '../PushOptIn'
 import { supabase } from '@/lib/supabase'
 
-interface Member { id: string; nickname: string | null; joined_at: string }
+type NotifPrefKey = 'notif_pref_likes' | 'notif_pref_comments' | 'notif_pref_followers' | 'notif_pref_new_posts'
+interface Member {
+  id: string; nickname: string | null; joined_at: string
+  avatar_url?: string | null; bio?: string | null
+  notif_pref_likes?: boolean; notif_pref_comments?: boolean; notif_pref_followers?: boolean; notif_pref_new_posts?: boolean
+}
+interface BlockedBiz { business_id: string; created_at: string; businesses: { name: string | null; logo_url: string | null } | null }
 interface Follow {
   id: string
   business_id: string
@@ -29,6 +35,14 @@ export default function CommunityHomePage() {
   const [upgradePassword, setUpgradePassword] = useState('')
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const [upgrading, setUpgrading] = useState(false)
+  // CX-ACCOUNT-CENTRE-1
+  const [bioInput, setBioInput] = useState('')
+  const [savingBio, setSavingBio] = useState(false)
+  const [bioSaved, setBioSaved] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [stats, setStats] = useState<{ following: number; saved: number; liked: number } | null>(null)
+  const [blocks, setBlocks] = useState<BlockedBiz[]>([])
+  const avatarFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     (async () => {
@@ -38,6 +52,14 @@ export default function CommunityHomePage() {
       ])
       setMember(d.member ?? null)
       setFollows(d.follows ?? [])
+      if (d.member) {
+        setBioInput(d.member.bio ?? '')
+        // Activity stats + blocked businesses (parallel, best-effort).
+        fetch('/api/community/members/' + d.member.id).then(r => r.ok ? r.json() : null).then(p => {
+          if (p) setStats({ following: p.follow_count ?? 0, saved: p.saved_count ?? 0, liked: p.like_count ?? 0 })
+        }).catch(() => {})
+        fetch('/api/community/block').then(r => r.ok ? r.json() : null).then(b => { if (b?.blocks) setBlocks(b.blocks) }).catch(() => {})
+      }
       if (authData.data.user) {
         setAuthUser({ id: authData.data.user.id, email: authData.data.user.email })
         // Check if community session is already linked to this auth user
@@ -126,6 +148,45 @@ export default function CommunityHomePage() {
     setFollows(prev => prev.filter(f => f.business_id !== business_id))
   }
 
+  // CX-ACCOUNT-CENTRE-1 handlers
+  async function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setAvatarUploading(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch('/api/community/members/avatar', { method: 'POST', body: fd })
+      const d = await res.json()
+      if (res.ok && d.avatar_url) setMember(m => m ? { ...m, avatar_url: d.avatar_url } : m)
+    } catch { /* keep current avatar */ }
+    setAvatarUploading(false)
+  }
+
+  async function saveBio() {
+    setSavingBio(true)
+    await fetch('/api/community/session', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bio: bioInput }),
+    }).catch(() => {})
+    setMember(m => m ? { ...m, bio: bioInput.trim() || null } : m)
+    setBioSaved(true); setTimeout(() => setBioSaved(false), 2000)
+    setSavingBio(false)
+  }
+
+  async function toggleNotifPref(key: NotifPrefKey, value: boolean) {
+    setMember(m => m ? { ...m, [key]: value } : m) // optimistic
+    await fetch('/api/community/session', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value }),
+    }).catch(() => {})
+  }
+
+  async function unblock(business_id: string) {
+    await fetch('/api/community/block?business_id=' + business_id, { method: 'DELETE' }).catch(() => {})
+    setBlocks(prev => prev.filter(b => b.business_id !== business_id))
+  }
+
   if (loading) {
     return (
       <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px' }}>
@@ -198,13 +259,16 @@ export default function CommunityHomePage() {
     )
   }
 
-  // ─── JOINED ─────────────────────────────────────────────────────
+  // ─── JOINED — Account Centre ────────────────────────────────────
+  const secLabel: React.CSSProperties = { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: C.textMuted, margin: '0 0 8px' }
+  const maskedEmail = authUser?.email ? authUser.email[0] + '***@' + (authUser.email.split('@')[1] ?? '') : ''
+  const dispName = member.nickname ?? 'Anonymous'
   return (
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px 64px' }}>
       <header style={{ marginBottom: 22 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Account Centre</p>
             <h1 style={{ fontSize: 26, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY }}>
               {member.nickname ? 'Hi ' + member.nickname : 'You\'re in'}
             </h1>
@@ -216,68 +280,89 @@ export default function CommunityHomePage() {
         </div>
       </header>
 
-      {/* Nickname inline edit */}
-      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 20 }}>
-        {!editingNick ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Nickname</p>
-              <p style={{ fontSize: 15, fontWeight: 600, margin: '4px 0 0' }}>{member.nickname ?? 'Anonymous'}</p>
-            </div>
-            <button onClick={() => { setNickname(member.nickname ?? ''); setEditingNick(true) }}
-              style={{ background: 'transparent', border: '1px solid ' + C.border, color: C.textDim, padding: '8px 14px', borderRadius: RADIUS.sm, fontSize: 12, cursor: 'pointer', minHeight: 36, fontFamily: 'inherit' }}>
-              Change
-            </button>
+      {/* ════ SECTION 1 — IDENTITY ════ */}
+      <p style={secLabel}>Identity</p>
+      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 22 }}>
+        <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarPick} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+          <button onClick={() => avatarFileRef.current?.click()} disabled={avatarUploading} aria-label="Change avatar"
+            style={{ position: 'relative', width: 80, height: 80, borderRadius: '50%', flexShrink: 0, padding: 0, cursor: 'pointer',
+              background: member.avatar_url ? `url(${member.avatar_url}) center/cover` : C.accent,
+              border: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: C.ink, fontWeight: 800, fontSize: 30 }}>
+            {!member.avatar_url && dispName[0]?.toUpperCase()}
+            <span style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: C.ink, color: C.accent, border: '2px solid ' + C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800 }}>
+              {avatarUploading ? '…' : '+'}
+            </span>
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {!editingNick ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <p style={{ fontSize: 18, fontWeight: 700, margin: 0, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dispName}</p>
+                <button onClick={() => { setNickname(member.nickname ?? ''); setEditingNick(true) }}
+                  style={{ background: 'transparent', border: '1px solid ' + C.border, color: C.textDim, padding: '5px 11px', borderRadius: RADIUS.sm, fontSize: 11, cursor: 'pointer', minHeight: 30, fontFamily: 'inherit', flexShrink: 0 }}>Edit</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Nickname" maxLength={40}
+                  style={{ flex: 1, padding: '8px 10px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
+                <button onClick={saveNickname} disabled={saving}
+                  style={{ padding: '0 12px', background: C.accent, color: C.ink, border: 'none', borderRadius: RADIUS.sm, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 36, fontFamily: 'inherit' }}>Save</button>
+                <button onClick={() => setEditingNick(false)}
+                  style={{ padding: '0 10px', background: 'transparent', color: C.textDim, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 12, cursor: 'pointer', minHeight: 36, fontFamily: 'inherit' }}>✕</button>
+              </div>
+            )}
+            {/* Activity stats */}
+            {stats && (
+              <p style={{ fontSize: 12, color: C.textMuted, margin: '6px 0 0' }}>
+                <b style={{ color: C.text }}>{stats.following}</b> following · <b style={{ color: C.text }}>{stats.saved}</b> saved · <b style={{ color: C.text }}>{stats.liked}</b> liked
+              </p>
+            )}
           </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Nickname" maxLength={40}
-              style={{ flex: 1, padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
-            <button onClick={saveNickname} disabled={saving}
-              style={{ padding: '0 16px', background: C.accent, color: C.ink, border: 'none', borderRadius: RADIUS.sm, fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 40, fontFamily: 'inherit' }}>
-              Save
-            </button>
-            <button onClick={() => setEditingNick(false)}
-              style={{ padding: '0 14px', background: 'transparent', color: C.textDim, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 13, cursor: 'pointer', minHeight: 40, fontFamily: 'inherit' }}>
-              Cancel
-            </button>
-          </div>
-        )}
+        </div>
+
+        {/* Bio */}
+        <p style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 6px' }}>Bio</p>
+        <textarea value={bioInput} onChange={e => setBioInput(e.target.value.slice(0, 160))} rows={2}
+          placeholder="Tell locals a bit about yourself…"
+          style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <button onClick={saveBio} disabled={savingBio || bioInput === (member.bio ?? '')}
+            style={{ padding: '8px 16px', background: C.accent, color: C.ink, border: 'none', borderRadius: RADIUS.sm, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 36, fontFamily: 'inherit', opacity: savingBio || bioInput === (member.bio ?? '') ? 0.5 : 1 }}>
+            {savingBio ? 'Saving…' : 'Save bio'}
+          </button>
+          {bioSaved && <span style={{ fontSize: 12, color: C.accent, fontWeight: 600 }}>✓ Saved</span>}
+          <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 'auto' }}>{bioInput.length}/160</span>
+        </div>
+        <Link href={`/community/u/${member.id}`} prefetch={false} style={{ display: 'inline-block', marginTop: 12, fontSize: 12, fontWeight: 700, color: C.accent, textDecoration: 'none' }}>
+          View public profile →
+        </Link>
       </section>
 
-      {/* Account upgrade — shown when no auth link yet */}
+      {/* ════ SECTION 2 — ACCOUNT ════ */}
+      <p style={secLabel}>Account</p>
       {!accountLinked && !authUser && (
-        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 20 }}>
+        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 14 }}>
           {!showUpgrade ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div>
-                <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Create an account</p>
+                <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Link an account</p>
                 <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', lineHeight: 1.5 }}>
                   Keep your follows across devices. Still anonymous to businesses.
                 </p>
               </div>
               <button onClick={() => setShowUpgrade(true)}
                 style={{ padding: '9px 16px', background: C.accent, color: C.ink, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minHeight: 40 }}>
-                Upgrade
+                Link
               </button>
             </div>
           ) : (
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px' }}>Link an account</p>
-              <input
-                value={upgradeEmail}
-                onChange={e => setUpgradeEmail(e.target.value)}
-                placeholder="Email address"
-                type="email"
-                style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }}
-              />
-              <input
-                value={upgradePassword}
-                onChange={e => setUpgradePassword(e.target.value)}
-                placeholder="Password (min 8 chars)"
-                type="password"
-                style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }}
-              />
+              <input value={upgradeEmail} onChange={e => setUpgradeEmail(e.target.value)} placeholder="Email address" type="email"
+                style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }} />
+              <input value={upgradePassword} onChange={e => setUpgradePassword(e.target.value)} placeholder="Password (min 8 chars)" type="password"
+                style={{ width: '100%', padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }} />
               {upgradeError && <p style={{ fontSize: 12, color: C.danger, margin: '0 0 8px' }}>{upgradeError}</p>}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={upgradeAccount} disabled={upgrading || !upgradeEmail || !upgradePassword}
@@ -289,44 +374,87 @@ export default function CommunityHomePage() {
                   Sign in
                 </button>
               </div>
-              <button onClick={() => setShowUpgrade(false)} style={{ marginTop: 8, background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}>
-                Cancel
-              </button>
+              <button onClick={() => setShowUpgrade(false)} style={{ marginTop: 8, background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}>Cancel</button>
             </div>
           )}
         </section>
       )}
-
-      {accountLinked && (
-        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18 }}>✓</span>
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Account linked</p>
-            <p style={{ fontSize: 11, color: C.textMuted, margin: '2px 0 0' }}>Your follows are preserved across devices.</p>
+      {(accountLinked || authUser) && (
+        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 16, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>✓</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Linked{maskedEmail ? ' — ' + maskedEmail : ''}</p>
+              <p style={{ fontSize: 11, color: C.textMuted, margin: '2px 0 0' }}>Your follows sync across devices.</p>
+            </div>
           </div>
+          <Link href="/dashboard/settings" prefetch={false} style={{ display: 'inline-block', marginTop: 10, fontSize: 12, fontWeight: 700, color: C.accent, textDecoration: 'none' }}>
+            Change password →
+          </Link>
         </section>
       )}
-
-      {/* Saved offers wallet link */}
       <Link href="/community/saved" prefetch={false} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg,
-        padding: '14px 16px', marginBottom: 14, textDecoration: 'none', color: C.text,
+        padding: '14px 16px', marginBottom: 22, textDecoration: 'none', color: C.text,
       }}>
         <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>saved offers</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.inkSoft }}>→</span>
       </Link>
 
-      {/* Push notifications opt-in */}
-      <div style={{ marginBottom: 20 }}>
+      {/* ════ SECTION 3 — NOTIFICATIONS ════ */}
+      <p style={secLabel}>Notifications</p>
+      <div style={{ marginBottom: 12 }}>
         <PushOptIn />
       </div>
-
-      {/* Follows */}
-      <section style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>You follow ({follows.length})</h2>
+      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 16, marginBottom: 22 }}>
+        <p style={{ fontSize: 12, color: C.textMuted, margin: '0 0 10px', lineHeight: 1.5 }}>Choose what reaches you — applies to your in-app alerts and push.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <PrefRow label="Likes on your posts" value={member.notif_pref_likes !== false} onChange={v => toggleNotifPref('notif_pref_likes', v)} />
+          <PrefRow label="Comments" value={member.notif_pref_comments !== false} onChange={v => toggleNotifPref('notif_pref_comments', v)} />
+          <PrefRow label="New followers" value={member.notif_pref_followers !== false} onChange={v => toggleNotifPref('notif_pref_followers', v)} />
+          <PrefRow label="New posts from shops you follow" value={member.notif_pref_new_posts !== false} onChange={v => toggleNotifPref('notif_pref_new_posts', v)} />
         </div>
+      </section>
+
+      {/* ════ SECTION 4 — PRIVACY ════ */}
+      <p style={secLabel}>Privacy</p>
+      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 16, marginBottom: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Your follows are private</p>
+        <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', lineHeight: 1.5 }}>
+          Who you follow is never shown publicly in Aria. Only your nickname and activity counts appear on your public profile.
+        </p>
+        {blocks.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <p style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Blocked businesses ({blocks.length})</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {blocks.map(b => (
+                <div key={b.business_id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.surfaceHi, borderRadius: RADIUS.sm, padding: '8px 10px' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.businesses?.name ?? 'Business'}</span>
+                  <button onClick={() => unblock(b.business_id)}
+                    style={{ background: 'transparent', border: '1px solid ' + C.border, color: C.textDim, padding: '5px 11px', borderRadius: RADIUS.sm, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Unblock</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <p style={{ fontSize: 11, color: C.textMuted, margin: '14px 0 0', lineHeight: 1.5 }}>
+          To block a business, open its profile and choose Block. Blocking hides their posts and stops all messages.
+        </p>
+      </section>
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+        <button onClick={leave} disabled={saving}
+          style={{ width: '100%', padding: '12px', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: C.danger, borderRadius: RADIUS.sm, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}>
+          Leave the network
+        </button>
+        <p style={{ fontSize: 11, color: C.textMuted, margin: 0, lineHeight: 1.55, textAlign: 'center' }}>
+          Identity (loyalty, points, your real name) only ever lives in-store at the shop — never here.
+        </p>
+      </section>
+
+      {/* ════ SECTION 5 — FOLLOWING ════ */}
+      <p style={secLabel}>Businesses you follow ({follows.length})</p>
+      <section style={{ marginBottom: 24 }}>
         {follows.length === 0 ? (
           <div style={{ background: C.surface, border: '1px dashed ' + C.border, borderRadius: RADIUS.lg, padding: 22, textAlign: 'center' }}>
             <p style={{ fontSize: 14, color: C.textDim, margin: 0, lineHeight: 1.5 }}>
@@ -369,17 +497,6 @@ export default function CommunityHomePage() {
             ))}
           </div>
         )}
-      </section>
-
-      {/* Footer actions */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8, borderTop: '1px solid ' + C.border, marginTop: 24 }}>
-        <button onClick={leave} disabled={saving}
-          style={{ width: '100%', padding: '12px', background: 'transparent', border: '1px solid ' + C.border, color: C.textMuted, borderRadius: RADIUS.sm, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}>
-          Leave the network
-        </button>
-        <p style={{ fontSize: 11, color: C.textMuted, margin: 0, lineHeight: 1.55, textAlign: 'center' }}>
-          Identity (loyalty, points, your real name) only ever lives in-store at the shop — never here.
-        </p>
       </section>
     </main>
   )

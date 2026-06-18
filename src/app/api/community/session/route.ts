@@ -41,15 +41,30 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH — update the nickname (still anonymous, still no real name required)
+// PATCH — update editable member fields (still anonymous, still no real name required).
+// CX-ACCOUNT-CENTRE-1: partial patch — only the fields PRESENT in the body are touched (a patch that
+// omits nickname no longer wipes it). Accepts nickname, avatar_url, bio, and notif_pref_* toggles.
+const NOTIF_PREF_KEYS = ['notif_pref_likes', 'notif_pref_comments', 'notif_pref_followers', 'notif_pref_new_posts'] as const
 export async function PATCH(req: Request) {
   try {
     const member = await getCommunityMember()
     if (!member) return NextResponse.json({ error: 'No session' }, { status: 401 })
     const body = await req.json().catch(() => ({} as Record<string, unknown>))
-    const nickname = typeof body.nickname === 'string' ? body.nickname.trim().slice(0, 40) : null
+
+    const patch: Record<string, unknown> = {}
+    if (typeof body.nickname === 'string') patch.nickname = body.nickname.trim().slice(0, 40) || null
+    if (typeof body.bio === 'string') patch.bio = body.bio.trim().slice(0, 160) || null
+    if (typeof body.avatar_url === 'string') {
+      const u = body.avatar_url.trim().slice(0, 500)
+      if (u !== '' && !/^https:\/\//i.test(u)) return NextResponse.json({ error: 'avatar_url must be an https URL.' }, { status: 400 })
+      patch.avatar_url = u || null
+    }
+    for (const k of NOTIF_PREF_KEYS) if (typeof body[k] === 'boolean') patch[k] = body[k]
+
+    if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true })
+
     const { supabaseAdmin } = await import('@/lib/supabase-admin')
-    await supabaseAdmin.from('community_members').update({ nickname }).eq('id', member.id)
+    await supabaseAdmin.from('community_members').update(patch).eq('id', member.id)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[community/session PATCH]', err)

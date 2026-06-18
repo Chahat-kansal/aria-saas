@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Heart, Store } from 'lucide-react'
 import { C, BORDER, RADIUS, MAX_W, FONT_DISPLAY } from '../../theme'
 
-interface MemberProfile { id: string; nickname: string | null; joined_at: string; follow_count: number; like_count: number }
+interface MemberProfile { id: string; nickname: string | null; avatar_url: string | null; bio: string | null; joined_at: string; follow_count: number; like_count: number; saved_count?: number }
 
 function fmtJoined(iso: string) {
   try { return new Date(iso).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) } catch { return '' }
@@ -54,11 +54,12 @@ export default function MemberProfilePage() {
       </button>
 
       <section style={{ background: C.surface, border: BORDER, borderRadius: RADIUS.xl, padding: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
-        <div style={{ width: 72, height: 72, borderRadius: '50%', background: C.accent, border: BORDER, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, fontWeight: 800, color: C.ink }}>
-          {name[0]?.toUpperCase() ?? '?'}
+        <div style={{ width: 72, height: 72, borderRadius: '50%', background: m.avatar_url ? `url(${m.avatar_url}) center/cover` : C.accent, border: BORDER, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, fontWeight: 800, color: C.ink }}>
+          {!m.avatar_url && (name[0]?.toUpperCase() ?? '?')}
         </div>
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY, letterSpacing: '-0.01em', color: C.ink }}>{name.toLowerCase()}</h1>
         <p style={{ fontSize: 12, color: C.inkSoft, margin: 0 }}>member since {fmtJoined(m.joined_at)}</p>
+        {m.bio && <p style={{ fontSize: 13, color: C.ink, margin: '8px 0 0', lineHeight: 1.5, maxWidth: 340 }}>{m.bio}</p>}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 14, width: '100%', maxWidth: 320 }}>
           <div style={{ flex: 1, background: C.surfaceAlt, borderRadius: RADIUS.md, padding: '12px 8px' }}>

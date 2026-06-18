@@ -17,15 +17,32 @@ export async function GET() {
   try {
     const member = await getCommunityMember()
     if (!member) return NextResponse.json({ follows: [], member: null })
-    const { data } = await supabaseAdmin
-      .from('community_follows')
-      .select('id, business_id, followed_at, consent_marketing, notifications_on, is_hidden, businesses(name, industry, city, logo_url)')
-      .eq('member_id', member.id)
-      .is('unfollowed_at', null)
-      .order('followed_at', { ascending: false })
+    // CX-ACCOUNT-CENTRE-1 — the Account Centre needs the member's profile + notif prefs too.
+    const [{ data }, { data: profile }] = await Promise.all([
+      supabaseAdmin
+        .from('community_follows')
+        .select('id, business_id, followed_at, consent_marketing, notifications_on, is_hidden, businesses(name, industry, city, logo_url)')
+        .eq('member_id', member.id)
+        .is('unfollowed_at', null)
+        .order('followed_at', { ascending: false }),
+      supabaseAdmin
+        .from('community_members')
+        .select('avatar_url, bio, notif_pref_likes, notif_pref_comments, notif_pref_followers, notif_pref_new_posts')
+        .eq('id', member.id).maybeSingle(),
+    ])
     return NextResponse.json({
       follows: data ?? [],
-      member: { id: member.id, nickname: member.nickname },
+      member: {
+        id: member.id,
+        nickname: member.nickname,
+        joined_at: member.joined_at,
+        avatar_url: profile?.avatar_url ?? null,
+        bio: profile?.bio ?? null,
+        notif_pref_likes: profile?.notif_pref_likes ?? true,
+        notif_pref_comments: profile?.notif_pref_comments ?? true,
+        notif_pref_followers: profile?.notif_pref_followers ?? true,
+        notif_pref_new_posts: profile?.notif_pref_new_posts ?? true,
+      },
     })
   } catch (err) {
     console.error('[community/follows GET]', err)

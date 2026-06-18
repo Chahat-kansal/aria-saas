@@ -18,6 +18,17 @@ async function ownerMemberId(businessId: string): Promise<string | null> {
   return m?.id ?? null
 }
 
+// CX-ACCOUNT-CENTRE-1 — respect the recipient's per-type notification preference. Defaults to true
+// (notify) when the column is null or the lookup fails, so missing prefs never silence notifications.
+type PrefColumn = 'notif_pref_likes' | 'notif_pref_comments' | 'notif_pref_followers' | 'notif_pref_new_posts'
+async function memberWantsType(memberId: string, pref: PrefColumn): Promise<boolean> {
+  try {
+    const { data } = await supabaseAdmin.from('community_members').select(pref).eq('id', memberId).maybeSingle()
+    const v = (data as Record<string, unknown> | null)?.[pref]
+    return v !== false
+  } catch { return true }
+}
+
 /** A member liked or commented on a business's post → notify the owner (if linked). */
 export async function notifyEngagement(opts: {
   postId: string
@@ -28,6 +39,8 @@ export async function notifyEngagement(opts: {
   try {
     const recipient = await ownerMemberId(opts.businessId)
     if (!recipient || recipient === opts.actorMemberId) return // no recipient / no self-notify
+    const pref: PrefColumn = opts.kind === 'new_like' ? 'notif_pref_likes' : 'notif_pref_comments'
+    if (!(await memberWantsType(recipient, pref))) return // recipient turned this type off
     await supabaseAdmin.from('community_notifications').insert({
       member_id: recipient,
       type: opts.kind,
@@ -45,6 +58,7 @@ export async function notifyFollow(opts: { businessId: string; actorMemberId: st
   try {
     const recipient = await ownerMemberId(opts.businessId)
     if (!recipient || recipient === opts.actorMemberId) return
+    if (!(await memberWantsType(recipient, 'notif_pref_followers'))) return
     await supabaseAdmin.from('community_notifications').insert({
       member_id: recipient,
       type: 'new_follower',
@@ -59,12 +73,13 @@ export async function notifyFollow(opts: { businessId: string; actorMemberId: st
 /** A business published a post → notify every active follower. */
 export async function notifyNewPost(opts: { businessId: string; postId: string }): Promise<void> {
   try {
+    // Join each follower's notif_pref_new_posts so we can skip the ones who turned new-post alerts off.
     const { data: followers } = await supabaseAdmin.from('community_follows')
-      .select('member_id')
+      .select('member_id, community_members(notif_pref_new_posts)')
       .eq('business_id', opts.businessId)
       .is('unfollowed_at', null)
-    const rows = ((followers ?? []) as Array<{ member_id: string | null }>)
-      .filter(f => !!f.member_id)
+    const rows = ((followers ?? []) as unknown as Array<{ member_id: string | null; community_members: { notif_pref_new_posts: boolean | null } | null }>)
+      .filter(f => !!f.member_id && f.community_members?.notif_pref_new_posts !== false)
       .map(f => ({
         member_id: f.member_id as string,
         type: 'new_post' as const,
