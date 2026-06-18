@@ -47,7 +47,15 @@ export default function CommunityFeedPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    // CX-ACCOUNT-CENTRE-2 — honour the member's saved default-feed preference on first load.
+    let initial: 'foryou' | 'following' = 'foryou'
+    if (typeof window !== 'undefined' && window.localStorage.getItem('aria-community-default-feed') === 'following') {
+      initial = 'following'
+      setFeedTab('following')
+    }
+    load(initial)
+  }, [load])
 
   // Detect if the current auth user is a business owner (For Owners mode toggle)
   useEffect(() => {

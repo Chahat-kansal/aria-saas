@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { C, RADIUS, MAX_W, FONT_DISPLAY } from '../theme'
+import { C, RADIUS, MAX_W, FONT_DISPLAY, SIGNAL_COLORS } from '../theme'
 import { PushOptIn } from '../PushOptIn'
 import { supabase } from '@/lib/supabase'
 
@@ -40,11 +40,20 @@ export default function CommunityHomePage() {
   const [savingBio, setSavingBio] = useState(false)
   const [bioSaved, setBioSaved] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
-  const [stats, setStats] = useState<{ following: number; saved: number; liked: number } | null>(null)
+  // CX-ACCOUNT-CENTRE-2
+  const [stats, setStats] = useState<{ following: number; saved: number; liked: number; comments: number; messaged: number } | null>(null)
+  const [exportData, setExportData] = useState<unknown | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [defaultFeed, setDefaultFeedState] = useState<'foryou' | 'following'>('foryou')
+  const [pwReset, setPwReset] = useState('')
   const [blocks, setBlocks] = useState<BlockedBiz[]>([])
   const avatarFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const df = window.localStorage.getItem('aria-community-default-feed')
+      if (df === 'following' || df === 'foryou') setDefaultFeedState(df)
+    }
     (async () => {
       const [d, authData] = await Promise.all([
         fetch('/api/community/follows').then(r => r.json()),
@@ -54,9 +63,9 @@ export default function CommunityHomePage() {
       setFollows(d.follows ?? [])
       if (d.member) {
         setBioInput(d.member.bio ?? '')
-        // Activity stats + blocked businesses (parallel, best-effort).
-        fetch('/api/community/members/' + d.member.id).then(r => r.ok ? r.json() : null).then(p => {
-          if (p) setStats({ following: p.follow_count ?? 0, saved: p.saved_count ?? 0, liked: p.like_count ?? 0 })
+        // Activity counts + full export data (own data, member-scoped) + blocked businesses.
+        fetch('/api/community/me/export').then(r => r.ok ? r.json() : null).then(p => {
+          if (p) { setStats(p.activity); setExportData(p) }
         }).catch(() => {})
         fetch('/api/community/block').then(r => r.ok ? r.json() : null).then(b => { if (b?.blocks) setBlocks(b.blocks) }).catch(() => {})
       }
@@ -187,6 +196,37 @@ export default function CommunityHomePage() {
     setBlocks(prev => prev.filter(b => b.business_id !== business_id))
   }
 
+  // CX-ACCOUNT-CENTRE-2 handlers
+  async function downloadMyData() {
+    setDownloading(true)
+    try {
+      // Use the already-loaded export, or fetch fresh.
+      const data = exportData ?? await fetch('/api/community/me/export').then(r => r.ok ? r.json() : null).catch(() => null)
+      if (data) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = 'aria-community-data.json'
+        document.body.appendChild(a); a.click(); a.remove()
+        URL.revokeObjectURL(url)
+      }
+    } catch { /* no-op */ }
+    setDownloading(false)
+  }
+
+  function setDefaultFeed(v: 'foryou' | 'following') {
+    setDefaultFeedState(v)
+    if (typeof window !== 'undefined') window.localStorage.setItem('aria-community-default-feed', v)
+  }
+
+  async function changePassword() {
+    const email = authUser?.email
+    if (!email) return
+    await supabase.auth.resetPasswordForEmail(email).catch(() => {})
+    setPwReset('Password reset link sent to ' + email)
+    setTimeout(() => setPwReset(''), 4000)
+  }
+
   if (loading) {
     return (
       <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px' }}>
@@ -280,6 +320,23 @@ export default function CommunityHomePage() {
         </div>
       </header>
 
+      {/* ════ DATA PERSISTENCE BANNER ════ */}
+      {!accountLinked ? (
+        <div style={{ background: 'rgba(186,117,23,0.08)', border: `1.5px solid ${SIGNAL_COLORS.promo}`, borderRadius: RADIUS.lg, padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 20, flexShrink: 0 }}>📦</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.ink }}>You&apos;re browsing anonymously</p>
+            <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0', lineHeight: 1.4 }}>Your follows live on this device only. Create an account to keep them forever.</p>
+          </div>
+          <button onClick={() => setShowUpgrade(true)} style={{ flexShrink: 0, padding: '8px 14px', background: C.accent, color: C.ink, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Create account</button>
+        </div>
+      ) : (
+        <div style={{ background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16, color: C.accent }}>✓</span>
+          <p style={{ fontSize: 12, fontWeight: 600, margin: 0, color: C.text }}>Account synced{maskedEmail ? ' — ' + maskedEmail : ''}. Your data is saved across devices.</p>
+        </div>
+      )}
+
       {/* ════ SECTION 1 — IDENTITY ════ */}
       <p style={secLabel}>Identity</p>
       <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 22 }}>
@@ -339,6 +396,33 @@ export default function CommunityHomePage() {
         </Link>
       </section>
 
+      {/* ════ YOUR ACTIVITY ════ */}
+      {stats && (
+        <>
+          <p style={secLabel}>Your activity</p>
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 22 }}>
+            {([
+              { label: 'following', value: stats.following, href: undefined },
+              { label: 'saved', value: stats.saved, href: '/community/saved' },
+              { label: 'liked', value: stats.liked, href: undefined },
+              { label: 'comments', value: stats.comments, href: undefined },
+              { label: 'messaged', value: stats.messaged, href: '/community/market/chats' },
+            ] as const).map(t => {
+              const inner = (
+                <>
+                  <p style={{ fontSize: 20, fontWeight: 800, margin: 0, color: C.text }}>{t.value}</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, margin: '2px 0 0' }}>{t.label}</p>
+                </>
+              )
+              const tileStyle: React.CSSProperties = { background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.md, padding: '12px 10px', textAlign: 'center', textDecoration: 'none', color: C.text }
+              return t.href
+                ? <Link key={t.label} href={t.href} prefetch={false} style={tileStyle}>{inner}</Link>
+                : <div key={t.label} style={tileStyle}>{inner}</div>
+            })}
+          </section>
+        </>
+      )}
+
       {/* ════ SECTION 2 — ACCOUNT ════ */}
       <p style={secLabel}>Account</p>
       {!accountLinked && !authUser && (
@@ -388,19 +472,29 @@ export default function CommunityHomePage() {
               <p style={{ fontSize: 11, color: C.textMuted, margin: '2px 0 0' }}>Your follows sync across devices.</p>
             </div>
           </div>
-          <Link href="/dashboard/settings" prefetch={false} style={{ display: 'inline-block', marginTop: 10, fontSize: 12, fontWeight: 700, color: C.accent, textDecoration: 'none' }}>
+          <button onClick={changePassword} style={{ marginTop: 10, background: 'transparent', border: 'none', padding: 0, fontSize: 12, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit' }}>
             Change password →
-          </Link>
+          </button>
+          {pwReset && <p style={{ fontSize: 11, color: C.accent, margin: '6px 0 0', fontWeight: 600 }}>{pwReset}</p>}
         </section>
       )}
       <Link href="/community/saved" prefetch={false} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg,
-        padding: '14px 16px', marginBottom: 22, textDecoration: 'none', color: C.text,
+        padding: '14px 16px', marginBottom: 10, textDecoration: 'none', color: C.text,
       }}>
         <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>saved offers</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.inkSoft }}>→</span>
       </Link>
+      {/* Download my data (AU Privacy Act APP) */}
+      <button onClick={downloadMyData} disabled={downloading} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+        background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg,
+        padding: '14px 16px', marginBottom: 22, cursor: downloading ? 'wait' : 'pointer', fontFamily: 'inherit', color: C.text, opacity: downloading ? 0.6 : 1,
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>{downloading ? 'preparing…' : 'download my data'}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.inkSoft }}>↓</span>
+      </button>
 
       {/* ════ SECTION 3 — NOTIFICATIONS ════ */}
       <p style={secLabel}>Notifications</p>
@@ -417,12 +511,32 @@ export default function CommunityHomePage() {
         </div>
       </section>
 
+      {/* ════ PREFERENCES ════ */}
+      <p style={secLabel}>Preferences</p>
+      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 16, marginBottom: 22 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Default feed</p>
+        <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 12px', lineHeight: 1.5 }}>Which tab the feed opens on.</p>
+        <div style={{ display: 'flex', gap: 6, padding: 4, background: C.surfaceHi, borderRadius: RADIUS.md, border: '1px solid ' + C.border }}>
+          {([['foryou', 'For You'], ['following', 'Following']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setDefaultFeed(v)} style={{
+              flex: 1, padding: '8px 0', border: 'none', borderRadius: RADIUS.sm,
+              background: defaultFeed === v ? C.accent : 'transparent', color: C.ink,
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}>{label}</button>
+          ))}
+        </div>
+      </section>
+
       {/* ════ SECTION 4 — PRIVACY ════ */}
-      <p style={secLabel}>Privacy</p>
+      <p style={secLabel}>Privacy &amp; safety</p>
       <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 16, marginBottom: 14 }}>
         <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Your follows are private</p>
         <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', lineHeight: 1.5 }}>
           Who you follow is never shown publicly in Aria. Only your nickname and activity counts appear on your public profile.
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 700, margin: '14px 0 0' }}>Who can see my profile</p>
+        <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', lineHeight: 1.5 }}>
+          Your profile is only visible when you comment on a post — someone can tap your nickname there. You&apos;re never searchable, suggested, or browsable. Aria Community is for discovering shops, not people.
         </p>
         {blocks.length > 0 && (
           <div style={{ marginTop: 14 }}>
@@ -498,6 +612,31 @@ export default function CommunityHomePage() {
           </div>
         )}
       </section>
+
+      {/* ════ SUPPORT / ABOUT ════ */}
+      <p style={secLabel}>Support &amp; about</p>
+      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, overflow: 'hidden', marginBottom: 16 }}>
+        {([
+          { label: 'Privacy policy', href: '/privacy', external: false },
+          { label: 'Terms', href: '/terms', external: false },
+          { label: 'Report a problem', href: 'mailto:support@ariaos.site?subject=Aria%20Community', external: true },
+        ] as const).map((row, i) => (
+          row.external ? (
+            <a key={row.label} href={row.href} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', textDecoration: 'none', color: C.text, borderTop: i === 0 ? 'none' : '1px solid ' + C.border }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{row.label}</span>
+              <span style={{ fontSize: 13, color: C.inkSoft }}>→</span>
+            </a>
+          ) : (
+            <Link key={row.label} href={row.href} prefetch={false} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', textDecoration: 'none', color: C.text, borderTop: i === 0 ? 'none' : '1px solid ' + C.border }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{row.label}</span>
+              <span style={{ fontSize: 13, color: C.inkSoft }}>→</span>
+            </Link>
+          )
+        ))}
+      </section>
+      <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', margin: '0 0 8px', lineHeight: 1.5 }}>
+        Aria Community — local shops, one feed. Promotion, not connection: discover businesses, never browse people.
+      </p>
     </main>
   )
 }
