@@ -139,7 +139,7 @@ export async function GET(req: Request) {
     // from one call. Backward-compatible — `comments` is unchanged.
     const [{ data }, { data: postRow }, { data: engRows }] = await Promise.all([
       supabaseAdmin.from('community_post_engagement')
-        .select('id, comment_text, created_at, parent_id, community_members(nickname)')
+        .select('id, comment_text, created_at, parent_id, member_id, community_members(nickname)')
         .eq('post_id', post_id).eq('engagement_type', 'comment')
         .order('created_at', { ascending: false }).limit(200),
       supabaseAdmin.from('community_posts')
@@ -151,9 +151,9 @@ export async function GET(req: Request) {
 
     // CX-POLISH-3 — nest replies (parent_id) under their top-level comment. Top-level stays newest-first
     // (so the feed card's top-3 preview is unchanged); replies are ordered oldest-first within a thread.
-    type Row = { id: string; comment_text: string | null; created_at: string; parent_id: string | null; community_members: { nickname: string | null } | null }
+    type Row = { id: string; comment_text: string | null; created_at: string; parent_id: string | null; member_id: string | null; community_members: { nickname: string | null } | null }
     const rows = (data ?? []) as unknown as Row[]
-    const mapRow = (c: Row) => ({ id: c.id, text: c.comment_text, nickname: c.community_members?.nickname ?? 'Anonymous', created_at: c.created_at })
+    const mapRow = (c: Row) => ({ id: c.id, text: c.comment_text, nickname: c.community_members?.nickname ?? 'Anonymous', created_at: c.created_at, member_id: c.member_id })
     const repliesByParent: Record<string, ReturnType<typeof mapRow>[]> = {}
     for (const r of rows) {
       if (r.parent_id) (repliesByParent[r.parent_id] ??= []).push(mapRow(r))

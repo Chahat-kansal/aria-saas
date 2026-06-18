@@ -16,6 +16,7 @@ export interface PostCardData {
   media_type: string | null
   ai_generated?: boolean
   published_at: string | null
+  location_tag?: string | null
   saved_at?: string
   is_expired?: boolean
   stream_id?: string | null
@@ -270,6 +271,13 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
           )}
         </div>
       </header>
+
+      {/* CX-POLISH-4 — location tag (only when set) */}
+      {post.location_tag && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: PALETTE.surface, color: PALETTE.inkSoft, border: BORDER, fontSize: 10, fontWeight: 700, letterSpacing: '0.02em', padding: '3px 9px', borderRadius: RADIUS.pill }}>📍 {post.location_tag}</span>
+        </div>
+      )}
 
       {/* CX-0 — POS-signal chips (only when the signal is real) */}
       {signalChips(post).length > 0 && (

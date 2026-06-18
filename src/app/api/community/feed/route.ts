@@ -107,7 +107,7 @@ export async function GET(req: Request) {
     // ── Posts query ──────────────────────────────────────────────────────────
     let q = supabaseAdmin
       .from('community_posts')
-      .select('id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, businesses(name, logo_url, industry, suburb, city, community_verified)')
+      .select('id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, location_tag, businesses(name, logo_url, industry, suburb, city, community_verified)')
       .eq('status', 'published')
       .eq('is_story', false)
       .order('published_at', { ascending: false })
@@ -140,6 +140,7 @@ export async function GET(req: Request) {
     type PostRow = {
       id: string; business_id: string; post_type: string; title: string | null; body: string | null
       media_urls: string[]; media_type: string | null; ai_generated: boolean | null; published_at: string
+      location_tag: string | null
       businesses: { name: string | null; logo_url: string | null; industry: string | null; suburb: string | null; city: string | null; community_verified: boolean | null } | null
     }
     const list = (rows ?? []) as unknown as PostRow[]
@@ -281,6 +282,7 @@ export async function GET(req: Request) {
       media_type: p.media_type,
       ai_generated: p.ai_generated ?? false,
       published_at: p.published_at,
+      location_tag: p.location_tag ?? null,
       counts: counts[p.id] ?? { like: 0, comment: 0, save: 0 },
       mine: mineMap[p.id] ?? { liked: false, saved: false },
       followed: !!(businessIds && businessIds.includes(p.business_id)),

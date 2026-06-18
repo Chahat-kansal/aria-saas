@@ -99,7 +99,12 @@ export default function NotificationsPage() {
           {items.map(n => {
             const { who, action } = line(n)
             const snippet = n.community_posts?.title
-            const href = n.post_id ? `/community/posts/${n.post_id}` : (n.actor_business_id ? `/community/businesses/${n.actor_business_id}` : '/community')
+            // CX-POLISH-4 — engagement notifications (a member acted) link to that member's profile;
+            // new_post links to the post.
+            const isEngagement = n.type === 'new_like' || n.type === 'new_comment' || n.type === 'new_follower'
+            const href = isEngagement && n.actor_member_id
+              ? `/community/u/${n.actor_member_id}`
+              : n.post_id ? `/community/posts/${n.post_id}` : (n.actor_business_id ? `/community/businesses/${n.actor_business_id}` : '/community')
             const unread = !n.read_at
             return (
               <Link key={n.id} href={href} prefetch={false} style={{

@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { PostCard, type PostCardData } from '../../PostCard'
 import { PALETTE, BORDER, RADIUS, MAX_W, SIGNAL_COLORS } from '../../theme'
 
-interface Reply { id: string; text: string | null; nickname: string; created_at: string }
-interface Comment { id: string; text: string | null; nickname: string; created_at: string; replies?: Reply[] }
+interface Reply { id: string; text: string | null; nickname: string; created_at: string; member_id?: string | null }
+interface Comment { id: string; text: string | null; nickname: string; created_at: string; member_id?: string | null; replies?: Reply[] }
 
 function fmtRel(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
@@ -135,7 +136,9 @@ export default function PostDetailPage() {
             {[...comments].reverse().map(c => (
               <div key={c.id} style={{ padding: '10px 0', borderBottom: `1px solid ${PALETTE.surfaceAlt}` }}>
                 <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: PALETTE.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {(c.nickname ?? 'Anonymous').toLowerCase()}
+                  {c.member_id
+                    ? <Link href={'/community/u/' + c.member_id} style={{ color: PALETTE.ink, textDecoration: 'none' }}>{(c.nickname ?? 'Anonymous').toLowerCase()}</Link>
+                    : (c.nickname ?? 'Anonymous').toLowerCase()}
                   <span style={{ fontSize: 10, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(c.created_at)}</span>
                 </p>
                 <p style={{ fontSize: 13, margin: '2px 0 2px', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{c.text}</p>
@@ -150,7 +153,9 @@ export default function PostDetailPage() {
                     {c.replies.map(r => (
                       <div key={r.id}>
                         <p style={{ fontSize: 11, fontWeight: 700, margin: 0, color: PALETTE.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {(r.nickname ?? 'Anonymous').toLowerCase()}
+                          {r.member_id
+                            ? <Link href={'/community/u/' + r.member_id} style={{ color: PALETTE.ink, textDecoration: 'none' }}>{(r.nickname ?? 'Anonymous').toLowerCase()}</Link>
+                            : (r.nickname ?? 'Anonymous').toLowerCase()}
                           <span style={{ fontSize: 9, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(r.created_at)}</span>
                         </p>
                         <p style={{ fontSize: 12, margin: '1px 0 0', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{r.text}</p>

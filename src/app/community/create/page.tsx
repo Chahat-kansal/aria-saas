@@ -46,6 +46,8 @@ export default function CreatePost() {
   const [step, setStep]           = useState(0)
   const [type, setType]           = useState<PostType>('photo')
   const [biz, setBiz]             = useState<{ id: string; name: string } | null>(null)
+  const [locationTag, setLocationTag] = useState<string | null>(null)   // CX-POLISH-4 — current value (null = off)
+  const [defaultLocation, setDefaultLocation] = useState<string | null>(null) // suburb ?? city
   const [preview, setPreview]     = useState<string | null>(null)
   const [isVideo, setIsVideo]     = useState(false)
   const [progress, setProgress]   = useState(0)
@@ -63,10 +65,16 @@ export default function CreatePost() {
     supabase.auth.getUser().then((res: { data: { user: { id: string } | null } }) => {
       const user = res.data?.user
       if (!user) { router.push('/dashboard'); return }
-      supabase.from('businesses').select('id,name')
+      supabase.from('businesses').select('id,name,suburb,city')
         .eq('user_id', user.id).eq('is_active', true).limit(1).single()
-        .then((bizRes: { data: { id: string; name: string } | null }) => {
-          if (bizRes.data) setBiz(bizRes.data)
+        .then((bizRes: { data: { id: string; name: string; suburb: string | null; city: string | null } | null }) => {
+          if (bizRes.data) {
+            setBiz({ id: bizRes.data.id, name: bizRes.data.name })
+            // CX-POLISH-4 — auto-populate the location tag from the business suburb/city (pre-selected).
+            const loc = bizRes.data.suburb ?? bizRes.data.city ?? null
+            setDefaultLocation(loc)
+            setLocationTag(loc)
+          }
         })
     })
   }, [router])
@@ -167,6 +175,7 @@ export default function CreatePost() {
         thumbnail_url: thumbUrl || undefined,
         is_story: type === 'story',
         scheduled_for: schedDate || undefined,
+        location_tag: locationTag || undefined,
       }),
     })
     setPublishing(false)
@@ -302,6 +311,13 @@ export default function CreatePost() {
             </button>
           ))}
         </div>
+        {/* CX-POLISH-4 — location tag (auto-filled from your suburb/city; tap to toggle off) */}
+        {defaultLocation && (
+          <button onClick={() => setLocationTag(t => (t ? null : defaultLocation))}
+            style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: RADIUS.pill, background: locationTag ? ACC : 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: locationTag ? PALETTE.ink : FG, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            📍 {defaultLocation}{locationTag ? '' : ' (off)'}
+          </button>
+        )}
         <label style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Schedule (optional)</label>
         <input type="datetime-local" value={schedDate} onChange={e => setSchedDate(e.target.value)}
           style={{ padding: '12px 16px', borderRadius: RADIUS.md, background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.15)', color: FG, fontSize: 14, outline: 'none' }} />

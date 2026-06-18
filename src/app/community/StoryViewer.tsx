@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { X, BadgeCheck, ChevronLeft, ChevronRight } from 'lucide-react'
-import { C, FONT } from './theme'
+import { X, BadgeCheck, ChevronLeft, ChevronRight, Send } from 'lucide-react'
+import { C, BORDER, FONT } from './theme'
 import type { StoryBubble } from './StoriesRow'
 
 const STORY_DURATION_MS = 5000
@@ -18,6 +18,11 @@ export function StoryViewer({ bubbles, startIndex, onClose }: Props) {
   const [storyIdx, setStoryIdx] = useState(0)
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
+  // CX-POLISH-4 — story reply (DM to the business)
+  const [replyText, setReplyText] = useState('')
+  const [replySending, setReplySending] = useState(false)
+  const [replySent, setReplySent] = useState(false)
+  const [replyError, setReplyError] = useState('')
   const rafRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(Date.now())
   const pausedAtRef = useRef<number>(0)
@@ -60,6 +65,35 @@ export function StoryViewer({ bubbles, startIndex, onClose }: Props) {
     } else {
       onClose()
     }
+  }
+
+  function resumeStory() {
+    startTimeRef.current = Date.now() - (progress * STORY_DURATION_MS)
+    pausedAtRef.current = 0
+    setPaused(false)
+  }
+
+  async function submitReply() {
+    const t = replyText.trim()
+    if (!t || replySending || !bubble?.business_id) return
+    setReplySending(true); setReplyError('')
+    // Carry the story context into the DM so the owner knows which story is being replied to.
+    const label = (story?.body ?? '').trim().slice(0, 40)
+    const msg = '↩ ' + (label ? '"' + label + '": ' : 'story: ') + t
+    try {
+      const res = await fetch('/api/community/dm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: bubble.business_id, text: msg }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok && !d.blocked) {
+        setReplyText(''); setReplySent(true)
+        setTimeout(() => { setReplySent(false); resumeStory() }, 1500)
+      } else {
+        setReplyError(d.reason ?? d.error ?? 'Could not send your reply.')
+      }
+    } catch { setReplyError('Network error — please try again.') }
+    setReplySending(false)
   }
 
   function rewind() {
@@ -189,12 +223,36 @@ export function StoryViewer({ bubbles, startIndex, onClose }: Props) {
         )}
       </div>
 
-      {/* Caption */}
+      {/* Caption — raised above the reply bar */}
       {firstMedia && story.body && (
-        <div style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', left: 16, right: 16, padding: '12px 14px', background: 'rgba(0,0,0,0.55)', borderRadius: 12, color: '#fff', fontSize: 14, lineHeight: 1.45, zIndex: 8, textAlign: 'center' }}>
+        <div style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 76px)', left: 16, right: 16, padding: '12px 14px', background: 'rgba(0,0,0,0.55)', borderRadius: 12, color: '#fff', fontSize: 14, lineHeight: 1.45, zIndex: 8, textAlign: 'center' }}>
           {story.body}
         </div>
       )}
+
+      {/* CX-POLISH-4 — reply to story (opens/continues a DM with the business). Stops pointer events so
+          tapping the bar doesn't pause/advance the story; focus pauses the timer, send resumes it. */}
+      <div onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}
+        style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)', left: 14, right: 14, zIndex: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {replySent && (
+          <span style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 999 }}>Sent ✓</span>
+        )}
+        {replyError && (
+          <span style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.78)', color: '#fff', fontSize: 12, padding: '5px 12px', borderRadius: 999, whiteSpace: 'nowrap', maxWidth: '90vw', overflow: 'hidden', textOverflow: 'ellipsis' }}>{replyError}</span>
+        )}
+        <input value={replyText}
+          onChange={e => { setReplyText(e.target.value); setReplyError('') }}
+          onFocus={() => setPaused(true)}
+          onBlur={() => { if (!replyText.trim()) resumeStory() }}
+          onKeyDown={e => { if (e.key === 'Enter') submitReply() }}
+          placeholder={`Reply to ${bubble.business?.name ?? 'this shop'}'s story…`}
+          maxLength={500}
+          style={{ flex: 1, padding: '11px 16px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1.5px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: 14, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
+        <button onClick={submitReply} disabled={replySending || !replyText.trim()} aria-label="Send reply"
+          style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, background: C.accent, border: BORDER, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: replySending || !replyText.trim() ? 'default' : 'pointer', opacity: replySending || !replyText.trim() ? 0.5 : 1 }}>
+          <Send size={16} color={C.ink} />
+        </button>
+      </div>
     </div>
   )
 }

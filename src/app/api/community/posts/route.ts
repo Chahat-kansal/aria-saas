@@ -26,10 +26,13 @@ async function _POST(req: Request) {
     thumbnail_url?: string
     is_story?: boolean
     scheduled_for?: string
+    location_tag?: string
   }
 
   const { business_id, post_type, title, media_url, thumbnail_url, is_story, scheduled_for } = body
   const bodyText = body.body
+  // CX-POLISH-4 — optional human-readable location label (max 60 chars), null when blank.
+  const locationTag = (body.location_tag ?? '').toString().trim().slice(0, 60) || null
 
   if (!business_id || !post_type || !bodyText) {
     return NextResponse.json({ error: 'business_id, post_type, body required' }, { status: 400 })
@@ -59,6 +62,7 @@ async function _POST(req: Request) {
     status,
     published_at: publishedAt,
     ai_generated: false,
+    location_tag: locationTag,
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
