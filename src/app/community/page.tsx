@@ -130,6 +130,10 @@ export default function CommunityFeedPage() {
           <Link href="/community/search" prefetch={false} aria-label="Search" style={roundBtn}>
             <Search size={18} color={PALETTE.ink} />
           </Link>
+          {/* CX-SHELL-PRIVACY — Market moved out of the bottom nav; one tap away here */}
+          <Link href="/community/market" prefetch={false} aria-label="Marketplace" style={roundBtn}>
+            <Store size={18} color={PALETTE.ink} />
+          </Link>
           {!member && (
             <Link href="/community/me" style={{
               padding: '9px 16px', borderRadius: RADIUS.pill,

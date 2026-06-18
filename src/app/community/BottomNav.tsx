@@ -3,17 +3,16 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Home, Film, Store, Search, User, PlusSquare, Bell } from 'lucide-react'
+import { Home, Film, User, PlusSquare, Bell } from 'lucide-react'
 import { PALETTE, BORDER, NAV_SHADOW, RADIUS, FONT, MAX_W } from './theme'
 
-// feed · reels · alerts · [+create] · market · search · profile
+// CX-SHELL-PRIVACY — 5 slots: feed · reels · [+create] · alerts · profile.
+// Market + Search live in the feed header (top-right), not the bottom nav.
 const TABS = [
-  { href: '/community',              label: 'feed',    icon: Home,   match: (p: string) => p === '/community' },
-  { href: '/community/reels',        label: 'reels',   icon: Film,   match: (p: string) => p.startsWith('/community/reels') },
-  { href: '/community/notifications', label: 'alerts', icon: Bell,   match: (p: string) => p.startsWith('/community/notifications') },
-  { href: '/community/market',       label: 'market',  icon: Store,  match: (p: string) => p.startsWith('/community/market') },
-  { href: '/community/search',       label: 'search',  icon: Search, match: (p: string) => p.startsWith('/community/search') },
-  { href: '/community/me',           label: 'profile', icon: User,   match: (p: string) => p.startsWith('/community/me') },
+  { href: '/community',              label: 'feed',    icon: Home, match: (p: string) => p === '/community' },
+  { href: '/community/reels',        label: 'reels',   icon: Film, match: (p: string) => p.startsWith('/community/reels') },
+  { href: '/community/notifications', label: 'alerts', icon: Bell, match: (p: string) => p.startsWith('/community/notifications') },
+  { href: '/community/me',           label: 'profile', icon: User, match: (p: string) => p.startsWith('/community/me') },
 ]
 
 export function BottomNav() {
@@ -49,7 +48,7 @@ export function BottomNav() {
         boxShadow: NAV_SHADOW,
         pointerEvents: 'auto',
       }}>
-        {TABS.slice(0, 3).map((t, i) => {
+        {TABS.slice(0, 2).map((t, i) => {
           const active = i === activeIdx
           const Icon = t.icon
           return (
@@ -98,8 +97,8 @@ export function BottomNav() {
             <PlusSquare size={17} strokeWidth={2.5} color={PALETTE.ink} />
           </div>
         </Link>
-        {TABS.slice(3).map((t, i) => {
-          const active = i + 3 === activeIdx
+        {TABS.slice(2).map((t, i) => {
+          const active = i + 2 === activeIdx
           const Icon = t.icon
           return (
             <Link
