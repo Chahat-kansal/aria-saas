@@ -5,7 +5,8 @@ import { ArrowLeft } from 'lucide-react'
 import { PostCard, type PostCardData } from '../../PostCard'
 import { PALETTE, BORDER, RADIUS, MAX_W, SIGNAL_COLORS } from '../../theme'
 
-interface Comment { id: string; text: string | null; nickname: string; created_at: string }
+interface Reply { id: string; text: string | null; nickname: string; created_at: string }
+interface Comment { id: string; text: string | null; nickname: string; created_at: string; replies?: Reply[] }
 
 function fmtRel(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
@@ -27,6 +28,12 @@ export default function PostDetailPage() {
   const [ariaReply, setAriaReply] = useState<string | null>(null)
   const [ariaBusy, setAriaBusy] = useState(false)
   const threadRef = useRef<HTMLElement>(null) // CX-POLISH-2 — comment button scrolls here
+  // CX-POLISH-3 — comment composer + replies
+  const [cInput, setCInput] = useState('')
+  const [cPosting, setCPosting] = useState(false)
+  const [cError, setCError] = useState('')
+  const [replyTo, setReplyTo] = useState<{ id: string; nickname: string } | null>(null)
+  const [replyInput, setReplyInput] = useState('')
 
   const load = useCallback(async () => {
     if (!id) return
@@ -37,6 +44,23 @@ export default function PostDetailPage() {
     setLoading(false)
   }, [id])
   useEffect(() => { load() }, [load])
+
+  async function submitComment(text: string, parentId?: string): Promise<boolean> {
+    const t = text.trim()
+    if (!t || cPosting) return false
+    setCPosting(true); setCError('')
+    try {
+      const res = await fetch('/api/community/engagement', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: id, type: 'comment', comment_text: t, ...(parentId ? { parent_id: parentId } : {}) }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setCError(d.error ?? d.reason ?? 'Could not post your comment.'); setCPosting(false); return false }
+      await load() // refresh the thread (new comment / reply nested in)
+      setCPosting(false)
+      return true
+    } catch { setCError('Network error — please try again.'); setCPosting(false); return false }
+  }
 
   async function askAria() {
     if (!ariaQ.trim() || ariaBusy) return
@@ -105,20 +129,70 @@ export default function PostDetailPage() {
           {comments.length === 0 ? 'Comments' : comments.length === 1 ? 'View 1 comment' : `View all ${comments.length} comments`}
         </h2>
         {comments.length === 0 ? (
-          <p style={{ fontSize: 12, color: PALETTE.inkSoft, fontWeight: 500 }}>No comments yet — use the comment button on the post above to be the first.</p>
+          <p style={{ fontSize: 12, color: PALETTE.inkSoft, fontWeight: 500 }}>No comments yet — be the first to say something nice below.</p>
         ) : (
           <div>
-            {comments.map(c => (
+            {[...comments].reverse().map(c => (
               <div key={c.id} style={{ padding: '10px 0', borderBottom: `1px solid ${PALETTE.surfaceAlt}` }}>
                 <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: PALETTE.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {(c.nickname ?? 'Anonymous').toLowerCase()}
                   <span style={{ fontSize: 10, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(c.created_at)}</span>
                 </p>
-                <p style={{ fontSize: 13, margin: '2px 0 0', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{c.text}</p>
+                <p style={{ fontSize: 13, margin: '2px 0 2px', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{c.text}</p>
+                <button onClick={() => { setReplyTo({ id: c.id, nickname: c.nickname }); setReplyInput('@' + (c.nickname ?? 'anonymous').toLowerCase() + ' '); setCError('') }}
+                  style={{ background: 'transparent', border: 'none', padding: 0, fontSize: 11, fontWeight: 700, color: PALETTE.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  reply
+                </button>
+
+                {/* Nested replies */}
+                {c.replies && c.replies.length > 0 && (
+                  <div style={{ marginLeft: 16, marginTop: 8, borderLeft: `1.5px solid ${PALETTE.surfaceAlt}`, paddingLeft: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {c.replies.map(r => (
+                      <div key={r.id}>
+                        <p style={{ fontSize: 11, fontWeight: 700, margin: 0, color: PALETTE.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {(r.nickname ?? 'Anonymous').toLowerCase()}
+                          <span style={{ fontSize: 9, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(r.created_at)}</span>
+                        </p>
+                        <p style={{ fontSize: 12, margin: '1px 0 0', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{r.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Inline reply composer */}
+                {replyTo?.id === c.id && (
+                  <div style={{ marginLeft: 16, marginTop: 8, display: 'flex', gap: 8 }}>
+                    <input value={replyInput} onChange={e => setReplyInput(e.target.value)} autoFocus maxLength={600}
+                      onKeyDown={e => { if (e.key === 'Enter' && !cPosting) { submitComment(replyInput, c.id).then(ok => { if (ok) { setReplyTo(null); setReplyInput('') } }) } }}
+                      placeholder="reply…"
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: RADIUS.pill, background: PALETTE.surfaceAlt, border: BORDER, color: PALETTE.ink, fontSize: 12, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
+                    <button onClick={() => submitComment(replyInput, c.id).then(ok => { if (ok) { setReplyTo(null); setReplyInput('') } })}
+                      disabled={cPosting || !replyInput.trim()}
+                      style={{ padding: '0 14px', borderRadius: RADIUS.pill, border: BORDER, background: PALETTE.accent, color: PALETTE.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 38, opacity: cPosting || !replyInput.trim() ? 0.5 : 1 }}>
+                      post
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        {/* Top-level comment composer */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <input value={cInput} onChange={e => { setCInput(e.target.value); setCError('') }} maxLength={600}
+            onKeyDown={e => { if (e.key === 'Enter' && !cPosting) { submitComment(cInput).then(ok => { if (ok) setCInput('') }) } }}
+            placeholder="add a comment…"
+            style={{ flex: 1, padding: '10px 14px', borderRadius: RADIUS.pill, background: PALETTE.surfaceAlt, border: BORDER, color: PALETTE.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
+          <button onClick={() => submitComment(cInput).then(ok => { if (ok) setCInput('') })} disabled={cPosting || !cInput.trim()}
+            style={{ padding: '0 16px', borderRadius: RADIUS.pill, border: BORDER, background: PALETTE.accent, color: PALETTE.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 44, opacity: cPosting || !cInput.trim() ? 0.5 : 1 }}>
+            post
+          </button>
+        </div>
+        {cError && <p style={{ fontSize: 11, color: PALETTE.live, margin: '8px 0 0' }}>{cError}</p>}
+        <p style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: PALETTE.inkSoft, margin: '8px 0 0', lineHeight: 1.5 }}>
+          Phone, email + card details are blocked. Sort the rest in person.
+        </p>
       </section>
     </main>
   )

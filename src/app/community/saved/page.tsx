@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Bookmark } from 'lucide-react'
-import { C, RADIUS, MAX_W, FONT_DISPLAY } from '../theme'
+import { C, BORDER, RADIUS, MAX_W, FONT_DISPLAY } from '../theme'
 import { PostCard, type PostCardData } from '../PostCard'
 
 interface SavedPost extends PostCardData {
@@ -15,6 +15,7 @@ export default function SavedPage() {
   const [posts, setPosts] = useState<SavedPost[]>([])
   const [member, setMember] = useState<{ id: string; nickname: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [collection, setCollection] = useState<string>('all') // CX-POLISH-3 — 'all' | business_id
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -33,6 +34,17 @@ export default function SavedPage() {
       setPosts(prev => prev.filter(p => p.id !== id))
     }
   }
+
+  // CX-POLISH-3 — saved collections grouped by business (client-side, no new API).
+  const collectionsMap = new Map<string, { id: string; name: string; count: number }>()
+  for (const p of posts) {
+    if (!p.business_id) continue
+    const ex = collectionsMap.get(p.business_id) ?? { id: p.business_id, name: p.business?.name ?? 'shop', count: 0 }
+    ex.count++
+    collectionsMap.set(p.business_id, ex)
+  }
+  const collections = Array.from(collectionsMap.values())
+  const visiblePosts = collection === 'all' ? posts : posts.filter(p => p.business_id === collection)
 
   return (
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '20px 16px 24px' }}>
@@ -70,7 +82,25 @@ export default function SavedPage() {
         </div>
       ) : (
         <div>
-          {posts.map(p => (
+          {/* CX-POLISH-3 — collection chips (only when saved posts span 2+ businesses) */}
+          {collections.length >= 2 && (
+            <div className="community-hide-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 14, paddingBottom: 2 }}>
+              {[{ id: 'all', name: 'All', count: posts.length }, ...collections].map(c => {
+                const active = collection === c.id
+                return (
+                  <button key={c.id} onClick={() => setCollection(c.id)} style={{
+                    flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '7px 13px', borderRadius: RADIUS.pill, border: BORDER,
+                    background: active ? C.accent : 'transparent', color: C.ink,
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    {c.name.toLowerCase()} <span style={{ opacity: 0.6 }}>{c.count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {visiblePosts.map(p => (
             <div key={p.id} style={{ position: 'relative' }}>
               {p.is_expired && (
                 <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 5, padding: '4px 10px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: RADIUS.pill, color: C.danger, fontSize: 11, fontWeight: 700 }}>
