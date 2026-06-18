@@ -8,7 +8,9 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
+import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from '@/lib/aria/providers/anthropic'
+import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, isTransientError } from '@/lib/aria/circuit-breaker'
+import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { classifyAriaIntent } from '@/lib/aria/ask/aria-intent'
@@ -1829,23 +1831,61 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     ? (useThinking ? 4096 : 3500)
     : 4096
 
-  const toolResult = await callAnthropicWithTools({
-    model: routedModel,
-    systemPrompt,
-    userPrompt,
-    priorMessages: historyMessages,
-    tools: allTools,
-    executeTool: (name, input) => executePOSTool(name, input, bid),
-    maxTokens,
-    maxIterations: routedModel === 'haiku' ? 4 : 8,
-    thinking: useThinking ? { enabled: true, budget_tokens: thinkingBudget } : undefined,
-    timeoutMs: routedModel === 'haiku' ? 30_000 : 55_000,
-    businessId: bid,
-    agentKey: 'ask_aria',
-    role: 'chat',
-    toolChoice: imageToolChoice,
-    requestSummary: message.slice(0, 100),
-  })
+  // ── API-RESILIENCE-1 — provider failover + circuit breaker ───────────────
+  // The tool-loop is Anthropic-only (cross-provider tool-calling is the separate API-RESILIENCE-2
+  // epic). When Anthropic is down we don't die: we answer from the ALREADY-ASSEMBLED ground truth
+  // (systemPrompt) via the ariaChat fallback chain (gemini → openai → haiku). No NEW live queries,
+  // but a real grounded answer from this session's snapshot. GROUNDING-TEETH still applies.
+  let degradedProvider: string | null = null
+  let toolResult: ToolLoopResult
+
+  const circuit = await isAnthropicCircuitOpen()
+  if (circuit.open) {
+    // Circuit OPEN — skip the dead provider's tool-loop entirely (saves the full per-request timeout).
+    console.warn('[aria/ask] Anthropic circuit OPEN — serving degraded grounded answer', 'business', bid)
+    const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: true })
+    degradedProvider = deg.provider
+    if (circuit.incidentId) await recordAnthropicFallbackProvider(circuit.incidentId, deg.provider)
+    toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
+  } else {
+    toolResult = await callAnthropicWithTools({
+      model: routedModel,
+      systemPrompt,
+      userPrompt,
+      priorMessages: historyMessages,
+      tools: allTools,
+      executeTool: (name, input) => executePOSTool(name, input, bid),
+      maxTokens,
+      maxIterations: routedModel === 'haiku' ? 4 : 8,
+      thinking: useThinking ? { enabled: true, budget_tokens: thinkingBudget } : undefined,
+      timeoutMs: routedModel === 'haiku' ? 30_000 : 55_000,
+      businessId: bid,
+      agentKey: 'ask_aria',
+      role: 'chat',
+      toolChoice: imageToolChoice,
+      requestSummary: message.slice(0, 100),
+    })
+
+    const emptyResult = toolResult.success && (!toolResult.raw || toolResult.raw.trim().length === 0)
+    if (!toolResult.success && !isTransientError(toolResult.error_message)) {
+      // Hard failure (auth/billing/config) — surface it; never mask an engineering problem as "degraded".
+      console.error('[aria/ask] non-transient Anthropic failure:', toolResult.error_message)
+      return NextResponse.json({ error: 'Aria is temporarily unavailable. Please try again shortly.' }, { status: 500 })
+    }
+    if (!toolResult.success || emptyResult) {
+      // Transient failure (or empty answer after retries) → degrade gracefully through the fallback chain.
+      const rec = await recordAnthropicFailure(toolResult.error_message ?? 'empty tool-loop result')
+      const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: false })
+      degradedProvider = deg.provider
+      if (rec.incidentId) await recordAnthropicFallbackProvider(rec.incidentId, deg.provider)
+      console.warn('[aria/ask] degraded answer served by', deg.provider, 'business', bid)
+      toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
+    } else {
+      // Healthy Anthropic response — close any open circuit.
+      await recordAnthropicSuccess()
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (useThinking) {
     console.log('[aria/ask] extended_thinking', JSON.stringify({ budget: thinkingBudget, used_tokens: toolResult.thinking_tokens, ms: toolResult.latency_ms }), 'business', bid)
@@ -1864,7 +1904,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // FLAGS contradictions only — it never restates/asserts numbers, so nothing here enters _anchor_values.
   // On a CORRECTION verdict: prepend a light, traceable hedge (option c — surgical, lowest cost; never a
   // silent delete) and log the contradiction. Complementary to V2 Check 6 / advisor_guard (which run later).
-  if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && cleanResponse.length > 100) {
+  if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && !degradedProvider && cleanResponse.length > 100) {
     try {
       const verifierResult = await callAnthropic<{ verdict: string }>(
         {
@@ -2059,6 +2099,11 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     // LOGGING-FIX-1 Part 3: serving-path observability (debug-only) — 'brevity' when the
     // COUNCIL-PORT-1 gate diverted a short-factual question here, otherwise plain main brain
     served_by: isBrevityQuestion ? 'brevity' : 'main_brain',
+    // API-RESILIENCE-1 — when Anthropic was down, this answer came from a backup provider using the
+    // already-assembled data (no new live lookups). The dashboard shows an amber banner on this flag.
+    degraded_provider: degradedProvider ? true : undefined,
+    degraded_via: degradedProvider ?? undefined,
+    note: degradedProvider ? 'Answered from your latest data — live lookups briefly paused.' : undefined,
   })
 }
 

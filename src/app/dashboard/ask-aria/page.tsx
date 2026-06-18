@@ -523,6 +523,7 @@ export default function AskAriaPage() {
   const [deliverables, setDeliverables] = useState<DeliverableRecord[]>([])
   const [selectedDeliverable, setSelectedDeliverable] = useState<DeliverableRecord | null>(null)
   const [vitals, setVitals] = useState<Vitals | null>(null)
+  const [degradedNote, setDegradedNote] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -692,9 +693,16 @@ export default function AskAriaPage() {
         used_council?: boolean
         model_used?: string
         deliverable?: DeliverableInfo
+        degraded_provider?: boolean
+        note?: string
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)
+
+      // API-RESILIENCE-1 — Anthropic was down; this answer came from a backup provider on saved data.
+      if (data.degraded_provider) {
+        setDegradedNote(data.note ?? 'Aria is running on backup intelligence — answers use your latest saved data. Full live lookups back shortly.')
+      }
 
       if ((data.action?.action === 'preview' || data.action?.action === 'fork') && data.action.planned) {
         setPendingAction(data.action.planned as PlannedAction)
@@ -943,6 +951,14 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ height: '100%', overflow: 'hidden', position: 'relative', fontFamily: T.body }}>
+      {/* API-RESILIENCE-1 — backup-intelligence banner (amber, dismissable) when Anthropic is down */}
+      {degradedNote && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 60, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: 'rgba(186,117,23,0.12)', borderBottom: '1px solid rgba(186,117,23,0.35)', color: '#BA7517', fontSize: 12.5, fontWeight: 600, fontFamily: T.body }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>⚡</span>
+          <span style={{ flex: 1, lineHeight: 1.4 }}>{degradedNote}</span>
+          <button onClick={() => setDegradedNote(null)} aria-label="Dismiss" style={{ background: 'transparent', border: 'none', color: '#BA7517', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+        </div>
+      )}
       <style>{`
         @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
         @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }

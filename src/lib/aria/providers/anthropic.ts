@@ -149,6 +149,8 @@ export interface ToolLoopResult {
   cost_cents: number
   latency_ms: number
   success: boolean
+  /** Populated when success=false — lets callers classify transient (529/timeout) vs hard (auth) failures. */
+  error_message?: string | null
 }
 
 export async function callAnthropicWithTools(params: ToolLoopParams): Promise<ToolLoopResult> {
@@ -260,5 +262,5 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
     } catch (e) { console.error('[non-fatal]', e) }
   }
 
-  return { raw, tool_calls: toolCalls, iterations: toolCalls.length, thinking_tokens: thinkingTokensTotal, cost_cents: cost, latency_ms: latency, success }
+  return { raw, tool_calls: toolCalls, iterations: toolCalls.length, thinking_tokens: thinkingTokensTotal, cost_cents: cost, latency_ms: latency, success, error_message: errorMessage }
 }

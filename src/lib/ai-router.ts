@@ -111,13 +111,17 @@ async function callGemini(task: AiTask, userPrompt: string, maxTokens: number): 
   return result.response.text()
 }
 
-// ── GPT-4o mini (JSON mode) ───────────────────────────────────────────
+// ── GPT-4o mini ───────────────────────────────────────────────────────
+// JSON mode ONLY for tasks whose prompts demand valid JSON. 'chat' and 'review_reply' are plain-text
+// tasks — forcing json_object on them makes OpenAI hard-error ("messages must contain 'json'"), which
+// previously broke the entire chat failover when Anthropic was down. (API-RESILIENCE-1 fix.)
+const OPENAI_TEXT_TASKS = new Set<AiTask>(['chat', 'review_reply'])
 async function callOpenAI(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   const resp = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     max_tokens: maxTokens,
-    response_format: { type: 'json_object' },
+    ...(OPENAI_TEXT_TASKS.has(task) ? {} : { response_format: { type: 'json_object' as const } }),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS[task] },
       { role: 'user', content: userPrompt },
@@ -139,7 +143,15 @@ async function callHaiku(task: AiTask, userPrompt: string, maxTokens: number): P
 }
 
 // ── Main router with fallback chain ───────────────────────────────────
-export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800): Promise<string> {
+// Returns BOTH the text and which provider answered. opts.skipAnthropic drops claude+haiku from the
+// chain — used by API-RESILIENCE-1 when the Anthropic circuit is OPEN, so the degraded path never
+// re-hits a provider already known to be down (saves a wasted timeout per request).
+export async function ariaChatWithProvider(
+  task: AiTask,
+  userPrompt: string,
+  maxTokens = 800,
+  opts: { skipAnthropic?: boolean } = {},
+): Promise<{ text: string; provider: string }> {
   const primary = TASK_PROVIDERS[task]
   const providerFns: Record<string, () => Promise<string>> = {
     claude: () => callClaude(task, userPrompt, maxTokens),
@@ -149,17 +161,23 @@ export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800
   }
   // Order: primary first, then fallback sequence
   const fallbackOrder = ['claude', 'gemini', 'openai', 'haiku'].filter(p => p !== primary)
-  const sequence = [primary, ...fallbackOrder]
+  let sequence = [primary, ...fallbackOrder]
+  if (opts.skipAnthropic) sequence = sequence.filter(p => p !== 'claude' && p !== 'haiku')
 
   for (const provider of sequence) {
     try {
       const result = await providerFns[provider]()
-      if (result) return result
+      if (result) return { text: result, provider }
     } catch (e) {
       console.warn(`[ai-router] ${provider} failed for task="${task}":`, (e as Error).message?.slice(0, 120))
     }
   }
-  return ''
+  return { text: '', provider: 'none' }
+}
+
+export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800): Promise<string> {
+  const { text } = await ariaChatWithProvider(task, userPrompt, maxTokens)
+  return text
 }
 
 // ── Cross-model validation (GPT calculates → Gemini contextualises → Claude synthesises)
