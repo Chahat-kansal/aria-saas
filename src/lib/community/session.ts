@@ -34,7 +34,7 @@ export async function getCommunityMember(): Promise<CommunityMember | null> {
   if (!token) return null
   const { data } = await supabaseAdmin
     .from('community_members')
-    .select('id, session_token, nickname, push_token, push_enabled, joined_at')
+    .select('id, session_token, nickname, push_token, push_enabled, joined_at, user_id')
     .eq('session_token', token)
     .maybeSingle()
   return (data as CommunityMember | null) ?? null
@@ -96,7 +96,21 @@ export async function resolveOrLinkMember(userId: string): Promise<CommunityMemb
     .select('id, session_token, nickname, push_token, push_enabled, joined_at, user_id')
     .eq('user_id', userId)
     .maybeSingle()
-  if (linked) return linked as CommunityMember
+  if (linked) {
+    // CX-ENTRY-1 — establish the community session cookie for this account's member, so a returning
+    // account user signing in on a fresh device is immediately recognised (no re-prompt).
+    const cookieStore = await cookies()
+    cookieStore.set({
+      name: COMMUNITY_COOKIE,
+      value: (linked as CommunityMember).session_token,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: COOKIE_MAX_AGE_SECONDS,
+    })
+    return linked as CommunityMember
+  }
 
   const current = await getCommunityMember()
   if (current) {

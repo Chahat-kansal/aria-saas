@@ -9,8 +9,11 @@ export async function GET() {
   try {
     const member = await getCommunityMember()
     if (!member) return NextResponse.json({ member: null })
+    // CX-ENTRY-1 — data_persists is just "is this member account-linked?" (user_id set). Anonymous
+    // members live on this device only; account members sync + return on every login.
     return NextResponse.json({
       member: { id: member.id, nickname: member.nickname, joined_at: member.joined_at },
+      data_persists: !!member.user_id,
     })
   } catch (err) {
     console.error('[community/session GET]', err)

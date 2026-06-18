@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { PALETTE, FONT, NAV_HEIGHT } from './theme'
 import { BottomNav } from './BottomNav'
+import { CommunityGate } from './CommunityGate'
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap' })
 
@@ -25,11 +26,14 @@ export default function CommunityLayout({ children }: { children: React.ReactNod
         .community-pop { animation: community-pop 320ms ease-out; }
         @keyframes community-live-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.75; transform: scale(1.04); } }
       `}</style>
-      {/* Pad bottom so the floating bottom-nav doesn't cover content */}
-      <div style={{ paddingBottom: NAV_HEIGHT }}>
-        {children}
-      </div>
-      <BottomNav />
+      {/* CX-ENTRY-1 — choice gate runs first; returning members (session/account) pass straight through. */}
+      <CommunityGate>
+        {/* Pad bottom so the floating bottom-nav doesn't cover content */}
+        <div style={{ paddingBottom: NAV_HEIGHT }}>
+          {children}
+        </div>
+        <BottomNav />
+      </CommunityGate>
     </div>
   )
 }
