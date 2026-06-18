@@ -2,13 +2,19 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { createElement } from 'react'
+import { render } from '@react-email/render'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { StaffLoginLinkEmail } from '@/emails/StaffLoginLinkEmail'
 
 async function sendLoginLinkEmail(email: string, firstName: string, actionLink: string): Promise<void> {
   const resendKey = process.env.RESEND_API_KEY
   if (!resendKey) return
+  // B28-REACT-EMAIL — body now a React Email component; transport (direct Resend), from, subject unchanged.
+  const html = await render(createElement(StaffLoginLinkEmail, { firstName, actionLink }))
+  const text = await render(createElement(StaffLoginLinkEmail, { firstName, actionLink }), { plainText: true })
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
@@ -16,16 +22,8 @@ async function sendLoginLinkEmail(email: string, firstName: string, actionLink: 
       from: 'AriaOS <support@ariaos.site>',
       to: [email],
       subject: 'Your login link for AriaOS Staff Portal',
-      html: `
-        <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
-          <h2 style="color:#2D5240;margin-bottom:8px;">Hi ${firstName},</h2>
-          <p style="color:#444;margin-bottom:24px;">Your manager has sent you a one-click login link for the AriaOS staff portal. Click below to sign in.</p>
-          <a href="${actionLink}" style="display:inline-block;background:#2D5240;color:#7FB897;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
-            Sign in to Staff Portal
-          </a>
-          <p style="color:#999;font-size:12px;margin-top:24px;">This link expires in 1 hour. If you didn't expect this, you can ignore it.</p>
-        </div>
-      `,
+      html,
+      text,
     }),
   })
   if (!res.ok) console.error('[staff/send-login-link] Resend failed:', await res.text())

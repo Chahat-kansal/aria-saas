@@ -2,10 +2,13 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { createElement } from 'react'
+import { render } from '@react-email/render'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { suppressEmail } from '@/lib/external-apis'
 import { verifyUnsubToken } from '@/lib/unsubscribe-token'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { UnsubscribedPage } from '@/emails/UnsubscribedPage'
 
 // MSG-COMPLIANCE-2 — email List-Unsubscribe One-Click endpoint. The token (minted by sendEmail) is
 // HMAC-signed and carries business + customer/email, so it can't be forged to suppress an arbitrary
@@ -48,10 +51,9 @@ export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get('token')
   const r = await handle(token)
   if (r.ok) {
-    return new NextResponse(
-      '<!doctype html><html><body style="font-family:system-ui,sans-serif;text-align:center;padding:48px;color:#1A1D23"><h2>You&rsquo;re unsubscribed</h2><p style="color:#4A5568">You will no longer receive marketing emails. You may still receive transactional messages (receipts, bookings).</p></body></html>',
-      { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-    )
+    // B28-REACT-EMAIL — confirmation page now rendered from the branded React Email component.
+    const page = await render(createElement(UnsubscribedPage))
+    return new NextResponse(page, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
   return NextResponse.json({ error: r.error }, { status: r.status })
 }

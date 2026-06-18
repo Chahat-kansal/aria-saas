@@ -1,6 +1,9 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { createElement } from 'react'
+import { render } from '@react-email/render'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { ContactNotificationEmail } from '@/emails/ContactNotificationEmail'
 
 export async function POST(req: Request) {
   // SEC-H1: per-IP throttle on the public contact form (spam guard).
@@ -28,18 +31,9 @@ export async function POST(req: Request) {
   const domain = process.env.RESEND_FROM_DOMAIN ?? 'ariaos.site'
   const to = 'hello@ariaos.site'
 
-  const html = `
-<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-  <h2 style="margin:0 0 16px;color:#111">New contact form submission</h2>
-  <table style="width:100%;border-collapse:collapse">
-    <tr><td style="padding:6px 0;color:#555;width:80px"><strong>Name</strong></td><td style="padding:6px 0">${name.replace(/</g, '&lt;')}</td></tr>
-    <tr><td style="padding:6px 0;color:#555"><strong>Email</strong></td><td style="padding:6px 0"><a href="mailto:${email}">${email.replace(/</g, '&lt;')}</a></td></tr>
-  </table>
-  <hr style="margin:16px 0;border:none;border-top:1px solid #eee"/>
-  <p style="white-space:pre-wrap;color:#333">${message.replace(/</g, '&lt;')}</p>
-  <hr style="margin:16px 0;border:none;border-top:1px solid #eee"/>
-  <p style="font-size:12px;color:#999">Sent via ariaos.site/contact</p>
-</div>`
+  // B28-REACT-EMAIL — body now a React Email component (React auto-escapes the user fields, replacing
+  // the manual &lt; escaping). Transport (direct Resend), from, to, reply_to, subject unchanged.
+  const html = await render(createElement(ContactNotificationEmail, { name, email, message }))
 
   try {
     const res = await fetch('https://api.resend.com/emails', {
