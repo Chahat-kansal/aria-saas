@@ -1,11 +1,20 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { PostCard, type PostCardData } from '../../PostCard'
 import { PALETTE, BORDER, RADIUS, MAX_W, SIGNAL_COLORS } from '../../theme'
 
 interface Comment { id: string; text: string | null; nickname: string; created_at: string }
+
+function fmtRel(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 60_000) return 'just now'
+  if (diff < 3600_000) return Math.floor(diff / 60_000) + 'm'
+  if (diff < 86_400_000) return Math.floor(diff / 3600_000) + 'h'
+  if (diff < 7 * 86_400_000) return Math.floor(diff / 86_400_000) + 'd'
+  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -17,6 +26,7 @@ export default function PostDetailPage() {
   const [ariaQ, setAriaQ] = useState('')
   const [ariaReply, setAriaReply] = useState<string | null>(null)
   const [ariaBusy, setAriaBusy] = useState(false)
+  const threadRef = useRef<HTMLElement>(null) // CX-POLISH-2 — comment button scrolls here
 
   const load = useCallback(async () => {
     if (!id) return
@@ -64,7 +74,7 @@ export default function PostDetailPage() {
         <ArrowLeft size={18} color={PALETTE.ink} />
       </button>
 
-      <PostCard post={post} showHide={false} />
+      <PostCard post={post} showHide={false} onCommentClick={() => threadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
 
       {/* Ask Aria — explicit trigger, grounded reply */}
       <section style={{ marginTop: 14, background: PALETTE.surface, border: `1.5px solid ${SIGNAL_COLORS.fresh}`, borderRadius: RADIUS.lg, padding: 14 }}>
@@ -90,15 +100,20 @@ export default function PostDetailPage() {
       </section>
 
       {/* Comments thread */}
-      <section style={{ marginTop: 18 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 10px' }}>Comments ({comments.length})</h2>
+      <section ref={threadRef} style={{ marginTop: 18, scrollMarginTop: 12 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.01em', margin: '0 0 12px', color: PALETTE.ink }}>
+          {comments.length === 0 ? 'Comments' : comments.length === 1 ? 'View 1 comment' : `View all ${comments.length} comments`}
+        </h2>
         {comments.length === 0 ? (
           <p style={{ fontSize: 12, color: PALETTE.inkSoft, fontWeight: 500 }}>No comments yet — use the comment button on the post above to be the first.</p>
         ) : (
           <div>
             {comments.map(c => (
               <div key={c.id} style={{ padding: '10px 0', borderBottom: `1px solid ${PALETTE.surfaceAlt}` }}>
-                <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: PALETTE.ink }}>{(c.nickname ?? 'Anonymous').toLowerCase()}</p>
+                <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: PALETTE.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {(c.nickname ?? 'Anonymous').toLowerCase()}
+                  <span style={{ fontSize: 10, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(c.created_at)}</span>
+                </p>
                 <p style={{ fontSize: 13, margin: '2px 0 0', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{c.text}</p>
               </div>
             ))}

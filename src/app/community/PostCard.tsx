@@ -1,8 +1,8 @@
 'use client'
-import { useState, Fragment } from 'react'
+import { useState, useRef, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play, Share2 } from 'lucide-react'
+import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play, Share2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS, SIGNAL_COLORS } from './theme'
 
 export interface PostCardData {
@@ -65,6 +65,9 @@ interface Props {
   showHide?: boolean
   // CX-1-P3: when set, tapping the post body opens the post-detail page (used in the feed).
   detailHref?: string
+  // CX-POLISH-2: when set, the comment button calls this instead of toggling inline comments
+  // (used on the post-detail page to scroll to the full thread). Feed behaviour is unchanged.
+  onCommentClick?: () => void
 }
 
 function fmtRel(iso: string | null) {
@@ -97,7 +100,7 @@ function renderBodyWithPrices(text: string) {
   )
 }
 
-export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true, detailHref }: Props) {
+export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true, detailHref, onCommentClick }: Props) {
   const router = useRouter()
   const [liked, setLiked] = useState(!!post.mine?.liked)
   const [saved, setSaved] = useState(!!post.mine?.saved)
@@ -115,6 +118,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [commentsLoaded, setCommentsLoaded] = useState(false)
   const [shareToast, setShareToast] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0) // CX-POLISH-2 carousel index
 
   async function fetchComments() {
     setCommentsLoading(true)
@@ -201,6 +205,21 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
   const badge = BADGE_LABEL[post.post_type]
   const bodyText = post.title || post.body || ''
 
+  // CX-POLISH-2 — carousel (only for regular multi-image/video posts; live + reel keep their behaviour).
+  const mediaCount = post.media_urls?.length ?? 0
+  const isCarousel = !isLive && !isReel && mediaCount > 1
+  const touchStartX = useRef<number | null>(null)
+  function goPrev() { setActiveIndex(i => Math.max(0, i - 1)) }
+  function goNext() { setActiveIndex(i => Math.min(mediaCount - 1, i + 1)) }
+  function onTouchStart(e: React.TouchEvent) { touchStartX.current = e.touches[0]?.clientX ?? null }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current == null) return
+    const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current
+    if (dx > 50) goPrev()
+    else if (dx < -50) goNext()
+    touchStartX.current = null
+  }
+
   return (
     <article style={{
       background: PALETTE.surface,
@@ -285,6 +304,36 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
                 </div>
               </div>
             </Link>
+          ) : isCarousel ? (
+            <div style={{ position: 'absolute', inset: 0 }} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+              {(() => {
+                const url = post.media_urls[activeIndex] ?? firstMedia
+                const vid = /\.mp4|\.webm|\.mov|video/i.test(url ?? '')
+                return vid
+                  ? <video src={url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  : <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              })()}
+              {/* Desktop arrows */}
+              {activeIndex > 0 && (
+                <button onClick={goPrev} aria-label="Previous image"
+                  style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: '50%', border: BORDER, background: PALETTE.surface, opacity: 0.7, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                  <ChevronLeft size={16} color={PALETTE.ink} />
+                </button>
+              )}
+              {activeIndex < mediaCount - 1 && (
+                <button onClick={goNext} aria-label="Next image"
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: '50%', border: BORDER, background: PALETTE.surface, opacity: 0.7, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                  <ChevronRight size={16} color={PALETTE.ink} />
+                </button>
+              )}
+              {/* Dot indicators */}
+              <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5, background: PALETTE.surface, border: BORDER, padding: '4px 7px', borderRadius: RADIUS.pill }}>
+                {post.media_urls.map((_, i) => (
+                  <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === activeIndex ? PALETTE.accent : PALETTE.ink, opacity: i === activeIndex ? 1 : 0.3 }} />
+                ))}
+              </div>
+            </div>
           ) : isVideo ? (
             <video src={firstMedia} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
@@ -322,7 +371,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
           <Heart size={20} fill={liked ? PALETTE.live : 'transparent'} color={liked ? PALETTE.live : PALETTE.ink} strokeWidth={liked ? 0 : 2} className={popping ? 'community-pop' : undefined} />
           <span style={{ fontSize: 13, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>{likeCount}</span>
         </button>
-        <button onClick={toggleComments} aria-label="Comment"
+        <button onClick={onCommentClick ?? toggleComments} aria-label="Comment"
           style={iconAction}>
           <MessageCircle size={20} color={PALETTE.ink} strokeWidth={2} />
           <span style={{ fontSize: 13, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>{commentCount}</span>

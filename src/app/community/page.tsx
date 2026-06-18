@@ -20,17 +20,19 @@ export default function CommunityFeedPage() {
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'followed' | 'discovery'>('discovery')
   const [viewMode, setViewMode] = useState<'discover' | 'owners'>('discover')
+  const [feedTab, setFeedTab] = useState<'foryou' | 'following'>('foryou')
   const [member, setMember] = useState<{ id: string; nickname: string | null } | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [ownerBusiness, setOwnerBusiness] = useState<{ id: string; name: string } | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (tab: 'foryou' | 'following' = 'foryou') => {
     setLoading(true)
     try {
+      const feedUrl = '/api/community/feed' + (tab === 'following' ? '?following_only=true' : '')
       const [fRes, sRes] = await Promise.all([
-        fetch('/api/community/feed').then(r => r.json()),
+        fetch(feedUrl).then(r => r.json()),
         fetch('/api/community/stories').then(r => r.json()),
       ])
       const feed = fRes as FeedResponse
@@ -67,14 +69,24 @@ export default function CommunityFeedPage() {
     if (!cursor || loadingMore) return
     setLoadingMore(true)
     try {
-      const r = await fetch('/api/community/feed?before=' + encodeURIComponent(cursor)).then(r => r.json()) as FeedResponse
+      // Keep the active tab while paginating (tab state persists across scroll).
+      const url = '/api/community/feed?before=' + encodeURIComponent(cursor) + (feedTab === 'following' ? '&following_only=true' : '')
+      const r = await fetch(url).then(r => r.json()) as FeedResponse
       setPosts(prev => [...prev, ...(r.posts ?? [])])
       setCursor(r.next_cursor)
     } catch (e) {
       console.error(e)
     }
     setLoadingMore(false)
-  }, [cursor, loadingMore])
+  }, [cursor, loadingMore, feedTab])
+
+  function selectFeedTab(t: 'foryou' | 'following') {
+    if (t === feedTab) return
+    setFeedTab(t)
+    setPosts([])
+    setCursor(null)
+    load(t)
+  }
 
   // Infinite scroll
   useEffect(() => {
@@ -191,6 +203,20 @@ export default function CommunityFeedPage() {
         </div>
       )}
 
+      {/* CX-POLISH-2 — For You / Following tab toggle (customer-facing, separate from owner viewMode) */}
+      {viewMode === 'discover' && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, padding: '4px', background: PALETTE.surfaceAlt, borderRadius: RADIUS.lg, border: BORDER }}>
+          {([['foryou', 'For You'], ['following', 'Following']] as const).map(([t, label]) => (
+            <button key={t} onClick={() => selectFeedTab(t)} style={{
+              flex: 1, padding: '9px 0', border: 'none', borderRadius: RADIUS.pill,
+              background: feedTab === t ? PALETTE.accent : 'transparent',
+              color: PALETTE.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              fontFamily: 'inherit', transition: 'background 160ms',
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
+
       {/* Stories row — only in Discover mode */}
       {viewMode === 'discover' && <StoriesRow bubbles={bubbles} loading={loading && bubbles.length === 0} />}
 
@@ -199,12 +225,19 @@ export default function CommunityFeedPage() {
         loading && posts.length === 0 ? (
           <FeedSkeleton />
         ) : posts.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', background: PALETTE.surface, borderRadius: RADIUS.xl, border: BORDER, marginTop: 16 }}>
-            <p style={{ fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: PALETTE.ink }}>{mode === 'followed' ? 'no posts yet from your follows.' : 'no posts yet — check back soon.'}</p>
-            {mode === 'discovery' && (
-              <p style={{ fontSize: 13, fontWeight: 500, color: PALETTE.ink, opacity: 0.6, margin: '8px 0 0', lineHeight: 1.5 }}>Visit a shop&apos;s page to follow them and start your personalised feed.</p>
-            )}
-          </div>
+          feedTab === 'following' ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', background: PALETTE.surface, borderRadius: RADIUS.xl, border: BORDER, marginTop: 16 }}>
+              <p style={{ fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: PALETTE.ink }}>Follow some businesses to see their posts here.</p>
+              <Link href="/community/discover" prefetch={false} style={{ display: 'inline-block', marginTop: 14, padding: '10px 18px', borderRadius: RADIUS.pill, background: PALETTE.accent, color: PALETTE.ink, border: BORDER, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>Discover local shops</Link>
+            </div>
+          ) : (
+            <div style={{ padding: '40px 20px', textAlign: 'center', background: PALETTE.surface, borderRadius: RADIUS.xl, border: BORDER, marginTop: 16 }}>
+              <p style={{ fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: PALETTE.ink }}>{mode === 'followed' ? 'no posts yet from your follows.' : 'no posts yet — check back soon.'}</p>
+              {mode === 'discovery' && (
+                <p style={{ fontSize: 13, fontWeight: 500, color: PALETTE.ink, opacity: 0.6, margin: '8px 0 0', lineHeight: 1.5 }}>Visit a shop&apos;s page to follow them and start your personalised feed.</p>
+              )}
+            </div>
+          )
         ) : (
           <div style={{ marginTop: 16 }}>
             {posts.map(p => (

@@ -47,6 +47,18 @@ export async function GET(req: Request) {
       businessIds = list.filter(f => !f.is_hidden).map(f => f.business_id)
     }
 
+    // CX-POLISH-2 — "Following" tab: restrict to followed (non-hidden) businesses only.
+    const followingOnly = searchParams.get('following_only') === 'true'
+    if (followingOnly && (!member || !businessIds || businessIds.length === 0)) {
+      // No member / no follows → empty feed (graceful, not an error).
+      return NextResponse.json({
+        posts: [],
+        next_cursor: null,
+        mode: 'followed',
+        member: member ? { id: member.id, nickname: member.nickname } : null,
+      })
+    }
+
     // ── Geo-scope: resolve which business IDs are in range ───────────────────
     let geoBusinessIds: string[] | null = null
 
@@ -115,6 +127,11 @@ export async function GET(req: Request) {
         })
       }
       q = q.in('business_id', geoBusinessIds)
+    }
+
+    // CX-POLISH-2 — Following tab: filter to the member's followed businesses (intersects with geo if set).
+    if (followingOnly && businessIds && businessIds.length > 0) {
+      q = q.in('business_id', businessIds)
     }
 
     const { data: rows, error } = await q
