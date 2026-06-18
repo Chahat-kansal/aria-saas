@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { ensureCommunityMember, getCommunityMember } from '@/lib/community/session'
+import { notifyEngagement } from '@/lib/community/notifications'
 
 const VALID_TYPES = new Set(['like', 'comment', 'save', 'view', 'share'])
 
@@ -52,6 +53,8 @@ export async function POST(req: Request) {
         comment_text: txt,
       }).select('id, created_at').single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      // CX-POLISH-1: notify the post's owner — fire-and-forget, never blocks the comment.
+      void notifyEngagement({ postId: body.post_id, businessId: post.business_id, actorMemberId: member.id, kind: 'new_comment' })
       return NextResponse.json({ ok: true, comment_id: data?.id, created_at: data?.created_at })
     }
 
@@ -90,6 +93,10 @@ export async function POST(req: Request) {
       await supabaseAdmin.from('community_post_engagement').insert({
         post_id: body.post_id, member_id: member.id, engagement_type: body.type,
       })
+      // CX-POLISH-1: only a NEW like (not save, not un-like) pings the owner — fire-and-forget.
+      if (body.type === 'like') {
+        void notifyEngagement({ postId: body.post_id, businessId: post.business_id, actorMemberId: member.id, kind: 'new_like' })
+      }
       return NextResponse.json({ ok: true, on: true })
     }
 

@@ -2,7 +2,7 @@
 import { useState, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play } from 'lucide-react'
+import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play, Share2 } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS, SIGNAL_COLORS } from './theme'
 
 export interface PostCardData {
@@ -110,6 +110,45 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
   const [commentError, setCommentError] = useState('')
   const [commentSuccess, setCommentSuccess] = useState(false)
   const [popping, setPopping] = useState(false)
+  // CX-POLISH-1 — comments rendered on the card + share button
+  const [comments, setComments] = useState<Array<{ id: string; text: string | null; nickname: string; created_at: string }>>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentsLoaded, setCommentsLoaded] = useState(false)
+  const [shareToast, setShareToast] = useState(false)
+
+  async function fetchComments() {
+    setCommentsLoading(true)
+    try {
+      const d = await fetch('/api/community/engagement?post_id=' + post.id).then(r => r.json())
+      setComments(Array.isArray(d.comments) ? d.comments : [])
+      setCommentsLoaded(true)
+    } catch { /* leave list as-is */ }
+    setCommentsLoading(false)
+  }
+
+  function toggleComments() {
+    const next = !showComments
+    setShowComments(next)
+    if (next && !commentsLoaded) fetchComments()
+  }
+
+  async function share() {
+    const url = (typeof window !== 'undefined' ? window.location.origin : '') + '/community/posts/' + post.id
+    // Fire-and-forget engagement log — never blocks the UI.
+    fetch('/api/community/engagement', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_id: post.id, type: 'share' }),
+    }).catch(() => {})
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title: post.business?.name ?? 'Aria Community', text: post.title ?? post.body ?? '', url })
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(url)
+        setShareToast(true)
+        setTimeout(() => setShareToast(false), 2000)
+      }
+    } catch { /* user dismissed the share sheet — not an error */ }
+  }
 
   async function toggle(type: 'like' | 'save') {
     const wasOn = type === 'like' ? liked : saved
@@ -147,6 +186,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
       setCommentInput('')
       setCommentSuccess(true)
       setTimeout(() => setCommentSuccess(false), 2400)
+      fetchComments() // CX-POLISH-1 — refresh the rendered list with the new comment
     } catch (e: unknown) {
       setCommentError((e as Error).message)
     }
@@ -282,10 +322,15 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
           <Heart size={20} fill={liked ? PALETTE.live : 'transparent'} color={liked ? PALETTE.live : PALETTE.ink} strokeWidth={liked ? 0 : 2} className={popping ? 'community-pop' : undefined} />
           <span style={{ fontSize: 13, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>{likeCount}</span>
         </button>
-        <button onClick={() => setShowComments(v => !v)} aria-label="Comment"
+        <button onClick={toggleComments} aria-label="Comment"
           style={iconAction}>
           <MessageCircle size={20} color={PALETTE.ink} strokeWidth={2} />
           <span style={{ fontSize: 13, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>{commentCount}</span>
+        </button>
+        <button onClick={share} aria-label="Share"
+          style={iconAction}>
+          <Share2 size={19} color={PALETTE.ink} strokeWidth={2} />
+          {shareToast && <span style={{ fontSize: 12, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>link copied!</span>}
         </button>
         <button onClick={() => toggle('save')}
           style={{
@@ -301,6 +346,28 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true,
       {/* Comment composer */}
       {showComments && (
         <div style={{ padding: '0 14px 14px', borderTop: BORDER }}>
+          {/* CX-POLISH-1 — existing comments (3 newest, oldest-first for chat-style reading) */}
+          {commentsLoading ? (
+            <p style={{ fontSize: 12, color: PALETTE.inkSoft, margin: '12px 0 0' }}>loading comments…</p>
+          ) : comments.length > 0 ? (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {[...comments].slice(0, 3).reverse().map(c => (
+                <p key={c.id} style={{ fontSize: 13, lineHeight: 1.4, margin: 0, color: PALETTE.ink }}>
+                  <span style={{ fontWeight: 700 }}>{(c.nickname ?? 'anon').toLowerCase()}</span>{' '}
+                  {c.text}
+                  <span style={{ color: PALETTE.inkSoft, fontSize: 11, marginLeft: 6 }}>{fmtRel(c.created_at)}</span>
+                </p>
+              ))}
+              {comments.length > 3 && (
+                <Link href={`/community/posts/${post.id}`} prefetch={false}
+                  style={{ fontSize: 12, fontWeight: 700, color: PALETTE.ink, textDecoration: 'underline', marginTop: 2 }}>
+                  view all {comments.length} comments
+                </Link>
+              )}
+            </div>
+          ) : commentsLoaded ? (
+            <p style={{ fontSize: 12, color: PALETTE.inkSoft, margin: '12px 0 0' }}>no comments yet — be the first.</p>
+          ) : null}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input
               value={commentInput}

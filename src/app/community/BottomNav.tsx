@@ -1,21 +1,34 @@
 'use client'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Home, Film, Store, Search, User, PlusSquare } from 'lucide-react'
+import { Home, Film, Store, Search, User, PlusSquare, Bell } from 'lucide-react'
 import { PALETTE, BORDER, NAV_SHADOW, RADIUS, FONT, MAX_W } from './theme'
 
-// feed · reels · market · [+create] · search · profile
+// feed · reels · alerts · [+create] · market · search · profile
 const TABS = [
-  { href: '/community',        label: 'feed',    icon: Home,   match: (p: string) => p === '/community' },
-  { href: '/community/reels',  label: 'reels',   icon: Film,   match: (p: string) => p.startsWith('/community/reels') },
-  { href: '/community/market', label: 'market',  icon: Store,  match: (p: string) => p.startsWith('/community/market') },
-  { href: '/community/search', label: 'search',  icon: Search, match: (p: string) => p.startsWith('/community/search') },
-  { href: '/community/me',     label: 'profile', icon: User,   match: (p: string) => p.startsWith('/community/me') },
+  { href: '/community',              label: 'feed',    icon: Home,   match: (p: string) => p === '/community' },
+  { href: '/community/reels',        label: 'reels',   icon: Film,   match: (p: string) => p.startsWith('/community/reels') },
+  { href: '/community/notifications', label: 'alerts', icon: Bell,   match: (p: string) => p.startsWith('/community/notifications') },
+  { href: '/community/market',       label: 'market',  icon: Store,  match: (p: string) => p.startsWith('/community/market') },
+  { href: '/community/search',       label: 'search',  icon: Search, match: (p: string) => p.startsWith('/community/search') },
+  { href: '/community/me',           label: 'profile', icon: User,   match: (p: string) => p.startsWith('/community/me') },
 ]
 
 export function BottomNav() {
   const pathname = usePathname() || '/community'
+  // CX-POLISH-1 — unread notification badge on the alerts tab. count_only=true never marks read.
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    let active = true
+    fetch('/api/community/notifications?count_only=true')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (active && d) setUnread(Number(d.unread_count) || 0) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [pathname])
+
   // Immersive full-screen reel viewer — hide the nav.
   if (pathname.startsWith('/community/reels/') && pathname !== '/community/reels') return null
 
@@ -70,6 +83,11 @@ export function BottomNav() {
                   <span style={{ fontSize: 11, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.01em' }}>{t.label}</span>
                 )}
               </span>
+              {t.href === '/community/notifications' && unread > 0 && (
+                <span style={{ position: 'absolute', top: 3, right: 6, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 8, background: PALETTE.live, color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
             </Link>
           )
         })}
@@ -114,6 +132,11 @@ export function BottomNav() {
                   <span style={{ fontSize: 11, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.01em' }}>{t.label}</span>
                 )}
               </span>
+              {t.href === '/community/notifications' && unread > 0 && (
+                <span style={{ position: 'absolute', top: 3, right: 6, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 8, background: PALETTE.live, color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
             </Link>
           )
         })}

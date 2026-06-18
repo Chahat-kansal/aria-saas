@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { notifyNewPost } from '@/lib/community/notifications'
 
 async function verifyBiz(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string, bid: string) {
   const { data } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', userId).single()
@@ -61,6 +62,10 @@ async function _POST(req: Request) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // CX-POLISH-1: notify followers when the post goes LIVE now (not for scheduled posts) — fire-and-forget.
+  if (status === 'published' && data?.id) {
+    void notifyNewPost({ businessId: business_id, postId: data.id as string })
+  }
   return NextResponse.json({ post: data }, { status: 201 })
 }
 

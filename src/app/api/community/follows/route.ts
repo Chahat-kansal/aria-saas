@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { ensureCommunityMember, getCommunityMember, hashIp } from '@/lib/community/session'
+import { notifyFollow } from '@/lib/community/notifications'
 
 function clientIp(req: Request): string | null {
   const fwd = req.headers.get('x-forwarded-for')
@@ -85,6 +86,12 @@ export async function POST(req: Request) {
       ip_hash: hashIp(clientIp(req)),
       user_agent: req.headers.get('user-agent')?.slice(0, 200) ?? null,
     })
+
+    // CX-POLISH-1: notify the owner only on a genuine NEW follow or re-follow (not a prefs re-save of an
+    // already-active follow). Fire-and-forget — never blocks the follow.
+    if (!existing || existing.unfollowed_at != null) {
+      void notifyFollow({ businessId: body.business_id, actorMemberId: member.id })
+    }
 
     return NextResponse.json({ ok: true, member_id: member.id })
   } catch (err) {
