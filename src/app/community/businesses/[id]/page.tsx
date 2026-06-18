@@ -192,7 +192,7 @@ export default function BusinessProfilePage() {
           ) : (
             <button onClick={() => setShowFollowPanel(true)} disabled={busy} style={limePill}>+ follow</button>
           )}
-          <Link href={`/community/market/chats`} prefetch={false} style={whitePill}>message</Link>
+          <Link href={`/community/dm/${businessId}`} prefetch={false} style={whitePill}>message</Link>
         </div>
       </div>
 

@@ -42,8 +42,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ chat: chat ?? null })
     }
 
+    // Joins BOTH the listing (for marketplace chats) and the business directly (for business DMs,
+    // which have listing_id IS NULL and therefore no listing to render).
     const { data } = await supabaseAdmin.from('marketplace_chats')
-      .select('id, listing_id, business_id, messages, last_message_at, unread_for_member, marketplace_listings(title, price, media_urls, status, businesses(name, logo_url, community_verified))')
+      .select('id, listing_id, business_id, messages, last_message_at, unread_for_member, businesses(name, logo_url, community_verified), marketplace_listings(title, price, media_urls, status, businesses(name, logo_url, community_verified))')
       .eq('member_id', member.id)
       .order('last_message_at', { ascending: false })
       .limit(50)
