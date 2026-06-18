@@ -143,7 +143,8 @@ Confirmed column/table traps — use the CORRECT name:
 
 Use exactly:
 - claude-haiku-4-5-20251001
-- claude-sonnet-4-5-20250929
+- claude-sonnet-4-6  ← current Sonnet (model-router smart tasks, MODEL-ROUTER-UPGRADE)
+- claude-sonnet-4-5-20250929  ← still pinned by the core tool-loop provider (providers/anthropic.ts); migrate later
 - claude-opus-4-5-20251101
 
 Aria Intelligence Rule: every feature should feed data into briefing/business-brain,

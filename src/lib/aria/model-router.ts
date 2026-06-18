@@ -46,12 +46,16 @@ type RunInput = {
   tools?: any[];
 };
 
+// 'openrouter_free' is the $0 last-resort floor — distinct from paid 'openrouter' so free-model
+// usage is visible in logs/result.provider (MODEL-ROUTER-UPGRADE Section C).
+type Provider = 'anthropic' | 'openai' | 'openrouter' | 'openrouter_free';
+
 export type AriaModelResult<T = any> = {
   ok: boolean;
   data: T | null;
   text: string;
   error?: string;
-  provider?: 'anthropic' | 'openai' | 'openrouter';
+  provider?: Provider;
 };
 
 // Tasks that genuinely need Sonnet-level reasoning (user-initiated, high-value)
@@ -76,12 +80,21 @@ function hasOpenRouter() {
   return Boolean(process.env.OPENROUTER_API_KEY);
 }
 
-function providerOrder(task: AriaTask): Array<'anthropic' | 'openai' | 'openrouter'> {
-  const order: Array<'anthropic' | 'openai' | 'openrouter'> = [];
+// The free floor only activates when the OpenRouter key AND at least one free-model slug are configured.
+// Slugs are env-supplied (OPENROUTER_FREE_SMART_MODEL / OPENROUTER_FREE_ROUTINE_MODEL) — NO hardcoded
+// model strings, so a wrong/missing slug simply leaves the floor inert rather than failing silently.
+function hasOpenRouterFree() {
+  return hasOpenRouter() && Boolean(process.env.OPENROUTER_FREE_SMART_MODEL || process.env.OPENROUTER_FREE_ROUTINE_MODEL);
+}
+
+function providerOrder(task: AriaTask): Provider[] {
+  const order: Provider[] = [];
   // Anthropic-first for all tasks — avoids OpenRouter fallback errors when OPENAI_API_KEY is absent
   if (hasAnthropic()) order.push('anthropic');
   if (hasOpenAI()) order.push('openai');
   if (hasOpenRouter()) order.push('openrouter');
+  // Free models are the LAST-RESORT floor — only reached when every paid provider above has failed.
+  if (hasOpenRouterFree()) order.push('openrouter_free');
   return order;
 }
 
@@ -116,7 +129,7 @@ export function parseModelJson(text: string) {
 async function callAnthropic(input: RunInput) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
   const createParams: any = {
-    model: SMART_TASKS.has(input.task) ? 'claude-sonnet-4-5-20250929' : 'claude-haiku-4-5-20251001',
+    model: SMART_TASKS.has(input.task) ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
     max_tokens: input.maxTokens ?? 2500,
     temperature: input.temperature ?? 0.2,
     system: input.systemPrompt,
@@ -160,7 +173,7 @@ async function callOpenRouter(input: RunInput) {
     },
     signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({
-      model: SMART_TASKS.has(input.task) ? 'anthropic/claude-sonnet-4-5-20250929' : 'openai/gpt-4o-mini',
+      model: SMART_TASKS.has(input.task) ? 'anthropic/claude-sonnet-4-6' : 'openai/gpt-4o-mini',
       temperature: input.temperature ?? 0.2,
       max_tokens: input.maxTokens ?? 2500,
       response_format: { type: 'json_object' },
@@ -175,9 +188,47 @@ async function callOpenRouter(input: RunInput) {
   return json.choices?.[0]?.message?.content?.trim() ?? '';
 }
 
-async function callProvider(provider: 'anthropic' | 'openai' | 'openrouter', input: RunInput) {
+// MODEL-ROUTER-UPGRADE Section B — $0 OpenRouter free-model floor. Same endpoint/key as paid
+// OpenRouter, but the model slug comes ENTIRELY from env (no hardcoded model IDs). Smart tasks prefer
+// OPENROUTER_FREE_SMART_MODEL, routine tasks prefer OPENROUTER_FREE_ROUTINE_MODEL; each falls back to
+// the other if only one is set. Throws (→ runAriaModel skips it) when nothing is configured.
+// NOTE: free models are rate-limited and more prone to hallucination — this is why they sit at the
+// very bottom of the chain and their output is validated by the SAME strict parseModelJson + repair
+// path as every paid provider (an invalid/empty response yields {ok:false}, never accepted bad data).
+async function callOpenRouterFree(input: RunInput) {
+  const smart = process.env.OPENROUTER_FREE_SMART_MODEL;
+  const routine = process.env.OPENROUTER_FREE_ROUTINE_MODEL;
+  const model = SMART_TASKS.has(input.task) ? (smart || routine) : (routine || smart);
+  if (!model) throw new Error('OpenRouter free model not configured');
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      ...(process.env.OPENROUTER_SITE_URL ? { 'HTTP-Referer': process.env.OPENROUTER_SITE_URL } : {}),
+      ...(process.env.OPENROUTER_APP_NAME ? { 'X-Title': process.env.OPENROUTER_APP_NAME } : {}),
+    },
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify({
+      model,
+      temperature: input.temperature ?? 0.2,
+      max_tokens: input.maxTokens ?? 2500,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: input.systemPrompt },
+        { role: 'user', content: input.userPrompt },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenRouter (free) returned ${response.status}`);
+  const json = await response.json();
+  return json.choices?.[0]?.message?.content?.trim() ?? '';
+}
+
+async function callProvider(provider: Provider, input: RunInput) {
   if (provider === 'anthropic') return callAnthropic(input);
   if (provider === 'openai') return callOpenAI(input);
+  if (provider === 'openrouter_free') return callOpenRouterFree(input);
   return callOpenRouter(input);
 }
 
