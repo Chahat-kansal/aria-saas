@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import { CommunityAnalytics, type CommunityAnalyticsData } from './CommunityAnalytics'
 import {
   Plus, Sparkles, Image as ImageIcon, Video, Film, Clock, CalendarClock,
   Eye, EyeOff, Trash2, Send, Save, X, Loader2, AlertCircle, ChevronRight,
@@ -114,13 +115,19 @@ export default function CommunityOwnerPage() {
   const [uploading, setUploading] = useState(false)
   const [hint, setHint] = useState('')
   const [error, setError] = useState('')
+  const [analytics, setAnalytics] = useState<CommunityAnalyticsData | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const d = await fetch('/api/community/owner/posts').then(r => r.json())
-      setPosts(d.posts ?? [])
+      // CX-OWNER-TRUST-1: fetch posts + analytics in parallel.
+      const [postsRes, analyticsRes] = await Promise.all([
+        fetch('/api/community/owner/posts').then(r => r.json()),
+        fetch('/api/community/owner/analytics').then(r => (r.ok ? r.json() : null)).catch(() => null),
+      ])
+      setPosts(postsRes.posts ?? [])
+      if (analyticsRes && !analyticsRes.error) setAnalytics(analyticsRes as CommunityAnalyticsData)
     } catch (e: unknown) {
       setError((e as Error).message)
     }
@@ -292,6 +299,17 @@ export default function CommunityOwnerPage() {
           </button>
         </div>
       </header>
+
+      {/* CX-OWNER-TRUST-1 — community analytics (followers / reach / engagement / top posts / best times) */}
+      {analytics ? (
+        <CommunityAnalytics data={analytics} c={C} font={FONT} />
+      ) : loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ padding: '14px 16px', borderRadius: 12, background: C.card, border: `1px solid ${C.border}`, height: 84 }} />
+          ))}
+        </div>
+      ) : null}
 
       {/* Stats strip */}
       <div className="community-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
