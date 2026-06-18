@@ -9,8 +9,9 @@ import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from '@/lib/aria/providers/anthropic'
-import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, isTransientError } from '@/lib/aria/circuit-breaker'
+import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, recordTotalOutage, isTransientError } from '@/lib/aria/circuit-breaker'
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
+import { findCachedAnswer } from '@/lib/aria/cached-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { classifyAriaIntent } from '@/lib/aria/ask/aria-intent'
@@ -1884,6 +1885,39 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       // Healthy Anthropic response — close any open circuit.
       await recordAnthropicSuccess()
     }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── API-RESILIENCE-1B — total outage (EVERY provider down) ───────────────
+  // The fallback chain returned provider 'none' → not a single hiccup, the whole AI layer is offline.
+  // Never return empty (the old bad-reply symptom) and never 500: serve a cached last-good answer if
+  // a recent similar one exists (clearly labelled stale), else a calm terminal message that reassures
+  // the owner their POS/payments/data are unaffected (those are Supabase/Stripe — no LLM dependency).
+  if (degradedProvider === 'none') {
+    await recordTotalOutage(toolResult.error_message ?? 'all providers returned empty')
+
+    const cached = await findCachedAnswer(bid, message)
+    const isCached = !!cached
+    const reply = cached
+      ? `All AI providers are briefly offline. Here's your most recent related answer from ${cached.relative} — your live data may have changed since:\n\n${cached.answer}`
+      : 'Aria\'s AI is temporarily offline across all providers — this is rare and usually clears within minutes. Your POS, payments, stock, customers, bookings and every other feature are working normally. Please try Aria again shortly.'
+
+    let outageConvId = conversationId
+    try { outageConvId = await upsertConversation(bid, user.id, conversationId, message, reply, 'ai_outage') }
+    catch (e) { console.error('[aria/ask] outage upsertConversation failed:', (e as Error).message) }
+
+    console.error('[aria/ask] TOTAL OUTAGE served', JSON.stringify({ cached: isCached }), 'business', bid)
+    return NextResponse.json({
+      response: reply,
+      conversation_id: outageConvId ?? conversationId,
+      intent: 'ai_outage',
+      degraded_provider: true,
+      total_outage: true,
+      cached: isCached || undefined,
+      note: isCached
+        ? 'Cached answer — live data may have changed since it was generated.'
+        : 'All AI providers are briefly offline. Your business data and POS are unaffected.',
+    }, { status: 200 })
   }
   // ─────────────────────────────────────────────────────────────────────────
 

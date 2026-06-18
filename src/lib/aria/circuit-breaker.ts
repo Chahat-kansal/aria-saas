@@ -94,6 +94,33 @@ export async function recordAnthropicFallbackProvider(incidentId: string, provid
   }
 }
 
+/** API-RESILIENCE-1B — the rare terminal case: EVERY provider is down. Ensure an incident exists and
+ *  mark it 'none_all_down' so total outages are distinguishable from ordinary single-provider failovers.
+ *  Reuses an already-open incident if present; otherwise inserts one. Best-effort. */
+export async function recordTotalOutage(triggerError: string): Promise<void> {
+  try {
+    const open = await isAnthropicCircuitOpen()
+    if (open.open && open.incidentId) {
+      await supabaseAdmin
+        .from('aria_provider_incidents')
+        .update({ fallback_provider_used: 'none_all_down' })
+        .eq('id', open.incidentId)
+        .is('resolved_at', null)
+    } else {
+      await supabaseAdmin
+        .from('aria_provider_incidents')
+        .insert({
+          provider: PROVIDER,
+          fallback_provider_used: 'none_all_down',
+          trigger_error: ('ALL PROVIDERS DOWN: ' + (triggerError ?? '')).slice(0, 500),
+        })
+    }
+    console.error('[circuit-breaker] TOTAL OUTAGE — all AI providers down')
+  } catch (e) {
+    console.error('[circuit-breaker] recordTotalOutage error:', (e as Error).message)
+  }
+}
+
 /** A real Anthropic success — resolve any open incident (circuit CLOSED). Best-effort. */
 export async function recordAnthropicSuccess(): Promise<void> {
   try {
