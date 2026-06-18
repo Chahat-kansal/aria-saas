@@ -50,14 +50,18 @@ export default function BusinessProfilePage() {
   const [consentMarketing, setConsentMarketing] = useState(false)
   const [notificationsOn, setNotificationsOn] = useState(true)
   const [nickname, setNickname] = useState('')
+  const [accountLinked, setAccountLinked] = useState(false)
+  const [showVerifyNudge, setShowVerifyNudge] = useState(false)
 
   const load = useCallback(async () => {
     if (!businessId) return
     try {
-      const [pRes, fRes] = await Promise.all([
+      const [pRes, fRes, linkRes] = await Promise.all([
         fetch('/api/community/businesses/' + businessId + '/profile').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/community/follows').then(r => r.ok ? r.json() : { follows: [] }),
+        fetch('/api/community/account-link').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
+      setAccountLinked(!!(linkRes?.linked || linkRes?.has_auth))
       if (!pRes || !pRes.business) { setNotFound(true); setLoading(false); return }
       setProfile(pRes)
       const f = (fRes.follows ?? []).find((x: { business_id: string }) => x.business_id === businessId)
@@ -78,7 +82,11 @@ export default function BusinessProfilePage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ business_id: businessId, consent_marketing: consentMarketing, notifications_on: notificationsOn, nickname: nickname || undefined }),
     })
-    setShowFollowPanel(false); setBusy(false); load()
+    setShowFollowPanel(false); setBusy(false)
+    // CX-1-P1: AFTER following (never before — never gate the follow), nudge anonymous members to
+    // verify so they can be notified. Linked members already keep follows across devices.
+    if (!accountLinked) setShowVerifyNudge(true)
+    load()
   }
   async function unfollow() {
     if (!confirm('Unfollow ' + (profile?.business.name ?? 'this shop') + '?')) return
@@ -131,6 +139,18 @@ export default function BusinessProfilePage() {
           <MoreHorizontal size={18} color={PALETTE.ink} />
         </button>
       </div>
+
+      {/* CX-1-P1: post-follow verify nudge — shown AFTER following, only for anonymous members */}
+      {showVerifyNudge && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: PALETTE.surface, border: BORDER, borderRadius: RADIUS.lg, padding: '12px 14px', marginBottom: 12 }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>🔔</span>
+          <p style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: PALETTE.ink, margin: 0, lineHeight: 1.4 }}>
+            Following {biz.name}! <Link href="/community/me" style={{ color: PALETTE.ink, fontWeight: 800, textDecoration: 'underline' }}>Verify your account</Link> to get notified when they post.
+          </p>
+          <button onClick={() => setShowVerifyNudge(false)} aria-label="Dismiss"
+            style={{ background: 'transparent', border: 'none', color: PALETTE.inkSoft, cursor: 'pointer', fontSize: 18, padding: 4, lineHeight: 1, flexShrink: 0 }}>×</button>
+        </div>
+      )}
 
       {/* Hero banner */}
       <div style={{
