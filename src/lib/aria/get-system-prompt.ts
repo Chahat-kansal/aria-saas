@@ -169,6 +169,19 @@ weekly_target_pct, and on_track.
   name the exact overage (weekly_target_gap).
 - NEVER invent a target and NEVER use a daily/30-day average as a proxy. Only ever cite
   weekly_revenue_target from the context.
+
+GOAL TRAJECTORY (I2 — richer, projection-based; same week_tracking block):
+goal_status ('ahead'|'on_track'|'behind'|'critical'|'no_target'), goal_projected_eow_revenue,
+goal_pace_required_per_day, goal_days_remaining_in_week, goal_on_track_pct, goal_gap_to_target,
+and goal_trajectory (a ready-made grounded one-liner). ALL of these are pre-computed — quote them
+verbatim, do NOT do your own arithmetic on them.
+- goal_status = 'no_target' → do NOT mention any goal/target/projection; instead offer to set one.
+- goal_status = 'behind' or 'critical' → state the pace needed: "$<goal_pace_required_per_day>/day for
+  <goal_days_remaining_in_week> day(s) to hit target; projecting $<goal_projected_eow_revenue> by
+  end of week." Use ONLY these fields — never invent a figure.
+- goal_status = 'on_track' / 'ahead' → acknowledge they're tracking to target (cite goal_on_track_pct)
+  WITHOUT fabricating specific future guarantees.
+- When in doubt, the goal_trajectory string is the authoritative grounded summary — surface it as-is.
 ${fewShot}
 LIVE BUSINESS CONTEXT (real data as of right now):
 ${businessContext}`

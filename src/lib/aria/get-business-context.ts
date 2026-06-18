@@ -5,6 +5,7 @@ import { resolveBusinessTimezone } from '@/lib/aria/business-timezone'
 import { getWeatherContext } from './get-weather-context'
 import { CANONICAL_COLS } from './schema-registry'
 import { getEffectivePlan } from '@/lib/plans/resolve-plan'
+import { computeGoalContext } from '@/lib/aria/goal-context'
 
 export async function getBusinessContext(businessId: string): Promise<string> {
   const supabase = createServerSupabaseClient()
@@ -50,6 +51,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     salesSameWeekLastMonth,
     ariaActionsRaw,
     salesThisCalWeekRaw,
+    goalCtxRaw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -124,6 +126,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .eq('business_id', businessId)
       .gte('created_at', toAESTStart(startOfWeekAEST(tz).toISOString().slice(0, 10), tz))
       .neq('status', 'voided'),
+    // I2 GOAL-AWARE: full goal trajectory (status/projection/pace/reasoning) — runs in parallel.
+    computeGoalContext(businessId),
   ])
 
   // SKU aggregation from sale_items — use line_total (registry product_sales canonical, RULE 6)
@@ -162,6 +166,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const revs  = reviews.status   === 'fulfilled' ? reviews.value.data    ?? [] : []
   const outs  = outcomes.status  === 'fulfilled' ? outcomes.value.data   ?? [] : []
   const alts  = lowStock.status  === 'fulfilled' ? lowStock.value.data   ?? [] : []
+  const goalCtx = goalCtxRaw.status === 'fulfilled' ? goalCtxRaw.value : null
 
   const topLeakData = topLeakRaw.status === 'fulfilled' ? (topLeakRaw.value.data as { title: string; monthly_loss: number; recommendation: string; status: string } | null) : null
 
@@ -271,6 +276,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       } else {
         parts.push(`Same week last month (${swlmWindow}): no sales data found for that window.`)
       }
+      // I2 GOAL-AWARE: grounded trajectory one-liner — figures come ONLY from computeGoalContext.
+      if (goalCtx) parts.push(`GOAL TRAJECTORY: ${goalCtx.reasoning}`)
       return {
         current_week_revenue: revWeek,
         current_7d_revenue: rev7,
@@ -286,6 +293,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         pct_of_target: pctOfTarget,
         vs_same_week_pct: vsSWLMPct,
         on_track: onTrack,
+        // I2 GOAL-AWARE — full trajectory from computeGoalContext (no prompt-side arithmetic):
+        goal_status: goalCtx?.status ?? null,
+        goal_projected_eow_revenue: goalCtx?.projected_eow_revenue ?? null,
+        goal_pace_required_per_day: goalCtx?.pace_required ?? null,
+        goal_days_remaining_in_week: goalCtx?.days_remaining_in_week ?? null,
+        goal_on_track_pct: goalCtx?.on_track_pct ?? null,
+        goal_gap_to_target: goalCtx?.gap_to_target ?? null,
+        goal_trajectory: goalCtx?.reasoning ?? null,
         note: parts.join(' '),
       }
     })(),
