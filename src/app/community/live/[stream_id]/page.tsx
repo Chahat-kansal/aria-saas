@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { X, Volume2, VolumeX, Users, Send } from 'lucide-react'
-import { PALETTE, BORDER, RADIUS, FONT } from '../../theme'
+import { PALETTE, BORDER, RADIUS, FONT, SIGNAL_COLORS } from '../../theme'
 import { supabase } from '@/lib/supabase'
 
 type ChatMsg = { id: string; sender_name: string; message: string; created_at: string }
@@ -25,6 +25,7 @@ export default function ViewerPage() {
   const [chatInput, setChatInput]   = useState('')
   const [viewerCount, setViewerCount] = useState(0)
   const [nickname, setNickname]     = useState('viewer')
+  const [pulse, setPulse]           = useState<{ busy_now: boolean; promo_live: boolean; sales_this_stream: number } | null>(null)
 
   // Load stream info
   useEffect(() => {
@@ -113,6 +114,24 @@ export default function ViewerPage() {
     }
   }, [streamId, nickname, router])
 
+  // POS pulse — grounded live signals for the streaming business. Poll every 60s while active.
+  useEffect(() => {
+    const sid = stream?.id
+    if (!sid || ended) return
+    let active = true
+    const load = () => {
+      fetch('/api/community/live/' + sid + '/pulse')
+        .then(r => (r.ok ? r.json() : null))
+        .then((d: { busy_now?: boolean; promo_live?: boolean; sales_this_stream?: number } | null) => {
+          if (active && d) setPulse({ busy_now: !!d.busy_now, promo_live: !!d.promo_live, sales_this_stream: Number(d.sales_this_stream) || 0 })
+        })
+        .catch(() => {})
+    }
+    load()
+    const iv = setInterval(load, 60000)
+    return () => { active = false; clearInterval(iv) }
+  }, [stream?.id, ended])
+
   async function sendChat() {
     if (!chatInput.trim() || !streamId) return
     const msg = chatInput.trim()
@@ -190,6 +209,20 @@ export default function ViewerPage() {
 
       {/* Bottom chat */}
       <div style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 8px) + 8px)', left: 12, right: 12, zIndex: 10 }}>
+        {/* POS pulse — only renders when the DB confirms a live signal (no empty row, no invented figures) */}
+        {pulse && (pulse.busy_now || pulse.promo_live || pulse.sales_this_stream > 0) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {pulse.busy_now && (
+              <span style={{ background: SIGNAL_COLORS.busy, color: '#fff', padding: '4px 11px', borderRadius: RADIUS.pill, fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>🔴 BUSY NOW</span>
+            )}
+            {pulse.promo_live && (
+              <span style={{ background: SIGNAL_COLORS.promo, color: '#fff', padding: '4px 11px', borderRadius: RADIUS.pill, fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>📣 PROMO LIVE</span>
+            )}
+            {pulse.sales_this_stream > 0 && (
+              <span style={{ background: SIGNAL_COLORS.fresh, color: '#fff', padding: '4px 11px', borderRadius: RADIUS.pill, fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>🛒 {pulse.sales_this_stream} {pulse.sales_this_stream === 1 ? 'sale' : 'sales'} this stream</span>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8, maxHeight: 160, overflowY: 'hidden' }}>
           {messages.slice(-5).map(m => (
             <div key={m.id} style={{ background: 'rgba(0,0,0,0.55)', borderRadius: RADIUS.pill, padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}>
