@@ -9,6 +9,18 @@ const FONT = 'Inter, system-ui, -apple-system, sans-serif'
 
 type Step = 'loading' | 'email' | 'pin' | 'code' | 'setpin' | 'landing'
 
+interface Activity { type: string; points_delta: number; stamps_delta: number; reward_redeemed: string | null; created_at: string }
+interface DashData {
+  customer: { name: string | null }
+  program_type: 'points' | 'stamps'
+  points: { balance: number; dollar_value: number; point_value_cents: number }
+  stamps: { count: number; target: number; remaining: number; reward_text: string }
+  tier: { current_label: string; current_color: string; multiplier: number; next_label: string | null; progress_pct: number; to_next_spend: number } | null
+  reward_available: { available: boolean; text?: string; dollars?: number }
+  activity: Activity[]
+  empty: boolean
+}
+
 export default function LoyaltySignInPage() {
   const params = useParams()
   const bid = params?.business_id as string
@@ -24,6 +36,7 @@ export default function LoyaltySignInPage() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [welcome, setWelcome] = useState<string | null>(null)
+  const [dash, setDash] = useState<DashData | null>(null)
 
   useEffect(() => {
     if (!bid) return
@@ -33,6 +46,13 @@ export default function LoyaltySignInPage() {
       if (d?.customer) { setWelcome(d.customer.name ?? null); setStep('landing') } else setStep('email')
     }).catch(() => setStep('email'))
   }, [bid])
+
+  // Load the read-only dashboard whenever we land (own-row only; server scopes via the session).
+  useEffect(() => {
+    if (step !== 'landing') return
+    setDash(null)
+    fetch('/api/loyalty/dashboard').then(r => r.json()).then(d => { if (d?.customer) setDash(d as DashData) }).catch(() => {})
+  }, [step])
 
   const post = async (payload: Record<string, unknown>) => {
     const r = await fetch('/api/loyalty/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -105,14 +125,95 @@ export default function LoyaltySignInPage() {
 
   if (step === 'loading') return wrap(<p style={{ textAlign: 'center', color: INK_SOFT }}>Loading…</p>)
 
-  if (step === 'landing') return wrap(
-    <div style={{ ...card, textAlign: 'center' }}>
-      <div style={{ fontSize: 48, marginBottom: 8 }}>👋</div>
-      <h2 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Welcome{welcome ? `, ${welcome.split(' ')[0]}` : ' back'}!</h2>
-      <p style={{ color: INK_SOFT, fontSize: 15, lineHeight: 1.5, margin: '0 0 18px' }}>You&apos;re signed in to your {bizName} rewards. Your full dashboard is coming soon.</p>
-      <button onClick={logout} style={{ ...link }}>Sign out</button>
-    </div>
-  )
+  if (step === 'landing') {
+    const bar = (pct: number) => (
+      <div style={{ height: 10, borderRadius: 999, border: BORDER, background: SURFACE, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, pct))}%`, background: ACCENT }} />
+      </div>
+    )
+    const header = (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
+        <button onClick={logout} style={link}>Sign out</button>
+      </div>
+    )
+    if (!dash) return wrap(<div style={card}>{header}<p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0' }}>Loading your rewards…</p></div>)
+
+    const isStamps = dash.program_type === 'stamps'
+    const reward = dash.reward_available
+
+    return wrap(
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={card}>
+          {header}
+
+          {/* HERO — visible progress */}
+          {isStamps ? (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: INK_SOFT, margin: '0 0 12px' }}>Your stamp card</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 14 }}>
+                {Array.from({ length: dash.stamps.target }).map((_, i) => (
+                  <div key={i} style={{ width: 38, height: 38, borderRadius: '50%', border: BORDER, display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < dash.stamps.count ? ACCENT : SURFACE, fontSize: 16, fontWeight: 800 }}>{i < dash.stamps.count ? '★' : ''}</div>
+                ))}
+              </div>
+              <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
+                {dash.stamps.remaining === 0 ? `Reward ready: ${dash.stamps.reward_text}!` : `${dash.stamps.remaining} more to ${dash.stamps.reward_text}`}
+              </p>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: INK_SOFT, margin: '0 0 4px' }}>Your balance</p>
+              <div style={{ fontSize: 52, fontWeight: 800, lineHeight: 1, fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>{dash.points.balance.toLocaleString()}</div>
+              <p style={{ fontSize: 14, color: INK_SOFT, margin: '6px 0 0' }}>points · worth ${dash.points.dollar_value.toFixed(2)} in-store</p>
+            </div>
+          )}
+
+          {/* REWARD AVAILABLE — display only, redeem is in-store */}
+          {reward.available && (
+            <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, border: BORDER, background: ACCENT, fontSize: 14, fontWeight: 700, textAlign: 'center' }}>
+              {isStamps ? `🎁 ${reward.text} — claim it in store` : `🎁 You can redeem $${(reward.dollars ?? 0).toFixed(2)} in-store`}
+            </div>
+          )}
+        </div>
+
+        {/* TIER (points mode) */}
+        {!isStamps && dash.tier && (
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, padding: '3px 10px', borderRadius: 999, border: BORDER, color: dash.tier.current_color }}>{dash.tier.current_label}{dash.tier.multiplier > 1 ? ` · ${dash.tier.multiplier}×` : ''}</span>
+              {dash.tier.next_label && <span style={{ fontSize: 12, color: INK_SOFT }}>${dash.tier.to_next_spend.toFixed(0)} spend to {dash.tier.next_label}</span>}
+            </div>
+            {dash.tier.next_label ? bar(dash.tier.progress_pct) : <p style={{ fontSize: 12, color: INK_SOFT, margin: 0 }}>You&apos;re at our top tier — thank you!</p>}
+          </div>
+        )}
+
+        {/* ACTIVITY */}
+        <div style={card}>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 10px' }}>Recent activity</p>
+          {dash.empty || dash.activity.length === 0 ? (
+            <p style={{ fontSize: 14, color: INK_SOFT, margin: 0, lineHeight: 1.5 }}>Start earning — show your email at the counter on your next visit. 🌱</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {dash.activity.map((a, i) => {
+                const isRedeem = a.type === 'redeem'
+                const delta = isStamps ? a.stamps_delta : a.points_delta
+                const unit = isStamps ? (Math.abs(delta) === 1 ? 'stamp' : 'stamps') : 'pts'
+                return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: i ? '1px solid #eee' : 'none' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{isRedeem ? (a.reward_redeemed ? `Redeemed: ${a.reward_redeemed}` : 'Redeemed') : a.type === 'earn' ? 'Earned' : a.type}</div>
+                      <div style={{ fontSize: 12, color: INK_SOFT }}>{new Date(a.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: delta < 0 ? '#d11' : INK }}>{delta > 0 ? '+' : ''}{delta} {unit}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return wrap(
     <div style={card}>
