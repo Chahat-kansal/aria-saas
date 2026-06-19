@@ -21,6 +21,8 @@ interface DashData {
   empty: boolean
 }
 
+interface AcctForm { name: string; email: string; phone: string; birthday: string; marketing_consent: boolean; email_consent: boolean; sms_consent: boolean }
+
 export default function LoyaltySignInPage() {
   const params = useParams()
   const bid = params?.business_id as string
@@ -37,6 +39,29 @@ export default function LoyaltySignInPage() {
   const [info, setInfo] = useState('')
   const [welcome, setWelcome] = useState<string | null>(null)
   const [dash, setDash] = useState<DashData | null>(null)
+  const [showAccount, setShowAccount] = useState(false)
+  const [acct, setAcct] = useState<AcctForm | null>(null)
+  const [acctBusy, setAcctBusy] = useState(false)
+  const [acctMsg, setAcctMsg] = useState('')
+  const [acctErr, setAcctErr] = useState<Record<string, string>>({})
+
+  const openAccount = async () => {
+    setAcctMsg(''); setAcctErr({}); setAcct(null); setShowAccount(true)
+    const d = await fetch('/api/loyalty/account').then(r => r.json()).catch(() => null)
+    if (d?.account) setAcct(d.account as AcctForm)
+  }
+  const saveAccount = async () => {
+    if (!acct) return
+    setAcctBusy(true); setAcctMsg(''); setAcctErr({})
+    const r = await fetch('/api/loyalty/account', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(acct) })
+    const d = await r.json().catch(() => ({}))
+    setAcctBusy(false)
+    if (r.ok && d.ok) {
+      setAcctMsg('Saved ✓'); setWelcome(acct.name || welcome)
+      fetch('/api/loyalty/dashboard').then(x => x.json()).then(x => { if (x?.customer) setDash(x as DashData) }).catch(() => {})
+    } else if (d.errors) { setAcctErr(d.errors as Record<string, string>) }
+    else { setAcctMsg(d.error || 'Could not save — please try again.') }
+  }
 
   useEffect(() => {
     if (!bid) return
@@ -134,9 +159,55 @@ export default function LoyaltySignInPage() {
     const header = (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
-        <button onClick={logout} style={link}>Sign out</button>
+        <div style={{ display: 'flex', gap: 14 }}>
+          <button onClick={openAccount} style={link}>My details</button>
+          <button onClick={logout} style={link}>Sign out</button>
+        </div>
       </div>
     )
+
+    // ── My details (self-service account editor) ──
+    if (showAccount) {
+      const field = (label: string, key: 'name' | 'email' | 'phone' | 'birthday', type: string) => (
+        <div>
+          <label style={{ fontSize: 12, color: INK_SOFT, display: 'block', marginBottom: 5 }}>{label}</label>
+          <input type={type} value={acct?.[key] ?? ''} onChange={e => setAcct(a => a ? { ...a, [key]: e.target.value } : a)} style={inp} />
+          {acctErr[key] && <p style={{ color: '#d11', fontSize: 12, margin: '4px 0 0' }}>{acctErr[key]}</p>}
+        </div>
+      )
+      const toggle = (label: string, key: 'marketing_consent' | 'email_consent' | 'sms_consent') => (
+        <button type="button" onClick={() => setAcct(a => a ? { ...a, [key]: !a[key] } : a)}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 12, border: BORDER, background: SURFACE, color: INK, fontFamily: FONT, fontSize: 14, cursor: 'pointer' }}>
+          <span style={{ width: 38, height: 22, borderRadius: 999, background: acct?.[key] ? ACCENT : '#ddd', padding: 2, flexShrink: 0, transition: 'background 150ms' }}>
+            <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: INK, transform: acct?.[key] ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+          </span>
+          <span>{label}</span>
+        </button>
+      )
+      return wrap(
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>My details</h2>
+            <button onClick={() => { setShowAccount(false); setAcctMsg('') }} style={link}>← Back</button>
+          </div>
+          {!acct ? <p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0' }}>Loading…</p> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {field('Name', 'name', 'text')}
+              {field('Email', 'email', 'email')}
+              {field('Mobile', 'phone', 'tel')}
+              {field('Birthday', 'birthday', 'date')}
+              <p style={{ fontSize: 12, fontWeight: 700, color: INK_SOFT, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 0' }}>Marketing preferences</p>
+              {toggle('Receive offers & rewards', 'marketing_consent')}
+              {toggle('Email me', 'email_consent')}
+              {toggle('Text me', 'sms_consent')}
+              {acctMsg && <p style={{ fontSize: 13, color: acctMsg.includes('✓') ? '#2e7d32' : '#d11', margin: 0 }}>{acctMsg}</p>}
+              <button onClick={saveAccount} disabled={acctBusy} style={{ ...btn, opacity: acctBusy ? 0.6 : 1 }}>{acctBusy ? 'Saving…' : 'Save changes'}</button>
+            </div>
+          )}
+        </div>
+      )
+    }
+
     if (!dash) return wrap(<div style={card}>{header}<p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0' }}>Loading your rewards…</p></div>)
 
     const isStamps = dash.program_type === 'stamps'
