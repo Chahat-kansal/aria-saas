@@ -4,16 +4,11 @@ export const maxDuration = 90
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { resolveOwnerBusinessId as getBid } from '@/lib/community/resolveOwnerBusinessId'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { crossPost, type ChannelKey } from '@/lib/community/cross-post'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 // POST — bulk-publish every approved draft (optionally limited to one plan_run_id)
 async function _POST(req: Request) {

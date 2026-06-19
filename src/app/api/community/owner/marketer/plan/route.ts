@@ -4,6 +4,7 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { resolveOwnerBusinessId as getBid } from '@/lib/community/resolveOwnerBusinessId'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { randomUUID } from 'crypto'
@@ -13,12 +14,6 @@ import { parseLLMJsonOr } from '@/lib/ai-json'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 // ── Best-times analyzer: when do followers engage? ───────────────────
 // Looks at community_post_engagement for this business's posts over last 60d

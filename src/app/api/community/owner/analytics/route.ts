@@ -3,18 +3,13 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { resolveOwnerBusinessId as getBid } from '@/lib/community/resolveOwnerBusinessId'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 // CX-OWNER-TRUST-1 — community analytics for the owner dashboard. One call returns everything the
 // dashboard renders. Every figure is a real DB count scoped to the owner's business — nothing invented.
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 const DAY = 86_400_000
 

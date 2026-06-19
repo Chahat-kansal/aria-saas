@@ -4,17 +4,12 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { resolveOwnerBusinessId as getBid } from '@/lib/community/resolveOwnerBusinessId'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkPrivacyFull } from '@/lib/community/privacy-guard'
 import { checkAbuseRegex } from '@/lib/community/abuse-guard'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 interface ChatMessage { from: 'member' | 'owner'; text: string; ts: string }
 

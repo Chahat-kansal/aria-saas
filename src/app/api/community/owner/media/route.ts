@@ -4,14 +4,9 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { resolveOwnerBusinessId as getBid } from '@/lib/community/resolveOwnerBusinessId'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 // Max sizes — images small, video larger for reels
 const MAX_IMAGE_MB = 8
