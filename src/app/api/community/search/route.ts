@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 
 // Public — unified search across businesses + marketplace listings.
 //
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
 
     if (type === 'all' || type === 'listing') {
       const { data } = await supabaseAdmin.from('marketplace_listings')
-        .select('id, business_id, title, description, price, media_urls, category, created_at, businesses(name, logo_url, community_verified, suburb, city)')
+        .select(`id, business_id, title, description, price, media_urls, category, created_at, ${COMMUNITY_BUSINESS_CARD}`)
         .eq('status', 'active')
         .or(`title.ilike.${ilike},description.ilike.${ilike},category.ilike.${ilike}`)
         .order('created_at', { ascending: false })

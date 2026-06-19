@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { getCommunityMember, ensureCommunityMember } from '@/lib/community/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 
 // CX-ACCOUNT-CENTRE-1 — a MEMBER blocking a BUSINESS (member's perspective).
 // Stored in community_member_blocks. This is the INVERSE of community_blocked_visitors (a business
@@ -15,7 +16,7 @@ export async function GET() {
     const member = await getCommunityMember()
     if (!member) return NextResponse.json({ blocks: [] })
     const { data } = await supabaseAdmin.from('community_member_blocks')
-      .select('business_id, created_at, businesses(name, logo_url)')
+      .select(`business_id, created_at, ${COMMUNITY_BUSINESS_CARD}`)
       .eq('member_id', member.id)
       .order('created_at', { ascending: false })
     return NextResponse.json({ blocks: data ?? [] })

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 import { ensureCommunityMember, getCommunityMember } from '@/lib/community/session'
 import { notifyEngagement } from '@/lib/community/notifications'
 
@@ -143,7 +144,7 @@ export async function GET(req: Request) {
         .eq('post_id', post_id).eq('engagement_type', 'comment')
         .order('created_at', { ascending: false }).limit(200),
       supabaseAdmin.from('community_posts')
-        .select('id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, businesses(name, logo_url, community_verified, industry, suburb, city)')
+        .select(`id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, ${COMMUNITY_BUSINESS_CARD}`)
         .eq('id', post_id).eq('status', 'published').maybeSingle(),
       supabaseAdmin.from('community_post_engagement')
         .select('engagement_type').eq('post_id', post_id).in('engagement_type', ['like', 'save', 'comment']),

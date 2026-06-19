@@ -4,6 +4,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 import { ensureCommunityMember, getCommunityMember } from '@/lib/community/session'
 import { checkPrivacyFull } from '@/lib/community/privacy-guard'
 import { checkAbuseFull, logMessage } from '@/lib/community/abuse-guard'
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
 
     if (id) {
       const { data: chat } = await supabaseAdmin.from('marketplace_chats')
-        .select('id, listing_id, business_id, messages, created_at, last_message_at, marketplace_listings(title, price, media_urls, status, businesses(name, logo_url, community_verified))')
+        .select(`id, listing_id, business_id, messages, created_at, last_message_at, marketplace_listings(title, price, media_urls, status, ${COMMUNITY_BUSINESS_CARD})`)
         .eq('id', id).eq('member_id', member.id).maybeSingle()
       if (!chat) return NextResponse.json({ error: 'Not found' }, { status: 404 })
       // Mark as read by member
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
     // Joins BOTH the listing (for marketplace chats) and the business directly (for business DMs,
     // which have listing_id IS NULL and therefore no listing to render).
     const { data } = await supabaseAdmin.from('marketplace_chats')
-      .select('id, listing_id, business_id, messages, last_message_at, unread_for_member, businesses(name, logo_url, community_verified), marketplace_listings(title, price, media_urls, status, businesses(name, logo_url, community_verified))')
+      .select(`id, listing_id, business_id, messages, last_message_at, unread_for_member, ${COMMUNITY_BUSINESS_CARD}, marketplace_listings(title, price, media_urls, status, ${COMMUNITY_BUSINESS_CARD})`)
       .eq('member_id', member.id)
       .order('last_message_at', { ascending: false })
       .limit(50)

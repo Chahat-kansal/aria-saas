@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { getCommunityMember } from '@/lib/community/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { tallyEngagementTypes } from '@/lib/community/query-helpers'
 
 // CX-ACCOUNT-CENTRE-2 — the current member's OWN data: activity counts (for the Account Centre) +
 // the full export (AU Privacy Act APP nicety — "download my data"). Member-scoped via the session
@@ -14,7 +15,7 @@ export async function GET() {
     if (!member) return NextResponse.json({ error: 'No session' }, { status: 401 })
     const id = member.id
 
-    const [profileRes, followsRes, savedRes, likedCnt, commentsCnt, messagedRes] = await Promise.all([
+    const [profileRes, followsRes, savedRes, engTypesRes, messagedRes] = await Promise.all([
       supabaseAdmin.from('community_members').select('avatar_url, bio').eq('id', id).maybeSingle(),
       supabaseAdmin.from('community_follows')
         .select('business_id, followed_at, businesses(name)')
@@ -22,10 +23,11 @@ export async function GET() {
       supabaseAdmin.from('community_post_engagement')
         .select('post_id, created_at, community_posts(title, businesses(name))')
         .eq('member_id', id).eq('engagement_type', 'save').order('created_at', { ascending: false }).limit(200),
-      supabaseAdmin.from('community_post_engagement').select('id', { count: 'exact', head: true }).eq('member_id', id).eq('engagement_type', 'like'),
-      supabaseAdmin.from('community_post_engagement').select('id', { count: 'exact', head: true }).eq('member_id', id).eq('engagement_type', 'comment'),
+      // F5 — one grouped tally replaces the separate like + comment count queries (saved stays the list length).
+      supabaseAdmin.from('community_post_engagement').select('engagement_type').eq('member_id', id),
       supabaseAdmin.from('marketplace_chats').select('business_id').eq('member_id', id),
     ])
+    const eng = tallyEngagementTypes(engTypesRes.data as Array<{ engagement_type: string | null }> | null)
 
     const follows = ((followsRes.data ?? []) as unknown as Array<{ business_id: string; followed_at: string; businesses: { name: string | null } | null }>)
       .map(f => ({ business_id: f.business_id, business: f.businesses?.name ?? null, followed_at: f.followed_at }))
@@ -45,8 +47,8 @@ export async function GET() {
       activity: {
         following: follows.length,
         saved: saved.length,
-        liked: likedCnt.count ?? 0,
-        comments: commentsCnt.count ?? 0,
+        liked: eng.like,
+        comments: eng.comment,
         messaged: messagedBiz.size,
       },
       follows,

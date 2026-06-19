@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 
 // Public — browse the marketplace. Supports search + category filter + pagination.
 export async function GET(req: Request) {
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
     const search = searchParams.get('q')
 
     let q = supabaseAdmin.from('marketplace_listings')
-      .select('id, business_id, title, description, price, media_urls, category, created_at, businesses(name, logo_url, community_verified, suburb, city)')
+      .select(`id, business_id, title, description, price, media_urls, category, created_at, ${COMMUNITY_BUSINESS_CARD}`)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(limit + 1)

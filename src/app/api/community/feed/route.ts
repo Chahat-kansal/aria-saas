@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 import { getCommunityMember } from '@/lib/community/session'
 import { generateColdStartCards, type BizSignal } from '@/lib/community/cold-start-cards'
 
@@ -107,7 +108,7 @@ export async function GET(req: Request) {
     // ── Posts query ──────────────────────────────────────────────────────────
     let q = supabaseAdmin
       .from('community_posts')
-      .select('id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, location_tag, businesses(name, logo_url, industry, suburb, city, community_verified)')
+      .select(`id, business_id, post_type, title, body, media_urls, media_type, ai_generated, published_at, location_tag, ${COMMUNITY_BUSINESS_CARD}`)
       .eq('status', 'published')
       .eq('is_story', false)
       .order('published_at', { ascending: false })

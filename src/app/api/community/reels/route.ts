@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 
 // Public — reels (media_type='reel') across the network. TikTok-style discovery.
 export async function GET(req: Request) {
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
     const member = await getCommunityMember()
 
     let q = supabaseAdmin.from('community_posts')
-      .select('id, business_id, title, body, media_urls, published_at, businesses(name, logo_url, community_verified)')
+      .select(`id, business_id, title, body, media_urls, published_at, ${COMMUNITY_BUSINESS_CARD}`)
       .eq('status', 'published')
       .eq('media_type', 'reel')
       .order('published_at', { ascending: false })

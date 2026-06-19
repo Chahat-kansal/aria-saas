@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
+import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 
 // Public — list this anonymous member's saved posts (the "Saved offers wallet")
 export async function GET() {
@@ -12,7 +13,7 @@ export async function GET() {
     if (!member) return NextResponse.json({ posts: [], member: null })
 
     const { data: saves } = await supabaseAdmin.from('community_post_engagement')
-      .select('post_id, created_at, community_posts(id, business_id, post_type, title, body, media_urls, media_type, published_at, is_story, expires_at, businesses(name, logo_url, community_verified))')
+      .select(`post_id, created_at, community_posts(id, business_id, post_type, title, body, media_urls, media_type, published_at, is_story, expires_at, ${COMMUNITY_BUSINESS_CARD})`)
       .eq('member_id', member.id)
       .eq('engagement_type', 'save')
       .order('created_at', { ascending: false })
