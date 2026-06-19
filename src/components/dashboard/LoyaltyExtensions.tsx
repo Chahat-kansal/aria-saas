@@ -7,6 +7,101 @@ interface LeaderEntry { customer_id: string; name: string; referrals: number; po
 interface Rule { id: string; rule_type: string; points_value: number; is_active: boolean }
 interface FraudFlag { customer_id: string; customer_name: string; flag_type: string; details: Record<string, unknown> }
 interface ForecastSummary { loyalty_members: number; non_loyalty: number; avg_loyalty_spend: number; avg_non_loyalty_spend: number; spend_multiplier: number; at_risk: Record<string, { count: number; annual_revenue_at_risk: number }> }
+interface Offer { id: string; title: string; description: string | null; image_url: string | null; offer_type: string; point_cost: number | null; active: boolean; starts_at: string | null; ends_at: string | null }
+
+const OFFER_TYPES = [
+  { key: 'info', label: 'Announcement' },
+  { key: 'points_reward', label: 'Points reward' },
+  { key: 'bonus', label: 'Bonus' },
+]
+
+// LOY-OFFERS — owner CRUD for loyalty offers shown on customers' dashboards.
+export function OffersTab() {
+  const [offers, setOffers] = useState<Offer[]>([])
+  const [form, setForm] = useState({ title: '', description: '', image_url: '', offer_type: 'info', point_cost: '', ends_at: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function load() {
+    const r = await fetch('/api/loyalty/offers').then(r => r.json()).catch(() => ({ offers: [] }))
+    setOffers(r.offers ?? [])
+  }
+  useEffect(() => { load() }, [])
+
+  async function add() {
+    if (!form.title.trim()) { setError('Title is required.'); return }
+    setSaving(true); setError('')
+    const body = {
+      title: form.title, description: form.description || null, image_url: form.image_url || null,
+      offer_type: form.offer_type, point_cost: form.point_cost === '' ? null : Number(form.point_cost),
+      ends_at: form.ends_at || null, active: true,
+    }
+    const res = await fetch('/api/loyalty/offers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).catch(() => ({}))
+    if (res.offer) { setOffers(o => [res.offer, ...o]); setForm({ title: '', description: '', image_url: '', offer_type: 'info', point_cost: '', ends_at: '' }) }
+    else setError(res.error || 'Could not create offer.')
+    setSaving(false)
+  }
+
+  async function toggleActive(o: Offer) {
+    const res = await fetch('/api/loyalty/offers', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: o.id, active: !o.active }) }).then(r => r.json()).catch(() => ({}))
+    if (res.offer) setOffers(list => list.map(x => x.id === o.id ? res.offer : x))
+  }
+
+  async function remove(id: string) {
+    await fetch(`/api/loyalty/offers?id=${id}`, { method: 'DELETE' })
+    setOffers(list => list.filter(x => x.id !== id))
+  }
+
+  const inp = { width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12, fontFamily: 'inherit' } as const
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Offers</h2>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>Post offers your members see on their loyalty dashboard. Redemption happens in store.</p>
+      </div>
+
+      {offers.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>No offers yet — create your first below.</p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+          {offers.map(o => (
+            <div key={o.id} style={{ padding: 14, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', opacity: o.active ? 1 : 0.55 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <p style={{ fontSize: 13, fontWeight: 700 }}>{o.title}</p>
+                <span style={{ fontSize: 10, color: o.active ? '#7FB897' : 'rgba(255,255,255,0.4)' }}>{o.active ? 'Active' : 'Hidden'}</span>
+              </div>
+              {o.description && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{o.description}</p>}
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 6 }}>{OFFER_TYPES.find(t => t.key === o.offer_type)?.label ?? o.offer_type}{o.point_cost != null ? ` · ${o.point_cost} pts` : ''}{o.ends_at ? ` · ends ${new Date(o.ends_at).toLocaleDateString('en-AU')}` : ''}</p>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button onClick={() => toggleActive(o)} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{o.active ? 'Deactivate' : 'Activate'}</button>
+                <button onClick={() => remove(o.id)} style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ padding: 14, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.2)' }}>
+        <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Create offer</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input style={inp} placeholder="Title (e.g. Double points weekend)" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+          <textarea style={{ ...inp, minHeight: 50, resize: 'vertical' }} placeholder="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr', gap: 6 }}>
+            <input style={inp} placeholder="Image URL (https://, optional)" value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} />
+            <select style={inp} value={form.offer_type} onChange={e => setForm(f => ({ ...f, offer_type: e.target.value }))}>
+              {OFFER_TYPES.map(t => <option key={t.key} value={t.key} style={{ color: '#000' }}>{t.label}</option>)}
+            </select>
+            <input style={inp} type="number" min={0} placeholder="Point cost" value={form.point_cost} onChange={e => setForm(f => ({ ...f, point_cost: e.target.value }))} />
+            <input style={inp} type="date" value={form.ends_at} onChange={e => setForm(f => ({ ...f, ends_at: e.target.value }))} />
+          </div>
+          {error && <p style={{ fontSize: 12, color: '#EF4444' }}>{error}</p>}
+          <button onClick={add} disabled={saving || !form.title.trim()} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1812', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !form.title.trim() ? 0.5 : 1, alignSelf: 'flex-start' }}>{saving ? 'Creating…' : 'Create offer'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const RULE_TYPES = [
   { key: 'review_left', label: 'Review left' },

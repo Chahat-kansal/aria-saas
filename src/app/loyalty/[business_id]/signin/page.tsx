@@ -22,6 +22,7 @@ interface DashData {
 }
 
 interface AcctForm { name: string; email: string; phone: string; birthday: string; marketing_consent: boolean; email_consent: boolean; sms_consent: boolean }
+interface OfferItem { id: string; title: string; description: string | null; image_url: string | null; offer_type: string; point_cost: number | null }
 
 export default function LoyaltySignInPage() {
   const params = useParams()
@@ -50,6 +51,14 @@ export default function LoyaltySignInPage() {
   const [codeExpiry, setCodeExpiry] = useState(0)
   const [secsLeft, setSecsLeft] = useState(0)
   const regenRef = useRef(false)
+  const [showOffers, setShowOffers] = useState(false)
+  const [offers, setOffers] = useState<OfferItem[] | null>(null)
+
+  const openOffers = async () => {
+    setShowOffers(true); setOffers(null)
+    const d = await fetch('/api/loyalty/offers-feed').then(r => r.json()).catch(() => null)
+    if (d) setOffers((d.offers ?? []) as OfferItem[])
+  }
 
   const generateCode = async () => {
     if (regenRef.current) return
@@ -194,11 +203,44 @@ export default function LoyaltySignInPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
         <div style={{ display: 'flex', gap: 14 }}>
+          <button onClick={openOffers} style={link}>Offers</button>
           <button onClick={openAccount} style={link}>My details</button>
           <button onClick={logout} style={link}>Sign out</button>
         </div>
       </div>
     )
+
+    // ── Offers (read-only feed of the business's active offers) ──
+    if (showOffers) {
+      return wrap(
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Offers</h2>
+            <button onClick={() => setShowOffers(false)} style={link}>← Back</button>
+          </div>
+          {!offers ? (
+            <p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0' }}>Loading…</p>
+          ) : offers.length === 0 ? (
+            <p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0', lineHeight: 1.5 }}>No offers right now — check back soon. 🌿</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {offers.map(o => (
+                <div key={o.id} style={{ border: BORDER, borderRadius: 14, overflow: 'hidden', background: SURFACE }}>
+                  {o.image_url && <img src={o.image_url} alt="" style={{ width: '100%', height: 130, objectFit: 'cover', display: 'block' }} />}
+                  <div style={{ padding: 14 }}>
+                    <p style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>{o.title}</p>
+                    {o.description && <p style={{ fontSize: 14, color: INK_SOFT, margin: '6px 0 0', lineHeight: 1.5 }}>{o.description}</p>}
+                    <p style={{ fontSize: 12, fontWeight: 700, margin: '10px 0 0' }}>
+                      {o.point_cost != null ? `${o.point_cost} points · ` : ''}🎁 Claim in store
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
 
     // ── Redeem code (short-lived single-use QR shown at the counter) ──
     if (showCode) {

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
-import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection } from '@/components/dashboard/LoyaltyExtensions'
+import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection, OffersTab } from '@/components/dashboard/LoyaltyExtensions'
 import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
 type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; public_enrol_enabled?: boolean }
@@ -41,7 +41,7 @@ export default function LoyaltyPage() {
   const [saveMsg, setSaveMsg] = useState('')
   const [insight, setInsight] = useState('')
   const [insightLoading, setInsightLoading] = useState(false)
-  const [tab, setTab] = useState<'overview' | 'members' | 'tiers' | 'referrals' | 'rewards' | 'config'>('overview')
+  const [tab, setTab] = useState<'overview' | 'members' | 'tiers' | 'referrals' | 'rewards' | 'offers' | 'config'>('overview')
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -104,7 +104,7 @@ export default function LoyaltyPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(232,237,231,0.08)' }}>
-        {(['overview','members','tiers','referrals','rewards','config'] as const).map(t => (
+        {(['overview','members','tiers','referrals','rewards','offers','config'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding: '9px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: tab === t ? 700 : 400, color: tab === t ? '#7FB897' : 'var(--text-secondary, #A8B5A8)', borderBottom: tab === t ? '2px solid #7FB897' : '2px solid transparent', marginBottom: -1, textTransform: 'capitalize' }}>
             {t}
@@ -126,6 +126,7 @@ export default function LoyaltyPage() {
       {tab === 'tiers' && <TiersTab />}
       {tab === 'referrals' && <ReferralsTab />}
       {tab === 'rewards' && <RewardRulesTab />}
+      {tab === 'offers' && <OffersTab />}
 
       {tab === 'overview' && <RevenueForecastCard />}
 
