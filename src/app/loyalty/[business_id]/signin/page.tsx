@@ -2,10 +2,10 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 
-// Locked Pipel design — light ink-on-cream, hard 1.5px borders, Inter.
+// Locked Pipel design — light ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
 const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#888888', ACCENT = '#d9f54e'
 const BORDER = `1.5px solid ${INK}`
-const FONT = 'Inter, system-ui, -apple-system, sans-serif'
+const FONT = "var(--font-body, 'Outfit', system-ui, sans-serif)"
 
 type Step = 'loading' | 'email' | 'pin' | 'code' | 'setpin' | 'landing'
 
@@ -116,7 +116,7 @@ export default function LoyaltySignInPage() {
   const wrap = (children: React.ReactNode) => (
     <div style={{ minHeight: '100vh', background: CREAM, fontFamily: FONT, color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 440 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, textAlign: 'center', margin: '0 0 18px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>{bizName} Rewards</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 800, textAlign: 'center', margin: '0 0 18px', fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>{bizName} Rewards</h1>
         {children}
         <div style={{ textAlign: 'center', marginTop: 18, fontSize: 12, color: INK_SOFT }}>Powered by Aria</div>
       </div>
@@ -133,7 +133,7 @@ export default function LoyaltySignInPage() {
     )
     const header = (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
         <button onClick={logout} style={link}>Sign out</button>
       </div>
     )
@@ -163,7 +163,7 @@ export default function LoyaltySignInPage() {
           ) : (
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: 13, color: INK_SOFT, margin: '0 0 4px' }}>Your balance</p>
-              <div style={{ fontSize: 52, fontWeight: 800, lineHeight: 1, fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>{dash.points.balance.toLocaleString()}</div>
+              <div style={{ fontSize: 52, fontWeight: 800, lineHeight: 1, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>{dash.points.balance.toLocaleString()}</div>
               <p style={{ fontSize: 14, color: INK_SOFT, margin: '6px 0 0' }}>points · worth ${dash.points.dollar_value.toFixed(2)} in-store</p>
             </div>
           )}

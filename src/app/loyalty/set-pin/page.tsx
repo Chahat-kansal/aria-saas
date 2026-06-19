@@ -2,10 +2,10 @@
 import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-// Locked Pipel design — light ink-on-cream, hard 1.5px borders, Inter.
+// Locked Pipel design — light ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
 const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#888888', ACCENT = '#d9f54e'
 const BORDER = `1.5px solid ${INK}`
-const FONT = 'Inter, system-ui, -apple-system, sans-serif'
+const FONT = "var(--font-body, 'Outfit', system-ui, sans-serif)"
 
 function SetPinInner() {
   const params = useSearchParams()
@@ -43,14 +43,14 @@ function SetPinInner() {
   if (done) return (
     <div style={{ ...card, textAlign: 'center' }}>
       <div style={{ fontSize: 52, marginBottom: 10 }}>🎉</div>
-      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>You&apos;re all set{done.name ? `, ${done.name.split(' ')[0]}` : ''}!</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>You&apos;re all set{done.name ? `, ${done.name.split(' ')[0]}` : ''}!</h1>
       <p style={{ color: INK_SOFT, fontSize: 15, lineHeight: 1.5, margin: 0 }}>Your PIN is set. You&apos;re signed in on this device — show your email at the counter to earn and redeem points.</p>
     </div>
   )
 
   return (
     <div style={card}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 6px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Choose your PIN</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 6px', fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Choose your PIN</h1>
       <p style={{ color: INK_SOFT, fontSize: 14, margin: '0 0 18px' }}>Pick a 6-digit PIN you&apos;ll remember — you&apos;ll use it to sign in to your rewards.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <input inputMode="numeric" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••••" style={inp} aria-label="New PIN" />

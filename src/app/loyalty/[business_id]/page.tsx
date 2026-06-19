@@ -2,10 +2,10 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 
-// Locked Pipel design (prompt 83) — light, ink-on-cream, hard 1.5px borders, Inter.
+// Locked Pipel design (prompt 83) — light, ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
 const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#888888', ACCENT = '#d9f54e'
 const BORDER = `1.5px solid ${INK}`
-const FONT = 'Inter, system-ui, -apple-system, sans-serif'
+const FONT = "var(--font-body, 'Outfit', system-ui, sans-serif)"
 
 interface Config { program_type?: string; points_per_dollar?: number; stamps_to_reward?: number; stamp_reward_text?: string; public_enrol_enabled?: boolean; tier_silver_points?: number; tier_gold_points?: number; tier_platinum_points?: number }
 
@@ -66,7 +66,7 @@ export default function LoyaltyEnrolPage() {
   if (done) return wrap(
     <div style={{ background: SURFACE, border: BORDER, borderRadius: 22, padding: 28, textAlign: 'center', boxShadow: '4px 4px 0 #0a0a0a' }}>
       <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
-      <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 8px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>You&apos;re in!</h1>
+      <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 8px', fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>You&apos;re in!</h1>
       <p style={{ color: INK_SOFT, fontSize: 15, lineHeight: 1.5 }}>Welcome to {biz.name}&apos;s loyalty programme. Show this at the counter when you visit to earn points.</p>
     </div>
   )
@@ -75,7 +75,7 @@ export default function LoyaltyEnrolPage() {
   if (config.public_enrol_enabled === false) return wrap(
     <div style={{ background: SURFACE, border: BORDER, borderRadius: 22, padding: 28, textAlign: 'center', boxShadow: '4px 4px 0 #0a0a0a' }}>
       <div style={{ width: 56, height: 56, borderRadius: 16, border: BORDER, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 26 }}>★</div>
-      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Loyalty rewards coming soon</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Loyalty rewards coming soon</h1>
       <p style={{ color: INK_SOFT, fontSize: 15, lineHeight: 1.5 }}>{biz.name} is setting up their rewards programme. Check back soon — or ask the team in store.</p>
     </div>
   )
@@ -95,7 +95,7 @@ export default function LoyaltyEnrolPage() {
       {/* Hero */}
       <div style={{ background: SURFACE, border: BORDER, borderRadius: 22, padding: 24, textAlign: 'center', boxShadow: '4px 4px 0 #0a0a0a', marginBottom: 16 }}>
         <div style={{ width: 56, height: 56, borderRadius: 16, border: BORDER, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 26 }}>★</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>{biz.name} Rewards</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px', fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>{biz.name} Rewards</h1>
         <p style={{ color: INK_SOFT, fontSize: 14, margin: 0 }}>
           {isStamps ? `Collect stamps — ${config.stamp_reward_text ?? 'a free reward'} after ${config.stamps_to_reward ?? 10} visits` : `Earn ${config.points_per_dollar ?? 1} point per $1 spent`}
         </p>
