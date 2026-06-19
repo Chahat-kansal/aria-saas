@@ -62,6 +62,21 @@ export default function CustomerDetailPage() {
   const [smsSending, setSmsSending] = useState(false);
   const [smsResult, setSmsResult] = useState<'sent' | 'error' | null>(null);
   const [ariaSmsLoading, setAriaSmsLoading] = useState(false);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+
+  const sendLoyaltyInvite = async (channel: 'email' | 'sms') => {
+    setInviteSending(true); setInviteMsg(null);
+    try {
+      const r = await fetch(`/api/pos/customers/${id}/loyalty-invite`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) setInviteMsg(d.error || 'Could not send invite.');
+      else setInviteMsg(d.delivered ? `Loyalty invite sent by ${channel}.` : `Invite created — ${channel} delivery is pending.`);
+    } catch { setInviteMsg('Could not send invite.'); }
+    setInviteSending(false);
+  };
 
   const load = useCallback(() => {
     if (!id) return;
@@ -215,9 +230,20 @@ export default function CustomerDetailPage() {
               💬 Send SMS
             </button>
           )}
+          {customer.email && (
+            <button onClick={() => sendLoyaltyInvite('email')} disabled={inviteSending} title="Email a set-PIN link so this customer can sign in to their loyalty rewards" style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: inviteSending ? 0.6 : 1 }}>
+              🎁 {inviteSending ? 'Sending…' : 'Loyalty invite'}
+            </button>
+          )}
+          {customer.email && customer.phone && (
+            <button onClick={() => sendLoyaltyInvite('sms')} disabled={inviteSending} title="Text a set-PIN link to this customer" style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: inviteSending ? 0.6 : 1 }}>
+              📲 by SMS
+            </button>
+          )}
           <Link href={`/pos/terminal?customer_id=${id}`} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.violet}`, background: 'rgba(139,92,246,0.12)', color: C.violet, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>🛒 New Sale</Link>
         </div>
       </div>
+      {inviteMsg && <div style={{ padding: '8px 24px', fontSize: 12, color: C.muted }}>{inviteMsg}</div>}
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 1100 }}>
         <AriaInsightCard bullets={insight ?? undefined} loading={insightLoading} />
