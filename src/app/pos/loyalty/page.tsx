@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 
 interface Customer {
   id: string; name: string; email: string | null; phone: string | null;
@@ -65,9 +66,12 @@ export default function LoyaltyPage() {
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: 'var(--bg-base)', fontFamily: 'var(--font-ui)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ flexShrink: 0, padding: '20px 28px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(8,12,16,0.9)' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Loyalty Program</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{settings.points_per_dollar ?? 1} point per dollar · Redeem from {settings.min_redeem ?? 100} points</p>
+      <div style={{ flexShrink: 0, padding: '20px 28px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(8,12,16,0.9)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Loyalty Program</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{settings.points_per_dollar ?? 1} point per dollar · Redeem from {settings.min_redeem ?? 100} points</p>
+        </div>
+        <Link href="/pos/loyalty/scan" style={{ flexShrink: 0, padding: '9px 16px', borderRadius: 10, background: '#2D5240', color: '#7FB897', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>📷 Scan loyalty code</Link>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 28 }}>

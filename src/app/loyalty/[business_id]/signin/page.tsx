@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 
 // Locked Pipel design — light ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
@@ -44,6 +44,40 @@ export default function LoyaltySignInPage() {
   const [acctBusy, setAcctBusy] = useState(false)
   const [acctMsg, setAcctMsg] = useState('')
   const [acctErr, setAcctErr] = useState<Record<string, string>>({})
+  const [showCode, setShowCode] = useState(false)
+  const [qr, setQr] = useState<string | null>(null)
+  const [codeBusy, setCodeBusy] = useState(false)
+  const [codeExpiry, setCodeExpiry] = useState(0)
+  const [secsLeft, setSecsLeft] = useState(0)
+  const regenRef = useRef(false)
+
+  const generateCode = async () => {
+    if (regenRef.current) return
+    regenRef.current = true
+    setCodeBusy(true); setQr(null)
+    try {
+      const r = await fetch('/api/loyalty/redeem-code', { method: 'POST' })
+      const d = await r.json()
+      if (r.ok && d.token) {
+        const QRCode = (await import('qrcode')).default
+        const url = await QRCode.toDataURL(d.token, { margin: 1, width: 240 })
+        setQr(url); setCodeExpiry(new Date(d.expires_at).getTime())
+      }
+    } catch { /* ignore — user can tap refresh */ }
+    setCodeBusy(false); regenRef.current = false
+  }
+  const openCode = () => { setShowCode(true); generateCode() }
+
+  // Live countdown; auto-regenerate once when the short-lived code lapses.
+  useEffect(() => {
+    if (!showCode || !codeExpiry) return
+    const t = setInterval(() => {
+      const left = Math.max(0, Math.round((codeExpiry - Date.now()) / 1000))
+      setSecsLeft(left)
+      if (left === 0 && !regenRef.current) generateCode()
+    }, 1000)
+    return () => clearInterval(t)
+  }, [showCode, codeExpiry])
 
   const openAccount = async () => {
     setAcctMsg(''); setAcctErr({}); setAcct(null); setShowAccount(true)
@@ -166,6 +200,33 @@ export default function LoyaltySignInPage() {
       </div>
     )
 
+    // ── Redeem code (short-lived single-use QR shown at the counter) ──
+    if (showCode) {
+      const expired = secsLeft <= 0 && !codeBusy
+      return wrap(
+        <div style={{ ...card, textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Show this at the counter</h2>
+            <button onClick={() => setShowCode(false)} style={link}>← Back</button>
+          </div>
+          {codeBusy && !qr ? (
+            <p style={{ color: INK_SOFT, margin: '24px 0' }}>Generating your code…</p>
+          ) : qr && !expired ? (
+            <>
+              <img src={qr} alt="Your redeem code" width={240} height={240} style={{ border: BORDER, borderRadius: 16, background: SURFACE }} />
+              <p style={{ fontSize: 13, color: INK_SOFT, margin: '14px 0 0' }}>The cashier scans this to apply your rewards.</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: '4px 0 0' }}>Refreshes in {secsLeft}s</p>
+            </>
+          ) : (
+            <>
+              <p style={{ color: INK_SOFT, margin: '24px 0 12px' }}>Your code expired — get a fresh one.</p>
+            </>
+          )}
+          <button onClick={generateCode} disabled={codeBusy} style={{ ...btn, marginTop: 16, opacity: codeBusy ? 0.6 : 1 }}>{codeBusy ? 'Refreshing…' : 'Get a fresh code'}</button>
+        </div>
+      )
+    }
+
     // ── My details (self-service account editor) ──
     if (showAccount) {
       const field = (label: string, key: 'name' | 'email' | 'phone' | 'birthday', type: string) => (
@@ -245,6 +306,8 @@ export default function LoyaltySignInPage() {
               {isStamps ? `🎁 ${reward.text} — claim it in store` : `🎁 You can redeem $${(reward.dollars ?? 0).toFixed(2)} in-store`}
             </div>
           )}
+          {/* Redeem CTA — opens the short-lived scannable code */}
+          <button onClick={openCode} style={{ ...btn, marginTop: 16, width: '100%' }}>📲 Redeem in store</button>
         </div>
 
         {/* TIER (points mode) */}
