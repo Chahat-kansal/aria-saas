@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getLoyaltyCustomer } from '@/lib/loyalty/auth'
-import { getTier, TIERS, TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
 
 // LOY-P2-DASHBOARD — read-only data for the authed customer's own loyalty dashboard.
 // SCOPE: the customer is resolved ONLY from the session cookie via getLoyaltyCustomer();
@@ -22,7 +21,7 @@ export async function GET() {
       .select('points_balance, loyalty_points, stamps_count, total_spent, total_spend, visit_count')
       .eq('id', customer_id).maybeSingle(),
     supabaseAdmin.from('pos_loyalty_config')
-      .select('program_type, points_per_dollar, point_value_cents, stamps_to_reward, stamp_reward_text')
+      .select('program_type, points_per_dollar, point_value_cents, stamps_to_reward, stamp_reward_text, tier_silver_points, tier_gold_points, tier_platinum_points')
       .eq('business_id', business_id).maybeSingle(),
     // Own rows only — scoped to this customer AND business.
     supabaseAdmin.from('pos_loyalty_transactions')
@@ -35,32 +34,42 @@ export async function GET() {
   const balance = Number(cust?.points_balance ?? cust?.loyalty_points ?? 0)
   const stamps = Number(cust?.stamps_count ?? 0)
   const pointValueCents = Number(cfg?.point_value_cents ?? 1)
-  const spend = Number(cust?.total_spent ?? cust?.total_spend ?? 0)
-  const visits = Number(cust?.visit_count ?? 0)
   const stampsTarget = Math.max(1, Number(cfg?.stamps_to_reward ?? 10))
   const stampRewardText = (cfg?.stamp_reward_text as string) ?? 'a free reward'
 
-  // Tier (points mode only) — uses the SAME spend/visit thresholds as the earn path (lib/loyalty.ts).
+  // Tier (points mode) — driven by the owner's CONFIGURED point thresholds (pos_loyalty_config),
+  // the single source of truth. Everyone starts Bronze; Silver/Gold/Platinum unlock at the configured
+  // points (measured against the member's points balance). Omitted entirely if no tier is configured
+  // (no fabricated tiers). LOY-CONFIG-COMPLETE: replaces the old hardcoded spend thresholds so owner
+  // edits to tier_*_points now drive what the customer sees.
   let tier: {
-    current: LoyaltyTier; current_label: string; current_color: string; multiplier: number
-    next: LoyaltyTier | null; next_label: string | null; progress_pct: number; to_next_spend: number
+    current: string; current_label: string; current_color: string
+    next: string | null; next_label: string | null; progress_pct: number; to_next_points: number
   } | null = null
   if (programType === 'points') {
-    const order: LoyaltyTier[] = ['bronze', 'silver', 'gold']
-    const current = getTier(spend, visits)
-    const idx = order.indexOf(current)
-    const next = idx < order.length - 1 ? order[idx + 1] : null
-    let progressPct = 100, toNextSpend = 0, nextLabel: string | null = null
-    if (next) {
-      const prev = TIERS[current].min_spend
-      const target = TIERS[next].min_spend
-      progressPct = Math.max(0, Math.min(100, Math.round(((spend - prev) / (target - prev)) * 100)))
-      toNextSpend = Math.max(0, Math.round((target - spend) * 100) / 100)
-      nextLabel = TIER_BADGE[next].label
-    }
-    tier = {
-      current, current_label: TIER_BADGE[current].label, current_color: TIER_BADGE[current].color,
-      multiplier: TIERS[current].multiplier, next, next_label: nextLabel, progress_pct: progressPct, to_next_spend: toNextSpend,
+    const ladder = [
+      { key: 'bronze', label: 'Bronze', color: '#CD7F32', threshold: 0 },
+      { key: 'silver', label: 'Silver', color: '#C0C0C0', threshold: Math.max(0, Number(cfg?.tier_silver_points ?? 0)) },
+      { key: 'gold', label: 'Gold', color: '#FFD700', threshold: Math.max(0, Number(cfg?.tier_gold_points ?? 0)) },
+      { key: 'platinum', label: 'Platinum', color: '#E5E4E2', threshold: Math.max(0, Number(cfg?.tier_platinum_points ?? 0)) },
+    ].filter((t, i) => i === 0 || t.threshold > 0).sort((a, b) => a.threshold - b.threshold)
+
+    if (ladder.length > 1) {
+      let curIdx = 0
+      for (let i = 0; i < ladder.length; i++) if (balance >= ladder[i].threshold) curIdx = i
+      const cur = ladder[curIdx]
+      const nxt = ladder[curIdx + 1] ?? null
+      let progressPct = 100, toNextPoints = 0, nextLabel: string | null = null
+      if (nxt) {
+        const span = Math.max(1, nxt.threshold - cur.threshold)
+        progressPct = Math.max(0, Math.min(100, Math.round(((balance - cur.threshold) / span) * 100)))
+        toNextPoints = Math.max(0, nxt.threshold - balance)
+        nextLabel = nxt.label
+      }
+      tier = {
+        current: cur.key, current_label: cur.label, current_color: cur.color,
+        next: nxt?.key ?? null, next_label: nextLabel, progress_pct: progressPct, to_next_points: toNextPoints,
+      }
     }
   }
 

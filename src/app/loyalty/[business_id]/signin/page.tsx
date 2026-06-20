@@ -15,7 +15,7 @@ interface DashData {
   program_type: 'points' | 'stamps'
   points: { balance: number; dollar_value: number; point_value_cents: number }
   stamps: { count: number; target: number; remaining: number; reward_text: string }
-  tier: { current_label: string; current_color: string; multiplier: number; next_label: string | null; progress_pct: number; to_next_spend: number } | null
+  tier: { current_label: string; current_color: string; next_label: string | null; progress_pct: number; to_next_points: number } | null
   reward_available: { available: boolean; text?: string; dollars?: number }
   activity: Activity[]
   empty: boolean
@@ -356,8 +356,8 @@ export default function LoyaltySignInPage() {
         {!isStamps && dash.tier && (
           <div style={card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, padding: '3px 10px', borderRadius: 999, border: BORDER, color: dash.tier.current_color }}>{dash.tier.current_label}{dash.tier.multiplier > 1 ? ` · ${dash.tier.multiplier}×` : ''}</span>
-              {dash.tier.next_label && <span style={{ fontSize: 12, color: INK_SOFT }}>${dash.tier.to_next_spend.toFixed(0)} spend to {dash.tier.next_label}</span>}
+              <span style={{ fontSize: 13, fontWeight: 700, padding: '3px 10px', borderRadius: 999, border: BORDER, color: dash.tier.current_color }}>{dash.tier.current_label}</span>
+              {dash.tier.next_label && <span style={{ fontSize: 12, color: INK_SOFT }}>{dash.tier.to_next_points.toLocaleString()} points to {dash.tier.next_label}</span>}
             </div>
             {dash.tier.next_label ? bar(dash.tier.progress_pct) : <p style={{ fontSize: 12, color: INK_SOFT, margin: 0 }}>You&apos;re at our top tier — thank you!</p>}
           </div>

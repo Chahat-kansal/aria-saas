@@ -5,12 +5,12 @@ import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
 import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection, OffersTab } from '@/components/dashboard/LoyaltyExtensions'
 import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
-type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; public_enrol_enabled?: boolean }
+type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; winback_reward_text: string | null; points_expiry_days: number; referral_bonus_points: number; referee_bonus_points: number; tier_silver_points: number; tier_gold_points: number; tier_platinum_points: number; enrol_page_slug: string | null; public_enrol_enabled?: boolean }
 type Stats = { enrolled: number; active_this_month: number; points_liability_dollars: number; redemptions_this_month: number; avg_points_per_customer: number }
 type TopCustomer = { id: string; name: string; points_balance: number; loyalty_points: number; stamps_count: number; total_spent: number; total_spend: number; visit_count: number; tier: LoyaltyTier; last_redemption: string | null }
 type Txn = { id: string; type: string; points_delta: number; stamps_delta: number; reward_redeemed: string | null; created_at: string; pos_customers: { name: string; email: string | null } | null }
 
-const DEFAULT_CONFIG: Config = { program_type: 'points', points_per_dollar: 1, point_value_cents: 1, stamps_to_reward: 10, stamp_reward_text: 'Free coffee', birthday_reward_text: null, winback_after_days: 30, public_enrol_enabled: true }
+const DEFAULT_CONFIG: Config = { program_type: 'points', points_per_dollar: 1, point_value_cents: 1, stamps_to_reward: 10, stamp_reward_text: 'Free coffee', birthday_reward_text: null, winback_after_days: 30, winback_reward_text: null, points_expiry_days: 365, referral_bonus_points: 0, referee_bonus_points: 0, tier_silver_points: 500, tier_gold_points: 1500, tier_platinum_points: 5000, enrol_page_slug: null, public_enrol_enabled: true }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -191,17 +191,56 @@ export default function LoyaltyPage() {
           Preview: {earnPreview}
         </div>
 
-        {/* Tier thresholds — display only */}
+        {/* Tier thresholds (points) — the single source of truth the customer dashboard reads */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Automatic Tiers</p>
-          <div className="grid grid-cols-3 gap-3 text-xs">
-            {[{ tier: 'bronze' as LoyaltyTier, label: 'Bronze', rule: 'Default — all customers', mult: '1x' }, { tier: 'silver' as LoyaltyTier, label: 'Silver', rule: '$500+ spend OR 20+ visits', mult: '1.5x points' }, { tier: 'gold' as LoyaltyTier, label: 'Gold', rule: '$2,000+ spend OR 50+ visits', mult: '2x points' }].map(({ tier, label, rule, mult }) => (
-              <div key={tier} className="rounded-lg p-3" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid var(--divider)' }}>
-                <TierBadge tier={tier} />
-                <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>{rule}</p>
-                <p className="mt-1 font-medium" style={{ color: 'var(--text-primary)' }}>{mult}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Tier thresholds (points)</p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Everyone starts Bronze. Members see their tier &amp; progress on their loyalty dashboard — these point thresholds drive it. Set 0 to disable a tier.</p>
+          <div className="grid grid-cols-3 gap-3">
+            {([['Silver', 'tier_silver_points'], ['Gold', 'tier_gold_points'], ['Platinum', 'tier_platinum_points']] as const).map(([label, key]) => (
+              <div key={key}>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>{label} at (points)</label>
+                <input type="number" min="0" step="50" value={draft[key] ?? 0}
+                  onChange={e => setDraft(d => ({ ...d, [key]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Points expiry + win-back + referral bonuses */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>Points expiry (days, 0 = never)</label>
+            <input type="number" min="0" step="1" value={draft.points_expiry_days ?? 0}
+              onChange={e => setDraft(d => ({ ...d, points_expiry_days: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+              className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+          </div>
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>Win-back after (days inactive)</label>
+            <input type="number" min="0" step="1" value={draft.winback_after_days ?? 0}
+              onChange={e => setDraft(d => ({ ...d, winback_after_days: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+              className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase tracking-wide block" style={{ color: 'var(--text-secondary)' }}>Win-back reward</label>
+          <input type="text" value={draft.winback_reward_text ?? ''}
+            onChange={e => setDraft(d => ({ ...d, winback_reward_text: e.target.value || null }))}
+            placeholder="e.g. 20% off — we miss you!"
+            className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>Referrer bonus (points)</label>
+            <input type="number" min="0" step="10" value={draft.referral_bonus_points ?? 0}
+              onChange={e => setDraft(d => ({ ...d, referral_bonus_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+              className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+          </div>
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>New-member bonus (points)</label>
+            <input type="number" min="0" step="10" value={draft.referee_bonus_points ?? 0}
+              onChange={e => setDraft(d => ({ ...d, referee_bonus_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+              className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
           </div>
         </div>
 
@@ -233,6 +272,12 @@ export default function LoyaltyPage() {
               <span className="block text-xs" style={{ color: 'var(--text-secondary)' }}>{(draft.public_enrol_enabled ?? true) ? 'On — customers can self-enrol at your /loyalty link' : 'Off — sign-ups happen in store only'}</span>
             </span>
           </button>
+          <label className="text-xs mb-1 block mt-2" style={{ color: 'var(--text-secondary)' }}>Custom link name (optional)</label>
+          <input type="text" value={draft.enrol_page_slug ?? ''}
+            onChange={e => setDraft(d => ({ ...d, enrol_page_slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || null }))}
+            placeholder="e.g. sip-cafe"
+            className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Lowercase letters, numbers, hyphens. Must be unique.</p>
         </div>
       </div>
       )}

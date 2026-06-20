@@ -50,10 +50,27 @@ async function _POST(req: Request) {
     'birthday_reward_text', 'winback_after_days', 'winback_reward_text',
     // auto-enrol (public sign-up) + tiers + referral + expiry
     'public_enrol_enabled', 'points_expiry_days', 'referral_bonus_points', 'referee_bonus_points',
-    'tier_silver_points', 'tier_gold_points', 'tier_platinum_points',
+    'tier_silver_points', 'tier_gold_points', 'tier_platinum_points', 'enrol_page_slug',
   ] as const
   const payload: Record<string, unknown> = { business_id: bid, updated_at: new Date().toISOString() }
   for (const k of SAFE) if (k in body) payload[k] = body[k]
+
+  // enrol_page_slug — public URL identifier: validate format + ensure no other business owns it.
+  if ('enrol_page_slug' in payload) {
+    const raw = payload.enrol_page_slug
+    if (raw === null || raw === '') {
+      payload.enrol_page_slug = null
+    } else {
+      const slug = String(raw).trim().toLowerCase()
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length < 2 || slug.length > 40) {
+        return NextResponse.json({ error: 'Link name must be 2–40 lowercase letters, numbers, or hyphens.' }, { status: 400 })
+      }
+      const { data: clash } = await supabaseAdmin.from('pos_loyalty_config')
+        .select('business_id').eq('enrol_page_slug', slug).neq('business_id', bid).limit(1).maybeSingle()
+      if (clash) return NextResponse.json({ error: 'That link name is already taken — try another.' }, { status: 409 })
+      payload.enrol_page_slug = slug
+    }
+  }
 
   const { error } = await supabaseAdmin.from('pos_loyalty_config').upsert(payload, { onConflict: 'business_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
