@@ -294,7 +294,9 @@ export async function sendEmail(
   const category: EmailCategory = opts.category ?? 'transactional'
   const businessId = opts.businessId ?? null
   const toNorm = (params.to ?? '').toLowerCase().trim()
-  const domain = process.env.RESEND_FROM_DOMAIN ?? 'aria.com.au'
+  // Default to the VERIFIED Resend domain. aria.com.au was never verified → every send 403'd when
+  // RESEND_FROM_DOMAIN wasn't applied at runtime. The env var still overrides if set correctly.
+  const domain = process.env.RESEND_FROM_DOMAIN ?? 'ariaos.site'
 
   let html = params.html
   let suppressed = false

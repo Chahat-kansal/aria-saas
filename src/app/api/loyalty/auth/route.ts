@@ -120,10 +120,13 @@ export async function POST(req: Request) {
       otp_hash: hashOtp(code), otp_expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
       otp_attempts: 0, updated_at: new Date().toISOString(),
     }).eq('id', identity.id)
-    void sendEmail(
+    // Await the send so a provider failure (e.g. unverified domain → 403) is NOT swallowed.
+    // The failure is a SYSTEM error returned for ANY email, so it never reveals account existence.
+    const sent = await sendEmail(
       { to: email, subject: 'Your Aria Rewards code', html: codeEmailHtml(code), from_name: 'Aria Rewards' },
       { category: 'transactional' },
     )
+    if (!sent) return NextResponse.json({ error: 'We couldn’t send your code right now. Please try again in a moment.' }, { status: 502 })
     return NextResponse.json({ ok: true })
   }
 
