@@ -49,7 +49,8 @@ export function normaliseEmail(raw: unknown): string {
 
 export interface LoyaltyIdentity {
   id: string
-  email: string
+  email: string | null
+  phone: string | null
 }
 
 export interface LoyaltyMembership {
@@ -57,7 +58,8 @@ export interface LoyaltyMembership {
   customer_id: string
   business_id: string
   name: string | null
-  email: string
+  email: string | null
+  phone: string | null
 }
 
 /** Resolve the global signed-in identity from the cookie. No business context. */
@@ -67,11 +69,11 @@ export async function getLoyaltyIdentity(): Promise<LoyaltyIdentity | null> {
   if (!token) return null
   const { data } = await supabaseAdmin
     .from('loyalty_identity')
-    .select('id, email')
+    .select('id, email, phone')
     .eq('session_token', token)
     .maybeSingle()
   if (!data?.id) return null
-  return { id: data.id as string, email: data.email as string }
+  return { id: data.id as string, email: (data.email as string | null) ?? null, phone: (data.phone as string | null) ?? null }
 }
 
 /**
@@ -91,7 +93,7 @@ export async function getLoyaltyMembership(businessId: string): Promise<LoyaltyM
   if (!cust?.id) return null
   let name = (cust.name as string | null) ?? null
   try { name = decryptCustomerPII(cust as Record<string, unknown>, businessId).name ?? name } catch { /* keep plaintext */ }
-  return { identity_id: identity.id, customer_id: cust.id as string, business_id: businessId, name, email: identity.email }
+  return { identity_id: identity.id, customer_id: cust.id as string, business_id: businessId, name, email: identity.email, phone: identity.phone }
 }
 
 /** Issue a fresh session token for an identity and set the cookie (login / set-PIN / accept-invite). */

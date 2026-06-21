@@ -35,6 +35,6 @@ export async function POST(req: Request) {
   const realId = body.business_id ? await resolveBusinessId(supabaseAdmin, String(body.business_id)) : null
   if (!realId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const providedName = typeof body.name === 'string' ? body.name : ''
-  const m = await linkOrCreateMembership(identity.id, realId, identity.email, providedName)
+  const m = await linkOrCreateMembership(identity.id, realId, { email: identity.email, phone: identity.phone }, providedName)
   return NextResponse.json({ ok: true, name: m.name })
 }

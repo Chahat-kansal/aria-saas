@@ -17,9 +17,11 @@ export default function LoyaltyEntryPage() {
   const [signedIn, setSignedIn] = useState(false)
   const [businesses, setBusinesses] = useState<Biz[] | null>(null)
 
-  // Identity-first sign-in (email; phone is a fast-follow). All actions are business-agnostic.
+  // Identity-first sign-in — EMAIL (PIN) or PHONE (SMS code). All actions are business-agnostic.
   const [step, setStep] = useState<Step>('email')
   const [mode, setMode] = useState<'login' | 'join' | 'forgot'>('login')
+  const [channel, setChannel] = useState<'email' | 'phone'>('email')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [pin, setPin] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -48,6 +50,15 @@ export default function LoyaltyEntryPage() {
 
   const continueEmail = async () => {
     setError('')
+    if (channel === 'phone') {
+      if (!/^(\+?61|0)?4\d{8}$/.test(phone.replace(/\s/g, ''))) { setError('Enter a valid Australian mobile (04xx xxx xxx).'); return }
+      setBusy(true)
+      const { ok, d } = await post({ action: 'send-code', phone })
+      setBusy(false)
+      if (!ok || d.error) { setError(d.error || 'Could not send your code.'); return }
+      setInfo(`We've texted a 6-digit code to ${phone}.`); setStep('code')
+      return
+    }
     if (!email.includes('@')) { setError('Enter a valid email.'); return }
     if (mode === 'login') { setStep('pin'); return }
     setBusy(true)
@@ -69,10 +80,11 @@ export default function LoyaltyEntryPage() {
     setError('')
     if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code.'); return }
     setBusy(true)
-    const { ok, d } = await post({ action: 'verify', email, code })
+    const { ok, d } = await post(channel === 'phone' ? { action: 'verify', phone, code } : { action: 'verify', email, code })
     setBusy(false)
     if (!ok || d.error) { setError(d.error || 'That code is incorrect or expired.'); return }
-    setStep('setpin')
+    if (d.signed_in) { toWallet(); return } // phone: OTP signs in directly (no PIN)
+    setStep('setpin') // email: continue to set a PIN
   }
   const setPinSubmit = async () => {
     setError('')
@@ -98,18 +110,39 @@ export default function LoyaltyEntryPage() {
       <p style={{ fontSize: 13, color: INK_SOFT, margin: '0 0 16px' }}>One login for every Aria business.</p>
 
       {step === 'email' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label htmlFor="loy-email" style={lbl}>Email</label>
-          <input id="loy-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" style={inp} />
-          {error && <p style={{ color: '#d11', fontSize: 13, margin: '4px 0 0' }}>{error}</p>}
-          <button onClick={continueEmail} disabled={busy} style={{ ...btn, marginTop: 4, opacity: busy ? 0.6 : 1 }}>{busy ? 'Please wait…' : 'Continue →'}</button>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            {mode === 'login'
-              ? <button style={linkBtn} onClick={() => { setMode('join'); setError('') }}>First time? Join</button>
-              : <button style={linkBtn} onClick={() => { setMode('login'); setError('') }}>Have a PIN? Sign in</button>}
-            <button style={linkBtn} onClick={() => { setMode('forgot'); setError(''); if (email.includes('@')) continueEmail() }}>Forgot PIN?</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Email or phone — customer's choice */}
+          <div role="tablist" aria-label="Sign-in method" style={{ display: 'flex', gap: 8 }}>
+            {(['email', 'phone'] as const).map(c => (
+              <button key={c} role="tab" aria-selected={channel === c} onClick={() => { setChannel(c); setError('') }}
+                style={{ flex: 1, height: 44, borderRadius: 10, border: BORDER, background: channel === c ? ACCENT : SURFACE, color: INK, fontWeight: channel === c ? 700 : 500, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>
+                {c === 'email' ? 'Email' : 'Phone'}
+              </button>
+            ))}
           </div>
-          <p style={{ fontSize: 11, color: INK_SOFT, textAlign: 'center', margin: 0 }}>Phone sign-in coming soon.</p>
+
+          {channel === 'phone' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label htmlFor="loy-phone" style={lbl}>Mobile number</label>
+              <input id="loy-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="04xx xxx xxx" style={inp} />
+              {error && <p style={{ color: '#d11', fontSize: 13, margin: '4px 0 0' }}>{error}</p>}
+              <button onClick={continueEmail} disabled={busy} style={{ ...btn, marginTop: 4, opacity: busy ? 0.6 : 1 }}>{busy ? 'Sending…' : 'Text me a code →'}</button>
+              <p style={{ fontSize: 11, color: INK_SOFT, textAlign: 'center', margin: 0 }}>We&apos;ll send a one-time SMS code. No PIN needed.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label htmlFor="loy-email" style={lbl}>Email</label>
+              <input id="loy-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" style={inp} />
+              {error && <p style={{ color: '#d11', fontSize: 13, margin: '4px 0 0' }}>{error}</p>}
+              <button onClick={continueEmail} disabled={busy} style={{ ...btn, marginTop: 4, opacity: busy ? 0.6 : 1 }}>{busy ? 'Please wait…' : 'Continue →'}</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                {mode === 'login'
+                  ? <button style={linkBtn} onClick={() => { setMode('join'); setError('') }}>First time? Join</button>
+                  : <button style={linkBtn} onClick={() => { setMode('login'); setError('') }}>Have a PIN? Sign in</button>}
+                <button style={linkBtn} onClick={() => { setMode('forgot'); setError(''); if (email.includes('@')) continueEmail() }}>Forgot PIN?</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {step === 'pin' && (
