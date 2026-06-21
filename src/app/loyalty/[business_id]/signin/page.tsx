@@ -7,7 +7,7 @@ const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#8888
 const BORDER = `1.5px solid ${INK}`
 const FONT = "var(--font-body, 'Outfit', system-ui, sans-serif)"
 
-type Step = 'loading' | 'email' | 'pin' | 'code' | 'setpin' | 'landing'
+type Step = 'loading' | 'email' | 'pin' | 'code' | 'setpin' | 'join' | 'landing'
 
 interface Activity { type: string; points_delta: number; stamps_delta: number; reward_redeemed: string | null; created_at: string }
 interface DashData {
@@ -56,7 +56,7 @@ export default function LoyaltySignInPage() {
 
   const openOffers = async () => {
     setShowOffers(true); setOffers(null)
-    const d = await fetch('/api/loyalty/offers-feed').then(r => r.json()).catch(() => null)
+    const d = await fetch('/api/loyalty/offers-feed?business_id=' + encodeURIComponent(bid)).then(r => r.json()).catch(() => null)
     if (d) setOffers((d.offers ?? []) as OfferItem[])
   }
 
@@ -90,18 +90,18 @@ export default function LoyaltySignInPage() {
 
   const openAccount = async () => {
     setAcctMsg(''); setAcctErr({}); setAcct(null); setShowAccount(true)
-    const d = await fetch('/api/loyalty/account').then(r => r.json()).catch(() => null)
+    const d = await fetch('/api/loyalty/account?business_id=' + encodeURIComponent(bid)).then(r => r.json()).catch(() => null)
     if (d?.account) setAcct(d.account as AcctForm)
   }
   const saveAccount = async () => {
     if (!acct) return
     setAcctBusy(true); setAcctMsg(''); setAcctErr({})
-    const r = await fetch('/api/loyalty/account', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(acct) })
+    const r = await fetch('/api/loyalty/account', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...acct, business_id: bid }) })
     const d = await r.json().catch(() => ({}))
     setAcctBusy(false)
     if (r.ok && d.ok) {
       setAcctMsg('Saved ✓'); setWelcome(acct.name || welcome)
-      fetch('/api/loyalty/dashboard').then(x => x.json()).then(x => { if (x?.customer) setDash(x as DashData) }).catch(() => {})
+      fetch('/api/loyalty/dashboard?business_id=' + encodeURIComponent(bid)).then(x => x.json()).then(x => { if (x?.customer) setDash(x as DashData) }).catch(() => {})
     } else if (d.errors) { setAcctErr(d.errors as Record<string, string>) }
     else { setAcctMsg(d.error || 'Could not save — please try again.') }
   }
@@ -109,18 +109,36 @@ export default function LoyaltySignInPage() {
   useEffect(() => {
     if (!bid) return
     fetch(`/api/public/loyalty/${bid}`).then(r => r.json()).then(d => { if (d?.business?.name) setBizName(d.business.name) }).catch(() => {})
-    // Same-device session → straight to landing.
-    fetch('/api/loyalty/auth').then(r => r.json()).then(d => {
-      if (d?.customer) { setWelcome(d.customer.name ?? null); setStep('landing') } else setStep('email')
+    // Same-device session → resolve identity + membership at THIS business.
+    fetch('/api/loyalty/auth?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => {
+      if (d?.identity) {
+        if (d.membership) { setWelcome(d.membership.name ?? null); setStep('landing') }
+        else setStep('join')
+      } else setStep('email')
     }).catch(() => setStep('email'))
   }, [bid])
 
-  // Load the read-only dashboard whenever we land (own-row only; server scopes via the session).
+  // After a global login, route to this business's dashboard or the join prompt.
+  const checkMembership = async () => {
+    const m = await fetch('/api/loyalty/membership?business_id=' + encodeURIComponent(bid)).then(r => r.json()).catch(() => null)
+    if (m?.member) { setWelcome(m.name ?? null); setStep('landing') } else setStep('join')
+  }
+
+  const joinBusiness = async () => {
+    setBusy(true); setError('')
+    const r = await fetch('/api/loyalty/membership', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, name: name || undefined }) })
+    const d = await r.json().catch(() => ({}))
+    setBusy(false)
+    if (!r.ok || !d.ok) { setError(d.error || 'Could not join — try again.'); return }
+    setWelcome(d.name ?? null); setStep('landing')
+  }
+
+  // Load the read-only dashboard whenever we land (membership scoped by identity + business).
   useEffect(() => {
     if (step !== 'landing') return
     setDash(null)
-    fetch('/api/loyalty/dashboard').then(r => r.json()).then(d => { if (d?.customer) setDash(d as DashData) }).catch(() => {})
-  }, [step])
+    fetch('/api/loyalty/dashboard?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d?.customer) setDash(d as DashData) }).catch(() => {})
+  }, [step, bid])
 
   const post = async (payload: Record<string, unknown>) => {
     const r = await fetch('/api/loyalty/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -133,7 +151,7 @@ export default function LoyaltySignInPage() {
     if (mode === 'login') { setStep('pin'); return }
     // join / forgot → send a code
     setBusy(true)
-    const { d } = await post({ action: 'send-code', business_id: bid, email })
+    const { d } = await post({ action: 'send-code', email })
     setBusy(false)
     if (d.error) { setError(d.error); return }
     setInfo(`We've emailed a 6-digit code to ${email}.`); setStep('code')
@@ -143,17 +161,17 @@ export default function LoyaltySignInPage() {
     setError('')
     if (!/^\d{6}$/.test(pin)) { setError('Enter your 6-digit PIN.'); return }
     setBusy(true)
-    const { ok, d } = await post({ action: 'login', business_id: bid, email, pin })
+    const { ok, d } = await post({ action: 'login', email, pin })
     setBusy(false)
     if (!ok || d.error) { setError(d.error || 'Sign-in failed.'); setPin(''); return }
-    setWelcome(d.name ?? null); setStep('landing')
+    await checkMembership()
   }
 
   const verifyCode = async () => {
     setError('')
     if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code.'); return }
     setBusy(true)
-    const { ok, d } = await post({ action: 'verify', business_id: bid, email, code })
+    const { ok, d } = await post({ action: 'verify', email, code })
     setBusy(false)
     if (!ok || d.error) { setError(d.error || 'That code is incorrect or expired.'); return }
     setStep('setpin')
@@ -393,6 +411,16 @@ export default function LoyaltySignInPage() {
 
   return wrap(
     <div style={card}>
+      {step === 'join' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 44 }}>🌟</div>
+          <p style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>You&apos;re not a member of {bizName} yet</p>
+          <p style={{ fontSize: 14, color: INK_SOFT, margin: 0, lineHeight: 1.5 }}>Join with your existing Aria Rewards account — same email &amp; PIN, no new sign-up.</p>
+          {error && <p style={{ color: '#d11', fontSize: 13, margin: 0 }}>{error}</p>}
+          <button onClick={joinBusiness} disabled={busy} style={{ ...btn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Joining…' : `Become a member →`}</button>
+          <button onClick={logout} style={link}>Sign out</button>
+        </div>
+      )}
       {step === 'email' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <label style={{ fontSize: 13, color: INK_SOFT }}>{mode === 'login' ? 'Sign in with your email' : mode === 'join' ? 'Join with your email' : 'Reset your PIN'}</label>

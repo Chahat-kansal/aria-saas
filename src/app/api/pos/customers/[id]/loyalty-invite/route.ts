@@ -40,19 +40,12 @@ async function _POST(req: Request, { params }: Params) {
   if (!email) return NextResponse.json({ error: 'Add an email to this customer first — loyalty sign-in uses email + PIN.' }, { status: 400 })
   if (channel === 'sms' && !phone) return NextResponse.json({ error: 'This customer has no phone number for SMS.' }, { status: 400 })
 
-  // Upsert the auth row for this customer (idempotent on business_id + email).
+  // LOY-NETWORK — stamp the invite token on THIS membership row (pos_customers). On accept, the
+  // customer sets their GLOBAL identity PIN and this membership links to it.
   const token = genToken()
-  const { data: existing } = await supabaseAdmin.from('pos_customer_auth')
-    .select('id').eq('business_id', bid).ilike('email', email).maybeSingle()
-  if (existing) {
-    await supabaseAdmin.from('pos_customer_auth').update({
-      customer_id: cust.id, invite_token: token, invite_sent_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    }).eq('id', existing.id)
-  } else {
-    await supabaseAdmin.from('pos_customer_auth').insert({
-      business_id: bid, customer_id: cust.id, email, invite_token: token, invite_sent_at: new Date().toISOString(),
-    })
-  }
+  await supabaseAdmin.from('pos_customers')
+    .update({ loyalty_invite_token: token, loyalty_invite_sent_at: new Date().toISOString() })
+    .eq('id', cust.id).eq('business_id', bid)
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_URL ?? 'https://www.ariaos.site'
   const link = `${appUrl}/loyalty/set-pin?token=${encodeURIComponent(token)}`

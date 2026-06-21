@@ -8,11 +8,12 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { decryptCustomerPII } from '@/lib/aria/customer-pii'
 import { createHash } from 'crypto'
 
-// LOY-REDEEM-SCAN (cashier side) — resolve a scanned customer redeem code, then atomically
-// consume it (single-use). Auth: cashier/owner via getBid (like sibling POS routes). The token is
-// validated against THIS business only (cross-business tokens never resolve). This route does NOT
-// mutate points/ledger — after `consume` returns the customer_id, the cashier UI calls the existing
-// /api/pos/loyalty/redeem to write the ledger row (one redeem implementation, reused).
+// LOY-NETWORK (cashier side) — resolve a scanned GLOBAL redeem code to THIS identity's membership at
+// the CASHIER'S business, then atomically consume the code (single-use). Auth: cashier via getBid. The
+// token lives on the global identity; the cashier's business decides which membership is resolved, so
+// a cashier only ever sees their own business's membership (cross-business isolation). No points/ledger
+// mutation here — after `consume` returns the customer_id, the cashier UI calls the existing
+// /api/pos/loyalty/redeem (one redeem implementation, reused).
 
 // Local getBid — mirrors the sibling POS routes (active business → oldest active fallback).
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -39,33 +40,37 @@ async function _POST(req: Request) {
   const nowIso = new Date().toISOString()
 
   if (action === 'consume') {
-    // Atomic single-use: succeeds only if currently UNCONSUMED and UNEXPIRED, scoped to this business.
-    const { data: consumed } = await supabaseAdmin.from('pos_customer_auth')
+    // Atomic single-use: burn the token on the global identity only if UNCONSUMED + UNEXPIRED.
+    const { data: burned } = await supabaseAdmin.from('loyalty_identity')
       .update({ redeem_token_consumed_at: nowIso })
-      .eq('redeem_token_hash', hash).eq('business_id', bid)
+      .eq('redeem_token_hash', hash)
       .is('redeem_token_consumed_at', null).gt('redeem_token_expires_at', nowIso)
-      .select('customer_id').maybeSingle()
-    if (!consumed?.customer_id) {
+      .select('id').maybeSingle()
+    if (!burned?.id) {
       return NextResponse.json({ error: 'This code has already been used or has expired.' }, { status: 400 })
     }
-    return NextResponse.json({ ok: true, customer_id: consumed.customer_id })
+    // Resolve THIS identity's membership at the cashier's business.
+    const { data: cust } = await supabaseAdmin.from('pos_customers')
+      .select('id').eq('loyalty_identity_id', burned.id as string).eq('business_id', bid).maybeSingle()
+    if (!cust?.id) return NextResponse.json({ error: 'This customer is not a member here yet.', not_member: true }, { status: 404 })
+    return NextResponse.json({ ok: true, customer_id: cust.id })
   }
 
-  // resolve (preview) — do NOT consume; just identify + show balance for cashier confirmation.
-  const { data: row } = await supabaseAdmin.from('pos_customer_auth')
-    .select('customer_id, redeem_token_expires_at, redeem_token_consumed_at')
-    .eq('redeem_token_hash', hash).eq('business_id', bid).maybeSingle()
-  if (!row?.customer_id) return NextResponse.json({ error: 'Invalid code — ask the customer to refresh their code.' }, { status: 404 })
-  if (row.redeem_token_consumed_at) return NextResponse.json({ error: 'This code has already been used.' }, { status: 400 })
-  if (!row.redeem_token_expires_at || new Date(row.redeem_token_expires_at).getTime() <= Date.now()) {
+  // resolve (preview) — do NOT consume; identify the identity, then its membership at this business.
+  const { data: identity } = await supabaseAdmin.from('loyalty_identity')
+    .select('id, redeem_token_expires_at, redeem_token_consumed_at')
+    .eq('redeem_token_hash', hash).maybeSingle()
+  if (!identity?.id) return NextResponse.json({ error: 'Invalid code — ask the customer to refresh their code.' }, { status: 404 })
+  if (identity.redeem_token_consumed_at) return NextResponse.json({ error: 'This code has already been used.' }, { status: 400 })
+  if (!identity.redeem_token_expires_at || new Date(identity.redeem_token_expires_at).getTime() <= Date.now()) {
     return NextResponse.json({ error: 'This code has expired — ask the customer to refresh it.' }, { status: 400 })
   }
 
   const [{ data: cust }, { data: cfg }] = await Promise.all([
-    supabaseAdmin.from('pos_customers').select('id, name, name_enc, points_balance, stamps_count').eq('id', row.customer_id as string).eq('business_id', bid).maybeSingle(),
+    supabaseAdmin.from('pos_customers').select('id, name, name_enc, points_balance, stamps_count').eq('loyalty_identity_id', identity.id as string).eq('business_id', bid).maybeSingle(),
     supabaseAdmin.from('pos_loyalty_config').select('program_type, point_value_cents, stamp_reward_text, stamps_to_reward').eq('business_id', bid).maybeSingle(),
   ])
-  if (!cust) return NextResponse.json({ error: 'Customer not found.' }, { status: 404 })
+  if (!cust) return NextResponse.json({ error: 'This customer is not a member here yet — offer to enrol them.', not_member: true }, { status: 404 })
 
   let name = (cust.name as string | null) ?? null
   try { name = decryptCustomerPII(cust as Record<string, unknown>, bid).name ?? name } catch { /* keep plaintext */ }

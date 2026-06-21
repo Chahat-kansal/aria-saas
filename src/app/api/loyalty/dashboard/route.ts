@@ -3,15 +3,19 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getLoyaltyCustomer } from '@/lib/loyalty/auth'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { getLoyaltyMembership } from '@/lib/loyalty/auth'
 
-// LOY-P2-DASHBOARD — read-only data for the authed customer's own loyalty dashboard.
-// SCOPE: the customer is resolved ONLY from the session cookie via getLoyaltyCustomer();
-// this route NEVER reads a customer_id from the request — no IDOR. Every figure is a real
-// DB value (balance/stamps/spend/tier/history); nothing invented. No mutations here.
+// LOY-NETWORK — read-only data for the authed customer's MEMBERSHIP at one business. SCOPE: the
+// identity is resolved from the session cookie; the membership (pos_customers row) is resolved by
+// (identity, business_id). The business_id selects which of the customer's OWN memberships is shown —
+// no cross-identity access (the lookup is scoped to their identity). Nothing invented; no mutations.
 
-export async function GET() {
-  const me = await getLoyaltyCustomer()
+export async function GET(req: Request) {
+  const bidParam = new URL(req.url).searchParams.get('business_id')
+  const realId = bidParam ? await resolveBusinessId(supabaseAdmin, bidParam) : null
+  if (!realId) return NextResponse.json({ customer: null })
+  const me = await getLoyaltyMembership(realId)
   if (!me) return NextResponse.json({ customer: null })
 
   const { customer_id, business_id, name } = me

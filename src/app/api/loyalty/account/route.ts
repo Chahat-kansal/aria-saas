@@ -3,20 +3,24 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getLoyaltyCustomer } from '@/lib/loyalty/auth'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { getLoyaltyMembership } from '@/lib/loyalty/auth'
 import { encryptCustomerPII, decryptCustomerPII } from '@/lib/aria/customer-pii'
 
-// LOY-P3-ACCOUNT — customer self-service: edit OWN contact details + granular marketing consent.
-// SCOPE: the row is chosen ONLY by getLoyaltyCustomer() (session cookie). No customer_id is read
-// from the request — no IDOR. Server-side field whitelist blocks mass-assignment. name/email/phone
-// are dual-written (plaintext + *_enc) via encryptCustomerPII; consent changes stamp an audit trail.
+// LOY-NETWORK — customer self-service: edit OWN per-business membership details + granular consent.
+// SCOPE: business_id selects the membership; the row is resolved by (identity, business_id) — no IDOR,
+// no cross-identity access. Whitelist blocks mass-assignment; name/phone dual-written (plaintext+_enc).
+// Email is the GLOBAL identity login email — shown read-only here (not editable per-membership).
 
-// GET — prefill the form with the signed-in customer's current details (own row only).
-export async function GET() {
-  const me = await getLoyaltyCustomer()
+// GET ?business_id — prefill the form for the signed-in member at that business.
+export async function GET(req: Request) {
+  const bidParam = new URL(req.url).searchParams.get('business_id')
+  const realId = bidParam ? await resolveBusinessId(supabaseAdmin, bidParam) : null
+  if (!realId) return NextResponse.json({ account: null })
+  const me = await getLoyaltyMembership(realId)
   if (!me) return NextResponse.json({ account: null })
   const { data } = await supabaseAdmin.from('pos_customers')
-    .select('name, name_enc, email, email_enc, phone, phone_enc, birthday, marketing_consent, email_consent, sms_consent')
+    .select('name, name_enc, phone, phone_enc, birthday, marketing_consent, email_consent, sms_consent')
     .eq('id', me.customer_id).maybeSingle()
   if (!data) return NextResponse.json({ account: null })
   // Prefer ciphertext, fall back to plaintext (migration-safe).
@@ -24,7 +28,7 @@ export async function GET() {
   return NextResponse.json({
     account: {
       name: pii.name ?? '',
-      email: pii.email ?? '',
+      email: me.email,
       phone: pii.phone ?? '',
       birthday: (data.birthday as string | null) ?? '',
       marketing_consent: !!data.marketing_consent,
@@ -34,14 +38,13 @@ export async function GET() {
   })
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
 export async function PATCH(req: Request) {
-  const me = await getLoyaltyCustomer()
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const realId = body.business_id ? await resolveBusinessId(supabaseAdmin, String(body.business_id)) : null
+  if (!realId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const me = await getLoyaltyMembership(realId)
   if (!me) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   const { customer_id, business_id } = me
-
-  const body = await req.json().catch(() => ({})) as Record<string, unknown>
 
   const patch: Record<string, unknown> = {}
   const errors: Record<string, string> = {}
@@ -52,12 +55,7 @@ export async function PATCH(req: Request) {
     if (!name) errors.name = 'Name is required.'
     else patch.name = name.slice(0, 80)
   }
-  // email — optional; validate format when non-empty, else clear.
-  if ('email' in body) {
-    const email = String(body.email ?? '').trim().toLowerCase()
-    if (email && !EMAIL_RE.test(email)) errors.email = 'Enter a valid email.'
-    else patch.email = email || null
-  }
+  // email is the global identity login — not editable per-membership (ignored if sent).
   // phone — optional; normalise to digits/+, require a plausible length, else clear.
   if ('phone' in body) {
     const raw = String(body.phone ?? '').trim()

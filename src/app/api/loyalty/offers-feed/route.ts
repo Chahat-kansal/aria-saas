@@ -3,14 +3,18 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getLoyaltyCustomer } from '@/lib/loyalty/auth'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { getLoyaltyMembership } from '@/lib/loyalty/auth'
 
-// LOY-OFFERS (customer side) — READ-ONLY feed of the customer's business offers for the loyalty
-// dashboard. Scoped ONLY to the signed-in customer's business via getLoyaltyCustomer() (no cross-
-// business leak, no customer_id from the request). Returns only ACTIVE, in-window offers.
+// LOY-NETWORK (customer side) — READ-ONLY offers feed for the member's business. business_id selects
+// the business; the caller must be a MEMBER there (identity-scoped), so there's no cross-business leak.
+// Returns only ACTIVE, in-window offers.
 
-export async function GET() {
-  const me = await getLoyaltyCustomer()
+export async function GET(req: Request) {
+  const bidParam = new URL(req.url).searchParams.get('business_id')
+  const realId = bidParam ? await resolveBusinessId(supabaseAdmin, bidParam) : null
+  if (!realId) return NextResponse.json({ offers: null })
+  const me = await getLoyaltyMembership(realId)
   if (!me) return NextResponse.json({ offers: null })
 
   const nowIso = new Date().toISOString()
