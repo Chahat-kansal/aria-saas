@@ -8,3 +8,8 @@ node_modules/
 /playwright-report/
 /playwright/.cache/
 .vercel
+
+# Claude Code local skills (dev tooling, not product)
+.claude/skills/
+.agents/skills/
+skills-lock.json
