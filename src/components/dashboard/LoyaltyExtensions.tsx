@@ -183,16 +183,64 @@ export function TiersTab() {
 export function ReferralsTab() {
   const [referrals, setReferrals] = useState<Referral[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([])
+  const [cfg, setCfg] = useState({ enabled: false, referrer_points: 100, referee_points: 50 })
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    fetch('/api/loyalty/referrals').then(r => r.json()).then(d => { setReferrals(d.referrals ?? []); setLeaderboard(d.leaderboard ?? []) }).catch(() => {})
+    fetch('/api/loyalty/referrals').then(r => r.json()).then(d => {
+      setReferrals(d.referrals ?? []); setLeaderboard(d.leaderboard ?? [])
+      if (d.config) setCfg(d.config)
+    }).catch(() => {})
   }, [])
+
+  async function saveCfg() {
+    setSaving(true); setMsg('')
+    const r = await fetch('/api/loyalty/referrals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: true, ...cfg }) }).then(r => r.json()).catch(() => ({}))
+    setSaving(false); setMsg(r.ok ? 'Saved' : (r.error || 'Could not save'))
+    setTimeout(() => setMsg(''), 2200)
+  }
+
+  const cfgInp = { width: 110, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 13, fontFamily: 'inherit' } as const
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Referral program</h2>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>Each customer gets a code. When a friend uses it at POS, both earn points.</p>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>Members get a shareable invite link. When a friend joins and makes their first purchase, both earn points — automatically, through your loyalty ledger.</p>
+      </div>
+
+      {/* LOY-REFERRALS — enable + bonus amounts (the existing config fields) */}
+      <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <p style={{ fontSize: 13, fontWeight: 600 }}>🤝 Refer-a-friend</p>
+          <button onClick={saveCfg} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+        <button type="button" onClick={() => setCfg(c => ({ ...c, enabled: !c.enabled }))}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)', cursor: 'pointer', marginBottom: 12 }}>
+          <span style={{ width: 38, height: 22, borderRadius: 999, background: cfg.enabled ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, flexShrink: 0, transition: 'background 150ms' }}>
+            <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: cfg.enabled ? '#7FB897' : '#888', transform: cfg.enabled ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{cfg.enabled ? 'On — members can invite friends' : 'Off — referrals disabled'}</span>
+        </button>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Referrer gets</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="number" min={0} value={cfg.referrer_points} onChange={e => setCfg(c => ({ ...c, referrer_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} style={cfgInp} />
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>pts</span>
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Friend gets</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="number" min={0} value={cfg.referee_points} onChange={e => setCfg(c => ({ ...c, referee_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} style={cfgInp} />
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>pts</span>
+            </div>
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 10 }}>Points are paid only on the friend&apos;s first real purchase — never on signup alone (anti-abuse).</p>
+        {msg && <p style={{ fontSize: 11, color: msg === 'Saved' ? '#7FB897' : '#EF4444', marginTop: 6 }}>{msg === 'Saved' ? '✓ Saved' : msg}</p>}
       </div>
       <div style={{ padding: 14, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.2)' }}>
         <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🏆 Top referrers</p>

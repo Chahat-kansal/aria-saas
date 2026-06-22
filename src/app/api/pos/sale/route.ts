@@ -381,6 +381,15 @@ async function _POST(req: Request) {
         await evaluateChallenges(customer_id, business.id)
       } catch (e) { console.error('[sale] challenge eval failed:', e) }
     })())
+
+    // LOY-REFERRALS — additive hook: this customer's FIRST real purchase may be a referee's qualifying
+    // purchase. Atomically rewards both referrer + referee via the existing ledger. Earn logic untouched.
+    waitUntil((async () => {
+      try {
+        const { evaluateReferrals } = await import('@/lib/loyalty/referrals')
+        await evaluateReferrals(customer_id, business.id)
+      } catch (e) { console.error('[sale] referral eval failed:', e) }
+    })())
   }
 
   // Cafe KDS + ingredient deduction (waitUntil — keeps function alive, doesn't block response)

@@ -24,6 +24,8 @@ interface DashData {
 interface AcctForm { name: string; email: string; phone: string; birthday: string; marketing_consent: boolean; email_consent: boolean; sms_consent: boolean }
 interface OfferItem { id: string; title: string; description: string | null; image_url: string | null; offer_type: string; point_cost: number | null }
 interface ChallengeItem { id: string; title: string; description: string | null; target_metric: string; target_item: string | null; target_count: number; progress: number; reward_points: number; status: string; expires_at: string | null }
+interface InviteRow { status: string; date: string; points: number }
+interface InviteData { enabled: boolean; code: string | null; share_url: string | null; referrer_bonus: number; referee_bonus: number; summary?: { total: number; rewarded: number; pending: number }; referrals: InviteRow[] }
 
 export default function LoyaltySignInPage() {
   const params = useParams()
@@ -57,6 +59,12 @@ export default function LoyaltySignInPage() {
   const [showChallenges, setShowChallenges] = useState(false)
   const [challenges, setChallenges] = useState<ChallengeItem[] | null>(null)
   const [challengesOn, setChallengesOn] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
+  const [invite, setInvite] = useState<InviteData | null>(null)
+  const [inviteOn, setInviteOn] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const refCodeRef = useRef<string | null>(null)
+  const refCapturedRef = useRef(false)
 
   const openOffers = async () => {
     setShowOffers(true); setOffers(null)
@@ -69,6 +77,16 @@ export default function LoyaltySignInPage() {
     if (d) { setChallengesOn(!!d.enabled); setChallenges((d.challenges ?? []) as ChallengeItem[]) }
   }
   const openChallenges = async () => { setShowChallenges(true); setChallenges(null); await loadChallenges() }
+
+  const loadInvite = async () => {
+    const d = await fetch('/api/loyalty/referral-link?business_id=' + encodeURIComponent(bid)).then(r => r.json()).catch(() => null)
+    if (d) { setInviteOn(!!d.enabled); setInvite(d as InviteData) }
+  }
+  const openInvite = async () => { setShowInvite(true); setInvite(null); setCopied(false); await loadInvite() }
+  const copyInvite = async () => {
+    if (!invite?.share_url) return
+    try { await navigator.clipboard.writeText(invite.share_url); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* clipboard blocked — user can select the text */ }
+  }
 
   const generateCode = async () => {
     if (regenRef.current) return
@@ -118,6 +136,7 @@ export default function LoyaltySignInPage() {
 
   useEffect(() => {
     if (!bid) return
+    try { refCodeRef.current = new URLSearchParams(window.location.search).get('ref') } catch { refCodeRef.current = null }
     fetch(`/api/public/loyalty/${bid}`).then(r => r.json()).then(d => { if (d?.business?.name) setBizName(d.business.name) }).catch(() => {})
     // Same-device session → resolve identity + membership at THIS business.
     fetch('/api/loyalty/auth?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => {
@@ -136,7 +155,7 @@ export default function LoyaltySignInPage() {
 
   const joinBusiness = async () => {
     setBusy(true); setError('')
-    const r = await fetch('/api/loyalty/membership', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, name: name || undefined }) })
+    const r = await fetch('/api/loyalty/membership', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, name: name || undefined, ref: refCodeRef.current || undefined }) })
     const d = await r.json().catch(() => ({}))
     setBusy(false)
     if (!r.ok || !d.ok) { setError(d.error || 'Could not join — try again.'); return }
@@ -150,6 +169,13 @@ export default function LoyaltySignInPage() {
     fetch('/api/loyalty/dashboard?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d?.customer) setDash(d as DashData) }).catch(() => {})
     // Whether this business runs challenges (gates the nav link + lazily generates the member's missions).
     loadChallenges()
+    // LOY-REFERRALS — if this member arrived via an invite link, record the pending referral once
+    // (idempotent server-side; covers both the join and set-PIN signup paths). Then load invite state.
+    if (refCodeRef.current && !refCapturedRef.current) {
+      refCapturedRef.current = true
+      fetch('/api/loyalty/referral-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, ref: refCodeRef.current }) }).catch(() => {})
+    }
+    loadInvite()
   }, [step, bid])
 
   const post = async (payload: Record<string, unknown>) => {
@@ -234,12 +260,72 @@ export default function LoyaltySignInPage() {
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {challengesOn && <button onClick={openChallenges} style={link}>Challenges</button>}
+          {inviteOn && <button onClick={openInvite} style={link}>Invite</button>}
           <button onClick={openOffers} style={link}>Offers</button>
           <button onClick={openAccount} style={link}>My details</button>
           <button onClick={logout} style={link}>Sign out</button>
         </div>
       </div>
     )
+
+    // ── Invite a friend (shareable code/link; you both get points on their first visit) ──
+    if (showInvite) {
+      const statusChip = (s: string) => (
+        <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, border: BORDER, background: s === 'rewarded' ? ACCENT : SURFACE }}>
+          {s === 'rewarded' ? 'Rewarded' : s === 'cancelled' ? 'Cancelled' : 'Pending'}
+        </span>
+      )
+      return wrap(
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Invite a friend</h2>
+            <button onClick={() => setShowInvite(false)} style={link}>← Back</button>
+          </div>
+          {!invite ? (
+            <p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0' }}>Loading…</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <p style={{ fontSize: 15, margin: 0, lineHeight: 1.5 }}>
+                Share your link — when a friend joins and makes their first purchase, <strong>you get {invite.referrer_bonus} points</strong> and <strong>they get {invite.referee_bonus}</strong>. 🎉
+              </p>
+              {invite.code && (
+                <div style={{ border: BORDER, borderRadius: 14, padding: 16, background: ACCENT, textAlign: 'center' }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: INK, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Your code</p>
+                  <p style={{ fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: 2, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)" }}>{invite.code}</p>
+                </div>
+              )}
+              {invite.share_url && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ ...inp, fontSize: 12, color: INK_SOFT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '10px 12px' }}>{invite.share_url}</div>
+                  <button onClick={copyInvite} style={btn}>{copied ? 'Copied ✓' : 'Copy invite link'}</button>
+                </div>
+              )}
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, margin: '4px 0 8px' }}>Your referrals{invite.summary ? ` · ${invite.summary.rewarded} rewarded, ${invite.summary.pending} pending` : ''}</p>
+                {invite.referrals.length === 0 ? (
+                  <p style={{ fontSize: 14, color: INK_SOFT, margin: 0, lineHeight: 1.5 }}>No invites yet — share your link to start earning. 🌱</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {invite.referrals.map((r, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: i ? '1px solid #eee' : 'none' }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600 }}>Friend joined</div>
+                          <div style={{ fontSize: 12, color: INK_SOFT }}>{new Date(r.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {r.status === 'rewarded' && <span style={{ fontSize: 14, fontWeight: 800 }}>+{r.points}</span>}
+                          {statusChip(r.status)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
 
     // ── Challenges (read-only personalised missions; progress only advances from real in-store sales) ──
     if (showChallenges) {

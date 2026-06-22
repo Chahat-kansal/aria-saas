@@ -27,14 +27,22 @@ export async function GET(req: Request) {
   return NextResponse.json({ signed_in: true, member: !!m, name: m?.name ?? null, business_name: name })
 }
 
-// POST { business_id, name? } → join: link/create this identity's membership at the business.
+// POST { business_id, name?, ref? } → join: link/create this identity's membership at the business.
+// LOY-REFERRALS: if `ref` (a referral code) is present, record a pending referral for this new member.
 export async function POST(req: Request) {
   const identity = await getLoyaltyIdentity()
   if (!identity) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
-  const body = await req.json().catch(() => ({})) as { business_id?: string; name?: string }
+  const body = await req.json().catch(() => ({})) as { business_id?: string; name?: string; ref?: string }
   const realId = body.business_id ? await resolveBusinessId(supabaseAdmin, String(body.business_id)) : null
   if (!realId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const providedName = typeof body.name === 'string' ? body.name : ''
   const m = await linkOrCreateMembership(identity.id, realId, { email: identity.email, phone: identity.phone }, providedName)
+
+  if (typeof body.ref === 'string' && body.ref.trim()) {
+    try {
+      const { captureReferral } = await import('@/lib/loyalty/referrals')
+      await captureReferral(realId, body.ref, { customer_id: m.customer_id, identity_id: identity.id, email: identity.email, phone: identity.phone })
+    } catch (e) { console.error('[membership] referral capture failed:', e) }
+  }
   return NextResponse.json({ ok: true, name: m.name })
 }

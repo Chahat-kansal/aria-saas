@@ -44,7 +44,16 @@ async function _GET() {
     .map(([id, v]) => ({ customer_id: id, name: nameMap.get(id) ?? 'Unknown', referrals: v.count, points_earned: v.points }))
     .sort((a, b) => b.referrals - a.referrals).slice(0, 10);
 
-  return NextResponse.json({ referrals: referrals ?? [], leaderboard });
+  // LOY-REFERRALS — owner config (enable + the existing bonus fields) for the dashboard toggle.
+  const { data: cfg } = await supabase.from('pos_loyalty_config')
+    .select('referrals_enabled, referral_bonus_points, referee_bonus_points').eq('business_id', bid).maybeSingle();
+  const config = {
+    enabled: !!cfg?.referrals_enabled,
+    referrer_points: Number(cfg?.referral_bonus_points ?? 100),
+    referee_points: Number(cfg?.referee_bonus_points ?? 50),
+  };
+
+  return NextResponse.json({ referrals: referrals ?? [], leaderboard, config });
 }
 
 function genCode(name: string): string {
@@ -61,6 +70,18 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const body = await req.json();
+
+  // LOY-REFERRALS — Mode C: owner config (enable + referrer/referee bonus, the existing config fields).
+  if (body.config) {
+    const enabled = !!body.enabled;
+    const referrer = Math.max(0, Math.min(100000, Math.round(Number(body.referrer_points) || 0)));
+    const referee = Math.max(0, Math.min(100000, Math.round(Number(body.referee_points) || 0)));
+    const { data: existing } = await supabase.from('pos_loyalty_config').select('business_id').eq('business_id', bid).maybeSingle();
+    const patch = { referrals_enabled: enabled, referral_bonus_points: referrer, referee_bonus_points: referee };
+    if (existing) await supabase.from('pos_loyalty_config').update(patch).eq('business_id', bid);
+    else await supabase.from('pos_loyalty_config').insert({ business_id: bid, ...patch });
+    return NextResponse.json({ ok: true, config: { enabled, referrer_points: referrer, referee_points: referee } });
+  }
 
   // Mode A: generate/return code for an existing customer
   if (body.customer_id && !body.referred_customer_id) {
