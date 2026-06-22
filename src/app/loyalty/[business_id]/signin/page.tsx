@@ -26,6 +26,8 @@ interface OfferItem { id: string; title: string; description: string | null; ima
 interface ChallengeItem { id: string; title: string; description: string | null; target_metric: string; target_item: string | null; target_count: number; progress: number; reward_points: number; status: string; expires_at: string | null }
 interface InviteRow { status: string; date: string; points: number }
 interface InviteData { enabled: boolean; code: string | null; share_url: string | null; referrer_bonus: number; referee_bonus: number; summary?: { total: number; rewarded: number; pending: number }; referrals: InviteRow[] }
+interface PreloadLedger { entry_type: string; amount: number; balance_after: number; note: string | null; created_at: string }
+interface PreloadData { enabled: boolean; balance: number; amounts: number[]; bonus_threshold: number; bonus_amount: number; ledger: PreloadLedger[] }
 
 export default function LoyaltySignInPage() {
   const params = useParams()
@@ -63,6 +65,9 @@ export default function LoyaltySignInPage() {
   const [invite, setInvite] = useState<InviteData | null>(null)
   const [inviteOn, setInviteOn] = useState(false)
   const [tierPerks, setTierPerks] = useState<{ perk_type: string; perk_value: number | null }[]>([])
+  const [preload, setPreload] = useState<PreloadData | null>(null)
+  const [showPreload, setShowPreload] = useState(false)
+  const [loadingAmt, setLoadingAmt] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const refCodeRef = useRef<string | null>(null)
   const refCapturedRef = useRef(false)
@@ -179,7 +184,19 @@ export default function LoyaltySignInPage() {
     loadInvite()
     // LOY-TIER-PERKS — show the member's current-tier perks on their wallet.
     fetch('/api/loyalty/tier-perks?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (Array.isArray(d?.perks)) setTierPerks(d.perks) }).catch(() => {})
+    // LOY-PRELOAD — stored-value balance.
+    fetch('/api/loyalty/preload?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d && d.enabled !== undefined) setPreload(d as PreloadData) }).catch(() => {})
   }, [step, bid])
+
+  const startLoad = async (amount: number) => {
+    setLoadingAmt(amount)
+    try {
+      const r = await fetch('/api/loyalty/preload/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, amount }) })
+      const d = await r.json().catch(() => ({}))
+      if (d.url) { window.location.href = d.url as string; return }
+    } catch { /* ignore — user can retry */ }
+    setLoadingAmt(null)
+  }
 
   const post = async (payload: Record<string, unknown>) => {
     const r = await fetch('/api/loyalty/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -262,6 +279,7 @@ export default function LoyaltySignInPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {preload?.enabled && <button onClick={() => setShowPreload(true)} style={link}>Balance</button>}
           {challengesOn && <button onClick={openChallenges} style={link}>Challenges</button>}
           {inviteOn && <button onClick={openInvite} style={link}>Invite</button>}
           <button onClick={openOffers} style={link}>Offers</button>
@@ -270,6 +288,50 @@ export default function LoyaltySignInPage() {
         </div>
       </div>
     )
+
+    // ── Preload balance (stored value; load via Stripe, spend in store) ──
+    if (showPreload && preload) {
+      const bonusNote = preload.bonus_threshold > 0 && preload.bonus_amount > 0
+        ? `Load $${(Number(preload.bonus_threshold) || 0).toFixed(0)}+ and get $${(Number(preload.bonus_amount) || 0).toFixed(2)} free.` : null
+      return wrap(
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Your balance</h2>
+            <button onClick={() => setShowPreload(false)} style={link}>← Back</button>
+          </div>
+          <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
+            <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>${(Number(preload.balance) || 0).toFixed(2)}</div>
+            <p style={{ fontSize: 13, color: INK_SOFT, margin: '6px 0 0' }}>available to spend in store</p>
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px' }}>Top up</p>
+          {bonusNote && <p style={{ fontSize: 12, color: INK_SOFT, margin: '0 0 10px' }}>🎁 {bonusNote}</p>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {preload.amounts.map(a => (
+              <button key={a} onClick={() => startLoad(a)} disabled={loadingAmt != null}
+                style={{ ...btn, flex: '1 0 28%', minWidth: 90, opacity: loadingAmt != null && loadingAmt !== a ? 0.5 : 1 }}>
+                {loadingAmt === a ? '…' : `$${a}`}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: '4px 0 8px' }}>History</p>
+          {preload.ledger.length === 0 ? (
+            <p style={{ fontSize: 14, color: INK_SOFT, margin: 0, lineHeight: 1.5 }}>No activity yet — top up to get started. 🌱</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {preload.ledger.map((e, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: i ? '1px solid #eee' : 'none' }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{e.entry_type === 'spend' ? 'Spent in store' : e.entry_type === 'load' ? 'Top up' : e.entry_type === 'bonus' ? 'Bonus' : 'Refund'}</div>
+                    <div style={{ fontSize: 12, color: INK_SOFT }}>{new Date(e.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: (Number(e.amount) || 0) < 0 ? '#d11' : INK }}>{(Number(e.amount) || 0) < 0 ? '' : '+'}${(Number(e.amount) || 0).toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
 
     // ── Invite a friend (shareable code/link; you both get points on their first visit) ──
     if (showInvite) {

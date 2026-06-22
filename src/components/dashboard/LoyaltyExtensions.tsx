@@ -558,6 +558,61 @@ export function MemberPricingSection() {
   )
 }
 
+// LOY-PRELOAD — owner control for member stored-value. Enable, set load amounts + an optional load bonus.
+// Real money: loads are taken via Stripe and credited only on webhook success (append-only ledger).
+export function PreloadSection() {
+  const [cfg, setCfg] = useState({ enabled: false, amounts: [20, 50, 100] as number[], bonus_threshold: 0, bonus_amount: 0 })
+  const [amountsText, setAmountsText] = useState('20, 50, 100')
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    fetch('/api/loyalty/preload?owner=1').then(r => r.json()).then(d => {
+      if (d && d.amounts) { setCfg({ enabled: !!d.enabled, amounts: d.amounts, bonus_threshold: Number(d.bonus_threshold) || 0, bonus_amount: Number(d.bonus_amount) || 0 }); setAmountsText((d.amounts as number[]).join(', ')) }
+    }).catch(() => {})
+  }, [])
+
+  async function save() {
+    setMsg('')
+    const amounts = amountsText.split(',').map(s => Math.round(Number(s.trim()))).filter(n => n > 0)
+    const r = await fetch('/api/loyalty/preload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: cfg.enabled, amounts, bonus_threshold: cfg.bonus_threshold, bonus_amount: cfg.bonus_amount }) }).then(r => r.json()).catch(() => ({}))
+    setMsg(r.ok ? 'Saved' : (r.error || 'Could not save'))
+    if (r.ok && r.amounts) setAmountsText((r.amounts as number[]).join(', '))
+    setTimeout(() => setMsg(''), 2200)
+  }
+  const inp = { padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 13, fontFamily: 'inherit' } as const
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <p style={{ fontSize: 13, fontWeight: 600 }}>💳 Preload balance</p>
+        <button onClick={save} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Save</button>
+      </div>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>Let members top up a balance and pay from it in store (Starbucks-style). Loads are taken securely via Stripe.</p>
+      <button type="button" onClick={() => setCfg(c => ({ ...c, enabled: !c.enabled }))}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)', cursor: 'pointer', marginBottom: 12 }}>
+        <span style={{ width: 38, height: 22, borderRadius: 999, background: cfg.enabled ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, flexShrink: 0 }}>
+          <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: cfg.enabled ? '#7FB897' : '#888', transform: cfg.enabled ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{cfg.enabled ? 'On — members can preload' : 'Off — preload disabled'}</span>
+      </button>
+      <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Load amounts ($, comma-separated)</label>
+      <input value={amountsText} onChange={e => setAmountsText(e.target.value)} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 12 }} />
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Bonus when loading ≥ $</label>
+          <input type="number" min={0} value={cfg.bonus_threshold} onChange={e => setCfg(c => ({ ...c, bonus_threshold: Math.max(0, Number(e.target.value) || 0) }))} style={{ ...inp, width: 110 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Bonus amount $</label>
+          <input type="number" min={0} value={cfg.bonus_amount} onChange={e => setCfg(c => ({ ...c, bonus_amount: Math.max(0, Number(e.target.value) || 0) }))} style={{ ...inp, width: 110 }} />
+        </div>
+      </div>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 10 }}>e.g. load $50, get $5 free. Money is kept separate from points — every load/spend is on an append-only ledger.</p>
+      {msg && <p style={{ fontSize: 11, color: msg === 'Saved' ? '#7FB897' : '#EF4444', marginTop: 6 }}>{msg === 'Saved' ? '✓ Saved' : msg}</p>}
+    </div>
+  )
+}
+
 // LOY-TIER-PERKS — owner control for per-tier benefits (beyond pricing). Tiers come from the existing
 // pos_loyalty_config thresholds; perks grant via the existing ledger (points multiplier) or as a flag.
 interface TierPerk { id: string; tier: string; perk_type: string; perk_value: number | null; config: Record<string, unknown> | null; is_active: boolean }
