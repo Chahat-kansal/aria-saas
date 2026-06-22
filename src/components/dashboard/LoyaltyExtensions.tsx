@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 interface Tier { id: string; tier_name: string; tier_order: number; min_spend: number; points_multiplier: number; perks: string | null; color: string }
 interface Referral { id: string; referral_code: string | null; referral_date: string; referrer_points_awarded: number | null; referred_points_awarded: number | null }
 interface LeaderEntry { customer_id: string; name: string; referrals: number; points_earned: number }
-interface Rule { id: string; rule_type: string; points_value: number; is_active: boolean }
+interface Rule { id: string; rule_type: string; points_value: number; is_active: boolean; threshold_value?: number | null; config?: Record<string, unknown> | null }
+const BEHAVIOUR_RULE_TYPES = ['spend_threshold', 'visit_count', 'category_purchase']
 interface FraudFlag { customer_id: string; customer_name: string; flag_type: string; details: Record<string, unknown> }
 interface ForecastSummary { loyalty_members: number; non_loyalty: number; avg_loyalty_spend: number; avg_non_loyalty_spend: number; spend_multiplier: number; at_risk: Record<string, { count: number; annual_revenue_at_risk: number }> }
 interface Offer { id: string; title: string; description: string | null; image_url: string | null; offer_type: string; point_cost: number | null; active: boolean; starts_at: string | null; ends_at: string | null }
@@ -273,9 +274,12 @@ export function ReferralsTab() {
   )
 }
 
+const TRIGGER_LABELS: Record<string, string> = { spend_threshold: 'Spend ≥ $', visit_count: 'On the Nth visit', category_purchase: 'Buys from category' }
+
 export function RewardRulesTab() {
   const [rules, setRules] = useState<Rule[]>([])
   const [flags, setFlags] = useState<FraudFlag[]>([])
+  const [trigForm, setTrigForm] = useState({ rule_type: 'spend_threshold', threshold_value: '', category: '', points_value: '50' })
 
   async function load() {
     const r = await fetch('/api/loyalty/reward-rules').then(r => r.json()).catch(() => ({ rules: [] }))
@@ -284,6 +288,31 @@ export function RewardRulesTab() {
     setFlags(f.flags ?? [])
   }
   useEffect(() => { load() }, [])
+
+  const triggerRules = rules.filter(r => BEHAVIOUR_RULE_TYPES.includes(r.rule_type))
+
+  async function addTrigger() {
+    const points = Math.max(1, Math.floor(Number(trigForm.points_value) || 0))
+    const body: Record<string, unknown> = { rule_type: trigForm.rule_type, points_value: points, is_active: true }
+    if (trigForm.rule_type === 'category_purchase') body.config = { category: trigForm.category.trim() }
+    else body.threshold_value = Number(trigForm.threshold_value) || 0
+    const res = await fetch('/api/loyalty/reward-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).catch(() => ({}))
+    if (res.rule) { setRules(rs => [...rs, res.rule]); setTrigForm({ rule_type: 'spend_threshold', threshold_value: '', category: '', points_value: '50' }) }
+  }
+  async function removeTrigger(id: string) {
+    await fetch(`/api/loyalty/reward-rules?id=${id}`, { method: 'DELETE' })
+    setRules(rs => rs.filter(r => r.id !== id))
+  }
+  async function toggleTrigger(r: Rule) {
+    await fetch(`/api/loyalty/reward-rules?id=${r.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: !r.is_active }) })
+    setRules(rs => rs.map(x => x.id === r.id ? { ...x, is_active: !x.is_active } : x))
+  }
+  function triggerDesc(r: Rule): string {
+    if (r.rule_type === 'spend_threshold') return `Spend ≥ $${(Number(r.threshold_value) || 0).toFixed(2)} → +${r.points_value} pts`
+    if (r.rule_type === 'visit_count') return `On visit #${Math.round(Number(r.threshold_value) || 0)} → +${r.points_value} pts`
+    if (r.rule_type === 'category_purchase') return `Buys "${String((r.config ?? {}).category ?? '')}" → +${r.points_value} pts`
+    return r.rule_type
+  }
 
   async function upsert(type: string, points_value: number, is_active: boolean, existing?: Rule) {
     if (existing) {
@@ -320,6 +349,44 @@ export function RewardRulesTab() {
           )
         })}
       </div>
+      {/* LOY-REWARD-RULES — behaviour-triggered rules evaluated on each real sale */}
+      <div>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>🎯 Spend & visit triggers</h3>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>Award bonus points automatically when a member hits a spend, visit, or category milestone on a real sale.</p>
+        {triggerRules.length > 0 && (
+          <div style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 10 }}>
+            {triggerRules.map(r => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.02)', opacity: r.is_active ? 1 : 0.5 }}>
+                <span style={{ fontSize: 13 }}>{triggerDesc(r)}</span>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button onClick={() => toggleTrigger(r)} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{r.is_active ? 'Pause' : 'Activate'}</button>
+                  <button onClick={() => removeTrigger(r.id)} style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ padding: 12, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.2)', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+          <select value={trigForm.rule_type} onChange={e => setTrigForm(f => ({ ...f, rule_type: e.target.value }))}
+            style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12 }}>
+            {BEHAVIOUR_RULE_TYPES.map(t => <option key={t} value={t} style={{ color: '#000' }}>{TRIGGER_LABELS[t]}</option>)}
+          </select>
+          {trigForm.rule_type === 'category_purchase' ? (
+            <input placeholder="Category (e.g. Coffee)" value={trigForm.category} onChange={e => setTrigForm(f => ({ ...f, category: e.target.value }))}
+              style={{ width: 150, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12 }} />
+          ) : (
+            <input type="number" min={1} placeholder={trigForm.rule_type === 'spend_threshold' ? 'Min spend $' : 'Visit number'} value={trigForm.threshold_value} onChange={e => setTrigForm(f => ({ ...f, threshold_value: e.target.value }))}
+              style={{ width: 120, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12 }} />
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="number" min={1} value={trigForm.points_value} onChange={e => setTrigForm(f => ({ ...f, points_value: e.target.value }))}
+              style={{ width: 80, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12 }} />
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>pts</span>
+          </div>
+          <button onClick={addTrigger} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1812', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Add rule</button>
+        </div>
+      </div>
+
       <div>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>⚠️ Fraud flags</h3>
         {flags.length === 0 ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>No suspicious activity detected.</p> : (

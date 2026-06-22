@@ -390,6 +390,15 @@ async function _POST(req: Request) {
         await evaluateReferrals(customer_id, business.id)
       } catch (e) { console.error('[sale] referral eval failed:', e) }
     })())
+
+    // LOY-REWARD-RULES — additive hook: behaviour-triggered rules (spend threshold / Nth visit / category)
+    // evaluated against this real sale; awards via the existing ledger, idempotent per (rule, sale).
+    waitUntil((async () => {
+      try {
+        const { evaluateRewardRules } = await import('@/lib/loyalty/reward-rules')
+        await evaluateRewardRules(customer_id, business.id, sale.id)
+      } catch (e) { console.error('[sale] reward-rule eval failed:', e) }
+    })())
   }
 
   // Cafe KDS + ingredient deduction (waitUntil — keeps function alive, doesn't block response)

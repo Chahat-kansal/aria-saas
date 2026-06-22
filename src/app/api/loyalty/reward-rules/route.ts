@@ -5,7 +5,9 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
-const RULE_TYPES = ['review_left','birthday_visit','referral_made','fifth_visit','spending_milestone'];
+// LOY-REWARD-RULES — behaviour-triggered rule types (evaluated in the sale hook) added alongside the
+// legacy behaviour rewards (kept for back-compat).
+const RULE_TYPES = ['review_left','birthday_visit','referral_made','fifth_visit','spending_milestone','spend_threshold','visit_count','category_purchase'];
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -34,12 +36,15 @@ async function _POST(req: Request) {
   if (!RULE_TYPES.includes(body.rule_type)) {
     return NextResponse.json({ error: 'invalid rule_type' }, { status: 400 });
   }
-  const { data, error } = await supabase.from('loyalty_reward_rules').insert({
+  const insert: Record<string, unknown> = {
     business_id: bid,
     rule_type: body.rule_type,
     points_value: body.points_value ?? 25,
     is_active: body.is_active ?? true,
-  }).select().single();
+  };
+  if (body.threshold_value !== undefined && body.threshold_value !== null && body.threshold_value !== '') insert.threshold_value = Number(body.threshold_value);
+  if (body.config !== undefined && body.config !== null && typeof body.config === 'object') insert.config = body.config;
+  const { data, error } = await supabase.from('loyalty_reward_rules').insert(insert).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ rule: data });
 }
@@ -54,6 +59,8 @@ async function _PATCH(req: Request) {
   const patch: Record<string, unknown> = {};
   if (body.points_value !== undefined) patch.points_value = body.points_value;
   if (body.is_active !== undefined) patch.is_active = body.is_active;
+  if (body.threshold_value !== undefined) patch.threshold_value = body.threshold_value === null || body.threshold_value === '' ? null : Number(body.threshold_value);
+  if (body.config !== undefined && typeof body.config === 'object' && body.config !== null) patch.config = body.config;
   await supabase.from('loyalty_reward_rules').update(patch).eq('id', id);
   return NextResponse.json({ ok: true });
 }
