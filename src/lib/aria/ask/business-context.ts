@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { computeStockValue } from '@/lib/inventory/stock-value'
 
 export interface ConversationSummary {
   id: string
@@ -30,6 +31,8 @@ export interface AskAriaContext {
   avg_ticket_cents: number
   // Operational state
   low_stock_items: Array<{ id: string; name: string; qty: number; reorder_point: number | null }>
+  // INV-COST-1 — real stock valuation (GROUNDING: unknown-cost products excluded from at_cost + counted)
+  inventory_value: { at_cost_cents: number; at_retail_cents: number; products_valued: number; products_unknown_cost: number; margin_incomplete: boolean } | null
   staff_count: number
   open_support_tickets: number
   pending_aria_actions: number
@@ -423,6 +426,19 @@ export async function buildAskAriaContext(
     }
   }
 
+  // INV-COST-1 — real stock valuation for groundTruth (unknown-cost products excluded + counted).
+  let inventoryValue: AskAriaContext['inventory_value'] = null
+  try {
+    const sv = await computeStockValue(supabaseAdmin, businessId, null)
+    inventoryValue = {
+      at_cost_cents: Math.round(sv.at_cost * 100),
+      at_retail_cents: Math.round(sv.at_retail * 100),
+      products_valued: sv.products_valued,
+      products_unknown_cost: sv.products_unknown_cost,
+      margin_incomplete: sv.margin_incomplete,
+    }
+  } catch (e) { console.error('[business-context] stock value failed (non-fatal):', (e as Error).message) }
+
   return {
     business_id: businessId,
     business_name: biz?.name ?? 'Your business',
@@ -440,6 +456,7 @@ export async function buildAskAriaContext(
     revenue_month_cents: monthCents,
     avg_ticket_cents: avgTicket,
     low_stock_items: lowStock,
+    inventory_value: inventoryValue,
     staff_count: Number(staffRes.count) || 0,
     open_support_tickets: Number(ticketsRes.count) || 0,
     pending_aria_actions: ariaActionsDetail.pending_count,

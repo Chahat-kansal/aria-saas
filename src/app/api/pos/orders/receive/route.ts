@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { captureReceiptCost } from '@/lib/inventory/resolve-cost'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -29,7 +30,7 @@ async function _POST(req: Request) {
   try {
     for (const item of items as Array<{
       line_id?: string; product_id: string; received_qty: number;
-      expiry_date?: string | null; quantity_ordered?: number;
+      expiry_date?: string | null; quantity_ordered?: number; unit_cost?: number | null;
     }>) {
       if (!item.product_id || !item.received_qty) continue;
 
@@ -55,6 +56,15 @@ async function _POST(req: Request) {
             items_reorder_amount: 10, updated_at: new Date().toISOString(),
           });
         }
+
+        // INV-COST-1 — CAPTURE-ON-RECEIVE: write the REAL receipt unit cost (from the payload, else the PO
+        // line's unit_cost) onto item_cost/last_item_cost. Only writes a positive cost; never fabricates.
+        let unitCost = item.unit_cost ?? null;
+        if ((unitCost == null || unitCost <= 0) && item.line_id) {
+          const { data: poLine } = await supabase.from('pos_purchase_order_items').select('unit_cost').eq('id', item.line_id).maybeSingle();
+          unitCost = poLine?.unit_cost ?? null;
+        }
+        await captureReceiptCost(supabase, { businessId: bid, outletId: outlet.id, productId: item.product_id, unitCost });
       }
 
       // 3. Update pos_purchase_order_items.quantity_received + receive_status

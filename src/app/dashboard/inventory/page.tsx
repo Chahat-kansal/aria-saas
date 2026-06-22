@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import InventoryValuePanel from '@/components/dashboard/InventoryValuePanel'
 
 interface Product { id: string; name: string; sku: string | null; stock_quantity: number | null; cost_price: number | null; price: number | null; low_stock_threshold: number | null; track_stock: boolean; pos_categories?: { name: string; color: string } | null }
 interface Movement { id: string; product_id: string; product_name: string; movement_type: string; quantity_change: number; new_quantity: number; reason: string | null; created_at: string }
@@ -51,19 +52,9 @@ export default function InventoryPage() {
   }
 
   const filtered = products.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku ?? '').toLowerCase().includes(search.toLowerCase()))
+  // Overview stat: stock_quantity here is the canonical items_on_hand (the products API overlays it).
   const totalValue = products.reduce((a, p) => a + Number(p.stock_quantity ?? 0) * Number(p.cost_price ?? 0), 0)
   const lowStock = products.filter(p => p.low_stock_threshold != null && Number(p.stock_quantity ?? 0) <= Number(p.low_stock_threshold)).length
-
-  // Valuation by category
-  const byCategory: Record<string, { name: string; color: string; value: number; count: number }> = {}
-  for (const p of products) {
-    const cat = p.pos_categories?.name ?? 'Uncategorised'
-    const color = p.pos_categories?.color ?? '#6b7280'
-    if (!byCategory[cat]) byCategory[cat] = { name: cat, color, value: 0, count: 0 }
-    byCategory[cat].value += Number(p.stock_quantity ?? 0) * Number(p.cost_price ?? 0)
-    byCategory[cat].count++
-  }
-  const catList = Object.values(byCategory).sort((a, b) => b.value - a.value)
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, color: C.text, fontFamily: 'Manrope, sans-serif' }}>
@@ -188,39 +179,9 @@ export default function InventoryPage() {
             {adjustMsg && <p style={{ marginTop: 8, fontSize: 12, color: adjustMsg.startsWith('✓') ? C.green : C.red }}>{adjustMsg}</p>}
           </div>
         ) : (
-          <div>
-            <div style={{ marginBottom: 18, padding: 16, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border }}>
-              <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Total inventory value</p>
-              <p style={{ fontSize: 28, fontWeight: 700, color: C.green }}>A${totalValue.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-            <div style={{ borderRadius: 12, border: '1px solid ' + C.border, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead><tr style={{ background: C.surface }}>{['Category', 'SKUs', 'Value'].map(h => (<th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>))}</tr></thead>
-                <tbody>
-                  {catList.map(c => (
-                    <tr key={c.name} style={{ borderTop: '1px solid ' + C.border }}>
-                      <td style={{ padding: '8px 14px' }}><span style={{ color: c.color, fontWeight: 600 }}>● {c.name}</span></td>
-                      <td style={{ padding: '8px 14px', color: C.dim }}>{c.count}</td>
-                      <td style={{ padding: '8px 14px', color: C.green, fontWeight: 600 }}>A${c.value.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {insight?.top_dead && insight.top_dead.length > 0 && (
-              <div style={{ marginTop: 18 }}>
-                <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Top dead stock (no sales 90d)</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {insight.top_dead.map((d, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                      <span>{d.name}</span>
-                      <span style={{ color: C.red, fontWeight: 600 }}>A${(d.value_cents / 100).toFixed(2)} · {d.stock} units</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          // INV-COST-1 — canonical, rich inventory-value surface (items_on_hand × resolved cost, provenance,
+          // margin, completeness, missing-cost action). Replaces the old stock_quantity-based single card.
+          <InventoryValuePanel />
         )}
     </div>
   )
