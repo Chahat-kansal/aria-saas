@@ -558,6 +558,42 @@ export function MemberPricingSection() {
   )
 }
 
+// LOY-WHATSAPP — owner enable for the WhatsApp loyalty channel. Actual sending needs a provider
+// (founder-console TODO); until then this just records the opt-in for the channel.
+export function WhatsAppSection() {
+  const [enabled, setEnabled] = useState(false)
+  const [providerOk, setProviderOk] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    fetch('/api/loyalty/whatsapp?owner=1').then(r => r.json()).then(d => { setEnabled(!!d.enabled); setProviderOk(!!d.provider_configured) }).catch(() => {})
+  }, [])
+
+  async function save(next: boolean) {
+    setEnabled(next); setMsg('')
+    const r = await fetch('/api/loyalty/whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'config', enabled: next }) }).then(r => r.json()).catch(() => ({}))
+    setMsg(r.ok ? 'Saved' : 'Could not save'); setTimeout(() => setMsg(''), 2000)
+  }
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>💬 WhatsApp</p>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>Let members enrol, check their balance, and receive offers on WhatsApp — the highest-engagement channel in many markets.</p>
+      <button type="button" onClick={() => save(!enabled)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+        <span style={{ width: 38, height: 22, borderRadius: 999, background: enabled ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, flexShrink: 0 }}>
+          <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: enabled ? '#7FB897' : '#888', transform: enabled ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{enabled ? 'On — members can use WhatsApp' : 'Off — WhatsApp disabled'}</span>
+      </button>
+      <p style={{ fontSize: 11, color: providerOk ? '#7FB897' : 'rgba(255,255,255,0.4)', marginTop: 8 }}>
+        {providerOk ? '✓ WhatsApp provider connected' : 'Provider not connected yet — members can opt in, but sends activate once a WhatsApp provider is configured.'}
+      </p>
+      {msg && <p style={{ fontSize: 11, color: msg === 'Saved' ? '#7FB897' : '#EF4444', marginTop: 6 }}>{msg === 'Saved' ? '✓ Saved' : msg}</p>}
+    </div>
+  )
+}
+
 // LOY-PRELOAD — owner control for member stored-value. Enable, set load amounts + an optional load bonus.
 // Real money: loads are taken via Stripe and credited only on webhook success (append-only ledger).
 export function PreloadSection() {

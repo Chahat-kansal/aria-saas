@@ -69,6 +69,8 @@ export default function LoyaltySignInPage() {
   const [showPreload, setShowPreload] = useState(false)
   const [loadingAmt, setLoadingAmt] = useState<number | null>(null)
   const [wallet, setWallet] = useState<{ google?: { configured: boolean; save_url: string | null }; apple?: { configured: boolean } } | null>(null)
+  const [wa, setWa] = useState<{ enabled: boolean; opted_in: boolean; has_phone?: boolean } | null>(null)
+  const [waBusy, setWaBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const refCodeRef = useRef<string | null>(null)
   const refCapturedRef = useRef(false)
@@ -189,7 +191,16 @@ export default function LoyaltySignInPage() {
     fetch('/api/loyalty/preload?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d && d.enabled !== undefined) setPreload(d as PreloadData) }).catch(() => {})
     // LOY-WALLET-PASS — Apple/Google Wallet pass availability for this membership.
     fetch('/api/loyalty/wallet-pass?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d && (d.google || d.apple)) setWallet(d) }).catch(() => {})
+    // LOY-WHATSAPP — channel availability + this member's opt-in state.
+    fetch('/api/loyalty/whatsapp?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d && d.enabled !== undefined) setWa(d) }).catch(() => {})
   }, [step, bid])
+
+  const toggleWa = async (next: boolean) => {
+    setWaBusy(true)
+    const r = await fetch('/api/loyalty/whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: next ? 'opt_in' : 'opt_out', business_id: bid }) }).then(r => r.json()).catch(() => ({}))
+    if (r.ok) setWa(w => w ? { ...w, opted_in: !!r.opted_in } : w)
+    setWaBusy(false)
+  }
 
   const startLoad = async (amount: number) => {
     setLoadingAmt(amount)
@@ -635,6 +646,19 @@ export default function LoyaltySignInPage() {
             </div>
           )}
         </div>
+
+        {/* LOY-WHATSAPP — opt in to the WhatsApp channel (shown when the business enabled it) */}
+        {wa?.enabled && (
+          <div style={card}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 6px' }}>💬 WhatsApp updates</p>
+            <p style={{ fontSize: 13, color: INK_SOFT, margin: '0 0 12px', lineHeight: 1.5 }}>Get your rewards, offers and balance on WhatsApp.{wa.has_phone === false ? ' Add a mobile in “My details” first.' : ''}</p>
+            <button onClick={() => toggleWa(!wa.opted_in)} disabled={waBusy}
+              style={{ ...btn, width: '100%', background: wa.opted_in ? SURFACE : ACCENT, opacity: waBusy ? 0.6 : 1 }}>
+              {waBusy ? '…' : wa.opted_in ? 'Turn off WhatsApp updates' : 'Get updates on WhatsApp'}
+            </button>
+            {wa.opted_in && <p style={{ fontSize: 12, color: INK_SOFT, margin: '8px 0 0' }}>✓ You&apos;re opted in. Reply STOP on WhatsApp anytime to opt out.</p>}
+          </div>
+        )}
 
         {/* LOY-WALLET-PASS — add membership to Apple/Google Wallet (shown when a provider is configured) */}
         {wallet && ((wallet.google?.configured && wallet.google?.save_url) || wallet.apple?.configured) && (

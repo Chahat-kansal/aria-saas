@@ -52,8 +52,18 @@ export async function awardLifecyclePoints(customerId: string, businessId: strin
 
 export interface Contactable { id: string; name: string | null; phone: string | null; email: string | null; business_id: string }
 
-/** Deliver via SMS (preferred) then email; both are marketing-category (consent/suppression handled by the senders). */
+/** Deliver via WhatsApp (when opted in + a provider is configured), then SMS, then email; all are
+ * marketing-category (consent/suppression handled by each sender). WhatsApp is additive — when it isn't
+ * available the message falls back to SMS/email exactly as before. */
 export async function deliverLifecycleMessage(c: Contactable, smsBody: string, emailSubject: string, emailHtml: string): Promise<{ channel: string; status: string }> {
+  // LOY-WHATSAPP — prefer WhatsApp first; returns 'skipped' (no external send) when unconfigured / not opted in.
+  if (c.phone) {
+    try {
+      const { sendWhatsApp } = await import('@/lib/whatsapp')
+      const r = await sendWhatsApp(c.phone, smsBody, { category: 'marketing', businessId: c.business_id, customerId: c.id, template: 'lifecycle' })
+      if (r.ok) return { channel: 'whatsapp', status: 'sent' }
+    } catch (e) { console.error('[lifecycle] whatsapp failed:', (e as Error).message) }
+  }
   if (c.phone) {
     try {
       const r = await sendSMS(c.phone, smsBody, { category: 'marketing', businessId: c.business_id, customerId: c.id })
