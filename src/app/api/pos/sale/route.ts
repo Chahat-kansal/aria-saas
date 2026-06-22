@@ -399,6 +399,15 @@ async function _POST(req: Request) {
         await evaluateRewardRules(customer_id, business.id, sale.id)
       } catch (e) { console.error('[sale] reward-rule eval failed:', e) }
     })())
+
+    // LOY-TIER-PERKS — additive hook: the member's tier points-multiplier credits bonus earn via the
+    // existing ledger (the base earn block is untouched). Idempotent per (perk, sale).
+    waitUntil((async () => {
+      try {
+        const { applyTierEarnPerks } = await import('@/lib/loyalty/tiers')
+        await applyTierEarnPerks(customer_id, business.id, sale.id)
+      } catch (e) { console.error('[sale] tier-perk eval failed:', e) }
+    })())
   }
 
   // Cafe KDS + ingredient deduction (waitUntil — keeps function alive, doesn't block response)

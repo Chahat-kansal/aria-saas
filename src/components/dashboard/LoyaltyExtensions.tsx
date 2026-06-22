@@ -529,6 +529,86 @@ export function MemberPricingSection() {
   )
 }
 
+// LOY-TIER-PERKS — owner control for per-tier benefits (beyond pricing). Tiers come from the existing
+// pos_loyalty_config thresholds; perks grant via the existing ledger (points multiplier) or as a flag.
+interface TierPerk { id: string; tier: string; perk_type: string; perk_value: number | null; config: Record<string, unknown> | null; is_active: boolean }
+const PERK_TIERS = ['silver', 'gold', 'platinum'] as const
+export function TierPerksSection() {
+  const [perks, setPerks] = useState<TierPerk[]>([])
+  const [thresholds, setThresholds] = useState<{ silver: number; gold: number; platinum: number } | null>(null)
+  const [form, setForm] = useState({ tier: 'gold', perk_type: 'points_multiplier', perk_value: '2' })
+  const [msg, setMsg] = useState('')
+
+  async function load() {
+    const d = await fetch('/api/loyalty/tier-perks?owner=1').then(r => r.json()).catch(() => ({ perks: [] }))
+    setPerks(d.perks ?? []); setThresholds(d.thresholds ?? null)
+  }
+  useEffect(() => { load() }, [])
+
+  async function add() {
+    setMsg('')
+    const body: Record<string, unknown> = { tier: form.tier, perk_type: form.perk_type, is_active: true }
+    if (form.perk_type === 'points_multiplier') body.perk_value = Math.max(1, Number(form.perk_value) || 1)
+    const r = await fetch('/api/loyalty/tier-perks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).catch(() => ({}))
+    if (r.ok) { await load(); setMsg('Saved') } else setMsg(r.error || 'Could not save')
+    setTimeout(() => setMsg(''), 2000)
+  }
+  async function toggle(p: TierPerk) {
+    await fetch('/api/loyalty/tier-perks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier: p.tier, perk_type: p.perk_type, perk_value: p.perk_value, is_active: !p.is_active }) })
+    setPerks(ps => ps.map(x => x.id === p.id ? { ...x, is_active: !x.is_active } : x))
+  }
+  async function remove(id: string) {
+    await fetch(`/api/loyalty/tier-perks?id=${id}`, { method: 'DELETE' })
+    setPerks(ps => ps.filter(x => x.id !== id))
+  }
+  function desc(p: TierPerk): string {
+    if (p.perk_type === 'points_multiplier') return `Earn ×${Number(p.perk_value) || 1} points`
+    if (p.perk_type === 'priority') return 'Priority service'
+    return p.perk_type
+  }
+  const sel = { padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12 } as const
+  const tierColor = (t: string) => t === 'platinum' ? '#C0C0F0' : t === 'gold' ? '#E8C66B' : '#B8C2CC'
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>👑 Tier perks</p>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
+        Reward your top tiers with benefits beyond pricing.{thresholds ? ` Silver ${thresholds.silver}+ · Gold ${thresholds.gold}+ · Platinum ${thresholds.platinum}+ pts.` : ''}
+      </p>
+      {perks.length > 0 && (
+        <div style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 10 }}>
+          {perks.map(p => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.02)', opacity: p.is_active ? 1 : 0.5 }}>
+              <span style={{ fontSize: 13 }}><span style={{ fontWeight: 700, color: tierColor(p.tier), textTransform: 'capitalize' }}>{p.tier}</span> — {desc(p)}</span>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => toggle(p)} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{p.is_active ? 'Pause' : 'Activate'}</button>
+                <button onClick={() => remove(p.id)} style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <select value={form.tier} onChange={e => setForm(f => ({ ...f, tier: e.target.value }))} style={sel}>
+          {PERK_TIERS.map(t => <option key={t} value={t} style={{ color: '#000' }}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+        </select>
+        <select value={form.perk_type} onChange={e => setForm(f => ({ ...f, perk_type: e.target.value }))} style={sel}>
+          <option value="points_multiplier" style={{ color: '#000' }}>Points multiplier</option>
+          <option value="priority" style={{ color: '#000' }}>Priority service</option>
+        </select>
+        {form.perk_type === 'points_multiplier' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>×</span>
+            <input type="number" min={1} step={0.5} value={form.perk_value} onChange={e => setForm(f => ({ ...f, perk_value: e.target.value }))} style={{ ...sel, width: 70 }} />
+          </div>
+        )}
+        <button onClick={add} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Add perk</button>
+        {msg && <span style={{ fontSize: 11, color: msg === 'Saved' ? '#7FB897' : '#EF4444' }}>{msg === 'Saved' ? '✓ Saved' : msg}</span>}
+      </div>
+    </div>
+  )
+}
+
 // LOY-CHALLENGES — owner control. Turn on AI-personalised missions; each member's challenges are generated
 // from their REAL purchase history and award points through the existing loyalty ledger when completed.
 export function ChallengesSection() {

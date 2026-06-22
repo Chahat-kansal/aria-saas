@@ -62,6 +62,7 @@ export default function LoyaltySignInPage() {
   const [showInvite, setShowInvite] = useState(false)
   const [invite, setInvite] = useState<InviteData | null>(null)
   const [inviteOn, setInviteOn] = useState(false)
+  const [tierPerks, setTierPerks] = useState<{ perk_type: string; perk_value: number | null }[]>([])
   const [copied, setCopied] = useState(false)
   const refCodeRef = useRef<string | null>(null)
   const refCapturedRef = useRef(false)
@@ -176,6 +177,8 @@ export default function LoyaltySignInPage() {
       fetch('/api/loyalty/referral-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, ref: refCodeRef.current }) }).catch(() => {})
     }
     loadInvite()
+    // LOY-TIER-PERKS — show the member's current-tier perks on their wallet.
+    fetch('/api/loyalty/tier-perks?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (Array.isArray(d?.perks)) setTierPerks(d.perks) }).catch(() => {})
   }, [step, bid])
 
   const post = async (payload: Record<string, unknown>) => {
@@ -531,6 +534,15 @@ export default function LoyaltySignInPage() {
               {dash.tier.next_label && <span style={{ fontSize: 12, color: INK_SOFT }}>{dash.tier.to_next_points.toLocaleString()} points to {dash.tier.next_label}</span>}
             </div>
             {dash.tier.next_label ? bar(dash.tier.progress_pct) : <p style={{ fontSize: 12, color: INK_SOFT, margin: 0 }}>You&apos;re at our top tier — thank you!</p>}
+            {tierPerks.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                {tierPerks.map((p, i) => (
+                  <span key={i} style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999, border: BORDER, background: ACCENT }}>
+                    {p.perk_type === 'points_multiplier' ? `★ Earn ×${Number(p.perk_value) || 1} points` : p.perk_type === 'priority' ? '★ Priority service' : p.perk_type}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

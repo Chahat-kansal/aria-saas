@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
-import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection, OffersTab, MemberPricingSection, ChallengesSection } from '@/components/dashboard/LoyaltyExtensions'
+import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection, OffersTab, MemberPricingSection, ChallengesSection, TierPerksSection } from '@/components/dashboard/LoyaltyExtensions'
 import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
 type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; winback_reward_text: string | null; points_expiry_days: number; referral_bonus_points: number; referee_bonus_points: number; tier_silver_points: number; tier_gold_points: number; tier_platinum_points: number; enrol_page_slug: string | null; public_enrol_enabled?: boolean; birthday_enabled?: boolean; birthday_reward_points?: number; winback_enabled?: boolean; winback_reward_points?: number }
@@ -317,6 +317,7 @@ export default function LoyaltyPage() {
       )}
 
       {tab === 'config' && <MemberPricingSection />}
+      {tab === 'config' && <TierPerksSection />}
       {tab === 'config' && <ChallengesSection />}
       {tab === 'config' && <BrandingSection />}
 
