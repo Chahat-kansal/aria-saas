@@ -548,7 +548,7 @@ export default function LoyaltySignInPage() {
                 return (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: i ? '1px solid #eee' : 'none' }}>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{isRedeem ? (a.reward_redeemed ? `Redeemed: ${a.reward_redeemed}` : 'Redeemed') : a.type === 'earn' ? 'Earned' : a.type}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{isRedeem ? (a.reward_redeemed ? `Redeemed: ${a.reward_redeemed}` : 'Redeemed') : a.type === 'earn' ? 'Earned' : a.type === 'birthday' ? '🎂 Birthday reward' : a.type === 'winback' ? '💌 We miss you' : a.type}</div>
                       <div style={{ fontSize: 12, color: INK_SOFT }}>{new Date(a.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                     </div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: delta < 0 ? '#d11' : INK }}>{delta > 0 ? '+' : ''}{delta} {unit}</div>

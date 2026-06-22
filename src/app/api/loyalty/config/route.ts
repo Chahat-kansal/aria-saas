@@ -48,6 +48,8 @@ async function _POST(req: Request) {
   const SAFE = [
     'program_type', 'points_per_dollar', 'point_value_cents', 'stamps_to_reward', 'stamp_reward_text',
     'birthday_reward_text', 'winback_after_days', 'winback_reward_text',
+    // LOY-LIFECYCLE — birthday/winback enable + reward points (texts above already existed)
+    'birthday_enabled', 'birthday_reward_points', 'winback_enabled', 'winback_reward_points',
     // auto-enrol (public sign-up) + tiers + referral + expiry
     'public_enrol_enabled', 'points_expiry_days', 'referral_bonus_points', 'referee_bonus_points',
     'tier_silver_points', 'tier_gold_points', 'tier_platinum_points', 'enrol_page_slug',

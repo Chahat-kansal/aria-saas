@@ -5,12 +5,12 @@ import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
 import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection, OffersTab, MemberPricingSection, ChallengesSection } from '@/components/dashboard/LoyaltyExtensions'
 import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
-type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; winback_reward_text: string | null; points_expiry_days: number; referral_bonus_points: number; referee_bonus_points: number; tier_silver_points: number; tier_gold_points: number; tier_platinum_points: number; enrol_page_slug: string | null; public_enrol_enabled?: boolean }
+type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; winback_reward_text: string | null; points_expiry_days: number; referral_bonus_points: number; referee_bonus_points: number; tier_silver_points: number; tier_gold_points: number; tier_platinum_points: number; enrol_page_slug: string | null; public_enrol_enabled?: boolean; birthday_enabled?: boolean; birthday_reward_points?: number; winback_enabled?: boolean; winback_reward_points?: number }
 type Stats = { enrolled: number; active_this_month: number; points_liability_dollars: number; redemptions_this_month: number; avg_points_per_customer: number }
 type TopCustomer = { id: string; name: string; points_balance: number; loyalty_points: number; stamps_count: number; total_spent: number; total_spend: number; visit_count: number; tier: LoyaltyTier; last_redemption: string | null }
 type Txn = { id: string; type: string; points_delta: number; stamps_delta: number; reward_redeemed: string | null; created_at: string; pos_customers: { name: string; email: string | null } | null }
 
-const DEFAULT_CONFIG: Config = { program_type: 'points', points_per_dollar: 1, point_value_cents: 1, stamps_to_reward: 10, stamp_reward_text: 'Free coffee', birthday_reward_text: null, winback_after_days: 30, winback_reward_text: null, points_expiry_days: 365, referral_bonus_points: 0, referee_bonus_points: 0, tier_silver_points: 500, tier_gold_points: 1500, tier_platinum_points: 5000, enrol_page_slug: null, public_enrol_enabled: true }
+const DEFAULT_CONFIG: Config = { program_type: 'points', points_per_dollar: 1, point_value_cents: 1, stamps_to_reward: 10, stamp_reward_text: 'Free coffee', birthday_reward_text: null, winback_after_days: 30, winback_reward_text: null, points_expiry_days: 365, referral_bonus_points: 0, referee_bonus_points: 0, tier_silver_points: 500, tier_gold_points: 1500, tier_platinum_points: 5000, enrol_page_slug: null, public_enrol_enabled: true, birthday_enabled: false, birthday_reward_points: 0, winback_enabled: false, winback_reward_points: 0 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -228,6 +228,23 @@ export default function LoyaltyPage() {
             onChange={e => setDraft(d => ({ ...d, winback_reward_text: e.target.value || null }))}
             placeholder="e.g. 20% off — we miss you!"
             className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+          {/* LOY-LIFECYCLE — winback automation: enable + bonus points (sent on a daily cron to lapsed members) */}
+          <div className="grid grid-cols-2 gap-4 items-end pt-1">
+            <button type="button" onClick={() => setDraft(d => ({ ...d, winback_enabled: !d.winback_enabled }))}
+              className="flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm"
+              style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }}>
+              <span style={{ width: 38, height: 22, borderRadius: 999, background: draft.winback_enabled ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, flexShrink: 0 }}>
+                <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: draft.winback_enabled ? '#7FB897' : '#888', transform: draft.winback_enabled ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+              </span>
+              <span>{draft.winback_enabled ? 'Win-back automation on' : 'Win-back automation off'}</span>
+            </button>
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>Win-back bonus (points)</label>
+              <input type="number" min="0" step="10" value={draft.winback_reward_points ?? 0}
+                onChange={e => setDraft(d => ({ ...d, winback_reward_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -256,6 +273,23 @@ export default function LoyaltyPage() {
               SMS preview: &quot;Happy Birthday, [Name]! 🎂 {draft.birthday_reward_text} Show this in store to redeem.&quot;
             </p>
           )}
+          {/* LOY-LIFECYCLE — birthday automation: enable + bonus points (sent on a daily cron on the member's birthday) */}
+          <div className="grid grid-cols-2 gap-4 items-end pt-1">
+            <button type="button" onClick={() => setDraft(d => ({ ...d, birthday_enabled: !d.birthday_enabled }))}
+              className="flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm"
+              style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }}>
+              <span style={{ width: 38, height: 22, borderRadius: 999, background: draft.birthday_enabled ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, flexShrink: 0 }}>
+                <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: draft.birthday_enabled ? '#7FB897' : '#888', transform: draft.birthday_enabled ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+              </span>
+              <span>{draft.birthday_enabled ? 'Birthday reward on' : 'Birthday reward off'}</span>
+            </button>
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>Birthday bonus (points)</label>
+              <input type="number" min="0" step="10" value={draft.birthday_reward_points ?? 0}
+                onChange={e => setDraft(d => ({ ...d, birthday_reward_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }} />
+            </div>
+          </div>
         </div>
 
         {/* Public sign-up / auto-enrol */}
