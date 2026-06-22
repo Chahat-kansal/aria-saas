@@ -13,7 +13,9 @@ export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [movements, setMovements] = useState<Movement[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'overview' | 'movements' | 'adjust' | 'valuation'>('overview')
+  // INV-NAV-FIX — default to the Valuation panel (the INV-COST-1 stock-value surface) when arriving from
+  // the sidebar; other tabs remain one click away.
+  const [tab, setTab] = useState<'overview' | 'movements' | 'adjust' | 'valuation'>('valuation')
   const [search, setSearch] = useState('')
   const [insight, setInsight] = useState<Insight | null>(null)
   const [insightLoading, setInsightLoading] = useState(false)

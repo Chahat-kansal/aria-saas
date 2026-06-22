@@ -141,6 +141,14 @@ const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean
     ],
   },
   {
+    section: 'Operations',
+    items: [
+      // INV-NAV-FIX — the Inventory tool (stock value / valuation) shipped without a sidebar link; surface
+      // it for every business. Plain href so the active-highlight matches every other nav item.
+      { href: '/dashboard/inventory', label: 'Inventory', icon: BoxIcon, section: 'Operations', badge: 'New', fresh: true },
+    ],
+  },
+  {
     section: 'Growth',
     items: [
       { href: '/dashboard/bundles',         label: 'Bundle builder',  icon: LayersIcon,     section: 'Growth', badge: 'AI', fresh: true },
