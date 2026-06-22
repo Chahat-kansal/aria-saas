@@ -7,6 +7,7 @@ import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MenuEngineeringAgent } from '@/lib/agents/menu-engineering-agent';
 import { computeVelocity, persistVelocity } from '@/lib/inventory/velocity';
+import { computePar } from '@/lib/inventory/par-levels';
 
 export async function GET(req: Request) {
   const denied = verifyCronAuth(req)
@@ -41,7 +42,9 @@ export async function GET(req: Request) {
     try {
       const v = await computeVelocity(supabaseAdmin, biz.id);
       await persistVelocity(supabaseAdmin, biz.id, v);
-    } catch (err) { console.error('[menu-engineering cron] velocity failed', biz.id, String(err)); }
+      // INV-PAR-1 — re-derive par levels from the fresh velocity (seeds reorder_settings if missing).
+      await computePar(supabaseAdmin, biz.id);
+    } catch (err) { console.error('[menu-engineering cron] velocity/par failed', biz.id, String(err)); }
   }
 
   const succeeded = results.filter(r => r.ok).length;

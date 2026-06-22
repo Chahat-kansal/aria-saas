@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import InventoryValuePanel from '@/components/dashboard/InventoryValuePanel'
 import InventoryVelocityPanel from '@/components/dashboard/InventoryVelocityPanel'
+import InventoryReorderPanel from '@/components/dashboard/InventoryReorderPanel'
 
 interface Product { id: string; name: string; sku: string | null; stock_quantity: number | null; cost_price: number | null; price: number | null; low_stock_threshold: number | null; track_stock: boolean; pos_categories?: { name: string; color: string } | null }
 interface Movement { id: string; product_id: string; product_name: string; movement_type: string; quantity_change: number; new_quantity: number; reason: string | null; created_at: string }
@@ -16,7 +17,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true)
   // INV-NAV-FIX — default to the Valuation panel (the INV-COST-1 stock-value surface) when arriving from
   // the sidebar; other tabs remain one click away.
-  const [tab, setTab] = useState<'overview' | 'pulse' | 'movements' | 'adjust' | 'valuation'>('valuation')
+  const [tab, setTab] = useState<'overview' | 'pulse' | 'reorder' | 'movements' | 'adjust' | 'valuation'>('valuation')
   const [search, setSearch] = useState('')
   const [insight, setInsight] = useState<Insight | null>(null)
   const [insightLoading, setInsightLoading] = useState(false)
@@ -97,7 +98,7 @@ export default function InventoryPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, borderBottom: '1px solid ' + C.border }}>
-        {(['overview', 'pulse', 'movements', 'adjust', 'valuation'] as const).map(t => (
+        {(['overview', 'pulse', 'reorder', 'movements', 'adjust', 'valuation'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: tab === t ? 700 : 500, color: tab === t ? C.green : C.dim, borderBottom: tab === t ? '2px solid ' + C.green : '2px solid transparent', marginBottom: -1, textTransform: 'capitalize' }}>{t}</button>
         ))}
       </div>
@@ -184,6 +185,9 @@ export default function InventoryPage() {
         ) : tab === 'pulse' ? (
           // INV-VELOCITY-1 — honest velocity + ABC "what sells" board (real data window, cost-aware margin).
           <InventoryVelocityPanel />
+        ) : tab === 'reorder' ? (
+          // INV-PAR-1 — auto reorder points + targets from velocity; below-reorder list + par table + days-of-cover.
+          <InventoryReorderPanel />
         ) : (
           // INV-COST-1 — canonical, rich inventory-value surface (items_on_hand × resolved cost, provenance,
           // margin, completeness, missing-cost action). Replaces the old stock_quantity-based single card.

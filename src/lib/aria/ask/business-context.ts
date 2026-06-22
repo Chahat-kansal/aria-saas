@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 import { velocitySummary } from '@/lib/inventory/velocity'
+import { reorderSummary } from '@/lib/inventory/par-levels'
 
 export interface ConversationSummary {
   id: string
@@ -36,6 +37,8 @@ export interface AskAriaContext {
   inventory_value: { at_cost_cents: number; at_retail_cents: number; products_valued: number; products_unknown_cost: number; margin_incomplete: boolean } | null
   // INV-VELOCITY-1 — real velocity from completed sales (top movers, dead stock, ABC counts, cost-honesty flag)
   inventory_velocity: { scored_at: string | null; top_movers: Array<{ name: string; units_per_day: number; abc_tier: string }>; dead_stock: Array<{ name: string }>; abc_counts: { A: number; B: number; C: number; dead: number }; uncosted_count: number } | null
+  // INV-PAR-1 — products below their reorder point right now (real, from velocity-derived par)
+  inventory_reorder: { below_count: number; review_count: number; top: Array<{ name: string; on_hand: number; reorder_point: number; days_of_cover: number | null; suggested_qty: number }> } | null
   staff_count: number
   open_support_tickets: number
   pending_aria_actions: number
@@ -449,6 +452,11 @@ export async function buildAskAriaContext(
     inventoryVelocity = { scored_at: vs.scored_at, top_movers: vs.top_movers, dead_stock: vs.dead_stock, abc_counts: vs.counts, uncosted_count: vs.uncosted }
   } catch (e) { console.error('[business-context] velocity summary failed (non-fatal):', (e as Error).message) }
 
+  // INV-PAR-1 — "below reorder point right now" for groundTruth (real, never guessed).
+  let inventoryReorder: AskAriaContext['inventory_reorder'] = null
+  try { inventoryReorder = await reorderSummary(supabaseAdmin, businessId) }
+  catch (e) { console.error('[business-context] reorder summary failed (non-fatal):', (e as Error).message) }
+
   return {
     business_id: businessId,
     business_name: biz?.name ?? 'Your business',
@@ -468,6 +476,7 @@ export async function buildAskAriaContext(
     low_stock_items: lowStock,
     inventory_value: inventoryValue,
     inventory_velocity: inventoryVelocity,
+    inventory_reorder: inventoryReorder,
     staff_count: Number(staffRes.count) || 0,
     open_support_tickets: Number(ticketsRes.count) || 0,
     pending_aria_actions: ariaActionsDetail.pending_count,
