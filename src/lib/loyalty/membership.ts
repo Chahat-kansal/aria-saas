@@ -9,6 +9,17 @@ export interface MembershipIdentifier { email?: string | null; phone?: string | 
 // LOY-NETWORK — membership helpers. A "membership" is a pos_customers row (per business) linked to a
 // global loyalty_identity. Points/tier/stamps live on this row, scoped per business.
 
+// LOY-MEMBER-PRICING — if this business runs member pricing (a "Members" group exists), put the member
+// into that group so the existing checkout discount engine gives them the member price. Never clobbers
+// an already-assigned group.
+async function assignMembersGroup(customerId: string, businessId: string): Promise<void> {
+  const { data: grp } = await supabaseAdmin.from('pos_customer_groups')
+    .select('id').eq('business_id', businessId).eq('name', 'Members').maybeSingle()
+  if (!grp?.id) return
+  await supabaseAdmin.from('pos_customers')
+    .update({ customer_group_id: grp.id }).eq('id', customerId).is('customer_group_id', null)
+}
+
 export async function membershipName(customerId: string, businessId: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from('pos_customers').select('id, name, name_enc').eq('id', customerId).maybeSingle()
   if (!data) return null
@@ -44,6 +55,7 @@ export async function linkOrCreateMembership(
       Object.assign(patch, { name: nm, ...encryptCustomerPII({ name: nm }, businessId) })
     }
     await supabaseAdmin.from('pos_customers').update(patch).eq('id', existing.id)
+    await assignMembersGroup(existing.id, businessId)
     return { customer_id: existing.id, name: await membershipName(existing.id, businessId) }
   }
 
@@ -69,5 +81,6 @@ export async function linkOrCreateMembership(
     consent_source: 'online', source: 'loyalty_network',
     points_balance: 0, stamps_count: 0, loyalty_points: 0,
   }).select('id').single()
+  await assignMembersGroup(created!.id as string, businessId)
   return { customer_id: created!.id as string, name: displayName }
 }
