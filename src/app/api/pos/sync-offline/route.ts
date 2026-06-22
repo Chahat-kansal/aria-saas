@@ -4,6 +4,7 @@ export const runtime = 'nodejs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { recordSaleMovements } from '@/lib/inventory/record-sale-movement'
 
 interface OfflineItem {
   product_id?:      string;
@@ -99,6 +100,15 @@ async function _POST(req: Request) {
 
       if (items.length > 0) {
         await supabase.from('pos_sale_items').insert(items);
+      }
+
+      // INV-DECREMENT-FIX phase 1 — record units-sold movements for offline sales (this path does NOT
+      // decrement stock yet; reconciliation is phase 2). Idempotent per sale → safe under sync replay.
+      if ((sale.status ?? 'completed') === 'completed') {
+        await recordSaleMovements(supabase, {
+          businessId: bid, saleId: saleRecord.id,
+          lines: items.filter(it => it.product_id).map(it => ({ itemId: it.product_id as string, quantitySold: it.quantity })),
+        });
       }
 
       // Update session totals

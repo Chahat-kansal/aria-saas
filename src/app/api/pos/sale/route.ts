@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
 import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture'
 import { logger } from '@/lib/observability/logger'
+import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -288,7 +289,10 @@ async function _POST(req: Request) {
     }
   } catch (e) { console.error('[sale] payment recording failed:', e); }
 
-  // Decrement stock atomically + log stock movements
+  // Decrement stock atomically, then log movements via the shared helper (INV-DECREMENT-FIX phase 1).
+  // Behaviour-preserving: same decrement (stock_quantity) + same movement rows as before; the helper
+  // adds sale_id + idempotency. Which field is decremented is unchanged (reconciliation = phase 2).
+  const movementLines: SaleMovementLine[] = [];
   const stockOps: PromiseLike<any>[] = [];
   for (const i of items) {
     const p = productMap[i.product_id];
@@ -297,21 +301,12 @@ async function _POST(req: Request) {
       (async () => {
         const { data: newStock, error: decErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity });
         if (decErr) logger.error('pos/sale decrement_stock_quantity failed', { route: 'pos/sale', businessId: business.id, productId: i.product_id, error: decErr.message });
-        try {
-          await supabase.from('stock_movements').insert({
-            business_id: business.id,
-            item_id: i.product_id,
-            movement_type: 'sale',
-            quantity_added: -i.quantity,
-            new_stock: newStock ?? 0,
-            notes: `Sale ${saleNumber}`,
-            scanned_at: new Date().toISOString(),
-          });
-        } catch (e) { console.error('[non-fatal]', e) }
+        movementLines.push({ itemId: i.product_id, quantitySold: i.quantity, newStock: newStock ?? 0 });
       })()
     );
   }
   await Promise.all(stockOps);
+  await recordSaleMovements(supabase, { businessId: business.id, saleId: sale.id, saleNumber, lines: movementLines });
 
   // Update session totals atomically — use RPC to avoid concurrent-sale race
   if (openSession) {
