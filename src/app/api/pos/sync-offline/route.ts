@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { recordSaleMovements } from '@/lib/inventory/record-sale-movement'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 interface OfflineItem {
   product_id?:      string;
@@ -102,13 +103,22 @@ async function _POST(req: Request) {
         await supabase.from('pos_sale_items').insert(items);
       }
 
-      // INV-DECREMENT-FIX phase 1 — record units-sold movements for offline sales (this path does NOT
-      // decrement stock yet; reconciliation is phase 2). Idempotent per sale → safe under sync replay.
+      // INV-DECREMENT-FIX phase 2 — decrement CANONICAL items_on_hand (+ stock_quantity cache) for offline
+      // sales and log the movement. Guarded against double-processing (decrement is not atomically
+      // idempotent): skip if this sale already has movements.
       if ((sale.status ?? 'completed') === 'completed') {
-        await recordSaleMovements(supabase, {
-          businessId: bid, saleId: saleRecord.id,
-          lines: items.filter(it => it.product_id).map(it => ({ itemId: it.product_id as string, quantitySold: it.quantity })),
-        });
+        const lineItems = (items.filter(it => it.product_id) as Array<{ product_id: string; quantity: number }>);
+        const { data: alreadyLogged } = await supabase.from('stock_movements').select('id').eq('sale_id', saleRecord.id).limit(1).maybeSingle();
+        if (!alreadyLogged && lineItems.length) {
+          const outletForStock = await resolveOutletId(supabase, bid, (sale as { outlet_id?: string | null }).outlet_id ?? null);
+          const lines = [];
+          for (const it of lineItems) {
+            await supabase.rpc('decrement_stock_quantity', { p_product_id: it.product_id, p_amount: it.quantity }); // cache
+            const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: outletForStock, productId: it.product_id, delta: -it.quantity }); // canonical
+            lines.push({ itemId: it.product_id, quantitySold: it.quantity, newStock: itemsOnHand });
+          }
+          await recordSaleMovements(supabase, { businessId: bid, saleId: saleRecord.id, lines });
+        }
       }
 
       // Update session totals

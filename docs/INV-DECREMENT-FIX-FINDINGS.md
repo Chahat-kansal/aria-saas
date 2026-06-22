@@ -89,4 +89,23 @@ Evidence:
 **HALTED.** Awaiting founder approval of the canonical field (`items_on_hand`) before writing the Phase 2 reconciliation migration + decrement repointing.
 
 ---
-*Phase 1 changed logging only. No stock field's decrement behaviour was altered.*
+
+# Phase 2 — reconciliation to `pos_outlet_inventory.items_on_hand` (signed off)
+
+**Canonical field locked: `pos_outlet_inventory.items_on_hand`.** `stock_quantity` is **demoted to a cache** (still written for rollback safety, no longer the read source); `current_stock` stays Square-only. Sip = 1 outlet (`f52d463c…` "Global").
+
+**STEP 1 — re-baseline:** the at-risk query (`items_on_hand` null/0 **and** a plausibly-real `stock_quantity` < 900) returned **0 rows**. **No product has real stock in `stock_quantity` that would be lost** by flipping reads — `items_on_hand` is already the truth for all 74. Nothing copied; `items_on_hand` left untouched. (`stock_quantity`/`current_stock` remain at ~995–999 seed and are no longer read.)
+
+**STEP 2 — decrement repointed** (new shared helper [`src/lib/inventory/outlet-stock.ts`](../src/lib/inventory/outlet-stock.ts)): `adjustOutletStock` decrements `items_on_hand` (atomic, never negative) for the resolved outlet and returns the post-decrement balance; `resolveOutletId` = sale's `outlet_id` → business default → first active → any. Wired into `pos/sale`, `pos/sales`, `sync-offline`. `stock_quantity` still decremented in parallel (cache). `stock_movements.new_stock` now records **post-decrement `items_on_hand`** (canonical), not the cache.
+
+**STEP 3 — void/refund repointed:** both now `increment` `items_on_hand` (+ `stock_quantity` cache) for the resolved outlet. Void is idempotent (status guard); refund mirrors existing behaviour (no double-refund guard pre-exists — out of scope).
+
+**STEP 4 — cashier read repointed:** `pos/products` GET overlays `items_on_hand` (active outlet, `?outlet_id=` or primary) onto each product's `stock_quantity` field in the list response — zero frontend change, grid instantly realistic. Manager view + Aria already read `items_on_hand` (unchanged).
+
+**STEP 5 — live proof (Sip, reversible, torn down):** product "Caesar Salad" — baseline `items_on_hand=47`, cache `stock_quantity=996`. Sale of 2 → `items_on_hand 47→45`, cache `996→994`, one movement with `new_stock=45 == post items_on_hand`; replay → still 1 movement (idempotent); void/refund +2 → restored to 47/996; **grid overlay now returns 47 == manager 47 → split-brain CLOSED**; single-outlet resolution correct; baseline restored.
+
+**Reconcile invariant / legacy gap:** going forward `items_on_hand = baseline − Σ(sale movements) + Σ(restores)` holds because every sale path now logs + decrements canonically. **Historical** `Σ(stock_movements)` does **not** reconcile to current `items_on_hand` — expected: pre-fix sales (and the seeded bulk) decremented `items_on_hand` (via the old pos/sales path / stocktakes) without logging movements, so the ledger starts incomplete. A one-time movement backfill from `pos_sale_items` is optional future work.
+
+**Known follow-ups (out of Phase 2 scope):** (1) `pos/sale` pre-sale insufficient-stock guard still checks the `stock_quantity` cache — permissive (won't wrongly block), tighten to `items_on_hand` later; (2) the product **edit page** single-fetch still shows the `stock_quantity` column for editing; (3) `online-orders`/`laybys` header-only sales still don't decrement (no product lines); (4) `stock_quantity` cache retained this sprint — drop only after a soak.
+
+*Phase 2 flips the source of truth to `items_on_hand`; `stock_quantity` retained as a write-through cache for rollback safety.*

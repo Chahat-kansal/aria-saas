@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { verifyManagerToken } from '@/lib/pos/manager-token'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -30,11 +31,14 @@ async function _POST(req: Request, { params }: Params) {
   // free-text note, falling back to the reason code; nullable so legacy/empty voids still succeed.
   await supabase.from('pos_sales').update({ status: 'voided', void_reason: reason_note || reason_code || null, last_edited_at: new Date().toISOString() }).eq('id', id)
 
-  // Restore stock for all items — atomic increment prevents concurrent-void race
+  // Restore stock for all items — CANONICAL items_on_hand (+ stock_quantity cache). Idempotent: the
+  // status='voided' guard above means this runs at most once per sale. (INV-DECREMENT-FIX phase 2)
+  const voidOutletId = await resolveOutletId(supabase, bid, (sale as { outlet_id?: string | null }).outlet_id ?? null)
   const { data: items } = await supabase.from('pos_sale_items').select('product_id, quantity').eq('sale_id', id)
   for (const item of items ?? []) {
     if (!item.product_id) continue
-    await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity })
+    await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }) // cache
+    await adjustOutletStock(supabase, { businessId: bid, outletId: voidOutletId, productId: item.product_id, delta: Math.abs(Number(item.quantity)) }) // canonical
   }
 
   await supabase.from('pos_audit_log').insert({

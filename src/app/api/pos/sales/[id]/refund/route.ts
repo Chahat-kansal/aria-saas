@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { verifyManagerToken } from '@/lib/pos/manager-token'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -45,9 +46,11 @@ async function _POST(req: Request, { params }: Params) {
         business_id: bid,
       }))
     )
-    // Restore stock for refunded items — atomic increment prevents concurrent-refund race
+    // Restore stock for refunded items — CANONICAL items_on_hand (+ stock_quantity cache). (INV-DECREMENT-FIX phase 2)
+    const refundOutletId = await resolveOutletId(supabase, bid, (original as { outlet_id?: string | null }).outlet_id ?? null)
     for (const it of refundItems) {
-      await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: it.product_id, p_column: 'stock_quantity', p_amount: Math.abs(it.quantity) })
+      await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: it.product_id, p_column: 'stock_quantity', p_amount: Math.abs(it.quantity) }) // cache
+      await adjustOutletStock(supabase, { businessId: bid, outletId: refundOutletId, productId: it.product_id, delta: Math.abs(Number(it.quantity)) }) // canonical
     }
   }
 

@@ -9,6 +9,7 @@ import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
 import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture'
 import { logger } from '@/lib/observability/logger'
 import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -289,9 +290,10 @@ async function _POST(req: Request) {
     }
   } catch (e) { console.error('[sale] payment recording failed:', e); }
 
-  // Decrement stock atomically, then log movements via the shared helper (INV-DECREMENT-FIX phase 1).
-  // Behaviour-preserving: same decrement (stock_quantity) + same movement rows as before; the helper
-  // adds sale_id + idempotency. Which field is decremented is unchanged (reconciliation = phase 2).
+  // INV-DECREMENT-FIX phase 2 — pos_outlet_inventory.items_on_hand is the CANONICAL sellable stock.
+  // Decrement it (per resolved outlet); keep stock_quantity decremented in parallel as a rollback cache.
+  // The movement's new_stock records the post-decrement items_on_hand (the canonical figure).
+  const saleOutletId = await resolveOutletId(supabase, business.id, outlet_id ?? null);
   const movementLines: SaleMovementLine[] = [];
   const stockOps: PromiseLike<any>[] = [];
   for (const i of items) {
@@ -299,9 +301,12 @@ async function _POST(req: Request) {
     if (!p?.track_stock) continue;
     stockOps.push(
       (async () => {
-        const { data: newStock, error: decErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity });
+        // cache (rollback safety): pos_products.stock_quantity
+        const { data: cacheStock, error: decErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity });
         if (decErr) logger.error('pos/sale decrement_stock_quantity failed', { route: 'pos/sale', businessId: business.id, productId: i.product_id, error: decErr.message });
-        movementLines.push({ itemId: i.product_id, quantitySold: i.quantity, newStock: newStock ?? 0 });
+        // canonical: pos_outlet_inventory.items_on_hand
+        const itemsOnHand = await adjustOutletStock(supabase, { businessId: business.id, outletId: saleOutletId, productId: i.product_id, delta: -i.quantity });
+        movementLines.push({ itemId: i.product_id, quantitySold: i.quantity, newStock: itemsOnHand ?? cacheStock ?? 0 });
       })()
     );
   }

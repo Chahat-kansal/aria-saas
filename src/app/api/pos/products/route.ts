@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 export const maxDuration = 30;
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
 import { z } from 'zod'
 import { validateBody } from '@/lib/api/validate'
@@ -81,12 +82,27 @@ supabase
       .order('position'),
   ]);
 
+  // INV-DECREMENT-FIX phase 2 — the cashier grid's stock figure is now the CANONICAL
+  // pos_outlet_inventory.items_on_hand (per active outlet), overlaid onto each product's stock_quantity
+  // field (the column stays as a cache). This closes the split-brain where the grid showed seed ~1000
+  // while the manager/Aria views showed the real ~45. Falls back to the cached value when no outlet row.
+  let productList = (products || []) as Array<{ id: string; stock_quantity?: number | null }>;
+  try {
+    const outletId = await resolveOutletId(supabase, bid, searchParams.get('outlet_id'));
+    if (outletId && productList.length) {
+      const { data: inv } = await supabase.from('pos_outlet_inventory')
+        .select('product_id, items_on_hand').eq('business_id', bid).eq('outlet_id', outletId).limit(10000);
+      const ohMap = new Map((inv ?? []).map(r => [r.product_id as string, Number(r.items_on_hand)]));
+      productList = productList.map(p => ohMap.has(p.id) ? { ...p, stock_quantity: ohMap.get(p.id) ?? p.stock_quantity } : p);
+    }
+  } catch (e) { console.error('[pos/products] items_on_hand overlay failed (non-fatal):', (e as Error).message); }
+
   return NextResponse.json({
     business_id:       bid,
     business_name:     biz?.name ?? 'AriaPOS',
     business_type:     (biz as any)?.industry ?? null,
     terminal_layout:   (biz as any)?.terminal_layout ?? null,
-    products:          products   || [],
+    products:          productList,
     categories:        categories || [],
     sale_keys:         saleKeys   || [],
   });

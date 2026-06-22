@@ -7,6 +7,7 @@ import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { ariaObserve } from '@/lib/aria/brain'
 import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -291,42 +292,31 @@ async function _POST(req: Request) {
     console.error('[pos/sales] payment save failed (non-fatal):', (payErr as Error).message);
   }
 
-  // ── Decrement stock — pos_products.stock_quantity + pos_outlet_inventory.items_on_hand ──
+  // ── Decrement stock — CANONICAL pos_outlet_inventory.items_on_hand (+ stock_quantity cache) ──
+  // INV-DECREMENT-FIX phase 2: items_on_hand (per resolved outlet) is the source of truth; stock_quantity
+  // is kept decremented as a rollback cache. The movement records post-decrement items_on_hand.
   const saleMovementLines: SaleMovementLine[] = [];
+  const outletForStock = await resolveOutletId(supabase, bid, resolvedOutletId);
   try {
     for (const item of (items as Array<{ product_id: string; quantity: number }>) ?? []) {
-      // pos_products.stock_quantity
+      // cache (rollback safety): pos_products.stock_quantity
       const { data: prod } = await supabase.from('pos_products')
         .select('stock_quantity').eq('id', item.product_id).maybeSingle();
-      let newQtyForMovement: number | null = null;
       if (prod?.stock_quantity != null) {
         const { data: newQty } = await supabase.rpc('decrement_stock_quantity', { p_product_id: item.product_id, p_amount: item.quantity });
-        newQtyForMovement = newQty ?? null;
         // Observe low stock for Aria Brain (fire-and-forget)
         if ((newQty ?? 0) <= 5) {
           const { data: prodInfo } = await supabase.from('pos_products').select('name, reorder_point').eq('id', item.product_id).maybeSingle();
           ariaObserve({ business_id: bid, category: 'inventory', event_type: 'low_stock', data: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty ?? 0, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
         }
       }
-      saleMovementLines.push({ itemId: item.product_id, quantitySold: item.quantity, newStock: newQtyForMovement });
-
-      // pos_outlet_inventory.items_on_hand — atomic decrement to prevent concurrent-sale race
-      if (resolvedOutletId) {
-        const { data: inv } = await supabase.from('pos_outlet_inventory')
-          .select('id')
-          .eq('product_id', item.product_id)
-          .eq('outlet_id', resolvedOutletId)
-          .maybeSingle();
-        if (inv) {
-          await supabase.rpc('decrement_numeric', { p_table: 'pos_outlet_inventory', p_id: inv.id, p_column: 'items_on_hand', p_amount: item.quantity });
-          await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', inv.id);
-        }
-      }
+      // canonical: pos_outlet_inventory.items_on_hand (atomic, never negative)
+      const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: outletForStock, productId: item.product_id, delta: -item.quantity });
+      saleMovementLines.push({ itemId: item.product_id, quantitySold: item.quantity, newStock: itemsOnHand });
     }
   } catch (stockErr) {
     console.error('[pos/sales] stock decrement failed (non-fatal):', (stockErr as Error).message);
   }
-  // INV-DECREMENT-FIX phase 1 — log the movement ledger (this path previously decremented WITHOUT logging).
   await recordSaleMovements(supabase, { businessId: bid, saleId: sale.id, saleNumber: (sale as { sale_number?: string | null }).sale_number ?? null, lines: saleMovementLines });
 
   // ── KDS order creation for cafe (waitUntil — keeps function alive, never blocks response) ──
