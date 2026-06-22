@@ -68,6 +68,7 @@ export default function LoyaltySignInPage() {
   const [preload, setPreload] = useState<PreloadData | null>(null)
   const [showPreload, setShowPreload] = useState(false)
   const [loadingAmt, setLoadingAmt] = useState<number | null>(null)
+  const [wallet, setWallet] = useState<{ google?: { configured: boolean; save_url: string | null }; apple?: { configured: boolean } } | null>(null)
   const [copied, setCopied] = useState(false)
   const refCodeRef = useRef<string | null>(null)
   const refCapturedRef = useRef(false)
@@ -186,6 +187,8 @@ export default function LoyaltySignInPage() {
     fetch('/api/loyalty/tier-perks?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (Array.isArray(d?.perks)) setTierPerks(d.perks) }).catch(() => {})
     // LOY-PRELOAD — stored-value balance.
     fetch('/api/loyalty/preload?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d && d.enabled !== undefined) setPreload(d as PreloadData) }).catch(() => {})
+    // LOY-WALLET-PASS — Apple/Google Wallet pass availability for this membership.
+    fetch('/api/loyalty/wallet-pass?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d && (d.google || d.apple)) setWallet(d) }).catch(() => {})
   }, [step, bid])
 
   const startLoad = async (amount: number) => {
@@ -632,6 +635,21 @@ export default function LoyaltySignInPage() {
             </div>
           )}
         </div>
+
+        {/* LOY-WALLET-PASS — add membership to Apple/Google Wallet (shown when a provider is configured) */}
+        {wallet && ((wallet.google?.configured && wallet.google?.save_url) || wallet.apple?.configured) && (
+          <div style={card}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 10px' }}>Add to your phone wallet</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {wallet.google?.configured && wallet.google?.save_url && (
+                <a href={wallet.google.save_url} target="_blank" rel="noopener noreferrer" style={{ ...btn, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48 }}>Add to Google Wallet</a>
+              )}
+              {wallet.apple?.configured && (
+                <a href={`/api/loyalty/wallet-pass?business_id=${encodeURIComponent(bid)}&format=apple`} style={{ height: 48, borderRadius: 12, border: BORDER, background: INK, color: CREAM, fontWeight: 700, fontSize: 15, fontFamily: FONT, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Add to Apple Wallet</a>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
