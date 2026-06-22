@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MenuEngineeringAgent } from '@/lib/agents/menu-engineering-agent';
+import { computeVelocity, persistVelocity } from '@/lib/inventory/velocity';
 
 export async function GET(req: Request) {
   const denied = verifyCronAuth(req)
@@ -35,6 +36,12 @@ export async function GET(req: Request) {
     } catch (err) {
       results.push({ business_id: biz.id, ok: false, decisions: 0, error: String(err) });
     }
+    // INV-VELOCITY-1 — refresh honest velocity + ABC into product_performance_scores (independent of the
+    // agent; idempotent on the day-bucketed scored_at). Daily, reusing this cron — no new cron entry.
+    try {
+      const v = await computeVelocity(supabaseAdmin, biz.id);
+      await persistVelocity(supabaseAdmin, biz.id, v);
+    } catch (err) { console.error('[menu-engineering cron] velocity failed', biz.id, String(err)); }
   }
 
   const succeeded = results.filter(r => r.ok).length;
