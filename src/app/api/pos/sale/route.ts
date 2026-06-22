@@ -371,6 +371,16 @@ async function _POST(req: Request) {
         }
       } catch (e) { console.error('[sale] loyalty update failed:', e) }
     })())
+
+    // LOY-CHALLENGES — separate, additive hook: this real sale may complete a loyalty challenge.
+    // Recomputes progress from real pos_sale_items and awards points via the existing earn ledger.
+    // Independent of the earn block above (never alters it).
+    waitUntil((async () => {
+      try {
+        const { evaluateChallenges } = await import('@/lib/loyalty/challenges')
+        await evaluateChallenges(customer_id, business.id)
+      } catch (e) { console.error('[sale] challenge eval failed:', e) }
+    })())
   }
 
   // Cafe KDS + ingredient deduction (waitUntil — keeps function alive, doesn't block response)

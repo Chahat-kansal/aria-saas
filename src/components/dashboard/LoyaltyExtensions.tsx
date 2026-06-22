@@ -413,3 +413,52 @@ export function MemberPricingSection() {
     </div>
   )
 }
+
+// LOY-CHALLENGES — owner control. Turn on AI-personalised missions; each member's challenges are generated
+// from their REAL purchase history and award points through the existing loyalty ledger when completed.
+export function ChallengesSection() {
+  const [enabled, setEnabled] = useState(false)
+  const [reward, setReward] = useState(50)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    fetch('/api/loyalty/challenges?owner=1').then(r => r.json())
+      .then(d => { setEnabled(!!d.enabled); if (Number(d.reward_points) > 0) setReward(Number(d.reward_points)) })
+      .catch(() => {})
+  }, [])
+
+  async function save() {
+    setSaving(true); setMsg('')
+    const r = await fetch('/api/loyalty/challenges', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled, reward_points: reward }) }).then(r => r.json()).catch(() => ({}))
+    setSaving(false)
+    setMsg(r.ok ? 'Saved' : (r.error || 'Could not save'))
+    setTimeout(() => setMsg(''), 2200)
+  }
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <p style={{ fontSize: 13, fontWeight: 600 }}>🎯 Personalised challenges</p>
+        <button onClick={save} disabled={saving} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>AI sets each member a goal from what they actually buy (e.g. &ldquo;Buy 2 more flat whites this week&rdquo;). Completing it credits bonus points automatically — through your normal loyalty ledger.</p>
+      <button type="button" onClick={() => setEnabled(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)', cursor: 'pointer', marginBottom: 10 }}>
+        <span style={{ width: 38, height: 22, borderRadius: 999, background: enabled ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, flexShrink: 0, transition: 'background 150ms' }}>
+          <span style={{ display: 'block', width: 18, height: 18, borderRadius: '50%', background: enabled ? '#7FB897' : '#888', transform: enabled ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{enabled ? 'On — members get personalised challenges' : 'Off — no challenges'}</span>
+      </button>
+      <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Bonus points per completed challenge</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input type="number" min={10} max={500} step={5} value={reward}
+          onChange={e => setReward(Math.max(10, Math.min(500, Math.floor(Number(e.target.value) || 0))))}
+          style={{ width: 120, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 13, fontFamily: 'inherit' }} />
+        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>points each</span>
+      </div>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>Every goal is grounded in real purchases — no invented products. Progress only counts real in-store sales.</p>
+      {msg && <p style={{ fontSize: 11, color: msg === 'Saved' ? '#7FB897' : '#EF4444', marginTop: 6 }}>{msg === 'Saved' ? '✓ Saved' : msg}</p>}
+    </div>
+  )
+}

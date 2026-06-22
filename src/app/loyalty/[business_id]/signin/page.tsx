@@ -23,6 +23,7 @@ interface DashData {
 
 interface AcctForm { name: string; email: string; phone: string; birthday: string; marketing_consent: boolean; email_consent: boolean; sms_consent: boolean }
 interface OfferItem { id: string; title: string; description: string | null; image_url: string | null; offer_type: string; point_cost: number | null }
+interface ChallengeItem { id: string; title: string; description: string | null; target_metric: string; target_item: string | null; target_count: number; progress: number; reward_points: number; status: string; expires_at: string | null }
 
 export default function LoyaltySignInPage() {
   const params = useParams()
@@ -53,12 +54,21 @@ export default function LoyaltySignInPage() {
   const regenRef = useRef(false)
   const [showOffers, setShowOffers] = useState(false)
   const [offers, setOffers] = useState<OfferItem[] | null>(null)
+  const [showChallenges, setShowChallenges] = useState(false)
+  const [challenges, setChallenges] = useState<ChallengeItem[] | null>(null)
+  const [challengesOn, setChallengesOn] = useState(false)
 
   const openOffers = async () => {
     setShowOffers(true); setOffers(null)
     const d = await fetch('/api/loyalty/offers-feed?business_id=' + encodeURIComponent(bid)).then(r => r.json()).catch(() => null)
     if (d) setOffers((d.offers ?? []) as OfferItem[])
   }
+
+  const loadChallenges = async () => {
+    const d = await fetch('/api/loyalty/challenges?business_id=' + encodeURIComponent(bid)).then(r => r.json()).catch(() => null)
+    if (d) { setChallengesOn(!!d.enabled); setChallenges((d.challenges ?? []) as ChallengeItem[]) }
+  }
+  const openChallenges = async () => { setShowChallenges(true); setChallenges(null); await loadChallenges() }
 
   const generateCode = async () => {
     if (regenRef.current) return
@@ -138,6 +148,8 @@ export default function LoyaltySignInPage() {
     if (step !== 'landing') return
     setDash(null)
     fetch('/api/loyalty/dashboard?business_id=' + encodeURIComponent(bid)).then(r => r.json()).then(d => { if (d?.customer) setDash(d as DashData) }).catch(() => {})
+    // Whether this business runs challenges (gates the nav link + lazily generates the member's missions).
+    loadChallenges()
   }, [step, bid])
 
   const post = async (payload: Record<string, unknown>) => {
@@ -220,13 +232,68 @@ export default function LoyaltySignInPage() {
     const header = (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Hi{welcome ? `, ${welcome.split(' ')[0]}` : ''} 👋</h2>
-        <div style={{ display: 'flex', gap: 14 }}>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {challengesOn && <button onClick={openChallenges} style={link}>Challenges</button>}
           <button onClick={openOffers} style={link}>Offers</button>
           <button onClick={openAccount} style={link}>My details</button>
           <button onClick={logout} style={link}>Sign out</button>
         </div>
       </div>
     )
+
+    // ── Challenges (read-only personalised missions; progress only advances from real in-store sales) ──
+    if (showChallenges) {
+      const dot = (filled: boolean) => (
+        <span style={{ width: 14, height: 14, borderRadius: '50%', border: BORDER, background: filled ? ACCENT : SURFACE, flexShrink: 0 }} />
+      )
+      return wrap(
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, fontFamily: "var(--font-display, 'Cormorant', Georgia, serif)", fontStyle: 'italic' }}>Your challenges</h2>
+            <button onClick={() => setShowChallenges(false)} style={link}>← Back</button>
+          </div>
+          {!challenges ? (
+            <p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0' }}>Loading…</p>
+          ) : challenges.length === 0 ? (
+            <p style={{ textAlign: 'center', color: INK_SOFT, margin: '12px 0', lineHeight: 1.5 }}>No challenges right now — visit us a few times and we&apos;ll set you some personalised goals. 🌱</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {challenges.map(c => {
+                const done = c.status === 'completed' || c.status === 'claimed'
+                const target = Math.max(1, c.target_count)
+                const prog = Math.max(0, Math.min(target, c.progress))
+                const pct = Math.round((prog / target) * 100)
+                return (
+                  <div key={c.id} style={{ border: BORDER, borderRadius: 14, padding: 16, background: done ? ACCENT : SURFACE }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <p style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>{c.title}</p>
+                      <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', padding: '3px 9px', borderRadius: 999, border: BORDER, background: done ? SURFACE : ACCENT }}>+{c.reward_points} pts</span>
+                    </div>
+                    {c.description && <p style={{ fontSize: 13, color: done ? INK : INK_SOFT, margin: '6px 0 0', lineHeight: 1.5 }}>{c.description}</p>}
+                    {done ? (
+                      <p style={{ fontSize: 14, fontWeight: 800, margin: '12px 0 0' }}>✓ Complete — {c.reward_points} points added!</p>
+                    ) : target <= 12 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center', marginTop: 12 }}>
+                        {Array.from({ length: target }).map((_, i) => <span key={i}>{dot(i < prog)}</span>)}
+                        <span style={{ fontSize: 12, color: INK_SOFT, marginLeft: 4 }}>{prog}/{target}</span>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ height: 10, borderRadius: 999, border: BORDER, background: SURFACE, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: ACCENT }} />
+                        </div>
+                        <p style={{ fontSize: 12, color: INK_SOFT, margin: '6px 0 0' }}>{prog}/{target}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              <p style={{ fontSize: 12, color: INK_SOFT, margin: '4px 0 0', lineHeight: 1.5, textAlign: 'center' }}>Progress updates automatically when you buy in store. 🌿</p>
+            </div>
+          )}
+        </div>
+      )
+    }
 
     // ── Offers (read-only feed of the business's active offers) ──
     if (showOffers) {
