@@ -3,7 +3,13 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { detectFraud } from '@/lib/loyalty/fraud';
+
+// LOY-FRAUD — owner review surface for loyalty_fraud_flags. GET lists persisted flags (getBid-scoped);
+// POST {action:'scan'} runs grounded detection (de-duped, idempotent); POST {action:'resolve', id} closes
+// a flag. Detection NEVER silently blocks — flags are advisory for owner review.
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -12,7 +18,22 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-interface TxnRow { customer_id: string | null; type: string; points_delta: number | null; created_at: string }
+interface FlagRow { id: string; customer_id: string | null; flag_type: string; details: Record<string, unknown> | null; resolved: boolean; created_at: string }
+
+async function listFlags(bid: string) {
+  const { data: flags } = await supabaseAdmin.from('loyalty_fraud_flags')
+    .select('id, customer_id, flag_type, details, resolved, created_at')
+    .eq('business_id', bid).order('created_at', { ascending: false }).limit(200);
+  const ids = Array.from(new Set((flags ?? []).map(f => f.customer_id).filter(Boolean))) as string[];
+  const { data: customers } = ids.length > 0
+    ? await supabaseAdmin.from('pos_customers').select('id, name').in('id', ids)
+    : { data: [] as { id: string; name: string }[] };
+  const nameMap = new Map((customers ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
+  return (flags ?? []).map((f: FlagRow) => ({
+    id: f.id, customer_id: f.customer_id, customer_name: f.customer_id ? (nameMap.get(f.customer_id) ?? 'Unknown') : 'Unknown',
+    flag_type: f.flag_type, details: f.details ?? {}, resolved: f.resolved, created_at: f.created_at,
+  }));
+}
 
 async function _GET() {
   const supabase = createServerSupabaseClient();
@@ -20,48 +41,31 @@ async function _GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ flags: [] });
-
-  // Detect: >3 redemptions/week per customer + sudden balance spike
-  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const { data: txns } = await supabase.from('pos_loyalty_transactions')
-    .select('customer_id, type, points_delta, created_at')
-    .eq('business_id', bid)
-    .gte('created_at', weekAgo)
-    .limit(2000);
-
-  const perCustomer: Record<string, { redeems: number; earned: number }> = {};
-  for (const t of (txns ?? []) as TxnRow[]) {
-    const cid = t.customer_id;
-    if (!cid) continue;
-    if (!perCustomer[cid]) perCustomer[cid] = { redeems: 0, earned: 0 };
-    if (t.type === 'redeem') perCustomer[cid].redeems++;
-    if ((t.points_delta ?? 0) > 0) perCustomer[cid].earned += Number(t.points_delta ?? 0);
-  }
-
-  const ruleFlags: Array<{ customer_id: string; flag_type: string; details: Record<string, unknown> }> = [];
-  for (const [cid, v] of Object.entries(perCustomer)) {
-    if (v.redeems > 3) ruleFlags.push({ customer_id: cid, flag_type: 'frequent_redeem', details: { redeems_this_week: v.redeems } });
-    if (v.earned > 5000) ruleFlags.push({ customer_id: cid, flag_type: 'balance_spike', details: { points_earned_this_week: v.earned } });
-  }
-
-  const ids = Array.from(new Set(ruleFlags.map(f => f.customer_id)));
-  const { data: customers } = ids.length > 0
-    ? await supabase.from('pos_customers').select('id, name').in('id', ids)
-    : { data: [] };
-  const nameMap = new Map((customers ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
-
-  const flagsWithNames = ruleFlags.map(f => ({ ...f, customer_name: nameMap.get(f.customer_id) ?? 'Unknown' }));
-
-  // Persist new flags (best-effort)
-  if (flagsWithNames.length > 0) {
-    try {
-      await supabase.from('loyalty_fraud_flags').insert(
-        ruleFlags.map(f => ({ business_id: bid, customer_id: f.customer_id, flag_type: f.flag_type, details: f.details }))
-      );
-    } catch (e) { console.error('[non-fatal]', e) }
-  }
-
-  return NextResponse.json({ flags: flagsWithNames });
+  return NextResponse.json({ flags: await listFlags(bid) });
 }
 
-export const GET = withErrorCapture('loyalty/fraud', _GET);
+async function _POST(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+
+  const body = await req.json().catch(() => ({})) as { action?: string; id?: string };
+
+  if (body.action === 'resolve' && body.id) {
+    // Scope the update to this owner's business (no cross-business resolve).
+    await supabaseAdmin.from('loyalty_fraud_flags').update({ resolved: true }).eq('id', body.id).eq('business_id', bid);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === 'scan') {
+    const result = await detectFraud(bid);
+    return NextResponse.json({ ok: true, ...result, flags: await listFlags(bid) });
+  }
+
+  return NextResponse.json({ error: 'unknown action' }, { status: 400 });
+}
+
+export const GET = withErrorCapture('loyalty/fraud:get', _GET);
+export const POST = withErrorCapture('loyalty/fraud:post', _POST);

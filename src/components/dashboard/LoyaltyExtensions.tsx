@@ -6,7 +6,8 @@ interface Referral { id: string; referral_code: string | null; referral_date: st
 interface LeaderEntry { customer_id: string; name: string; referrals: number; points_earned: number }
 interface Rule { id: string; rule_type: string; points_value: number; is_active: boolean; threshold_value?: number | null; config?: Record<string, unknown> | null }
 const BEHAVIOUR_RULE_TYPES = ['spend_threshold', 'visit_count', 'category_purchase']
-interface FraudFlag { customer_id: string; customer_name: string; flag_type: string; details: Record<string, unknown> }
+interface FraudFlag { id?: string; customer_id: string; customer_name: string; flag_type: string; details: Record<string, unknown>; resolved?: boolean; created_at?: string }
+const FLAG_LABELS: Record<string, string> = { velocity_earn: 'Rapid earns', point_spike: 'Large single earn', frequent_redeem: 'Frequent redemptions', balance_spike: 'Points spike', referral_ring: 'Referral ring', shared_identity: 'Shared contact details' }
 interface ForecastSummary { loyalty_members: number; non_loyalty: number; avg_loyalty_spend: number; avg_non_loyalty_spend: number; spend_multiplier: number; at_risk: Record<string, { count: number; annual_revenue_at_risk: number }> }
 interface Offer { id: string; title: string; description: string | null; image_url: string | null; offer_type: string; point_cost: number | null; active: boolean; starts_at: string | null; ends_at: string | null }
 
@@ -281,6 +282,9 @@ export function RewardRulesTab() {
   const [flags, setFlags] = useState<FraudFlag[]>([])
   const [trigForm, setTrigForm] = useState({ rule_type: 'spend_threshold', threshold_value: '', category: '', points_value: '50' })
 
+  const [scanning, setScanning] = useState(false)
+  const [scanMsg, setScanMsg] = useState('')
+
   async function load() {
     const r = await fetch('/api/loyalty/reward-rules').then(r => r.json()).catch(() => ({ rules: [] }))
     setRules(r.rules ?? [])
@@ -288,6 +292,20 @@ export function RewardRulesTab() {
     setFlags(f.flags ?? [])
   }
   useEffect(() => { load() }, [])
+
+  async function runScan() {
+    setScanning(true); setScanMsg('')
+    const r = await fetch('/api/loyalty/fraud', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'scan' }) }).then(r => r.json()).catch(() => ({}))
+    setScanning(false)
+    if (r.flags) setFlags(r.flags)
+    setScanMsg(r.created != null ? (r.created > 0 ? `${r.created} new flag${r.created === 1 ? '' : 's'}` : 'No new issues found') : 'Scan failed')
+    setTimeout(() => setScanMsg(''), 3000)
+  }
+  async function resolveFlag(id?: string) {
+    if (!id) return
+    await fetch('/api/loyalty/fraud', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'resolve', id }) })
+    setFlags(fs => fs.map(f => f.id === id ? { ...f, resolved: true } : f))
+  }
 
   const triggerRules = rules.filter(r => BEHAVIOUR_RULE_TYPES.includes(r.rule_type))
 
@@ -388,12 +406,23 @@ export function RewardRulesTab() {
       </div>
 
       <div>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>⚠️ Fraud flags</h3>
-        {flags.length === 0 ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>No suspicious activity detected.</p> : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600 }}>⚠️ Fraud flags</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {scanMsg && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{scanMsg}</span>}
+            <button onClick={runScan} disabled={scanning} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: scanning ? 0.5 : 1 }}>{scanning ? 'Scanning…' : 'Run scan'}</button>
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>Advisory only — flags are for your review and never block a member automatically.</p>
+        {flags.filter(f => !f.resolved).length === 0 ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>No open flags.</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {flags.map((f, i) => (
-              <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', fontSize: 12 }}>
-                <strong style={{ color: '#F87171' }}>{f.customer_name}</strong> — {f.flag_type === 'frequent_redeem' ? `${f.details.redeems_this_week} redemptions this week` : `Earned ${f.details.points_earned_this_week} points this week`}
+            {flags.filter(f => !f.resolved).map((f, i) => (
+              <div key={f.id ?? i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', fontSize: 12 }}>
+                <div>
+                  <div><strong style={{ color: '#F87171' }}>{f.customer_name}</strong> · {FLAG_LABELS[f.flag_type] ?? f.flag_type}{f.details?.auto_held ? ' · auto-held' : ''}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{Object.entries(f.details ?? {}).filter(([k]) => k !== 'auto_held' && k !== 'membership_ids').map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ')}</div>
+                </div>
+                <button onClick={() => resolveFlag(f.id)} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, whiteSpace: 'nowrap' }}>Resolve</button>
               </div>
             ))}
           </div>
