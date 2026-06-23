@@ -192,9 +192,11 @@ export async function GET(req: Request) {
   if (denied) return denied
 
   const now = new Date()
+  // INV-REPORTS — corrected column names (the table has send_hour_aest + page_path, NOT hour_aest/pages_allowed;
+  // the prior select errored → this loop never ran). page_path drives whether it's an inventory report.
   const { data: due } = await supabaseAdmin
     .from('scheduled_pdf_reports')
-    .select('id, business_id, label, frequency, day_of_week, day_of_month, hour_aest, recipients, pages_allowed, include_share_link')
+    .select('id, business_id, label, frequency, day_of_week, day_of_month, send_hour_aest, recipients, page_path, include_share_link')
     .eq('is_active', true)
     .lt('next_send_at', now.toISOString())
 
@@ -239,9 +241,20 @@ export async function GET(req: Request) {
         }
       }
 
-      const pages = (report.pages_allowed as string[]) ?? []
-      const html = buildReportHtml(biz as { name: string | null; trading_name: string | null; city: string | null }, { label: report.label as string, pages_allowed: pages, frequency: report.frequency as string }, { yesterday_revenue, monthly_revenue, yesterday_count })
-      const pdfBuffer = await generatePDF(html)
+      // INV-REPORTS — when the schedule points at an inventory report, render the REAL inventory PDF
+      // (deterministic generators); otherwise fall back to the generic revenue summary.
+      const pagePath = (report.page_path as string) ?? ''
+      let pdfBuffer: Buffer
+      if (pagePath.startsWith('/inventory/reports')) {
+        const qs = new URLSearchParams(pagePath.split('?')[1] ?? '')
+        const { generateReport } = await import('@/lib/inventory/reports')
+        const { renderReportHtml, generateReportPdf } = await import('@/lib/inventory/report-pdf')
+        const invData = await generateReport(supabaseAdmin, report.business_id as string, (qs.get('type') ?? 'sold_vs_stock') as Parameters<typeof generateReport>[2], (qs.get('period') === 'weekly' ? 'weekly' : 'daily'), null)
+        pdfBuffer = await generateReportPdf(renderReportHtml(invData))
+      } else {
+        const html = buildReportHtml(biz as { name: string | null; trading_name: string | null; city: string | null }, { label: report.label as string, pages_allowed: [], frequency: report.frequency as string }, { yesterday_revenue, monthly_revenue, yesterday_count })
+        pdfBuffer = await generatePDF(html)
+      }
 
       const bizName = (biz.trading_name ?? biz.name) as string ?? 'Business'
       const month = now.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })
@@ -252,7 +265,7 @@ export async function GET(req: Request) {
       const recipients = (report.recipients as { name: string; email: string }[]) ?? []
       const ok = await sendEmail(recipients, subject, emailHtml, pdfBuffer, filename)
 
-      const nextSend = computeNextSend(report.frequency as string, report.day_of_week as number | null, report.day_of_month as number | null, report.hour_aest as number ?? 8)
+      const nextSend = computeNextSend(report.frequency as string, report.day_of_week as number | null, report.day_of_month as number | null, report.send_hour_aest as number ?? 8)
       await supabaseAdmin.from('scheduled_pdf_reports').update({
         last_sent_at: now.toISOString(),
         next_send_at: nextSend.toISOString(),

@@ -34,6 +34,11 @@ interface WasteItem { id: string; product_name: string; quantity: number; unit: 
 interface WasteToday { acting: { id: string; name: string }; reasons: string[]; items: WasteItem[]; total_cost_cents: number; count: number }
 interface AdjustRecent { id: string; product_id: string; product_name: string; delta: number; reason: string; adjusted_by: string; created_at: string; value_dollars: number | null }
 interface AdjustData { acting: { id: string; name: string }; role: string; can_adjust: boolean; reasons: string[]; recent: AdjustRecent[] }
+interface ReportSection { title: string; columns: string[]; rows: Array<Array<string | number>>; empty?: string; total_row?: Array<string | number> }
+interface ReportKpis { stock_at_cost: number; stock_at_retail: number; units_sold: number; shrinkage_dollars: number }
+interface ReportData { type: string; title: string; period: string; period_label: string; business_name: string; generated_at: string; kpis: ReportKpis | null; sections: ReportSection[]; note: string | null }
+interface ReportLibItem { type: string; title: string; blurb: string }
+interface ReportsResp { acting: { id: string; name: string }; library: ReportLibItem[]; report: ReportData }
 
 const TILES = [
   { key: 'receive', label: 'Receive', sub: 'log a delivery', bg: 'greenSoft', stroke: '#0F6E56', d: 'M3 7h13v8H3zM16 10h3l2 3v2h-5M5.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
@@ -109,6 +114,10 @@ export default function InventoryStaffApp() {
   const [adjustSubmitting, setAdjustSubmitting] = useState(false)
   const [adjustData, setAdjustData] = useState<AdjustData | null>(null)
   const [adjustState, setAdjustState] = useState<'loading' | 'ok' | 'error'>('loading')
+  // Reports screen state
+  const [reportsResp, setReportsResp] = useState<ReportsResp | null>(null)
+  const [reportsState, setReportsState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
+  const [reportPeriod, setReportPeriod] = useState<'daily' | 'weekly'>('daily')
   // Price-tickets batch state
   const [ticketBatch, setTicketBatch] = useState<Array<{ id: string; name: string; price: number; was: number | null; promo: string | null; qty: number }>>([])
   const [ticketSearch, setTicketSearch] = useState('')
@@ -365,6 +374,24 @@ export default function InventoryStaffApp() {
       else setTicketMsg(d.error ? `Couldn't save: ${d.error}` : 'Could not save the batch.')
     } catch { setTicketMsg('Something went wrong.') }
     setTicketSaving(false)
+  }
+
+  // ── Reports ──
+  const loadReports = useCallback(async (period: 'daily' | 'weekly', oid: string | null) => {
+    setReportsState('loading')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/report?type=sold_vs_stock&period=${period}${oid ? `&outlet_id=${oid}` : ''}`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setReportsState('error'); return }
+      const d = await r.json() as ReportsResp
+      setReportsResp(d)
+      const hasData = (d.report.kpis?.units_sold ?? 0) > 0 || (d.report.kpis?.stock_at_cost ?? 0) > 0 || d.report.sections.some(s => s.rows.length > 0)
+      setReportsState(hasData ? 'ok' : 'empty')
+    } catch { setReportsState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'reports') loadReports(reportPeriod, outletId) }, [stage, tab, reportPeriod, outletId, loadReports])
+  function exportReport(type: string) {
+    window.open(`/api/inventory/app/${slug}/report?type=${type}&period=${reportPeriod}${outletId ? `&outlet_id=${outletId}` : ''}&format=pdf`, '_blank')
   }
 
   // Bootstrap + resume session.
@@ -625,7 +652,85 @@ export default function InventoryStaffApp() {
       </>
     )
   }
-  if (tab === 'reports') return stub('Reports', 'Sold vs in-stock · PDF + email')
+  // ── REPORTS ──
+  if (tab === 'reports') {
+    const rep = reportsResp?.report
+    const k = rep?.kpis
+    const lib = reportsResp?.library ?? []
+    const soldSection = rep?.sections.find(s => s.title.toLowerCase().startsWith('sold'))
+    return shell(
+      <>
+        {statusbar}{header(true, 'Reports', 'Sold vs in-stock · PDF + email')}
+        {body(
+          <>
+            <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1px solid ${T.line}`, borderRadius: 12, padding: 4, marginBottom: 14 }}>
+              {(['daily', 'weekly'] as const).map(p => (
+                <button key={p} onClick={() => setReportPeriod(p)} style={{ flex: 1, padding: '8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: BODY, fontSize: 13, fontWeight: 600, background: reportPeriod === p ? T.green : 'transparent', color: reportPeriod === p ? '#fff' : T.muted }}>{p === 'daily' ? 'Daily' : 'Weekly'}</button>
+              ))}
+            </div>
+
+            {reportsState === 'loading' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: i === 0 ? 80 : 130, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            ) : reportsState === 'error' ? (
+              <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load reports</p><button onClick={() => loadReports(reportPeriod, outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            ) : (
+              <>
+                {k && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginBottom: 14 }}>
+                    {([['Stock at cost', money(k.stock_at_cost), T.green], ['At retail', money(k.stock_at_retail), T.ink], ['Sold', String(k.units_sold), T.ink], ['Shrinkage', money(k.shrinkage_dollars), k.shrinkage_dollars > 0 ? T.red : T.ink]] as const).map(([l, v, col]) => (
+                      <div key={l} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 10, color: T.muted, textTransform: 'uppercase', letterSpacing: '.4px' }}>{l}</div>
+                        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, fontWeight: 600, color: col, marginTop: 3 }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {reportsState === 'empty' && (
+                  <div style={{ padding: 24, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}`, marginBottom: 14 }}>
+                    <div style={{ fontSize: 28, marginBottom: 6 }}>📊</div>
+                    <p style={{ fontSize: 14, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 3 }}>No data for this period yet</p>
+                    <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>Once you make sales or log counts/waste, the figures appear here. You can still export any report below.</p>
+                  </div>
+                )}
+
+                {soldSection && soldSection.rows.length > 0 && (
+                  <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <b style={{ fontSize: 14, fontWeight: 600 }}>Sold vs on-hand</b>
+                      <span style={{ fontSize: 11, color: T.muted }}>{rep?.period_label}</span>
+                    </div>
+                    <div style={{ display: 'flex', fontSize: 10, fontWeight: 600, color: T.muted, textTransform: 'uppercase', letterSpacing: '.3px', padding: '0 2px 6px' }}>
+                      <span style={{ flex: 1 }}>Product</span><span style={{ width: 60, textAlign: 'right' }}>Sold</span><span style={{ width: 64, textAlign: 'right' }}>On hand</span>
+                    </div>
+                    {soldSection.rows.slice(0, 12).map((r, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 2px', borderTop: `1px solid ${T.line}`, fontSize: 13 }}>
+                        <span style={{ flex: 1, fontWeight: 600 }}>{r[0]}</span>
+                        <span style={{ width: 60, textAlign: 'right', color: T.green, fontWeight: 600 }}>{r[1]}</span>
+                        <span style={{ width: 64, textAlign: 'right' }}>{r[2]}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ margin: '4px 2px 10px', fontSize: 14, fontWeight: 600 }}>Report library</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  {lib.map(item => (
+                    <button key={item.type} onClick={() => exportReport(item.type)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{item.title}</b><div style={{ fontSize: 11, color: T.muted, lineHeight: 1.4, marginTop: 1 }}>{item.blurb}</div></div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.green, background: T.greenSoft, borderRadius: 8, padding: '6px 10px', whiteSpace: 'nowrap' }}>PDF ↓</span>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 14, lineHeight: 1.5 }}>Tap a report to export a branded PDF. The owner can schedule any of these to auto-email daily or weekly from the dashboard.</div>
+              </>
+            )}
+          </>
+        )}
+        {tabbar}
+      </>
+    )
+  }
 
   // ── OWNER REVIEW QUEUE ──
   if (tab === 'review') {
