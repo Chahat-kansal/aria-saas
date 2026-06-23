@@ -29,6 +29,10 @@ async function _PUT(req: Request, { params }: Params) {
     .eq('id', id).eq('business_id', bid)
     .select('*').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // One default per business — unset the others.
+  if (body.is_default === true) {
+    await supabaseAdmin.from('pos_shelf_ticket_templates').update({ is_default: false }).eq('business_id', bid).neq('id', id)
+  }
   return NextResponse.json({ template: data })
 }
 

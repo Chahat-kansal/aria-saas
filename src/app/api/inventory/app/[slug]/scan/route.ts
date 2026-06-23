@@ -9,6 +9,7 @@ import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { resolveCostFor } from '@/lib/inventory/resolve-cost'
+import { resolveTicketPrice } from '@/lib/tickets/ticket-price'
 
 // INV-STAFF-APP-3 — scan lookup. A barcode resolves via pos_product_barcodes; Sip has 0 barcodes today, so a
 // miss falls back to a name/SKU search (the primary path). A resolved product shows live on-hand
@@ -39,11 +40,15 @@ async function enrichOne(bid: string, productId: string, outletId: string | null
   const perDay = Math.round((units30 / 30) * 100) / 100
   const daysCover = perDay > 0 ? Math.round((stock / perDay) * 10) / 10 : null
 
+  // Ticket price + real promo (for the price-ticket batch flow). Grounded: promo or NULL.
+  const tp = await resolveTicketPrice(supabaseAdmin, bid, { id: p.id as string, price: p.price as number | null })
+
   return {
     id: p.id, name: p.name, sku: (p.sku as string | null) ?? null,
     price: Number(p.price) || 0, on_hand: stock,
     cost, cost_source: costSource,
     units_per_day: perDay, days_of_cover: daysCover,
+    ticket_price: tp.price_snapshot, was_price: tp.was_price_snapshot, promo_label: tp.promo_label,
   }
 }
 

@@ -67,6 +67,10 @@ async function _POST(req: Request) {
     is_default: body.is_default ?? false,
   }).select('*').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // One default per business — unset the others.
+  if (body.is_default === true && data?.id) {
+    await supabaseAdmin.from('pos_shelf_ticket_templates').update({ is_default: false }).eq('business_id', bid).neq('id', data.id)
+  }
   return NextResponse.json({ template: data }, { status: 201 })
 }
 

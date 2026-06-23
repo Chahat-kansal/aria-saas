@@ -44,6 +44,7 @@ const TILES = [
   { key: 'order', label: 'Order', sub: 'reorder needs', bg: 'greenSoft', stroke: '#0F6E56', d: 'M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20a1 1 0 100-2 1 1 0 000 2zM18 20a1 1 0 100-2 1 1 0 000 2z', badge: 'order' as const },
   { key: 'expiring', label: 'Expiring', sub: 'expiry alerts', bg: 'amberSoft', stroke: '#854F0B', d: 'M12 7v5l3 2', circle: true, badge: 'expiring' as const },
   { key: 'scan', label: 'Scan', sub: 'look up item', bg: 'paper', stroke: '#5F5E5A', d: 'M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10' },
+  { key: 'tickets', label: 'Price tickets', sub: 'scan to print', bg: 'violetSoft', stroke: '#534AB7', d: 'M3 8h18v9H3zM7 8v9M7 12h.5M11 12h6M11 15h4' },
 ]
 
 export default function InventoryStaffApp() {
@@ -59,7 +60,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -108,6 +109,14 @@ export default function InventoryStaffApp() {
   const [adjustSubmitting, setAdjustSubmitting] = useState(false)
   const [adjustData, setAdjustData] = useState<AdjustData | null>(null)
   const [adjustState, setAdjustState] = useState<'loading' | 'ok' | 'error'>('loading')
+  // Price-tickets batch state
+  const [ticketBatch, setTicketBatch] = useState<Array<{ id: string; name: string; price: number; was: number | null; promo: string | null; qty: number }>>([])
+  const [ticketSearch, setTicketSearch] = useState('')
+  const [ticketMatches, setTicketMatches] = useState<ScanMatch[]>([])
+  const [ticketSearching, setTicketSearching] = useState(false)
+  const [ticketName, setTicketName] = useState('')
+  const [ticketSaving, setTicketSaving] = useState(false)
+  const [ticketMsg, setTicketMsg] = useState('')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -318,6 +327,44 @@ export default function InventoryStaffApp() {
       else setAdjustErr(d.message ?? 'Could not apply the correction.')
     } catch { setAdjustErr('Something went wrong.') }
     setAdjustSubmitting(false)
+  }
+
+  // ── Price tickets (scan-to-batch) ──
+  async function ticketSearchRun(term: string) {
+    if (!term.trim()) return
+    setTicketSearching(true); setTicketMatches([])
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.mode === 'search') setTicketMatches(d.matches ?? [])
+    } catch { /* ignore */ }
+    setTicketSearching(false)
+  }
+  async function ticketAdd(id: string) {
+    setTicketSearching(true)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?product_id=${id}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.found) {
+        const p = d.product
+        setTicketBatch(b => b.some(x => x.id === p.id) ? b.map(x => x.id === p.id ? { ...x, qty: x.qty + 1 } : x) : [...b, { id: p.id, name: p.name, price: p.ticket_price ?? p.price, was: p.was_price ?? null, promo: p.promo_label ?? null, qty: 1 }])
+        setTicketMsg(''); setTicketMatches([]); setTicketSearch('')
+      }
+    } catch { /* ignore */ }
+    setTicketSearching(false)
+  }
+  const ticketQty = (id: string, delta: number) => setTicketBatch(b => b.map(x => x.id === id ? { ...x, qty: Math.max(1, x.qty + delta) } : x))
+  const ticketRemove = (id: string) => setTicketBatch(b => b.filter(x => x.id !== id))
+  async function ticketSaveBatch() {
+    if (!ticketName.trim() || ticketBatch.length === 0) return
+    setTicketSaving(true)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/ticket-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: ticketName.trim(), outlet_id: outletId, items: ticketBatch.map(x => ({ product_id: x.id, qty: x.qty })) }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setTicketMsg(`✓ Saved "${ticketName.trim()}" — ${d.item_count} item${d.item_count === 1 ? '' : 's'} queued. Print it from the dashboard Price Tickets page.`); setTicketBatch([]); setTicketName('') }
+      else setTicketMsg(d.error ? `Couldn't save: ${d.error}` : 'Could not save the batch.')
+    } catch { setTicketMsg('Something went wrong.') }
+    setTicketSaving(false)
   }
 
   // Bootstrap + resume session.
@@ -964,6 +1011,80 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── PRICE TICKETS (scan-to-batch) ──
+  if (tab === 'tickets') {
+    const totalCopies = ticketBatch.reduce((s, x) => s + x.qty, 0)
+    return shell(
+      <>
+        {statusbar}{header(true, 'Price tickets', 'Scan items → save a print batch')}
+        {body(
+          <>
+            <div style={{ fontSize: 11.5, color: '#43407a', background: T.violetSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginBottom: 13 }}>
+              Scan or search items to build a print batch. The owner picks a template and prints it from the dashboard. Prices are snapshotted now, so a later price change won&apos;t change what prints.
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={ticketSearch} onChange={e => setTicketSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') ticketSearchRun(ticketSearch) }} placeholder="Scan or search by name / SKU…"
+                style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+              <button onClick={() => ticketSearchRun(ticketSearch)} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Find</button>
+            </div>
+
+            {ticketSearching && <div style={{ height: 60, borderRadius: 13, background: '#fff', border: `1px solid ${T.line}`, marginBottom: 12 }} />}
+            {ticketMatches.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                {ticketMatches.map(m => (
+                  <button key={m.id} onClick={() => ticketAdd(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku} · ` : ''}{money(m.price)}</div></div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#534AB7', background: T.violetSoft, borderRadius: 8, padding: '5px 10px' }}>+ Add</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {ticketMsg && <div style={{ fontSize: 12.5, color: T.green, background: T.greenSoft, borderRadius: 11, padding: '12px 14px', lineHeight: 1.45, marginBottom: 14, fontWeight: 500 }}>{ticketMsg}</div>}
+
+            <div style={{ margin: '4px 2px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <b style={{ fontSize: 14, fontWeight: 600 }}>This batch</b>
+              {ticketBatch.length > 0 && <span style={{ fontSize: 11.5, color: T.muted }}>{ticketBatch.length} item{ticketBatch.length === 1 ? '' : 's'} · {totalCopies} ticket{totalCopies === 1 ? '' : 's'}</span>}
+            </div>
+
+            {ticketBatch.length === 0 ? (
+              <div style={{ padding: 34, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}` }}>
+                <div style={{ fontSize: 30, marginBottom: 6 }}>🏷️</div>
+                <p style={{ fontSize: 15, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 3 }}>No items yet</p>
+                <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>Search above and tap “Add” to start a price-ticket batch.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 14 }}>
+                  {ticketBatch.map(it => (
+                    <div key={it.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <b style={{ fontSize: 13.5, fontWeight: 600 }}>{it.name}</b>
+                        <div style={{ fontSize: 11, color: T.muted }}>{it.was != null ? <span><span style={{ textDecoration: 'line-through' }}>{money(it.was)}</span> {money(it.price)}{it.promo ? ` · ${it.promo}` : ''}</span> : money(it.price)}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button onClick={() => ticketQty(it.id, -1)} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 18, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
+                        <span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 19, fontWeight: 600, minWidth: 22, textAlign: 'center' }}>{it.qty}</span>
+                        <button onClick={() => ticketQty(it.id, 1)} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 18, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
+                        <button onClick={() => ticketRemove(it.id)} title="Remove" style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.redSoft}`, background: '#fff', fontSize: 14, color: T.red, cursor: 'pointer' }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <input value={ticketName} onChange={e => setTicketName(e.target.value)} placeholder="Name this batch (e.g. Friday specials)…"
+                  style={{ width: '100%', padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 10 }} />
+                <button onClick={ticketSaveBatch} disabled={ticketSaving || !ticketName.trim()} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (ticketSaving || !ticketName.trim()) ? 0.5 : 1 }}>{ticketSaving ? 'Saving…' : `Save batch · ${totalCopies} ticket${totalCopies === 1 ? '' : 's'}`}</button>
+                <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Saved as <b style={{ color: T.green }}>{acting?.name}</b> · the owner prints it from the dashboard</div>
+              </>
+            )}
+          </>
+        )}
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -1020,7 +1141,7 @@ export default function InventoryStaffApp() {
             {TILES.map(t => {
               const badge = t.badge ? (home?.tile_badges[t.badge] ?? 0) : 0
               return (
-                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } else if (t.key === 'adjust') { setAdjustProduct(null); setTab('adjust') } }}
+                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } else if (t.key === 'adjust') { setAdjustProduct(null); setTab('adjust') } else if (t.key === 'tickets') setTab('tickets') }}
                   style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: (T as Record<string, string>)[t.bg], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="18" height="18" fill="none" stroke={t.stroke} strokeWidth={2} viewBox="0 0 24 24">{t.circle && <circle cx="12" cy="12" r="9" />}<path d={t.d} /></svg>
