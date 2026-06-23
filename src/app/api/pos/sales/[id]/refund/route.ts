@@ -25,7 +25,9 @@ async function _POST(req: Request, { params }: Params) {
   if (!original) return NextResponse.json({ error: 'Sale not found' }, { status: 404 })
 
   const refundAmount = amount ?? original.total_amount
-  const { data: refundSale } = await supabase.from('pos_sales').insert({
+  // BUGFIX-POS-4 FIX 5 — error-check the refund sale insert; a swallowed error previously returned ok:true with
+  // a null refund_sale_id (looked successful while no refund was recorded).
+  const { data: refundSale, error: refundErr } = await supabase.from('pos_sales').insert({
     business_id: bid,
     parent_sale_id: id,
     total_amount: -(Math.abs(refundAmount)),
@@ -33,10 +35,11 @@ async function _POST(req: Request, { params }: Params) {
     status: 'refund',
     notes: `Refund of sale ${id.slice(-6).toUpperCase()}${reason_note ? ': ' + reason_note : ''}`,
   }).select().single()
+  if (refundErr || !refundSale) return NextResponse.json({ error: refundErr?.message ?? 'Refund could not be recorded' }, { status: 500 })
 
   // Insert refund items if specified
   if (refundItems?.length && refundSale) {
-    await supabase.from('pos_sale_items').insert(
+    const { error: refundItemsErr } = await supabase.from('pos_sale_items').insert(
       refundItems.map((it: { product_id: string; product_name: string; quantity: number; unit_price: number }) => ({
         sale_id: refundSale.id,
         product_id: it.product_id,
@@ -46,6 +49,7 @@ async function _POST(req: Request, { params }: Params) {
         business_id: bid,
       }))
     )
+    if (refundItemsErr) console.error('[pos/sales/refund] refund items insert failed:', refundItemsErr.message) // BUGFIX-POS-4 FIX 5
     // Restore stock for refunded items — CANONICAL items_on_hand (+ stock_quantity cache). (INV-DECREMENT-FIX phase 2)
     const refundOutletId = await resolveOutletId(supabase, bid, (original as { outlet_id?: string | null }).outlet_id ?? null)
     for (const it of refundItems) {
@@ -54,11 +58,12 @@ async function _POST(req: Request, { params }: Params) {
     }
   }
 
-  await supabase.from('pos_audit_log').insert({
+  const { error: auditErr } = await supabase.from('pos_audit_log').insert({
     business_id: bid, action: 'refund', reason_code: reason_code ?? 'customer_request',
     reason_note, amount: refundAmount, sale_id: id,
     performed_by: user.id, manager_approved_by: managerId,
   })
+  if (auditErr) console.error('[pos/sales/refund] audit log insert failed:', auditErr.message) // BUGFIX-POS-4 FIX 5
 
   return NextResponse.json({ ok: true, refund_sale_id: refundSale?.id })
 }

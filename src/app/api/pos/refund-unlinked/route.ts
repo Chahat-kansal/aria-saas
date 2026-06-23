@@ -18,19 +18,22 @@ async function _POST(req: Request) {
   const bid = active?.business_id ?? null
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { data: refundSale } = await supabase.from('pos_sales').insert({
+  // BUGFIX-POS-4 FIX 5 — error-check the unlinked-refund insert (previously returned ok:true with a null id).
+  const { data: refundSale, error: refundErr } = await supabase.from('pos_sales').insert({
     business_id: bid,
     total_amount: -(Math.abs(amount)),
     payment_method: payment_method ?? 'cash',
     status: 'refund',
     notes: reason_note ? `Unlinked refund: ${reason_note}` : 'Unlinked refund',
   }).select('id').single()
+  if (refundErr || !refundSale) return NextResponse.json({ error: refundErr?.message ?? 'Refund could not be recorded' }, { status: 500 })
 
-  await supabase.from('pos_audit_log').insert({
+  const { error: auditErr } = await supabase.from('pos_audit_log').insert({
     business_id: bid, action: 'refund', reason_code: reason_code ?? 'other',
     reason_note: `Unlinked refund${reason_note ? ': ' + reason_note : ''}`,
     amount, performed_by: user.id, manager_approved_by: managerId,
   })
+  if (auditErr) console.error('[pos/refund-unlinked] audit log insert failed:', auditErr.message) // BUGFIX-POS-4 FIX 5
 
   return NextResponse.json({ ok: true, refund_sale_id: refundSale?.id })
 }

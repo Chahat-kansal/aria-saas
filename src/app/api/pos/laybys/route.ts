@@ -93,7 +93,9 @@ async function _PATCH(req: Request) {
     }
     const totalDollars = Math.round(Number(layby.total_cents ?? 0)) / 100;
     const { count } = await supabase.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', bid);
-    const { data: sale } = await supabase.from('pos_sales').insert({
+    // BUGFIX-POS-4 FIX 5 — error-check the layby→sale conversion BEFORE marking the layby completed, so a
+    // failed sale insert can't leave a completed layby with no sale (money unrecorded).
+    const { data: sale, error: saleErr } = await supabase.from('pos_sales').insert({
       business_id: bid,
       sale_number: 'LAYBY-' + String((count ?? 0) + 1).padStart(4, '0'),
       payment_method: 'other',                 // pos_sales CHECK: cash|card|eftpos|split|gift_card|other
@@ -105,6 +107,7 @@ async function _PATCH(req: Request) {
       customer_id: layby.customer_id ?? null,
       notes: 'Layby completed',
     }).select('id, sale_number').single();
+    if (saleErr || !sale) return NextResponse.json({ error: saleErr?.message ?? 'Could not create sale from layby' }, { status: 500 });
     const { data: done } = await supabase.from('pos_laybys')
       .update({ status: 'completed', completed_at: new Date().toISOString(), notes: `${layby.notes ? layby.notes + ' · ' : ''}Converted to sale ${sale?.sale_number ?? ''}` })
       .eq('id', id).eq('business_id', bid).select('*').single();

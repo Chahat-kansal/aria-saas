@@ -1019,10 +1019,16 @@ export default function TerminalPage() {
   /* ─── Cart calculations ──────────────────────────────────────── */
   const cartKey    = (i: CartItem) => `${i.product.id}::${i.label ?? i.product.name}`;
   const subtotal   = cart.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0);
+  // BUGFIX-POS-4 FIX 1 — the sale-level promo discount (the "% Disc" quick discount + applied promotions) was
+  // displayed but NEVER subtracted from the charged total (customers overcharged). Fold it in HERE, before the
+  // surcharge, so: (a) the customer is charged the discounted amount, and (b) AU card surcharge is correctly a
+  // percentage of the amount ACTUALLY charged (the discounted subtotal), not the pre-discount subtotal.
+  const promoDiscount = Math.min(subtotal, Math.max(0, manualDiscountAmt + appliedDiscounts.reduce((s, d) => s + (d.amount_off ?? 0), 0)));
+  const discountedSubtotal = Math.max(0, subtotal - promoDiscount);
   // Sprint E: engine computes authoritative tax on finalize. Display uses flat 1.1 estimate.
-  const taxAmount  = subtotal - subtotal / 1.1;
-  const netAmount  = subtotal / 1.1;
-  // Surcharge: apply first matching active rule for current payment method
+  const taxAmount  = discountedSubtotal - discountedSubtotal / 1.1;
+  const netAmount  = discountedSubtotal / 1.1;
+  // Surcharge: apply first matching active rule for current payment method — on the DISCOUNTED subtotal.
   const surchargeAmt = useMemo(() => {
     if (!surchargeRules.length || !cart.length) return 0;
     const todayDow = new Date().getDay(); // 0=Sun, 6=Sat
@@ -1033,11 +1039,11 @@ export default function TerminalPage() {
     });
     if (!rule) return 0;
     return rule.amount_type === 'percent'
-      ? Math.round(subtotal * (rule.amount / 100) * 100) / 100
+      ? Math.round(discountedSubtotal * (rule.amount / 100) * 100) / 100
       : rule.amount;
-  }, [surchargeRules, payMethod, subtotal, cart.length]);
+  }, [surchargeRules, payMethod, discountedSubtotal, cart.length]);
 
-  const total      = subtotal + surchargeAmt;
+  const total      = discountedSubtotal + surchargeAmt;
   const tendered   = parseFloat(cashTendered) || 0;
 
   // POS user permission gates (set at cashier login, stored in localStorage)
@@ -1314,7 +1320,14 @@ export default function TerminalPage() {
     if (selectedItems.length === 0) return;
     setProcessingRefund(true);
     try {
-      const refundTotal = selectedItems.reduce((s: number, i: any) => s + (i.line_total ?? 0), 0);
+      // BUGFIX-POS-4 FIX 1 — refund the amount ACTUALLY charged. line_total is pre-promo-discount, so prorate
+      // the sale-level discount across the refunded items (full refund → refunds the discounted total). Old
+      // sales (discount_amount 0) are unaffected.
+      const grossRefund = selectedItems.reduce((s: number, i: any) => s + Math.abs(i.line_total ?? 0), 0);
+      const saleSubtotal = Number(refundSale.subtotal) || grossRefund;
+      const saleDiscount = Number(refundSale.discount_amount) || 0;
+      const proratedDiscount = saleSubtotal > 0 ? Math.round(saleDiscount * (grossRefund / saleSubtotal) * 100) / 100 : 0;
+      const refundTotal = Math.max(0, Math.round((grossRefund - proratedDiscount) * 100) / 100);
       await fetch('/api/pos/sale', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1325,8 +1338,8 @@ export default function TerminalPage() {
             line_total: -Math.abs(i.line_total ?? 0),
           })),
           payment_method: refundSale.payment_method ?? 'card',
-          subtotal: -refundTotal, tax_amount: -(refundTotal - refundTotal / 1.1),
-          discount_amount: 0, total_amount: -refundTotal,
+          subtotal: -grossRefund, tax_amount: -(refundTotal - refundTotal / 1.1),
+          discount_amount: -proratedDiscount, total_amount: -refundTotal,
           session_id: registerSession?.id ?? null,
           original_sale_id: refundSale.id,
           notes: `Refund for sale ${refundSale.sale_number ?? refundSale.id}`,
@@ -1489,6 +1502,7 @@ export default function TerminalPage() {
     const capturedSplitCardAmt = splitCardAmt;
     const capturedPayMethod = payMethod;
     const capturedSubtotal = subtotal;
+    const capturedDiscount = promoDiscount; // BUGFIX-POS-4 FIX 1 — real $ off, now charged + recorded
     const capturedTaxAmount = taxAmount;
     const capturedTendered = tendered;
     const capturedAppliedDiscounts = appliedDiscounts ?? [];
@@ -1523,7 +1537,7 @@ export default function TerminalPage() {
       pos_user_id: capturedPosUserId,
       applied_discounts: capturedAppliedDiscounts,
       subtotal: +capturedSubtotal.toFixed(2), tax_amount: +capturedTaxAmount.toFixed(2),
-      discount_amount: 0, total_amount: +capturedTotal.toFixed(2),
+      discount_amount: +capturedDiscount.toFixed(2), total_amount: +capturedTotal.toFixed(2),
       cash_tendered: capturedPayMethod === 'cash' ? capturedTendered : null,
       change_given: capturedPayMethod === 'cash' ? +capturedChange.toFixed(2) : null,
       split_cash: capturedPayMethod === 'split' ? capturedSplitCash : null,

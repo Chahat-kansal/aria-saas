@@ -29,7 +29,10 @@ async function _POST(req: Request, { params }: Params) {
 
   // void_reason feeds the log_sale_void trigger → deletion_audit_log.reason. Use the cashier's
   // free-text note, falling back to the reason code; nullable so legacy/empty voids still succeed.
-  await supabase.from('pos_sales').update({ status: 'voided', void_reason: reason_note || reason_code || null, last_edited_at: new Date().toISOString() }).eq('id', id)
+  // BUGFIX-POS-4 FIX 5 — error-check the void BEFORE restoring stock, so a failed void can't double-count
+  // stock (status not voided but items_on_hand already incremented).
+  const { error: voidErr } = await supabase.from('pos_sales').update({ status: 'voided', void_reason: reason_note || reason_code || null, last_edited_at: new Date().toISOString() }).eq('id', id)
+  if (voidErr) return NextResponse.json({ error: voidErr.message }, { status: 500 })
 
   // Restore stock for all items — CANONICAL items_on_hand (+ stock_quantity cache). Idempotent: the
   // status='voided' guard above means this runs at most once per sale. (INV-DECREMENT-FIX phase 2)
@@ -41,11 +44,12 @@ async function _POST(req: Request, { params }: Params) {
     await adjustOutletStock(supabase, { businessId: bid, outletId: voidOutletId, productId: item.product_id, delta: Math.abs(Number(item.quantity)) }) // canonical
   }
 
-  await supabase.from('pos_audit_log').insert({
+  const { error: auditErr } = await supabase.from('pos_audit_log').insert({
     business_id: bid, action: 'void', reason_code: reason_code ?? 'other',
     reason_note, amount: sale.total_amount, sale_id: id,
     performed_by: user.id, manager_approved_by: managerId,
   })
+  if (auditErr) console.error('[pos/sales/void] audit log insert failed:', auditErr.message) // BUGFIX-POS-4 FIX 5
 
   return NextResponse.json({ ok: true })
 }

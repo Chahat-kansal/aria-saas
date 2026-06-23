@@ -75,7 +75,9 @@ async function _POST(req: Request, { params }: Params) {
     const { data: items } = await supabase.from('pos_inventory_transfer_items').select('*').eq('transfer_id', id);
     let totalCost = 0;
     for (const item of items ?? []) {
-      const qty = Number(item.quantity_sent) || Number(item.quantity_approved) || 0;
+      // BUGFIX-POS-4 FIX 4 — an explicit quantity_sent of 0 is falsy, so `|| quantity_approved` wrongly shipped
+      // the approved qty instead of 0. Use quantity_sent when present (including 0), else quantity_approved.
+      const qty = item.quantity_sent != null ? Number(item.quantity_sent) : Number(item.quantity_approved ?? 0);
       if (qty <= 0) continue;
       const { data: inv } = await supabase.from('pos_outlet_inventory')
         .select('outlet_id, product_id, items_on_hand, item_cost, last_item_cost, last_received_at')
@@ -83,14 +85,16 @@ async function _POST(req: Request, { params }: Params) {
       const unitCost = snapshotUnitCost(inv ?? null, (transfer.cost_method as CostMethod) ?? 'fifo');
       const lineCost = qty * unitCost;
       totalCost += lineCost;
-      await supabase.from('pos_inventory_transfer_items').update({
+      const { error: tiErr } = await supabase.from('pos_inventory_transfer_items').update({
         unit_cost: unitCost, line_cost: lineCost, quantity_sent: qty,
       }).eq('id', item.id);
+      if (tiErr) console.error('[pos/transfers/transition] transfer-item update failed:', tiErr.message); // BUGFIX-POS-4 FIX 5
       if (inv) {
-        await supabase.from('pos_outlet_inventory').update({
+        const { error: srcErr } = await supabase.from('pos_outlet_inventory').update({
           items_on_hand: Math.max(0, (Number(inv.items_on_hand) || 0) - qty),
           updated_at: now,
         }).eq('outlet_id', transfer.from_outlet_id).eq('product_id', item.product_id);
+        if (srcErr) console.error('[pos/transfers/transition] source stock deduct failed:', srcErr.message); // BUGFIX-POS-4 FIX 5
       }
     }
     updates.total_cost = +totalCost.toFixed(2);
@@ -105,17 +109,19 @@ async function _POST(req: Request, { params }: Params) {
       const { data: destInv } = await supabase.from('pos_outlet_inventory')
         .select('items_on_hand').eq('outlet_id', transfer.to_outlet_id).eq('product_id', item.product_id).maybeSingle();
       if (destInv) {
-        await supabase.from('pos_outlet_inventory').update({
+        const { error: dstErr } = await supabase.from('pos_outlet_inventory').update({
           items_on_hand: (Number(destInv.items_on_hand) || 0) + qtyReceived,
           last_item_cost: Number(item.unit_cost) || 0,
           last_received_at: now, updated_at: now,
         }).eq('outlet_id', transfer.to_outlet_id).eq('product_id', item.product_id);
+        if (dstErr) console.error('[pos/transfers/transition] dest stock add failed:', dstErr.message); // BUGFIX-POS-4 FIX 5
       } else {
-        await supabase.from('pos_outlet_inventory').insert({
+        const { error: dstInsErr } = await supabase.from('pos_outlet_inventory').insert({
           business_id: bid, outlet_id: transfer.to_outlet_id, product_id: item.product_id,
           items_on_hand: qtyReceived, last_item_cost: Number(item.unit_cost) || 0,
           last_received_at: now,
         });
+        if (dstInsErr) console.error('[pos/transfers/transition] dest stock insert failed:', dstInsErr.message); // BUGFIX-POS-4 FIX 5
       }
     }
   }

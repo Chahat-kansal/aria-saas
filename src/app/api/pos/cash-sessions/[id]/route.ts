@@ -55,15 +55,19 @@ async function _PATCH(req: Request, { params }: Params) {
 
   // Compute totals from sales in this session
   const { data: sessionSales } = await supabase.from('pos_sales')
-    .select('total_amount, payment_method, status')
+    .select('id, total_amount, payment_method, status')
     .eq('business_id', bid).eq('session_id', id).neq('status', 'voided')
 
   const total_cash_sales = (sessionSales ?? []).filter(s => s.payment_method === 'cash').reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
   const total_card_sales = (sessionSales ?? []).filter(s => s.payment_method !== 'cash').reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
 
-  const { data: sessionReturns } = await supabase.from('pos_sale_returns')
-    .select('refund_amount, original_sale_id')
-    .in('original_sale_id', (sessionSales ?? []).map(s => s).map((_, i) => i).slice(0, 0))
+  // BUGFIX-POS-4 FIX 2 — the prior query used `.slice(0,0)` (always empty) AND never selected `id`, so
+  // total_refunds was ALWAYS 0 → expected_cash overstated → false "short" variance. Select id (above) + use
+  // the real sale ids here so cash refunds are subtracted from expected cash.
+  const sessionSaleIds = (sessionSales ?? []).map(s => s.id as string)
+  const { data: sessionReturns } = sessionSaleIds.length
+    ? await supabase.from('pos_sale_returns').select('refund_amount, original_sale_id').in('original_sale_id', sessionSaleIds)
+    : { data: [] as Array<{ refund_amount: number | null }> }
   const total_refunds = (sessionReturns ?? []).reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0)
 
   const expected_cash_cents = computeExpectedCashCents(Number(session.opening_float) || 0, total_cash_sales, total_refunds)

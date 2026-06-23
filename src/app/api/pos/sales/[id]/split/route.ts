@@ -38,7 +38,8 @@ async function _POST(req: Request, { params }: Params) {
       splitTotal = Math.max(0, total - alreadyAllocated)
     }
 
-    const { data: splitSale } = await supabase.from('pos_sales').insert({
+    // BUGFIX-POS-4 FIX 5 — surface split-check write failures (a swallowed error dropped a check's money silently).
+    const { data: splitSale, error: splitErr } = await supabase.from('pos_sales').insert({
       business_id: bid,
       parent_sale_id: id,
       total_amount: Math.round(splitTotal * 100) / 100,
@@ -46,16 +47,18 @@ async function _POST(req: Request, { params }: Params) {
       status: 'open',
       notes: `${split.label ?? `Check ${i + 1}`} (split from #${id.slice(-6).toUpperCase()})`,
     }).select('id').single()
+    if (splitErr) console.error('[pos/sales/split] split-check insert failed:', splitErr.message) // BUGFIX-POS-4 FIX 5
 
     if (splitSale && split.item_ids?.length) {
       const splitItems = allItems.filter(it => (split.item_ids as string[]).includes(it.id))
       if (splitItems.length) {
-        await supabase.from('pos_sale_items').insert(
+        const { error: splitItemsErr } = await supabase.from('pos_sale_items').insert(
           splitItems.map(it => ({
             sale_id: splitSale.id, product_id: it.product_id, product_name: it.product_name,
             quantity: it.quantity, unit_price: it.unit_price, business_id: bid,
           }))
         )
+        if (splitItemsErr) console.error('[pos/sales/split] split items insert failed:', splitItemsErr.message) // BUGFIX-POS-4 FIX 5
       }
     }
 
@@ -63,13 +66,15 @@ async function _POST(req: Request, { params }: Params) {
   }
 
   // Mark original as split
-  await supabase.from('pos_sales').update({ status: 'split', last_edited_at: new Date().toISOString() }).eq('id', id)
+  const { error: splitStatusErr } = await supabase.from('pos_sales').update({ status: 'split', last_edited_at: new Date().toISOString() }).eq('id', id)
+  if (splitStatusErr) console.error('[pos/sales/split] parent status update failed:', splitStatusErr.message) // BUGFIX-POS-4 FIX 5
 
-  await supabase.from('pos_audit_log').insert({
+  const { error: splitAuditErr } = await supabase.from('pos_audit_log').insert({
     business_id: bid, action: 'split', sale_id: id,
     performed_by: user.id, amount: total,
     reason_note: `Split into ${splits.length} checks`,
   })
+  if (splitAuditErr) console.error('[pos/sales/split] audit log insert failed:', splitAuditErr.message) // BUGFIX-POS-4 FIX 5
 
   return NextResponse.json({ ok: true, split_sale_ids: createdSales })
 }
