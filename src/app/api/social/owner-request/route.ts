@@ -6,6 +6,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { buildSocialSystemPrompt, getSocialIndustryConfig } from '@/lib/social/industry-prompts'
 import { getBestSlotForPlatform } from '@/lib/social/smart-scheduler'
 import { getRelevantImage } from '@/lib/images/pixabay'
+import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -85,6 +86,8 @@ ${recurrence_rule ? 'Recurrence: ' + recurrence_rule : ''}
 Generate ${activePlatforms.length} post(s) — one optimized for each platform:
 ${activePlatforms.map(p => '- ' + p).join('\n')}
 
+IMPORTANT: do NOT state any price, discount, statistic, or number unless it appears verbatim in the owner's request above. This business has no data feed here — invented figures would be published publicly.
+
 Return a JSON array with this exact shape:
 [
   {
@@ -125,9 +128,15 @@ Only output the JSON array. No preamble.`
     return NextResponse.json({ error: 'AI parse failed' }, { status: 500 })
   }
 
+  // FAB-FIX-2 — this surface injects NO business data, so the ONLY grounded numbers are those the owner
+  // typed in their request. Any $/%/stat the model invented is stripped before the (pending-approval) draft.
+  const allowedNums = numbersIn(request_text)
+
   const createdIds: string[] = []
 
   for (const p of posts) {
+    const capGuard = await guardOutput(p.caption ?? '', allowedNums, { mode: 'redact', businessId: biz.id, surface: 'social/owner-request:caption' })
+    p.caption = capGuard.text
     let imageUrl: string | null = null
     if (p.image_query) {
       try {

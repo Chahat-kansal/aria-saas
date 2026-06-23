@@ -7,6 +7,7 @@ import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { guardOutput } from '@/lib/aria/ground-guard'
 import Anthropic from '@anthropic-ai/sdk'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -37,14 +38,21 @@ async function _POST(req: Request) {
 
   if (body.action === 'generate_message') {
     const { data: biz } = await supabaseAdmin.from('businesses').select('name,industry').eq('id', bid).maybeSingle()
+    // FAB-FIX-2 — the owner's discount_pct is grounded (their chosen offer); real menu prices are the only
+    // dollar figures allowed. The customer-facing SMS is guarded for fabricated prices before return.
+    const { data: priceRows } = await supabaseAdmin.from('pos_products')
+      .select('name, price').eq('business_id', bid).eq('is_active', true).order('price', { ascending: false }).limit(40)
+    const realPrices = (priceRows ?? []).map(p => Number(p.price)).filter(n => Number.isFinite(n) && n > 0)
+    const menu = (priceRows ?? []).slice(0, 12).map(p => `${p.name} A$${Number(p.price).toFixed(2)}`).join(', ')
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 200,
-      system: 'Write a short friendly marketing SMS for an Australian small business. Max 160 chars. Include "Reply STOP to opt out." Return ONLY the message.',
-      messages: [{ role: 'user', content: 'Campaign: ' + (body.campaign_type ?? 'winback') + ', Business: ' + (biz?.name ?? '') + ' (' + (biz?.industry ?? '') + '), Discount: ' + (body.discount_pct ?? 0) + '%' }],
+      system: 'Write a short friendly marketing SMS for an Australian small business. Max 160 chars. Include "Reply STOP to opt out." Do not invent any dollar price — only use prices provided. Return ONLY the message.',
+      messages: [{ role: 'user', content: 'Campaign: ' + (body.campaign_type ?? 'winback') + ', Business: ' + (biz?.name ?? '') + ' (' + (biz?.industry ?? '') + '), Discount: ' + (body.discount_pct ?? 0) + '%' + (menu ? '. Real prices you may reference: ' + menu : '. No prices on file — state no dollar price.') }],
     })
-    const text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
-    return NextResponse.json({ message: text })
+    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
+    const guarded = await guardOutput(raw, realPrices, { mode: 'redact', ignorePercent: true, businessId: bid, surface: 'marketing-campaigns:generate_message' })
+    return NextResponse.json({ message: guarded.text })
   }
 
   if (body.action === 'send_campaign') {

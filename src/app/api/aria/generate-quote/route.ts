@@ -9,6 +9,9 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { guardOutput } from '@/lib/aria/ground-guard'
+
+const GST_RATE = 0.10 // Australian GST
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -59,13 +62,12 @@ Return a JSON object with this exact structure:
   "lineItems": [
     { "description": "item description", "qty": 1, "rate": 0, "total": 0 }
   ],
-  "subtotal": 0,
-  "gst": 0,
-  "total": 0,
   "notes": "payment terms and any notes",
   "terms": "standard terms"
 }
-Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
+Use realistic Australian pricing for the industry. Provide a qty and rate (ex-GST) for each line item.
+Do NOT compute line totals, subtotal, GST or grand total — those are calculated server-side from your rates.
+Do NOT state any dollar figure in notes/terms other than the line rates. Return ONLY the JSON.`;
 
   try {
     const _bizCtx = await getBusinessContext(bid)
@@ -87,6 +89,33 @@ await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-5-2025
       return NextResponse.json({ error: 'Could not parse Aria quote response' }, { status: 502 });
     }
 
+    // FAB-FIX-2 — every dollar figure on a customer-facing quote is computed in code from the LLM's
+    // qty/rate ONLY. The model never authors line totals, subtotal, GST or grand total (a wrong GST on a
+    // customer quote is a legal/trust problem). Prose (notes/terms) is guarded against the computed figures.
+    const rawItems = Array.isArray(quoteData.lineItems) ? quoteData.lineItems as Array<Record<string, unknown>> : [];
+    const lineItems = rawItems.map(it => {
+      const qty = Math.max(0, Number(it.qty) || 0);
+      const rate = Math.max(0, Number(it.rate) || 0);
+      return { description: String(it.description ?? '').slice(0, 300), qty, rate, total: Math.round(qty * rate * 100) / 100 };
+    });
+    const subtotal = Math.round(lineItems.reduce((s, it) => s + it.total, 0) * 100) / 100;
+    const gst = Math.round(subtotal * GST_RATE * 100) / 100;
+    const total = Math.round((subtotal + gst) * 100) / 100;
+    const allowed = [subtotal, gst, total, ...lineItems.map(i => i.rate), ...lineItems.map(i => i.total)];
+    // redact — a customer quote must never carry a fabricated $ figure, even if it's the only sentence.
+    const notesGuard = await guardOutput(String(quoteData.notes ?? ''), allowed, { mode: 'redact', businessId: bid, surface: 'generate-quote:notes' });
+    const termsGuard = await guardOutput(String(quoteData.terms ?? ''), allowed, { mode: 'redact', businessId: bid, surface: 'generate-quote:terms' });
+
+    const quote = {
+      quoteNumber: String(quoteData.quoteNumber ?? `Q-${Date.now().toString().slice(-6)}`),
+      businessName: business.name,
+      date: new Date().toLocaleDateString('en-AU'),
+      validUntil: new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-AU'),
+      lineItems, subtotal, gst, total,
+      notes: notesGuard.text,
+      terms: termsGuard.text,
+    };
+
     // Save to quotes table
     const { data: saved, error: saveErr } = await supabase
       .from('quotes')
@@ -96,8 +125,8 @@ await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-5-2025
         customer_email: customerEmail ?? null,
         customer_phone: customerPhone ?? null,
         job_description: jobDescription,
-        quote_amount: quoteData.total,
-        quote_breakdown: quoteData,
+        quote_amount: total,
+        quote_breakdown: quote,
         status: 'draft',
         generated_by_ai: true,
         generated_at: new Date().toISOString(),
@@ -109,11 +138,11 @@ await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-5-2025
     if (saveErr) {
       // Table may not exist yet — return quote without saving
       console.error('Quote save error:', saveErr.message);
-      return NextResponse.json({ quote: quoteData, saved: false });
+      return NextResponse.json({ quote, saved: false });
     }
 
-    await writeAriaOutcome(bid, 'quote-generated', `Quote ${quoteData.quoteNumber ?? ''} — ${jobDescription.slice(0, 80)}`).catch(() => null);
-    return NextResponse.json({ quote: quoteData, id: saved.id, saved: true });
+    await writeAriaOutcome(bid, 'quote-generated', `Quote ${quote.quoteNumber} — ${jobDescription.slice(0, 80)}`).catch(() => null);
+    return NextResponse.json({ quote, id: saved.id, saved: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

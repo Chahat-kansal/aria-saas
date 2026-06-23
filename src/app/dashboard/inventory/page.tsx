@@ -21,9 +21,11 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('')
   const [insight, setInsight] = useState<Insight | null>(null)
   const [insightLoading, setInsightLoading] = useState(false)
-  // FAB-FIX-1 — the value tile is the CANONICAL items_on_hand × resolved cost (computeStockValue via
-  // /api/pos/inventory/cost), not the partially-overlaid stock_quantity sum (which inflated to A$234,523).
+  // FAB-FIX-1/2 — the value tile AND the per-product stock figures come from the CANONICAL
+  // computeStockValue (items_on_hand × resolved cost) via /api/pos/inventory/cost, not the partially-overlaid
+  // stock_quantity (which inflated the total to A$234,523 and depended on the overlay staying in place).
   const [stockAtCost, setStockAtCost] = useState<number | null>(null)
+  const [onHandMap, setOnHandMap] = useState<Record<string, number>>({})
   const [adjustForm, setAdjustForm] = useState({ product_id: '', qty: 0, reason: 'counted' })
   const [adjustMsg, setAdjustMsg] = useState('')
 
@@ -36,9 +38,15 @@ export default function InventoryPage() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  // Canonical inventory value (items_on_hand) for the KPI tile — same source as the Valuation panel below.
+  // Canonical inventory value + per-product on-hand for the KPI tile and overview table — same source as the
+  // Valuation panel below (computeStockValue). No longer depends on the products-API stock_quantity overlay.
   useEffect(() => {
-    fetch('/api/pos/inventory/cost').then(r => r.json()).then(d => setStockAtCost(d?.stock_value?.at_cost ?? null)).catch(() => {})
+    fetch('/api/pos/inventory/cost').then(r => r.json()).then(d => {
+      setStockAtCost(d?.stock_value?.at_cost ?? null)
+      const m: Record<string, number> = {}
+      for (const p of (d?.stock_value?.products ?? []) as Array<{ id: string; units: number }>) m[p.id] = Number(p.units) || 0
+      setOnHandMap(m)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -64,10 +72,9 @@ export default function InventoryPage() {
   }
 
   const filtered = products.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku ?? '').toLowerCase().includes(search.toLowerCase()))
-  // Low-stock count uses the products API's stock_quantity, which the API overlays with the per-outlet
-  // items_on_hand. The value tile no longer sums this field (it used the canonical at_cost above) because
-  // products without an outlet row keep a stale seed cache that inflated the total.
-  const lowStock = products.filter(p => p.low_stock_threshold != null && Number(p.stock_quantity ?? 0) <= Number(p.low_stock_threshold)).length
+  // Low-stock count uses the CANONICAL per-product items_on_hand (onHandMap), not the stock_quantity cache.
+  const onHandOf = (id: string) => Number(onHandMap[id] ?? 0)
+  const lowStock = products.filter(p => p.low_stock_threshold != null && onHandOf(p.id) <= Number(p.low_stock_threshold)).length
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, color: C.text, fontFamily: 'Manrope, sans-serif' }}>
@@ -128,13 +135,14 @@ export default function InventoryPage() {
                 </thead>
                 <tbody>
                   {filtered.slice(0, 200).map(p => {
-                    const low = p.low_stock_threshold != null && Number(p.stock_quantity ?? 0) <= Number(p.low_stock_threshold)
-                    const value = Number(p.stock_quantity ?? 0) * Number(p.cost_price ?? 0)
+                    const onHand = onHandOf(p.id)
+                    const low = p.low_stock_threshold != null && onHand <= Number(p.low_stock_threshold)
+                    const value = onHand * Number(p.cost_price ?? 0)
                     return (
                       <tr key={p.id} style={{ borderTop: '1px solid ' + C.border }}>
                         <td style={{ padding: '8px 14px', fontWeight: 600 }}>{p.name}</td>
                         <td style={{ padding: '8px 14px', color: C.dim, fontFamily: 'monospace', fontSize: 11 }}>{p.sku ?? '—'}</td>
-                        <td style={{ padding: '8px 14px', color: low ? C.red : C.text, fontWeight: low ? 700 : 400 }}>{p.stock_quantity ?? 0}{low && <span style={{ marginLeft: 6, fontSize: 9, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.12)', color: C.red, fontWeight: 700 }}>LOW</span>}</td>
+                        <td style={{ padding: '8px 14px', color: low ? C.red : C.text, fontWeight: low ? 700 : 400 }}>{onHand}{low && <span style={{ marginLeft: 6, fontSize: 9, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.12)', color: C.red, fontWeight: 700 }}>LOW</span>}</td>
                         <td style={{ padding: '8px 14px', color: C.dim }}>{p.low_stock_threshold ?? '—'}</td>
                         <td style={{ padding: '8px 14px', color: C.dim }}>A${Number(p.cost_price ?? 0).toFixed(2)}</td>
                         <td style={{ padding: '8px 14px', color: C.green, fontWeight: 600 }}>A${value.toFixed(2)}</td>
@@ -171,7 +179,7 @@ export default function InventoryPage() {
             <select value={adjustForm.product_id} onChange={e => setAdjustForm(f => ({ ...f, product_id: e.target.value }))}
               style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: C.surface2, border: '1px solid ' + C.border, color: C.text, fontSize: 13, fontFamily: 'inherit', marginBottom: 8 }}>
               <option value="">Select a product…</option>
-              {products.map(p => <option key={p.id} value={p.id} style={{ background: '#1A2620' }}>{p.name} (stock: {p.stock_quantity ?? 0})</option>)}
+              {products.map(p => <option key={p.id} value={p.id} style={{ background: '#1A2620' }}>{p.name} (stock: {onHandOf(p.id)})</option>)}
             </select>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <input type="number" value={adjustForm.qty} onChange={e => setAdjustForm(f => ({ ...f, qty: Number(e.target.value) }))}

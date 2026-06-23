@@ -13,6 +13,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -26,6 +27,19 @@ async function _POST(req: Request) {
 
   const { data: biz } = await supabase.from('businesses').select('id, name, industry, city').eq('id', business_id).eq('user_id', user.id).single();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // FAB-FIX-2 — real menu prices are the ONLY dollar figures the promo may reference. The discount % is the
+  // owner's chosen offer (not a data fact), so percentages are left alone; any $ price is guarded.
+  const { data: priceRows } = await supabase.from('pos_products')
+    .select('name, price').eq('business_id', business_id).eq('is_active', true).order('price', { ascending: false }).limit(40);
+  const realPrices = (priceRows ?? []).map(p => Number(p.price)).filter(n => Number.isFinite(n) && n > 0);
+  const menu = (priceRows ?? []).slice(0, 20).map(p => `${p.name} A$${Number(p.price).toFixed(2)}`).join(', ');
+
+  // Strip any ungrounded $ from a customer-facing line, preferring no price over a fabricated one.
+  const guardField = async (s: string | undefined, surface: string): Promise<string> => {
+    const g = await guardOutput(s ?? '', realPrices, { mode: 'redact', ignorePercent: true, businessId: business_id, surface });
+    return g.text;
+  };
 
   try {
     const _bizCtx = await getBusinessContext(business_id)
@@ -43,6 +57,7 @@ await trackAICall({ route: 'aria/generate-promotion', model: 'claude-sonnet-4-5-
         content: `Create a targeted promotion for ${biz.name} (${biz.industry} in ${biz.city ?? 'Australia'}).
 
 Context: ${JSON.stringify(context ?? {})}
+${menu ? `Real menu prices (the ONLY dollar prices you may reference — never invent a price): ${menu}` : 'No menu prices on file — do NOT state any specific dollar price.'}
 
 Return JSON:
 {
@@ -58,6 +73,9 @@ Return JSON:
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const promo = parseLLMJsonOr(raw, null, 'generate-promotion') as Record<string, string> | null;
     if (!promo) throw new Error('No JSON');
+    // Guard the two customer-facing fields against real prices before persisting/returning.
+    promo.offer_text = await guardField(promo.offer_text, 'generate-promotion:offer');
+    promo.sms_message = await guardField(promo.sms_message, 'generate-promotion:sms');
     try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: promo.promotion_name, offer_text: promo.offer_text, sms_message: promo.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch (e) { console.error('[non-fatal]', e) }
     return NextResponse.json(promo);
   } catch {

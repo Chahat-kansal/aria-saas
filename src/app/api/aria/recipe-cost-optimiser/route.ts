@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action';
+import { guardOutput } from '@/lib/aria/ground-guard';
 import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
@@ -22,6 +23,8 @@ interface Suggestion {
   suggested_substitute: string;
   reason: string;
   estimated_saving_per_unit: number;
+  is_estimate?: boolean;        // true when the saving is NOT bounded by a real ingredient cost
+  saving_basis?: string;        // how the figure was derived (audit/provenance)
 }
 
 export async function POST(req: Request) {
@@ -95,6 +98,32 @@ Rules:
     }
   }
 
+  // FAB-FIX-2 — the LLM's estimated_saving_per_unit was persisted as fact. Bound it by REAL data: you cannot
+  // save more than the original ingredient costs. Clamp to [0, original cost_per_unit] when that cost is known
+  // and flag it; otherwise mark it an unbounded estimate. Guard the reason prose against the real costs.
+  const costOf = new Map<string, number>();
+  for (const ing of ingredients) {
+    const c = Number(ing.cost_per_unit);
+    if (Number.isFinite(c) && c > 0) costOf.set(ing.ingredient_name.trim().toLowerCase(), c);
+  }
+  const realCosts = Array.from(costOf.values());
+  suggestions = await Promise.all(suggestions.map(async (s) => {
+    const ceiling = costOf.get(String(s.original_ingredient ?? '').trim().toLowerCase());
+    const rawSaving = Math.max(0, Number(s.estimated_saving_per_unit) || 0);
+    const bounded = ceiling != null;
+    const saving = bounded ? Math.min(rawSaving, ceiling) : rawSaving;
+    const reasonGuard = await guardOutput(String(s.reason ?? ''), realCosts, { mode: 'redact', ignorePercent: true, businessId: business_id, surface: 'recipe-cost-optimiser:reason' });
+    return {
+      ...s,
+      estimated_saving_per_unit: Math.round(saving * 1000) / 1000,
+      reason: reasonGuard.text,
+      is_estimate: !bounded,
+      saving_basis: bounded
+        ? `capped at original ingredient cost A$${ceiling.toFixed(3)}/unit`
+        : 'estimate — no cost on file for the original ingredient; verify supplier quote',
+    };
+  }));
+
   const inputTokens = msg.usage.input_tokens;
   const outputTokens = msg.usage.output_tokens;
 
@@ -120,7 +149,9 @@ Rules:
       title: `Swap ${topSaving.original_ingredient} → ${topSaving.suggested_substitute} in ${recipe.name}`,
       recommendation: topSaving.suggested_substitute,
       reason: topSaving.reason,
-      expected_impact: `Save ~A$${Number(topSaving.estimated_saving_per_unit).toFixed(2)} per unit`,
+      expected_impact: topSaving.is_estimate
+        ? `Estimated saving ~A$${Number(topSaving.estimated_saving_per_unit).toFixed(2)}/unit (estimate — verify supplier quote)`
+        : `Estimated saving up to A$${Number(topSaving.estimated_saving_per_unit).toFixed(2)}/unit (${topSaving.saving_basis})`,
       priority: 'medium',
       status: 'pending',
       source: 'recipe_cost_optimiser',
