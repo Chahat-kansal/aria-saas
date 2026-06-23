@@ -4,6 +4,7 @@ import { computeStockValue } from '@/lib/inventory/stock-value'
 import { velocitySummary } from '@/lib/inventory/velocity'
 import { reorderSummary } from '@/lib/inventory/par-levels'
 import { taskAndReviewCounts } from '@/lib/inventory/daily-tasks'
+import { wasteGroundTruth } from '@/lib/inventory/waste'
 
 export interface ConversationSummary {
   id: string
@@ -40,8 +41,8 @@ export interface AskAriaContext {
   inventory_velocity: { scored_at: string | null; top_movers: Array<{ name: string; units_per_day: number; abc_tier: string }>; dead_stock: Array<{ name: string }>; abc_counts: { A: number; B: number; C: number; dead: number }; uncosted_count: number } | null
   // INV-PAR-1 — products below their reorder point right now (real, from velocity-derived par)
   inventory_reorder: { below_count: number; review_count: number; top: Array<{ name: string; on_hand: number; reorder_point: number; days_of_cover: number | null; suggested_qty: number }> } | null
-  // INV-STAFF-APP-2 — open staff tasks today + open owner-review-queue items (counts awaiting a decision)
-  inventory_ops: { open_tasks: number; open_reviews: number } | null
+  // INV-STAFF-APP-2 / INV-WASTE-1 — open staff tasks + owner-review items + today's waste $ and open waste spikes
+  inventory_ops: { open_tasks: number; open_reviews: number; waste_today_dollars: number; waste_spikes_open: number } | null
   staff_count: number
   open_support_tickets: number
   pending_aria_actions: number
@@ -460,10 +461,12 @@ export async function buildAskAriaContext(
   try { inventoryReorder = await reorderSummary(supabaseAdmin, businessId) }
   catch (e) { console.error('[business-context] reorder summary failed (non-fatal):', (e as Error).message) }
 
-  // INV-STAFF-APP-2 — open tasks + pending owner reviews for groundTruth.
+  // INV-STAFF-APP-2 / INV-WASTE-1 — open tasks + pending owner reviews + today's waste $ + open spikes.
   let inventoryOps: AskAriaContext['inventory_ops'] = null
-  try { inventoryOps = await taskAndReviewCounts(supabaseAdmin, businessId) }
-  catch (e) { console.error('[business-context] ops counts failed (non-fatal):', (e as Error).message) }
+  try {
+    const [ops, waste] = await Promise.all([taskAndReviewCounts(supabaseAdmin, businessId), wasteGroundTruth(supabaseAdmin, businessId)])
+    inventoryOps = { ...ops, ...waste }
+  } catch (e) { console.error('[business-context] ops counts failed (non-fatal):', (e as Error).message) }
 
   return {
     business_id: businessId,
