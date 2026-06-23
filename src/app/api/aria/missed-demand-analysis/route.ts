@@ -13,6 +13,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -103,6 +104,15 @@ Return JSON:
     { analysis: `Product requested ${item.times_requested} times — consider adding to catalogue.`, confidence: 'low', estimated_monthly_revenue_cents: null },
     'missed-demand-analysis'
   );
+
+  // BUGFIX-FAB-3 — guard the prose `analysis` against the REAL request/price figures (the structured
+  // estimated_monthly_revenue_cents is an explicit estimate field and left as-is).
+  if (typeof parsed.analysis === 'string') {
+    const allowed: number[] = [Number(item.times_requested) || 0, Number(item.estimated_quantity_wanted) || 0];
+    if (item.approximate_price_point_cents != null) allowed.push(Math.round(Number(item.approximate_price_point_cents)) / 100);
+    if (globalProduct?.suggested_price_cents != null) allowed.push(Math.round(Number(globalProduct.suggested_price_cents)) / 100);
+    parsed.analysis = (await guardOutput(parsed.analysis, allowed, { mode: 'strip', businessId: business_id, surface: 'missed-demand-analysis' })).text;
+  }
 
   // Update missed_demand record with Aria's analysis
   await supabase

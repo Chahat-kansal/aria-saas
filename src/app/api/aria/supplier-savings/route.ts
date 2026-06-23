@@ -8,6 +8,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { guardOutput } from '@/lib/aria/ground-guard';
 
 interface PoItem { product_id: string | null; product_name: string | null; unit_cost_cents: number | null; supplier_id: string | null }
 
@@ -59,19 +60,29 @@ async function _POST() {
     .sort((a, b) => b.saving_per_unit_cents - a.saving_per_unit_cents)
     .slice(0, 10);
 
+  // BUGFIX-FAB-3 — the REAL per-unit savings are computed above; the LLM must cite them, NOT invent a monthly
+  // figure (we have no sales-volume data to ground one). Feed the exact numbers + guard the prose.
+  const allowed: number[] = [];
+  for (const o of opportunities) {
+    allowed.push(Math.round(o.saving_per_unit_cents) / 100, Math.round(o.cheapest.avg_cost_cents) / 100, Math.round(o.dearest.avg_cost_cents) / 100);
+  }
+
   let recommendation = '';
   let inputTokens = 0, outputTokens = 0, success = false;
   if (opportunities.length > 0) {
     try {
       const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
+      const lines = opportunities.slice(0, 5).map(o => `${o.product}: save A$${(o.saving_per_unit_cents / 100).toFixed(2)}/unit — switch from ${o.dearest.supplier_name} (A$${(o.dearest.avg_cost_cents / 100).toFixed(2)}) to ${o.cheapest.supplier_name} (A$${(o.cheapest.avg_cost_cents / 100).toFixed(2)})`).join('\n');
       const res = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
         temperature: 0.3,
-        system: 'You are a procurement advisor for an Australian small business. One short paragraph: estimate monthly saving if they switch the top 3 products to the cheapest supplier. No preamble.',
-        messages: [{ role: 'user', content: `Supplier price gaps:\n${JSON.stringify(opportunities.slice(0, 5))}\n\nWhat would they save monthly switching the top 3?` }],
+        system: 'You are a procurement advisor for an Australian small business. One short paragraph recommending which products to switch supplier. Cite ONLY the exact per-unit saving figures provided. Do NOT estimate or invent a monthly total — there is no sales-volume data to support one. No preamble.',
+        messages: [{ role: 'user', content: `Real per-unit supplier savings:\n${lines}\n\nWhich should they switch? Cite only the per-unit savings above.` }],
       });
       recommendation = res.content.filter((b: { type: string; text?: string }) => b.type === 'text').map((b: { type: string; text?: string }) => b.text ?? '').join('').trim();
+      const guarded = await guardOutput(recommendation, allowed, { mode: 'strip', businessId: bid, surface: 'supplier-savings' });
+      recommendation = guarded.text;
       inputTokens = res.usage.input_tokens;
       outputTokens = res.usage.output_tokens;
       success = true;

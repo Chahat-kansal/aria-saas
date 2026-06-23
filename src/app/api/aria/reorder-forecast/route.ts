@@ -12,6 +12,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -181,7 +182,15 @@ Return: {"summary":"2-3 sentences with specific items/quantities","urgent_items"
         }],
       }));
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      aiSummary = parseLLMJsonOr(raw, {}, 'reorder-forecast');
+      aiSummary = parseLLMJsonOr<{ summary?: string; holiday_note?: string | null; [k: string]: unknown }>(raw, {}, 'reorder-forecast');
+      // BUGFIX-FAB-3 — the qty/stock/day figures are all code-computed (forecastItems). Guard the prose summary
+      // against them so the LLM can't drift a number; structured fields (urgent_items, actions) are untouched.
+      const allowed: number[] = [];
+      for (const i of forecastItems.slice(0, 15)) allowed.push(i.current_stock, i.suggested_order, i.adjusted_days_remaining, i.velocity_per_day);
+      for (const h of upcomingHolidays) allowed.push(h.days_away);
+      if (aiSummary && typeof aiSummary.summary === 'string') {
+        aiSummary.summary = (await guardOutput(aiSummary.summary, allowed, { mode: 'strip', businessId: business_id, surface: 'reorder-forecast' })).text;
+      }
     } catch { /* non-critical — continue without summary */ }
   }
 

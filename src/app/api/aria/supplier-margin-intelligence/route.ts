@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -99,6 +100,15 @@ Then respond ONLY in this JSON format:
     const text = response.content.filter(b => b.type === 'text').map(b => (b as { type: 'text'; text: string }).text).join('')
     const cleaned = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(cleaned)
+
+    // BUGFIX-FAB-3 — competitor prices come from web_search (the structured recommendations keep them); the
+    // owner-facing `summary` prose is FLAG-guarded against the REAL margin/cost/price figures (flag, not strip,
+    // because a legit summary may reference a searched competitor price — we log drift rather than gut it).
+    if (typeof parsed.summary === 'string') {
+      const allowed: number[] = []
+      for (const p of atRisk) { allowed.push(Math.round(p.new_cost * 100) / 100, Math.round(p.sell_price * 100) / 100, Math.round(p.newMargin * 10) / 10); if (p.oldMargin != null) allowed.push(Math.round(p.oldMargin * 10) / 10) }
+      await guardOutput(parsed.summary, allowed, { mode: 'flag', businessId: bid, surface: 'supplier-margin-intelligence' })
+    }
 
     // Write a combined recommendation to autopilot
     if (parsed.recommendations?.length > 0) {

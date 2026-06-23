@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -157,6 +158,13 @@ Only output the JSON. No markdown, no explanation.`,
     const cleaned = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(cleaned)
     insight = parsed.body ?? ''
+    // BUGFIX-FAB-3 — guard the prose body against the REAL variance figures (all code-computed above).
+    if (insight) {
+      const allowed: number[] = [Math.abs(avgVariance) / 100, Math.abs(totalShortage) / 100, shortSessions, sessions.length, Math.round(shortSessions / sessions.length * 100)]
+      for (const d of dowSummary) allowed.push(Math.abs(d.avg) / 100, d.count, d.negCount)
+      for (const s of staffSummary) allowed.push(Math.abs(s.avg) / 100, s.count, Math.round(s.negRate * 100))
+      insight = (await guardOutput(insight, allowed, { mode: 'strip', businessId: bid, surface: 'cashup-intelligence' })).text
+    }
     const rawPriority: string = parsed.priority ?? ''
     priority = rawPriority === 'high' || rawPriority === 'urgent' ? 'urgent'
       : rawPriority === 'medium' || rawPriority === 'important' ? 'important'

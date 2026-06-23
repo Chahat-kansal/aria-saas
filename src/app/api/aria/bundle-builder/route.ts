@@ -9,6 +9,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { parseLLMJsonOr } from '@/lib/ai-json'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -183,7 +184,13 @@ async function _POST() {
       const text = resp.content[0].type === 'text' ? resp.content[0].text : ''
       const parsed = parseLLMJsonOr<Array<{ i: number; name: string; pitch: string }>>(text.match(/\[[\s\S]*\]/)?.[0] ?? '[]', [], 'bundle-naming')
       for (const item of parsed) {
-        if (named[item.i]) named[item.i] = { name: item.name ?? named[item.i].name, pitch: item.pitch ?? named[item.i].pitch }
+        if (!named[item.i]) continue
+        const s = top[item.i]
+        const pitch = item.pitch ?? named[item.i].pitch
+        // BUGFIX-FAB-3 — the saving/price are code-computed; if the LLM pitch drifts a $ off them, fall back to
+        // the code-built pitch (which carries the real saving). Allowed = this bundle's real figures.
+        const g = await guardOutput(pitch, [Math.round((s.individual_total - s.bundle_price) * 100) / 100, s.bundle_price, s.individual_total], { mode: 'flag', businessId: bid, surface: 'bundle-builder' })
+        named[item.i] = { name: item.name ?? named[item.i].name, pitch: g.ok ? pitch : `Save A$${(s.individual_total - s.bundle_price).toFixed(2)} when bought as a bundle.` }
       }
     } catch { /* keep defaults */ }
   }

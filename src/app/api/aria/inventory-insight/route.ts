@@ -10,6 +10,7 @@ import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { computeStockValue } from '@/lib/inventory/stock-value';
 import { resolveOutletId } from '@/lib/inventory/outlet-stock';
+import { guardOutput } from '@/lib/aria/ground-guard';
 
 // FAB-FIX-1 — stock value is now the CANONICAL items_on_hand × resolved cost (computeStockValue), NOT the
 // demoted pos_products.stock_quantity cache (which summed to a fabricated A$234,523 for Sip vs the real
@@ -102,6 +103,10 @@ async function _POST() {
 What should the owner do? Plain prose, 2-3 sentences, Australian context. Cite only the figures above.` }],
     });
     insight = res.content.filter((b: { type: string; text?: string }) => b.type === 'text').map((b: { type: string; text?: string }) => b.text ?? '').join('').trim();
+    // BUGFIX-FAB-3 — guard the prose against the canonical valuation figures already injected as ground truth.
+    const allowed: number[] = [sv.at_cost, sv.at_retail, sv.units_on_hand, sv.products_total, sv.products_valued, sv.products_unknown_cost, Math.round(deadValue * 100) / 100, lowStock, dead.length];
+    if (sv.margin_pct != null) allowed.push(sv.margin_pct);
+    insight = (await guardOutput(insight, allowed, { mode: 'strip', businessId: bid, surface: 'inventory-insight' })).text;
     inputTokens = res.usage.input_tokens; outputTokens = res.usage.output_tokens; success = true;
   } catch (e) { console.error('[inventory-insight] AI failed:', (e as Error).message); }
 

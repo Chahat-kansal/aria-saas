@@ -8,6 +8,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { guardOutput } from '@/lib/aria/ground-guard';
 
 interface SaleItem { product_name: string | null; quantity: number | null; unit_price: number | null; line_total?: number | null }
 interface PastSale { id: string; created_at: string; total_amount: number | null }
@@ -65,6 +66,11 @@ async function _POST(req: Request) {
       messages: [{ role: 'user', content: `Sale ${sale.id}\nWhen: ${sale.created_at}\nStaff: ${sale.served_by ?? 'unknown'}\nPayment: ${sale.payment_method ?? 'cash'}\nStatus: ${sale.status}\nTotal: A$${Number(sale.total_amount ?? 0).toFixed(2)}\nLine items: ${JSON.stringify(lines)}\nCustomer history: ${customerHistory ? JSON.stringify(customerHistory) : 'walk-in'}` }],
     });
     insight = res.content.filter((b: { type: string; text?: string }) => b.type === 'text').map((b: { type: string; text?: string }) => b.text ?? '').join('').trim();
+    // BUGFIX-FAB-3 — guard the prose against the REAL sale + customer figures (code-computed).
+    const allowed: number[] = [Math.round(Number(sale.total_amount ?? 0) * 100) / 100];
+    if (customerHistory) allowed.push(customerHistory.lifetime_value, customerHistory.count);
+    for (const li of lines) { if (li.line_total != null) allowed.push(Math.round(Number(li.line_total) * 100) / 100); if (li.unit_price != null) allowed.push(Math.round(Number(li.unit_price) * 100) / 100); if (li.quantity != null) allowed.push(Number(li.quantity)); }
+    insight = (await guardOutput(insight, allowed, { mode: 'strip', businessId: bid, surface: 'sale-insight' })).text;
     inputTokens = res.usage.input_tokens; outputTokens = res.usage.output_tokens; success = true;
   } catch (e) { console.error('[sale-insight] AI failed:', (e as Error).message); }
 

@@ -9,6 +9,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,10 @@ Items: ${JSON.stringify(significant.map(v => ({
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
       const { parseLLMJsonOr } = await import('@/lib/ai-json');
       aiInsights = parseLLMJsonOr<typeof aiInsights>(raw, aiInsights, 'aria/variance');
+      // BUGFIX-FAB-3 — guard each prose insight against the REAL variance qty + $ value (code-computed).
+      const allowed: number[] = [];
+      for (const v of significant) allowed.push(v.variance, Math.round(v.variance_value_cents) / 100);
+      aiInsights = await Promise.all(aiInsights.map(async ins => ({ ...ins, insight: typeof ins.insight === 'string' ? (await guardOutput(ins.insight, allowed, { mode: 'strip', businessId: business_id, surface: 'variance' })).text : ins.insight })));
     } catch { /* non-critical */ }
   }
 

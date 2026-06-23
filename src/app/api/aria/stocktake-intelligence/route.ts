@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -155,6 +156,12 @@ Respond ONLY in this JSON format:
 
     classified = parsed.classified ?? []
     overallInsight = parsed.overall_insight ?? ''
+    // BUGFIX-FAB-3 — guard the prose against the REAL variance + cost-impact figures (code-computed).
+    if (overallInsight) {
+      const allowed: number[] = [Math.round(totalCostImpact / 100), varianceItems.length]
+      for (const i of topItems) allowed.push(i.variance, Math.round(i.cost_impact_cents / 100))
+      overallInsight = (await guardOutput(overallInsight, allowed, { mode: 'strip', businessId: bid, surface: 'stocktake-intelligence' })).text
+    }
     const rawPriority: string = parsed.priority ?? ''
     priority = rawPriority === 'high' || rawPriority === 'urgent' ? 'urgent'
       : rawPriority === 'medium' || rawPriority === 'important' ? 'important'

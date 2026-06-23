@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { guardOutput } from '@/lib/aria/ground-guard'
 import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -31,7 +32,11 @@ async function _POST(req: Request) {
       () => anthropic.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 150, messages: [{ role: 'user', content: prompt }] })
     )
     const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
-    if (raw.length > 20) commentary = raw
+    if (raw.length > 20) {
+      // BUGFIX-FAB-3 — the only valid $ figures are the burn/runway/lowest passed in by the caller.
+      const allowed = [Math.round((burn_rate ?? 0) * 100) / 100, Number(runway_days ?? 0), Math.round(lowest_point ?? 0)]
+      commentary = (await guardOutput(raw, allowed, { mode: 'strip', businessId: business_id, surface: 'cash-commentary' })).text
+    }
   } catch { /* use fallback */ }
 
   return NextResponse.json({ commentary })
