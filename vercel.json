@@ -32,232 +32,92 @@
   },
   "crons": [
     {
-      "path": "/api/cron/kiosk-token-rotate",
-      "schedule": "0 18 * * *"
-    },
-    {
-      "path": "/api/cron/expire-checkout-carts",
-      "schedule": "0 18 * * *"
-    },
-    {
-      "path": "/api/cron/parcel-insights",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/nightly-sync",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/rfm-daily",
-      "schedule": "0 16 * * *"
-    },
-    {
-      "path": "/api/cron/daily-briefing-submit",
-      "schedule": "0 16 * * *"
-    },
-    {
-      "path": "/api/cron/daily-briefing-poll",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/publish-scheduled",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/sync-engagement",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/aria-brain",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/sync-reviews",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/loyalty-birthday",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/loyalty-winback",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/notify-ready",
-      "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/crons/aria-intelligence",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/signal-engine",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/customer-scoring",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/memory-extract",
-      "schedule": "0 16 * * *"
-    },
-    {
-      "path": "/api/cron/hypothesis-engine",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/cron/outcome-check",
-      "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/marketing-automations",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/cron/parcel-sync",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/leave-accrual",
+      "path": "/api/cron/dispatch/h01",
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/cron/seo-crawl",
+      "path": "/api/cron/dispatch/h02",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h03",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h04",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h05",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h06",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h07",
       "schedule": "0 7 * * *"
     },
     {
-      "path": "/api/cron/weekly-report",
-      "schedule": "0 22 * * 0"
-    },
-    {
-      "path": "/api/cron/price-schedules",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/seo-keyword-check",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/seo-verify-fixes",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/competitor-monitor",
-      "schedule": "0 22 * * *"
-    },
-    {
-      "path": "/api/cron/loyalty-expiry",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/mark-overdue",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/timed-prices",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/xero-sync",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/send-scheduled-campaigns",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/booking-reminders",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/cron/market-price-refresh",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/cron/send-scheduled-reports",
-      "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/cron/xero-auto-sync",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/trial-warnings",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/council-session",
-      "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/cron/menu-engineering",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/supplier-negotiation",
-      "schedule": "0 20 1 * *"
-    },
-    {
-      "path": "/api/cron/waste-prep-guide",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/cron/waste-noon-check",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/waste-reconcile",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/labour-optimisation",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/cron/bas-monitor",
-      "schedule": "0 22 * * *"
-    },
-    {
-      "path": "/api/cron/reputation-requests",
+      "path": "/api/cron/dispatch/h08",
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/cron/aeo-weekly",
-      "schedule": "0 21 * * 0"
-    },
-    {
-      "path": "/api/cron/reconciliation",
-      "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/cron/customer-acquisition",
-      "schedule": "0 21 * * 1"
-    },
-    {
-      "path": "/api/cron/inventory-financing",
-      "schedule": "0 19 * * 0"
-    },
-    {
-      "path": "/api/cron/aria-health-monitor",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/invoices-recurring",
+      "path": "/api/cron/dispatch/h09",
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/cron/pattern-memory",
-      "schedule": "0 3 * * 1"
+      "path": "/api/cron/dispatch/h10",
+      "schedule": "0 10 * * *"
     },
     {
-      "path": "/api/cron/industry-benchmarks",
-      "schedule": "0 2 * * 0"
+      "path": "/api/cron/dispatch/h11",
+      "schedule": "0 11 * * *"
     },
     {
-      "path": "/api/cron/causal-analysis",
-      "schedule": "0 4 * * *"
+      "path": "/api/cron/dispatch/h12",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h13",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h15",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h16",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h17",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h18",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h19",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h20",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h21",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h22",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/h23",
+      "schedule": "0 23 * * *"
     }
   ]
 }
