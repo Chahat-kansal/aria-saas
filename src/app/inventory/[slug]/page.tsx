@@ -26,6 +26,10 @@ interface Boot { business: { id: string; name: string; slug: string }; outlets: 
 interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number } }
 interface Task { id: string; task_type: string; product_id: string | null; title: string; detail: string | null; hypothesis: string | null; priority: number; status: string; completed_by: string | null; product_name: string | null; product_sku: string | null; expected: number | null }
 interface TasksData { acting: { id: string; name: string }; tasks: Task[]; pills: { accuracy: number | null; streak: number; left_today: number } }
+interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string }
+interface ReviewData { acting: { id: string; name: string }; reviews: Review[]; counts: { open: number; resolved_today: number } }
+interface ScanProduct { id: string; name: string; sku: string | null; price: number; on_hand: number; cost: number | null; cost_source: string; units_per_day: number; days_of_cover: number | null }
+interface ScanMatch { id: string; name: string; sku: string | null; price: number; on_hand: number }
 
 const TILES = [
   { key: 'receive', label: 'Receive', sub: 'log a delivery', bg: 'greenSoft', stroke: '#0F6E56', d: 'M3 7h13v8H3zM16 10h3l2 3v2h-5M5.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
@@ -60,6 +64,20 @@ export default function InventoryStaffApp() {
   const [countVal, setCountVal] = useState(0)
   const [countMsg, setCountMsg] = useState<{ variance: number; review: boolean; time: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Review screen state
+  const [reviewData, setReviewData] = useState<ReviewData | null>(null)
+  const [reviewState, setReviewState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
+  const [actingReview, setActingReview] = useState<string | null>(null)
+  // Scan screen state
+  const [scanInput, setScanInput] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [scanResult, setScanResult] = useState<ScanProduct | null>(null)
+  const [scanMatches, setScanMatches] = useState<ScanMatch[]>([])
+  const [scanState, setScanState] = useState<'idle' | 'searching' | 'found' | 'notfound' | 'error'>('idle')
+  const [scanNote, setScanNote] = useState('')
+  const [scanCount, setScanCount] = useState<number | null>(null)
+  const [scanCountMsg, setScanCountMsg] = useState<{ variance: number; review: boolean } | null>(null)
+  const [scanCounting, setScanCounting] = useState(false)
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -118,6 +136,67 @@ export default function InventoryStaffApp() {
       }
     } catch { /* ignore */ }
     setSubmitting(false)
+  }
+
+  // ── Review queue ──
+  const loadReview = useCallback(async (oid: string | null) => {
+    setReviewState('loading')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/review${oid ? `?outlet_id=${oid}` : ''}`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setReviewState('error'); return }
+      const d = await r.json() as ReviewData
+      setReviewData(d)
+      setReviewState(d.reviews.length === 0 ? 'empty' : 'ok')
+    } catch { setReviewState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'review' && !reviewData) loadReview(outletId) }, [stage, tab, reviewData, outletId, loadReview])
+
+  async function reviewAction(id: string, action: 'accept' | 'investigate' | 'dismiss') {
+    setActingReview(id)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_id: id, action }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { await loadReview(outletId); loadHome(outletId) }
+    } catch { /* ignore */ }
+    setActingReview(null)
+  }
+
+  // ── Scan / lookup ──
+  async function runScan(term: string, kind: 'barcode' | 'q') {
+    if (!term.trim()) return
+    setScanState('searching'); setScanNote(''); setScanResult(null); setScanMatches([]); setScanCount(null); setScanCountMsg(null)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?${kind}=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setScanState('error'); return }
+      const d = await r.json()
+      if (d.mode === 'barcode') {
+        if (d.found) { setScanResult(d.product); setScanState('found') }
+        else { setScanState('notfound'); setScanNote(`No barcode match for "${d.barcode}". Search by name or SKU instead.`) }
+      } else if (d.mode === 'search') {
+        if ((d.matches ?? []).length) { setScanMatches(d.matches); setScanState('found') }
+        else { setScanState('notfound'); setScanNote(`Nothing matches "${d.query}".`) }
+      }
+    } catch { setScanState('error') }
+  }
+  async function pickMatch(id: string) {
+    setScanState('searching'); setScanMatches([])
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?product_id=${id}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.found) { setScanResult(d.product); setScanState('found') } else { setScanState('notfound'); setScanNote('Could not load that item.') }
+    } catch { setScanState('error') }
+  }
+  async function submitScanCount(product: ScanProduct) {
+    if (scanCount == null) return
+    setScanCounting(true)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: product.id, counted: scanCount, outlet_id: outletId, product_name: product.name }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setScanCountMsg({ variance: d.variance, review: d.review_raised }); loadHome(outletId) }
+    } catch { /* ignore */ }
+    setScanCounting(false)
   }
 
   // Bootstrap + resume session.
@@ -379,8 +458,176 @@ export default function InventoryStaffApp() {
     )
   }
   if (tab === 'reports') return stub('Reports', 'Sold vs in-stock · PDF + email')
-  if (tab === 'review') return stub('Review', 'Owner review queue')
-  if (tab === 'scan') return stub('Scan', 'Look up an item')
+
+  // ── OWNER REVIEW QUEUE ──
+  if (tab === 'review') {
+    const reviews = reviewData?.reviews ?? []
+    const counts = reviewData?.counts
+    const flagMeta = (f: string) => ({
+      count_variance: { label: 'Count variance', bg: T.redSoft, col: T.red },
+      short_delivery: { label: 'Short delivery', bg: T.amberSoft, col: T.amber },
+      waste_spike: { label: 'Waste spike', bg: T.redSoft, col: T.red },
+      velocity_drop: { label: 'Velocity drop', bg: T.blueSoft, col: '#185FA5' },
+    } as Record<string, { label: string; bg: string; col: string }>)[f] ?? { label: f.replace(/_/g, ' '), bg: T.paper, col: T.muted }
+    const timeAgo = (iso: string) => {
+      const m = (Date.now() - new Date(iso).getTime()) / 60000
+      if (m < 60) return `${Math.max(1, Math.round(m))}m ago`
+      if (m < 1440) return `${Math.round(m / 60)}h ago`
+      return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+    }
+    const cell = (l: string, v: React.ReactNode, bg: string, col: string, i: number) => (
+      <div key={i} style={{ flex: 1, borderRadius: 12, padding: 11, textAlign: 'center', background: bg }}>
+        <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.3px', color: T.muted }}>{l}</div>
+        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, fontWeight: 600, marginTop: 3, color: col }}>{v}</div>
+      </div>
+    )
+    return shell(
+      <>
+        {statusbar}{header(true, 'Review', counts ? `${counts.open} open · ${counts.resolved_today} resolved today` : 'Owner review queue')}
+        {body(
+          reviewState === 'loading' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 170, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+          ) : reviewState === 'error' ? (
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load the review queue</p><button onClick={() => loadReview(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+          ) : reviewState === 'empty' ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>✓</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>All clear — nothing to review</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When a staff count doesn&apos;t match the book stock, it lands here for you to accept or investigate. Nothing changes your stock until you do.</p></div>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, color: '#5A6472', background: T.sageSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginBottom: 13, display: 'flex', gap: 8 }}>
+                <svg width="16" height="16" fill="none" stroke={T.green} strokeWidth={2} viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 1 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                <span><b style={{ color: T.green }}>Nothing auto-corrects.</b> A count never moves stock. It only changes when <b>you</b> accept a variance here — logged against your name.</span>
+              </div>
+              {reviews.map(rv => {
+                const fm = flagMeta(rv.flag_type)
+                const v = rv.variance ?? 0
+                const busy = actingReview === rv.id
+                return (
+                  <div key={rv.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: fm.col, background: fm.bg, padding: '3px 9px', borderRadius: 7, textTransform: 'uppercase', letterSpacing: '.3px' }}>{fm.label}</span>
+                      {rv.status === 'investigating' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '3px 8px', borderRadius: 7 }}>INVESTIGATING</span>}
+                    </div>
+                    <b style={{ fontSize: 15, fontWeight: 600, display: 'block' }}>{rv.product_name}</b>
+                    {rv.product_sku && <span style={{ fontSize: 11, color: T.muted }}>SKU {rv.product_sku}</span>}
+                    {(rv.expected_value != null || rv.actual_value != null) && (
+                      <div style={{ display: 'flex', gap: 9, margin: '11px 0' }}>
+                        {cell('Book stock', rv.expected_value ?? '—', T.paper, T.ink, 0)}
+                        {cell('Counted', rv.actual_value ?? '—', T.greenSoft, T.green, 1)}
+                        {cell('Variance', `${v > 0 ? '+' : ''}${v}`, v === 0 ? T.greenSoft : T.redSoft, v === 0 ? T.green : T.red, 2)}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: T.muted, marginBottom: 12 }}>Raised by <b style={{ color: T.ink }}>{rv.staff_name}</b> · {timeAgo(rv.created_at)}{v !== 0 ? ` · ${Math.abs(v)} units ${v < 0 ? 'short' : 'over'}` : ''}</div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'accept')} style={{ flex: 1.5, background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : rv.flag_type === 'count_variance' ? 'Accept · adjust stock' : 'Accept'}</button>
+                      {rv.status !== 'investigating' && <button disabled={busy} onClick={() => reviewAction(rv.id, 'investigate')} style={{ flex: 1, background: '#fff', color: T.amber, border: `1.5px solid ${T.amberSoft}`, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Investigate</button>}
+                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'dismiss')} style={{ flex: 0.9, background: '#fff', color: T.muted, border: `1.5px solid ${T.line}`, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Dismiss</button>
+                    </div>
+                    {rv.flag_type === 'count_variance' && rv.status !== 'investigating' && <div style={{ fontSize: 10, color: T.muted, marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>Accept moves stock to {rv.actual_value ?? '—'} and logs the adjustment to you.</div>}
+                  </div>
+                )
+              })}
+            </>
+          )
+        )}
+        {tabbar}
+      </>
+    )
+  }
+
+  // ── SCAN / LOOKUP ──
+  if (tab === 'scan') {
+    const scanCell = (l: string, v: React.ReactNode, col: string, i: number) => (
+      <div key={i} style={{ flex: 1, background: T.paper, borderRadius: 11, padding: '9px 8px', textAlign: 'center' }}>
+        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 21, fontWeight: 600, lineHeight: 1, color: col }}>{v}</div>
+        <div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{l}</div>
+      </div>
+    )
+    return shell(
+      <>
+        {statusbar}{header(true, 'Scan', 'Look up an item · live stock')}
+        {body(
+          <>
+            <div style={{ background: T.ink, color: '#fff', borderRadius: 16, padding: 18, marginBottom: 13, textAlign: 'center' }}>
+              <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(127,184,151,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                <svg width="28" height="28" fill="none" stroke={T.sage} strokeWidth={2} viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10" /></svg>
+              </div>
+              <p style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 18 }}>Scan a barcode</p>
+              <p style={{ fontSize: 11.5, color: '#9aa3b2', marginTop: 2, lineHeight: 1.5 }}>No camera here — type the barcode, or search by name below.</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <input value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runScan(scanInput, 'barcode') }} placeholder="Barcode…" inputMode="numeric"
+                  style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: '1px solid rgba(255,255,255,.14)', background: 'rgba(255,255,255,.06)', color: '#fff', fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+                <button onClick={() => runScan(scanInput, 'barcode')} style={{ background: T.sage, color: '#0E1812', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Look up</button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
+              <input value={searchInput} onChange={e => setSearchInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runScan(searchInput, 'q') }} placeholder="Search by name or SKU…"
+                style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+              <button onClick={() => runScan(searchInput, 'q')} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
+            </div>
+
+            {scanState === 'idle' && <div style={{ padding: 28, textAlign: 'center', color: T.muted }}><p style={{ fontSize: 13, lineHeight: 1.6 }}>Look up any item to see its live on-hand, cost and how fast it sells.</p></div>}
+            {scanState === 'searching' && <div style={{ height: 150, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />}
+            {scanState === 'error' && <div style={{ padding: 20, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>Lookup failed. Try again.</div>}
+            {scanState === 'notfound' && (
+              <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.amberSoft}`, textAlign: 'center' }}>
+                <div style={{ fontSize: 30, marginBottom: 6 }}>🔍</div>
+                <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No match</p>
+                <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{scanNote}</p>
+              </div>
+            )}
+            {scanState === 'found' && scanMatches.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {scanMatches.map(m => (
+                  <button key={m.id} onClick={() => pickMatch(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku} · ` : ''}{money(m.price)}</div></div>
+                    <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {scanState === 'found' && scanResult && (
+              <div style={{ background: '#fff', border: `1.5px solid ${T.green}`, borderRadius: 16, padding: 15, boxShadow: '0 6px 20px rgba(45,82,64,.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.ink, color: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 13 }}>
+                  <svg width="20" height="20" fill="none" stroke={T.sage} strokeWidth={2} viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10" /></svg>
+                  <b style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{scanResult.name}</b><span style={{ fontSize: 11, color: '#9aa3b2' }}>{scanResult.sku ? `SKU ${scanResult.sku}` : 'no SKU'}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 9, marginBottom: 9 }}>
+                  {scanCell('on hand', scanResult.on_hand, T.green, 0)}
+                  {scanCell('price', money(scanResult.price), T.ink, 1)}
+                  {scanCell('unit cost', scanResult.cost != null ? money(scanResult.cost) : '—', T.ink, 2)}
+                </div>
+                <div style={{ display: 'flex', gap: 9, marginBottom: 12 }}>
+                  {scanCell('sells / day', scanResult.units_per_day, T.ink, 0)}
+                  {scanCell('days cover', scanResult.days_of_cover != null ? scanResult.days_of_cover : '—', scanResult.days_of_cover != null && scanResult.days_of_cover < 7 ? T.red : T.ink, 1)}
+                  {scanCell('cost basis', scanResult.cost_source, T.muted, 2)}
+                </div>
+                {scanCount == null ? (
+                  <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Count this item</button>
+                ) : scanCountMsg ? (
+                  <>
+                    <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 13, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{scanCountMsg.review ? '✓ Sent to owner review' : '✓ Count matches — recorded'}</div>
+                    <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>Logged as <b style={{ color: T.green }}>{acting?.name}</b> · stock unchanged{scanCountMsg.review ? ' — the owner reviews the variance' : ''}</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '2px 0 12px' }}>
+                      <button onClick={() => setScanCount(v => Math.max(0, (v ?? 0) - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
+                      <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{scanCount}</div>
+                      <button onClick={() => setScanCount(v => (v ?? 0) + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
+                    </div>
+                    <button onClick={() => submitScanCount(scanResult)} disabled={scanCounting} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: scanCounting ? 0.6 : 1 }}>{scanCounting ? 'Submitting…' : 'Submit count'}</button>
+                    <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>Counting won&apos;t change stock — a mismatch goes to the owner&apos;s review queue.</div>
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        {tabbar}
+      </>
+    )
+  }
 
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
