@@ -32,6 +32,8 @@ interface ScanProduct { id: string; name: string; sku: string | null; price: num
 interface ScanMatch { id: string; name: string; sku: string | null; price: number; on_hand: number }
 interface WasteItem { id: string; product_name: string; quantity: number; unit: string; reason: string; recorded_by: string; recorded_at: string; cost_cents: number | null }
 interface WasteToday { acting: { id: string; name: string }; reasons: string[]; items: WasteItem[]; total_cost_cents: number; count: number }
+interface AdjustRecent { id: string; product_id: string; product_name: string; delta: number; reason: string; adjusted_by: string; created_at: string; value_dollars: number | null }
+interface AdjustData { acting: { id: string; name: string }; role: string; can_adjust: boolean; reasons: string[]; recent: AdjustRecent[] }
 
 const TILES = [
   { key: 'receive', label: 'Receive', sub: 'log a delivery', bg: 'greenSoft', stroke: '#0F6E56', d: 'M3 7h13v8H3zM16 10h3l2 3v2h-5M5.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
@@ -57,7 +59,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -92,6 +94,20 @@ export default function InventoryStaffApp() {
   const [wasteSubmitting, setWasteSubmitting] = useState(false)
   const [wasteToday, setWasteToday] = useState<WasteToday | null>(null)
   const [wasteTodayState, setWasteTodayState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
+  // Adjust screen state
+  const [adjustProduct, setAdjustProduct] = useState<{ id: string; name: string; unit_cost: number | null; on_hand: number } | null>(null)
+  const [adjustSearch, setAdjustSearch] = useState('')
+  const [adjustMatches, setAdjustMatches] = useState<ScanMatch[]>([])
+  const [adjustSearching, setAdjustSearching] = useState(false)
+  const [adjustMode, setAdjustMode] = useState<'set' | 'add' | 'remove'>('set')
+  const [adjustValue, setAdjustValue] = useState(0)
+  const [adjustReason, setAdjustReason] = useState('')
+  const [adjustOther, setAdjustOther] = useState('')
+  const [adjustMsg, setAdjustMsg] = useState<{ delta: number; new_on_hand: number | null } | null>(null)
+  const [adjustErr, setAdjustErr] = useState('')
+  const [adjustSubmitting, setAdjustSubmitting] = useState(false)
+  const [adjustData, setAdjustData] = useState<AdjustData | null>(null)
+  const [adjustState, setAdjustState] = useState<'loading' | 'ok' | 'error'>('loading')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -256,6 +272,52 @@ export default function InventoryStaffApp() {
       if (r.ok && d.ok) { setWasteMsg({ cost_cents: d.cost_cents, spike: d.spike }); loadWasteToday(outletId); loadHome(outletId) }
     } catch { /* ignore */ }
     setWasteSubmitting(false)
+  }
+
+  // ── Adjust ──
+  const loadAdjust = useCallback(async (oid: string | null) => {
+    setAdjustState('loading')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/adjust${oid ? `?outlet_id=${oid}` : ''}`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setAdjustState('error'); return }
+      const d = await r.json() as AdjustData
+      setAdjustData(d); setAdjustState('ok')
+    } catch { setAdjustState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'adjust' && !adjustData) loadAdjust(outletId) }, [stage, tab, adjustData, outletId, loadAdjust])
+
+  async function adjustSearchRun(term: string) {
+    if (!term.trim()) return
+    setAdjustSearching(true); setAdjustMatches([])
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.mode === 'search') setAdjustMatches(d.matches ?? [])
+    } catch { /* ignore */ }
+    setAdjustSearching(false)
+  }
+  async function pickAdjustProduct(id: string) {
+    setAdjustSearching(true)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?product_id=${id}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.found) { setAdjustProduct({ id: d.product.id, name: d.product.name, unit_cost: d.product.cost, on_hand: d.product.on_hand }); setAdjustMode('set'); setAdjustValue(d.product.on_hand); setAdjustReason(''); setAdjustOther(''); setAdjustMsg(null); setAdjustErr(''); setAdjustMatches([]); setAdjustSearch('') }
+    } catch { /* ignore */ }
+    setAdjustSearching(false)
+  }
+  async function submitAdjust() {
+    if (!adjustProduct) return
+    if (!adjustReason) { setAdjustErr('Pick a reason — corrections need one.'); return }
+    setAdjustSubmitting(true); setAdjustErr('')
+    try {
+      const reason = adjustReason === 'other' ? (adjustOther.trim() || 'other') : adjustReason
+      const r = await fetch(`/api/inventory/app/${slug}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: adjustProduct.id, product_name: adjustProduct.name, mode: adjustMode, value: adjustValue, reason, outlet_id: outletId }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setAdjustMsg({ delta: d.delta, new_on_hand: d.new_on_hand }); loadAdjust(outletId); loadHome(outletId) }
+      else setAdjustErr(d.message ?? 'Could not apply the correction.')
+    } catch { setAdjustErr('Something went wrong.') }
+    setAdjustSubmitting(false)
   }
 
   // Bootstrap + resume session.
@@ -662,10 +724,13 @@ export default function InventoryStaffApp() {
                   {scanCell('cost basis', scanResult.cost_source, T.muted, 2)}
                 </div>
                 {scanCount == null ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ flex: 1.4, background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Count this item</button>
-                    <button onClick={() => { setWasteProduct({ id: scanResult.id, name: scanResult.name, unit_cost: scanResult.cost, on_hand: scanResult.on_hand }); setWasteQty(1); setWasteReason('spoilage'); setWasteOther(''); setWasteMsg(null); setTab('waste') }} style={{ flex: 1, background: '#fff', color: T.red, border: `1.5px solid ${T.redSoft}`, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Log waste</button>
-                  </div>
+                  <>
+                    <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>Count this item</button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => { setWasteProduct({ id: scanResult.id, name: scanResult.name, unit_cost: scanResult.cost, on_hand: scanResult.on_hand }); setWasteQty(1); setWasteReason('spoilage'); setWasteOther(''); setWasteMsg(null); setTab('waste') }} style={{ flex: 1, background: '#fff', color: T.red, border: `1.5px solid ${T.redSoft}`, borderRadius: 13, padding: 11, fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Log waste</button>
+                      <button onClick={() => { setAdjustProduct({ id: scanResult.id, name: scanResult.name, unit_cost: scanResult.cost, on_hand: scanResult.on_hand }); setAdjustMode('set'); setAdjustValue(scanResult.on_hand); setAdjustReason(''); setAdjustOther(''); setAdjustMsg(null); setAdjustErr(''); setTab('adjust') }} style={{ flex: 1, background: '#fff', color: '#534AB7', border: `1.5px solid ${T.violetSoft}`, borderRadius: 13, padding: 11, fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Adjust</button>
+                    </div>
+                  </>
                 ) : scanCountMsg ? (
                   <>
                     <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 13, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{scanCountMsg.review ? '✓ Sent to owner review' : '✓ Count matches — recorded'}</div>
@@ -787,6 +852,118 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── ADJUST ──
+  if (tab === 'adjust') {
+    const ap = adjustProduct
+    const reasons = adjustData?.reasons ?? ['found_stock', 'damaged', 'theft', 'supplier_error', 'data_correction', 'opening_balance', 'other']
+    const canAdjust = adjustData?.can_adjust ?? false
+    const recent = adjustData?.recent ?? []
+    const reasonLabel = (r: string) => r.charAt(0).toUpperCase() + r.slice(1).replace(/_/g, ' ')
+    const previewDelta = ap ? (adjustMode === 'set' ? Math.max(0, Math.round(adjustValue)) - ap.on_hand : adjustMode === 'add' ? Math.abs(Math.round(adjustValue)) : -Math.abs(Math.round(adjustValue))) : 0
+    const previewNew = ap ? Math.max(0, ap.on_hand + previewDelta) : 0
+    const valueImpact = ap && ap.unit_cost != null ? previewDelta * ap.unit_cost : null
+    const setMode = (m: 'set' | 'add' | 'remove') => { setAdjustMode(m); setAdjustValue(m === 'set' ? (ap?.on_hand ?? 0) : 1); setAdjustErr('') }
+    const recentList = (
+      recent.length === 0
+        ? <div style={{ padding: 26, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}` }}><div style={{ fontSize: 28, marginBottom: 6 }}>📋</div><p style={{ fontSize: 13.5, fontFamily: DISPLAY, fontStyle: 'italic' }}>No adjustments today</p><p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, marginTop: 2 }}>Manual corrections show here so every change to the book is transparent.</p></div>
+        : <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>{recent.map(a => (
+          <div key={a.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{a.product_name}</b><div style={{ fontSize: 11, color: T.muted }}>{reasonLabel(a.reason)} · {a.adjusted_by}</div></div>
+            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: a.delta < 0 ? T.red : T.green }}>{a.delta > 0 ? '+' : ''}{a.delta}</div><div style={{ fontSize: 9.5, color: T.muted }}>{a.value_dollars != null ? `${a.value_dollars < 0 ? '−' : '+'}$${Math.abs(a.value_dollars).toFixed(2)}` : new Date(a.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}</div></div>
+          </div>
+        ))}</div>
+    )
+    return shell(
+      <>
+        {statusbar}{header(true, 'Adjust', 'Manual stock correction')}
+        {body(
+          adjustState === 'loading' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: i === 0 ? 90 : 56, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+          ) : adjustState === 'error' ? (
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load adjustments</p><button onClick={() => loadAdjust(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, color: '#43407a', background: T.violetSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginBottom: 13, display: 'flex', gap: 8 }}>
+                <svg width="16" height="16" fill="none" stroke="#534AB7" strokeWidth={2} viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 1 }}><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                <span><b style={{ color: '#534AB7' }}>This directly changes stock.</b> Use it to correct the book to reality for a known reason — found stock, damage, a supplier error or a data fix. Unlike a count, it moves on-hand immediately.</span>
+              </div>
+
+              {!canAdjust ? (
+                <div style={{ background: '#fff', border: `1px solid ${T.amberSoft}`, borderRadius: 16, padding: 18, marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 12, background: T.amberSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <svg width="22" height="22" fill="none" stroke={T.amber} strokeWidth={2} viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM8 11V7a4 4 0 118 0v4" /></svg>
+                  </div>
+                  <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Manager approval needed</p>
+                  <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>Stock corrections are limited to managers. You&apos;re signed in as <b style={{ color: T.ink }}>{acting?.name}</b> ({adjustData?.role ?? 'staff'}). Ask a manager to sign in and apply the correction — you can still see today&apos;s adjustments below.</p>
+                </div>
+              ) : !ap ? (
+                <>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <input value={adjustSearch} onChange={e => setAdjustSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') adjustSearchRun(adjustSearch) }} placeholder="Find the item to correct…"
+                      style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+                    <button onClick={() => adjustSearchRun(adjustSearch)} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
+                  </div>
+                  {adjustSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />
+                    : adjustMatches.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 4 }}>
+                        {adjustMatches.map(m => (
+                          <button key={m.id} onClick={() => pickAdjustProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
+                            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13, lineHeight: 1.6 }}>Search the item whose book count is wrong, then set it to the true number.</div>}
+                </>
+              ) : adjustMsg ? (
+                <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 4 }}>
+                  <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>✓ Stock corrected</div>
+                  <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>Adjusted by <b style={{ color: T.green }}>{acting?.name}</b> · {new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()} · {adjustMsg.delta > 0 ? '+' : ''}{adjustMsg.delta} → now {adjustMsg.new_on_hand}</div>
+                  <button onClick={() => { setAdjustProduct(null); setAdjustMsg(null); setAdjustSearch('') }} style={{ width: '100%', marginTop: 12, background: '#fff', color: T.green, border: `1.5px solid ${T.greenSoft}`, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Adjust another</button>
+                </div>
+              ) : (
+                <div style={{ background: '#fff', border: `1.5px solid ${T.green}`, borderRadius: 16, padding: 15, boxShadow: '0 6px 20px rgba(45,82,64,.1)', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.ink, color: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 13 }}>
+                    <b style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{ap.name}</b><span style={{ fontSize: 11, color: '#9aa3b2' }}>now {ap.on_hand} on hand</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 7, marginBottom: 13 }}>
+                    {(['set', 'add', 'remove'] as const).map(m => (
+                      <button key={m} onClick={() => setMode(m)} style={{ flex: 1, fontSize: 12.5, fontWeight: 600, padding: '9px 6px', borderRadius: 10, cursor: 'pointer', fontFamily: BODY, border: `1.5px solid ${adjustMode === m ? T.green : T.line}`, background: adjustMode === m ? T.greenSoft : '#fff', color: adjustMode === m ? T.green : T.muted }}>{m === 'set' ? 'Set to' : m === 'add' ? 'Add' : 'Remove'}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '2px 0 14px' }}>
+                    <button onClick={() => setAdjustValue(v => Math.max(adjustMode === 'set' ? 0 : 1, Math.round(v) - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
+                    <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{Math.round(adjustValue)}</div>
+                    <button onClick={() => setAdjustValue(v => Math.round(v) + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T.muted, marginBottom: 7 }}>Reason (required)</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
+                    {reasons.map(r => (
+                      <button key={r} onClick={() => { setAdjustReason(r); setAdjustErr('') }} style={{ fontSize: 12, fontWeight: 600, padding: '7px 12px', borderRadius: 9, cursor: 'pointer', fontFamily: BODY, border: `1.5px solid ${adjustReason === r ? T.green : T.line}`, background: adjustReason === r ? T.greenSoft : '#fff', color: adjustReason === r ? T.green : T.muted }}>{reasonLabel(r)}</button>
+                    ))}
+                  </div>
+                  {adjustReason === 'other' && <input value={adjustOther} onChange={e => setAdjustOther(e.target.value)} placeholder="Describe the reason…" style={{ width: '100%', padding: '10px 12px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 12 }} />}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.paper, borderRadius: 11, padding: '11px 13px', marginBottom: 13 }}>
+                    <span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 19, fontWeight: 600 }}>{ap.on_hand} → {previewNew}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: previewDelta < 0 ? T.red : previewDelta > 0 ? T.green : T.muted }}>{previewDelta > 0 ? '+' : ''}{previewDelta}{valueImpact != null ? ` · ${valueImpact < 0 ? '−' : '+'}$${Math.abs(valueImpact).toFixed(2)}` : ''}</span>
+                  </div>
+                  {adjustErr && <p style={{ fontSize: 12, color: T.red, marginBottom: 10, textAlign: 'center' }}>{adjustErr}</p>}
+                  <button onClick={submitAdjust} disabled={adjustSubmitting || previewDelta === 0} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (adjustSubmitting || previewDelta === 0) ? 0.5 : 1 }}>{adjustSubmitting ? 'Applying…' : previewDelta === 0 ? 'No change' : 'Apply correction'}</button>
+                  <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Moves {ap.name} to {previewNew} · attributed to <b style={{ color: T.green }}>{acting?.name}</b></div>
+                  <button onClick={() => { setAdjustProduct(null); setAdjustMsg(null) }} style={{ width: '100%', marginTop: 9, background: 'none', color: T.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, cursor: 'pointer' }}>← pick a different item</button>
+                </div>
+              )}
+
+              <div style={{ margin: '18px 2px 10px', fontSize: 14, fontWeight: 600 }}>Adjustments today</div>
+              {recentList}
+            </>
+          )
+        )}
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -843,7 +1020,7 @@ export default function InventoryStaffApp() {
             {TILES.map(t => {
               const badge = t.badge ? (home?.tile_badges[t.badge] ?? 0) : 0
               return (
-                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } }}
+                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } else if (t.key === 'adjust') { setAdjustProduct(null); setTab('adjust') } }}
                   style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: (T as Record<string, string>)[t.bg], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="18" height="18" fill="none" stroke={t.stroke} strokeWidth={2} viewBox="0 0 24 24">{t.circle && <circle cx="12" cy="12" r="9" />}<path d={t.d} /></svg>
