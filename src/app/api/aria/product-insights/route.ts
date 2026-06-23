@@ -33,9 +33,9 @@ async function _POST(req: Request) {
     const from12m = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0]
     const from30d = new Date(Date.now() - 30 * 86400000).toISOString()
 
-    const [{ data: product }, { data: saleItems30d }, { data: saleItems12m }] = await Promise.all([
+    const [{ data: product }, { data: saleItems30d }, { data: saleItems12m }, { data: invRows }] = await Promise.all([
       supabase.from('pos_products')
-        .select('name,price,cost_price,stock_quantity,is_active')
+        .select('name,price,cost_price,is_active')
         .eq('id', product_id).maybeSingle(),
       supabase.from('pos_sale_items')
         .select('quantity,line_total,created_at')
@@ -46,16 +46,22 @@ async function _POST(req: Request) {
         .eq('product_id', product_id)
         .gte('created_at', `${from12m}T00:00:00`)
         .limit(2000),
+      // FAB-FIX-1 — canonical on-hand (items_on_hand summed across outlets), NOT the stock_quantity cache.
+      supabase.from('pos_outlet_inventory')
+        .select('items_on_hand')
+        .eq('business_id', business_id).eq('product_id', product_id).limit(10000),
     ])
 
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+
+    const onHand = (invRows || []).reduce((s, r) => s + (Number(r.items_on_hand) || 0), 0)
 
     // Metrics
     const units30d = (saleItems30d || []).reduce((s, i) => s + (i.quantity || 0), 0)
     const rev30d   = (saleItems30d || []).reduce((s, i) => s + (i.line_total || 0), 0)
     const dailyVel = units30d / 30
-    const daysStock = dailyVel > 0 && (product.stock_quantity ?? 0) > 0
-      ? Math.round((product.stock_quantity ?? 0) / dailyVel) : 999
+    const daysStock = dailyVel > 0 && onHand > 0
+      ? Math.round(onHand / dailyVel) : 999
 
     const priceCents = Math.round((product.price || 0) * 100)
     const costCents  = Math.round((product.cost_price || 0) * 100)
@@ -86,7 +92,7 @@ async function _POST(req: Request) {
 Sales trend: ${trendLabel} vs previous month
 Best month: ${bestMonth[0]} (${bestMonth[1]} units)
 Last 30 days: ${units30d} units, A$${rev30d.toFixed(2)} revenue
-Current stock: ${product.stock_quantity ?? 0} units
+Current stock: ${onHand} units
 Days of stock at current velocity: ${daysStock === 999 ? 'No recent sales' : daysStock + ' days'}
 Margin: ${marginPct.toFixed(1)}%
 Sell price: A$${product.price?.toFixed(2)}

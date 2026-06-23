@@ -34,6 +34,21 @@ async function getBid(
   return data?.id ?? null;
 }
 
+// FAB-FIX-1 — canonical on-hand per product (items_on_hand summed across outlets), replacing the demoted
+// pos_products.stock_quantity cache for every displayed stock figure on this surface.
+async function onHandByProduct(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  businessId: string,
+): Promise<Record<string, number>> {
+  const { data } = await supabase.from('pos_outlet_inventory')
+    .select('product_id, items_on_hand').eq('business_id', businessId).limit(10000);
+  const m: Record<string, number> = {};
+  for (const r of (data ?? []) as Array<{ product_id: string; items_on_hand: number | null }>) {
+    m[r.product_id] = (m[r.product_id] ?? 0) + (Number(r.items_on_hand) || 0);
+  }
+  return m;
+}
+
 type Priority = 'info' | 'warning' | 'critical';
 
 interface PageInsightResult {
@@ -116,22 +131,23 @@ async function _POST(req: Request): Promise<Response> {
     if (page === 'stock' || page === 'warehouse/stock') {
       const { data: products } = await supabase
         .from('pos_products')
-        .select('id, name, stock_quantity, low_stock_threshold')
+        .select('id, name, low_stock_threshold')
         .eq('business_id', business_id)
         .eq('track_stock', true);
+      const onHand = await onHandByProduct(supabase, business_id);
 
       const below = (products ?? []).filter(
-        (p: { stock_quantity: number | null; low_stock_threshold: number | null }) =>
-          (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 0)
+        (p: { id: string; low_stock_threshold: number | null }) =>
+          (onHand[p.id] ?? 0) <= (p.low_stock_threshold ?? 0)
       );
       const outOfStock = below.filter(
-        (p: { stock_quantity: number | null }) => (p.stock_quantity ?? 0) <= 0
+        (p: { id: string }) => (onHand[p.id] ?? 0) <= 0
       );
       const context = `${below.length} products below threshold, ${outOfStock.length} out of stock. Items: ${below
         .slice(0, 5)
         .map(
-          (p: { name: string; stock_quantity: number | null; low_stock_threshold: number | null }) =>
-            `${p.name} (${p.stock_quantity ?? 0} left, threshold ${p.low_stock_threshold ?? 0})`
+          (p: { id: string; name: string; low_stock_threshold: number | null }) =>
+            `${p.name} (${onHand[p.id] ?? 0} left, threshold ${p.low_stock_threshold ?? 0})`
         )
         .join(', ')}`;
 
@@ -302,23 +318,24 @@ async function _POST(req: Request): Promise<Response> {
     if (page === 'reorder') {
       const { data: reorderItems } = await supabase
         .from('pos_products')
-        .select('id, name, stock_quantity, low_stock_threshold')
+        .select('id, name, low_stock_threshold')
         .eq('business_id', business_id)
         .eq('track_stock', true);
+      const onHand = await onHandByProduct(supabase, business_id);
 
       const belowReorder = (reorderItems ?? []).filter(
-        (p: { stock_quantity: number | null; low_stock_threshold: number | null }) =>
-          (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 0)
+        (p: { id: string; low_stock_threshold: number | null }) =>
+          (onHand[p.id] ?? 0) <= (p.low_stock_threshold ?? 0)
       );
 
       const context = `${belowReorder.length} products below reorder point. Most critical: ${belowReorder
         .slice(0, 3)
         .map(
           (p: {
+            id: string;
             name: string;
-            stock_quantity: number | null;
             low_stock_threshold: number | null;
-          }) => `${p.name} (${p.stock_quantity ?? 0} left)`
+          }) => `${p.name} (${onHand[p.id] ?? 0} left)`
         )
         .join(', ')}`;
 
@@ -327,7 +344,7 @@ async function _POST(req: Request): Promise<Response> {
       , systemPrompt);
 
       const outOfStock = belowReorder.filter(
-        (p: { stock_quantity: number | null }) => (p.stock_quantity ?? 0) <= 0
+        (p: { id: string }) => (onHand[p.id] ?? 0) <= 0
       );
       const priority: Priority =
         outOfStock.length > 0 ? 'critical' : belowReorder.length > 0 ? 'warning' : 'info';
@@ -370,7 +387,7 @@ async function _POST(req: Request): Promise<Response> {
     }
 
     if (page === 'dashboard') {
-      const [salesRes, productsRes] = await Promise.all([
+      const [salesRes, productsRes, onHand] = await Promise.all([
         supabase
           .from('pos_sales')
           .select('total_amount')
@@ -381,8 +398,8 @@ async function _POST(req: Request): Promise<Response> {
           .from('pos_products')
           .select('id')
           .eq('business_id', business_id)
-          .eq('track_stock', true)
-          .lte('stock_quantity', 0),
+          .eq('track_stock', true),
+        onHandByProduct(supabase, business_id),
       ]);
 
       const todayRevenue = (salesRes.data ?? []).reduce(
@@ -390,7 +407,10 @@ async function _POST(req: Request): Promise<Response> {
         0
       );
       const todayTx = (salesRes.data ?? []).length;
-      const outOfStockCount = (productsRes.data ?? []).length;
+      // FAB-FIX-1 — out-of-stock from canonical items_on_hand (a missing outlet row counts as 0 on hand).
+      const outOfStockCount = (productsRes.data ?? []).filter(
+        (p: { id: string }) => (onHand[p.id] ?? 0) <= 0
+      ).length;
 
       const context = `Today: A$${todayRevenue.toFixed(2)} from ${todayTx} transactions. Out-of-stock items: ${outOfStockCount}.`;
 
@@ -437,7 +457,8 @@ async function _POST(req: Request): Promise<Response> {
 
     if (page === 'stocktake') {
       const { data: products } = await supabase.from('pos_products')
-        .select('id, name, stock_quantity').eq('business_id', business_id).eq('track_stock', true).limit(500);
+        .select('id, name').eq('business_id', business_id).eq('track_stock', true).limit(500);
+      const onHand = await onHandByProduct(supabase, business_id);
       const { data: sales } = await supabase.from('pos_sale_items')
         .select('product_id, quantity, pos_sales!inner(business_id, created_at)')
         .eq('pos_sales.business_id', business_id).gte('pos_sales.created_at', thirtyDaysAgo).limit(5000);
@@ -447,7 +468,7 @@ async function _POST(req: Request): Promise<Response> {
         if (!r.product_id) continue;
         sold[r.product_id] = (sold[r.product_id] ?? 0) + Number(r.quantity ?? 0);
       }
-      const fast = (products ?? []).map((p: { id: string; name: string; stock_quantity: number | null }) => ({ name: p.name, stock: Number(p.stock_quantity ?? 0), sold30: sold[p.id] ?? 0 }))
+      const fast = (products ?? []).map((p: { id: string; name: string }) => ({ name: p.name, stock: onHand[p.id] ?? 0, sold30: sold[p.id] ?? 0 }))
         .filter(p => p.sold30 > 10)
         .sort((a, b) => b.sold30 - a.sold30).slice(0, 5);
       const ctx = `Top movers last 30d (name · current stock · sold): ${fast.map(p => `${p.name} · ${p.stock} · ${p.sold30}`).join('; ')}`;

@@ -21,6 +21,9 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('')
   const [insight, setInsight] = useState<Insight | null>(null)
   const [insightLoading, setInsightLoading] = useState(false)
+  // FAB-FIX-1 — the value tile is the CANONICAL items_on_hand × resolved cost (computeStockValue via
+  // /api/pos/inventory/cost), not the partially-overlaid stock_quantity sum (which inflated to A$234,523).
+  const [stockAtCost, setStockAtCost] = useState<number | null>(null)
   const [adjustForm, setAdjustForm] = useState({ product_id: '', qty: 0, reason: 'counted' })
   const [adjustMsg, setAdjustMsg] = useState('')
 
@@ -32,6 +35,11 @@ export default function InventoryPage() {
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  // Canonical inventory value (items_on_hand) for the KPI tile — same source as the Valuation panel below.
+  useEffect(() => {
+    fetch('/api/pos/inventory/cost').then(r => r.json()).then(d => setStockAtCost(d?.stock_value?.at_cost ?? null)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (tab !== 'movements') return
@@ -56,8 +64,9 @@ export default function InventoryPage() {
   }
 
   const filtered = products.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku ?? '').toLowerCase().includes(search.toLowerCase()))
-  // Overview stat: stock_quantity here is the canonical items_on_hand (the products API overlays it).
-  const totalValue = products.reduce((a, p) => a + Number(p.stock_quantity ?? 0) * Number(p.cost_price ?? 0), 0)
+  // Low-stock count uses the products API's stock_quantity, which the API overlays with the per-outlet
+  // items_on_hand. The value tile no longer sums this field (it used the canonical at_cost above) because
+  // products without an outlet row keep a stale seed cache that inflated the total.
   const lowStock = products.filter(p => p.low_stock_threshold != null && Number(p.stock_quantity ?? 0) <= Number(p.low_stock_threshold)).length
 
   return (
@@ -74,7 +83,7 @@ export default function InventoryPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
         {[
           { label: 'SKUs tracked', value: products.length, color: C.text },
-          { label: 'Inventory value', value: 'A$' + totalValue.toLocaleString('en-AU', { maximumFractionDigits: 0 }), color: C.green },
+          { label: 'Inventory value', value: stockAtCost != null ? 'A$' + stockAtCost.toLocaleString('en-AU', { maximumFractionDigits: 0 }) : '…', color: C.green },
           { label: 'Low stock', value: lowStock, color: lowStock > 0 ? C.amber : C.dim },
           { label: 'Dead stock', value: insight ? insight.metrics.dead_count : '—', color: insight && insight.metrics.dead_count > 0 ? C.red : C.dim },
         ].map(m => (

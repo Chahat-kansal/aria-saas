@@ -56,8 +56,10 @@ async function _POST(req: Request) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
 
   const [{ data: products }, { data: salesItems }] = await Promise.all([
+    // FAB-FIX-1 — stock_quantity removed (it was selected but unused; variance is sourced from
+    // pos_stock_take_items.system_qty, not the demoted cache).
     supabase.from('pos_products')
-      .select('id, name, category, cost_price, price, stock_quantity')
+      .select('id, name, category, cost_price, price')
       .in('id', productIds)
       .eq('business_id', bid),
     supabase.from('pos_sale_items')
