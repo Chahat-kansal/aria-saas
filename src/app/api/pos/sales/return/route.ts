@@ -31,10 +31,28 @@ async function _POST(req: Request) {
   const { data: origItems } = await supabase.from('pos_sale_items').select('*').in('id', itemIds);
   if (!origItems?.length) return NextResponse.json({ error: 'Items not found' }, { status: 404 });
 
+  // BUGFIX-POS-RACES-5 FIX 3 — atomically claim the returnable quantity on each original line BEFORE refunding.
+  // claim_return_qty only succeeds while returned_quantity + qty <= quantity (the guard is checked under the
+  // row lock), so over-returning (more than was sold, or two concurrent returns of the same line) is impossible.
+  // All-or-nothing: if any line exceeds remaining, release the lines already claimed in this request and reject.
+  type Orig = (typeof origItems)[number];
+  const claimedLines: Array<{ oi: Orig; qty: number }> = [];
+  for (const oi of origItems) {
+    const reqItem = items.find((i: { sale_item_id: string; qty?: number }) => i.sale_item_id === oi.id);
+    if (!reqItem) continue;
+    const qty = Number(reqItem.qty ?? oi.quantity) || 0;
+    if (qty <= 0) continue;
+    const { data: newRet, error: claimErr } = await supabase.rpc('claim_return_qty', { p_item_id: oi.id, p_qty: qty });
+    if (claimErr || newRet == null) {
+      for (const c of claimedLines) await supabase.rpc('claim_return_qty', { p_item_id: c.oi.id, p_qty: -c.qty });
+      return NextResponse.json({ error: `Return exceeds the remaining returnable quantity for ${oi.product_name ?? 'an item'}` }, { status: 409 });
+    }
+    claimedLines.push({ oi, qty });
+  }
+  if (claimedLines.length === 0) return NextResponse.json({ error: 'No returnable items' }, { status: 400 });
+
   let refundTotal = 0;
-  const refundItems = origItems.map(oi => {
-    const reqItem = items.find((i: { sale_item_id: string; qty: number }) => i.sale_item_id === oi.id);
-    const qty = reqItem?.qty ?? oi.quantity;
+  const refundItems = claimedLines.map(({ oi, qty }) => {
     const lineTotal = -(oi.unit_price ?? 0) * qty;
     refundTotal += lineTotal;
     return { ...oi, id: undefined, quantity: -qty, line_total: lineTotal };
@@ -56,7 +74,11 @@ async function _POST(req: Request) {
     notes: reason ? `Return: ${reason}` : `Return of ${orig.sale_number}`,
   }).select().single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !refundSale) {
+    // Release the returned_quantity claims so a failed refund-sale insert doesn't leave items marked returned.
+    for (const c of claimedLines) await supabase.rpc('claim_return_qty', { p_item_id: c.oi.id, p_qty: -c.qty });
+    return NextResponse.json({ error: error?.message ?? 'Return could not be recorded' }, { status: 500 });
+  }
 
   const refundItemsInsert = refundItems.map(ri => ({
     sale_id: refundSale.id,

@@ -87,14 +87,21 @@ async function _PATCH(req: Request) {
 
   // ── Complete → convert to a POS sale (total in DOLLARS = total_cents / 100) ──
   if (body.action === 'complete') {
-    if (layby.status === 'completed') return NextResponse.json({ error: 'Layby already completed' }, { status: 400 });
+    // paid_cents only ever increases (payments add), so this monotonic check before the atomic claim is safe.
     if (Number(layby.paid_cents ?? 0) < Number(layby.total_cents ?? 0)) {
       return NextResponse.json({ error: 'Layby not fully paid yet' }, { status: 400 });
     }
-    const totalDollars = Math.round(Number(layby.total_cents ?? 0)) / 100;
+    // BUGFIX-POS-RACES-5 FIX 2 — atomic completion claim BEFORE creating the sale. Only the FIRST concurrent
+    // complete updates a row (status 'active' → 'completed'); a second gets 0 rows and is rejected, so one
+    // layby can never produce two sales (the prior check-then-set let both concurrent completes through).
+    const { data: claimed } = await supabase.from('pos_laybys')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', id).eq('business_id', bid).eq('status', 'active')
+      .select('*').maybeSingle();
+    if (!claimed) return NextResponse.json({ error: 'Layby already completed' }, { status: 409 });
+
+    const totalDollars = Math.round(Number(claimed.total_cents ?? 0)) / 100;
     const { count } = await supabase.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', bid);
-    // BUGFIX-POS-4 FIX 5 — error-check the layby→sale conversion BEFORE marking the layby completed, so a
-    // failed sale insert can't leave a completed layby with no sale (money unrecorded).
     const { data: sale, error: saleErr } = await supabase.from('pos_sales').insert({
       business_id: bid,
       sale_number: 'LAYBY-' + String((count ?? 0) + 1).padStart(4, '0'),
@@ -104,14 +111,18 @@ async function _PATCH(req: Request) {
       tax_amount: Math.round((totalDollars - totalDollars / 1.1) * 100) / 100,
       discount_amount: 0,
       status: 'completed',
-      customer_id: layby.customer_id ?? null,
+      customer_id: claimed.customer_id ?? null,
       notes: 'Layby completed',
     }).select('id, sale_number').single();
-    if (saleErr || !sale) return NextResponse.json({ error: saleErr?.message ?? 'Could not create sale from layby' }, { status: 500 });
+    if (saleErr || !sale) {
+      // Roll back the claim so a failed sale insert doesn't strand the layby as completed-without-a-sale.
+      await supabase.from('pos_laybys').update({ status: 'active', completed_at: null }).eq('id', id).eq('business_id', bid);
+      return NextResponse.json({ error: saleErr?.message ?? 'Could not create sale from layby' }, { status: 500 });
+    }
     const { data: done } = await supabase.from('pos_laybys')
-      .update({ status: 'completed', completed_at: new Date().toISOString(), notes: `${layby.notes ? layby.notes + ' · ' : ''}Converted to sale ${sale?.sale_number ?? ''}` })
+      .update({ notes: `${claimed.notes ? claimed.notes + ' · ' : ''}Converted to sale ${sale.sale_number ?? ''}` })
       .eq('id', id).eq('business_id', bid).select('*').single();
-    return NextResponse.json({ layby: done, sale_id: sale?.id ?? null });
+    return NextResponse.json({ layby: done ?? claimed, sale_id: sale.id });
   }
 
   // ── Scoped status/notes/due_date update ──

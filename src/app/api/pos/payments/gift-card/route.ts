@@ -117,17 +117,28 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: txnErr.message }, { status: 500 });
   }
 
-  // Apply to the card balance + audit fields (only after the ledger row is committed)
-  const { error: updateErr } = await supabase
-    .from('pos_gift_cards')
-    .update({
-      balance: newBalance,
-      is_active: newBalance > 0,
-      redeemed_amount: Number(card.redeemed_amount ?? 0) + actualCharge,
-      last_used_at: new Date().toISOString(),
-    })
-    .eq('id', card.id);
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  // BUGFIX-POS-RACES-5 FIX 1 — atomic guarded deduct (was a JS read-modify-write that let two concurrent
+  // DIFFERENT-sale redemptions both read the same balance and overspend below 0). The RPC row-locks the card,
+  // charges LEAST(requested, balance) and can never go negative. The sale_id idempotency gate above still
+  // prevents a SAME-sale double deduct (a retry conflicts before reaching here).
+  const { data: redeemRows, error: rpcErr } = await supabase.rpc('redeem_gift_card', { p_card_id: card.id, p_bid: bid, p_charge: charge });
+  if (rpcErr) return NextResponse.json({ error: rpcErr.message }, { status: 500 });
+  const redeem = (Array.isArray(redeemRows) ? redeemRows[0] : redeemRows) as { charged: number; new_balance: number } | undefined;
+  if (!redeem) {
+    // Card was depleted by a concurrent redemption between validation and deduct — remove the idempotency
+    // placeholder so this sale can be retried, and report a clean insufficient-balance error to the loser.
+    await supabase.from('gift_card_transactions').delete()
+      .eq('gift_card_id', card.id).eq('sale_id', sale_id).eq('type', 'redeem');
+    return NextResponse.json({ error: 'Gift card has insufficient balance' }, { status: 409 });
+  }
+  const realCharge = Number(redeem.charged);
+  const realBalance = Number(redeem.new_balance);
+  // Reconcile the ledger row to the REAL charged/balance if a cross-sale race shifted them from the estimate.
+  if (realCharge !== actualCharge || realBalance !== newBalance) {
+    await supabase.from('gift_card_transactions')
+      .update({ amount: realCharge, balance_after: realBalance })
+      .eq('gift_card_id', card.id).eq('sale_id', sale_id).eq('type', 'redeem');
+  }
 
   // Velocity fraud check — flag 3+ redemptions on the same card within 10 minutes
   const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -140,12 +151,12 @@ async function _POST(req: Request) {
   }
 
   await supabase.from('pos_sales').update({
-    gift_card_id: card.id, gift_card_code: code, gift_card_amount: actualCharge,
+    gift_card_id: card.id, gift_card_code: code, gift_card_amount: realCharge,
   }).eq('id', sale_id).eq('business_id', bid);
 
   return NextResponse.json({
-    ok: true, charged: actualCharge, remaining_balance: newBalance,
-    short_paid: charge > actualCharge ? charge - actualCharge : 0,
+    ok: true, charged: realCharge, remaining_balance: realBalance,
+    short_paid: charge > realCharge ? charge - realCharge : 0,
     flagged: (recentCount ?? 0) >= 3,
   });
 }

@@ -260,14 +260,12 @@ export async function processReturn(
     )
   }
 
-  // 10. Increment returned_quantity on each original sale item (raw select+update — no RPC)
+  // 10. Increment returned_quantity ATOMICALLY (BUGFIX-POS-RACES-5 FIX 3). The previous raw select+update
+  //     could race two concurrent returns of the same line past `quantity`. claim_return_qty applies the
+  //     guard (returned_quantity + qty <= quantity) under the UPDATE's row lock, so the loser matches 0 rows.
   for (const line of lines) {
-    const { data: cur } = await supabase.from('pos_sale_items')
-      .select('returned_quantity').eq('id', line.original_item_id).maybeSingle()
-    const newQty = (Number(cur?.returned_quantity) || 0) + line.quantity
-    await supabase.from('pos_sale_items')
-      .update({ returned_quantity: newQty })
-      .eq('id', line.original_item_id)
+    const { data: claimed, error: claimErr } = await supabase.rpc('claim_return_qty', { p_item_id: line.original_item_id, p_qty: line.quantity })
+    if (claimErr || claimed == null) console.error('[return-engine] returned_quantity claim rejected (over-return guard):', line.original_item_id, claimErr?.message)
   }
 
   // 11. Restore inventory via existing RPC
