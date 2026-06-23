@@ -10,6 +10,7 @@ import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 import { computeParReadonly } from '@/lib/inventory/par-levels'
+import { taskAndReviewCounts } from '@/lib/inventory/daily-tasks'
 
 // INV-STAFF-APP-1 — Home data. Requires the acting-staff cookie (scoped to this business). Value hero
 // reuses INV-COST-1; Order badge reuses INV-PAR-1; all live, GROUNDING (sold-today is the real count).
@@ -46,12 +47,15 @@ async function _GET(req: Request, { params }: Params) {
   let belowReorder = 0
   try { belowReorder = (await computeParReadonly(supabaseAdmin, bid)).below_count } catch { /* non-fatal */ }
 
-  // Expiring badge — best-effort (table may not exist for every business).
+  // Expiring badge — unacknowledged expiry alerts (best-effort).
   let expiring = 0
   try {
-    const { count } = await supabaseAdmin.from('pos_expiry_alerts').select('id', { count: 'exact', head: true }).eq('business_id', bid).neq('status', 'resolved')
+    const { count } = await supabaseAdmin.from('pos_expiry_alerts').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('acknowledged', false)
     expiring = count ?? 0
   } catch { /* table absent → 0 */ }
+
+  // Open tasks + review queue (INV-STAFF-APP-2).
+  const tr = await taskAndReviewCounts(supabaseAdmin, bid)
 
   return NextResponse.json({
     staff: { id: acting.staff_id, name: acting.staff_name },
@@ -59,7 +63,7 @@ async function _GET(req: Request, { params }: Params) {
       at_cost: sv.at_cost, at_retail: sv.at_retail, margin_pct: sv.margin_pct,
       products_valued: sv.products_valued, products_total: sv.products_total, uncosted: sv.products_unknown_cost,
     },
-    mini_stats: { sold_today: soldToday, tasks_open: 0, to_review: 0 }, // tasks/review = prompts 2-3
+    mini_stats: { sold_today: soldToday, tasks_open: tr.open_tasks, to_review: tr.open_reviews },
     tile_badges: { order: belowReorder, expiring },
   })
 }
