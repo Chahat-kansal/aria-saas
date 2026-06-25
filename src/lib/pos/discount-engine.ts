@@ -147,7 +147,9 @@ function evalPromo(promo: Promotion, cart: CartItem[]): AppliedDiscount | null {
 
   const t = promo.promotion_type
 
-  if (t === 'combo' && promo.product_ids?.length && promo.bundle_price != null) {
+  // 'bundle' is an alias for 'combo' — same fixed-bundle-price logic. Ask Aria writes promotion_type='bundle'
+  // (consistent with discount_type CHECK), and this branch evaluates it identically to a combo.
+  if ((t === 'combo' || t === 'bundle') && promo.product_ids?.length && promo.bundle_price != null) {
     const comboMet = promo.product_ids.every(pid => cart.some(i => i.product_id === pid && i.quantity >= 1))
     if (!comboMet) return null
     const comboItemsTotal = cart.filter(i => promo.product_ids!.includes(i.product_id)).reduce((s, i) => s + (Number(i.unit_price) || 0), 0)
@@ -256,7 +258,7 @@ export function calculateApplicableDiscounts(
       continue
     }
 
-    const AUTO_TYPES = ['combo', 'happy_hour', 'bogo', 'bogo_half', 'free_item']
+    const AUTO_TYPES = ['combo', 'bundle', 'happy_hour', 'bogo', 'bogo_half', 'free_item']
     if (AUTO_TYPES.includes(promo.promotion_type)) {
       autoApplicable.push(applied)
     } else {

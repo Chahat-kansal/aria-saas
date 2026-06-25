@@ -48,6 +48,10 @@ import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
 import { buildNavGrounding } from '@/lib/aria/nav-grounding'
 
+// ALSO (audit Phase 4): tool-loop writes/outbound that must never auto-fire from a chat answer without
+// explicit owner confirmation. Intercepted in the main tool-loop's executeTool below.
+const GATED_TOOL_WRITES = new Set(['update_product_price', 'send_email_now', 'send_sms_now'])
+
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
   if (active?.business_id) return active.business_id as string
@@ -356,6 +360,8 @@ async function _POST(req: Request) {
           }
         })()
 
+        // RC3: never hide a partial failure behind a clean "Done".
+        const confirmTextFinal = result.warning ? `${confirmText}\n\n⚠️ ${result.warning}` : confirmText
         // Council provides follow-up blocks/suggestions only — responseText is always confirmText
         let postCouncil: CouncilOutput | null = null
         try {
@@ -364,7 +370,7 @@ async function _POST(req: Request) {
         } catch (e) {
           console.error('[aria/ask] post-action council failed (non-fatal):', (e as Error).message)
         }
-        const responseText = confirmText
+        const responseText = confirmTextFinal
         let savedConvId = conversationId
         try {
           savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'action_executed')
@@ -663,8 +669,18 @@ Rules:
   const SHORT_FACTUAL = /^.{0,60}\b(how much|what'?s my|what is my|today'?s|this week'?s|this month'?s|revenue today|orders today)/i
   const isBrevityQuestion = BREVITY_SIGNALS.test(message) || SHORT_FACTUAL.test(message)
 
-  // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests
-  if (!isBrevityQuestion && (isStrategicQuestion || ariaIntent.intent_type === 'analytical')) {
+  // RC5: data-lookup lane — a factual lookup ("who is my best customer", "what's my top seller", "how many
+  // customers", "what's low") must answer directly in the tool-loop (concise + RICH renderers), NOT fire the
+  // full council + POS-health diagnostics. A lookup is: a who/what/which/list/show/top/best phrasing WITHOUT a
+  // genuinely strategic verb (how-do-I, why, recommend, strategy, grow, improve…). Strategic asks still hit the
+  // council. This fixes the over-answering where the "best" in "best customer" misrouted to the council.
+  const STRATEGIC_RE = /\b(should|recommend|strateg|improve|grow|growth|why|how (do|can|should) (i|we)|advice|advise|suggest|optimi[sz]e|forecast|opportunit|what would|plan to|help me)\b/i
+  const DATA_LOOKUP_RE = /\b(who('?s| is| are)?|what('?s| is| are)?|which|how many|how much|list|show me|top|best|lowest|highest|worst)\b/i
+  const isDataLookup = DATA_LOOKUP_RE.test(message) && !STRATEGIC_RE.test(message)
+
+  // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests.
+  // RC5: a clear data-lookup never enters the council (answers in the tool-loop instead).
+  if (!isBrevityQuestion && !isDataLookup && (isStrategicQuestion || ariaIntent.intent_type === 'analytical')) {
     try {
       const [bizCtx, factsPacket] = await Promise.all([
         getBusinessContext(bid),
@@ -904,7 +920,27 @@ Rules:
         } catch { /* non-fatal — council proceeds without anchors */ }
         augCtx = JSON.stringify(ctxParsed)
       } catch { /* non-fatal — council still gets bizCtx */ }
-      const council = await runAriaCouncil(augCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
+      // RC4: COREFERENCE — the council path previously received zero conversation history, so pronouns in a
+      // follow-up ("what does SHE buy") had no referent. Rehydrate the last ~10 turns (client-sent messages
+      // first, else from aria_conversations by id) and inject them so the council resolves references.
+      let recentHistoryBlock = ''
+      try {
+        let turns: Array<{ role: string; content: string }> = []
+        if (clientMessages.length > 0) {
+          turns = clientMessages.slice(-10)
+        } else if (conversationId) {
+          const { data: convRow } = await supabaseAdmin.from('aria_conversations')
+            .select('messages').eq('id', conversationId).eq('business_id', bid).maybeSingle()
+          const msgs = Array.isArray((convRow as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
+            ? (convRow as { messages: Array<{ role: string; content: string }> }).messages : []
+          turns = msgs.slice(-10)
+        }
+        if (turns.length > 0) {
+          recentHistoryBlock = '\n\nRECENT_CONVERSATION (resolve pronouns/"she"/"that" against this — most recent last):\n' +
+            turns.map(m => `${m.role === 'assistant' ? 'Aria' : 'Owner'}: ${String(m.content ?? '').slice(0, 600)}`).join('\n')
+        }
+      } catch { /* non-fatal — council still answers without history */ }
+      const council = await runAriaCouncil(augCtx + recentHistoryBlock + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
       // COUNCIL-PORT-1 Parts 6+7: run council synthesis through the HEAL-1/GROUND-1 validator.
       // Council brains make zero LLM tool calls — their grounding is the pre-fetched context
       // (getBusinessContext + facts packet). toolsUsed=1 when that context loaded (mirrors the
@@ -1855,7 +1891,16 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       userPrompt,
       priorMessages: historyMessages,
       tools: allTools,
-      executeTool: (name, input) => executePOSTool(name, input, bid),
+      // ALSO (audit Phase 4): destructive / outbound tools must NOT auto-fire from a chat answer. Intercept
+      // them and return a not-executed notice so Aria proposes the change and asks the owner to confirm via
+      // the action flow, rather than silently changing a price or sending a message mid-answer.
+      executeTool: (name, input) => {
+        if (GATED_TOOL_WRITES.has(name)) {
+          const verb = name === 'update_product_price' ? 'change a price' : name === 'send_email_now' ? 'send an email' : 'send an SMS'
+          return Promise.resolve({ not_executed: true, requires_confirmation: true, tool: name, message: `For safety I don't ${verb} automatically. Confirm and I'll do it.` })
+        }
+        return executePOSTool(name, input, bid)
+      },
       maxTokens,
       maxIterations: routedModel === 'haiku' ? 4 : 8,
       thinking: useThinking ? { enabled: true, budget_tokens: thinkingBudget } : undefined,
