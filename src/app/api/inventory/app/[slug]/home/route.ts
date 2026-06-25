@@ -47,10 +47,22 @@ async function _GET(req: Request, { params }: Params) {
   let belowReorder = 0
   try { belowReorder = (await computeParReadonly(supabaseAdmin, bid)).below_count } catch { /* non-fatal */ }
 
-  // Expiring badge — unacknowledged expiry alerts (best-effort).
+  // Receive badge — POs sent and awaiting receipt (INV-SUPPLY-TILES).
+  let receive = 0
+  try {
+    const { count } = await supabaseAdmin.from('pos_purchase_orders').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('status', 'sent')
+    receive = count ?? 0
+  } catch { /* non-fatal */ }
+
+  // Expiring badge — tracked batches with stock expiring within 14 days (AEST), incl. already-expired.
   let expiring = 0
   try {
-    const { count } = await supabaseAdmin.from('pos_expiry_alerts').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('acknowledged', false)
+    const todayAest = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date())
+    const cutoff = new Date(`${todayAest}T00:00:00+10:00`)
+    cutoff.setDate(cutoff.getDate() + 14)
+    const cutoffDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(cutoff)
+    const { count } = await supabaseAdmin.from('pos_product_batches').select('id', { count: 'exact', head: true })
+      .eq('business_id', bid).eq('expiry_tracked', true).gt('quantity_remaining', 0).lte('expiry_date', cutoffDate)
     expiring = count ?? 0
   } catch { /* table absent → 0 */ }
 
@@ -64,7 +76,7 @@ async function _GET(req: Request, { params }: Params) {
       products_valued: sv.products_valued, products_total: sv.products_total, uncosted: sv.products_unknown_cost,
     },
     mini_stats: { sold_today: soldToday, tasks_open: tr.open_tasks, to_review: tr.open_reviews },
-    tile_badges: { order: belowReorder, expiring },
+    tile_badges: { order: belowReorder, expiring, receive },
   })
 }
 

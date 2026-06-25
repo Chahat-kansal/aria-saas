@@ -23,7 +23,7 @@ const greetWord = () => { const h = new Date().getHours(); return h < 12 ? 'Morn
 interface Staff { id: string; name: string; role: string; color: string | null }
 interface Outlet { id: string; name: string; is_default: boolean }
 interface Boot { business: { id: string; name: string; slug: string }; outlets: Outlet[]; staff: Staff[] }
-interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number } }
+interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number; receive: number } }
 interface Task { id: string; task_type: string; product_id: string | null; title: string; detail: string | null; hypothesis: string | null; priority: number; status: string; completed_by: string | null; product_name: string | null; product_sku: string | null; expected: number | null }
 interface TasksData { acting: { id: string; name: string }; tasks: Task[]; pills: { accuracy: number | null; streak: number; left_today: number } }
 interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string }
@@ -39,9 +39,18 @@ interface ReportKpis { stock_at_cost: number; stock_at_retail: number; units_sol
 interface ReportData { type: string; title: string; period: string; period_label: string; business_name: string; generated_at: string; kpis: ReportKpis | null; sections: ReportSection[]; note: string | null }
 interface ReportLibItem { type: string; title: string; blurb: string }
 interface ReportsResp { acting: { id: string; name: string }; library: ReportLibItem[]; report: ReportData }
+interface ReceiveLine { id: string; product_id: string; product_name: string; quantity_ordered: number; quantity_received: number | null; unit_cost: number | null; receive_status: string | null }
+interface ReceivePO { id: string; order_number: string; status: string; total: number | null; expected_date: string | null; items: ReceiveLine[] }
+interface RecentPO { id: string; order_number: string; total: number | null; received_at: string | null; received_by: string | null }
+interface ReceiveData { acting: { id: string; name: string }; receivable: ReceivePO[]; recent: RecentPO[] }
+interface TransferItem { id: string; product_id: string; product_name: string; quantity_approved: number; quantity_sent: number | null; quantity_received: number | null; variance_units: number | null }
+interface TransferRow { id: string; status: string; from_outlet_id: string; to_outlet_id: string; from_name: string; to_name: string; total_cost: number | null; items: TransferItem[] }
+interface TransferData { acting: { id: string; name: string }; outlet_count: number; transfers: TransferRow[] }
+interface ExpBatch { id: string; product_id: string; product_name: string; outlet_id: string; outlet_name: string; batch_ref: string; quantity_remaining: number; expiry_date: string; days_left: number; bucket: 'expired' | 'urgent' | 'soon' | 'ok' }
+interface ExpData { acting: { id: string; name: string }; counts: { expired: number; urgent: number; soon: number; ok: number }; batches: ExpBatch[] }
 
 const TILES = [
-  { key: 'receive', label: 'Receive', sub: 'log a delivery', bg: 'greenSoft', stroke: '#0F6E56', d: 'M3 7h13v8H3zM16 10h3l2 3v2h-5M5.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
+  { key: 'receive', label: 'Receive', sub: 'log a delivery', bg: 'greenSoft', stroke: '#0F6E56', d: 'M3 7h13v8H3zM16 10h3l2 3v2h-5M5.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z', badge: 'receive' as const },
   { key: 'count', label: 'Count', sub: 'stock count', bg: 'blueSoft', stroke: '#185FA5', d: 'M9 11l3 3 8-8M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9' },
   { key: 'waste', label: 'Waste', sub: 'log spoilage', bg: 'redSoft', stroke: '#A32D2D', d: 'M5 7h14M9 7V4h6v3M6 7l1 13h10l1-13' },
   { key: 'transfer', label: 'Transfer', sub: 'between outlets', bg: 'amberSoft', stroke: '#854F0B', d: 'M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4' },
@@ -65,7 +74,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -126,6 +135,25 @@ export default function InventoryStaffApp() {
   const [ticketName, setTicketName] = useState('')
   const [ticketSaving, setTicketSaving] = useState(false)
   const [ticketMsg, setTicketMsg] = useState('')
+  // Receive screen state
+  const [receiveData, setReceiveData] = useState<ReceiveData | null>(null)
+  const [receiveState, setReceiveState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
+  const [openPo, setOpenPo] = useState<string | null>(null)
+  const [recvQty, setRecvQty] = useState<Record<string, number>>({})
+  const [recvExpiry, setRecvExpiry] = useState<Record<string, string>>({})
+  const [recvNote, setRecvNote] = useState('')
+  const [recvSubmitting, setRecvSubmitting] = useState(false)
+  const [recvMsg, setRecvMsg] = useState('')
+  // Transfer screen state
+  const [transferData, setTransferData] = useState<TransferData | null>(null)
+  const [transferState, setTransferState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
+  const [transferBusy, setTransferBusy] = useState<string | null>(null)
+  const [transferMsg, setTransferMsg] = useState('')
+  // Expiring screen state
+  const [expData, setExpData] = useState<ExpData | null>(null)
+  const [expState, setExpState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
+  const [expBusy, setExpBusy] = useState<string | null>(null)
+  const [expMsg, setExpMsg] = useState('')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -392,6 +420,84 @@ export default function InventoryStaffApp() {
   useEffect(() => { if (stage === 'app' && tab === 'reports') loadReports(reportPeriod, outletId) }, [stage, tab, reportPeriod, outletId, loadReports])
   function exportReport(type: string) {
     window.open(`/api/inventory/app/${slug}/report?type=${type}&period=${reportPeriod}${outletId ? `&outlet_id=${outletId}` : ''}&format=pdf`, '_blank')
+  }
+
+  // ── Receive (PO → delivery) ──
+  const loadReceive = useCallback(async () => {
+    setReceiveState('loading')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/receive`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setReceiveState('error'); return }
+      const d = await r.json() as ReceiveData
+      setReceiveData(d)
+      setReceiveState(d.receivable.length === 0 && d.recent.length === 0 ? 'empty' : 'ok')
+    } catch { setReceiveState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'receive' && !receiveData) loadReceive() }, [stage, tab, receiveData, loadReceive])
+  function openReceivePo(po: ReceivePO) {
+    setOpenPo(po.id)
+    const q: Record<string, number> = {}; po.items.forEach(l => { q[l.id] = Math.round(Number(l.quantity_ordered) || 0) })
+    setRecvQty(q); setRecvExpiry({}); setRecvNote(''); setRecvMsg('')
+  }
+  async function submitReceive(po: ReceivePO) {
+    setRecvSubmitting(true); setRecvMsg('')
+    try {
+      const lines = po.items.map(l => ({ line_id: l.id, product_id: l.product_id, received_qty: recvQty[l.id] ?? 0, expiry_date: recvExpiry[l.id] || undefined }))
+      const r = await fetch(`/api/inventory/app/${slug}/receive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ po_id: po.id, outlet_id: outletId, note: recvNote || undefined, lines }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setRecvMsg(`✓ Received ${po.order_number} — stock updated.`); setOpenPo(null); setReceiveData(null); loadReceive(); loadHome(outletId) }
+      else setRecvMsg(d.error ? `Couldn't receive: ${d.error}` : 'Could not receive this delivery.')
+    } catch { setRecvMsg('Something went wrong.') }
+    setRecvSubmitting(false)
+  }
+
+  // ── Transfer (between outlets) ──
+  const loadTransfer = useCallback(async () => {
+    setTransferState('loading')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/transfer`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setTransferState('error'); return }
+      const d = await r.json() as TransferData
+      setTransferData(d)
+      setTransferState(d.transfers.length === 0 ? 'empty' : 'ok')
+    } catch { setTransferState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'transfer' && !transferData) loadTransfer() }, [stage, tab, transferData, loadTransfer])
+  async function transferAction(id: string, action: 'approve' | 'send' | 'receive') {
+    setTransferBusy(id); setTransferMsg('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/transfer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transfer_id: id, action }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setTransferMsg(d.stock_changed ? `✓ ${action === 'send' ? 'Sent — stock left the origin outlet.' : 'Received — stock landed at the destination.'}` : d.idempotent ? 'Already done.' : '✓ Approved.'); setTransferData(null); loadTransfer(); loadHome(outletId) }
+      else setTransferMsg(d.error ? `Couldn't ${action}: ${d.error}` : `Could not ${action}.`)
+    } catch { setTransferMsg('Something went wrong.') }
+    setTransferBusy(null)
+  }
+
+  // ── Expiring (batch buckets) ──
+  const loadExpiring = useCallback(async () => {
+    setExpState('loading')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/expiring`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setExpState('error'); return }
+      const d = await r.json() as ExpData
+      setExpData(d)
+      setExpState(d.batches.length === 0 ? 'empty' : 'ok')
+    } catch { setExpState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'expiring' && !expData) loadExpiring() }, [stage, tab, expData, loadExpiring])
+  async function expiringAction(batchId: string, action: 'waste' | 'markdown') {
+    setExpBusy(batchId); setExpMsg('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/expiring`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch_id: batchId, action }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setExpMsg(action === 'waste' ? (d.stock_changed ? `✓ Wasted ${d.wasted} — stock written off.` : 'Already cleared.') : '✓ Markdown flagged for the owner.'); setExpData(null); loadExpiring(); loadHome(outletId) }
+      else setExpMsg(d.error ? `Couldn't ${action}: ${d.error}` : `Could not ${action}.`)
+    } catch { setExpMsg('Something went wrong.') }
+    setExpBusy(null)
   }
 
   // Bootstrap + resume session.
@@ -1190,6 +1296,197 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── RECEIVE (PO → delivery) ──
+  if (tab === 'receive') {
+    const po = receiveData?.receivable.find(p => p.id === openPo) ?? null
+    const fmtDate = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'
+    return shell(
+      <>
+        {statusbar}{header(true, 'Receive', 'Log a delivery against a PO')}
+        {body(
+          receiveState === 'loading' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 70, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+          ) : receiveState === 'error' ? (
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load deliveries</p><button onClick={() => { setReceiveData(null); loadReceive() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+          ) : po ? (
+            // ── open PO: enter received quantities ──
+            <>
+              <button onClick={() => setOpenPo(null)} style={{ background: 'none', border: 'none', color: T.muted, fontSize: 13, cursor: 'pointer', fontFamily: BODY, marginBottom: 8 }}>← All deliveries</button>
+              <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <b style={{ fontSize: 16, fontWeight: 600 }}>{po.order_number}</b>
+                  <span style={{ fontSize: 11.5, color: T.muted }}>expected {fmtDate(po.expected_date)}</span>
+                </div>
+                <p style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>Default to ordered qty. Edit any line for a partial or over-delivery; add an expiry date to track a batch.</p>
+              </div>
+              {po.items.map(l => {
+                const q = recvQty[l.id] ?? 0
+                const diff = q - (Number(l.quantity_ordered) || 0)
+                return (
+                  <div key={l.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <b style={{ fontSize: 13.5, fontWeight: 600 }}>{l.product_name}</b>
+                      <span style={{ fontSize: 11, color: T.muted }}>ordered {l.quantity_ordered}{l.unit_cost != null ? ` · ${money(l.unit_cost)}/u` : ''}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', margin: '11px 0 6px' }}>
+                      <button onClick={() => setRecvQty(s => ({ ...s, [l.id]: Math.max(0, (s[l.id] ?? 0) - 1) }))} style={{ width: 42, height: 42, borderRadius: 13, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 22, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
+                      <input value={q} onChange={e => setRecvQty(s => ({ ...s, [l.id]: Math.max(0, Math.round(Number(e.target.value) || 0)) }))} inputMode="numeric" style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 38, fontWeight: 600, width: 72, textAlign: 'center', border: 'none', outline: 'none', color: T.ink }} />
+                      <button onClick={() => setRecvQty(s => ({ ...s, [l.id]: (s[l.id] ?? 0) + 1 }))} style={{ width: 42, height: 42, borderRadius: 13, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 22, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
+                    </div>
+                    {diff !== 0 && <div style={{ fontSize: 11, textAlign: 'center', color: diff < 0 ? T.amber : T.green, marginBottom: 6 }}>{diff < 0 ? `${Math.abs(diff)} short of ordered` : `${diff} over ordered`}</div>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: T.muted, whiteSpace: 'nowrap' }}>Expiry (optional)</span>
+                      <input type="date" value={recvExpiry[l.id] ?? ''} onChange={e => setRecvExpiry(s => ({ ...s, [l.id]: e.target.value }))} style={{ flex: 1, padding: '7px 10px', borderRadius: 9, border: `1px solid ${T.line}`, background: T.paper, color: T.ink, fontFamily: BODY, fontSize: 12.5, outline: 'none' }} />
+                    </div>
+                  </div>
+                )
+              })}
+              <textarea value={recvNote} onChange={e => setRecvNote(e.target.value)} placeholder="Note (optional) — e.g. one box damaged…" rows={2} style={{ width: '100%', padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 10, resize: 'vertical' }} />
+              {recvMsg && <p style={{ fontSize: 12.5, color: recvMsg.startsWith('✓') ? T.green : T.red, marginBottom: 10 }}>{recvMsg}</p>}
+              <button onClick={() => submitReceive(po)} disabled={recvSubmitting} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: recvSubmitting ? 0.6 : 1 }}>{recvSubmitting ? 'Receiving…' : 'Confirm delivery'}</button>
+              <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Received as <b style={{ color: T.green }}>{acting?.name}</b> · increments stock, captures cost, opens a batch.</div>
+            </>
+          ) : receiveState === 'empty' ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>📦</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>No deliveries waiting</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When a purchase order is sent to a supplier it appears here to receive. Create POs from the dashboard.</p></div>
+          ) : (
+            <>
+              <div style={{ margin: '2px 2px 10px', fontSize: 14, fontWeight: 600 }}>Awaiting receipt</div>
+              {(receiveData?.receivable ?? []).map(p => (
+                <button key={p.id} onClick={() => openReceivePo(p)} style={{ width: '100%', textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: 'pointer', fontFamily: BODY, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <div><b style={{ fontSize: 14, fontWeight: 600 }}>{p.order_number}</b><div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{p.items.length} line{p.items.length === 1 ? '' : 's'} · expected {fmtDate(p.expected_date)}</div></div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: T.green, background: T.greenSoft, borderRadius: 8, padding: '6px 11px', whiteSpace: 'nowrap' }}>Receive →</span>
+                </button>
+              ))}
+              {(receiveData?.recent ?? []).length > 0 && (
+                <>
+                  <div style={{ margin: '14px 2px 10px', fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.4px' }}>Recently received</div>
+                  {(receiveData?.recent ?? []).map(p => (
+                    <div key={p.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 12, padding: '11px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div><b style={{ fontSize: 13, fontWeight: 600 }}>{p.order_number}</b><div style={{ fontSize: 11, color: T.muted }}>by {p.received_by ?? '—'} · {fmtDate(p.received_at)}</div></div>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: T.sage, background: T.sageSoft, borderRadius: 7, padding: '4px 9px' }}>✓ done</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          )
+        )}
+        {tabbar}
+      </>
+    )
+  }
+
+  // ── TRANSFER (between outlets) ──
+  if (tab === 'transfer') {
+    const stageMeta = (s: string) => ({
+      draft: { label: 'Draft', bg: T.paper, col: T.muted }, requested: { label: 'Requested', bg: T.blueSoft, col: '#185FA5' },
+      approved: { label: 'Approved', bg: T.violetSoft, col: '#534AB7' }, in_transit: { label: 'In transit', bg: T.amberSoft, col: T.amber },
+      received: { label: 'Received', bg: T.sageSoft, col: T.green },
+    } as Record<string, { label: string; bg: string; col: string }>)[s] ?? { label: s.replace(/_/g, ' '), bg: T.paper, col: T.muted }
+    const nextAction = (s: string): { action: 'approve' | 'send' | 'receive'; label: string } | null =>
+      s === 'draft' || s === 'requested' ? { action: 'approve', label: 'Approve' }
+      : s === 'approved' ? { action: 'send', label: 'Send · ship stock' }
+      : s === 'in_transit' ? { action: 'receive', label: 'Receive · land stock' } : null
+    return shell(
+      <>
+        {statusbar}{header(true, 'Transfer', 'Move stock between outlets')}
+        {body(
+          transferState === 'loading' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(2)].map((_, i) => <div key={i} style={{ height: 150, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+          ) : transferState === 'error' ? (
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load transfers</p><button onClick={() => { setTransferData(null); loadTransfer() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+          ) : transferState === 'empty' ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🔁</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>No transfers right now</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Create a stock transfer between outlets from the dashboard. It walks through approve → send → receive here.</p></div>
+          ) : (
+            <>
+              {transferMsg && <p style={{ fontSize: 12.5, color: transferMsg.startsWith('✓') ? T.green : T.red, marginBottom: 12, background: transferMsg.startsWith('✓') ? T.sageSoft : T.redSoft, borderRadius: 10, padding: '10px 12px' }}>{transferMsg}</p>}
+              {(transferData?.transfers ?? []).map(tr => {
+                const sm = stageMeta(tr.status)
+                const na = nextAction(tr.status)
+                const busy = transferBusy === tr.id
+                return (
+                  <div key={tr.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>{tr.from_name} <span style={{ color: T.muted }}>→</span> {tr.to_name}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: sm.col, background: sm.bg, padding: '3px 9px', borderRadius: 7, textTransform: 'uppercase', letterSpacing: '.3px' }}>{sm.label}</span>
+                    </div>
+                    {tr.items.map(it => (
+                      <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 2px', borderTop: `1px solid ${T.line}`, fontSize: 12.5 }}>
+                        <span style={{ flex: 1 }}>{it.product_name}</span>
+                        <span style={{ color: T.muted }}>{tr.status === 'received' && it.quantity_received != null ? `${it.quantity_received} received` : tr.status === 'in_transit' && it.quantity_sent != null ? `${it.quantity_sent} sent` : `${it.quantity_approved} qty`}</span>
+                      </div>
+                    ))}
+                    {na ? (
+                      <button disabled={busy} onClick={() => transferAction(tr.id, na.action)} style={{ width: '100%', marginTop: 11, background: T.green, color: '#fff', border: 0, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : na.label}</button>
+                    ) : (
+                      <div style={{ width: '100%', marginTop: 11, background: T.sageSoft, color: T.green, borderRadius: 12, padding: 12, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>✓ Completed</div>
+                    )}
+                  </div>
+                )
+              })}
+              <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 4, lineHeight: 1.5 }}>Each step is logged to <b style={{ color: T.green }}>{acting?.name}</b>. Sending decrements the origin; receiving increments the destination.</div>
+            </>
+          )
+        )}
+        {tabbar}
+      </>
+    )
+  }
+
+  // ── EXPIRING (batch buckets) ──
+  if (tab === 'expiring') {
+    const bucketMeta = (b: string) => ({
+      expired: { label: 'Expired', bg: T.redSoft, col: T.red }, urgent: { label: '≤3 days', bg: T.redSoft, col: T.red },
+      soon: { label: '≤14 days', bg: T.amberSoft, col: T.amber }, ok: { label: 'OK', bg: T.sageSoft, col: T.green },
+    } as Record<string, { label: string; bg: string; col: string }>)[b] ?? { label: b, bg: T.paper, col: T.muted }
+    const c = expData?.counts
+    return shell(
+      <>
+        {statusbar}{header(true, 'Expiring', 'Batches nearing expiry')}
+        {body(
+          expState === 'loading' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+          ) : expState === 'error' ? (
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load expiring stock</p><button onClick={() => { setExpData(null); loadExpiring() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+          ) : expState === 'empty' ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🌿</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>Nothing tracked for expiry</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Batches with an expiry date appear here as they near their use-by. Add an expiry when receiving a delivery.</p></div>
+          ) : (
+            <>
+              {c && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
+                  {([['expired', c.expired], ['urgent', c.urgent], ['soon', c.soon]] as const).map(([b, n]) => {
+                    const m = bucketMeta(b)
+                    return <div key={b} style={{ flex: 1, background: m.bg, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: m.col, lineHeight: 1 }}>{n}</div><div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{m.label}</div></div>
+                  })}
+                </div>
+              )}
+              {expMsg && <p style={{ fontSize: 12.5, color: expMsg.startsWith('✓') ? T.green : T.red, marginBottom: 12, background: expMsg.startsWith('✓') ? T.sageSoft : T.redSoft, borderRadius: 10, padding: '10px 12px' }}>{expMsg}</p>}
+              {(expData?.batches ?? []).map(b => {
+                const m = bucketMeta(b.bucket)
+                const busy = expBusy === b.id
+                return (
+                  <div key={b.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderLeft: `3px solid ${m.col}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                      <b style={{ fontSize: 14, fontWeight: 600 }}>{b.product_name}</b>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: m.col }}>{b.days_left < 0 ? `${Math.abs(b.days_left)}d ago` : `${b.days_left}d left`}</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{b.batch_ref} · {b.quantity_remaining} left · {b.outlet_name} · use-by {new Date(`${b.expiry_date}T00:00:00+10:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
+                      <button disabled={busy} onClick={() => expiringAction(b.id, 'waste')} style={{ flex: 1, background: '#fff', color: T.red, border: `1.5px solid ${T.redSoft}`, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Waste'}</button>
+                      <button disabled={busy} onClick={() => expiringAction(b.id, 'markdown')} style={{ flex: 1, background: '#fff', color: T.amber, border: `1.5px solid ${T.amberSoft}`, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Markdown</button>
+                    </div>
+                  </div>
+                )
+              })}
+              <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 4, lineHeight: 1.5 }}>Waste writes the batch off (decrements stock, logged to <b style={{ color: T.green }}>{acting?.name}</b>). Markdown flags it for the owner — no price change.</div>
+            </>
+          )
+        )}
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -1243,17 +1540,17 @@ export default function InventoryStaffApp() {
           {/* TOOL TILES */}
           <div style={{ margin: '6px 2px 10px', fontSize: 14, fontWeight: 600 }}>Inventory tools</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {TILES.map(t => {
+            {TILES.filter(t => t.key !== 'transfer' || multiOutlet).map(t => {
               const badge = t.badge ? (home?.tile_badges[t.badge] ?? 0) : 0
               return (
-                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } else if (t.key === 'adjust') { setAdjustProduct(null); setTab('adjust') } else if (t.key === 'tickets') setTab('tickets') }}
+                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } else if (t.key === 'adjust') { setAdjustProduct(null); setTab('adjust') } else if (t.key === 'tickets') setTab('tickets'); else if (t.key === 'receive') { setReceiveData(null); setOpenPo(null); setTab('receive') } else if (t.key === 'transfer') { setTransferData(null); setTab('transfer') } else if (t.key === 'expiring') { setExpData(null); setTab('expiring') } }}
                   style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: (T as Record<string, string>)[t.bg], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="18" height="18" fill="none" stroke={t.stroke} strokeWidth={2} viewBox="0 0 24 24">{t.circle && <circle cx="12" cy="12" r="9" />}<path d={t.d} /></svg>
                   </div>
                   <b style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</b>
                   {t.badge && badge > 0
-                    ? <span style={{ fontSize: 9, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'flex-start', marginTop: -4 }}>{badge} {t.key === 'order' ? 'to reorder' : 'today'}</span>
+                    ? <span style={{ fontSize: 9, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'flex-start', marginTop: -4 }}>{badge} {t.key === 'order' ? 'to reorder' : t.key === 'receive' ? 'to receive' : t.key === 'expiring' ? 'expiring' : 'today'}</span>
                     : <span style={{ fontSize: 10.5, color: T.muted, marginTop: -4 }}>{t.sub}</span>}
                 </div>
               )
