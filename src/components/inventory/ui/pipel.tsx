@@ -49,6 +49,15 @@ const ICONS: Record<string, React.ReactNode> = {
   back: <path d="M15 18l-6-6 6-6" />,
 }
 
+// Manifest icon-key aliases → reuse an existing glyph so every tile renders a real icon (never a fallback box).
+const ICON_ALIAS: Record<string, string> = {
+  receive: 'truck', order: 'shopping-cart', low_stock: 'alert-triangle', expiring: 'clock', waste: 'trash',
+  tickets: 'tag', price_check: 'tag', locate: 'map-pin', stock_value: 'dollar-sign', tasks: 'list',
+  movement_audit: 'activity', fefo: 'clock', batches: 'layers', markdown: 'percent', transfer_history: 'git-branch',
+  adjust: 'edit', 'sort-asc': 'bar-chart', 'percent-circle': 'percent', columns: 'bar-chart', database: 'archive',
+}
+for (const [k, v] of Object.entries(ICON_ALIAS)) if (!ICONS[k]) ICONS[k] = ICONS[v]
+
 export function PIcon({ name, size = 20, stroke = P.ink, sw = 1.8 }: { name: string; size?: number; stroke?: string; sw?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">

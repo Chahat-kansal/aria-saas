@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { P, JAKARTA, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
-import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav } from '@/components/inventory/ui/pipel'
+import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton } from '@/components/inventory/ui/pipel'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -1457,7 +1457,6 @@ export default function InventoryStaffApp() {
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
-  const pct = vh && vh.products_total > 0 ? Math.round((vh.products_valued / vh.products_total) * 100) : 0
 
   // INV-1 — route a manifest tile to its screen. Implemented screens map to tabs; the rest land on home until
   // CX-UI-POLISH builds them. Falls back to the built-in TILES set if the manifest didn't load.
@@ -1480,71 +1479,93 @@ export default function InventoryStaffApp() {
     ? home.visible_tiles
     : TILES.filter(t => t.key !== 'transfer' || multiOutlet).map(t => ({ id: t.key, label: t.label, sublabel: t.sub, icon: t.key, route: t.key, badge: t.badge }))
 
+  // INV-PIPEL — "needs you" surfaces EXISTING home counts (no new data) as actionable rows to real screens.
+  const tb = home?.tile_badges
+  const needs: Array<{ icon: string; title: string; detail: string; cta: string; onCta: () => void; tone?: 'lime' | 'plain' }> = []
+  if (home && (tb?.receive ?? 0) > 0) needs.push({ icon: 'truck', title: `${tb!.receive} deliver${tb!.receive === 1 ? 'y' : 'ies'} to receive`, detail: 'Log it against its PO', cta: 'Receive', onCta: () => routeTile('receive') })
+  if (home && (home.mini_stats.tasks_open ?? 0) > 0) needs.push({ icon: 'count', tone: 'plain', title: `${home.mini_stats.tasks_open} task${home.mini_stats.tasks_open === 1 ? '' : 's'} to count`, detail: 'Aria built your list from real sales', cta: 'Count', onCta: () => setTab('tasks') })
+  if (home && (tb?.expiring ?? 0) > 0) needs.push({ icon: 'clock', title: `${tb!.expiring} expiring soon`, detail: 'Clear or mark it down', cta: 'Review', onCta: () => routeTile('expiring') })
+
+  const costPct = vh && vh.at_retail > 0 ? Math.round((vh.at_cost / vh.at_retail) * 100) : 39
+
   return shell(
     <>
       {statusbar}{header()}
-      {body(
-        <>
-          {multiOutlet && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${T.line}`, borderRadius: 11, padding: '9px 12px', marginBottom: 13, fontSize: 12.5, fontWeight: 600 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.sage }} />
-              <select value={outletId ?? ''} onChange={e => { setOutletId(e.target.value); loadHome(e.target.value) }} style={{ border: 0, background: 'transparent', fontFamily: BODY, fontWeight: 600, fontSize: 12.5, flex: 1, outline: 0, color: T.ink }}>
-                {boot!.outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-              <span style={{ fontSize: 9.5, color: T.muted, fontWeight: 600 }}>stock is per-outlet</span>
-            </div>
-          )}
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 18 }}>
+        {multiOutlet && boot && (
+          <PipelSegment
+            options={boot.outlets.map(o => ({ value: o.id, label: o.name.replace(/^\[TEST\]\s*/, '') }))}
+            value={outletId ?? boot.outlets[0]?.id ?? ''}
+            onChange={(v) => { setOutletId(v); loadHome(v) }}
+          />
+        )}
 
-          {/* VALUE HERO */}
-          {homeState === 'loading' ? (
-            <div style={{ height: 150, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}`, marginBottom: 13 }} />
-          ) : homeState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center', marginBottom: 13 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load your stock</p>
-              <button onClick={() => loadHome(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button>
-            </div>
-          ) : homeState === 'empty' ? (
-            <div style={{ padding: 28, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}`, textAlign: 'center', marginBottom: 13 }}>
-              <div style={{ fontSize: 34, marginBottom: 8 }}>📦</div>
-              <p style={{ fontSize: 16, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 4 }}>No products yet</p>
-              <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>Add products in the dashboard and your live stock value will appear here.</p>
-            </div>
-          ) : vh && (
-            <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 13, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
-              <div style={{ fontSize: 11, color: T.muted }}>Stock value on hand · at cost</div>
-              <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 34, fontWeight: 600, color: T.green, lineHeight: 1.05, marginTop: 1 }}>{money(vh.at_cost)}</div>
-              <div style={{ fontSize: 11.5, color: T.muted, marginTop: 1 }}>at retail {money(vh.at_retail)}{vh.margin_pct != null ? ` · ${vh.margin_pct}% margin` : ''} · {vh.products_valued}/{vh.products_total} costed</div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
-                {[['sold today', String(home!.mini_stats.sold_today), T.ink], ['tasks open', String(home!.mini_stats.tasks_open), T.amber], ['to review', String(home!.mini_stats.to_review), T.red]].map(([k, v, col]) => (
-                  <div key={k} style={{ flex: 1, background: T.paper, borderRadius: 11, padding: '8px 10px' }}>
-                    <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 19, fontWeight: 600, lineHeight: 1, color: col as string }}>{v}</div>
-                    <div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{k}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TOOL TILES — INV-1: rendered from the industry/capability-gated manifest (home.visible_tiles). */}
-          <div style={{ margin: '6px 2px 10px', fontSize: 14, fontWeight: 600 }}>Inventory tools</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {tilesToShow.map(t => {
-              const badge = t.badge ? ((home?.tile_badges as Record<string, number>)?.[t.badge] ?? 0) : 0
-              const badgeWord = t.badge === 'order' ? 'to reorder' : t.badge === 'receive' ? 'to receive' : t.badge === 'expiring' ? 'expiring' : 'today'
-              return (
-                <div key={t.id} onClick={() => routeTile(t.route)}
-                  style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: T.sageSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.green, fontFamily: DISPLAY, fontStyle: 'italic', fontWeight: 600, fontSize: 16 }}>{t.label[0]}</div>
-                  <b style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</b>
-                  {t.badge && badge > 0
-                    ? <span style={{ fontSize: 9, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'flex-start', marginTop: -4 }}>{badge} {badgeWord}</span>
-                    : <span style={{ fontSize: 10.5, color: T.muted, marginTop: -4 }}>{t.sublabel}</span>}
-                </div>
-              )
-            })}
+        {/* VALUE HERO */}
+        {homeState === 'loading' ? (
+          <div style={{ height: 200, borderRadius: 28, background: P.card, border: `1.5px solid ${P.ink}`, margin: '16px 16px 0' }} />
+        ) : homeState === 'error' ? (
+          <div style={{ margin: '16px 16px 0', padding: 24, borderRadius: 28, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}>
+            <p style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>Couldn&apos;t load your stock</p>
+            <PipelButton onClick={() => loadHome(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton>
           </div>
-        </>
-      )}
+        ) : homeState === 'empty' ? (
+          <div style={{ margin: '16px 16px 0', padding: 30, borderRadius: 28, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}>
+            <div style={{ fontSize: 34, marginBottom: 8 }}>📦</div>
+            <p style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>No products yet</p>
+            <p style={{ fontSize: 12.5, color: P.muted, lineHeight: 1.5, fontWeight: 500 }}>Add products in the dashboard and your live stock value appears here.</p>
+          </div>
+        ) : vh && (
+          <PipelHero
+            caption="Stock value on hand · at cost"
+            value={money(vh.at_cost)}
+            costPct={costPct}
+            costLabel={money(vh.at_cost)}
+            retailLabel={money(vh.at_retail)}
+            marginTag={vh.margin_pct != null ? `${vh.margin_pct}% margin` : null}
+            stats={[
+              { n: home!.mini_stats.sold_today, k: 'sold today' },
+              { n: home!.mini_stats.tasks_open, k: 'tasks open', tone: home!.mini_stats.tasks_open > 0 ? 'warn' : undefined },
+              { n: home!.mini_stats.to_review, k: 'to review', tone: home!.mini_stats.to_review > 0 ? 'alert' : undefined },
+            ]}
+          />
+        )}
+
+        {/* NEEDS YOU — existing counts surfaced as actions */}
+        {needs.length > 0 && (
+          <>
+            <PipelSectionHead title="needs you" em="· before close" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '0 16px' }}>
+              {needs.map((n, i) => <PipelNeed key={i} icon={n.icon} title={n.title} detail={n.detail} cta={n.cta} onCta={n.onCta} tone={n.tone} />)}
+            </div>
+          </>
+        )}
+
+        {/* TOOL TILES — INV-1 manifest (home.visible_tiles), Pipel-skinned (icon chip + live stat + offset shadow). */}
+        <PipelSectionHead title="inventory tools" right={`all ${tilesToShow.length}`} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 13, margin: '0 16px' }}>
+          {tilesToShow.map(t => {
+            const count = t.badge ? ((home?.tile_badges as Record<string, number>)?.[t.badge] ?? 0) : 0
+            const badgeWord = t.badge === 'order' ? 'to reorder' : t.badge === 'receive' ? 'to receive' : t.badge === 'expiring' ? 'within 7 days' : 'today'
+            const isWaste = t.id === 'waste' || t.route === 'waste'
+            const isReports = t.id === 'reports'
+            const variant = isWaste ? 'loss' : isReports ? 'featured' : 'default'
+            const hasCount = !!t.badge && count > 0
+            return (
+              <PipelTile
+                key={t.id}
+                icon={t.icon}
+                label={t.label}
+                statValue={hasCount ? count : undefined}
+                statSuffix={hasCount ? badgeWord : t.sublabel}
+                badge={isReports ? 'new' : t.id === 'expiring' ? 'soon' : undefined}
+                badgeTone={t.id === 'expiring' ? 'amber' : 'default'}
+                variant={variant}
+                onClick={() => routeTile(t.route)}
+              />
+            )
+          })}
+        </div>
+      </div>
       {tabbar}
     </>
   )
