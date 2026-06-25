@@ -463,7 +463,7 @@ async function _POST(req: Request) {
 
   // 1b. Detect action intent not caught by classifier
   // NOTE: only trigger if NOT a strategic/advisory question — those go to council
-  const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase|launch|add|start|run)\b/i
+  const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase|launch|add|start|run|remove|subtract|deactivate|reactivate|disable|enable|archive|cut|lower|raise|schedule|draft)\b/i
   const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount|promo|promotion|bundle|deal|offer|campaign|roster|invoice|sale)\b/i
   // BUGFIX-ASKARIA-ACTION-ROUTING: a promo request phrased as "10% off X" / "$5 off" / "BOGO" carries no literal
   // promo/discount SUBJECT word, so it missed ACTION_SUBJECTS and dead-ended in the answer path (answered as a
@@ -485,8 +485,13 @@ async function _POST(req: Request) {
   // report/lookup ("show me the discounts") or an advisory ("should I run a promo").
   const LOOKUP_WORDS = /\b(summary|report|list|show me|breakdown|overview|how many|how much|what are|which)\b/i
   const STRONG_ACTION = /\b(create|set up|launch|start|run|apply|add)\b[\s\S]{0,40}\b(promotion|promo|discount|deal|offer|sale|\d+\s*%\s*off|\$\s*\d+\s*off|bogo)\b/i
+  // A bare product-state TOGGLE ("deactivate X", "disable X") or a STOCK mutation ("set/add/remove N … stock")
+  // carries no SUBJECT word when the product is named directly — route these to the planner regardless of how
+  // the classifier labels them (they were mislabelled 'technical'/'question' and dead-ended in the answer path).
+  const STRONG_TOGGLE = /\b(deactivate|reactivate|disable|enable|archive|unarchive)\b/i
+  const STRONG_STOCK = /\b(set|add|remove|subtract|reduce|increase|adjust|restock)\b[\s\S]{0,30}\b(stock|inventory|on[- ]?hand|qty|quantity|units?)\b/i
   const isActionRequest = ACTION_KEYWORDS.test(message) && (ACTION_SUBJECTS.test(message) || ACTION_SHAPE.test(message)) && intent.type === 'question'
-  const isStrongAction = STRONG_ACTION.test(message) && !LOOKUP_WORDS.test(message) && !isStrategicQuestion
+  const isStrongAction = (STRONG_ACTION.test(message) || STRONG_TOGGLE.test(message) || STRONG_STOCK.test(message)) && !LOOKUP_WORDS.test(message) && !isStrategicQuestion
   // Action-intent takes precedence over the data-lookup / coref / general lanes below. A strong create command
   // routes to the planner even if the classifier mislabels it analytical; the looser request keeps the guards.
   const planTrigger = isStrongAction || ((isActionRequest || isEditIntent) && !isStrategicQuestion && ariaIntent.intent_type !== 'analytical')

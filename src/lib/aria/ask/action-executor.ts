@@ -147,6 +147,37 @@ async function runAction(
   let entityIds: string[] = []
   let entityType = 'pos_products'
 
+  // BUGFIX-ASKARIA-ACTION-ROUTING / cold-path coverage: the LLM planner emits VARYING payload key shapes
+  // (product_ids vs product_id, operation vs adjust_type, is_active vs field/value, adjustment_type+percentage
+  // vs price_change_type+price_change_value, filter.category vs category). Normalise them to the canonical
+  // shape the cases below read, so a cold create/adjust/mark from natural language actually writes (instead of
+  // silently no-op'ing or, worse, falling through to an unscoped all-products mutation). Additive + defensive.
+  ;(() => {
+    const p = action.payload as Record<string, unknown>
+    if (!p || typeof p !== 'object') return
+    const flt = (p.filter && typeof p.filter === 'object') ? p.filter as Record<string, unknown> : null
+    if (p.category == null && flt?.category != null) p.category = flt.category
+    if (p.brand == null && flt?.brand != null) p.brand = flt.brand
+    if (action.type === 'adjust_stock') {
+      if (p.product_id == null && Array.isArray(p.product_ids) && p.product_ids.length) p.product_id = p.product_ids[0]
+      if (p.adjust_type == null && p.operation != null) p.adjust_type = p.operation
+    }
+    if (action.type === 'mark_products' && p.field == null) {
+      if (p.is_active !== undefined) { p.field = 'is_active'; p.value = p.is_active }
+      else if (p.age_restricted !== undefined) { p.field = 'age_restricted'; p.value = p.age_restricted }
+    }
+    if (action.type === 'bulk_price_update') {
+      if (p.price_change_value == null) p.price_change_value = p.percentage ?? p.value ?? p.new_price ?? p.amount
+      if (p.price_change_type == null) {
+        const at = String(p.adjustment_type ?? p.operation ?? p.direction ?? '').toLowerCase()
+        const dec = /decrease|reduce|lower|cut|discount|off\b/.test(at) || (typeof messageExcerpt === 'string' && /\b(decrease|reduce|lower|cut|drop)\b/i.test(messageExcerpt))
+        if (at === 'set' || p.new_price != null) p.price_change_type = 'set'
+        else if (at.includes('percent') || (typeof p.percentage === 'number')) p.price_change_type = dec ? 'decrease_pct' : 'increase_pct'
+        else if (at) p.price_change_type = dec ? 'decrease_abs' : 'increase_abs'
+      }
+    }
+  })()
+
   // RC2 BACKSTOP: refuse an unconfirmed mass mutation (resolved row count over the threshold). Code-level —
   // prompt-injection can fool the planner into PLANNING "set all prices to 0", but it cannot make the executor
   // execute it without payload.confirm_mass set by a real second confirmation.
