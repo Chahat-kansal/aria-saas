@@ -86,6 +86,21 @@ async function buildPlanContext(
   return { recentTurns, lastPromotion }
 }
 
+// BUGFIX-ASKARIA-THREADING: the dashboard client sends only {message, conversation_id} (no messages array), so
+// history for the answer call must be REHYDRATED server-side from the conversation row. Returns the last ~10
+// user/assistant turns of THIS conversation (or the client-sent messages if a future client provides them).
+async function loadAnswerHistory(
+  bid: string,
+  conversationId: string | null,
+  clientMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  if (clientMessages.length > 0) return clientMessages.slice(-10)
+  if (!conversationId) return []
+  const { data } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', conversationId).eq('business_id', bid).maybeSingle()
+  const msgs = Array.isArray((data as { messages?: Array<{ role: string; content: string }> } | null)?.messages) ? (data as { messages: Array<{ role: string; content: string }> }).messages : []
+  return msgs.filter(m => m.role === 'user' || m.role === 'assistant').slice(-10).map(m => ({ role: m.role as 'user' | 'assistant', content: String(m.content ?? '') }))
+}
+
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
   if (active?.business_id) return active.business_id as string
@@ -544,8 +559,18 @@ async function _POST(req: Request) {
     }
   }
 
+  // BUGFIX-ASKARIA-THREADING: a coreferential follow-up ("what does she buy", "how often does she visit") must
+  // NOT be answered by the bare general path — that path injects no history (can't resolve "she") AND has no
+  // business tools (can't answer purchases even if resolved). When the message references prior context AND a
+  // thread exists, fall through to the business tool-loop, which rehydrates this conversation's history (so the
+  // referent resolves) and has the data tools. THIS is the real cause of "what does she buy" losing the referent.
+  const COREF_FOLLOWUP = /\b(she|he|her|him|hers|his|they|them|their|theirs|it|its|that|those|these|the customer|the product|the order|this one|that one|the last one|same one)\b/i
+  const isCoreferentialFollowup = COREF_FOLLOWUP.test(message) && (!!conversationId || clientMessages.length > 0)
+
   // GENERAL fast-path — non-business question: skip all business context, answer directly as a capable assistant
-  if (intent.type === 'general' || ariaIntent.intent_type === 'general' || ariaIntent.intent_type === 'smalltalk') {
+  if (!isCoreferentialFollowup && (intent.type === 'general' || ariaIntent.intent_type === 'general' || ariaIntent.intent_type === 'smalltalk')) {
+    // Defensive: even a genuine general follow-up gets this conversation's recent turns so references resolve.
+    const generalPrior = await loadAnswerHistory(bid, conversationId, clientMessages)
     const generalSystemPrompt = `You are Aria — an AI assistant for an Australian small business owner. The owner has asked a general question (not about their business data or operations). Answer it directly, helpfully, and competently as a knowledgeable general assistant.
 
 Rules:
@@ -561,7 +586,7 @@ Rules:
       model: 'haiku',
       systemPrompt: generalSystemPrompt,
       userPrompt: message,
-      priorMessages: [],
+      priorMessages: generalPrior,
       tools: generalTools,
       executeTool: (name, input) => executePOSTool(name, input, bid),
       maxTokens: 2000,
