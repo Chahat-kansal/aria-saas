@@ -463,8 +463,13 @@ async function _POST(req: Request) {
 
   // 1b. Detect action intent not caught by classifier
   // NOTE: only trigger if NOT a strategic/advisory question — those go to council
-  const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase)\b/i
-  const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount|promo|promotion|bundle|deal|offer|campaign|roster|invoice)\b/i
+  const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase|launch|add|start|run)\b/i
+  const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount|promo|promotion|bundle|deal|offer|campaign|roster|invoice|sale)\b/i
+  // BUGFIX-ASKARIA-ACTION-ROUTING: a promo request phrased as "10% off X" / "$5 off" / "BOGO" carries no literal
+  // promo/discount SUBJECT word, so it missed ACTION_SUBJECTS and dead-ended in the answer path (answered as a
+  // 'question' that merely DESCRIBES a promo — pending_action NULL, no "Act on it" button). Recognise the
+  // discount SHAPE as an action subject too.
+  const ACTION_SHAPE = /\b\d+\s*%\s*off\b|\$\s*\d+\s*off\b|\bpercent off\b|\bbogo\b|buy[- ]?one[- ]?get|half[- ]?price|\b2\s*for\s*1\b|\bbuy\s*\d+\s*get\b/i
   const isStrategicQuestion = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
   // Actions that are too risky to execute immediately — propose-only (save plan, don't execute)
   const PROPOSE_ONLY_TYPES = new Set(['bulk_price_update', 'create_roster'])
@@ -475,8 +480,17 @@ async function _POST(req: Request) {
   const EDIT_STRONG = /\b(turn it (off|on)|end it|deactivate it|reactivate it)\b/i
   const EDIT_SOFT = /\b(actually|change it|make it|set it to|instead|bump it|drop it)\b/i
   const isEditIntent = EDIT_STRONG.test(message) || (EDIT_SOFT.test(message) && /[\d%$]/.test(message))
-  const planTrigger = (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question') || isEditIntent
-  if (planTrigger && !isStrategicQuestion && ariaIntent.intent_type !== 'analytical') {
+  // A clear CREATE command for a promo/discount ("create/launch/set up a 10% off / a promotion") is an action
+  // even when the intent classifier labels it 'command'/'statement' (not 'question') — but NOT when it's a
+  // report/lookup ("show me the discounts") or an advisory ("should I run a promo").
+  const LOOKUP_WORDS = /\b(summary|report|list|show me|breakdown|overview|how many|how much|what are|which)\b/i
+  const STRONG_ACTION = /\b(create|set up|launch|start|run|apply|add)\b[\s\S]{0,40}\b(promotion|promo|discount|deal|offer|sale|\d+\s*%\s*off|\$\s*\d+\s*off|bogo)\b/i
+  const isActionRequest = ACTION_KEYWORDS.test(message) && (ACTION_SUBJECTS.test(message) || ACTION_SHAPE.test(message)) && intent.type === 'question'
+  const isStrongAction = STRONG_ACTION.test(message) && !LOOKUP_WORDS.test(message) && !isStrategicQuestion
+  // Action-intent takes precedence over the data-lookup / coref / general lanes below. A strong create command
+  // routes to the planner even if the classifier mislabels it analytical; the looser request keeps the guards.
+  const planTrigger = isStrongAction || ((isActionRequest || isEditIntent) && !isStrategicQuestion && ariaIntent.intent_type !== 'analytical')
+  if (planTrigger) {
     const planCtx = await buildPlanContext(bid, conversationId, clientMessages)
     const planned = await planAction(message, bid, planCtx)
     if (planned) {
