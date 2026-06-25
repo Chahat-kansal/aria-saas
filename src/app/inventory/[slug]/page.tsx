@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
+import { P, JAKARTA, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
+import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav } from '@/components/inventory/ui/pipel'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -13,12 +15,11 @@ const T = {
   greenSoft: '#EAF2EC', sandSoft: '#F6EFE4', amberSoft: '#FBF1E1', redSoft: '#FCEBEA', sageSoft: '#EDF5F0', blueSoft: '#E7F0FA', violetSoft: '#EEEDFE',
 }
 const DISPLAY = "'Cormorant', Georgia, serif"
-const BODY = "'Outfit', system-ui, sans-serif"
+const BODY = JAKARTA  // INV-PIPEL: body type is Plus Jakarta Sans across the whole staff app
 const AV_PALETTE = ['#185FA5', '#2D5240', '#C9A37A', '#7c5cbf', '#BA7517']
 const money = (n: number) => `$${(Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 const initials = (name: string) => name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 const firstName = (name: string) => name.split(' ')[0] ?? name
-const greetWord = () => { const h = new Date().getHours(); return h < 12 ? 'Morning' : h < 18 ? 'Afternoon' : 'Evening' }
 
 interface Staff { id: string; name: string; role: string; color: string | null }
 interface Outlet { id: string; name: string; is_default: boolean }
@@ -165,7 +166,7 @@ export default function InventoryStaffApp() {
     }
     const m = add('manifest', `/api/inventory/app/${slug}/manifest`)
     const f1 = add('preconnect', 'https://fonts.googleapis.com')
-    const f2 = add('stylesheet', 'https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@1,600&family=Outfit:wght@300;400;500;600;700&display=swap')
+    const f2 = add('stylesheet', 'https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@1,600&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap')
     return () => { [m, f1, f2].forEach(el => el.remove()) }
   }, [slug])
 
@@ -543,56 +544,21 @@ export default function InventoryStaffApp() {
 
   const avColor = (s: Staff, i: number) => (s.color && s.color !== '#6366f1') ? s.color : AV_PALETTE[i % AV_PALETTE.length]
 
-  // ── shells ──
+  // ── shells (INV-PIPEL — Pipel chrome: ink-bordered phone, lime/ink top bar, time-aware greeting, fixed nav) ──
   const shell = (children: React.ReactNode) => (
-    <div style={{ minHeight: '100dvh', background: '#E7ECF1', display: 'flex', justifyContent: 'center', fontFamily: BODY, color: T.ink }}>
-      <div style={{ width: '100%', maxWidth: 440, background: T.paper, minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 0 60px rgba(20,30,50,.12)' }}>{children}</div>
+    <div style={{ minHeight: '100dvh', background: '#cfd2cc', display: 'flex', justifyContent: 'center', fontFamily: BODY, color: P.ink }}>
+      <div style={{ width: '100%', maxWidth: 440, background: P.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 0 60px rgba(20,30,20,.18)' }}>{children}</div>
     </div>
   )
-  const statusbar = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 22px 4px', fontSize: 12, fontWeight: 600 }}>
-      <span>{new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-      <span style={{ color: T.muted }}>{boot?.business.name ?? 'Sip'} · PWA</span>
-    </div>
-  )
+  const statusbar = <PipelStatusBar right={`${boot?.business.name ?? 'Sip'} · PWA`} />
   const header = (mini?: boolean, title?: string, subtitle?: string) => (
-    <div style={{ padding: mini ? '6px 20px 14px' : '6px 20px 16px', background: `linear-gradient(135deg, ${T.green}, #244236)` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(127,184,151,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY, fontStyle: 'italic', color: '#fff', fontSize: 20, fontWeight: 600 }}>{(boot?.business.name ?? 's')[0]?.toLowerCase()}</div>
-        <div style={{ flex: 1, color: '#fff' }}>
-          <b style={{ fontSize: 15, fontWeight: 600, display: 'block' }}>{boot?.business.name ?? 'Inventory'}</b>
-          <span style={{ fontSize: 11.5, color: '#A9C3B4' }}>{subtitle ?? `ariaos.site/inventory/${slug}`}</span>
-        </div>
-        {acting && <div onClick={logout} title="Switch staff" style={{ width: 34, height: 34, borderRadius: '50%', background: T.sand, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,.3)', cursor: 'pointer' }}>{initials(acting.name)}</div>}
-      </div>
-      {!mini && acting && (
-        <div style={{ marginTop: 15, color: '#fff' }}>
-          <h1 style={{ fontSize: 21, fontWeight: 500 }}><span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 25, color: T.sage }}>{greetWord()},</span> {firstName(acting.name)}</h1>
-          <p style={{ fontSize: 12, color: '#A9C3B4', marginTop: 2 }}>Everything inventory — in one app</p>
-        </div>
-      )}
-      {mini && title && <div style={{ color: '#fff', marginTop: 14 }}><h1 style={{ fontSize: 20, fontWeight: 500 }}><span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, color: T.sage }}>{title}</span></h1><p style={{ fontSize: 11.5, color: '#A9C3B4', marginTop: 2 }}>{subtitle}</p></div>}
-    </div>
+    <>
+      <PipelTopBar word={(boot?.business.name ?? 'sip').toLowerCase()} crest={((boot?.business.name ?? 'S')[0] ?? 'S').toUpperCase()} acting={acting} onSwitch={logout} />
+      {!mini && acting && <PipelGreeting word={pgreet()} name={pfirst(acting.name)} dateLine={`${pipelDate()}${(boot?.outlets.length ?? 0) > 1 ? ' · stock is per-outlet' : ''}`} />}
+      {mini && title && <PipelTitle title={title.toLowerCase()} subtitle={subtitle} />}
+    </>
   )
-  const tabbar = (
-    <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `1px solid ${T.line}`, display: 'flex', padding: '11px 0 max(22px, env(safe-area-inset-bottom))', zIndex: 20 }}>
-      {([['home', 'Home', 'M3 11l9-8 9 8M5 10v10h14V10'], ['tasks', 'Tasks', 'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11']] as const).map(([k, label, d]) => (
-        <button key={k} onClick={() => setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: tab === k ? T.green : T.muted, background: 'none', border: 'none', cursor: 'pointer', fontFamily: BODY }}>
-          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d={d} /></svg><span style={{ fontSize: 10, fontWeight: 600 }}>{label}</span>
-        </button>
-      ))}
-      <button onClick={() => setTab('scan')} style={{ flex: 1, display: 'flex', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer' }}>
-        <div style={{ width: 52, height: 52, borderRadius: '50%', background: T.green, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 6px 16px rgba(45,82,64,.35)', border: '3px solid #fff' }}>
-          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10" /></svg>
-        </div>
-      </button>
-      {([['reports', 'Reports', 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z'], ['review', 'Review', 'M12 2l9 4-9 4-9-4 9-4zM3 11l9 4 9-4M3 16l9 4 9-4']] as const).map(([k, label, d]) => (
-        <button key={k} onClick={() => setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: tab === k ? T.green : T.muted, background: 'none', border: 'none', cursor: 'pointer', fontFamily: BODY }}>
-          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d={d} /></svg><span style={{ fontSize: 10, fontWeight: 600 }}>{label}</span>
-        </button>
-      ))}
-    </div>
-  )
+  const tabbar = <PipelBottomNav active={tab} onHome={() => setTab('home')} onTasks={() => setTab('tasks')} onScan={() => setTab('scan')} onReports={() => setTab('reports')} onReview={() => setTab('review')} />
 
   // ── LOGIN: staff picker ──
   if (stage === 'loading') return shell(<>{statusbar}{header()}<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13 }}>Loading…</div></>)
