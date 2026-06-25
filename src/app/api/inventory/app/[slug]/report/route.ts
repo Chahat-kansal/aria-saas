@@ -8,7 +8,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
-import { generateReport, REPORT_LIBRARY, type ReportType, type Period } from '@/lib/inventory/reports'
+import { generateReport, REPORT_LIBRARY, visibleReportLibrary, type ReportType, type Period } from '@/lib/inventory/reports'
 import { renderReportHtml, generateReportPdf } from '@/lib/inventory/report-pdf'
 
 // INV-REPORTS — staff-app report endpoint. JSON (for the Reports screen: KPIs + the requested report + the
@@ -34,7 +34,7 @@ async function _GET(req: Request, { params }: Params) {
     const pdf = await generateReportPdf(renderReportHtml(data))
     return new Response(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="aria-${type}-${period}.pdf"` } })
   }
-  return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, library: REPORT_LIBRARY, report: data })
+  return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, library: await visibleReportLibrary(bid), report: data })
 }
 
 export const GET = withErrorCapture('inventory/app/report', _GET)

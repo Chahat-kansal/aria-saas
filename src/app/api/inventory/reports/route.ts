@@ -7,7 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
-import { generateReport, REPORT_LIBRARY, type ReportType, type Period } from '@/lib/inventory/reports'
+import { generateReport, REPORT_LIBRARY, visibleReportLibrary, type ReportType, type Period } from '@/lib/inventory/reports'
 import { renderReportHtml, generateReportPdf } from '@/lib/inventory/report-pdf'
 
 // INV-REPORTS — owner/dashboard report endpoint. GET = report JSON / PDF / list schedules. POST = schedule an
@@ -46,7 +46,7 @@ async function _GET(req: Request) {
     const { data } = await supabaseAdmin.from('scheduled_pdf_reports')
       .select('id, label, page_path, frequency, day_of_week, send_hour_aest, recipients, is_active, last_sent_at, next_send_at')
       .eq('business_id', bid).ilike('page_path', '/inventory/reports%').order('created_at', { ascending: false })
-    return NextResponse.json({ schedules: data ?? [], library: REPORT_LIBRARY })
+    return NextResponse.json({ schedules: data ?? [], library: await visibleReportLibrary(bid) })
   }
 
   const type = (TYPES.has(sp.get('type') as ReportType) ? sp.get('type') : 'sold_vs_stock') as ReportType
@@ -58,7 +58,7 @@ async function _GET(req: Request) {
     const pdf = await generateReportPdf(renderReportHtml(data))
     return new Response(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="aria-${type}-${period}.pdf"` } })
   }
-  return NextResponse.json({ library: REPORT_LIBRARY, report: data })
+  return NextResponse.json({ library: await visibleReportLibrary(bid), report: data })
 }
 
 async function _POST(req: Request) {

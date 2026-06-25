@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 import { computeParReadonly } from '@/lib/inventory/par-levels'
+import { getVisibleTiles, type InvCapability, type InvCapabilities } from '@/lib/inventory/tile-manifest'
 
 // INV-REPORTS — the inventory reporting spine. Deterministic, GROUNDED generators (NO LLM for any number —
 // pure computed data from the live tables). Each report returns structured sections for a period/outlet, and
@@ -10,20 +11,39 @@ import { computeParReadonly } from '@/lib/inventory/par-levels'
 export type ReportType =
   | 'sold_vs_stock' | 'stock_value' | 'shrinkage_waste' | 'dead_stock' | 'reorder'
   | 'days_cover' | 'count_accuracy' | 'received_vs_ordered' | 'expiring' | 'movement_audit'
+  | 'transfers' | 'top_sellers' | 'margin'
 export type Period = 'daily' | 'weekly'
 
-export const REPORT_LIBRARY: Array<{ type: ReportType; title: string; blurb: string }> = [
+// Each entry may carry capability gates (AND): a report only lists for a business that has ALL of them.
+// INV-3 gating: Transfers needs >1 outlet (multiOutlet); Expiring needs a perishable industry. The gate hides
+// a report from the LIBRARY list — it never blocks generation if requested directly (so a deep link still works).
+export const REPORT_LIBRARY: Array<{ type: ReportType; title: string; blurb: string; capabilities?: InvCapability[] }> = [
   { type: 'sold_vs_stock', title: 'Sold vs in-stock', blurb: 'Units sold this period against current on-hand + variances' },
   { type: 'stock_value', title: 'Stock value', blurb: 'Inventory at cost and retail, margin and completeness' },
+  { type: 'margin', title: 'Margin by product & category', blurb: 'Cost vs retail vs realised sold margin; flags thin margins' },
+  { type: 'top_sellers', title: 'Top sellers & velocity', blurb: 'Units + revenue by product with ABC velocity class' },
   { type: 'shrinkage_waste', title: 'Shrinkage & waste', blurb: 'Waste $ and negative adjustments by product and staff' },
   { type: 'dead_stock', title: 'Dead stock', blurb: 'Slow/zero movers and the value tied up in them' },
   { type: 'reorder', title: 'Low stock & reorder', blurb: 'Below reorder point with days-of-cover + suggested qty' },
   { type: 'days_cover', title: 'Days of cover', blurb: 'On-hand ÷ velocity, fastest-to-run-out first' },
   { type: 'count_accuracy', title: 'Count accuracy', blurb: 'Stocktake accuracy by staff member' },
   { type: 'received_vs_ordered', title: 'Received vs ordered', blurb: 'Purchase orders received against ordered' },
-  { type: 'expiring', title: 'Expiring stock', blurb: 'Items nearing expiry → markdown candidates' },
+  { type: 'transfers', title: 'Transfers', blurb: 'Inter-outlet stock movements in the period', capabilities: ['multiOutlet'] },
+  { type: 'expiring', title: 'Expiring stock', blurb: 'Items nearing expiry → markdown candidates', capabilities: ['perishable'] },
   { type: 'movement_audit', title: 'Stock movement audit', blurb: 'The adjustment + waste ledger for the period' },
 ]
+
+/**
+ * Industry/capability-gated report list for a business — single-outlet hides Transfers, non-perishable hides
+ * Expiring. Reuses the INV-1 manifest's capability resolution (getVisibleTiles) so the gate stays in one place.
+ * Falls back to the full library if capability resolution fails (never hides a report on an error).
+ */
+export async function visibleReportLibrary(businessId: string): Promise<typeof REPORT_LIBRARY> {
+  let caps: InvCapabilities | null = null
+  try { caps = (await getVisibleTiles(businessId)).capabilities } catch { caps = null }
+  if (!caps) return REPORT_LIBRARY
+  return REPORT_LIBRARY.filter(r => (r.capabilities ?? []).every(c => caps![c] === true))
+}
 
 export interface ReportSection { title: string; columns: string[]; rows: Array<Array<string | number>>; empty?: string; total_row?: Array<string | number> }
 export interface ReportKpis { stock_at_cost: number; stock_at_retail: number; units_sold: number; shrinkage_dollars: number }
@@ -64,6 +84,40 @@ async function soldByProduct(sb: SupabaseClient, bid: string, start: string, end
     cur.sold += net
     m.set(r.product_id, cur)
   }
+  return m
+}
+
+/** Net units + revenue + realised cost per product (completed sales). Revenue = line_total pro-rated for returns.
+ *  GROUNDING-TEETH: a line with NO recorded cost_price is unknown-cost, NOT $0 — it's excluded from `cost` and
+ *  `costed_revenue`, so realised margin reflects only the costed portion (never a fabricated 100%). Used by Top
+ *  sellers (ABC) and Margin. */
+async function soldDetailByProduct(sb: SupabaseClient, bid: string, start: string, end: string): Promise<Map<string, { name: string; units: number; revenue: number; cost: number; costed_revenue: number }>> {
+  const { data } = await sb.from('pos_sale_items')
+    .select('product_id, product_name, quantity, returned_quantity, line_total, unit_price, cost_price, pos_sales!inner(business_id, created_at, status)')
+    .eq('pos_sales.business_id', bid).neq('pos_sales.status', 'voided')
+    .gte('pos_sales.created_at', start).lte('pos_sales.created_at', end).limit(40000)
+  const m = new Map<string, { name: string; units: number; revenue: number; cost: number; costed_revenue: number }>()
+  for (const r of (data ?? []) as Array<{ product_id: string | null; product_name: string | null; quantity: number | null; returned_quantity: number | null; line_total: number | null; unit_price: number | null; cost_price: number | null }>) {
+    if (!r.product_id) continue
+    const qty = Number(r.quantity) || 0
+    const net = qty - (Number(r.returned_quantity) || 0)
+    if (net <= 0) continue
+    const unitRev = qty > 0 ? (Number(r.line_total) || 0) / qty : (Number(r.unit_price) || 0)
+    const lineRev = unitRev * net
+    const cur = m.get(r.product_id) ?? { name: r.product_name ?? 'Item', units: 0, revenue: 0, cost: 0, costed_revenue: 0 }
+    cur.units += net
+    cur.revenue += lineRev
+    if (r.cost_price != null && Number(r.cost_price) > 0) { cur.cost += Number(r.cost_price) * net; cur.costed_revenue += lineRev } // known cost only (0/null = not recorded, not free)
+    m.set(r.product_id, cur)
+  }
+  return m
+}
+
+/** product_id → category (null → 'Uncategorised'). One query; used by the Margin report's category roll-up. */
+async function productCategories(sb: SupabaseClient, bid: string): Promise<Map<string, string>> {
+  const { data } = await sb.from('pos_products').select('id, category').eq('business_id', bid).limit(20000)
+  const m = new Map<string, string>()
+  for (const p of (data ?? []) as Array<{ id: string; category: string | null }>) m.set(p.id, (p.category ?? '').trim() || 'Uncategorised')
   return m
 }
 
@@ -246,6 +300,112 @@ async function rMovementAudit(sb: SupabaseClient, bid: string, range: { start: s
   return { sections: [{ title: 'Stock movement ledger', columns: ['When', 'Product', 'Type', 'Qty', 'By'], rows, empty: 'No stock movements this period.' }], note: 'Adjustment + waste ledger; every movement attributed to a staffer.' }
 }
 
+// INV-3 — Transfers summary (multi-outlet). Inter-outlet movements in the period from pos_inventory_transfers
+// (canonical transfers table), with a per-lane roll-up. Honest empty state when a business has no transfers.
+async function rTransfers(sb: SupabaseClient, bid: string, range: { start: string; end: string }): Promise<{ sections: ReportSection[]; note: string | null }> {
+  const [{ data: outlets }, { data: tx }] = await Promise.all([
+    sb.from('pos_outlets').select('id, name').eq('business_id', bid),
+    sb.from('pos_inventory_transfers')
+      .select('transfer_number, from_outlet_id, to_outlet_id, status, total_cost, total_variance_units, created_at, received_at')
+      .eq('business_id', bid).gte('created_at', range.start).lte('created_at', range.end)
+      .order('created_at', { ascending: false }).limit(500),
+  ])
+  const oname = new Map((outlets ?? []).map(o => [o.id as string, o.name as string]))
+  const lane = (t: { from_outlet_id: unknown; to_outlet_id: unknown }) => `${oname.get(t.from_outlet_id as string) ?? '—'} → ${oname.get(t.to_outlet_id as string) ?? '—'}`
+  const rows = (tx ?? []).map(t => [
+    String(t.transfer_number ?? '—'),
+    lane(t),
+    String(t.status ?? '—'),
+    money(Number(t.total_cost) || 0),
+    t.received_at ? 'received' : String(t.status ?? 'open'),
+  ])
+  const byLane = new Map<string, { count: number; value: number }>()
+  for (const t of tx ?? []) { const k = lane(t); const c = byLane.get(k) ?? { count: 0, value: 0 }; c.count++; c.value += Number(t.total_cost) || 0; byLane.set(k, c) }
+  const laneRows = Array.from(byLane.entries()).sort((a, b) => b[1].value - a[1].value).map(([k, v]) => [k, v.count, money(v.value)])
+  const totalVal = (tx ?? []).reduce((s, t) => s + (Number(t.total_cost) || 0), 0)
+  return {
+    sections: [
+      { title: 'Transfers this period', columns: ['Transfer', 'Lane', 'Status', 'Value', 'Received?'], rows, empty: 'No inter-outlet transfers this period.', total_row: rows.length ? ['Total', '', '', money(totalVal), ''] : undefined },
+      { title: 'By lane', columns: ['Lane', 'Count', 'Value moved'], rows: laneRows, empty: 'No transfer lanes this period.' },
+    ],
+    note: 'Inter-outlet movements from pos_inventory_transfers; value at the transfer’s recorded cost. Multi-outlet businesses only.',
+  }
+}
+
+// INV-3 — Top sellers & velocity with ABC class. Units + revenue per product (completed sales), ranked by
+// revenue; ABC by cumulative revenue contribution (A = top 80%, B = next 15%, C = last 5%) — the classic
+// inventory ABC. Grounded in real line_total revenue, never an estimate.
+async function rTopSellers(sb: SupabaseClient, bid: string, range: { start: string; end: string }): Promise<{ sections: ReportSection[]; note: string | null }> {
+  const detail = await soldDetailByProduct(sb, bid, range.start, range.end)
+  const arr = Array.from(detail.values()).filter(d => d.units > 0).sort((a, b) => b.revenue - a.revenue)
+  const totalRev = arr.reduce((s, d) => s + d.revenue, 0)
+  let cum = 0
+  const rows = arr.map(d => {
+    cum += d.revenue
+    const pct = totalRev > 0 ? cum / totalRev : 1
+    const cls = pct <= 0.8 ? 'A' : pct <= 0.95 ? 'B' : 'C'
+    return [d.name, d.units, money(d.revenue), cls]
+  })
+  return {
+    sections: [{ title: 'Top sellers by revenue (ABC)', columns: ['Product', 'Units', 'Revenue', 'Class'], rows: rows.slice(0, 200), empty: 'No sales this period.', total_row: rows.length ? ['Total', '', money(totalRev), ''] : undefined }],
+    note: 'ABC = cumulative revenue share (A top 80%, B next 15%, C last 5%). Units & revenue from completed sale lines.',
+  }
+}
+
+// INV-3 — Margin by product & category. Catalogue margin (price vs resolved cost on current stock) AND realised
+// sold margin (revenue vs line cost) for the period, plus a category roll-up. Thin margins (< 20%) flagged.
+async function rMargin(sb: SupabaseClient, bid: string, outletId: string | null, range: { start: string; end: string }): Promise<{ sections: ReportSection[]; note: string | null }> {
+  const [sv, detail, cats] = await Promise.all([
+    computeStockValue(sb, bid, outletId),
+    soldDetailByProduct(sb, bid, range.start, range.end),
+    productCategories(sb, bid),
+  ])
+  const THIN = 20 // %
+  // Per-product: catalogue margin (from stock value) + realised sold margin (this period).
+  // Realised sold margin over the COSTED portion only — unknown line costs never inflate it to 100%.
+  const soldMarginOf = (sold?: { costed_revenue: number; cost: number }) =>
+    sold && sold.costed_revenue > 0 ? Math.round(((sold.costed_revenue - sold.cost) / sold.costed_revenue) * 1000) / 10 : null
+  const prodRows: Array<Array<string | number>> = []
+  const seen = new Set<string>()
+  for (const p of sv.products) {
+    seen.add(p.id)
+    const soldMargin = soldMarginOf(detail.get(p.id))
+    const catMargin = p.margin_pct
+    const thin = (catMargin != null && catMargin < THIN) || (soldMargin != null && soldMargin < THIN)
+    prodRows.push([p.name, p.unit_cost != null ? money(p.unit_cost) : '—', money(p.price), catMargin != null ? `${catMargin}%` : '—', soldMargin != null ? `${soldMargin}%` : '—', thin ? 'thin' : ''])
+  }
+  // Products sold this period but not currently in stock-value (no on-hand) — still show realised margin.
+  for (const [pid, sold] of detail) {
+    if (seen.has(pid) || sold.revenue <= 0) continue
+    const soldMargin = soldMarginOf(sold)
+    prodRows.push([sold.name, sold.costed_revenue > 0 && sold.units > 0 ? money(sold.cost / sold.units) : '—', '—', '—', soldMargin != null ? `${soldMargin}%` : '—', soldMargin != null && soldMargin < THIN ? 'thin' : ''])
+  }
+  prodRows.sort((a, b) => {
+    const am = parseFloat(String(a[4])) || parseFloat(String(a[3])) || 999
+    const bm = parseFloat(String(b[4])) || parseFloat(String(b[3])) || 999
+    return am - bm // thinnest margins first (most actionable)
+  })
+  // Category roll-up: realised revenue + blended sold margin over the COSTED portion (unknown costs → '—').
+  const byCat = new Map<string, { revenue: number; costedRevenue: number; cost: number }>()
+  for (const [pid, sold] of detail) {
+    const cat = cats.get(pid) ?? 'Uncategorised'
+    const c = byCat.get(cat) ?? { revenue: 0, costedRevenue: 0, cost: 0 }
+    c.revenue += sold.revenue; c.costedRevenue += sold.costed_revenue; c.cost += sold.cost; byCat.set(cat, c)
+  }
+  const catRows = Array.from(byCat.entries()).sort((a, b) => b[1].revenue - a[1].revenue).map(([cat, c]) => [
+    cat, money(c.revenue),
+    c.costedRevenue > 0 ? money(c.costedRevenue - c.cost) : '—',
+    c.costedRevenue > 0 ? `${Math.round(((c.costedRevenue - c.cost) / c.costedRevenue) * 1000) / 10}%` : '—',
+  ])
+  return {
+    sections: [
+      { title: 'Margin by product (thinnest first)', columns: ['Product', 'Cost', 'Retail', 'Catalogue %', 'Sold %', 'Flag'], rows: prodRows.slice(0, 200), empty: 'No costed products or sales this period.' },
+      { title: 'Realised margin by category', columns: ['Category', 'Revenue', 'Gross profit', 'Margin %'], rows: catRows, empty: 'No sales this period.' },
+    ],
+    note: `Catalogue margin = (price − resolved cost) ÷ price on current stock; sold margin = (revenue − line cost) ÷ revenue over lines WITH a recorded cost this period. Margins under ${THIN}% flagged "thin". Lines/products with no recorded cost show "—", never a fabricated 0-cost / 100% margin.`,
+  }
+}
+
 /** Main entry — generate one report's structured data for a period/outlet. */
 export async function generateReport(sb: SupabaseClient, bid: string, type: ReportType, period: Period, outletId: string | null, dateStr?: string): Promise<ReportData> {
   const range = periodRange(period, dateStr)
@@ -264,6 +424,9 @@ export async function generateReport(sb: SupabaseClient, bid: string, type: Repo
         case 'received_vs_ordered': return rReceivedVsOrdered(sb, bid, range)
         case 'expiring': return rExpiring(sb, bid)
         case 'movement_audit': return rMovementAudit(sb, bid, range)
+        case 'transfers': return rTransfers(sb, bid, range)
+        case 'top_sellers': return rTopSellers(sb, bid, range)
+        case 'margin': return rMargin(sb, bid, outletId, range)
         default: return { sections: [], note: null }
       }
     })(),
