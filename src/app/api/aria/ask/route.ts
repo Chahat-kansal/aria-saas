@@ -1740,6 +1740,14 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     systemPrompt = systemPrompt.replace('You are Aria', memoryBlock + '\n\nYou are Aria')
   }
 
+  // ASK-ARIA-E2E-AUDIT (P4 over-answering): a plain DATA LOOKUP ("who is my best customer", "what's my top
+  // seller") must answer concisely — the name/figure + at most one line of context — and SUPPRESS advisory
+  // sections (no "what this means / next move", no multi-step plan, no campaign/bundle strategy) unless the
+  // owner explicitly asked for advice. Suspends the default 2-paragraph narrative for these lookups.
+  if (isDataLookup) {
+    systemPrompt += `\n\n### BREVITY OVERRIDE IS ACTIVE FOR THIS RESPONSE — this message is a direct DATA LOOKUP.\nTreat this EXACTLY as a BREVITY INTENT response (see the BREVITY INTENT block): output the requested name/figure plus AT MOST one short sentence of context, then STOP. The "2 paragraphs of narrative" rule and the "advisory mode is the default" rule are SUSPENDED for this response. ABSOLUTELY DO NOT add recommendations, "what this means", "next move", multi-step plans, or any re-engagement / outreach / campaign / loyalty / bundle / discount / "prime candidate" suggestions — the owner asked a factual question, NOT for advice. If they want advice they will ask. Lead with the answer and stop.`
+  }
+
   // 4. Add troubleshoot addendum if needed
   if (intent.type === 'troubleshoot' || intent.type === 'escalate') {
     const tsCtx = await buildTroubleshootContext(bid)
