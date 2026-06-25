@@ -59,7 +59,80 @@ export interface ExecutionResult {
   rollback_expires_at?: string
 }
 
+// ── ASK-ARIA-FORTRESS failsafes ─────────────────────────────────────────────────────────────────────────
+// PILLAR 1 (kill switch): when ON, every WRITE action is refused at the single chokepoint (executeAction).
+// PILLAR 3 (role gate): destructive/mass actions require a privileged role, not just a confirm.
+const PRIVILEGED_ROLES = new Set(['owner', 'manager', 'admin'])
+const DESTRUCTIVE_ACTION_TYPES = new Set(['bulk_price_update', 'mark_products', 'set_low_stock_threshold'])
+
+/** Kill switch: env break-glass overrides; else feature_flags 'aria_actions_kill' (global or per-business).
+ *  Fails OPEN (a transient flag-read error never blocks legit actions — the env var is the reliable kill). */
+async function isActionsKilled(supabase: SupabaseClient, businessId: string): Promise<boolean> {
+  if (process.env.ARIA_ACTIONS_KILL === '1') return true
+  try {
+    const { data } = await supabase.from('feature_flags')
+      .select('is_globally_enabled, enabled_for_business_ids')
+      .eq('flag_key', 'aria_actions_kill').maybeSingle()
+    if (!data) return false
+    if (data.is_globally_enabled === true) return true
+    return ((data.enabled_for_business_ids as string[] | null) ?? []).includes(businessId)
+  } catch { return false }
+}
+
+/** PILLAR 2: append-only audit row for a refused/failed attempt (success rows are written inside runAction). */
+async function appendActionLog(
+  supabase: SupabaseClient, businessId: string, action: PlannedAction, userId: string,
+  conversationId: string | undefined, messageExcerpt: string | undefined, outcome: string, error?: string,
+): Promise<void> {
+  try {
+    await supabase.from('aria_action_log').insert({
+      business_id: businessId, action_type: action.type, entity_type: 'action',
+      entity_ids: [], before_state: {}, after_state: { outcome, error: error ?? null },
+      triggered_by: 'ask_aria', user_id: userId, conversation_id: conversationId ?? null,
+      message_excerpt: messageExcerpt?.slice(0, 200) ?? null, executed_at: new Date().toISOString(),
+    })
+  } catch { /* logging must never break the action path */ }
+}
+
+/**
+ * The single chokepoint for EVERY Ask Aria write. Layers the failsafes in front of the action runner:
+ *   1) kill switch (refuse all writes when flipped — reads are unaffected, they don't come through here)
+ *   2) role gate (destructive/mass actions need owner/manager/admin)
+ *   3) the action runs; success logs inside runAction, failures/refusals log here (complete append-only audit)
+ * actorRole defaults to 'owner' so existing callers (the owner dashboard chat) are unchanged (RULE 0).
+ */
 export async function executeAction(
+  action: PlannedAction,
+  businessId: string,
+  userId: string,
+  conversationId?: string,
+  messageExcerpt?: string,
+  actorRole?: string,
+): Promise<ExecutionResult> {
+  const supabase = supabaseAdmin
+
+  // PILLAR 1 — kill switch (one chokepoint; nothing bypasses it).
+  if (await isActionsKilled(supabase, businessId)) {
+    await appendActionLog(supabase, businessId, action, userId, conversationId, messageExcerpt, 'refused', 'kill_switch')
+    return { ok: false, affected_count: 0, error: 'Ask Aria actions are currently disabled.', rollback_available: false }
+  }
+
+  // PILLAR 3 — role gate on destructive/mass actions.
+  const role = (actorRole ?? 'owner').toLowerCase()
+  if (DESTRUCTIVE_ACTION_TYPES.has(action.type) && !PRIVILEGED_ROLES.has(role)) {
+    await appendActionLog(supabase, businessId, action, userId, conversationId, messageExcerpt, 'refused', 'role')
+    return { ok: false, affected_count: 0, error: 'This action needs a manager or owner — ask one of them to run it.', rollback_available: false }
+  }
+
+  // PILLAR 2 — run, then log any non-mass-confirm failure (success rows are written inside runAction).
+  const result = await runAction(action, businessId, userId, conversationId, messageExcerpt)
+  if (!result.ok && !result.requires_mass_confirm) {
+    await appendActionLog(supabase, businessId, action, userId, conversationId, messageExcerpt, 'failed', result.error)
+  }
+  return result
+}
+
+async function runAction(
   action: PlannedAction,
   businessId: string,
   userId: string,
