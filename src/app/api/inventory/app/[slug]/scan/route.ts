@@ -10,6 +10,7 @@ import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { resolveCostFor } from '@/lib/inventory/resolve-cost'
 import { resolveTicketPrice } from '@/lib/tickets/ticket-price'
+import { scanLookup } from '@/lib/inventory/scan-engine'
 
 // INV-STAFF-APP-3 — scan lookup. A barcode resolves via pos_product_barcodes; Sip has 0 barcodes today, so a
 // miss falls back to a name/SKU search (the primary path). A resolved product shows live on-hand
@@ -71,15 +72,11 @@ async function _GET(req: Request, { params }: Params) {
     return NextResponse.json(product ? { mode: 'product', found: true, product } : { mode: 'product', found: false })
   }
 
-  // Barcode lookup → product, else graceful not-found (Sip has no barcodes → search is the path).
+  // INV-1 scan engine — barcode → price-check (name/retail/cost/margin/on-hand) + stock-locate (per-outlet)
+  // + external prefill on a catalogue miss (own catalog → Open Food Facts waterfall). Canonical items_on_hand.
   if (barcode) {
-    const { data: bc } = await supabaseAdmin.from('pos_product_barcodes')
-      .select('product_id').eq('business_id', bid).eq('barcode', barcode).limit(1).maybeSingle()
-    if (bc?.product_id) {
-      const product = await enrichOne(bid, bc.product_id as string, outletId)
-      if (product) return NextResponse.json({ mode: 'barcode', found: true, barcode, product })
-    }
-    return NextResponse.json({ mode: 'barcode', found: false, barcode })
+    const result = await scanLookup(supabaseAdmin, bid, barcode, outletId)
+    return NextResponse.json({ mode: 'barcode', ...result })
   }
 
   // Name / SKU search fallback (lightweight list with live on-hand).
@@ -105,4 +102,32 @@ async function _GET(req: Request, { params }: Params) {
   return NextResponse.json({ mode: 'idle' })
 }
 
+// INV-1 — add-to-catalogue from a barcode miss. Staff-scoped (getActingStaff) reuse of the SAME product-insert
+// shape as pos/products/quick-create (we did NOT rebuild the lookup waterfall — scanLookup reuses it). Prefilled
+// name/category/price/barcode come from the external waterfall result.
+async function _POST(req: Request, { params }: Params) {
+  const { slug } = await params
+  const bid = await resolveBusinessId(supabaseAdmin, slug)
+  if (!bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const acting = await getActingStaff(bid)
+  if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({})) as { barcode?: string; name?: string; category?: string; price?: number; cost_price?: number }
+  if (!body.name || !body.name.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
+
+  const { data: product, error } = await supabaseAdmin.from('pos_products').insert({
+    business_id: bid,
+    barcode: body.barcode?.trim() || null,
+    name: body.name.trim(),
+    category: body.category?.trim() || null,
+    price: Number(body.price) || 0,
+    cost_price: body.cost_price != null ? Number(body.cost_price) : null,
+    track_stock: true,
+    is_active: true,
+  }).select('id, name, barcode, price, category').single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, product, added_by: acting.staff_name })
+}
+
 export const GET = withErrorCapture('inventory/app/scan', _GET)
+export const POST = withErrorCapture('inventory/app/scan:post', _POST)

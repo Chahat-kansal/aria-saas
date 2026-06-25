@@ -23,7 +23,8 @@ const greetWord = () => { const h = new Date().getHours(); return h < 12 ? 'Morn
 interface Staff { id: string; name: string; role: string; color: string | null }
 interface Outlet { id: string; name: string; is_default: boolean }
 interface Boot { business: { id: string; name: string; slug: string }; outlets: Outlet[]; staff: Staff[] }
-interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number; receive: number } }
+interface VisibleTile { id: string; label: string; sublabel: string; icon: string; route: string; badge?: string }
+interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number; receive: number }; visible_tiles?: VisibleTile[]; tile_industry?: string }
 interface Task { id: string; task_type: string; product_id: string | null; title: string; detail: string | null; hypothesis: string | null; priority: number; status: string; completed_by: string | null; product_name: string | null; product_sku: string | null; expected: number | null }
 interface TasksData { acting: { id: string; name: string }; tasks: Task[]; pills: { accuracy: number | null; streak: number; left_today: number } }
 interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string }
@@ -1492,6 +1493,27 @@ export default function InventoryStaffApp() {
   const vh = home?.value_hero
   const pct = vh && vh.products_total > 0 ? Math.round((vh.products_valued / vh.products_total) * 100) : 0
 
+  // INV-1 — route a manifest tile to its screen. Implemented screens map to tabs; the rest land on home until
+  // CX-UI-POLISH builds them. Falls back to the built-in TILES set if the manifest didn't load.
+  const routeTile = (route: string) => {
+    switch (route) {
+      case 'scan': case 'gap_scan': setTab('scan'); break
+      case 'tasks': case 'count': setTab('tasks'); break
+      case 'receive': setReceiveData(null); setOpenPo(null); setTab('receive'); break
+      case 'transfer': setTransferData(null); setTab('transfer'); break
+      case 'expiring': setExpData(null); setTab('expiring'); break
+      case 'adjust': setAdjustProduct(null); setTab('adjust'); break
+      case 'waste': setWasteProduct(null); setTab('waste'); break
+      case 'tickets': setTab('tickets'); break
+      case 'reports': setTab('reports'); break
+      case 'review': setTab('review'); break
+      default: setTab('home')
+    }
+  }
+  const tilesToShow: VisibleTile[] = (home?.visible_tiles?.length)
+    ? home.visible_tiles
+    : TILES.filter(t => t.key !== 'transfer' || multiOutlet).map(t => ({ id: t.key, label: t.label, sublabel: t.sub, icon: t.key, route: t.key, badge: t.badge }))
+
   return shell(
     <>
       {statusbar}{header()}
@@ -1537,21 +1559,20 @@ export default function InventoryStaffApp() {
             </div>
           )}
 
-          {/* TOOL TILES */}
+          {/* TOOL TILES — INV-1: rendered from the industry/capability-gated manifest (home.visible_tiles). */}
           <div style={{ margin: '6px 2px 10px', fontSize: 14, fontWeight: 600 }}>Inventory tools</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {TILES.filter(t => t.key !== 'transfer' || multiOutlet).map(t => {
-              const badge = t.badge ? (home?.tile_badges[t.badge] ?? 0) : 0
+            {tilesToShow.map(t => {
+              const badge = t.badge ? ((home?.tile_badges as Record<string, number>)?.[t.badge] ?? 0) : 0
+              const badgeWord = t.badge === 'order' ? 'to reorder' : t.badge === 'receive' ? 'to receive' : t.badge === 'expiring' ? 'expiring' : 'today'
               return (
-                <div key={t.key} onClick={() => { if (t.key === 'count') setTab('tasks'); else if (t.key === 'scan') setTab('scan'); else if (t.key === 'waste') { setWasteProduct(null); setTab('waste') } else if (t.key === 'adjust') { setAdjustProduct(null); setTab('adjust') } else if (t.key === 'tickets') setTab('tickets'); else if (t.key === 'receive') { setReceiveData(null); setOpenPo(null); setTab('receive') } else if (t.key === 'transfer') { setTransferData(null); setTab('transfer') } else if (t.key === 'expiring') { setExpData(null); setTab('expiring') } }}
+                <div key={t.id} onClick={() => routeTile(t.route)}
                   style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: (T as Record<string, string>)[t.bg], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="18" height="18" fill="none" stroke={t.stroke} strokeWidth={2} viewBox="0 0 24 24">{t.circle && <circle cx="12" cy="12" r="9" />}<path d={t.d} /></svg>
-                  </div>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: T.sageSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.green, fontFamily: DISPLAY, fontStyle: 'italic', fontWeight: 600, fontSize: 16 }}>{t.label[0]}</div>
                   <b style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</b>
                   {t.badge && badge > 0
-                    ? <span style={{ fontSize: 9, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'flex-start', marginTop: -4 }}>{badge} {t.key === 'order' ? 'to reorder' : t.key === 'receive' ? 'to receive' : t.key === 'expiring' ? 'expiring' : 'today'}</span>
-                    : <span style={{ fontSize: 10.5, color: T.muted, marginTop: -4 }}>{t.sub}</span>}
+                    ? <span style={{ fontSize: 9, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'flex-start', marginTop: -4 }}>{badge} {badgeWord}</span>
+                    : <span style={{ fontSize: 10.5, color: T.muted, marginTop: -4 }}>{t.sublabel}</span>}
                 </div>
               )
             })}

@@ -11,6 +11,7 @@ import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 import { computeParReadonly } from '@/lib/inventory/par-levels'
 import { taskAndReviewCounts } from '@/lib/inventory/daily-tasks'
+import { getVisibleTiles } from '@/lib/inventory/tile-manifest'
 
 // INV-STAFF-APP-1 — Home data. Requires the acting-staff cookie (scoped to this business). Value hero
 // reuses INV-COST-1; Order badge reuses INV-PAR-1; all live, GROUNDING (sold-today is the real count).
@@ -69,8 +70,19 @@ async function _GET(req: Request, { params }: Params) {
   // Open tasks + review queue (INV-STAFF-APP-2).
   const tr = await taskAndReviewCounts(supabaseAdmin, bid)
 
+  // INV-1 — industry/capability-gated visible tiles (the manifest decides WHICH tiles render).
+  let visible_tiles: Array<{ id: string; label: string; sublabel: string; icon: string; route: string; badge?: string }> = []
+  let tile_industry = ''
+  try {
+    const vt = await getVisibleTiles(bid)
+    tile_industry = vt.industry
+    visible_tiles = vt.tiles.map(t => ({ id: t.id, label: t.label, sublabel: t.sublabel, icon: t.icon, route: t.route, badge: t.badge }))
+  } catch { /* manifest non-fatal — page falls back to its built-in tiles */ }
+
   return NextResponse.json({
     staff: { id: acting.staff_id, name: acting.staff_name },
+    visible_tiles,
+    tile_industry,
     value_hero: {
       at_cost: sv.at_cost, at_retail: sv.at_retail, margin_pct: sv.margin_pct,
       products_valued: sv.products_valued, products_total: sv.products_total, uncosted: sv.products_unknown_cost,
