@@ -52,6 +52,40 @@ import { buildNavGrounding } from '@/lib/aria/nav-grounding'
 // explicit owner confirmation. Intercepted in the main tool-loop's executeTool below.
 const GATED_TOOL_WRITES = new Set(['update_product_price', 'send_email_now', 'send_sms_now'])
 
+// ASK-ARIA-CONSOLIDATE-2 (RC3): give the action planner memory — the recent turns + the LAST promotion created
+// in this conversation — so an edit ("actually make it 15%") resolves to update_promotion on the existing row
+// instead of creating a duplicate or misfiring to a bulk price change.
+async function buildPlanContext(
+  bid: string,
+  conversationId: string | null,
+  clientMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Promise<import('@/lib/aria/ask/action-planner').PlanContext> {
+  let recentTurns: string[] = []
+  if (clientMessages.length > 0) {
+    recentTurns = clientMessages.slice(-10).map(m => `${m.role === 'assistant' ? 'Aria' : 'Owner'}: ${String(m.content ?? '').slice(0, 400)}`)
+  } else if (conversationId) {
+    const { data } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', conversationId).eq('business_id', bid).maybeSingle()
+    const msgs = Array.isArray((data as { messages?: Array<{ role: string; content: string }> } | null)?.messages) ? (data as { messages: Array<{ role: string; content: string }> }).messages : []
+    recentTurns = msgs.slice(-10).map(m => `${m.role === 'assistant' ? 'Aria' : 'Owner'}: ${String(m.content ?? '').slice(0, 400)}`)
+  }
+  let lastPromotion: import('@/lib/aria/ask/action-planner').PlanContext['lastPromotion'] = null
+  if (conversationId) {
+    const { data: logRow } = await supabaseAdmin.from('aria_action_log')
+      .select('entity_ids, action_type, executed_at')
+      .eq('business_id', bid).eq('conversation_id', conversationId)
+      .in('action_type', ['create_promotion', 'apply_category_discount', 'update_promotion'])
+      .order('executed_at', { ascending: false }).limit(1).maybeSingle()
+    const pid = (logRow?.entity_ids as string[] | undefined)?.[0]
+    if (pid) {
+      const { data: promo } = await supabaseAdmin.from('pos_promotions')
+        .select('id, name, promotion_type, discount_percent, discount_amount, bundle_price')
+        .eq('id', pid).eq('business_id', bid).maybeSingle()
+      if (promo) lastPromotion = { id: promo.id as string, name: promo.name as string, promotion_type: promo.promotion_type as string, value: Number(promo.discount_percent ?? promo.discount_amount ?? promo.bundle_price) || null }
+    }
+  }
+  return { recentTurns, lastPromotion }
+}
+
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
   if (active?.business_id) return active.business_id as string
@@ -298,6 +332,22 @@ async function _POST(req: Request) {
           : rawPending as PlannedAction
 
         const result = await executeAction(parsedPending, bid, user.id, conversationId, message)
+
+        // RC2/RC6: executor refused an unconfirmed mass mutation — re-stage WITH confirm_mass and ask the owner
+        // to confirm the scale (showing the exact count). Nothing was written. This is the injection backstop:
+        // even if the planner was talked into a catalog-wide change, it cannot execute without this 2nd confirm.
+        if (result.requires_mass_confirm) {
+          const massPending = { ...parsedPending, payload: { ...(parsedPending.payload as Record<string, unknown>), confirm_mass: true } }
+          await supabase.from('aria_conversations').update({
+            pending_action: massPending,
+            pending_action_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+          }).eq('id', conversationId)
+          const massText = `⚠️ ${result.error ?? `This affects ${result.affected_preview} items.`} Reply "confirm" to proceed.`
+          let massConvId = conversationId
+          try { massConvId = await upsertConversation(bid, user.id, conversationId, message, massText, 'action_request') } catch { /* non-fatal */ }
+          return NextResponse.json({ response: massText, conversation_id: massConvId ?? conversationId, intent: 'action_request', action: { action: 'mass_confirm', affected: result.affected_preview }, cost_usd_cents: 0 })
+        }
+
         await supabase.from('aria_conversations').update({
           pending_action: null, pending_action_expires_at: null,
         }).eq('id', conversationId)
@@ -322,6 +372,11 @@ async function _POST(req: Request) {
         const _rollback = result.rollback_available ? ' You can undo this within 1 hour.' : ''
         const confirmText = (() => {
           switch (parsedPending.type) {
+            case 'update_promotion': {
+              const v = (_ap.discount_percent ?? _ap.discount_amount ?? _ap.bundle_price) as number | undefined
+              const unit = _ap.discount_amount != null ? '$' : _ap.bundle_price != null ? ' bundle $' : '%'
+              return v != null ? `Done — updated that promotion to ${unit === '%' ? v + '% off' : unit.trim() + v}.${_rollback}` : `Done — promotion updated.${_rollback}`
+            }
             case 'create_promotion':
             case 'apply_category_discount': {
               const promoName = (typeof _ap.name === 'string' && _ap.name) || parsedPending.title
@@ -398,8 +453,17 @@ async function _POST(req: Request) {
   const isStrategicQuestion = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
   // Actions that are too risky to execute immediately — propose-only (save plan, don't execute)
   const PROPOSE_ONLY_TYPES = new Set(['bulk_price_update', 'create_roster'])
-  if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question' && !isStrategicQuestion && ariaIntent.intent_type !== 'analytical') {
-    const planned = await planAction(message, bid)
+  // RC3: edit-intent phrases ("actually make it 15%", "change it to 20%") carry no price/promo SUBJECT word,
+  // so they'd miss the gate and never plan update_promotion. Trigger planning on edit-intent too — but the soft
+  // phrases ("actually", "make it") need a value cue (a number/%/$) so a conversational "actually I think…"
+  // doesn't spuriously propose an action. Strong toggles ("turn it off") trigger on their own.
+  const EDIT_STRONG = /\b(turn it (off|on)|end it|deactivate it|reactivate it)\b/i
+  const EDIT_SOFT = /\b(actually|change it|make it|set it to|instead|bump it|drop it)\b/i
+  const isEditIntent = EDIT_STRONG.test(message) || (EDIT_SOFT.test(message) && /[\d%$]/.test(message))
+  const planTrigger = (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question') || isEditIntent
+  if (planTrigger && !isStrategicQuestion && ariaIntent.intent_type !== 'analytical') {
+    const planCtx = await buildPlanContext(bid, conversationId, clientMessages)
+    const planned = await planAction(message, bid, planCtx)
     if (planned) {
       const propose_only = PROPOSE_ONLY_TYPES.has(planned.type)
       const previewText = propose_only

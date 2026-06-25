@@ -58,3 +58,25 @@ export async function adjustOutletStock(
   const { data: after } = await supabase.from('pos_outlet_inventory').select('items_on_hand').eq('id', rowId).maybeSingle()
   return after ? Number(after.items_on_hand) : null
 }
+
+/**
+ * ASK-ARIA-CONSOLIDATE-2 (RC1) — ATOMIC absolute SET of items_on_hand to `target` (floored at 0). Unlike a
+ * read-compute-delta-add, this is a single locked UPDATE (set_numeric RPC), so two concurrent "set 50" both
+ * land on 50 — no lost update. Returns { previous, new } (previous is a best-effort pre-read for the audit
+ * delta; the SET itself does not depend on it). Returns null if the outlet/product can't be resolved.
+ */
+export async function setOutletStock(
+  supabase: SupabaseClient,
+  params: { businessId: string; outletId: string | null; productId: string; target: number },
+): Promise<{ previous: number; new: number } | null> {
+  const { businessId, outletId, productId } = params
+  if (!outletId || !productId) return null
+  const target = Math.max(0, Math.round(Number(params.target) || 0))
+  const rowId = await ensureRow(supabase, businessId, productId, outletId)
+  if (!rowId) return null
+  const { data: before } = await supabase.from('pos_outlet_inventory').select('items_on_hand').eq('id', rowId).maybeSingle()
+  const previous = before ? Number(before.items_on_hand) || 0 : 0
+  const { data: newVal } = await supabase.rpc('set_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_value: target })
+  await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', rowId)
+  return { previous, new: newVal != null ? Number(newVal) : target }
+}

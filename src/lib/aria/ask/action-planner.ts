@@ -9,6 +9,7 @@ export type ActionType =
   | 'apply_category_discount'
   | 'set_low_stock_threshold'
   | 'create_promotion'
+  | 'update_promotion'
   | 'create_roster'
   | 'create_invoice'
 
@@ -35,6 +36,7 @@ SUPPORTED ACTIONS (return one of these types):
   apply_category_discount — apply a % discount to all products in a POS category (payload: name [string — promo name], category_id [string — UUID from POS Categories list; match the category the owner names, case-insensitive], category_name [string — human-readable name], discount_percent [number — e.g. 10 for 10%], starts_at [YYYY-MM-DD — today's date], ends_at? [YYYY-MM-DD], active_days? [number[] — ISO day numbers same as create_promotion])
   set_low_stock_threshold — update low_stock_threshold for products
   create_promotion     — create a promotion rule saved to pos_promotions (payload: name, promotion_type ["percentage_discount"|"fixed_discount"|"bogo"|"bundle"|"multibuy"], discount_amount [number — the discount value in % for percentage_discount or $ for fixed_discount], starts_at [YYYY-MM-DD — MUST use the provided today's date as base; never use a past date or the wrong year], ends_at? [YYYY-MM-DD], min_spend? [number], active_days? [number[] — ISO day numbers: 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat 7=Sun; include ONLY if the promo targets specific days, e.g. "Thursday Special" → [4], "weekdays" → [1,2,3,4,5]; omit for all-day promos], product_ids? [string[] — UUIDs from the product list above; include ONLY if the owner names specific products by name, match the UUID exactly], category? [string for category-scoped promos], notes? [string])
+  update_promotion     — EDIT an EXISTING promotion (payload: promotion_id [string — the LAST_PROMOTION id from context], discount_percent? [number, for a % promo], discount_amount? [number, for a $ promo], bundle_price? [number], ends_at? [YYYY-MM-DD], active? [boolean]). USE THIS — never create a second promo — when the owner adjusts the promo just created/discussed: "actually make it 15%", "change it to 20%", "make it $5 instead", "end it Friday", "turn it off". Map the new number into the field that matches the existing promo's type.
   create_roster        — draft a staff roster for a week (payload: name, week_start YYYY-MM-DD, week_end?, notes?)
   create_invoice       — draft a client invoice (payload: customer_name, customer_email?, due_date?, items:[{description,quantity,unit_price}], notes?; amounts in DOLLARS)
 
@@ -66,9 +68,15 @@ export function isConfirmation(message: string): boolean {
   return CONFIRM_WORDS.some(w => lower === w || lower.startsWith(w + ' ') || lower.endsWith(' ' + w))
 }
 
+export interface PlanContext {
+  recentTurns?: string[]
+  lastPromotion?: { id: string; name: string; promotion_type: string; value: number | null } | null
+}
+
 export async function planAction(
   userMessage: string,
   businessId: string,
+  ctx?: PlanContext,
 ): Promise<PlannedAction | null> {
   const [productsQ, staffQ, categoriesQ] = await Promise.all([
     supabaseAdmin.from('pos_products')
@@ -93,13 +101,16 @@ Total active products: ${products.length}
 Categories: ${[...new Set(products.map((p: Record<string,unknown>) => p.category).filter(Boolean))].join(', ')}
 Brands: ${[...new Set(products.map((p: Record<string,unknown>) => p.brand).filter(Boolean))].slice(0, 10).join(', ')}
 Staff: ${(staff as Array<Record<string,unknown>>).map(s => `${s.first_name} ${s.last_name} (${s.position})`).join(', ')}
-POS Categories (id → name, for apply_category_discount): ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))}`
+POS Categories (id → name, for apply_category_discount): ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))}${ctx?.lastPromotion ? `
+LAST_PROMOTION (the promo just created/discussed — for "actually make it X"/"change it to X" use update_promotion with this id): ${JSON.stringify(ctx.lastPromotion)}` : ''}${ctx?.recentTurns?.length ? `
+RECENT_CONVERSATION (resolve "it"/"that promo"/"her favourite"/"actually" against this — most recent last):
+${ctx.recentTurns.slice(-10).join('\n')}` : ''}`
 
   const result = await callAnthropic<PlannedAction>(
     {
       model: 'sonnet',
       systemPrompt: PLANNER_SYSTEM,
-      userPrompt: `User request: "${userMessage}"\n\nBusiness context:\n${contextSummary}\n\nPlan this action precisely. Use today's date (${todayISO}) when resolving relative dates like "next Tuesday". ALWAYS return valid JSON with sensible defaults — do not ask questions.`,
+      userPrompt: `User request: "${userMessage}"\n\nBusiness context:\n${contextSummary}\n\nPlan this action precisely. Use today's date (${todayISO}) when resolving relative dates like "next Tuesday". If the request EDITS the LAST_PROMOTION (e.g. "actually make it 15%", "change it to 20%", "make it $5 instead") return update_promotion with that promotion_id — NEVER create a second promo and NEVER switch to bulk_price_update. ALWAYS return valid JSON with sensible defaults — do not ask questions.`,
       maxTokens: 1000,
       businessId,
       agentKey: 'ask_aria',

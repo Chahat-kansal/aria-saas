@@ -1035,6 +1035,11 @@ async function updateProductPrice(input: Record<string, unknown>, businessId: st
   const productId = String(input.product_id ?? '');
   const newPrice = Number(input.new_price ?? 0);
   if (!productId || newPrice <= 0) return { error: 'product_id and positive new_price required' };
+  // ASK-ARIA-CONSOLIDATE-2 (RC6): self-gate (defence in depth). Even if a caller bypasses the route's
+  // GATED_TOOL_WRITES wrapper, a price change does not execute without an explicit confirmed:true flag.
+  if (input.confirmed !== true) {
+    return { requires_confirmation: true, not_executed: true, tool: 'update_product_price', message: 'Price change needs explicit confirmation — re-call with confirmed:true once the owner approves.' };
+  }
 
   const { data: existing } = await supabaseAdmin.from('pos_products')
     .select('id, name, price').eq('id', productId).eq('business_id', businessId).maybeSingle();

@@ -1,7 +1,13 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { PlannedAction } from './action-planner'
 import { buildPromotionRow, normalisePromoKind } from './promotion-writer'
-import { adjustOutletStock, resolveOutletId } from '@/lib/inventory/outlet-stock'
+import { adjustOutletStock, setOutletStock, resolveOutletId } from '@/lib/inventory/outlet-stock'
+
+// ASK-ARIA-CONSOLIDATE-2 (RC2/RC6): executor-level safety thresholds. These are the BACKSTOP — a mass write or
+// an absurd quantity must be explicitly confirmed (payload.confirm_mass) before it executes, so prompt-injection
+// that fools the planner still cannot push an unconfirmed catalog-wide mutation through the executor.
+const MASS_MUTATION_THRESHOLD = 20      // RC2: >20 resolved products ⇒ require explicit confirm
+const ADD_STOCK_CLAMP = 100_000         // RC6: a single add bigger than this ⇒ require explicit confirm
 
 export interface ExecutionResult {
   ok: boolean
@@ -10,6 +16,9 @@ export interface ExecutionResult {
   // ASK-ARIA-CONSOLIDATE-1 (RC3): surfaced so the caller never reports a success it didn't achieve.
   failed_count?: number
   warning?: string
+  // ASK-ARIA-CONSOLIDATE-2 (RC2/RC6): the write was REFUSED pending an explicit confirmation of scale.
+  requires_mass_confirm?: boolean
+  affected_preview?: number
   action_log_id?: string
   rollback_available: boolean
   rollback_expires_at?: string
@@ -30,6 +39,15 @@ export async function executeAction(
   let entityIds: string[] = []
   let entityType = 'pos_products'
 
+  // RC2 BACKSTOP: refuse an unconfirmed mass mutation (resolved row count over the threshold). Code-level —
+  // prompt-injection can fool the planner into PLANNING "set all prices to 0", but it cannot make the executor
+  // execute it without payload.confirm_mass set by a real second confirmation.
+  const confirmMass = (action.payload as Record<string, unknown>)?.confirm_mass === true
+  const massBlock = (count: number): ExecutionResult | null =>
+    count > MASS_MUTATION_THRESHOLD && !confirmMass
+      ? { ok: false, affected_count: 0, requires_mass_confirm: true, affected_preview: count, error: `This will change ${count} products — reply "confirm" to proceed.`, rollback_available: false }
+      : null
+
   try {
     switch (action.type) {
       case 'bulk_price_update': {
@@ -45,6 +63,7 @@ export async function executeAction(
         if (brand) q = q.eq('brand', brand)
         const { data: targets } = await q.limit(500)
         if (!targets?.length) return { ok: false, affected_count: 0, error: 'No matching products found', rollback_available: false }
+        { const mb = massBlock(targets.length); if (mb) return mb }
 
         beforeState = { products: targets.map((p: Record<string,unknown>) => ({ id: p.id, name: p.name, price: p.price })) }
         entityIds = targets.map((p: Record<string,unknown>) => String(p.id))
@@ -85,6 +104,7 @@ export async function executeAction(
         else if (brand) q = q.eq('brand', brand)
         const { data: targets } = await q.limit(500)
         if (!targets?.length) return { ok: false, affected_count: 0, error: 'No matching products', rollback_available: false }
+        { const mb = massBlock(targets.length); if (mb) return mb }
 
         entityIds = targets.map((p: Record<string,unknown>) => String(p.id))
         beforeState = { field, previous_value: !value, products: targets.map((p: Record<string,unknown>) => p.name) }
@@ -110,47 +130,45 @@ export async function executeAction(
         const { data: targets } = await productQ.limit(10)
         if (!targets?.length) return { ok: false, affected_count: 0, error: 'Product not found', rollback_available: false }
 
+        // RC6: an absurd single add (e.g. +999999) must be explicitly confirmed.
+        if (adjust_type === 'add' && (Number(quantity) || 0) > ADD_STOCK_CLAMP && !confirmMass) {
+          return { ok: false, affected_count: 0, requires_mass_confirm: true, affected_preview: Number(quantity) || 0, error: `Adding ${Number(quantity) || 0} units is unusually large — reply "confirm" to proceed.`, rollback_available: false }
+        }
         entityIds = targets.map((p: Record<string,unknown>) => String(p.id))
         // RC2 (INV spine): stock lives in pos_outlet_inventory.items_on_hand (canonical, per-outlet), NOT
-        // pos_products.stock_quantity. Route through adjustOutletStock + an attributed pos_stock_adjustments
-        // row — the exact path the staff-app/INV-* tiles use. We also mirror stock_quantity so legacy reads
-        // stay in sync (additive — never the source of truth).
+        // pos_products.stock_quantity. We also mirror stock_quantity so legacy reads stay in sync (additive).
+        // RC1: 'set' goes through setOutletStock — a SINGLE atomic absolute UPDATE (set_numeric RPC) so two
+        // concurrent "set 50" both land on 50 (no lost update). 'add'/'subtract' use the atomic delta RPCs.
         const adjOutletId = await resolveOutletId(supabase, businessId, null)
         const stockMoves: Array<Record<string, unknown>> = []
         for (const p of targets as Array<Record<string,unknown>>) {
           const pid = String(p.id)
-          // Canonical on-hand for this outlet. When no row exists yet the canonical truth is 0 (adjustOutletStock
-          // creates the row at 0 then applies the delta) — using the legacy stock_quantity here would make a
-          // 'set' land on the wrong number. stock_quantity is only ever a mirror, never the delta basis.
-          let currentOnHand = 0
-          if (adjOutletId) {
+          if (!adjOutletId) { failedCount++; continue }
+          const amt = Number(quantity) || 0
+          let prev = 0, newQty = 0
+          if (adjust_type === 'set') {
+            const res = await setOutletStock(supabase, { businessId, outletId: adjOutletId, productId: pid, target: amt })
+            if (!res) { failedCount++; continue }
+            prev = res.previous; newQty = res.new
+          } else {
             const { data: invRow } = await supabase.from('pos_outlet_inventory').select('items_on_hand')
               .eq('business_id', businessId).eq('product_id', pid).eq('outlet_id', adjOutletId).maybeSingle()
-            currentOnHand = invRow ? Number(invRow.items_on_hand) || 0 : 0
+            prev = invRow ? Number(invRow.items_on_hand) || 0 : 0
+            const intendedDelta = adjust_type === 'add' ? amt : -amt
+            const post = intendedDelta !== 0 ? await adjustOutletStock(supabase, { businessId, outletId: adjOutletId, productId: pid, delta: intendedDelta }) : prev
+            if (post == null) { failedCount++; continue }
+            newQty = post
           }
-          let newQty: number
-          switch (adjust_type) {
-            case 'add': newQty = currentOnHand + (Number(quantity) || 0); break
-            case 'subtract': newQty = Math.max(0, currentOnHand - (Number(quantity) || 0)); break
-            case 'set': newQty = Math.max(0, Number(quantity) || 0); break
-            default: newQty = currentOnHand
-          }
-          const delta = newQty - currentOnHand
-          if (!adjOutletId) { failedCount++; continue }
-          const post = delta !== 0
-            ? await adjustOutletStock(supabase, { businessId, outletId: adjOutletId, productId: pid, delta })
-            : currentOnHand
-          if (post == null) { failedCount++; continue }
+          const actualDelta = newQty - prev
           // attributed audit row (text adjusted_by — pos_stock_adjustments.adjusted_by is text)
-          if (delta !== 0) {
+          if (actualDelta !== 0) {
             await supabase.from('pos_stock_adjustments').insert({
               business_id: businessId, product_id: pid, outlet_id: adjOutletId,
-              adjustment_qty: delta, reason: 'ask_aria_adjust', adjusted_by: 'Ask Aria',
+              adjustment_qty: actualDelta, reason: 'ask_aria_adjust', adjusted_by: 'Ask Aria',
             })
           }
-          // mirror legacy cache (additive)
           await supabase.from('pos_products').update({ stock_quantity: newQty, updated_at: new Date().toISOString() }).eq('id', pid).eq('business_id', businessId)
-          stockMoves.push({ product_id: pid, name: p.name, from: currentOnHand, to: newQty, delta })
+          stockMoves.push({ product_id: pid, name: p.name, from: prev, to: newQty, delta: actualDelta })
           affectedCount++
         }
         beforeState = { products: stockMoves.map(m => ({ id: m.product_id, name: m.name, stock: m.from })) }
@@ -168,6 +186,7 @@ export async function executeAction(
         if (brand) q = q.eq('brand', brand)
         const { data: targets } = await q.limit(500)
         if (!targets?.length) return { ok: false, affected_count: 0, error: 'No matching products', rollback_available: false }
+        { const mb = massBlock(targets.length); if (mb) return mb }
 
         entityIds = targets.map((p: Record<string,unknown>) => String(p.id))
         beforeState = { threshold_set: threshold, products: targets.map((p: Record<string,unknown>) => p.name) }
@@ -221,6 +240,16 @@ export async function executeAction(
         }
         if (!customer_name) return { ok: false, affected_count: 0, error: 'customer_name required', rollback_available: false }
         entityType = 'invoices'
+        // RC5 ATOMICITY: validate EVERY line BEFORE creating the invoice, so a bad line can never leave an
+        // orphan invoice (invoices is soft-delete-only — an orphan can't be cleaned up). Reject up-front.
+        for (const it of (items ?? [])) {
+          if (!it || typeof it.description !== 'string' || !it.description.trim()) {
+            return { ok: false, affected_count: 0, error: 'Every invoice line needs a description — nothing was saved.', rollback_available: false }
+          }
+          if (!(Number(it.quantity) > 0) || !(Number(it.unit_price) >= 0)) {
+            return { ok: false, affected_count: 0, error: 'Every invoice line needs a positive quantity and a non-negative price — nothing was saved.', rollback_available: false }
+          }
+        }
         // RC2: real columns are bill_to_name/bill_to_email + gst_total (NOT customer_name/customer_email/
         // tax_amount). Line items require gst_applicable + line_subtotal + line_gst (all NOT NULL).
         const lineItems = (items ?? []).map((it, idx) => {
@@ -322,6 +351,19 @@ export async function executeAction(
         })
         if (!built.ok) return { ok: false, affected_count: 0, error: built.error, rollback_available: false }
 
+        // RC4 IDEMPOTENCY: a re-fire of the same promo (same name + type) within 60s returns the existing row
+        // instead of writing a duplicate. Covers double-click / retry-after-timeout. (The route also clears
+        // pending_action after a confirm, so the confirm path can't double-execute.)
+        const promoDedupeSince = new Date(Date.now() - 60_000).toISOString()
+        const { data: dupPromo } = await supabase.from('pos_promotions').select('id,name')
+          .eq('business_id', businessId).eq('name', built.row.name as string).eq('promotion_type', built.row.promotion_type as string)
+          .gte('created_at', promoDedupeSince).order('created_at', { ascending: false }).limit(1).maybeSingle()
+        if (dupPromo) {
+          entityIds = [(dupPromo as { id: string }).id]; affectedCount = 1; beforeState = {}
+          afterState = { promotion_id: (dupPromo as { id: string }).id, name: (dupPromo as { name: string }).name, deduped: true }
+          break
+        }
+
         const { data: promo, error: promoErr } = await supabase
           .from('pos_promotions').insert(built.row).select('id,name').single()
         if (promoErr || !promo) {
@@ -412,6 +454,53 @@ export async function executeAction(
           active: true,
           active_days: resolvedCatDays ?? [1, 2, 3, 4, 5, 6, 7],
         }
+        break
+      }
+
+      case 'update_promotion': {
+        // RC3: edit an EXISTING promo ("actually make it 15%") instead of creating a duplicate. Updates only
+        // the value column that matches the promo's existing type, validated the same way buildPromotionRow is.
+        const { promotion_id, discount_percent, discount_amount, bundle_price, ends_at, active } = action.payload as {
+          promotion_id?: string; discount_percent?: number; discount_amount?: number; bundle_price?: number; ends_at?: string; active?: boolean
+        }
+        if (!promotion_id) return { ok: false, affected_count: 0, error: 'promotion_id required to update a promotion', rollback_available: false }
+        entityType = 'pos_promotions'
+        const { data: existing } = await supabase.from('pos_promotions')
+          .select('id,name,promotion_type,discount_percent,discount_amount,bundle_price,active')
+          .eq('id', promotion_id).eq('business_id', businessId).maybeSingle()
+        if (!existing) return { ok: false, affected_count: 0, error: 'That promotion was not found.', rollback_available: false }
+        beforeState = { id: existing.id, promotion_type: existing.promotion_type, discount_percent: existing.discount_percent, discount_amount: existing.discount_amount, bundle_price: existing.bundle_price }
+        const ptype = existing.promotion_type as string
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+        // A bare numeric edit ("make it 15") resolves against the promo's OWN type.
+        const numericEdit = discount_percent ?? discount_amount
+        if (ptype === 'percentage_discount') {
+          const v = Number(discount_percent ?? numericEdit)
+          if (discount_percent != null || (discount_amount == null && numericEdit != null)) {
+            if (!(v > 0 && v <= 100)) return { ok: false, affected_count: 0, error: 'A percentage discount must be between 1 and 100.', rollback_available: false }
+            patch.discount_percent = v; patch.value = v
+          }
+        } else if (ptype === 'fixed_discount') {
+          const v = Number(discount_amount ?? numericEdit)
+          if (discount_amount != null || numericEdit != null) {
+            if (!(v > 0)) return { ok: false, affected_count: 0, error: 'A $-off discount must be greater than 0.', rollback_available: false }
+            patch.discount_amount = v; patch.value = v
+          }
+        } else if (ptype === 'bundle' || ptype === 'combo') {
+          const v = Number(bundle_price ?? numericEdit)
+          if (bundle_price != null || numericEdit != null) {
+            if (!(v > 0)) return { ok: false, affected_count: 0, error: 'A bundle price must be greater than 0.', rollback_available: false }
+            patch.bundle_price = v
+          }
+        }
+        if (ends_at !== undefined) patch.ends_at = ends_at
+        if (active !== undefined) { patch.active = active; patch.is_active = active }
+        if (Object.keys(patch).length <= 1) return { ok: false, affected_count: 0, error: 'Nothing to change on that promotion — tell me the new value.', rollback_available: false }
+        const { error: upErr } = await supabase.from('pos_promotions').update(patch).eq('id', promotion_id).eq('business_id', businessId)
+        if (upErr) return { ok: false, affected_count: 0, error: `Update failed: ${upErr.message}`, rollback_available: false }
+        entityIds = [promotion_id]
+        affectedCount = 1
+        afterState = { promotion_id, name: existing.name, ...patch }
         break
       }
 
