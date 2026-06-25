@@ -9,12 +9,15 @@ import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav,
 // live (stock value via INV-COST-1, order badge via INV-PAR-1, sold-today from real sales). Tasks/Reports/
 // Review/Scan are wired nav targets, fully built in the next two prompts.
 
+// INV-PIPEL — the staff app's shared token map is repointed to the locked Pipel palette so every sub-screen
+// adopts ink borders + lime accents + Jakarta numerals with no structural rewrite. Names are kept so existing
+// inline styles resolve; values are Pipel. (green→ink, sage→lime, paper→soft inset, line→ink border.)
 const T = {
-  sage: '#7FB897', green: '#2D5240', sand: '#C9A37A', amber: '#BA7517', red: '#E24B4A',
-  ink: '#111827', paper: '#F4F6F9', line: '#ECEEF3', muted: '#8A93A2',
-  greenSoft: '#EAF2EC', sandSoft: '#F6EFE4', amberSoft: '#FBF1E1', redSoft: '#FCEBEA', sageSoft: '#EDF5F0', blueSoft: '#E7F0FA', violetSoft: '#EEEDFE',
+  sage: P.lime, green: P.ink, sand: P.ink, amber: P.amber, red: P.red,
+  ink: P.ink, paper: P.soft, line: P.ink, muted: P.muted,
+  greenSoft: '#f1fbcf', sandSoft: P.soft, amberSoft: P.amberSoft, redSoft: P.redSoft, sageSoft: '#f1fbcf', blueSoft: '#eef3fb', violetSoft: '#f1eefb',
 }
-const DISPLAY = "'Cormorant', Georgia, serif"
+const DISPLAY = JAKARTA
 const BODY = JAKARTA  // INV-PIPEL: body type is Plus Jakarta Sans across the whole staff app
 const AV_PALETTE = ['#185FA5', '#2D5240', '#C9A37A', '#7c5cbf', '#BA7517']
 const money = (n: number) => `$${(Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -572,7 +575,7 @@ export default function InventoryStaffApp() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {(boot?.staff ?? []).map((s, i) => (
             <button key={s.id} onClick={() => { setSelStaff(s); setPin(''); setPinErr(''); setStage('pin') }}
-              style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: 'pointer', fontFamily: BODY, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
+              style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: 'pointer', fontFamily: BODY, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
               <div style={{ width: 52, height: 52, borderRadius: '50%', background: avColor(s, i), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18 }}>{initials(s.name)}</div>
               <div style={{ textAlign: 'center' }}><b style={{ fontSize: 13.5, fontWeight: 600, display: 'block' }}>{s.name}</b><span style={{ fontSize: 11, color: T.muted, textTransform: 'capitalize' }}>{s.role}</span></div>
             </button>
@@ -599,7 +602,7 @@ export default function InventoryStaffApp() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 72px)', gap: 14 }}>
           {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((k, i) => k === '' ? <div key={i} /> : (
             <button key={i} disabled={busy} onClick={() => k === 'del' ? setPin(p => p.slice(0, -1)) : pushDigit(k)}
-              style={{ height: 64, borderRadius: 16, border: `1px solid ${T.line}`, background: '#fff', fontFamily: DISPLAY, fontStyle: 'italic', fontSize: k === 'del' ? 16 : 28, fontWeight: 600, color: T.ink, cursor: 'pointer' }}>{k === 'del' ? '⌫' : k}</button>
+              style={{ height: 64, borderRadius: 16, border: `1.5px solid ${T.line}`, background: '#fff', fontFamily: DISPLAY, fontSize: k === 'del' ? 16 : 28, fontWeight: 600, color: T.ink, cursor: 'pointer' }}>{k === 'del' ? '⌫' : k}</button>
           ))}
         </div>
       </div>
@@ -609,7 +612,7 @@ export default function InventoryStaffApp() {
   // ── APP (logged in) ──
   const body = (children: React.ReactNode) => <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 24px' }}>{children}</div>
   const stub = (title: string, note: string) => shell(<>{statusbar}{header(true, title, note)}{body(
-    <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🧰</div><p style={{ fontSize: 16, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>Coming in the next update</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>This screen is being built. Your acting session (<b>{acting?.name}</b>) carries through so every action is attributed to you.</p></div>
+    <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🧰</div><p style={{ fontSize: 16, fontFamily: DISPLAY, marginBottom: 6 }}>Coming in the next update</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>This screen is being built. Your acting session (<b>{acting?.name}</b>) carries through so every action is attributed to you.</p></div>
   )}{tabbar}</>)
 
   if (tab === 'tasks') {
@@ -619,31 +622,24 @@ export default function InventoryStaffApp() {
     const active = (tasksData?.tasks ?? []).find(t => t.id === activeId && t.status === 'open')
     const variance = active ? countVal - (active.expected ?? 0) : 0
     const tasksHeader = (
-      <div style={{ padding: '6px 20px 16px', background: `linear-gradient(135deg, ${T.green}, #244236)` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(127,184,151,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY, fontStyle: 'italic', color: '#fff', fontSize: 20, fontWeight: 600 }}>{(boot?.business.name ?? 's')[0]?.toLowerCase()}</div>
-          <div style={{ flex: 1, color: '#fff' }}><b style={{ fontSize: 15, fontWeight: 600, display: 'block' }}>{boot?.business.name}</b><span style={{ fontSize: 11.5, color: '#A9C3B4' }}>ariaos.site/inventory/{slug}</span></div>
-          {acting && <div onClick={logout} style={{ width: 34, height: 34, borderRadius: '50%', background: T.sand, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, border: '2px solid rgba(255,255,255,.3)', cursor: 'pointer' }}>{initials(acting.name)}</div>}
-        </div>
-        <div style={{ marginTop: 15, color: '#fff' }}>
-          <h1 style={{ fontSize: 21, fontWeight: 500 }}><span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 25, color: T.sage }}>Today,</span> {firstName(acting?.name ?? '')}</h1>
-          <p style={{ fontSize: 12, color: '#A9C3B4', marginTop: 2 }}>{open.length} task{open.length === 1 ? '' : 's'} · Aria built your list from real sales</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+      <>
+        <PipelTopBar word={(boot?.business.name ?? 'sip').toLowerCase()} crest={((boot?.business.name ?? 'S')[0] ?? 'S').toUpperCase()} acting={acting} onSwitch={logout} />
+        <PipelTitle title="today" subtitle={`${open.length} task${open.length === 1 ? '' : 's'} · Aria built your list from real sales`} />
+        <div style={{ display: 'flex', gap: 9, margin: '12px 16px 2px' }}>
           {[[pills?.accuracy != null ? `${pills.accuracy}%` : 'new', 'count accuracy'], [String(pills?.streak ?? 0), 'day streak'], [String(pills?.left_today ?? open.length), 'left today']].map(([v, k]) => (
-            <div key={k} style={{ flex: 1, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '9px 11px', color: '#fff' }}>
-              <b style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, display: 'block', lineHeight: 1 }}>{v}</b><span style={{ fontSize: 10, color: '#A9C3B4' }}>{k}</span>
+            <div key={k} style={{ flex: 1, background: P.bg, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: 11, textAlign: 'center' }}>
+              <b style={{ fontSize: 22, fontWeight: 800, display: 'block', lineHeight: 1 }}>{v}</b><span style={{ fontSize: 10.5, color: P.muted, fontWeight: 600 }}>{k}</span>
             </div>
           ))}
         </div>
-      </div>
+      </>
     )
-    const taskCard = (children: React.ReactNode, extra?: React.CSSProperties) => <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)', ...extra }}>{children}</div>
+    const taskCard = (children: React.ReactNode, extra?: React.CSSProperties) => <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 18, padding: 14, marginBottom: 11, ...extra }}>{children}</div>
     const checkRow = (t: Task, isDone: boolean) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div onClick={() => { if (!isDone && (t.task_type === 'count' || t.task_type === 'cycle_count') && t.product_id) { setActiveId(t.id); setCountVal(t.expected ?? 0); setCountMsg(null) } }}
-          style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${isDone ? T.sage : T.sage}`, background: isDone ? T.sage : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          {isDone && <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth={3} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>}
+          style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${P.ink}`, background: isDone ? P.lime : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          {isDone && <svg width="14" height="14" fill="none" stroke={P.ink} strokeWidth={3} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>}
         </div>
         <div style={{ flex: 1 }}>
           <b style={{ fontSize: 14, fontWeight: 600, textDecoration: isDone ? 'line-through' : 'none', color: isDone ? T.muted : T.ink }}>{t.title}</b>
@@ -656,11 +652,11 @@ export default function InventoryStaffApp() {
         {statusbar}{tasksHeader}
         {body(
           tasksState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: i === 1 ? 220 : 56, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: i === 1 ? 220 : 56, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : tasksState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load your tasks</p><button onClick={() => loadTasks(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load your tasks</p><button onClick={() => loadTasks(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : tasksState === 'empty' ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>✓</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>No tasks today — you&apos;re clear</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Aria didn&apos;t find anything that needs counting right now. New tasks appear as stock runs low or items near expiry.</p></div>
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>✓</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>No tasks today — you&apos;re clear</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Aria didn&apos;t find anything that needs counting right now. New tasks appear as stock runs low or items near expiry.</p></div>
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 2px 10px' }}>
@@ -682,14 +678,14 @@ export default function InventoryStaffApp() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '6px 0 14px' }}>
                         <button onClick={() => setCountVal(v => Math.max(0, v - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
-                        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 48, fontWeight: 600, minWidth: 70, textAlign: 'center', lineHeight: 1 }}>{countVal}</div>
+                        <div style={{ fontFamily: DISPLAY, fontSize: 48, fontWeight: 600, minWidth: 70, textAlign: 'center', lineHeight: 1 }}>{countVal}</div>
                         <button onClick={() => setCountVal(v => v + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                       </div>
                       <div style={{ display: 'flex', gap: 9, marginBottom: 14 }}>
                         {[['Aria expects', active.expected ?? 0, T.paper, T.ink], ['You counted', countVal, T.greenSoft, T.green], ['Variance', `${variance > 0 ? '+' : ''}${variance}`, variance === 0 ? T.greenSoft : T.redSoft, variance === 0 ? T.green : T.red]].map(([l, v, bg, col], i) => (
                           <div key={i} style={{ flex: 1, borderRadius: 12, padding: 11, textAlign: 'center', background: bg as string }}>
                             <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.3px', color: T.muted }}>{l}</div>
-                            <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, fontWeight: 600, marginTop: 3, color: col as string }}>{v}</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, marginTop: 3, color: col as string }}>{v}</div>
                           </div>
                         ))}
                       </div>
@@ -700,9 +696,9 @@ export default function InventoryStaffApp() {
                         </div>
                       )}
                       {!countMsg ? (
-                        <button onClick={() => submitCount(active)} disabled={submitting} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Submitting…' : 'Submit count'}</button>
+                        <button onClick={() => submitCount(active)} disabled={submitting} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Submitting…' : 'Submit count'}</button>
                       ) : (
-                        <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{countMsg.review ? '✓ Sent to owner review' : '✓ Count matches — recorded'}</div>
+                        <div style={{ width: '100%', background: P.lime, color: P.ink, borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{countMsg.review ? '✓ Sent to owner review' : '✓ Count matches — recorded'}</div>
                       )}
                       <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Logged as <b style={{ color: T.green }}>{acting?.name}</b> · {countMsg?.time ?? new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()} · attribution is how Aria spots who counts accurately</div>
                     </>,
@@ -736,39 +732,39 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Reports', 'Sold vs in-stock · PDF + email')}
         {body(
           <>
-            <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1px solid ${T.line}`, borderRadius: 12, padding: 4, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 12, padding: 4, marginBottom: 14 }}>
               {(['daily', 'weekly'] as const).map(p => (
                 <button key={p} onClick={() => setReportPeriod(p)} style={{ flex: 1, padding: '8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: BODY, fontSize: 13, fontWeight: 600, background: reportPeriod === p ? T.green : 'transparent', color: reportPeriod === p ? '#fff' : T.muted }}>{p === 'daily' ? 'Daily' : 'Weekly'}</button>
               ))}
             </div>
 
             {reportsState === 'loading' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: i === 0 ? 80 : 130, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: i === 0 ? 80 : 130, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
             ) : reportsState === 'error' ? (
-              <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load reports</p><button onClick={() => loadReports(reportPeriod, outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+              <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load reports</p><button onClick={() => loadReports(reportPeriod, outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
             ) : (
               <>
                 {k && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginBottom: 14 }}>
                     {([['Stock at cost', money(k.stock_at_cost), T.green], ['At retail', money(k.stock_at_retail), T.ink], ['Sold', String(k.units_sold), T.ink], ['Shrinkage', money(k.shrinkage_dollars), k.shrinkage_dollars > 0 ? T.red : T.ink]] as const).map(([l, v, col]) => (
-                      <div key={l} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px' }}>
+                      <div key={l} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px' }}>
                         <div style={{ fontSize: 10, color: T.muted, textTransform: 'uppercase', letterSpacing: '.4px' }}>{l}</div>
-                        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, fontWeight: 600, color: col, marginTop: 3 }}>{v}</div>
+                        <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: col, marginTop: 3 }}>{v}</div>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {reportsState === 'empty' && (
-                  <div style={{ padding: 24, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}`, marginBottom: 14 }}>
+                  <div style={{ padding: 24, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1.5px solid ${T.line}`, marginBottom: 14 }}>
                     <div style={{ fontSize: 28, marginBottom: 6 }}>📊</div>
-                    <p style={{ fontSize: 14, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 3 }}>No data for this period yet</p>
+                    <p style={{ fontSize: 14, fontFamily: DISPLAY, marginBottom: 3 }}>No data for this period yet</p>
                     <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>Once you make sales or log counts/waste, the figures appear here. You can still export any report below.</p>
                   </div>
                 )}
 
                 {soldSection && soldSection.rows.length > 0 && (
-                  <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
+                  <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <b style={{ fontSize: 14, fontWeight: 600 }}>Sold vs on-hand</b>
                       <span style={{ fontSize: 11, color: T.muted }}>{rep?.period_label}</span>
@@ -777,7 +773,7 @@ export default function InventoryStaffApp() {
                       <span style={{ flex: 1 }}>Product</span><span style={{ width: 60, textAlign: 'right' }}>Sold</span><span style={{ width: 64, textAlign: 'right' }}>On hand</span>
                     </div>
                     {soldSection.rows.slice(0, 12).map((r, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 2px', borderTop: `1px solid ${T.line}`, fontSize: 13 }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 2px', borderTop: `1.5px solid ${T.line}`, fontSize: 13 }}>
                         <span style={{ flex: 1, fontWeight: 600 }}>{r[0]}</span>
                         <span style={{ width: 60, textAlign: 'right', color: T.green, fontWeight: 600 }}>{r[1]}</span>
                         <span style={{ width: 64, textAlign: 'right' }}>{r[2]}</span>
@@ -789,7 +785,7 @@ export default function InventoryStaffApp() {
                 <div style={{ margin: '4px 2px 10px', fontSize: 14, fontWeight: 600 }}>Report library</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {lib.map(item => (
-                    <button key={item.type} onClick={() => exportReport(item.type)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <button key={item.type} onClick={() => exportReport(item.type)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                       <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{item.title}</b><div style={{ fontSize: 11, color: T.muted, lineHeight: 1.4, marginTop: 1 }}>{item.blurb}</div></div>
                       <span style={{ fontSize: 11, fontWeight: 700, color: T.green, background: T.greenSoft, borderRadius: 8, padding: '6px 10px', whiteSpace: 'nowrap' }}>PDF ↓</span>
                     </button>
@@ -824,7 +820,7 @@ export default function InventoryStaffApp() {
     const cell = (l: string, v: React.ReactNode, bg: string, col: string, i: number) => (
       <div key={i} style={{ flex: 1, borderRadius: 12, padding: 11, textAlign: 'center', background: bg }}>
         <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.3px', color: T.muted }}>{l}</div>
-        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 24, fontWeight: 600, marginTop: 3, color: col }}>{v}</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, marginTop: 3, color: col }}>{v}</div>
       </div>
     )
     return shell(
@@ -832,11 +828,11 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Review', counts ? `${counts.open} open · ${counts.resolved_today} resolved today` : 'Owner review queue')}
         {body(
           reviewState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 170, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 170, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : reviewState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load the review queue</p><button onClick={() => loadReview(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load the review queue</p><button onClick={() => loadReview(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : reviewState === 'empty' ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>✓</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>All clear — nothing to review</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When a staff count doesn&apos;t match the book stock, it lands here for you to accept or investigate. Nothing changes your stock until you do.</p></div>
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>✓</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>All clear — nothing to review</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When a staff count doesn&apos;t match the book stock, it lands here for you to accept or investigate. Nothing changes your stock until you do.</p></div>
           ) : (
             <>
               <div style={{ fontSize: 11.5, color: '#5A6472', background: T.sageSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginBottom: 13, display: 'flex', gap: 8 }}>
@@ -848,7 +844,7 @@ export default function InventoryStaffApp() {
                 const v = rv.variance ?? 0
                 const busy = actingReview === rv.id
                 return (
-                  <div key={rv.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
+                  <div key={rv.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: fm.col, background: fm.bg, padding: '3px 9px', borderRadius: 7, textTransform: 'uppercase', letterSpacing: '.3px' }}>{fm.label}</span>
                       {rv.status === 'investigating' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.amber, background: T.amberSoft, padding: '3px 8px', borderRadius: 7 }}>INVESTIGATING</span>}
@@ -864,7 +860,7 @@ export default function InventoryStaffApp() {
                     )}
                     <div style={{ fontSize: 11, color: T.muted, marginBottom: 12 }}>Raised by <b style={{ color: T.ink }}>{rv.staff_name}</b> · {timeAgo(rv.created_at)}{v !== 0 ? ` · ${Math.abs(v)} units ${v < 0 ? 'short' : 'over'}` : ''}</div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'accept')} style={{ flex: 1.5, background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : rv.flag_type === 'count_variance' ? 'Accept · adjust stock' : 'Accept'}</button>
+                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'accept')} style={{ flex: 1.5, background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : rv.flag_type === 'count_variance' ? 'Accept · adjust stock' : 'Accept'}</button>
                       {rv.status !== 'investigating' && <button disabled={busy} onClick={() => reviewAction(rv.id, 'investigate')} style={{ flex: 1, background: '#fff', color: T.amber, border: `1.5px solid ${T.amberSoft}`, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Investigate</button>}
                       <button disabled={busy} onClick={() => reviewAction(rv.id, 'dismiss')} style={{ flex: 0.9, background: '#fff', color: T.muted, border: `1.5px solid ${T.line}`, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Dismiss</button>
                     </div>
@@ -884,7 +880,7 @@ export default function InventoryStaffApp() {
   if (tab === 'scan') {
     const scanCell = (l: string, v: React.ReactNode, col: string, i: number) => (
       <div key={i} style={{ flex: 1, background: T.paper, borderRadius: 11, padding: '9px 8px', textAlign: 'center' }}>
-        <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 21, fontWeight: 600, lineHeight: 1, color: col }}>{v}</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, lineHeight: 1, color: col }}>{v}</div>
         <div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{l}</div>
       </div>
     )
@@ -894,10 +890,10 @@ export default function InventoryStaffApp() {
         {body(
           <>
             <div style={{ background: T.ink, color: '#fff', borderRadius: 16, padding: 18, marginBottom: 13, textAlign: 'center' }}>
-              <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(127,184,151,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+              <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(217,245,78,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
                 <svg width="28" height="28" fill="none" stroke={T.sage} strokeWidth={2} viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10" /></svg>
               </div>
-              <p style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 18 }}>Scan a barcode</p>
+              <p style={{ fontFamily: DISPLAY, fontSize: 18 }}>Scan a barcode</p>
               <p style={{ fontSize: 11.5, color: '#9aa3b2', marginTop: 2, lineHeight: 1.5 }}>No camera here — type the barcode, or search by name below.</p>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <input value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runScan(scanInput, 'barcode') }} placeholder="Barcode…" inputMode="numeric"
@@ -908,12 +904,12 @@ export default function InventoryStaffApp() {
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
               <input value={searchInput} onChange={e => setSearchInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runScan(searchInput, 'q') }} placeholder="Search by name or SKU…"
-                style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
-              <button onClick={() => runScan(searchInput, 'q')} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
+                style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+              <button onClick={() => runScan(searchInput, 'q')} style={{ background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
             </div>
 
             {scanState === 'idle' && <div style={{ padding: 28, textAlign: 'center', color: T.muted }}><p style={{ fontSize: 13, lineHeight: 1.6 }}>Look up any item to see its live on-hand, cost and how fast it sells.</p></div>}
-            {scanState === 'searching' && <div style={{ height: 150, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />}
+            {scanState === 'searching' && <div style={{ height: 150, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />}
             {scanState === 'error' && <div style={{ padding: 20, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>Lookup failed. Try again.</div>}
             {scanState === 'notfound' && (
               <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.amberSoft}`, textAlign: 'center' }}>
@@ -925,9 +921,9 @@ export default function InventoryStaffApp() {
             {scanState === 'found' && scanMatches.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {scanMatches.map(m => (
-                  <button key={m.id} onClick={() => pickMatch(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <button key={m.id} onClick={() => pickMatch(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku} · ` : ''}{money(m.price)}</div></div>
-                    <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                    <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
                   </button>
                 ))}
               </div>
@@ -950,7 +946,7 @@ export default function InventoryStaffApp() {
                 </div>
                 {scanCount == null ? (
                   <>
-                    <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>Count this item</button>
+                    <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>Count this item</button>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => { setWasteProduct({ id: scanResult.id, name: scanResult.name, unit_cost: scanResult.cost, on_hand: scanResult.on_hand }); setWasteQty(1); setWasteReason('spoilage'); setWasteOther(''); setWasteMsg(null); setTab('waste') }} style={{ flex: 1, background: '#fff', color: T.red, border: `1.5px solid ${T.redSoft}`, borderRadius: 13, padding: 11, fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Log waste</button>
                       <button onClick={() => { setAdjustProduct({ id: scanResult.id, name: scanResult.name, unit_cost: scanResult.cost, on_hand: scanResult.on_hand }); setAdjustMode('set'); setAdjustValue(scanResult.on_hand); setAdjustReason(''); setAdjustOther(''); setAdjustMsg(null); setAdjustErr(''); setTab('adjust') }} style={{ flex: 1, background: '#fff', color: '#534AB7', border: `1.5px solid ${T.violetSoft}`, borderRadius: 13, padding: 11, fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Adjust</button>
@@ -958,17 +954,17 @@ export default function InventoryStaffApp() {
                   </>
                 ) : scanCountMsg ? (
                   <>
-                    <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 13, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{scanCountMsg.review ? '✓ Sent to owner review' : '✓ Count matches — recorded'}</div>
+                    <div style={{ width: '100%', background: P.lime, color: P.ink, borderRadius: 13, padding: 13, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{scanCountMsg.review ? '✓ Sent to owner review' : '✓ Count matches — recorded'}</div>
                     <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>Logged as <b style={{ color: T.green }}>{acting?.name}</b> · stock unchanged{scanCountMsg.review ? ' — the owner reviews the variance' : ''}</div>
                   </>
                 ) : (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '2px 0 12px' }}>
                       <button onClick={() => setScanCount(v => Math.max(0, (v ?? 0) - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
-                      <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{scanCount}</div>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{scanCount}</div>
                       <button onClick={() => setScanCount(v => (v ?? 0) + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                     </div>
-                    <button onClick={() => submitScanCount(scanResult)} disabled={scanCounting} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: scanCounting ? 0.6 : 1 }}>{scanCounting ? 'Submitting…' : 'Submit count'}</button>
+                    <button onClick={() => submitScanCount(scanResult)} disabled={scanCounting} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: scanCounting ? 0.6 : 1 }}>{scanCounting ? 'Submitting…' : 'Submit count'}</button>
                     <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>Counting won&apos;t change stock — a mismatch goes to the owner&apos;s review queue.</div>
                   </>
                 )}
@@ -1001,24 +997,24 @@ export default function InventoryStaffApp() {
               <>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   <input value={wasteSearch} onChange={e => setWasteSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') wasteSearchRun(wasteSearch) }} placeholder="Find the item you're wasting…"
-                    style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
-                  <button onClick={() => wasteSearchRun(wasteSearch)} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
+                    style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+                  <button onClick={() => wasteSearchRun(wasteSearch)} style={{ background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
                 </div>
-                {wasteSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />
+                {wasteSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />
                   : wasteMatches.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                       {wasteMatches.map(m => (
-                        <button key={m.id} onClick={() => pickWasteProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <button key={m.id} onClick={() => pickWasteProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
-                          <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                          <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
                         </button>
                       ))}
                     </div>
                   ) : <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13, lineHeight: 1.6 }}>Search for the item you&apos;re writing off — spoilage, breakage, expiry or a prep mistake.</div>}
               </>
             ) : wasteMsg ? (
-              <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 4 }}>
-                <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>✓ Logged · stock updated</div>
+              <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 4 }}>
+                <div style={{ width: '100%', background: P.lime, color: P.ink, borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>✓ Logged · stock updated</div>
                 {wasteMsg.spike && <div style={{ fontSize: 11.5, color: T.red, background: T.redSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginTop: 10, display: 'flex', gap: 8 }}><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 1 }}><path d="M12 9v4m0 4h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" /></svg><span>Unusually high vs normal — flagged to the owner&apos;s review queue.</span></div>}
                 <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>Logged as <b style={{ color: T.green }}>{acting?.name}</b> · {new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}{wasteMsg.cost_cents != null ? ` · ${dollars(wasteMsg.cost_cents)} written off` : ''}</div>
                 <button onClick={() => { setWasteProduct(null); setWasteMsg(null); setWasteSearch('') }} style={{ width: '100%', marginTop: 12, background: '#fff', color: T.green, border: `1.5px solid ${T.greenSoft}`, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Log another</button>
@@ -1031,7 +1027,7 @@ export default function InventoryStaffApp() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '2px 0 14px' }}>
                   <button onClick={() => setWasteQty(v => Math.max(1, v - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
-                  <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{wasteQty}</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{wasteQty}</div>
                   <button onClick={() => setWasteQty(v => Math.min(wasteProduct.on_hand || 9999, v + 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
@@ -1039,10 +1035,10 @@ export default function InventoryStaffApp() {
                     <button key={r} onClick={() => setWasteReason(r)} style={{ fontSize: 12, fontWeight: 600, padding: '7px 12px', borderRadius: 9, cursor: 'pointer', fontFamily: BODY, border: `1.5px solid ${wasteReason === r ? T.green : T.line}`, background: wasteReason === r ? T.greenSoft : '#fff', color: wasteReason === r ? T.green : T.muted }}>{reasonLabel(r)}</button>
                   ))}
                 </div>
-                {wasteReason === 'other' && <input value={wasteOther} onChange={e => setWasteOther(e.target.value)} placeholder="Describe the reason…" style={{ width: '100%', padding: '10px 12px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 12 }} />}
+                {wasteReason === 'other' && <input value={wasteOther} onChange={e => setWasteOther(e.target.value)} placeholder="Describe the reason…" style={{ width: '100%', padding: '10px 12px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 12 }} />}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.paper, borderRadius: 11, padding: '11px 13px', marginBottom: 13 }}>
                   <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Cost of waste</span>
-                  <span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: costOfWaste != null ? T.red : T.muted }}>{costOfWaste != null ? `$${costOfWaste.toFixed(2)}` : 'cost unknown'}</span>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: costOfWaste != null ? T.red : T.muted }}>{costOfWaste != null ? `$${costOfWaste.toFixed(2)}` : 'cost unknown'}</span>
                 </div>
                 <button onClick={submitWaste} disabled={wasteSubmitting} style={{ width: '100%', background: T.red, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: wasteSubmitting ? 0.6 : 1 }}>{wasteSubmitting ? 'Logging…' : `Log waste · −${wasteQty} from stock`}</button>
                 <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Removes {wasteQty} from {wasteProduct.name} ({wasteProduct.on_hand} → {Math.max(0, wasteProduct.on_hand - wasteQty)}) · logged as <b style={{ color: T.green }}>{acting?.name}</b></div>
@@ -1055,17 +1051,17 @@ export default function InventoryStaffApp() {
               {wasteTodayState === 'ok' && wasteToday && <span style={{ fontSize: 12.5, fontWeight: 700, color: T.red }}>{dollars(wasteToday.total_cost_cents)} lost</span>}
             </div>
             {wasteTodayState === 'loading' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>{[...Array(2)].map((_, i) => <div key={i} style={{ height: 52, borderRadius: 13, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>{[...Array(2)].map((_, i) => <div key={i} style={{ height: 52, borderRadius: 13, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
             ) : wasteTodayState === 'error' ? (
-              <div style={{ padding: 18, borderRadius: 14, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 13, fontWeight: 600, marginBottom: 9 }}>Couldn&apos;t load today&apos;s waste</p><button onClick={() => loadWasteToday(outletId)} style={{ padding: '7px 16px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+              <div style={{ padding: 18, borderRadius: 14, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 13, fontWeight: 600, marginBottom: 9 }}>Couldn&apos;t load today&apos;s waste</p><button onClick={() => loadWasteToday(outletId)} style={{ padding: '7px 16px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
             ) : wasteTodayState === 'empty' ? (
-              <div style={{ padding: 28, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}` }}><div style={{ fontSize: 30, marginBottom: 6 }}>🌿</div><p style={{ fontSize: 14, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 3 }}>No waste logged today</p><p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Nice — nothing written off yet. Anything you log here reduces stock and shows up for the owner.</p></div>
+              <div style={{ padding: 28, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1.5px solid ${T.line}` }}><div style={{ fontSize: 30, marginBottom: 6 }}>🌿</div><p style={{ fontSize: 14, fontFamily: DISPLAY, marginBottom: 3 }}>No waste logged today</p><p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Nice — nothing written off yet. Anything you log here reduces stock and shows up for the owner.</p></div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {(wasteToday?.items ?? []).map(it => (
-                  <div key={it.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div key={it.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{it.product_name}</b><div style={{ fontSize: 11, color: T.muted }}>−{it.quantity} · {reasonLabel(it.reason)} · {it.recorded_by}</div></div>
-                    <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: it.cost_cents != null ? T.red : T.muted }}>{it.cost_cents != null ? dollars(it.cost_cents) : '—'}</div><div style={{ fontSize: 9.5, color: T.muted }}>{new Date(it.recorded_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}</div></div>
+                    <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: it.cost_cents != null ? T.red : T.muted }}>{it.cost_cents != null ? dollars(it.cost_cents) : '—'}</div><div style={{ fontSize: 9.5, color: T.muted }}>{new Date(it.recorded_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}</div></div>
                   </div>
                 ))}
               </div>
@@ -1090,11 +1086,11 @@ export default function InventoryStaffApp() {
     const setMode = (m: 'set' | 'add' | 'remove') => { setAdjustMode(m); setAdjustValue(m === 'set' ? (ap?.on_hand ?? 0) : 1); setAdjustErr('') }
     const recentList = (
       recent.length === 0
-        ? <div style={{ padding: 26, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}` }}><div style={{ fontSize: 28, marginBottom: 6 }}>📋</div><p style={{ fontSize: 13.5, fontFamily: DISPLAY, fontStyle: 'italic' }}>No adjustments today</p><p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, marginTop: 2 }}>Manual corrections show here so every change to the book is transparent.</p></div>
+        ? <div style={{ padding: 26, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1.5px solid ${T.line}` }}><div style={{ fontSize: 28, marginBottom: 6 }}>📋</div><p style={{ fontSize: 13.5, fontFamily: DISPLAY }}>No adjustments today</p><p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, marginTop: 2 }}>Manual corrections show here so every change to the book is transparent.</p></div>
         : <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>{recent.map(a => (
-          <div key={a.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div key={a.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{a.product_name}</b><div style={{ fontSize: 11, color: T.muted }}>{reasonLabel(a.reason)} · {a.adjusted_by}</div></div>
-            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: a.delta < 0 ? T.red : T.green }}>{a.delta > 0 ? '+' : ''}{a.delta}</div><div style={{ fontSize: 9.5, color: T.muted }}>{a.value_dollars != null ? `${a.value_dollars < 0 ? '−' : '+'}$${Math.abs(a.value_dollars).toFixed(2)}` : new Date(a.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}</div></div>
+            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: a.delta < 0 ? T.red : T.green }}>{a.delta > 0 ? '+' : ''}{a.delta}</div><div style={{ fontSize: 9.5, color: T.muted }}>{a.value_dollars != null ? `${a.value_dollars < 0 ? '−' : '+'}$${Math.abs(a.value_dollars).toFixed(2)}` : new Date(a.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}</div></div>
           </div>
         ))}</div>
     )
@@ -1103,9 +1099,9 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Adjust', 'Manual stock correction')}
         {body(
           adjustState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: i === 0 ? 90 : 56, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: i === 0 ? 90 : 56, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : adjustState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load adjustments</p><button onClick={() => loadAdjust(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load adjustments</p><button onClick={() => loadAdjust(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : (
             <>
               <div style={{ fontSize: 11.5, color: '#43407a', background: T.violetSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginBottom: 13, display: 'flex', gap: 8 }}>
@@ -1125,24 +1121,24 @@ export default function InventoryStaffApp() {
                 <>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                     <input value={adjustSearch} onChange={e => setAdjustSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') adjustSearchRun(adjustSearch) }} placeholder="Find the item to correct…"
-                      style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
-                    <button onClick={() => adjustSearchRun(adjustSearch)} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
+                      style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+                    <button onClick={() => adjustSearchRun(adjustSearch)} style={{ background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Search</button>
                   </div>
-                  {adjustSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />
+                  {adjustSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />
                     : adjustMatches.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 4 }}>
                         {adjustMatches.map(m => (
-                          <button key={m.id} onClick={() => pickAdjustProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <button key={m.id} onClick={() => pickAdjustProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
-                            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
                           </button>
                         ))}
                       </div>
                     ) : <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13, lineHeight: 1.6 }}>Search the item whose book count is wrong, then set it to the true number.</div>}
                 </>
               ) : adjustMsg ? (
-                <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 4 }}>
-                  <div style={{ width: '100%', background: T.sage, color: '#fff', borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>✓ Stock corrected</div>
+                <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 4 }}>
+                  <div style={{ width: '100%', background: P.lime, color: P.ink, borderRadius: 13, padding: 14, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>✓ Stock corrected</div>
                   <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>Adjusted by <b style={{ color: T.green }}>{acting?.name}</b> · {new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()} · {adjustMsg.delta > 0 ? '+' : ''}{adjustMsg.delta} → now {adjustMsg.new_on_hand}</div>
                   <button onClick={() => { setAdjustProduct(null); setAdjustMsg(null); setAdjustSearch('') }} style={{ width: '100%', marginTop: 12, background: '#fff', color: T.green, border: `1.5px solid ${T.greenSoft}`, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Adjust another</button>
                 </div>
@@ -1158,7 +1154,7 @@ export default function InventoryStaffApp() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '2px 0 14px' }}>
                     <button onClick={() => setAdjustValue(v => Math.max(adjustMode === 'set' ? 0 : 1, Math.round(v) - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
-                    <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{Math.round(adjustValue)}</div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, minWidth: 64, textAlign: 'center', lineHeight: 1 }}>{Math.round(adjustValue)}</div>
                     <button onClick={() => setAdjustValue(v => Math.round(v) + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                   </div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: T.muted, marginBottom: 7 }}>Reason (required)</div>
@@ -1167,13 +1163,13 @@ export default function InventoryStaffApp() {
                       <button key={r} onClick={() => { setAdjustReason(r); setAdjustErr('') }} style={{ fontSize: 12, fontWeight: 600, padding: '7px 12px', borderRadius: 9, cursor: 'pointer', fontFamily: BODY, border: `1.5px solid ${adjustReason === r ? T.green : T.line}`, background: adjustReason === r ? T.greenSoft : '#fff', color: adjustReason === r ? T.green : T.muted }}>{reasonLabel(r)}</button>
                     ))}
                   </div>
-                  {adjustReason === 'other' && <input value={adjustOther} onChange={e => setAdjustOther(e.target.value)} placeholder="Describe the reason…" style={{ width: '100%', padding: '10px 12px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 12 }} />}
+                  {adjustReason === 'other' && <input value={adjustOther} onChange={e => setAdjustOther(e.target.value)} placeholder="Describe the reason…" style={{ width: '100%', padding: '10px 12px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 12 }} />}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.paper, borderRadius: 11, padding: '11px 13px', marginBottom: 13 }}>
-                    <span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 19, fontWeight: 600 }}>{ap.on_hand} → {previewNew}</span>
+                    <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>{ap.on_hand} → {previewNew}</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: previewDelta < 0 ? T.red : previewDelta > 0 ? T.green : T.muted }}>{previewDelta > 0 ? '+' : ''}{previewDelta}{valueImpact != null ? ` · ${valueImpact < 0 ? '−' : '+'}$${Math.abs(valueImpact).toFixed(2)}` : ''}</span>
                   </div>
                   {adjustErr && <p style={{ fontSize: 12, color: T.red, marginBottom: 10, textAlign: 'center' }}>{adjustErr}</p>}
-                  <button onClick={submitAdjust} disabled={adjustSubmitting || previewDelta === 0} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (adjustSubmitting || previewDelta === 0) ? 0.5 : 1 }}>{adjustSubmitting ? 'Applying…' : previewDelta === 0 ? 'No change' : 'Apply correction'}</button>
+                  <button onClick={submitAdjust} disabled={adjustSubmitting || previewDelta === 0} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (adjustSubmitting || previewDelta === 0) ? 0.5 : 1 }}>{adjustSubmitting ? 'Applying…' : previewDelta === 0 ? 'No change' : 'Apply correction'}</button>
                   <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Moves {ap.name} to {previewNew} · attributed to <b style={{ color: T.green }}>{acting?.name}</b></div>
                   <button onClick={() => { setAdjustProduct(null); setAdjustMsg(null) }} style={{ width: '100%', marginTop: 9, background: 'none', color: T.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, cursor: 'pointer' }}>← pick a different item</button>
                 </div>
@@ -1203,15 +1199,15 @@ export default function InventoryStaffApp() {
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <input value={ticketSearch} onChange={e => setTicketSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') ticketSearchRun(ticketSearch) }} placeholder="Scan or search by name / SKU…"
-                style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
-              <button onClick={() => ticketSearchRun(ticketSearch)} style={{ background: T.green, color: '#fff', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Find</button>
+                style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+              <button onClick={() => ticketSearchRun(ticketSearch)} style={{ background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Find</button>
             </div>
 
-            {ticketSearching && <div style={{ height: 60, borderRadius: 13, background: '#fff', border: `1px solid ${T.line}`, marginBottom: 12 }} />}
+            {ticketSearching && <div style={{ height: 60, borderRadius: 13, background: '#fff', border: `1.5px solid ${T.line}`, marginBottom: 12 }} />}
             {ticketMatches.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                 {ticketMatches.map(m => (
-                  <button key={m.id} onClick={() => ticketAdd(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <button key={m.id} onClick={() => ticketAdd(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku} · ` : ''}{money(m.price)}</div></div>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#534AB7', background: T.violetSoft, borderRadius: 8, padding: '5px 10px' }}>+ Add</span>
                   </button>
@@ -1227,23 +1223,23 @@ export default function InventoryStaffApp() {
             </div>
 
             {ticketBatch.length === 0 ? (
-              <div style={{ padding: 34, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1px solid ${T.line}` }}>
+              <div style={{ padding: 34, textAlign: 'center', background: '#fff', borderRadius: 14, border: `1.5px solid ${T.line}` }}>
                 <div style={{ fontSize: 30, marginBottom: 6 }}>🏷️</div>
-                <p style={{ fontSize: 15, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 3 }}>No items yet</p>
+                <p style={{ fontSize: 15, fontFamily: DISPLAY, marginBottom: 3 }}>No items yet</p>
                 <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>Search above and tap “Add” to start a price-ticket batch.</p>
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 14 }}>
                   {ticketBatch.map(it => (
-                    <div key={it.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div key={it.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <b style={{ fontSize: 13.5, fontWeight: 600 }}>{it.name}</b>
                         <div style={{ fontSize: 11, color: T.muted }}>{it.was != null ? <span><span style={{ textDecoration: 'line-through' }}>{money(it.was)}</span> {money(it.price)}{it.promo ? ` · ${it.promo}` : ''}</span> : money(it.price)}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button onClick={() => ticketQty(it.id, -1)} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 18, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
-                        <span style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 19, fontWeight: 600, minWidth: 22, textAlign: 'center' }}>{it.qty}</span>
+                        <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, minWidth: 22, textAlign: 'center' }}>{it.qty}</span>
                         <button onClick={() => ticketQty(it.id, 1)} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 18, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                         <button onClick={() => ticketRemove(it.id)} title="Remove" style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.redSoft}`, background: '#fff', fontSize: 14, color: T.red, cursor: 'pointer' }}>✕</button>
                       </div>
@@ -1251,8 +1247,8 @@ export default function InventoryStaffApp() {
                   ))}
                 </div>
                 <input value={ticketName} onChange={e => setTicketName(e.target.value)} placeholder="Name this batch (e.g. Friday specials)…"
-                  style={{ width: '100%', padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 10 }} />
-                <button onClick={ticketSaveBatch} disabled={ticketSaving || !ticketName.trim()} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (ticketSaving || !ticketName.trim()) ? 0.5 : 1 }}>{ticketSaving ? 'Saving…' : `Save batch · ${totalCopies} ticket${totalCopies === 1 ? '' : 's'}`}</button>
+                  style={{ width: '100%', padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 10 }} />
+                <button onClick={ticketSaveBatch} disabled={ticketSaving || !ticketName.trim()} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (ticketSaving || !ticketName.trim()) ? 0.5 : 1 }}>{ticketSaving ? 'Saving…' : `Save batch · ${totalCopies} ticket${totalCopies === 1 ? '' : 's'}`}</button>
                 <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Saved as <b style={{ color: T.green }}>{acting?.name}</b> · the owner prints it from the dashboard</div>
               </>
             )}
@@ -1272,14 +1268,14 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Receive', 'Log a delivery against a PO')}
         {body(
           receiveState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 70, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 70, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : receiveState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load deliveries</p><button onClick={() => { setReceiveData(null); loadReceive() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load deliveries</p><button onClick={() => { setReceiveData(null); loadReceive() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : po ? (
             // ── open PO: enter received quantities ──
             <>
               <button onClick={() => setOpenPo(null)} style={{ background: 'none', border: 'none', color: T.muted, fontSize: 13, cursor: 'pointer', fontFamily: BODY, marginBottom: 8 }}>← All deliveries</button>
-              <div style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 13 }}>
+              <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 15, marginBottom: 13 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <b style={{ fontSize: 16, fontWeight: 600 }}>{po.order_number}</b>
                   <span style={{ fontSize: 11.5, color: T.muted }}>expected {fmtDate(po.expected_date)}</span>
@@ -1290,36 +1286,36 @@ export default function InventoryStaffApp() {
                 const q = recvQty[l.id] ?? 0
                 const diff = q - (Number(l.quantity_ordered) || 0)
                 return (
-                  <div key={l.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
+                  <div key={l.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <b style={{ fontSize: 13.5, fontWeight: 600 }}>{l.product_name}</b>
                       <span style={{ fontSize: 11, color: T.muted }}>ordered {l.quantity_ordered}{l.unit_cost != null ? ` · ${money(l.unit_cost)}/u` : ''}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', margin: '11px 0 6px' }}>
                       <button onClick={() => setRecvQty(s => ({ ...s, [l.id]: Math.max(0, (s[l.id] ?? 0) - 1) }))} style={{ width: 42, height: 42, borderRadius: 13, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 22, fontWeight: 600, color: T.green, cursor: 'pointer' }}>−</button>
-                      <input value={q} onChange={e => setRecvQty(s => ({ ...s, [l.id]: Math.max(0, Math.round(Number(e.target.value) || 0)) }))} inputMode="numeric" style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 38, fontWeight: 600, width: 72, textAlign: 'center', border: 'none', outline: 'none', color: T.ink }} />
+                      <input value={q} onChange={e => setRecvQty(s => ({ ...s, [l.id]: Math.max(0, Math.round(Number(e.target.value) || 0)) }))} inputMode="numeric" style={{ fontFamily: DISPLAY, fontSize: 38, fontWeight: 600, width: 72, textAlign: 'center', border: 'none', outline: 'none', color: T.ink }} />
                       <button onClick={() => setRecvQty(s => ({ ...s, [l.id]: (s[l.id] ?? 0) + 1 }))} style={{ width: 42, height: 42, borderRadius: 13, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 22, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                     </div>
                     {diff !== 0 && <div style={{ fontSize: 11, textAlign: 'center', color: diff < 0 ? T.amber : T.green, marginBottom: 6 }}>{diff < 0 ? `${Math.abs(diff)} short of ordered` : `${diff} over ordered`}</div>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                       <span style={{ fontSize: 11, color: T.muted, whiteSpace: 'nowrap' }}>Expiry (optional)</span>
-                      <input type="date" value={recvExpiry[l.id] ?? ''} onChange={e => setRecvExpiry(s => ({ ...s, [l.id]: e.target.value }))} style={{ flex: 1, padding: '7px 10px', borderRadius: 9, border: `1px solid ${T.line}`, background: T.paper, color: T.ink, fontFamily: BODY, fontSize: 12.5, outline: 'none' }} />
+                      <input type="date" value={recvExpiry[l.id] ?? ''} onChange={e => setRecvExpiry(s => ({ ...s, [l.id]: e.target.value }))} style={{ flex: 1, padding: '7px 10px', borderRadius: 9, border: `1.5px solid ${T.line}`, background: T.paper, color: T.ink, fontFamily: BODY, fontSize: 12.5, outline: 'none' }} />
                     </div>
                   </div>
                 )
               })}
-              <textarea value={recvNote} onChange={e => setRecvNote(e.target.value)} placeholder="Note (optional) — e.g. one box damaged…" rows={2} style={{ width: '100%', padding: '11px 13px', borderRadius: 11, border: `1px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 10, resize: 'vertical' }} />
+              <textarea value={recvNote} onChange={e => setRecvNote(e.target.value)} placeholder="Note (optional) — e.g. one box damaged…" rows={2} style={{ width: '100%', padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none', marginBottom: 10, resize: 'vertical' }} />
               {recvMsg && <p style={{ fontSize: 12.5, color: recvMsg.startsWith('✓') ? T.green : T.red, marginBottom: 10 }}>{recvMsg}</p>}
-              <button onClick={() => submitReceive(po)} disabled={recvSubmitting} style={{ width: '100%', background: T.green, color: '#fff', border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: recvSubmitting ? 0.6 : 1 }}>{recvSubmitting ? 'Receiving…' : 'Confirm delivery'}</button>
+              <button onClick={() => submitReceive(po)} disabled={recvSubmitting} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 14, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: recvSubmitting ? 0.6 : 1 }}>{recvSubmitting ? 'Receiving…' : 'Confirm delivery'}</button>
               <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>Received as <b style={{ color: T.green }}>{acting?.name}</b> · increments stock, captures cost, opens a batch.</div>
             </>
           ) : receiveState === 'empty' ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>📦</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>No deliveries waiting</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When a purchase order is sent to a supplier it appears here to receive. Create POs from the dashboard.</p></div>
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>📦</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>No deliveries waiting</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When a purchase order is sent to a supplier it appears here to receive. Create POs from the dashboard.</p></div>
           ) : (
             <>
               <div style={{ margin: '2px 2px 10px', fontSize: 14, fontWeight: 600 }}>Awaiting receipt</div>
               {(receiveData?.receivable ?? []).map(p => (
-                <button key={p.id} onClick={() => openReceivePo(p)} style={{ width: '100%', textAlign: 'left', background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: 'pointer', fontFamily: BODY, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <button key={p.id} onClick={() => openReceivePo(p)} style={{ width: '100%', textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: 'pointer', fontFamily: BODY, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                   <div><b style={{ fontSize: 14, fontWeight: 600 }}>{p.order_number}</b><div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{p.items.length} line{p.items.length === 1 ? '' : 's'} · expected {fmtDate(p.expected_date)}</div></div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: T.green, background: T.greenSoft, borderRadius: 8, padding: '6px 11px', whiteSpace: 'nowrap' }}>Receive →</span>
                 </button>
@@ -1328,7 +1324,7 @@ export default function InventoryStaffApp() {
                 <>
                   <div style={{ margin: '14px 2px 10px', fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.4px' }}>Recently received</div>
                   {(receiveData?.recent ?? []).map(p => (
-                    <div key={p.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 12, padding: '11px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={p.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 12, padding: '11px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div><b style={{ fontSize: 13, fontWeight: 600 }}>{p.order_number}</b><div style={{ fontSize: 11, color: T.muted }}>by {p.received_by ?? '—'} · {fmtDate(p.received_at)}</div></div>
                       <span style={{ fontSize: 10, fontWeight: 700, color: T.sage, background: T.sageSoft, borderRadius: 7, padding: '4px 9px' }}>✓ done</span>
                     </div>
@@ -1359,11 +1355,11 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Transfer', 'Move stock between outlets')}
         {body(
           transferState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(2)].map((_, i) => <div key={i} style={{ height: 150, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(2)].map((_, i) => <div key={i} style={{ height: 150, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : transferState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load transfers</p><button onClick={() => { setTransferData(null); loadTransfer() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load transfers</p><button onClick={() => { setTransferData(null); loadTransfer() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : transferState === 'empty' ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🔁</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>No transfers right now</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Create a stock transfer between outlets from the dashboard. It walks through approve → send → receive here.</p></div>
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🔁</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>No transfers right now</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Create a stock transfer between outlets from the dashboard. It walks through approve → send → receive here.</p></div>
           ) : (
             <>
               {transferMsg && <p style={{ fontSize: 12.5, color: transferMsg.startsWith('✓') ? T.green : T.red, marginBottom: 12, background: transferMsg.startsWith('✓') ? T.sageSoft : T.redSoft, borderRadius: 10, padding: '10px 12px' }}>{transferMsg}</p>}
@@ -1372,19 +1368,19 @@ export default function InventoryStaffApp() {
                 const na = nextAction(tr.status)
                 const busy = transferBusy === tr.id
                 return (
-                  <div key={tr.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
+                  <div key={tr.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 11, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
                       <span style={{ fontSize: 13.5, fontWeight: 600 }}>{tr.from_name} <span style={{ color: T.muted }}>→</span> {tr.to_name}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, color: sm.col, background: sm.bg, padding: '3px 9px', borderRadius: 7, textTransform: 'uppercase', letterSpacing: '.3px' }}>{sm.label}</span>
                     </div>
                     {tr.items.map(it => (
-                      <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 2px', borderTop: `1px solid ${T.line}`, fontSize: 12.5 }}>
+                      <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 2px', borderTop: `1.5px solid ${T.line}`, fontSize: 12.5 }}>
                         <span style={{ flex: 1 }}>{it.product_name}</span>
                         <span style={{ color: T.muted }}>{tr.status === 'received' && it.quantity_received != null ? `${it.quantity_received} received` : tr.status === 'in_transit' && it.quantity_sent != null ? `${it.quantity_sent} sent` : `${it.quantity_approved} qty`}</span>
                       </div>
                     ))}
                     {na ? (
-                      <button disabled={busy} onClick={() => transferAction(tr.id, na.action)} style={{ width: '100%', marginTop: 11, background: T.green, color: '#fff', border: 0, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : na.label}</button>
+                      <button disabled={busy} onClick={() => transferAction(tr.id, na.action)} style={{ width: '100%', marginTop: 11, background: P.lime, color: P.ink, border: 0, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : na.label}</button>
                     ) : (
                       <div style={{ width: '100%', marginTop: 11, background: T.sageSoft, color: T.green, borderRadius: 12, padding: 12, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>✓ Completed</div>
                     )}
@@ -1412,18 +1408,18 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Expiring', 'Batches nearing expiry')}
         {body(
           expState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 16, background: '#fff', border: `1px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : expState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load expiring stock</p><button onClick={() => { setExpData(null); loadExpiring() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: T.green, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load expiring stock</p><button onClick={() => { setExpData(null); loadExpiring() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : expState === 'empty' ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🌿</div><p style={{ fontSize: 18, fontFamily: DISPLAY, fontStyle: 'italic', marginBottom: 6 }}>Nothing tracked for expiry</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Batches with an expiry date appear here as they near their use-by. Add an expiry when receiving a delivery.</p></div>
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🌿</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>Nothing tracked for expiry</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Batches with an expiry date appear here as they near their use-by. Add an expiry when receiving a delivery.</p></div>
           ) : (
             <>
               {c && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
                   {([['expired', c.expired], ['urgent', c.urgent], ['soon', c.soon]] as const).map(([b, n]) => {
                     const m = bucketMeta(b)
-                    return <div key={b} style={{ flex: 1, background: m.bg, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}><div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: m.col, lineHeight: 1 }}>{n}</div><div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{m.label}</div></div>
+                    return <div key={b} style={{ flex: 1, background: m.bg, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}><div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: m.col, lineHeight: 1 }}>{n}</div><div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{m.label}</div></div>
                   })}
                 </div>
               )}
@@ -1432,7 +1428,7 @@ export default function InventoryStaffApp() {
                 const m = bucketMeta(b.bucket)
                 const busy = expBusy === b.id
                 return (
-                  <div key={b.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderLeft: `3px solid ${m.col}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
+                  <div key={b.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderLeft: `3px solid ${m.col}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                       <b style={{ fontSize: 14, fontWeight: 600 }}>{b.product_name}</b>
                       <span style={{ fontSize: 11, fontWeight: 700, color: m.col }}>{b.days_left < 0 ? `${Math.abs(b.days_left)}d ago` : `${b.days_left}d left`}</span>
