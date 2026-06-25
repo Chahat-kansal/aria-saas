@@ -46,7 +46,7 @@ export async function degradedGroundedAnswer(args: {
   // If every provider failed, hand back an honest "all down" message (NOT a fabricated answer).
   if (!text || provider === 'none') {
     return {
-      reply: 'Aria\'s AI providers are all briefly unavailable right now. Your data is safe — please try again in a few minutes.',
+      reply: 'Aria\'s thinking cap is off for a moment — your data is safe and everything else keeps working. Give it another go in a bit.',
       provider: 'none',
     }
   }

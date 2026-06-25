@@ -170,6 +170,14 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
 
   try {
     for (let iter = 0; iter < maxIter; iter++) {
+      // ASK-ARIA-COST-AND-FALLBACK (FIX 2) — stabilise the cache prefix: cache the tool definitions (large,
+      // rarely change within a conversation) by putting a cache_control breakpoint on the LAST tool. This makes
+      // the whole tools block a cache-READ prefix segment across turns instead of re-paying for it every turn
+      // (the data showed cache_write rotating ~21k). The system block keeps its own breakpoint.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cachedTools: any[] = params.tools.length > 0
+        ? params.tools.map((t, i) => i === params.tools.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t)
+        : params.tools
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const requestBody: any = {
         model: modelId,
@@ -179,7 +187,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
           text: params.systemPrompt,
           cache_control: { type: 'ephemeral' },
         }],
-        tools: params.tools,
+        tools: cachedTools,
         messages,
         ...(params.toolChoice ? { tool_choice: params.toolChoice } : {}),
       }

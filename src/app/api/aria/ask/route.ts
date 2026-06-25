@@ -9,7 +9,7 @@ import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from '@/lib/aria/providers/anthropic'
-import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, recordTotalOutage, isTransientError } from '@/lib/aria/circuit-breaker'
+import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, recordTotalOutage, isAnthropicUnreachable } from '@/lib/aria/circuit-breaker'
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
 import { findCachedAnswer } from '@/lib/aria/cached-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
@@ -1936,6 +1936,32 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // ARIA_POS_TOOLS includes the Tavily web_search tool (structured results with title+URL for citations)
   const allTools = [...ARIA_POS_TOOLS]
 
+  // FIX 2 — INTENT-SCOPED SLIM CONTEXT for data lookups. A factual lookup FETCHES what it needs via read tools,
+  // so it doesn't need the full ~30k pre-assembled system prompt + all ~30 tools (which cost the same as a
+  // strategic ask — shipping ~43k input tokens even for "who is my best customer"). Send a compact grounded
+  // prompt + the read-tool subset; strategic/council/action questions keep the rich context. Quality preserved
+  // — the model still calls the data tools and names the real figures, just without the kitchen sink.
+  const READ_TOOL_NAMES = new Set(['query_sales', 'query_customers', 'query_inventory', 'compare_periods', 'query_bookings', 'query_online_orders', 'query_business_data', 'get_hourly_sales', 'get_product_sales_detail', 'get_cashier_performance', 'query_bank_balance', 'get_business_profile', 'get_top', 'get_summary', 'get_reviews', 'get_profit_leaks', 'run_calculation'])
+  let effectiveSystemPrompt = systemPrompt
+  let effectiveTools = allTools
+  if (isDataLookup && !isImageRequest) {
+    effectiveTools = allTools.filter(t => READ_TOOL_NAMES.has((t as { name: string }).name))
+    effectiveSystemPrompt = `You are Aria, the AI business assistant for ${ctx.business_name ?? 'this business'} — an Australian small business. The owner asked a DIRECT DATA LOOKUP.
+
+YOU MUST CALL A DATA TOOL to answer — NEVER reply "I don't have data" or "I can't determine that" without FIRST calling the relevant tool. Map the question to a tool:
+- best/top customer, who spends most, customer spend → call get_top (e.g. {"metric":"customers"}) or query_customers
+- top seller / best-selling / most popular product → call get_top (e.g. {"metric":"products"}) or get_product_sales_detail
+- revenue / sales / takings (today, this week, this month) → call get_summary or query_sales
+- what's low / stock / on hand → call query_inventory
+- reviews / rating → call get_reviews
+- anything else about the business → call query_business_data or the closest read tool
+Call the tool, read its result, then answer.
+
+ANSWER CONCISELY: the name/number they asked for + at most ONE short sentence of context. No advisory, no recommendations, no "what this means"/"next move", no campaign/strategy suggestions unless they explicitly ask for advice. Lead with the answer.
+
+GROUNDING (absolute): every number, name, ranking or count MUST come from a tool result in THIS turn — never invent, estimate, or round. Currency A$ (never USD). Australian spelling. Only say you don't have the data if the tool genuinely returned nothing.`
+  }
+
   // ── IMAGE FAST-PATH ──────────────────────────────────────────────────────
   // Skip the entire Anthropic tool loop for image requests.
   // The loop (2 API calls + image gen) takes 20-50s and regularly hits the 60s limit.
@@ -2003,10 +2029,10 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   } else {
     toolResult = await callAnthropicWithTools({
       model: routedModel,
-      systemPrompt,
+      systemPrompt: effectiveSystemPrompt,
       userPrompt,
       priorMessages: historyMessages,
-      tools: allTools,
+      tools: effectiveTools,
       // ALSO (audit Phase 4): destructive / outbound tools must NOT auto-fire from a chat answer. Intercept
       // them and return a not-executed notice so Aria proposes the change and asks the owner to confirm via
       // the action flow, rather than silently changing a price or sending a message mid-answer.
@@ -2029,18 +2055,19 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     })
 
     const emptyResult = toolResult.success && (!toolResult.raw || toolResult.raw.trim().length === 0)
-    if (!toolResult.success && !isTransientError(toolResult.error_message)) {
-      // Hard failure (auth/billing/config) — surface it; never mask an engineering problem as "degraded".
-      console.error('[aria/ask] non-transient Anthropic failure:', toolResult.error_message)
-      return NextResponse.json({ error: 'Aria is temporarily unavailable. Please try again shortly.' }, { status: 500 })
-    }
     if (!toolResult.success || emptyResult) {
-      // Transient failure (or empty answer after retries) → degrade gracefully through the fallback chain.
-      const rec = await recordAnthropicFailure(toolResult.error_message ?? 'empty tool-loop result')
-      const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: false })
+      // FIX 1 — CROSS-PROVIDER FALLBACK: ANY failure (transient OR provider-level: out-of-credit/billing/auth/
+      // rate-limit) falls over to a DIFFERENT provider (Gemini), never a customer-facing 500. When the WHOLE
+      // Anthropic provider is unreachable, skip it in the degrade chain (skipAnthropic) so we go straight to
+      // Gemini instead of wasting a timeout re-hitting a dead provider. The previous code 500'd on a credit/
+      // billing error ("Aria is temporarily unavailable") instead of failing over — that was the bug.
+      const errMsg = toolResult.error_message ?? 'empty tool-loop result'
+      const providerDown = isAnthropicUnreachable(errMsg)
+      const rec = await recordAnthropicFailure(errMsg)
+      const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: providerDown })
       degradedProvider = deg.provider
       if (rec.incidentId) await recordAnthropicFallbackProvider(rec.incidentId, deg.provider)
-      console.warn('[aria/ask] degraded answer served by', deg.provider, 'business', bid)
+      console.warn('[aria/ask] degraded answer served by', deg.provider, 'business', bid, 'providerDown:', providerDown)
       toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
     } else {
       // Healthy Anthropic response — close any open circuit.
@@ -2048,6 +2075,18 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
+
+  // FIX 1 — log WHICH provider served this turn when we failed over, so fallback firing is visible in
+  // aria_ai_calls (gemini→'google', openai→'openai'). The failed Anthropic attempt already logged its own row.
+  if (degradedProvider) {
+    void logAICallSafe({
+      business_id: bid, agent_key: 'ask_aria', role: 'chat',
+      provider: degradedProvider === 'gemini' ? 'google' : degradedProvider === 'openai' ? 'openai' : degradedProvider === 'haiku' ? 'anthropic' : 'other',
+      success: degradedProvider !== 'none',
+      request_summary: 'cross_provider_fallback',
+      response_summary: `served_by:${degradedProvider}`,
+    })
+  }
 
   // ── API-RESILIENCE-1B — total outage (EVERY provider down) ───────────────
   // The fallback chain returned provider 'none' → not a single hiccup, the whole AI layer is offline.
@@ -2060,8 +2099,8 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     const cached = await findCachedAnswer(bid, message)
     const isCached = !!cached
     const reply = cached
-      ? `All AI providers are briefly offline. Here's your most recent related answer from ${cached.relative} — your live data may have changed since:\n\n${cached.answer}`
-      : 'Aria\'s AI is temporarily offline across all providers — this is rare and usually clears within minutes. Your POS, payments, stock, customers, bookings and every other feature are working normally. Please try Aria again shortly.'
+      ? `Aria's thinking cap is off for a moment — here's your most recent related answer from ${cached.relative} (your live data may have changed since):\n\n${cached.answer}`
+      : 'Aria\'s thinking cap is off for a moment — your data is safe and everything else (POS, payments, stock, customers, bookings) keeps working as normal. Give it another go in a bit.'
 
     let outageConvId = conversationId
     try { outageConvId = await upsertConversation(bid, user.id, conversationId, message, reply, 'ai_outage') }

@@ -5,7 +5,6 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
 // ── Evidence rules — injected into every system prompt ────────────────
 const EVIDENCE_RULES = `EVIDENCE-BASED OUTPUTS — MANDATORY:
@@ -100,15 +99,32 @@ async function callClaude(task: AiTask, userPrompt: string, maxTokens: number): 
 }
 
 // ── Gemini Flash ───────────────────────────────────────────────────────
+// ASK-ARIA-COST-AND-FALLBACK: the @google/generative-ai SDK call to gemini-2.5-flash was erroring
+// ("Error fetching from …/models/gemini-2.5-flash"), so the cross-provider failover skipped Gemini and fell
+// through to OpenAI. Use the same proven direct REST call as src/lib/aria/providers/gemini.ts (v1beta
+// generateContent), which works against gemini-2.5-flash with the GEMINI_API_KEY in env.
 async function callGemini(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '')
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    systemInstruction: SYSTEM_PROMPTS[task],
-    generationConfig: { maxOutputTokens: maxTokens },
-  })
-  const result = await model.generateContent(userPrompt)
-  return result.response.text()
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPTS[task] }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.2 },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    },
+  )
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  const data = await res.json() as Record<string, unknown>
+  const candidates = data.candidates as Array<Record<string, unknown>> | undefined
+  const content = candidates?.[0]?.content as Record<string, unknown> | undefined
+  const parts = content?.parts as Array<Record<string, unknown>> | undefined
+  return (parts?.[0]?.text as string) ?? ''
 }
 
 // ── GPT-4o mini ───────────────────────────────────────────────────────

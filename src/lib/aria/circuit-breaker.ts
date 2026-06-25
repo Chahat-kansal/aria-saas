@@ -36,6 +36,20 @@ export function isTransientError(msg: string | null | undefined): boolean {
   return /529|503|500|overload|rate.?limit|429|timed out|timeout|econnreset|etimedout|socket hang up|fetch failed|network|aborted|service unavailable/.test(m)
 }
 
+/**
+ * ASK-ARIA-COST-AND-FALLBACK (FIX 1): is the WHOLE Anthropic provider unreachable (not a single-model blip)?
+ * This is the superset that should trigger CROSS-PROVIDER failover (→ Gemini) and skip re-hitting Anthropic:
+ * out-of-credit/billing (the real bug), auth (401/403), rate-limit (429), and repeated 5xx/timeout/network.
+ * Distinct from isTransientError (which deliberately excludes billing/auth so they trip an engineer, not a
+ * customer-facing 500) — here we treat them as "provider down, fail over gracefully" so the owner still gets
+ * an answer from Gemini instead of an error.
+ */
+export function isAnthropicUnreachable(msg: string | null | undefined): boolean {
+  const m = (msg ?? '').toLowerCase()
+  if (!m) return false
+  return /credit balance|billing|quota|insufficient|payment|401|403|unauthorized|authentication|invalid x-api-key|permission|429|rate.?limit|529|503|500|overload|timed out|timeout|econnreset|etimedout|socket hang up|fetch failed|network|aborted|service unavailable/.test(m)
+}
+
 /** Is the Anthropic circuit currently OPEN? Returns the open incident id when so. */
 export async function isAnthropicCircuitOpen(): Promise<{ open: boolean; incidentId?: string }> {
   try {
