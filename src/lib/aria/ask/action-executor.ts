@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { PlannedAction } from './action-planner'
 import { buildPromotionRow, normalisePromoKind } from './promotion-writer'
@@ -8,6 +10,39 @@ import { adjustOutletStock, setOutletStock, resolveOutletId } from '@/lib/invent
 // that fools the planner still cannot push an unconfirmed catalog-wide mutation through the executor.
 const MASS_MUTATION_THRESHOLD = 20      // RC2: >20 resolved products ⇒ require explicit confirm
 const ADD_STOCK_CLAMP = 100_000         // RC6: a single add bigger than this ⇒ require explicit confirm
+
+// BUGFIX-ASKARIA-RC4: DB-enforced idempotent promo insert. The executor-local 60s read-dedup (below) is a cheap
+// fast-path for sequential double-clicks, but it RACES under true concurrency (5 simultaneous creates all read
+// "none exists" then all insert → 5 rows). The durable invariant is the DB: a deterministic idempotency_key
+// (business + normalized-name + type + value + scope + coarse 60s bucket) guarded by a PARTIAL UNIQUE INDEX. The
+// first concurrent insert wins; the racers hit 23505 and we return the winner's row (idempotent success). Other
+// promo paths (dashboard/POS) write NO key → the partial index ignores them (RULE 0). The coarse time bucket
+// means a deliberate re-creation in a later minute has a different key and is allowed.
+function promoIdempotencyKey(businessId: string, row: Record<string, unknown>): string {
+  const bucket = Math.floor(Date.now() / 60_000)
+  const norm = String(row.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const val = row.discount_percent ?? row.discount_amount ?? row.bundle_price ?? null
+  const scope = JSON.stringify({ a: row.applies_to ?? null, c: row.category_id ?? null, p: row.product_ids ?? [] })
+  return createHash('sha256').update([businessId, norm, row.promotion_type, String(val), scope, bucket].join('|')).digest('hex').slice(0, 40)
+}
+
+async function insertPromotionIdempotent(
+  supabase: SupabaseClient, businessId: string, row: Record<string, unknown>,
+): Promise<{ ok: true; id: string; name: string; deduped: boolean } | { ok: false; error: string }> {
+  const idemKey = promoIdempotencyKey(businessId, row)
+  const { data, error } = await supabase.from('pos_promotions').insert({ ...row, idempotency_key: idemKey }).select('id,name').maybeSingle()
+  if (error) {
+    // 23505 = the partial-unique race: another concurrent create with the same key already landed. Return it.
+    if (error.code === '23505') {
+      const { data: existing } = await supabase.from('pos_promotions').select('id,name')
+        .eq('business_id', businessId).eq('idempotency_key', idemKey).maybeSingle()
+      if (existing) return { ok: true, id: existing.id as string, name: existing.name as string, deduped: true }
+    }
+    return { ok: false, error: error.message }
+  }
+  if (!data) return { ok: false, error: 'Failed to create promotion' }
+  return { ok: true, id: data.id as string, name: data.name as string, deduped: false }
+}
 
 export interface ExecutionResult {
   ok: boolean
@@ -364,17 +399,20 @@ export async function executeAction(
           break
         }
 
-        const { data: promo, error: promoErr } = await supabase
-          .from('pos_promotions').insert(built.row).select('id,name').single()
-        if (promoErr || !promo) {
-          return { ok: false, affected_count: 0, error: promoErr?.message ?? 'Failed to create promotion', rollback_available: false }
+        // RC4: DB-enforced idempotent insert (partial-unique key + 23505 catch) — the durable backstop for the
+        // concurrency race the 60s read-dedup above can't close.
+        const promoIns = await insertPromotionIdempotent(supabase, businessId, built.row as Record<string, unknown>)
+        if (!promoIns.ok) {
+          return { ok: false, affected_count: 0, error: promoIns.error ?? 'Failed to create promotion', rollback_available: false }
         }
-        entityIds = [(promo as { id: string }).id]
+        const promo = { id: promoIns.id, name: promoIns.name }
+        entityIds = [promo.id]
         affectedCount = 1
         beforeState = {}
         afterState = {
-          promotion_id: (promo as { id: string }).id,
-          name: (promo as { name: string }).name,
+          promotion_id: promo.id,
+          name: promo.name,
+          deduped: promoIns.deduped,
           promotion_type: built.row.promotion_type,
           discount_percent: built.row.discount_percent ?? null,
           discount_amount: built.row.discount_amount ?? null,
@@ -435,16 +473,18 @@ export async function executeAction(
         })
         if (!catBuilt.ok) return { ok: false, affected_count: 0, error: catBuilt.error, rollback_available: false }
 
-        const { data: catPromo, error: catPromoErr } = await supabase
-          .from('pos_promotions').insert(catBuilt.row).select('id,name').single()
-        if (catPromoErr || !catPromo) {
-          return { ok: false, affected_count: 0, error: catPromoErr?.message ?? 'Failed to create category promotion', rollback_available: false }
+        // RC4: same DB-enforced idempotent insert as create_promotion.
+        const catIns = await insertPromotionIdempotent(supabase, businessId, catBuilt.row as Record<string, unknown>)
+        if (!catIns.ok) {
+          return { ok: false, affected_count: 0, error: catIns.error ?? 'Failed to create category promotion', rollback_available: false }
         }
-        entityIds = [(catPromo as { id: string }).id]
+        const catPromo = { id: catIns.id, name: catIns.name }
+        entityIds = [catPromo.id]
         affectedCount = 1
         beforeState = {}
         afterState = {
-          promotion_id: (catPromo as { id: string }).id,
+          promotion_id: catPromo.id,
+          deduped: catIns.deduped,
           name: (catPromo as { name: string }).name,
           promotion_type: 'percentage_discount',
           discount_percent: pct,
