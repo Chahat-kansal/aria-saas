@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 
 const L = { bg: '#f0f7f4', card: '#fff', text: '#1a2e22', muted: '#6b7c72', green: '#7FB897', dark: '#2D5240', border: '#d4e8db', red: '#ef4444' }
 
@@ -12,8 +13,9 @@ interface Booking {
   businesses: { name: string; booking_link_slug: string | null } | null
 }
 
-export default function CancelPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params)
+export default function CancelPage() {
+  // BUGFIX-BOOK-USE-HOOK: Next 14 passes params as a plain object — use(params) threw. useParams() is correct.
+  const token = (useParams()?.token as string) ?? ''
   const [booking, setBooking] = useState<Booking | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)

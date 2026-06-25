@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect, Suspense, use } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams, useParams } from 'next/navigation'
 
 const L = { bg: '#f0f7f4', card: '#fff', text: '#1a2e22', muted: '#6b7c72', green: '#7FB897', dark: '#2D5240', border: '#d4e8db', red: '#ef4444', amber: '#f59e0b' }
 
@@ -207,8 +207,9 @@ function ManageContent({ slug }: { slug: string }) {
   )
 }
 
-export default function ManagePage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params)
+export default function ManagePage() {
+  // BUGFIX-BOOK-USE-HOOK: Next 14 passes params as a plain object — use(params) threw. useParams() is correct.
+  const slug = (useParams()?.slug as string) ?? ''
   return (
     <div style={{ minHeight: '100vh', background: L.bg, fontFamily: 'Inter,sans-serif', padding: '40px 16px' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>

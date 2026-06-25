@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 
 const L = { bg: '#f0f7f4', card: '#fff', text: '#1a2e22', muted: '#6b7c72', green: '#7FB897', dark: '#2D5240', border: '#d4e8db', red: '#ef4444' }
 
@@ -18,9 +19,12 @@ function iStyle(): React.CSSProperties {
   return { width: '100%', padding: '10px 14px', borderRadius: 8, border: `1px solid ${L.border}`, background: '#fff', color: L.text, fontSize: 14, boxSizing: 'border-box' }
 }
 
-export default function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params)
+export default function BookingPage() {
+  // BUGFIX-BOOK-USE-HOOK: this is Next 14 — route params arrive as a plain object, so use(params) threw
+  // "unsupported type passed to use()". useParams() is the correct client-component hook (version-agnostic).
+  const slug = (useParams()?.slug as string) ?? ''
   const [biz, setBiz] = useState<Business | null>(null)
+  const [loadState, setLoadState] = useState<'loading' | 'ok' | 'unavailable'>('loading')
   const [services, setServices] = useState<Service[]>([])
   const [step, setStep] = useState<'service' | 'date' | 'time' | 'details' | 'done'>('service')
   const [selService, setSelService] = useState<Service | null>(null)
@@ -37,6 +41,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   })
 
   useEffect(() => {
+    if (!slug) { setLoadState('unavailable'); return }
     fetch(`/api/bookings/public?slug=${slug}`)
       .then(r => r.json())
       .then(d => {
@@ -44,8 +49,13 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
           setBiz(d.business)
           setServices(d.services ?? [])
           if ((d.services ?? []).length === 0) setStep('date')
+          setLoadState('ok')
+        } else {
+          // BUGFIX-BOOK-USE-HOOK: unknown slug / business not taking bookings → clean empty state, never a crash.
+          setLoadState('unavailable')
         }
       })
+      .catch(() => setLoadState('unavailable'))
   }, [slug])
 
   useEffect(() => {
@@ -85,6 +95,16 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
 
   const today = dateStr(new Date())
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekOf, i))
+
+  if (loadState === 'unavailable') return (
+    <div style={{ minHeight: '100vh', background: L.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,sans-serif', padding: '40px 16px' }}>
+      <div style={{ maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: L.dark, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 14 }}>📅</div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: L.text, margin: '0 0 8px' }}>Online bookings aren&apos;t available</h1>
+        <p style={{ fontSize: 14, color: L.muted, lineHeight: 1.6 }}>This business isn&apos;t taking online bookings right now. Please contact them directly to make an appointment.</p>
+      </div>
+    </div>
+  )
 
   if (!biz) return (
     <div style={{ minHeight: '100vh', background: L.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,sans-serif' }}>

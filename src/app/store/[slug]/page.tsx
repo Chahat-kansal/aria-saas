@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useMemo, use } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { useParams } from 'next/navigation'
 
 // WIRE-6 — public storefront. Reads canonical pos_online_settings (by slug) + pos_products menu,
 // themed; pickup/delivery per settings; min-order enforced; checkout → /api/public/place-order.
@@ -8,8 +9,9 @@ interface Store { business_id: string; store_name: string; slug: string; accept_
 
 const money = (n: number) => '$' + n.toFixed(2)
 
-export default function StorefrontPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params)
+export default function StorefrontPage() {
+  // BUGFIX-BOOK-USE-HOOK: Next 14 passes params as a plain object — use(params) threw. useParams() is correct.
+  const slug = (useParams()?.slug as string) ?? ''
   const [store, setStore] = useState<Store | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
