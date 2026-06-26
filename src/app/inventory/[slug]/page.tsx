@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { P, JAKARTA, HARD_SHADOW, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
 import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton, PipelStat, PIcon } from '@/components/inventory/ui/pipel'
+import { PipelScanner } from '@/components/inventory/ui/PipelScanner'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -120,6 +121,12 @@ export default function InventoryStaffApp() {
   const [scanCount, setScanCount] = useState<number | null>(null)
   const [scanCountMsg, setScanCountMsg] = useState<{ variance: number; review: boolean } | null>(null)
   const [scanCounting, setScanCounting] = useState(false)
+  // INV-SCAN-CAMERA — camera vs manual entry. cameraSupported is detected client-side (secure context + getUserMedia);
+  // SSR/unsupported devices default to manual. cameraDenied notes a blocked permission so the fallback explains why.
+  const [scanMode, setScanMode] = useState<'camera' | 'type'>('camera')
+  const [cameraSupported, setCameraSupported] = useState(false)
+  const [cameraDenied, setCameraDenied] = useState(false)
+  useEffect(() => { setCameraSupported(typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && (typeof window === 'undefined' || window.isSecureContext !== false)) }, [])
   // INV-1-FINISH — add-to-catalogue (barcode/search not found). notFoundCtx holds the prefill (barcode + any
   // Open Food Facts name/category); addForm is the editable form once the user chooses to add.
   const [notFoundCtx, setNotFoundCtx] = useState<{ barcode: string; name: string; category: string } | null>(null)
@@ -1266,12 +1273,23 @@ export default function InventoryStaffApp() {
                 <svg width="28" height="28" fill="none" stroke={T.sage} strokeWidth={2} viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10" /></svg>
               </div>
               <p style={{ fontFamily: DISPLAY, fontSize: 18 }}>Scan a barcode</p>
-              <p style={{ fontSize: 11.5, color: '#9aa3b2', marginTop: 2, lineHeight: 1.5 }}>No camera here — type the barcode, or search by name below.</p>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <input value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runScan(scanInput, 'barcode') }} placeholder="Barcode…" inputMode="numeric"
-                  style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: '1px solid rgba(255,255,255,.14)', background: 'rgba(255,255,255,.06)', color: '#fff', fontFamily: BODY, fontSize: 13, outline: 'none' }} />
-                <button onClick={() => runScan(scanInput, 'barcode')} style={{ background: T.sage, color: '#0E1812', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Look up</button>
-              </div>
+              {scanMode === 'camera' && cameraSupported ? (
+                <>
+                  <p style={{ fontSize: 11.5, color: '#9aa3b2', marginTop: 2, lineHeight: 1.5 }}>Point the rear camera at a barcode.</p>
+                  <PipelScanner active={scanMode === 'camera'} onDecode={t => runScan(t, 'barcode')} onDenied={() => { setScanMode('type'); setCameraDenied(true) }} />
+                  <button onClick={() => setScanMode('type')} style={{ marginTop: 11, background: 'none', border: 'none', color: '#9aa3b2', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>type the barcode instead</button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 11.5, color: cameraDenied ? '#ffb4b2' : '#9aa3b2', marginTop: 2, lineHeight: 1.5 }}>{cameraDenied ? 'Camera blocked — type the barcode, or search by name below.' : 'Type the barcode, or search by name below.'}</p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <input value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runScan(scanInput, 'barcode') }} placeholder="Barcode…" inputMode="numeric"
+                      style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: '1px solid rgba(255,255,255,.14)', background: 'rgba(255,255,255,.06)', color: '#fff', fontFamily: BODY, fontSize: 13, outline: 'none' }} />
+                    <button onClick={() => runScan(scanInput, 'barcode')} style={{ background: T.sage, color: '#0E1812', border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Look up</button>
+                  </div>
+                  {cameraSupported && <button onClick={() => { setScanMode('camera'); setCameraDenied(false) }} style={{ marginTop: 11, background: 'none', border: 'none', color: '#9aa3b2', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>{cameraDenied ? 'try the camera again' : 'use the camera'}</button>}
+                </>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
