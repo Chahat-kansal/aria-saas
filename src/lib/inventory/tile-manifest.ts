@@ -49,7 +49,7 @@ const SUPER_ONLY = ['supermarket'] as InvIndustry[]                             
 export const INVENTORY_TILES: TileEntry[] = [
   // ── Core (every industry; café sees all of these) ──
   { id: 'scan', label: 'Scan', sublabel: 'look up an item', icon: 'scan', route: 'scan', industries: ALL, capabilities: [] },
-  { id: 'count', label: 'Stock count', sublabel: 'count on hand', icon: 'check-square', route: 'tasks', industries: ALL, capabilities: [] },
+  { id: 'count', label: 'Stock count', sublabel: 'count on hand', icon: 'check-square', route: 'stocktake', industries: ALL, capabilities: [] },
   { id: 'price_check', label: 'Price check', sublabel: 'scan a price', icon: 'tag', route: 'scan', industries: ALL, capabilities: [] },
   { id: 'locate', label: 'Locate stock', sublabel: 'find where it is', icon: 'map-pin', route: 'scan', industries: ALL, capabilities: [] },
   { id: 'receive', label: 'Receive', sublabel: 'log a delivery', icon: 'truck', route: 'receive', industries: ALL, capabilities: [], badge: 'receive' },

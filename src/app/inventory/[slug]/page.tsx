@@ -97,7 +97,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -183,6 +183,21 @@ export default function InventoryStaffApp() {
   const [expState, setExpState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
   const [expBusy, setExpBusy] = useState<string | null>(null)
   const [expMsg, setExpMsg] = useState('')
+  // INV-4 — stocktake / cycle / perpetual counting
+  interface CycleItem { product_id: string; name: string; abc_tier: 'A' | 'B' | 'C'; expected_qty: number; last_counted_at: string | null; days_since: number | null; due_score: number }
+  interface StLine { product_id: string; product_name: string | null; expected_qty: number; counted_qty: number | null; variance_qty: number | null; variance_cents: number | null }
+  const [stType, setStType] = useState<'full' | 'cycle' | 'perpetual' | null>(null)
+  const [stSession, setStSession] = useState<{ id: string; count_type: string; status: string } | null>(null)
+  const [stState, setStState] = useState<'pick' | 'loading' | 'active' | 'submitted'>('pick')
+  const [stLines, setStLines] = useState<StLine[]>([])
+  const [stCycle, setStCycle] = useState<CycleItem[]>([])
+  const [stPick, setStPick] = useState<{ id: string; name: string; expected: number } | null>(null)
+  const [stCountVal, setStCountVal] = useState(0)
+  const [stPattern, setStPattern] = useState<string | null>(null)
+  const [stSearch, setStSearch] = useState('')
+  const [stMatches, setStMatches] = useState<ScanMatch[]>([])
+  const [stBusy, setStBusy] = useState(false)
+  const [stSummary, setStSummary] = useState<{ variances: number; reviews: number; total_cents: number; counted: number } | null>(null)
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -548,6 +563,68 @@ export default function InventoryStaffApp() {
     } catch { setExpMsg('Something went wrong.') }
     setExpBusy(null)
   }
+
+  // ── INV-4 stocktake / cycle / perpetual ──
+  const loadStLines = useCallback(async (sessionId: string) => {
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/stocktake?session_id=${sessionId}`)
+      if (r.ok) { const d = await r.json(); setStLines(d.lines ?? []) }
+    } catch { /* ignore */ }
+  }, [slug])
+  const loadStCycle = useCallback(async (oid: string | null) => {
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/stocktake?cycle=1${oid ? `&outlet_id=${oid}` : ''}`)
+      if (r.ok) { const d = await r.json(); setStCycle(d.cycle ?? []) }
+    } catch { /* ignore */ }
+  }, [slug])
+  async function openStocktakeUi(type: 'full' | 'cycle' | 'perpetual') {
+    setStBusy(true); setStType(type); setStState('loading'); setStSummary(null); setStPick(null); setStLines([]); setStCycle([])
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/stocktake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'open', type, outlet_id: outletId }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.session) {
+        setStSession({ id: d.session.id, count_type: d.session.count_type, status: d.session.status })
+        await loadStLines(d.session.id)
+        if (type === 'cycle') await loadStCycle(outletId)
+        setStState('active')
+      } else setStState('pick')
+    } catch { setStState('pick') }
+    setStBusy(false)
+  }
+  async function stSearchRun(term: string) {
+    if (!term.trim()) return
+    setStBusy(true); setStMatches([])
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.mode === 'search') setStMatches(d.matches ?? [])
+    } catch { /* ignore */ }
+    setStBusy(false)
+  }
+  async function stPickProduct(id: string, name: string, expected: number) {
+    setStPick({ id, name, expected }); setStCountVal(expected); setStMatches([]); setStSearch(''); setStPattern(null)
+    try { const r = await fetch(`/api/inventory/app/${slug}/stocktake?pattern=${id}${outletId ? `&outlet_id=${outletId}` : ''}`); if (r.ok) { const d = await r.json(); setStPattern(d.pattern?.fact ?? null) } } catch { /* ignore */ }
+  }
+  async function stSubmitLine() {
+    if (!stSession || !stPick) return
+    setStBusy(true)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/stocktake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'count', session_id: stSession.id, product_id: stPick.id, counted: stCountVal }) })
+      if (r.ok) { setStPick(null); await loadStLines(stSession.id); if (stType === 'cycle') await loadStCycle(outletId) }
+    } catch { /* ignore */ }
+    setStBusy(false)
+  }
+  async function stSubmitSession() {
+    if (!stSession) return
+    setStBusy(true)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/stocktake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit', session_id: stSession.id }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.result) { setStSummary({ variances: d.result.variances, reviews: d.result.reviews_raised, total_cents: d.result.total_variance_cents, counted: d.result.lines_counted }); setStState('submitted'); loadHome(outletId) }
+    } catch { /* ignore */ }
+    setStBusy(false)
+  }
+  function resetStocktake() { setStType(null); setStSession(null); setStLines([]); setStCycle([]); setStPick(null); setStSummary(null); setStState('pick') }
 
   // Bootstrap + resume session.
   useEffect(() => {
@@ -1539,6 +1616,139 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── STOCKTAKE / CYCLE / PERPETUAL (INV-4) ──
+  if (tab === 'stocktake') {
+    const outletName = boot?.outlets.find(o => o.id === outletId)?.name.replace(/^\[TEST\]\s*/, '') ?? ''
+    const modes: Array<{ k: 'full' | 'cycle' | 'perpetual'; icon: string; label: string; sub: string }> = [
+      { k: 'full', icon: 'check-square', label: 'Full stocktake', sub: 'count everything in this outlet' },
+      { k: 'cycle', icon: 'trending-up', label: 'ABC cycle count', sub: 'today’s smart subset — A items first' },
+      { k: 'perpetual', icon: 'scan', label: 'Spot count', sub: 'quick single-item accuracy check' },
+    ]
+    const countedIds = new Set(stLines.filter(l => l.counted_qty != null).map(l => l.product_id))
+    const varChip = (v: number | null, cents: number | null) => {
+      const n = Number(v) || 0
+      const col = n === 0 ? P.muted : n < 0 ? P.red : P.ink
+      const txt = n === 0 ? 'match' : `${n > 0 ? '+' : ''}${n}`
+      return <span style={{ fontWeight: 800, fontSize: 13, color: col }}>{txt}{n !== 0 && cents != null ? ` · ${cents < 0 ? '−' : '+'}$${Math.abs(cents / 100).toFixed(2)}` : ''}</span>
+    }
+    return shell(
+      <>
+        {statusbar}{header(true, 'stocktake', outletName ? `counting · ${outletName}` : 'counting verifies truth')}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px' }}>
+          {/* mode picker */}
+          {stState === 'pick' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 11.5, color: P.muted, fontWeight: 600, lineHeight: 1.5, marginBottom: 2 }}>A count never changes stock. You count, Aria spots the variance, the owner approves the correction.</div>
+              {modes.map(m => (
+                <div key={m.k} onClick={() => !stBusy && openStocktakeUi(m.k)} style={{ display: 'flex', alignItems: 'center', gap: 13, background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 20, padding: '14px 15px', boxShadow: HARD_SHADOW, cursor: 'pointer' }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 13, border: `1.5px solid ${P.ink}`, background: P.lime, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PIcon name={m.icon} size={22} /></div>
+                  <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 16, lineHeight: 1.1 }}>{m.label}</div><div style={{ fontSize: 12, color: P.muted, fontWeight: 500, marginTop: 2 }}>{m.sub}</div></div>
+                  <PIcon name="back" size={18} stroke={P.muted} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {stState === 'loading' && <div style={{ height: 160, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />}
+
+          {stState === 'submitted' && stSummary && (
+            <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 18, boxShadow: HARD_SHADOW, textAlign: 'center' }}>
+              <div style={{ width: 52, height: 52, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: P.lime, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}><PIcon name="check-square" size={26} /></div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>count submitted</div>
+              <div style={{ fontSize: 12.5, color: P.muted, fontWeight: 500, lineHeight: 1.5, margin: '6px 0 14px' }}>{stSummary.counted} counted · <b style={{ color: P.ink }}>{stSummary.variances}</b> variance{stSummary.variances === 1 ? '' : 's'} sent to owner review. Stock was <b style={{ color: P.ink }}>not</b> changed — the owner approves each correction.</div>
+              <div style={{ display: 'flex', gap: 9, marginBottom: 4 }}>
+                <PipelStat n={stSummary.counted} k="counted" />
+                <PipelStat n={stSummary.variances} k="variances" tone={stSummary.variances > 0 ? 'warn' : undefined} />
+                <PipelStat n={`$${Math.abs(stSummary.total_cents / 100).toFixed(0)}`} k="variance $" tone={stSummary.total_cents !== 0 ? 'alert' : undefined} />
+              </div>
+              <div style={{ marginTop: 14 }}><PipelButton onClick={resetStocktake}>New count</PipelButton></div>
+            </div>
+          )}
+
+          {stState === 'active' && stSession && (
+            <>
+              {/* session bar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.ink, color: '#fff', borderRadius: 16, padding: '11px 14px', marginBottom: 13 }}>
+                <div><div style={{ fontWeight: 800, fontSize: 14, textTransform: 'capitalize' }}>{stSession.count_type} count</div><div style={{ fontSize: 11, color: '#cfd2cc' }}>{countedIds.size} counted{outletName ? ` · ${outletName}` : ''}</div></div>
+                <button onClick={resetStocktake} style={{ background: 'none', border: 'none', color: '#cfd2cc', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>switch</button>
+              </div>
+
+              {/* active count card */}
+              {stPick ? (
+                <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW, marginBottom: 14 }}>
+                  <div style={{ fontWeight: 800, fontSize: 17, lineHeight: 1.1 }}>{stPick.name}</div>
+                  <div style={{ fontSize: 12, color: P.muted, fontWeight: 600, marginTop: 2 }}>Aria expects <b style={{ color: P.ink }}>{stPick.expected}</b> on hand</div>
+                  {stPattern && <div style={{ fontSize: 11.5, color: P.amber, fontWeight: 700, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '8px 11px', marginTop: 11, lineHeight: 1.4 }}>⚑ {stPattern} — flagged for the owner</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '16px 0' }}>
+                    <button onClick={() => setStCountVal(v => Math.max(0, v - 1))} style={{ width: 48, height: 48, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 24, fontWeight: 800, cursor: 'pointer' }}>−</button>
+                    <input value={stCountVal} onChange={e => setStCountVal(Math.max(0, Math.round(Number(e.target.value) || 0)))} inputMode="numeric" style={{ width: 84, textAlign: 'center', fontSize: 40, fontWeight: 800, border: 'none', outline: 'none', color: P.ink, fontFamily: BODY }} />
+                    <button onClick={() => setStCountVal(v => v + 1)} style={{ width: 48, height: 48, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 24, fontWeight: 800, cursor: 'pointer' }}>+</button>
+                  </div>
+                  <div style={{ textAlign: 'center', marginBottom: 14 }}>{varChip(stCountVal - stPick.expected, null)} <span style={{ fontSize: 11, color: P.muted, fontWeight: 600 }}>variance</span></div>
+                  <PipelButton onClick={stSubmitLine} disabled={stBusy}>{stBusy ? 'Recording…' : 'Record count'}</PipelButton>
+                  <button onClick={() => { setStPick(null); setStPattern(null) }} style={{ width: '100%', marginTop: 9, background: 'none', color: P.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>cancel</button>
+                </div>
+              ) : (
+                <>
+                  {/* product source: cycle list OR search */}
+                  {stType === 'cycle' ? (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>today’s cycle list · {stCycle.length} items</div>
+                      {stCycle.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center' }}>Nothing due to count right now.</div>}
+                      {stCycle.map(c => {
+                        const done = countedIds.has(c.product_id)
+                        return (
+                          <div key={c.product_id} onClick={() => !done && stPickProduct(c.product_id, c.name, c.expected_qty)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '11px 13px', marginBottom: 9, cursor: done ? 'default' : 'pointer', opacity: done ? 0.55 : 1 }}>
+                            <span style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${P.ink}`, background: c.abc_tier === 'A' ? P.lime : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{c.abc_tier}</span>
+                            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.name}</div><div style={{ fontSize: 11, color: P.muted, fontWeight: 500 }}>expect {c.expected_qty} · {c.last_counted_at ? `${c.days_since}d since count` : 'never counted'}</div></div>
+                            {done ? <PIcon name="check-square" size={20} /> : <PIcon name="back" size={16} stroke={P.muted} />}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 11 }}>
+                        <input value={stSearch} onChange={e => setStSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') stSearchRun(stSearch) }} placeholder="Find a product to count…"
+                          onFocus={e => { e.currentTarget.style.boxShadow = `0 0 0 3px ${P.lime}` }} onBlur={e => { e.currentTarget.style.boxShadow = 'none' }}
+                          style={{ flex: 1, padding: '11px 13px', borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', color: P.ink, fontFamily: BODY, fontSize: 14, outline: 'none' }} />
+                        <button onClick={() => stSearchRun(stSearch)} style={{ background: P.lime, color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 14, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Find</button>
+                      </div>
+                      {stMatches.map(m => (
+                        <div key={m.id} onClick={() => stPickProduct(m.id, m.name, m.on_hand)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '11px 13px', marginBottom: 9, cursor: 'pointer' }}>
+                          <div><div style={{ fontWeight: 700, fontSize: 13.5 }}>{m.name}</div><div style={{ fontSize: 11, color: P.muted }}>{m.sku ? `SKU ${m.sku} · ` : ''}expect {m.on_hand}</div></div>
+                          <PIcon name="back" size={16} stroke={P.muted} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* counted lines */}
+              {stLines.filter(l => l.counted_qty != null).length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>counted this session</div>
+                  {stLines.filter(l => l.counted_qty != null).map(l => (
+                    <div key={l.product_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 14, padding: '10px 13px', marginBottom: 8 }}>
+                      <div><div style={{ fontWeight: 700, fontSize: 13 }}>{l.product_name ?? 'Item'}</div><div style={{ fontSize: 11, color: P.muted }}>{l.expected_qty} → {l.counted_qty}</div></div>
+                      {varChip(l.variance_qty, l.variance_cents)}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* submit */}
+              <PipelButton onClick={stSubmitSession} disabled={stBusy || countedIds.size === 0}>{stBusy ? 'Submitting…' : `Submit count · ${countedIds.size} item${countedIds.size === 1 ? '' : 's'}`}</PipelButton>
+              <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5, fontWeight: 500 }}>Submitting sends variances to the owner review queue. Stock never changes until the owner approves.</div>
+            </>
+          )}
+        </div>
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -1548,6 +1758,7 @@ export default function InventoryStaffApp() {
   const routeTile = (route: string) => {
     switch (route) {
       case 'scan': case 'gap_scan': setTab('scan'); break
+      case 'stocktake': resetStocktake(); setTab('stocktake'); break
       case 'tasks': case 'count': setTab('tasks'); break
       case 'receive': setReceiveData(null); setOpenPo(null); setTab('receive'); break
       case 'transfer': setTransferData(null); setTab('transfer'); break
