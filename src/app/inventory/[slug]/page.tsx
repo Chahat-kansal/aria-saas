@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation'
 import { P, JAKARTA, HARD_SHADOW, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
 import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton, PipelStat, PIcon } from '@/components/inventory/ui/pipel'
 import { PipelScanner } from '@/components/inventory/ui/PipelScanner'
+import { enqueueWrite, allWrites, removeWrite, markFailed } from '@/lib/inventory/offline-queue'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -100,6 +101,12 @@ export default function InventoryStaffApp() {
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
   const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake' | 'order' | 'fresh' | 'loss'>('home')
   const pinSubmitting = useRef(false)
+  // INV-OFFLINE — offline detection + a queue for the safe writes (waste/temp/count). Online path unchanged.
+  const [online, setOnline] = useState(true)
+  const [pending, setPending] = useState(0)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+  const [offlineToast, setOfflineToast] = useState('')
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
   const [tasksState, setTasksState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
@@ -274,6 +281,7 @@ export default function InventoryStaffApp() {
   }, [slug])
 
   const loadHome = useCallback(async (oid: string | null) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) { setHomeState(s => (s === 'ok' || s === 'empty') ? s : 'error'); return } // INV-OFFLINE: keep last-loaded data, the banner explains offline
     setHomeState('loading')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/home${oid ? `?outlet_id=${oid}` : ''}`)
@@ -287,6 +295,7 @@ export default function InventoryStaffApp() {
   }, [slug])
 
   const loadTasks = useCallback(async (oid: string | null) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) { setTasksState(s => (s === 'ok' || s === 'empty') ? s : 'error'); return } // INV-OFFLINE: keep last data offline
     setTasksState('loading')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/tasks${oid ? `?outlet_id=${oid}` : ''}`)
@@ -307,9 +316,15 @@ export default function InventoryStaffApp() {
 
   async function submitCount(task: Task) {
     if (!task.product_id) return
+    const payload = { product_id: task.product_id, counted: countVal, task_id: task.id, outlet_id: outletId, product_name: task.product_name }
+    if (!online) { // INV-OFFLINE — queue the count; variance/review computes on sync (a count is verification, not a stock move)
+      const ok = await enqueueSafe(`/api/inventory/app/${slug}/count`, payload, `Count ${task.product_name ?? 'item'} = ${countVal}`)
+      if (ok) { const v = countVal - (task.expected ?? 0); setCountMsg({ variance: v, review: v !== 0, time: 'offline' }); setTasksData(td => td ? { ...td, tasks: td.tasks.map(t => t.id === task.id ? { ...t, status: 'done', completed_by: acting?.id ?? null } : t) } : td) }
+      return
+    }
     setSubmitting(true)
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: task.product_id, counted: countVal, task_id: task.id, outlet_id: outletId, product_name: task.product_name }) })
+      const r = await fetch(`/api/inventory/app/${slug}/count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) {
         setCountMsg({ variance: d.variance, review: d.review_raised, time: new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase() })
@@ -334,6 +349,7 @@ export default function InventoryStaffApp() {
   useEffect(() => { if (stage === 'app' && tab === 'review' && !reviewData) loadReview(outletId) }, [stage, tab, reviewData, outletId, loadReview])
 
   async function reviewAction(id: string, action: 'accept' | 'investigate' | 'dismiss') {
+    if (!online) { blockOffline(); return } // accept moves stock — needs a connection
     setActingReview(id)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_id: id, action }) })
@@ -391,9 +407,11 @@ export default function InventoryStaffApp() {
   }
   async function submitScanCount(product: ScanProduct) {
     if (scanCount == null) return
+    const payload = { product_id: product.id, counted: scanCount, outlet_id: outletId, product_name: product.name }
+    if (!online) { const ok = await enqueueSafe(`/api/inventory/app/${slug}/count`, payload, `Count ${product.name} = ${scanCount}`); if (ok) setScanCountMsg({ variance: scanCount - product.on_hand, review: scanCount - product.on_hand !== 0 }); return }
     setScanCounting(true)
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: product.id, counted: scanCount, outlet_id: outletId, product_name: product.name }) })
+      const r = await fetch(`/api/inventory/app/${slug}/count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setScanCountMsg({ variance: d.variance, review: d.review_raised }); loadHome(outletId) }
     } catch { /* ignore */ }
@@ -435,10 +453,12 @@ export default function InventoryStaffApp() {
   }
   async function submitWaste() {
     if (!wasteProduct) return
+    const reason = wasteReason === 'other' ? (wasteOther.trim() || 'other') : wasteReason
+    const payload = { product_id: wasteProduct.id, product_name: wasteProduct.name, quantity: wasteQty, reason, outlet_id: outletId }
+    if (!online) { const ok = await enqueueSafe(`/api/inventory/app/${slug}/waste`, payload, `Waste ${wasteProduct.name} ×${wasteQty}`); if (ok) setWasteMsg({ cost_cents: wasteProduct.unit_cost != null ? Math.round(wasteProduct.unit_cost * wasteQty * 100) : null, spike: false }); return }
     setWasteSubmitting(true)
     try {
-      const reason = wasteReason === 'other' ? (wasteOther.trim() || 'other') : wasteReason
-      const r = await fetch(`/api/inventory/app/${slug}/waste`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: wasteProduct.id, product_name: wasteProduct.name, quantity: wasteQty, reason, outlet_id: outletId }) })
+      const r = await fetch(`/api/inventory/app/${slug}/waste`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setWasteMsg({ cost_cents: d.cost_cents, spike: d.spike }); loadWasteToday(outletId); loadHome(outletId) }
     } catch { /* ignore */ }
@@ -479,6 +499,7 @@ export default function InventoryStaffApp() {
   }
   async function submitAdjust() {
     if (!adjustProduct) return
+    if (!online) { setAdjustErr('You’re offline — stock corrections need a connection.'); return }
     if (!adjustReason) { setAdjustErr('Pick a reason — corrections need one.'); return }
     setAdjustSubmitting(true); setAdjustErr('')
     try {
@@ -528,6 +549,7 @@ export default function InventoryStaffApp() {
   const ticketRemove = (id: string) => setTicketBatch(b => b.filter(x => x.id !== id))
   async function ticketSaveBatch() {
     if (!ticketName.trim() || ticketBatch.length === 0) return
+    if (!online) { setTicketMsg('You’re offline — saving a print batch needs a connection.'); return }
     setTicketSaving(true)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/ticket-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: ticketName.trim(), outlet_id: outletId, items: ticketBatch.map(x => ({ product_id: x.id, qty: x.qty })) }) })
@@ -575,6 +597,7 @@ export default function InventoryStaffApp() {
     setRecvQty(q); setRecvExpiry({}); setRecvNote(''); setRecvMsg('')
   }
   async function submitReceive(po: ReceivePO) {
+    if (!online) { setRecvMsg('You’re offline — receiving a delivery needs a connection.'); return }
     setRecvSubmitting(true); setRecvMsg('')
     try {
       const lines = po.items.map(l => ({ line_id: l.id, product_id: l.product_id, received_qty: recvQty[l.id] ?? 0, expiry_date: recvExpiry[l.id] || undefined }))
@@ -600,6 +623,7 @@ export default function InventoryStaffApp() {
   }, [slug])
   useEffect(() => { if (stage === 'app' && tab === 'transfer' && !transferData) loadTransfer() }, [stage, tab, transferData, loadTransfer])
   async function transferAction(id: string, action: 'approve' | 'send' | 'receive') {
+    if (!online) { setTransferMsg('You’re offline — transfers need a connection.'); return }
     setTransferBusy(id); setTransferMsg('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/transfer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transfer_id: id, action }) })
@@ -624,6 +648,7 @@ export default function InventoryStaffApp() {
   }, [slug])
   useEffect(() => { if (stage === 'app' && tab === 'expiring' && !expData) loadExpiring() }, [stage, tab, expData, loadExpiring])
   async function expiringAction(batchId: string, action: 'waste' | 'markdown') {
+    if (!online) { setExpMsg('You’re offline — reconnect to action expiring stock.'); return }
     setExpBusy(batchId); setExpMsg('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/expiring`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch_id: batchId, action }) })
@@ -713,6 +738,7 @@ export default function InventoryStaffApp() {
   useEffect(() => { if (stage === 'app' && tab === 'order') loadBuying(outletId) }, [stage, tab, outletId, loadBuying])
   async function draftFromGroup(g: BuyGroup) {
     if (g.needs_supplier || !g.supplier_id) return
+    if (!online) { setBuyMsg('You’re offline — drafting a PO needs a connection.'); return }
     setBuyBusy(g.supplier_id); setBuyMsg('')
     try {
       const lines = g.items.map(i => ({ product_id: i.product_id, product_name: i.name, quantity: i.suggested_qty, unit_cost: i.unit_cost }))
@@ -728,6 +754,7 @@ export default function InventoryStaffApp() {
     try { const r = await fetch(`/api/inventory/app/${slug}/buying?po=${id}`); if (r.ok) { const d = await r.json(); setBuyPo({ po: d.po, lines: d.lines ?? [] }) } } catch { /* ignore */ }
   }
   async function approveBuyPo(id: string) {
+    if (!online) { setBuyPermErr('You’re offline — a purchase order can’t be sent without a connection.'); return } // money: never queued
     setBuyBusy(id); setBuyPermErr('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/buying`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve', po_id: id }) })
@@ -773,6 +800,7 @@ export default function InventoryStaffApp() {
   useEffect(() => { if (stage === 'app' && tab === 'fresh') loadFresh(outletId) }, [stage, tab, outletId, loadFresh])
   async function prepRecipe() {
     if (!prepPick) return
+    if (!online) { blockOffline(); return } // prep depletes stock — needs a connection
     setFreshBusy(true); setPrepResult(null)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/fresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'prep', recipe_id: prepPick.id, batches: prepBatches, outlet_id: outletId }) })
@@ -784,9 +812,15 @@ export default function InventoryStaffApp() {
   }
   async function logTempUi() {
     if (!tempForm.reading.trim()) return
+    const payload = { action: 'log_temp', location: tempForm.location, reading_c: Number(tempForm.reading), threshold_c: tempForm.threshold.trim() ? Number(tempForm.threshold) : null, outlet_id: outletId }
+    if (!online) { // INV-OFFLINE — queue the reading (note: it timestamps at sync time, not measurement time — see INV-OFFLINE-2)
+      const ok = await enqueueSafe(`/api/inventory/app/${slug}/fresh`, payload, `Temp ${tempForm.location} ${tempForm.reading}°C`)
+      if (ok) { const pass = !tempForm.threshold.trim() || Number(tempForm.reading) <= Number(tempForm.threshold); setTempMsg(pass ? `✓ ${tempForm.location} ${tempForm.reading}°C — saved offline.` : `⚠ ${tempForm.location} ${tempForm.reading}°C — ABOVE limit, saved offline.`); setTempForm(f => ({ ...f, reading: '' })) }
+      return
+    }
     setFreshBusy(true); setTempMsg('')
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/fresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'log_temp', location: tempForm.location, reading_c: Number(tempForm.reading), threshold_c: tempForm.threshold.trim() ? Number(tempForm.threshold) : null, outlet_id: outletId }) })
+      const r = await fetch(`/api/inventory/app/${slug}/fresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setTempMsg(d.passed ? `✓ ${tempForm.location} ${tempForm.reading}°C — within safe range.` : `⚠ ${tempForm.location} ${tempForm.reading}°C — ABOVE the ${tempForm.threshold}°C limit. Flagged.`); setTempForm(f => ({ ...f, reading: '' })); loadFresh(outletId) }
     } catch { /* ignore */ }
@@ -813,6 +847,7 @@ export default function InventoryStaffApp() {
   }
   async function placeRecall() {
     if (!recallPick) return
+    if (!online) { setLossMsg('You’re offline — reconnect to place a hold.'); return }
     setLossBusy('recall'); setLossMsg('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'recall', product_id: recallPick.id, quantity: recallQty, reason: recallReason, outlet_id: outletId }) })
@@ -823,6 +858,7 @@ export default function InventoryStaffApp() {
     setLossBusy(null)
   }
   async function resolveHoldUi(holdId: string, resolution: 'released' | 'disposed' | 'returned_to_supplier') {
+    if (!online) { setLossPermErr('You’re offline — resolving a hold needs a connection.'); return }
     setLossBusy(holdId); setLossPermErr('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'resolve', hold_id: holdId, resolution, outlet_id: outletId }) })
@@ -832,6 +868,43 @@ export default function InventoryStaffApp() {
     } catch { setLossPermErr('Something went wrong.') }
     setLossBusy(null)
   }
+
+  // ── INV-OFFLINE — detect offline, queue safe writes, replay on reconnect ──
+  const refreshPending = useCallback(async () => { const w = await allWrites(); setPending(w.filter(x => x.status === 'pending').length) }, [])
+  const replayQueue = useCallback(async () => {
+    const w = (await allWrites()).filter(x => x.status === 'pending').sort((a, b) => a.client_ts - b.client_ts)
+    if (!w.length) return
+    setSyncing(true); let failed = 0
+    for (const e of w) {
+      try {
+        const r = await fetch(e.endpoint, { method: e.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e.payload) })
+        if (r.ok) { const d = await r.json().catch(() => ({})); if (d && d.ok === false) { await markFailed(e.id!, (d.error as string) ?? 'rejected'); failed++ } else await removeWrite(e.id!) }
+        else if (r.status >= 400 && r.status < 500 && r.status !== 401) { await markFailed(e.id!, `rejected (${r.status})`); failed++ }
+        // 401 (session expired) / 5xx / network mid-sync → leave pending, retry next reconnect
+      } catch { break } // a network blip mid-replay — stop, keep the rest pending
+    }
+    setSyncing(false); await refreshPending()
+    setSyncMsg(failed ? `${failed} change${failed === 1 ? '' : 's'} couldn’t sync — review` : 'Synced ✓')
+    setTimeout(() => setSyncMsg(''), 6000)
+    loadHome(outletId) // refresh the value hero etc. after the queue replays
+  }, [refreshPending, loadHome, outletId])
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') setOnline(navigator.onLine)
+    refreshPending()
+    const goOnline = () => { setOnline(true); replayQueue() }
+    const goOffline = () => setOnline(false)
+    if (typeof window !== 'undefined') { window.addEventListener('online', goOnline); window.addEventListener('offline', goOffline) }
+    return () => { if (typeof window !== 'undefined') { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline) } }
+  }, [refreshPending, replayQueue])
+  // Queue a SAFE write (waste/temp/count) + optimistic toast. Returns false if it couldn't be persisted.
+  const enqueueSafe = useCallback(async (endpoint: string, payload: unknown, label: string): Promise<boolean> => {
+    const ok = await enqueueWrite({ endpoint, method: 'POST', payload, label, client_ts: Date.now() })
+    if (ok) { await refreshPending(); setOfflineToast('✓ Saved offline — will sync when you reconnect'); setTimeout(() => setOfflineToast(''), 4000) }
+    else { setOfflineToast('Couldn’t save offline on this device — reconnect to record it'); setTimeout(() => setOfflineToast(''), 5000) }
+    return ok
+  }, [refreshPending])
+  // Block a NON-queueable write (money / stock move) when offline — clear message, never a silent fail.
+  const blockOffline = useCallback(() => { setOfflineToast('You’re offline — reconnect to do this'); setTimeout(() => setOfflineToast(''), 4000) }, [])
 
   // Bootstrap + resume session.
   useEffect(() => {
@@ -876,9 +949,23 @@ export default function InventoryStaffApp() {
   const avColor = (s: Staff, i: number) => (s.color && s.color !== '#6366f1') ? s.color : AV_PALETTE[i % AV_PALETTE.length]
 
   // ── shells (INV-PIPEL — Pipel chrome: ink-bordered phone, lime/ink top bar, time-aware greeting, fixed nav) ──
+  // INV-OFFLINE — a global offline / pending-sync banner + a transient toast (queued-saved / blocked-offline).
+  const offlineBanner = (!online || pending > 0 || syncing || syncMsg) ? (
+    <div style={{ flexShrink: 0, padding: '8px 16px', textAlign: 'center', fontSize: 12, fontWeight: 700, lineHeight: 1.35,
+      background: !online ? P.ink : syncMsg.includes('couldn') ? P.red : P.lime, color: !online ? P.lime : syncMsg.includes('couldn') ? '#fff' : P.ink }}>
+      {!online
+        ? (pending > 0 ? `Offline · ${pending} change${pending === 1 ? '' : 's'} waiting to sync` : 'You’re offline — counts, waste & temp logs save and sync when you reconnect')
+        : syncing ? `Syncing ${pending} change${pending === 1 ? '' : 's'}…`
+          : syncMsg ? syncMsg
+            : `${pending} change${pending === 1 ? '' : 's'} pending sync`}
+    </div>
+  ) : null
+  const offlineToastEl = offlineToast ? (
+    <div style={{ position: 'absolute', left: 16, right: 16, bottom: 92, zIndex: 50, background: P.ink, color: '#fff', borderRadius: 14, padding: '11px 14px', fontSize: 12.5, fontWeight: 700, textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,.25)' }}>{offlineToast}</div>
+  ) : null
   const shell = (children: React.ReactNode) => (
     <div style={{ minHeight: '100dvh', background: '#cfd2cc', display: 'flex', justifyContent: 'center', fontFamily: BODY, color: P.ink }}>
-      <div style={{ width: '100%', maxWidth: 440, background: P.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 0 60px rgba(20,30,20,.18)' }}>{children}</div>
+      <div style={{ width: '100%', maxWidth: 440, background: P.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 0 60px rgba(20,30,20,.18)' }}>{offlineBanner}{children}{offlineToastEl}</div>
     </div>
   )
   const statusbar = <PipelStatusBar right={`${boot?.business.name ?? 'Sip'} · PWA`} />
