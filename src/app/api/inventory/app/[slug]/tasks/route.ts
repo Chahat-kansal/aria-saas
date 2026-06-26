@@ -8,11 +8,12 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
-import { generateDailyTasks } from '@/lib/inventory/daily-tasks'
+import { generateDailyTasks, getTodayTasks } from '@/lib/inventory/daily-tasks'
+import { generateGuidanceTasks, completeTask } from '@/lib/inventory/guidance'
 
-// INV-STAFF-APP-2 — today's tasks for the acting staff. Generates (idempotently) from real signals, enriches
-// count tasks with the live "expected" (items_on_hand) for the count card, and computes the staff's real
-// habit pills (count accuracy from their own stock-take history, streak, left-today).
+// INV-STAFF-APP-2 / INV-6 — today's tasks for the acting staff. Generates (idempotently) the base par/cycle/expiry
+// set PLUS the INV-6 velocity/weather signals, enriches count tasks with the live "expected" (items_on_hand) for
+// the count card, and computes the staff's real habit pills. POST completes a non-count task (attributed).
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -24,7 +25,9 @@ async function _GET(req: Request, { params }: Params) {
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
   const outletId = await resolveOutletId(supabaseAdmin, bid, new URL(req.url).searchParams.get('outlet_id'))
-  const tasks = await generateDailyTasks(supabaseAdmin, bid, outletId)
+  await generateDailyTasks(supabaseAdmin, bid, outletId)        // base: par / cycle / expiry
+  await generateGuidanceTasks(supabaseAdmin, bid, outletId)     // INV-6: velocity / weather (idempotent, once/day)
+  const tasks = await getTodayTasks(supabaseAdmin, bid, outletId)
 
   // Enrich count/cycle_count tasks with the product's name/sku + live expected (items_on_hand).
   const productIds = Array.from(new Set(tasks.filter(t => t.product_id).map(t => t.product_id as string)))
@@ -68,4 +71,19 @@ async function _GET(req: Request, { params }: Params) {
   })
 }
 
+// POST — complete a non-count task (velocity/weather/expiring/receive), attributed. count/cycle_count tasks
+// complete through the INV-4 count flow (/count claims the task) — this never duplicates that path.
+async function _POST(req: Request, { params }: Params) {
+  const { slug } = await params
+  const bid = await resolveBusinessId(supabaseAdmin, slug)
+  if (!bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const acting = await getActingStaff(bid)
+  if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  const body = await req.json().catch(() => ({})) as { action?: string; task_id?: string }
+  if (body.action !== 'complete' || !body.task_id) return NextResponse.json({ error: 'action=complete and task_id required' }, { status: 400 })
+  const res = await completeTask(supabaseAdmin, bid, body.task_id, acting.staff_id)
+  return NextResponse.json({ ...res, by: acting.staff_name })
+}
+
 export const GET = withErrorCapture('inventory/app/tasks', _GET)
+export const POST = withErrorCapture('inventory/app/tasks:post', _POST)

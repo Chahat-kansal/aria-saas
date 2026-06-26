@@ -30,6 +30,13 @@ async function shape(supabase: SupabaseClient, businessId: string, outletId: str
   return ((data ?? []) as TaskRow[]).filter(() => true)
 }
 
+/** Read-only: today's tasks for a business/outlet (after generation). INV-6 re-reads this once it has added the
+ *  velocity/weather tasks on top of the base par/cycle/expiry set. */
+export async function getTodayTasks(supabase: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<TaskRow[]> {
+  const outletId = await resolveOutletId(supabase, businessId, outletIdIn ?? null)
+  return shape(supabase, businessId, outletId, aestDate())
+}
+
 /** Generate (idempotently) and return today's tasks for a business/outlet. */
 export async function generateDailyTasks(supabase: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<TaskRow[]> {
   const outletId = await resolveOutletId(supabase, businessId, outletIdIn ?? null)
