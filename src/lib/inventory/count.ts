@@ -60,9 +60,9 @@ export async function submitCount(supabase: SupabaseClient, p: CountParams): Pro
   } catch { /* cost unknown → 0 */ }
   if (outletId) {
     await supabase.from('pos_stock_takes').insert({
-      business_id: p.businessId, outlet_id: outletId, started_at: new Date().toISOString(), completed_at: new Date().toISOString(),
+      business_id: p.businessId, outlet_id: outletId, count_type: 'perpetual', started_at: new Date().toISOString(), completed_at: new Date().toISOString(),
       started_by: p.staffId, status: 'committed', items_counted: 1, items_with_variance: variance !== 0 ? 1 : 0,
-      total_variance_cents: varianceCents, notes: `Count via staff app${variance !== 0 ? ' — variance routed to owner review (stock NOT auto-adjusted)' : ' — matched'}`,
+      total_variance_cents: varianceCents, notes: `Perpetual count via staff app${variance !== 0 ? ' — variance routed to owner review (stock NOT auto-adjusted)' : ' — matched'}`,
     })
   }
 
