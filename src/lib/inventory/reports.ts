@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 import { computeParReadonly } from '@/lib/inventory/par-levels'
 import { getVisibleTiles, type InvCapability, type InvCapabilities } from '@/lib/inventory/tile-manifest'
+import { computeAvT } from '@/lib/inventory/avt'
 
 // INV-REPORTS — the inventory reporting spine. Deterministic, GROUNDED generators (NO LLM for any number —
 // pure computed data from the live tables). Each report returns structured sections for a period/outlet, and
@@ -11,7 +12,7 @@ import { getVisibleTiles, type InvCapability, type InvCapabilities } from '@/lib
 export type ReportType =
   | 'sold_vs_stock' | 'stock_value' | 'shrinkage_waste' | 'dead_stock' | 'reorder'
   | 'days_cover' | 'count_accuracy' | 'received_vs_ordered' | 'expiring' | 'movement_audit'
-  | 'transfers' | 'top_sellers' | 'margin'
+  | 'transfers' | 'top_sellers' | 'margin' | 'food_cost_variance'
 export type Period = 'daily' | 'weekly'
 
 // Each entry may carry capability gates (AND): a report only lists for a business that has ALL of them.
@@ -31,6 +32,7 @@ export const REPORT_LIBRARY: Array<{ type: ReportType; title: string; blurb: str
   { type: 'transfers', title: 'Transfers', blurb: 'Inter-outlet stock movements in the period', capabilities: ['multiOutlet'] },
   { type: 'expiring', title: 'Expiring stock', blurb: 'Items nearing expiry → markdown candidates', capabilities: ['perishable'] },
   { type: 'movement_audit', title: 'Stock movement audit', blurb: 'The adjustment + waste ledger for the period' },
+  { type: 'food_cost_variance', title: 'Food cost variance (AvT)', blurb: 'Theoretical ingredient usage (recipe × sold) vs actual depletion — the $ gap reveals over-portioning, waste or untracked loss' },
 ]
 
 /**
@@ -406,6 +408,64 @@ async function rMargin(sb: SupabaseClient, bid: string, outletId: string | null,
   }
 }
 
+// INV-AVT — Food cost variance: theoretical (recipe × sold) vs actual (depletion + waste). GROUNDING-TEETH: only
+// compute where recipe + sales + depletion history coexist. Delegates to computeAvT; formats results into the
+// standard ReportSection[] shape. Honest empty states throughout — no fabricated $/%.
+async function rFoodCostVariance(sb: SupabaseClient, bid: string, outletId: string | null, range: { start: string; end: string; label: string }): Promise<{ sections: ReportSection[]; note: string | null }> {
+  const avt = await computeAvT(sb, bid, outletId, range.start, range.end, range.label)
+  const sections: ReportSection[] = []
+
+  // Section 1: per-product summary
+  const unlinkedNote = avt.recipes_unlinked > 0
+    ? `${avt.recipes_unlinked} recipe${avt.recipes_unlinked !== 1 ? 's' : ''} exist but are not linked to POS products — link recipes to products to compute theoretical usage.`
+    : 'No recipes are linked to POS products yet.'
+  const prodRows: Array<Array<string | number>> = avt.product_results.map(r => {
+    if (r.status === 'no_sales') return [r.product_name, 0, '—', '—', '—', '— (no sales in period)']
+    if (r.status === 'no_linked_ingredients') return [r.product_name, r.units_sold, '—', '—', '—', '— (ingredients not linked to stock)']
+    if (r.status === 'depletion_not_tracked') return [r.product_name, r.units_sold, r.theoretical_cost_dollars != null ? money(r.theoretical_cost_dollars) : '—', '— (depletion not tracked)', '—', '—']
+    const gapStr = r.gap_dollars != null ? (r.gap_dollars < 0 ? '-' : '+') + money(Math.abs(r.gap_dollars)) + (r.gap_pct != null ? ` (${r.gap_pct > 0 ? '+' : ''}${r.gap_pct}%)` : '') : '—'
+    const dirStr = r.gap_dollars == null ? '—' : r.gap_dollars < -0.01 ? 'OVER-USED' : r.gap_dollars > 0.01 ? 'under-used' : 'on-spec'
+    return [r.product_name, r.units_sold, r.theoretical_cost_dollars != null ? money(r.theoretical_cost_dollars) : '—', r.actual_cost_dollars != null ? money(r.actual_cost_dollars) : '—', gapStr, r.food_cost_pct != null ? `${r.food_cost_pct}% food cost` : dirStr]
+  })
+  const totalRow: Array<string | number> | undefined = avt.total_gap_dollars != null
+    ? ['Total', '', '', '', (avt.total_gap_dollars < 0 ? '-' : '+') + money(Math.abs(avt.total_gap_dollars)), avt.total_gap_dollars < -0.01 ? 'net over-used' : avt.total_gap_dollars > 0.01 ? 'net under-used' : 'on-spec']
+    : undefined
+  sections.push({
+    title: 'Food cost variance by recipe (AvT)', columns: ['Product', 'Units sold', 'Theoretical cost', 'Actual cost', 'Gap $', 'Direction / Food cost %'],
+    rows: prodRows, empty: unlinkedNote, total_row: totalRow,
+  })
+
+  // Section 2: per-ingredient breakdown for computed products
+  for (const r of avt.product_results.filter(pr => pr.ingredients.length > 0 && pr.status !== 'no_sales' && pr.status !== 'no_linked_ingredients')) {
+    const ingRows = r.ingredients.map(i => {
+      const gapStr = i.gap_dollars != null ? (i.gap_dollars < 0 ? '-' : '+') + money(Math.abs(i.gap_dollars)) : '—'
+      const dirStr = i.direction === 'over' ? 'OVER' : i.direction === 'under' ? 'under' : 'on-spec'
+      return [i.ingredient_name, i.unit, i.theoretical_qty, i.actual_qty, i.gap_qty > 0 ? `+${i.gap_qty}` : String(i.gap_qty), gapStr, dirStr] as Array<string | number>
+    })
+    const thinBadge = r.thin_data && r.thin_reason ? ` ⚠ thin data` : ''
+    sections.push({
+      title: `${r.product_name} — ingredient variance${thinBadge}`,
+      columns: ['Ingredient', 'Unit', 'Theoretical qty', 'Actual qty', 'Gap qty', 'Gap $', 'Direction'],
+      rows: ingRows, empty: 'No linked ingredients.',
+    })
+  }
+
+  // Section 3: data quality flags — always shown when any flag exists
+  const flags: Array<Array<string | number>> = []
+  if (avt.recipes_unlinked > 0) flags.push([`${avt.recipes_unlinked} recipe${avt.recipes_unlinked !== 1 ? 's' : ''}`, '—', 'Not linked to a POS product — link to enable AvT'])
+  for (const r of avt.product_results) {
+    if (r.thin_reason) flags.push([r.product_name, r.units_sold, r.thin_reason])
+  }
+  if (flags.length) {
+    sections.push({ title: 'Data quality flags', columns: ['Item', 'Units sold', 'Flag'], rows: flags, empty: 'No data quality flags — all recipes have sufficient history.' })
+  }
+
+  return {
+    sections,
+    note: 'Theoretical = recipe spec × units sold (incl. wastage%). Actual = stock adjustments with reason recipe_depletion + waste log. Gap = theoretical − actual (+ = under-used, − = over-used). Food cost % = actual ingredient cost ÷ revenue. Only stock-linked ingredients tracked. Thin data shown honestly — AvT accuracy grows as depletion history builds. No numbers fabricated: all figures from real rows.',
+  }
+}
+
 /** Main entry — generate one report's structured data for a period/outlet. */
 export async function generateReport(sb: SupabaseClient, bid: string, type: ReportType, period: Period, outletId: string | null, dateStr?: string): Promise<ReportData> {
   const range = periodRange(period, dateStr)
@@ -427,6 +487,7 @@ export async function generateReport(sb: SupabaseClient, bid: string, type: Repo
         case 'transfers': return rTransfers(sb, bid, range)
         case 'top_sellers': return rTopSellers(sb, bid, range)
         case 'margin': return rMargin(sb, bid, outletId, range)
+        case 'food_cost_variance': return rFoodCostVariance(sb, bid, outletId, range)
         default: return { sections: [], note: null }
       }
     })(),

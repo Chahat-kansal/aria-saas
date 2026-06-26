@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { reorderSuggestions } from '@/lib/inventory/buying'
 import { tempStatus } from '@/lib/inventory/fresh'
+import { computeAvT } from '@/lib/inventory/avt'
+import { periodRange } from '@/lib/inventory/reports'
 
 // INV-6 — guidance (Tanpin-Kanri). Aria forms GROUNDED hypotheses from POS + weather + day, turns them into staff
 // tasks (inventory_tasks — reused), staff complete them (attributed). GROUNDING-TEETH: every "why" traces to a
@@ -126,6 +128,62 @@ export async function generateGuidanceTasks(sb: SupabaseClient, businessId: stri
     }
   }
   return { velocity_added: velAdded, weather_added: wxAdded, weather: wi }
+}
+
+// INV-AVT — Tanpin task generation for large food-cost gaps. Triggered when over-portion > 15% OR > $10 for the
+// period. Only fires for recipes with status='computed' (has real depletion data) and NOT thin_data (≥50%
+// coverage). GROUNDED: the % and $ in the task come from the real AvT computation, never fabricated.
+// Idempotent: upserts with (business_id, outlet_id, product_id, task_type='portioning', due_date).
+
+const AVT_TASK_OVERPORTION_PCT = -15   // gap_pct < -15 → over-portion > 15%
+const AVT_TASK_OVERSPEND_DOLLARS = -10 // gap_dollars < -10 → over-spent > $10
+
+export async function generateAvTTasks(
+  sb: SupabaseClient,
+  businessId: string,
+  outletIdIn?: string | null,
+  period: 'daily' | 'weekly' = 'weekly',
+): Promise<{ added: number; skipped_thin: number; skipped_no_data: number }> {
+  const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
+  const due = aestDate()
+
+  // Early-exit if we already ran portioning tasks today
+  const { data: existing } = await sb.from('inventory_tasks')
+    .select('id').eq('business_id', businessId).eq('due_date', due).eq('task_type', 'portioning').limit(1).maybeSingle()
+  if (existing?.id) return { added: 0, skipped_thin: 0, skipped_no_data: 0 }
+
+  const range = periodRange(period)
+  const avt = await computeAvT(sb, businessId, outletId, range.start, range.end, range.label)
+
+  let added = 0; let skippedThin = 0; let skippedNoData = 0
+  for (const r of avt.product_results) {
+    if (r.status !== 'computed') { skippedNoData++; continue }
+    if (r.thin_data) { skippedThin++; continue }
+    // Only flag over-portion (gap_dollars negative = spent more than recipe specifies)
+    if (!r.gap_dollars || r.gap_dollars >= 0) continue
+    if (r.gap_dollars > AVT_TASK_OVERSPEND_DOLLARS && (!r.gap_pct || r.gap_pct > AVT_TASK_OVERPORTION_PCT)) continue
+
+    const absPct = r.gap_pct != null ? Math.abs(r.gap_pct) : null
+    const absGap = Math.abs(r.gap_dollars)
+    const worstIng = r.ingredients.filter(i => i.direction === 'over').sort((a, b) => (a.gap_dollars ?? 0) - (b.gap_dollars ?? 0))[0]
+    const ingNote = worstIng ? ` (biggest: ${worstIng.ingredient_name})` : ''
+    const pctNote = absPct != null ? `${absPct.toFixed(1)}%` : ''
+    const title = `${r.product_name}: check portioning`
+    const detail = absPct != null
+      ? `${pctNote} more ingredient cost than recipe spec — $${absGap.toFixed(2)} over ${range.label}`
+      : `$${absGap.toFixed(2)} over recipe spec for ${range.label}`
+    const hypothesis = `${r.product_name} used ${absPct != null ? pctNote + ' more ingredient cost' : 'more ingredients'} than the recipe specifies`
+      + ingNote + ` over ${range.label} ($${absGap.toFixed(2)} gap, ${r.units_sold} unit${r.units_sold !== 1 ? 's' : ''} sold).`
+      + ' Check portioning technique and recipe adherence. Gap computed from live depletion data vs recipe spec — not an estimate.'
+
+    const { error } = await sb.from('inventory_tasks').upsert({
+      business_id: businessId, outlet_id: outletId, task_type: 'portioning',
+      product_id: r.product_id, title, detail, hypothesis,
+      priority: 26, generated_by: 'aria', due_date: due, status: 'open',
+    }, { onConflict: 'business_id,outlet_id,product_id,task_type,due_date', ignoreDuplicates: true })
+    if (!error) added++
+  }
+  return { added, skipped_thin: skippedThin, skipped_no_data: skippedNoData }
 }
 
 /** Mark a non-count task done — attributed, atomic (a re-complete is a no-op). count/cycle tasks complete via the
