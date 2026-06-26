@@ -209,6 +209,15 @@ export default function InventoryStaffApp() {
   const [buyMsg, setBuyMsg] = useState('')
   const [buyPo, setBuyPo] = useState<{ po: { id: string; order_number: string; status: string; total: number | null; created_by: string | null }; lines: Array<{ product_name: string; quantity_ordered: number; unit_cost: number | null; line_total: number | null }> } | null>(null)
   const [buyPermErr, setBuyPermErr] = useState('')
+  // INV-6 — Pulse + Handover (guidance) on the Tasks screen
+  interface PulseData { today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number } }
+  interface WeatherData { forecast_rain_pct: number | null; sufficient: boolean; matched_days: number; rain_days: number; dry_days: number; rain_lift_pct: number | null; reason: string | null }
+  interface HandoverData { done: Array<{ title: string; type: string; by: string }>; open: Array<{ title: string; type: string; why: string | null }>; flagged: { open_reviews: number; expiring: number; below_reorder: number } }
+  const [pulseData, setPulseData] = useState<PulseData | null>(null)
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null)
+  const [handoverData, setHandoverData] = useState<HandoverData | null>(null)
+  const [showHandover, setShowHandover] = useState(false)
+  const [completingTask, setCompletingTask] = useState<string | null>(null)
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -679,6 +688,27 @@ export default function InventoryStaffApp() {
     setBuyBusy(null)
   }
 
+  // ── INV-6 Pulse + Handover ──
+  const loadPulse = useCallback(async (oid: string | null) => {
+    try {
+      const [rp, rh] = await Promise.all([
+        fetch(`/api/inventory/app/${slug}/guidance${oid ? `?outlet_id=${oid}` : ''}`),
+        fetch(`/api/inventory/app/${slug}/guidance?handover=1${oid ? `&outlet_id=${oid}` : ''}`),
+      ])
+      if (rp.ok) { const d = await rp.json(); setPulseData(d.pulse ?? null); setWeatherData(d.weather ?? null) }
+      if (rh.ok) { const d = await rh.json(); setHandoverData(d.handover ?? null) }
+    } catch { /* non-fatal — Pulse is a bonus view */ }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'tasks') loadPulse(outletId) }, [stage, tab, outletId, loadPulse])
+  async function completeTaskUi(taskId: string) {
+    setCompletingTask(taskId)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'complete', task_id: taskId }) })
+      if (r.ok) { setTasksData(td => td ? { ...td, tasks: td.tasks.map(t => t.id === taskId ? { ...t, status: 'done', completed_by: acting?.id ?? null } : t) } : td); loadPulse(outletId) }
+    } catch { /* ignore */ }
+    setCompletingTask(null)
+  }
+
   // Bootstrap + resume session.
   useEffect(() => {
     if (!slug) return
@@ -811,21 +841,67 @@ export default function InventoryStaffApp() {
     const taskCard = (children: React.ReactNode, extra?: React.CSSProperties) => <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 18, padding: 14, marginBottom: 11, ...extra }}>{children}</div>
     const checkRow = (t: Task, isDone: boolean) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div onClick={() => { if (!isDone && (t.task_type === 'count' || t.task_type === 'cycle_count') && t.product_id) { setActiveId(t.id); setCountVal(t.expected ?? 0); setCountMsg(null) } }}
-          style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${P.ink}`, background: isDone ? P.lime : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <div onClick={() => {
+          if (isDone) return
+          if ((t.task_type === 'count' || t.task_type === 'cycle_count') && t.product_id) { setActiveId(t.id); setCountVal(t.expected ?? 0); setCountMsg(null) }
+          else completeTaskUi(t.id) // INV-6 — velocity/weather/expiring/receive complete here (attributed); count routes to the count card
+        }}
+          style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${P.ink}`, background: isDone ? P.lime : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: completingTask === t.id ? 0.5 : 1 }}>
           {isDone && <svg width="14" height="14" fill="none" stroke={P.ink} strokeWidth={3} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>}
         </div>
         <div style={{ flex: 1 }}>
           <b style={{ fontSize: 14, fontWeight: 600, textDecoration: isDone ? 'line-through' : 'none', color: isDone ? T.muted : T.ink }}>{t.title}</b>
-          {t.detail && <span style={{ display: 'block', fontSize: 11.5, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>{t.detail}</span>}
+          {(t.task_type === 'velocity' || t.task_type === 'weather') && t.hypothesis
+            ? <span style={{ display: 'block', fontSize: 11.5, color: P.muted, marginTop: 2, lineHeight: 1.4 }}>{t.hypothesis}</span>
+            : t.detail && <span style={{ display: 'block', fontSize: 11.5, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>{t.detail}</span>}
         </div>
+        {!isDone && (t.task_type === 'velocity' || t.task_type === 'weather') && <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 7, border: `1.5px solid ${P.ink}`, background: t.task_type === 'weather' ? '#fff' : P.lime, textTransform: 'uppercase' }}>{t.task_type}</span>}
+      </div>
+    )
+    // INV-6 — Pulse snapshot (grounded, per-outlet) + Handover
+    const pulseCard = pulseData && (
+      <div style={{ background: P.ink, color: '#fff', borderRadius: 22, padding: 16, marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div><div style={{ fontSize: 11, color: '#cfd2cc', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>pulse · today</div><div style={{ fontWeight: 800, fontSize: 28, lineHeight: 1.1, marginTop: 3 }}>${pulseData.today_revenue.toFixed(0)}</div></div>
+          {pulseData.vs_baseline_pct != null && <span style={{ fontSize: 12, fontWeight: 800, color: pulseData.vs_baseline_pct < 0 ? P.red : P.lime }}>{pulseData.vs_baseline_pct > 0 ? '+' : ''}{pulseData.vs_baseline_pct}% vs avg</span>}
+        </div>
+        <div style={{ fontSize: 11, color: '#9aa3b2', marginTop: 2 }}>{pulseData.today_txns} txns · baseline ${pulseData.baseline_avg.toFixed(0)}/day{pulseData.top_movers.length ? ` · top: ${pulseData.top_movers.map(m => m.name).slice(0, 2).join(', ')}` : ''}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
+          {([['done', pulseData.tasks_done, P.lime], ['open', pulseData.tasks_open, '#fff'], ['low', pulseData.attention.below_reorder, P.lime], ['expiring', pulseData.attention.expiring, '#fff'], ['review', pulseData.attention.open_reviews, '#fff']] as const).map(([k, v, col]) => (
+            <div key={k} style={{ flex: 1, textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 18, color: col as string }}>{v}</div><div style={{ fontSize: 9, color: '#9aa3b2', marginTop: 1 }}>{k}</div></div>
+          ))}
+        </div>
+        {weatherData && (
+          <div style={{ fontSize: 10.5, color: '#cfd2cc', marginTop: 12, paddingTop: 11, borderTop: '1px solid rgba(255,255,255,.12)', lineHeight: 1.4 }}>
+            ☂ rain {weatherData.forecast_rain_pct ?? '—'}% tomorrow · {weatherData.sufficient && weatherData.rain_lift_pct != null ? `your rain-day sales ${weatherData.rain_lift_pct >= 0 ? '+' : ''}${weatherData.rain_lift_pct}% (${weatherData.matched_days}d)` : `correlation: ${weatherData.reason ?? 'n/a'}`}
+          </div>
+        )}
+      </div>
+    )
+    const handoverSection = handoverData && (
+      <div style={{ marginTop: 18 }}>
+        <button onClick={() => setShowHandover(s => !s)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY }}>
+          <span style={{ fontWeight: 800, fontSize: 14 }}>shift handover</span>
+          <span style={{ fontSize: 11.5, color: P.muted, fontWeight: 600 }}>{handoverData.done.length} done · {handoverData.open.length} open {showHandover ? '▲' : '▼'}</span>
+        </button>
+        {showHandover && (
+          <div style={{ background: '#fff', border: `1.5px solid ${P.ink}`, borderTop: 'none', borderRadius: '0 0 16px 16px', padding: 14, marginTop: -8 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', margin: '2px 0 7px' }}>done this shift</div>
+            {handoverData.done.length === 0 ? <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Nothing completed yet.</div> : handoverData.done.map((d, i) => <div key={i} style={{ fontSize: 12.5, padding: '4px 0' }}>✓ {d.title} <span style={{ color: P.muted }}>· {d.by}</span></div>)}
+            <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', margin: '11px 0 7px' }}>still open ({handoverData.open.length})</div>
+            {handoverData.open.slice(0, 8).map((o, i) => <div key={i} style={{ fontSize: 12.5, padding: '4px 0' }}>○ {o.title} <span style={{ fontSize: 10, color: P.muted, border: `1px solid ${P.ink}`, borderRadius: 5, padding: '0 4px' }}>{o.type}</span></div>)}
+            <div style={{ fontSize: 11.5, color: P.amber, fontWeight: 700, marginTop: 11, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 10, padding: '8px 11px', lineHeight: 1.4 }}>⚑ next shift: {handoverData.flagged.below_reorder} to reorder · {handoverData.flagged.expiring} expiring · {handoverData.flagged.open_reviews} in review</div>
+          </div>
+        )}
       </div>
     )
     return shell(
       <>
         {statusbar}{tasksHeader}
         {body(
-          tasksState === 'loading' ? (
+          <>
+          {pulseCard}
+          {tasksState === 'loading' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: i === 1 ? 220 : 56, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
           ) : tasksState === 'error' ? (
             <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load your tasks</p><button onClick={() => loadTasks(outletId)} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
@@ -889,7 +965,9 @@ export default function InventoryStaffApp() {
                 </>
               )}
             </>
-          )
+          )}
+          {handoverSection}
+          </>
         )}
         {tabbar}
       </>
