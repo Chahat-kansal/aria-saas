@@ -37,9 +37,27 @@ function appliesTo(p: PromoRow, productId: string): boolean {
   return scope === 'all' || scope === 'everything' || scope === 'store'
 }
 
-/** Resolve one product's ticket price + real promo (or NULL — never a fabricated discount). */
+/** Resolve one product's ticket price + real promo (or NULL — never a fabricated discount). A SCHEDULED price
+ *  change (pos_scheduled_price_changes — the authoritative "correct/upcoming shelf price") takes precedence: the
+ *  label prints the new price with the original struck through. Then an active promo. Else the regular price
+ *  (a "reprint" — was_price null, no invented change). INV-TICKETS: scheduled-change snapshot added. */
 export async function resolveTicketPrice(supabase: SupabaseClient, businessId: string, product: { id: string; price: number | null }): Promise<TicketPrice> {
   const regular = Number(product.price) || 0
+  // 1) scheduled price change (current or upcoming) — the reason a shelf ticket usually needs reprinting.
+  try {
+    const { data: sched } = await supabase.from('pos_scheduled_price_changes')
+      .select('new_price, original_price, label, status, applied, effective_date')
+      .eq('business_id', businessId).eq('product_id', product.id).not('new_price', 'is', null)
+      .in('status', ['scheduled', 'active'])  // upcoming/current change → reprint; not 'completed'/'cancelled'
+      .order('effective_date', { ascending: false }).limit(1).maybeSingle()
+    if (sched && sched.new_price != null) {
+      const newP = r2(Number(sched.new_price))
+      const wasP = sched.original_price != null ? r2(Number(sched.original_price)) : (regular > 0 && regular !== newP ? r2(regular) : null)
+      if (newP >= 0 && (wasP == null || wasP !== newP)) {
+        return { price_snapshot: newP, was_price_snapshot: wasP, promo_label: (sched.label as string | null) ?? null }
+      }
+    }
+  } catch { /* table/shape absent → fall through to promo/regular (grounded) */ }
   try {
     const { data } = await supabase.from('pos_promotions')
       .select('name, type, promotion_type, discount_type, value, discount_percent, discount_amount, product_id, product_ids, applies_to, is_active, active, valid_from, valid_until, starts_at, ends_at')

@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { redirect } from 'next/navigation'
 import PriceTicketApp from '@/components/tickets/PriceTicketApp'
+import { ensureDefaultTemplate } from '@/lib/tickets/default-template'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,7 @@ export default async function PriceTicketsPage() {
   const { data: business } = await supabase.from('businesses').select('id,trading_name,name,logo_url,user_id').eq('id', bizId).maybeSingle()
   if (!business || (business as { user_id: string }).user_id !== user.id) redirect('/login')
 
+  await ensureDefaultTemplate(supabaseAdmin, bizId)  // INV-TICKETS: a printable default if the owner has none
   const [{ data: products }, { data: templates }] = await Promise.all([
     supabaseAdmin.from('pos_products').select('id,name,sku,barcode,price,description,brand,volume,volume_unit,alcohol_percentage,image_url').eq('business_id', bizId).eq('is_active', true).order('name'),
     supabaseAdmin.from('pos_shelf_ticket_templates').select('*').eq('business_id', bizId).order('created_at'),
