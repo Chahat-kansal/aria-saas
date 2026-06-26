@@ -141,7 +141,7 @@ export async function completeTask(sb: SupabaseClient, businessId: string, taskI
 export interface Pulse {
   outlet_id: string | null; today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null
   top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number
-  attention: { below_reorder: number; expiring: number; open_reviews: number; temp_logged: boolean; temp_failed: number }
+  attention: { below_reorder: number; expiring: number; open_reviews: number; temp_logged: boolean; temp_failed: number; on_hold: number }
 }
 export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<Pulse> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
@@ -189,8 +189,10 @@ export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?:
   } catch { /* absent → 0 */ }
   let tempLogged = true, tempFailed = 0
   try { const ts = await tempStatus(sb, businessId, outletId); tempLogged = ts.logged_today; tempFailed = ts.failed_today } catch { /* non-fatal */ }
+  let onHold = 0
+  try { const { count } = await sb.from('warehouse_quarantine').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'quarantined'); onHold = count ?? 0 } catch { /* non-fatal */ }
 
-  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed } }
+  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed, on_hold: onHold } }
 }
 
 // ── Handover ──────────────────────────────────────────────────────────────────────────────────────────────
