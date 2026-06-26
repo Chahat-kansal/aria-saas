@@ -50,7 +50,8 @@ interface Task { id: string; task_type: string; product_id: string | null; title
 interface TasksData { acting: { id: string; name: string }; tasks: Task[]; pills: { accuracy: number | null; streak: number; left_today: number } }
 interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string }
 interface ReviewData { acting: { id: string; name: string }; reviews: Review[]; counts: { open: number; resolved_today: number } }
-interface ScanProduct { id: string; name: string; sku: string | null; price: number; on_hand: number; cost: number | null; cost_source: string; units_per_day: number; days_of_cover: number | null }
+interface ScanLocate { outlet_id: string; outlet_name: string; items_on_hand: number }
+interface ScanProduct { id: string; name: string; sku: string | null; price: number; on_hand: number; cost: number | null; cost_source: string; units_per_day: number; days_of_cover: number | null; locate?: ScanLocate[] }
 interface ScanMatch { id: string; name: string; sku: string | null; price: number; on_hand: number }
 interface WasteItem { id: string; product_name: string; quantity: number; unit: string; reason: string; recorded_by: string; recorded_at: string; cost_cents: number | null }
 interface WasteToday { acting: { id: string; name: string }; reasons: string[]; items: WasteItem[]; total_cost_cents: number; count: number }
@@ -119,6 +120,12 @@ export default function InventoryStaffApp() {
   const [scanCount, setScanCount] = useState<number | null>(null)
   const [scanCountMsg, setScanCountMsg] = useState<{ variance: number; review: boolean } | null>(null)
   const [scanCounting, setScanCounting] = useState(false)
+  // INV-1-FINISH — add-to-catalogue (barcode/search not found). notFoundCtx holds the prefill (barcode + any
+  // Open Food Facts name/category); addForm is the editable form once the user chooses to add.
+  const [notFoundCtx, setNotFoundCtx] = useState<{ barcode: string; name: string; category: string } | null>(null)
+  const [addForm, setAddForm] = useState<{ name: string; category: string; price: string; cost: string; barcode: string } | null>(null)
+  const [addBusy, setAddBusy] = useState(false)
+  const [addErr, setAddErr] = useState('')
   // Waste screen state
   const [wasteProduct, setWasteProduct] = useState<{ id: string; name: string; unit_cost: number | null; on_hand: number } | null>(null)
   const [wasteSearch, setWasteSearch] = useState('')
@@ -263,7 +270,7 @@ export default function InventoryStaffApp() {
   // ── Scan / lookup ──
   async function runScan(term: string, kind: 'barcode' | 'q') {
     if (!term.trim()) return
-    setScanState('searching'); setScanNote(''); setScanResult(null); setScanMatches([]); setScanCount(null); setScanCountMsg(null)
+    setScanState('searching'); setScanNote(''); setScanResult(null); setScanMatches([]); setScanCount(null); setScanCountMsg(null); setAddForm(null); setNotFoundCtx(null); setAddErr('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?${kind}=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
       if (r.status === 401) { setStage('pick'); return }
@@ -271,20 +278,40 @@ export default function InventoryStaffApp() {
       const d = await r.json()
       if (d.mode === 'barcode') {
         if (d.found) { setScanResult(d.product); setScanState('found') }
-        else { setScanState('notfound'); setScanNote(`No barcode match for "${d.barcode}". Search by name or SKU instead.`) }
+        else { setScanState('notfound'); setScanNote(`No barcode match for "${d.barcode}". Add it below, or search by name.`); setNotFoundCtx({ barcode: String(d.barcode ?? term.trim()), name: d.external?.name ?? '', category: d.external?.category ?? '' }) }
       } else if (d.mode === 'search') {
         if ((d.matches ?? []).length) { setScanMatches(d.matches); setScanState('found') }
-        else { setScanState('notfound'); setScanNote(`Nothing matches "${d.query}".`) }
+        else { setScanState('notfound'); setScanNote(`Nothing matches "${d.query}". Add it as a new product below.`); setNotFoundCtx({ barcode: '', name: String(d.query ?? term.trim()), category: '' }) }
       }
     } catch { setScanState('error') }
   }
   async function pickMatch(id: string) {
-    setScanState('searching'); setScanMatches([])
+    setScanState('searching'); setScanMatches([]); setAddForm(null); setNotFoundCtx(null)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?product_id=${id}${outletId ? `&outlet_id=${outletId}` : ''}`)
       const d = await r.json()
       if (d.found) { setScanResult(d.product); setScanState('found') } else { setScanState('notfound'); setScanNote('Could not load that item.') }
     } catch { setScanState('error') }
+  }
+  // INV-1-FINISH — add-to-catalogue: open the form prefilled from the not-found context, then POST to the EXISTING
+  // INV-1 add endpoint (POST /scan) and re-resolve the new product via pickMatch (→ normal price-check/locate card).
+  function startAddProduct() {
+    if (!notFoundCtx) return
+    setAddForm({ name: notFoundCtx.name, category: notFoundCtx.category, price: '', cost: '', barcode: notFoundCtx.barcode }); setAddErr('')
+  }
+  async function submitAddProduct() {
+    if (!addForm) return
+    const name = addForm.name.trim(); const price = Number(addForm.price)
+    if (!name) { setAddErr('Enter a product name.'); return }
+    if (!(price > 0)) { setAddErr('Enter a retail price above $0.'); return }
+    setAddBusy(true); setAddErr('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, category: addForm.category.trim() || undefined, price, cost_price: addForm.cost.trim() ? Number(addForm.cost) : undefined, barcode: addForm.barcode.trim() || undefined }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok && d.product?.id) { setScanInput(''); setSearchInput(''); setScanNote(''); await pickMatch(d.product.id as string) }
+      else setAddErr(d.error ? `Couldn't add: ${d.error}` : 'Could not add the product.')
+    } catch { setAddErr('Something went wrong.') }
+    setAddBusy(false)
   }
   async function submitScanCount(product: ScanProduct) {
     if (scanCount == null) return
@@ -905,6 +932,15 @@ export default function InventoryStaffApp() {
 
   // ── SCAN / LOOKUP ──
   if (tab === 'scan') {
+    const multiOutlet = (boot?.outlets.length ?? 0) > 1
+    const field = (label: string, required: boolean, value: string, onChange: (v: string) => void, ph: string, dec?: boolean) => (
+      <div style={{ marginBottom: 11 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: P.muted, marginBottom: 5 }}>{label}{required ? ' *' : ''}</div>
+        <input value={value} onChange={e => onChange(e.target.value)} placeholder={ph} inputMode={dec ? 'decimal' : undefined}
+          onFocus={e => { e.currentTarget.style.boxShadow = `0 0 0 3px ${P.lime}` }} onBlur={e => { e.currentTarget.style.boxShadow = 'none' }}
+          style={{ width: '100%', padding: '11px 13px', borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', color: P.ink, fontFamily: BODY, fontSize: 14, outline: 'none' }} />
+      </div>
+    )
     return shell(
       <>
         {statusbar}{header(true, 'Scan', 'Look up an item · live stock')}
@@ -932,11 +968,28 @@ export default function InventoryStaffApp() {
             {scanState === 'idle' && <div style={{ padding: 28, textAlign: 'center', color: T.muted }}><p style={{ fontSize: 13, lineHeight: 1.6 }}>Look up any item to see its live on-hand, cost and how fast it sells.</p></div>}
             {scanState === 'searching' && <div style={{ height: 150, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />}
             {scanState === 'error' && <div style={{ padding: 20, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>Lookup failed. Try again.</div>}
-            {scanState === 'notfound' && (
-              <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.amberSoft}`, textAlign: 'center' }}>
+            {scanState === 'notfound' && !addForm && (
+              <div style={{ padding: 22, borderRadius: 22, background: '#fff', border: `1.5px solid ${P.ink}`, textAlign: 'center', boxShadow: HARD_SHADOW }}>
                 <div style={{ fontSize: 30, marginBottom: 6 }}>🔍</div>
-                <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No match</p>
-                <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{scanNote}</p>
+                <p style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>No match</p>
+                <p style={{ fontSize: 12, color: P.muted, lineHeight: 1.5, fontWeight: 500, marginBottom: notFoundCtx ? 14 : 0 }}>{scanNote}</p>
+                {notFoundCtx && <PipelButton onClick={startAddProduct}>+ Add to catalogue</PipelButton>}
+              </div>
+            )}
+            {addForm && (
+              <div style={{ padding: 16, borderRadius: 22, background: '#fff', border: `1.5px solid ${P.ink}`, boxShadow: HARD_SHADOW }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 13 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 13, border: `1.5px solid ${P.ink}`, background: P.lime, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PIcon name="plus-circle" size={22} /></div>
+                  <div><div style={{ fontWeight: 800, fontSize: 17, lineHeight: 1.05 }}>add to catalogue</div><div style={{ fontSize: 11.5, color: P.muted, fontWeight: 500, marginTop: 2 }}>creates the product, then opens its price-check</div></div>
+                </div>
+                {field('Product name', true, addForm.name, v => setAddForm(f => f && ({ ...f, name: v })), 'e.g. Oat Milk 1L')}
+                {field('Category', false, addForm.category, v => setAddForm(f => f && ({ ...f, category: v })), 'e.g. Milk')}
+                {field('Retail price', true, addForm.price, v => setAddForm(f => f && ({ ...f, price: v })), '0.00', true)}
+                {field('Unit cost (optional)', false, addForm.cost, v => setAddForm(f => f && ({ ...f, cost: v })), '0.00', true)}
+                {field('Barcode (optional)', false, addForm.barcode, v => setAddForm(f => f && ({ ...f, barcode: v })), 'scanned code')}
+                {addErr && <p style={{ fontSize: 12, color: P.red, fontWeight: 600, margin: '2px 0 10px' }}>{addErr}</p>}
+                <PipelButton onClick={submitAddProduct} disabled={addBusy} style={{ marginTop: 4 }}>{addBusy ? 'Adding…' : 'Add product'}</PipelButton>
+                <button onClick={() => { setAddForm(null); setAddErr('') }} style={{ width: '100%', marginTop: 9, background: 'none', color: P.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>cancel</button>
               </div>
             )}
             {scanState === 'found' && scanMatches.length > 0 && (
@@ -969,6 +1022,17 @@ export default function InventoryStaffApp() {
                   <PipelStat n={scanResult.days_of_cover != null ? scanResult.days_of_cover : '—'} k="days cover" tone={scanResult.days_of_cover != null && scanResult.days_of_cover < 7 ? 'alert' : undefined} />
                 </div>
                 <div style={{ fontSize: 10.5, color: P.muted, fontWeight: 600, textAlign: 'center', margin: '9px 0 12px' }}>cost basis · {scanResult.cost_source}</div>
+                {multiOutlet && (scanResult.locate?.length ?? 0) > 0 && (
+                  <div style={{ marginBottom: 13 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 8px' }}>in stock by outlet</div>
+                    {scanResult.locate!.map(l => (
+                      <div key={l.outlet_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 13px', border: `1.5px solid ${P.ink}`, borderRadius: 14, marginBottom: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13 }}>{l.outlet_name.replace(/^\[TEST\]\s*/, '')}</span>
+                        <span style={{ fontWeight: 800, fontSize: 16 }}>{l.items_on_hand}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {scanCount == null ? (
                   <>
                     <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>Count this item</button>

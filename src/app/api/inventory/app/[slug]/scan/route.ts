@@ -10,7 +10,7 @@ import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { resolveCostFor } from '@/lib/inventory/resolve-cost'
 import { resolveTicketPrice } from '@/lib/tickets/ticket-price'
-import { scanLookup } from '@/lib/inventory/scan-engine'
+import { scanLookup, locateStock } from '@/lib/inventory/scan-engine'
 
 // INV-STAFF-APP-3 — scan lookup. A barcode resolves via pos_product_barcodes; Sip has 0 barcodes today, so a
 // miss falls back to a name/SKU search (the primary path). A resolved product shows live on-hand
@@ -29,6 +29,9 @@ async function enrichOne(bid: string, productId: string, outletId: string | null
   const { data: p } = await supabaseAdmin.from('pos_products').select('id, name, sku, price').eq('id', productId).eq('business_id', bid).maybeSingle()
   if (!p) return null
   const stock = await onHand(bid, productId, outletId)
+  // INV-1-FINISH — per-outlet locate breakdown (canonical items_on_hand), so the search→pick path carries the
+  // same multi-outlet rows the barcode path already returns. Page gates display on outlet count.
+  const locate = await locateStock(supabaseAdmin, bid, productId)
   let cost: number | null = null, costSource = 'unknown'
   try { const rc = await resolveCostFor(supabaseAdmin, bid, productId, outletId); cost = rc.cost; costSource = rc.source } catch { /* unknown */ }
 
@@ -46,7 +49,7 @@ async function enrichOne(bid: string, productId: string, outletId: string | null
 
   return {
     id: p.id, name: p.name, sku: (p.sku as string | null) ?? null,
-    price: Number(p.price) || 0, on_hand: stock,
+    price: Number(p.price) || 0, on_hand: stock, locate,
     cost, cost_source: costSource,
     units_per_day: perDay, days_of_cover: daysCover,
     ticket_price: tp.price_snapshot, was_price: tp.was_price_snapshot, promo_label: tp.promo_label,
@@ -76,7 +79,13 @@ async function _GET(req: Request, { params }: Params) {
   // + external prefill on a catalogue miss (own catalog → Open Food Facts waterfall). Canonical items_on_hand.
   if (barcode) {
     const result = await scanLookup(supabaseAdmin, bid, barcode, outletId)
-    return NextResponse.json({ mode: 'barcode', ...result })
+    if (result.found) {
+      // INV-1-FINISH — re-resolve via enrichOne so the barcode path returns the SAME shape as search→pick
+      // (price / velocity / days-cover) plus the per-outlet locate, for one consistent result card.
+      const product = await enrichOne(bid, result.product.id, outletId)
+      return NextResponse.json({ mode: 'barcode', found: true, product })
+    }
+    return NextResponse.json({ mode: 'barcode', found: false, barcode: result.barcode, external: result.external })
   }
 
   // Name / SKU search fallback (lightweight list with live on-hand).

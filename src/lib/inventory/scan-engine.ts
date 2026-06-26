@@ -43,8 +43,9 @@ async function resolveProductId(sb: SupabaseClient, businessId: string, barcode:
   return (p?.id as string | undefined) ?? null
 }
 
-/** Per-outlet on-hand for a product (canonical items_on_hand) + outlet names. */
-async function locateStock(sb: SupabaseClient, businessId: string, productId: string): Promise<ScanLocate[]> {
+/** Per-outlet on-hand for a product (canonical items_on_hand) + outlet names. Exported so the staff scan route's
+ *  enrichOne (search→pick) path can carry the SAME breakdown the barcode path already has (INV-1-FINISH). */
+export async function locateStock(sb: SupabaseClient, businessId: string, productId: string): Promise<ScanLocate[]> {
   const { data: inv } = await sb.from('pos_outlet_inventory')
     .select('outlet_id, items_on_hand').eq('business_id', businessId).eq('product_id', productId)
   const oIds = [...new Set((inv ?? []).map(r => r.outlet_id as string).filter(Boolean))]
