@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { reorderSuggestions } from '@/lib/inventory/buying'
+import { tempStatus } from '@/lib/inventory/fresh'
 
 // INV-6 — guidance (Tanpin-Kanri). Aria forms GROUNDED hypotheses from POS + weather + day, turns them into staff
 // tasks (inventory_tasks — reused), staff complete them (attributed). GROUNDING-TEETH: every "why" traces to a
@@ -140,7 +141,7 @@ export async function completeTask(sb: SupabaseClient, businessId: string, taskI
 export interface Pulse {
   outlet_id: string | null; today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null
   top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number
-  attention: { below_reorder: number; expiring: number; open_reviews: number }
+  attention: { below_reorder: number; expiring: number; open_reviews: number; temp_logged: boolean; temp_failed: number }
 }
 export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<Pulse> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
@@ -186,8 +187,10 @@ export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?:
     const { count } = await sb.from('pos_product_batches').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('expiry_tracked', true).gt('quantity_remaining', 0).lte('expiry_date', cutoff)
     expiring = count ?? 0
   } catch { /* absent → 0 */ }
+  let tempLogged = true, tempFailed = 0
+  try { const ts = await tempStatus(sb, businessId, outletId); tempLogged = ts.logged_today; tempFailed = ts.failed_today } catch { /* non-fatal */ }
 
-  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0 } }
+  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed } }
 }
 
 // ── Handover ──────────────────────────────────────────────────────────────────────────────────────────────
