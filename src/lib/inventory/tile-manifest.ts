@@ -61,6 +61,7 @@ export const INVENTORY_TILES: TileEntry[] = [
   { id: 'reports', label: 'Reports', sublabel: 'inventory reports', icon: 'bar-chart', route: 'reports', industries: ALL, capabilities: [] },
   { id: 'tasks', label: 'Tasks', sublabel: 'today\'s list', icon: 'list', route: 'tasks', industries: ALL, capabilities: [] },
   { id: 'review', label: 'Review', sublabel: 'owner review', icon: 'shield', route: 'review', industries: ALL, capabilities: [] },
+  { id: 'recall', label: 'Recall', sublabel: 'on-hold & loss', icon: 'alert-triangle', route: 'loss', industries: ALL, capabilities: [] },
   { id: 'movement_audit', label: 'Movement audit', sublabel: 'stock ledger', icon: 'activity', route: 'reports', industries: ALL, capabilities: [] },
 
   // ── Perishable (café sees the first four; bigger food retailers add the rest) ──

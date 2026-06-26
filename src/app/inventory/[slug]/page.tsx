@@ -97,7 +97,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake' | 'order' | 'fresh'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake' | 'order' | 'fresh' | 'loss'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -234,6 +234,23 @@ export default function InventoryStaffApp() {
   const [freshBusy, setFreshBusy] = useState(false)
   const [tempForm, setTempForm] = useState({ location: 'Fridge 1', reading: '', threshold: '5' })
   const [tempMsg, setTempMsg] = useState('')
+  // INV-8 — loss & compliance
+  interface Hold { id: string; product_id: string; item_name: string; quantity: number; reason: string; quarantined_by: string | null; value_at_risk: number | null }
+  interface ShrinkData { period_days: number; total_dollars: number; by_category: Array<{ category: string; dollars: number; pct: number }>; top_products: Array<{ name: string; dollars: number }>; theft_signals: Array<{ name: string; fact: string }> }
+  const [lossTab, setLossTab] = useState<'quarantine' | 'recall' | 'shrinkage'>('quarantine')
+  const [lossHolds, setLossHolds] = useState<Hold[]>([])
+  const [lossFailedTemps, setLossFailedTemps] = useState<Array<{ location: string; reading_c: number; logged_at: string }>>([])
+  const [lossAtRisk, setLossAtRisk] = useState(0)
+  const [lossShrink, setLossShrink] = useState<ShrinkData | null>(null)
+  const [lossState, setLossState] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [lossBusy, setLossBusy] = useState<string | null>(null)
+  const [lossMsg, setLossMsg] = useState('')
+  const [lossPermErr, setLossPermErr] = useState('')
+  const [recallSearch, setRecallSearch] = useState('')
+  const [recallMatches, setRecallMatches] = useState<ScanMatch[]>([])
+  const [recallPick, setRecallPick] = useState<{ id: string; name: string } | null>(null)
+  const [recallQty, setRecallQty] = useState(1)
+  const [recallReason, setRecallReason] = useState('supplier recall')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -757,6 +774,46 @@ export default function InventoryStaffApp() {
       if (r.ok && d.ok) { setTempMsg(d.passed ? `✓ ${tempForm.location} ${tempForm.reading}°C — within safe range.` : `⚠ ${tempForm.location} ${tempForm.reading}°C — ABOVE the ${tempForm.threshold}°C limit. Flagged.`); setTempForm(f => ({ ...f, reading: '' })); loadFresh(outletId) }
     } catch { /* ignore */ }
     setFreshBusy(false)
+  }
+
+  // ── INV-8 loss & compliance ──
+  const loadLoss = useCallback(async (oid: string | null) => {
+    setLossState('loading'); setRecallPick(null)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/loss${oid ? `?outlet_id=${oid}` : ''}`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setLossState('error'); return }
+      const d = await r.json()
+      setLossHolds(d.quarantine?.holds ?? []); setLossFailedTemps(d.quarantine?.failed_temps ?? []); setLossAtRisk(d.quarantine?.total_at_risk ?? 0); setLossShrink(d.shrinkage ?? null); setLossState('ok')
+    } catch { setLossState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'loss') loadLoss(outletId) }, [stage, tab, outletId, loadLoss])
+  async function recallSearchRun(term: string) {
+    if (!term.trim()) return
+    setLossBusy('search'); setRecallMatches([])
+    try { const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`); const d = await r.json(); if (d.mode === 'search') setRecallMatches(d.matches ?? []) } catch { /* ignore */ }
+    setLossBusy(null)
+  }
+  async function placeRecall() {
+    if (!recallPick) return
+    setLossBusy('recall'); setLossMsg('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'recall', product_id: recallPick.id, quantity: recallQty, reason: recallReason, outlet_id: outletId }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setLossMsg(`✓ ${recallPick.name} placed on hold (${recallQty}). Stock is not sellable until resolved.`); setRecallPick(null); setRecallMatches([]); setRecallSearch(''); setLossTab('quarantine'); loadLoss(outletId) }
+      else setLossMsg('Could not place the hold.')
+    } catch { setLossMsg('Something went wrong.') }
+    setLossBusy(null)
+  }
+  async function resolveHoldUi(holdId: string, resolution: 'released' | 'disposed' | 'returned_to_supplier') {
+    setLossBusy(holdId); setLossPermErr('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'resolve', hold_id: holdId, resolution, outlet_id: outletId }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.status === 403) setLossPermErr(d.message ?? 'A manager must resolve a hold.')
+      else if (r.ok) { setLossMsg(resolution === 'released' ? '✓ Released — back to sellable.' : resolution === 'disposed' ? `✓ Disposed — written off${d.new_on_hand != null ? ` (now ${d.new_on_hand})` : ''}.` : '✓ Returned to supplier.'); loadLoss(outletId); loadHome(outletId) }
+    } catch { setLossPermErr('Something went wrong.') }
+    setLossBusy(null)
   }
 
   // Bootstrap + resume session.
@@ -2128,6 +2185,118 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── LOSS & COMPLIANCE (INV-8) ──
+  if (tab === 'loss') {
+    const catColor = (c: string) => c.includes('Waste') ? P.red : c.includes('variance') ? P.amber : c.includes('Recall') ? P.ink : P.muted
+    return shell(
+      <>
+        {statusbar}{header(true, 'recall', 'on-hold · shrinkage · compliance')}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px' }}>
+          <PipelSegment inset={false} value={lossTab} onChange={v => setLossTab(v)}
+            options={[{ value: 'quarantine', label: 'On hold' }, { value: 'recall', label: 'Recall' }, { value: 'shrinkage', label: 'Shrinkage' }]} />
+          <div style={{ height: 14 }} />
+          {lossMsg && <div style={{ fontSize: 12.5, color: P.ink, background: P.lime, border: `1.5px solid ${P.ink}`, borderRadius: 12, padding: '10px 13px', marginBottom: 13, fontWeight: 700, lineHeight: 1.4 }}>{lossMsg}</div>}
+          {lossPermErr && <div style={{ fontSize: 12.5, color: P.amber, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '10px 13px', marginBottom: 13, fontWeight: 700 }}>⚑ {lossPermErr}</div>}
+
+          {lossState === 'loading' ? (
+            <div style={{ height: 130, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />
+          ) : lossState === 'error' ? (
+            <div style={{ padding: 22, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontWeight: 800, marginBottom: 12 }}>Couldn’t load</p><PipelButton onClick={() => loadLoss(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
+          ) : lossTab === 'quarantine' ? (
+            <>
+              {lossHolds.length === 0 && lossFailedTemps.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center', fontWeight: 500 }}>Nothing on hold — all stock is sellable.</div>}
+              {lossHolds.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>on hold · {lossHolds.length} · ${lossAtRisk.toFixed(0)} at risk</div>}
+              {lossHolds.map(h => (
+                <div key={h.id} style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 18, padding: 14, marginBottom: 11, boxShadow: HARD_SHADOW }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ fontWeight: 800, fontSize: 15 }}>{h.item_name}</div>{h.value_at_risk != null && <span style={{ fontWeight: 800, fontSize: 13, color: P.red }}>${h.value_at_risk.toFixed(2)}</span>}</div>
+                  <div style={{ fontSize: 11.5, color: P.muted, fontWeight: 600, marginTop: 2 }}>{h.quantity} on hold · {h.reason}{h.quarantined_by ? ` · ${h.quarantined_by}` : ''}</div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
+                    <button disabled={lossBusy === h.id} onClick={() => resolveHoldUi(h.id, 'released')} style={{ flex: 1, background: P.lime, color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 12, padding: 10, fontFamily: BODY, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Release</button>
+                    <button disabled={lossBusy === h.id} onClick={() => resolveHoldUi(h.id, 'returned_to_supplier')} style={{ flex: 1, background: '#fff', color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 12, padding: 10, fontFamily: BODY, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Return</button>
+                    <button disabled={lossBusy === h.id} onClick={() => resolveHoldUi(h.id, 'disposed')} style={{ flex: 1, background: '#fff', color: P.red, border: `1.5px solid ${P.red}`, borderRadius: 12, padding: 10, fontFamily: BODY, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Dispose</button>
+                  </div>
+                </div>
+              ))}
+              {lossFailedTemps.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.red, textTransform: 'uppercase', letterSpacing: '.04em', margin: '16px 2px 10px' }}>failed temp checks today</div>
+                  {lossFailedTemps.map((t, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', background: P.redSoft, border: `1.5px solid ${P.red}`, borderRadius: 14, padding: '10px 13px', marginBottom: 8, fontSize: 13 }}><span style={{ fontWeight: 700 }}>{t.location}</span><span style={{ fontWeight: 800, color: P.red }}>{t.reading_c}°C ⚠</span></div>)}
+                </>
+              )}
+              <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5, fontWeight: 500 }}>On-hold stock is never auto-deleted. Dispose/return needs a manager and writes through the canonical path.</div>
+            </>
+          ) : lossTab === 'recall' ? (
+            recallPick ? (
+              <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW }}>
+                <div style={{ fontWeight: 800, fontSize: 17 }}>{recallPick.name}</div>
+                <div style={{ fontSize: 12, color: P.muted, fontWeight: 600, marginTop: 2 }}>place on hold — pulls it from sellable stock</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '16px 0' }}>
+                  <button onClick={() => setRecallQty(v => Math.max(1, v - 1))} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 22, fontWeight: 800, cursor: 'pointer' }}>−</button>
+                  <div style={{ fontWeight: 800, fontSize: 34, minWidth: 52, textAlign: 'center' }}>{recallQty}</div>
+                  <button onClick={() => setRecallQty(v => v + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 22, fontWeight: 800, cursor: 'pointer' }}>+</button>
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: P.muted, marginBottom: 5 }}>Reason</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 14 }}>
+                  {['supplier recall', 'contamination', 'quality', 'damaged'].map(r => (
+                    <button key={r} onClick={() => setRecallReason(r)} style={{ fontSize: 12, fontWeight: 700, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: BODY, border: `1.5px solid ${P.ink}`, background: recallReason === r ? P.lime : '#fff', color: P.ink }}>{r}</button>
+                  ))}
+                </div>
+                <PipelButton onClick={placeRecall} disabled={lossBusy === 'recall'}>{lossBusy === 'recall' ? 'Placing…' : 'Place on hold'}</PipelButton>
+                <button onClick={() => setRecallPick(null)} style={{ width: '100%', marginTop: 9, background: 'none', color: P.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>cancel</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <input value={recallSearch} onChange={e => setRecallSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') recallSearchRun(recallSearch) }} placeholder="Find the product to recall…"
+                    onFocus={e => { e.currentTarget.style.boxShadow = `0 0 0 3px ${P.lime}` }} onBlur={e => { e.currentTarget.style.boxShadow = 'none' }}
+                    style={{ flex: 1, padding: '11px 13px', borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', color: P.ink, fontFamily: BODY, fontSize: 14, outline: 'none' }} />
+                  <button onClick={() => recallSearchRun(recallSearch)} style={{ background: P.lime, color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 14, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Find</button>
+                </div>
+                {recallMatches.map(m => (
+                  <div key={m.id} onClick={() => { setRecallPick({ id: m.id, name: m.name }); setRecallQty(1); setRecallReason('supplier recall') }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '11px 13px', marginBottom: 9, cursor: 'pointer' }}>
+                    <div><div style={{ fontWeight: 700, fontSize: 13.5 }}>{m.name}</div><div style={{ fontSize: 11, color: P.muted }}>{m.on_hand} on hand</div></div>
+                    <PIcon name="back" size={16} stroke={P.muted} />
+                  </div>
+                ))}
+                <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5, fontWeight: 500 }}>Recall is open to any staff — pulling unsafe stock fast. Stock isn’t deleted; it’s held for the owner to resolve.</div>
+              </>
+            )
+          ) : lossShrink ? (
+            <>
+              <div style={{ background: P.ink, color: '#fff', borderRadius: 22, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: '#cfd2cc', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>shrinkage · last {lossShrink.period_days}d</div>
+                <div style={{ fontWeight: 800, fontSize: 30, marginTop: 3 }}>${lossShrink.total_dollars.toFixed(2)}</div>
+                <div style={{ marginTop: 12 }}>
+                  {lossShrink.by_category.map((c, i) => (
+                    <div key={i} style={{ marginBottom: 9 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, marginBottom: 4 }}><span>{c.category}</span><span>${c.dollars.toFixed(2)} · {c.pct}%</span></div>
+                      <div style={{ height: 8, borderRadius: 5, background: 'rgba(255,255,255,.12)', overflow: 'hidden' }}><div style={{ width: `${Math.max(3, c.pct)}%`, height: '100%', background: catColor(c.category) === P.ink ? P.lime : catColor(c.category) }} /></div>
+                    </div>
+                  ))}
+                  {lossShrink.by_category.length === 0 && <div style={{ fontSize: 12, color: '#9aa3b2' }}>No loss recorded this period — clean.</div>}
+                </div>
+              </div>
+              {lossShrink.top_products.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 9px' }}>top loss products</div>
+                  {lossShrink.top_products.map((p, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 14, padding: '10px 13px', marginBottom: 8, fontSize: 13 }}><span style={{ fontWeight: 700 }}>{p.name}</span><span style={{ fontWeight: 800 }}>${p.dollars.toFixed(2)}</span></div>)}
+                </>
+              )}
+              {lossShrink.theft_signals.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.amber, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 9px' }}>worth a closer look</div>
+                  {lossShrink.theft_signals.map((t, i) => <div key={i} style={{ fontSize: 11.5, color: P.amber, fontWeight: 600, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '9px 12px', marginBottom: 8, lineHeight: 1.4 }}>⚑ <b>{t.name}</b> — {t.fact}</div>)}
+                </div>
+              )}
+              <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5, fontWeight: 500 }}>Every figure is a real waste/variance row. Patterns are flagged for a look — never an accusation.</div>
+            </>
+          ) : null}
+        </div>
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -2140,6 +2309,7 @@ export default function InventoryStaffApp() {
       case 'stocktake': resetStocktake(); setTab('stocktake'); break
       case 'order': setTab('order'); break
       case 'fresh': setTab('fresh'); break
+      case 'loss': setTab('loss'); break
       case 'tasks': case 'count': setTab('tasks'); break
       case 'receive': setReceiveData(null); setOpenPo(null); setTab('receive'); break
       case 'transfer': setTransferData(null); setTab('transfer'); break
