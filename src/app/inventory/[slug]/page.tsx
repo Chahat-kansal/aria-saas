@@ -97,7 +97,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake' | 'order'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -198,6 +198,17 @@ export default function InventoryStaffApp() {
   const [stMatches, setStMatches] = useState<ScanMatch[]>([])
   const [stBusy, setStBusy] = useState(false)
   const [stSummary, setStSummary] = useState<{ variances: number; reviews: number; total_cents: number; counted: number } | null>(null)
+  // INV-5 — buying (reorder suggestions → draft PO → owner approve → send)
+  interface BuyItem { product_id: string; name: string; on_hand: number; reorder_point: number; target_stock: number; suggested_qty: number; abc_tier: string; unit_cost: number | null; line_total: number | null; needs_cost: boolean }
+  interface BuyGroup { supplier_id: string | null; supplier_name: string; needs_supplier: boolean; items: BuyItem[]; total: number }
+  interface BuyPo { id: string; order_number: string; status: string; supplier_name: string; total: number | null; created_by: string | null }
+  const [buyGroups, setBuyGroups] = useState<BuyGroup[]>([])
+  const [buyPos, setBuyPos] = useState<BuyPo[]>([])
+  const [buyState, setBuyState] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [buyBusy, setBuyBusy] = useState<string | null>(null)
+  const [buyMsg, setBuyMsg] = useState('')
+  const [buyPo, setBuyPo] = useState<{ po: { id: string; order_number: string; status: string; total: number | null; created_by: string | null }; lines: Array<{ product_name: string; quantity_ordered: number; unit_cost: number | null; line_total: number | null }> } | null>(null)
+  const [buyPermErr, setBuyPermErr] = useState('')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -625,6 +636,48 @@ export default function InventoryStaffApp() {
     setStBusy(false)
   }
   function resetStocktake() { setStType(null); setStSession(null); setStLines([]); setStCycle([]); setStPick(null); setStSummary(null); setStState('pick') }
+
+  // ── INV-5 buying ──
+  const loadBuying = useCallback(async (oid: string | null) => {
+    setBuyState('loading'); setBuyPo(null)
+    try {
+      const [rg, rp] = await Promise.all([
+        fetch(`/api/inventory/app/${slug}/buying?reorder=1${oid ? `&outlet_id=${oid}` : ''}`),
+        fetch(`/api/inventory/app/${slug}/buying`),
+      ])
+      if (rg.status === 401 || rp.status === 401) { setStage('pick'); return }
+      if (!rg.ok || !rp.ok) { setBuyState('error'); return }
+      const dg = await rg.json(); const dp = await rp.json()
+      setBuyGroups(dg.groups ?? []); setBuyPos(dp.pos ?? []); setBuyState('ok')
+    } catch { setBuyState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'order') loadBuying(outletId) }, [stage, tab, outletId, loadBuying])
+  async function draftFromGroup(g: BuyGroup) {
+    if (g.needs_supplier || !g.supplier_id) return
+    setBuyBusy(g.supplier_id); setBuyMsg('')
+    try {
+      const lines = g.items.map(i => ({ product_id: i.product_id, product_name: i.name, quantity: i.suggested_qty, unit_cost: i.unit_cost }))
+      const r = await fetch(`/api/inventory/app/${slug}/buying`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draft', supplier_id: g.supplier_id, lines }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.po) { setBuyMsg(`✓ Draft ${d.po.order_number} created — approve it below to send.`); loadBuying(outletId) }
+      else setBuyMsg(d.error ? `Couldn’t draft: ${d.error}` : 'Could not create the draft.')
+    } catch { setBuyMsg('Something went wrong.') }
+    setBuyBusy(null)
+  }
+  async function openBuyPo(id: string) {
+    setBuyPermErr('')
+    try { const r = await fetch(`/api/inventory/app/${slug}/buying?po=${id}`); if (r.ok) { const d = await r.json(); setBuyPo({ po: d.po, lines: d.lines ?? [] }) } } catch { /* ignore */ }
+  }
+  async function approveBuyPo(id: string) {
+    setBuyBusy(id); setBuyPermErr('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/buying`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve', po_id: id }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.status === 403) { setBuyPermErr(d.message ?? 'A manager must approve this order.') }
+      else if (r.ok) { setBuyMsg(d.idempotent ? 'Already sent.' : `✓ Approved & sent${d.channel === 'email' ? ` — emailed to ${d.supplier_email ?? 'the supplier'}` : ' (no supplier email — export a CSV from the dashboard)'}.`); setBuyPo(null); loadBuying(outletId) }
+    } catch { setBuyPermErr('Something went wrong.') }
+    setBuyBusy(null)
+  }
 
   // Bootstrap + resume session.
   useEffect(() => {
@@ -1749,6 +1802,95 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── ORDER / BUYING (INV-5) ──
+  if (tab === 'order') {
+    const outletName = boot?.outlets.find(o => o.id === outletId)?.name.replace(/^\[TEST\]\s*/, '') ?? ''
+    const statusChip = (s: string) => {
+      const map: Record<string, { bg: string; col: string }> = { draft: { bg: '#fff', col: P.muted }, sent: { bg: P.lime, col: P.ink }, received: { bg: '#f1fbcf', col: P.ink } }
+      const m = map[s] ?? { bg: '#fff', col: P.muted }
+      return <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 9, border: `1.5px solid ${P.ink}`, background: m.bg, color: m.col, textTransform: 'uppercase' }}>{s}</span>
+    }
+    return shell(
+      <>
+        {statusbar}{header(true, 'order', outletName ? `what to buy · ${outletName}` : 'reorder & purchase orders')}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px' }}>
+          {buyMsg && <div style={{ fontSize: 12.5, color: P.ink, background: P.lime, border: `1.5px solid ${P.ink}`, borderRadius: 12, padding: '10px 13px', marginBottom: 13, fontWeight: 700, lineHeight: 1.4 }}>{buyMsg}</div>}
+
+          {/* PO DETAIL */}
+          {buyPo ? (
+            <>
+              <button onClick={() => { setBuyPo(null); setBuyPermErr('') }} style={{ background: 'none', border: 'none', color: P.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY, marginBottom: 10 }}>← all orders</button>
+              <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ fontWeight: 800, fontSize: 18 }}>{buyPo.po.order_number}</div>{statusChip(buyPo.po.status)}
+                </div>
+                <div style={{ fontSize: 11.5, color: P.muted, fontWeight: 500, marginBottom: 12 }}>by {buyPo.po.created_by ?? '—'}</div>
+                {buyPo.lines.map((l, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 2px', borderTop: `1.5px solid ${P.ink}`, fontSize: 13 }}>
+                    <span style={{ fontWeight: 700, flex: 1 }}>{l.product_name}</span>
+                    <span style={{ color: P.muted, fontWeight: 600 }}>{l.quantity_ordered} × {l.unit_cost != null ? `$${Number(l.unit_cost).toFixed(2)}` : '—'}</span>
+                    <span style={{ width: 70, textAlign: 'right', fontWeight: 800 }}>{l.line_total != null ? `$${Number(l.line_total).toFixed(2)}` : '—'}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 2px 2px', borderTop: `1.5px solid ${P.ink}`, fontWeight: 800, fontSize: 15 }}><span>Total</span><span>${Number(buyPo.po.total ?? 0).toFixed(2)}</span></div>
+              </div>
+              {buyPermErr && <div style={{ fontSize: 12.5, color: P.amber, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '10px 13px', marginTop: 12, fontWeight: 700, lineHeight: 1.4 }}>⚑ {buyPermErr}</div>}
+              {buyPo.po.status === 'draft' && (
+                <div style={{ marginTop: 14 }}>
+                  <PipelButton onClick={() => approveBuyPo(buyPo.po.id)} disabled={buyBusy === buyPo.po.id}>{buyBusy === buyPo.po.id ? 'Sending…' : 'Approve & send to supplier'}</PipelButton>
+                  <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 9, lineHeight: 1.5, fontWeight: 500 }}>Sending emails the PO to the supplier. Money gate — needs a manager. Stock changes only when you Receive the delivery.</div>
+                </div>
+              )}
+            </>
+          ) : buyState === 'loading' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 120, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />)}</div>
+          ) : buyState === 'error' ? (
+            <div style={{ padding: 24, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>Couldn’t load buying</p><PipelButton onClick={() => loadBuying(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
+          ) : (
+            <>
+              {/* REORDER SUGGESTIONS grouped by supplier */}
+              <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 11px' }}>what to buy · {buyGroups.reduce((s, g) => s + g.items.length, 0)} below par</div>
+              {buyGroups.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center', fontWeight: 500 }}>Nothing below reorder point at this outlet — stock is healthy.</div>}
+              {buyGroups.map(g => (
+                <div key={g.supplier_id ?? 'none'} style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 15, boxShadow: HARD_SHADOW, marginBottom: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15 }}>{g.supplier_name}</div>
+                    {!g.needs_supplier && <span style={{ fontWeight: 800, fontSize: 14 }}>${g.total.toFixed(2)}</span>}
+                  </div>
+                  {g.items.map(it => (
+                    <div key={it.product_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px', borderTop: `1.5px solid ${P.ink}`, fontSize: 13 }}>
+                      <div style={{ flex: 1 }}><span style={{ fontWeight: 700 }}>{it.name}</span><div style={{ fontSize: 11, color: P.muted }}>on hand {it.on_hand} · par {it.reorder_point}{it.needs_cost ? ' · needs cost' : ''}</div></div>
+                      <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 800 }}>+{it.suggested_qty}</div><div style={{ fontSize: 10.5, color: P.muted }}>{it.line_total != null ? `$${it.line_total.toFixed(2)}` : '—'}</div></div>
+                    </div>
+                  ))}
+                  {g.needs_supplier ? (
+                    <div style={{ fontSize: 11, color: P.amber, fontWeight: 700, marginTop: 11, lineHeight: 1.4 }}>⚑ Assign a supplier (in the dashboard) to draft a PO for these.</div>
+                  ) : (
+                    <div style={{ marginTop: 12 }}><PipelButton onClick={() => draftFromGroup(g)} disabled={buyBusy === g.supplier_id}>{buyBusy === g.supplier_id ? 'Drafting…' : `Draft PO · ${g.items.length} line${g.items.length === 1 ? '' : 's'}`}</PipelButton></div>
+                  )}
+                </div>
+              ))}
+
+              {/* OPEN ORDERS */}
+              {buyPos.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '20px 2px 11px' }}>open orders</div>
+                  {buyPos.map(p => (
+                    <div key={p.id} onClick={() => openBuyPo(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '12px 14px', marginBottom: 9, cursor: 'pointer' }}>
+                      <div><div style={{ fontWeight: 800, fontSize: 13.5 }}>{p.order_number}</div><div style={{ fontSize: 11, color: P.muted }}>{p.supplier_name} · ${Number(p.total ?? 0).toFixed(2)}</div></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>{statusChip(p.status)}<PIcon name="back" size={16} stroke={P.muted} /></div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+        </div>
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -1759,6 +1901,7 @@ export default function InventoryStaffApp() {
     switch (route) {
       case 'scan': case 'gap_scan': setTab('scan'); break
       case 'stocktake': resetStocktake(); setTab('stocktake'); break
+      case 'order': setTab('order'); break
       case 'tasks': case 'count': setTab('tasks'); break
       case 'receive': setReceiveData(null); setOpenPo(null); setTab('receive'); break
       case 'transfer': setTransferData(null); setTab('transfer'); break
