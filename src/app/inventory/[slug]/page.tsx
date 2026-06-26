@@ -171,6 +171,7 @@ export default function InventoryStaffApp() {
   const [ticketName, setTicketName] = useState('')
   const [ticketSaving, setTicketSaving] = useState(false)
   const [ticketMsg, setTicketMsg] = useState('')
+  const [ticketCam, setTicketCam] = useState(false)  // INV-SCAN-CAMERA: camera scan into the ticket batch (search kept)
   // Receive screen state
   const [receiveData, setReceiveData] = useState<ReceiveData | null>(null)
   const [receiveState, setReceiveState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
@@ -513,6 +514,15 @@ export default function InventoryStaffApp() {
       }
     } catch { /* ignore */ }
     setTicketSearching(false)
+  }
+  // INV-SCAN-CAMERA — a camera decode resolves the barcode (scanLookup) then adds via the SAME ticketAdd flow.
+  async function ticketScanDecode(barcode: string) {
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?barcode=${encodeURIComponent(barcode)}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.mode === 'barcode' && d.found && d.product?.id) { await ticketAdd(d.product.id as string); setTicketMsg(`✓ Added ${d.product.name ?? 'item'} to the batch.`) }
+      else setTicketMsg(`No catalogue match for ${barcode} — search by name instead.`)
+    } catch { /* ignore */ }
   }
   const ticketQty = (id: string, delta: number) => setTicketBatch(b => b.map(x => x.id === id ? { ...x, qty: Math.max(1, x.qty + delta) } : x))
   const ticketRemove = (id: string) => setTicketBatch(b => b.filter(x => x.id !== id))
@@ -1616,11 +1626,18 @@ export default function InventoryStaffApp() {
         {body(
           <>
             <div style={{ fontSize: 11.5, color: '#43407a', background: T.violetSoft, borderRadius: 10, padding: '10px 12px', lineHeight: 1.45, marginBottom: 13 }}>
-              Scan or search items to build a print batch. The owner picks a template and prints it from the dashboard. Prices are snapshotted now, so a later price change won&apos;t change what prints.
+              {cameraSupported ? 'Scan with the camera, or search by name — both add to the print batch.' : 'Search by name to build the print batch.'} The owner picks a template and prints it from the dashboard. Prices are snapshotted now, so a later price change won&apos;t change what prints.
             </div>
 
+            {cameraSupported && (
+              <div style={{ marginBottom: 12 }}>
+                <button onClick={() => setTicketCam(c => !c)} style={{ width: '100%', background: ticketCam ? '#fff' : P.lime, color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 12, padding: 11, fontFamily: BODY, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{ticketCam ? 'Stop camera' : '📷 Scan with camera'}</button>
+                {ticketCam && <div style={{ marginTop: 10 }}><PipelScanner active={ticketCam} onDecode={ticketScanDecode} onDenied={() => { setTicketCam(false); setTicketMsg('Camera blocked — search by name instead.') }} /></div>}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input value={ticketSearch} onChange={e => setTicketSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') ticketSearchRun(ticketSearch) }} placeholder="Scan or search by name / SKU…"
+              <input value={ticketSearch} onChange={e => setTicketSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') ticketSearchRun(ticketSearch) }} placeholder="Search by name / SKU…"
                 style={{ flex: 1, padding: '11px 13px', borderRadius: 11, border: `1.5px solid ${T.line}`, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 13, outline: 'none' }} />
               <button onClick={() => ticketSearchRun(ticketSearch)} style={{ background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Find</button>
             </div>
