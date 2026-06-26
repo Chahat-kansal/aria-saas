@@ -97,7 +97,7 @@ export default function InventoryStaffApp() {
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
-  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake' | 'order'>('home')
+  const [tab, setTab] = useState<'home' | 'tasks' | 'reports' | 'review' | 'scan' | 'waste' | 'adjust' | 'tickets' | 'receive' | 'transfer' | 'expiring' | 'stocktake' | 'order' | 'fresh'>('home')
   const pinSubmitting = useRef(false)
   // Tasks screen state
   const [tasksData, setTasksData] = useState<TasksData | null>(null)
@@ -218,6 +218,22 @@ export default function InventoryStaffApp() {
   const [handoverData, setHandoverData] = useState<HandoverData | null>(null)
   const [showHandover, setShowHandover] = useState(false)
   const [completingTask, setCompletingTask] = useState<string | null>(null)
+  // INV-7 — fresh / production
+  interface Recipe { id: string; name: string; serves: number; cost: number | null; ingredients: number; linked: number }
+  interface MarkdownProp { product_id: string; name: string; expiry_date: string; days_left: number; current_price: number; discount_pct: number; marked_price: number; rule_name: string }
+  interface DepLine { name: string; depleted: number; new_on_hand: number | null; value: number | null; fefo_batch: string | null }
+  interface TempRecent { location: string; reading_c: number; passed: boolean; logged_at: string; by: string | null }
+  const [freshTab, setFreshTab] = useState<'prep' | 'markdown' | 'temp'>('prep')
+  const [freshRecipes, setFreshRecipes] = useState<Recipe[]>([])
+  const [freshMarkdowns, setFreshMarkdowns] = useState<MarkdownProp[]>([])
+  const [freshTemp, setFreshTemp] = useState<{ logged_today: boolean; failed_today: number; recent: TempRecent[] } | null>(null)
+  const [freshState, setFreshState] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [prepPick, setPrepPick] = useState<Recipe | null>(null)
+  const [prepBatches, setPrepBatches] = useState(1)
+  const [prepResult, setPrepResult] = useState<{ lines: DepLine[]; total_value: number } | null>(null)
+  const [freshBusy, setFreshBusy] = useState(false)
+  const [tempForm, setTempForm] = useState({ location: 'Fridge 1', reading: '', threshold: '5' })
+  const [tempMsg, setTempMsg] = useState('')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -707,6 +723,40 @@ export default function InventoryStaffApp() {
       if (r.ok) { setTasksData(td => td ? { ...td, tasks: td.tasks.map(t => t.id === taskId ? { ...t, status: 'done', completed_by: acting?.id ?? null } : t) } : td); loadPulse(outletId) }
     } catch { /* ignore */ }
     setCompletingTask(null)
+  }
+
+  // ── INV-7 fresh / production ──
+  const loadFresh = useCallback(async (oid: string | null) => {
+    setFreshState('loading'); setPrepPick(null); setPrepResult(null)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/fresh${oid ? `?outlet_id=${oid}` : ''}`)
+      if (r.status === 401) { setStage('pick'); return }
+      if (!r.ok) { setFreshState('error'); return }
+      const d = await r.json()
+      setFreshRecipes(d.recipes ?? []); setFreshMarkdowns(d.markdowns?.proposals ?? []); setFreshTemp(d.temp ?? null); setFreshState('ok')
+    } catch { setFreshState('error') }
+  }, [slug])
+  useEffect(() => { if (stage === 'app' && tab === 'fresh') loadFresh(outletId) }, [stage, tab, outletId, loadFresh])
+  async function prepRecipe() {
+    if (!prepPick) return
+    setFreshBusy(true); setPrepResult(null)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/fresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'prep', recipe_id: prepPick.id, batches: prepBatches, outlet_id: outletId }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.depleted) { setPrepResult({ lines: d.lines ?? [], total_value: d.total_value ?? 0 }); loadHome(outletId) }
+      else setPrepResult({ lines: [], total_value: 0 })
+    } catch { /* ignore */ }
+    setFreshBusy(false)
+  }
+  async function logTempUi() {
+    if (!tempForm.reading.trim()) return
+    setFreshBusy(true); setTempMsg('')
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/fresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'log_temp', location: tempForm.location, reading_c: Number(tempForm.reading), threshold_c: tempForm.threshold.trim() ? Number(tempForm.threshold) : null, outlet_id: outletId }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setTempMsg(d.passed ? `✓ ${tempForm.location} ${tempForm.reading}°C — within safe range.` : `⚠ ${tempForm.location} ${tempForm.reading}°C — ABOVE the ${tempForm.threshold}°C limit. Flagged.`); setTempForm(f => ({ ...f, reading: '' })); loadFresh(outletId) }
+    } catch { /* ignore */ }
+    setFreshBusy(false)
   }
 
   // Bootstrap + resume session.
@@ -1969,6 +2019,115 @@ export default function InventoryStaffApp() {
     )
   }
 
+  // ── FRESH / PRODUCTION (INV-7) ──
+  if (tab === 'fresh') {
+    const inp = (val: string, onCh: (v: string) => void, ph: string, dec?: boolean) => (
+      <input value={val} onChange={e => onCh(e.target.value)} placeholder={ph} inputMode={dec ? 'decimal' : undefined}
+        onFocus={e => { e.currentTarget.style.boxShadow = `0 0 0 3px ${P.lime}` }} onBlur={e => { e.currentTarget.style.boxShadow = 'none' }}
+        style={{ width: '100%', padding: '11px 13px', borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', color: P.ink, fontFamily: BODY, fontSize: 14, outline: 'none' }} />
+    )
+    return shell(
+      <>
+        {statusbar}{header(true, 'production', 'recipes · markdown · temp logs')}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px' }}>
+          <PipelSegment inset={false} value={freshTab} onChange={v => setFreshTab(v)}
+            options={[{ value: 'prep', label: 'Prep' }, { value: 'markdown', label: 'Markdown' }, { value: 'temp', label: 'Temp' }]} />
+          <div style={{ height: 14 }} />
+
+          {freshState === 'loading' ? (
+            <div style={{ height: 130, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />
+          ) : freshState === 'error' ? (
+            <div style={{ padding: 22, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontWeight: 800, marginBottom: 12 }}>Couldn’t load production</p><PipelButton onClick={() => loadFresh(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
+          ) : freshTab === 'prep' ? (
+            prepPick ? (
+              <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW }}>
+                <div style={{ fontWeight: 800, fontSize: 17 }}>{prepPick.name}</div>
+                <div style={{ fontSize: 12, color: P.muted, fontWeight: 600, marginTop: 2 }}>{prepPick.linked}/{prepPick.ingredients} ingredients stock-linked{prepPick.cost != null ? ` · $${prepPick.cost.toFixed(2)}/serve` : ''}</div>
+                {prepPick.linked === 0 && <div style={{ fontSize: 11.5, color: P.amber, fontWeight: 700, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '8px 11px', marginTop: 11 }}>⚑ No ingredients are linked to stock — link them in the dashboard to auto-deplete.</div>}
+                {!prepResult ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center', margin: '16px 0' }}>
+                      <button onClick={() => setPrepBatches(v => Math.max(1, v - 1))} style={{ width: 48, height: 48, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 24, fontWeight: 800, cursor: 'pointer' }}>−</button>
+                      <div style={{ fontWeight: 800, fontSize: 36, minWidth: 56, textAlign: 'center' }}>{prepBatches}</div>
+                      <button onClick={() => setPrepBatches(v => v + 1)} style={{ width: 48, height: 48, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 24, fontWeight: 800, cursor: 'pointer' }}>+</button>
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: 11, color: P.muted, fontWeight: 600, marginBottom: 14 }}>batches to prep — depletes ingredients now</div>
+                    <PipelButton onClick={prepRecipe} disabled={freshBusy || prepPick.linked === 0}>{freshBusy ? 'Depleting…' : 'Prep & deplete ingredients'}</PipelButton>
+                  </>
+                ) : (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>depleted (−${prepResult.total_value.toFixed(2)})</div>
+                    {prepResult.lines.map((l, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 2px', borderTop: `1.5px solid ${P.ink}`, fontSize: 13 }}>
+                        <span style={{ fontWeight: 700, flex: 1 }}>{l.name}{l.fefo_batch ? <span style={{ fontSize: 10, color: P.muted }}> · FEFO {l.fefo_batch}</span> : ''}</span>
+                        <span style={{ fontWeight: 800 }}>−{l.depleted} → {l.new_on_hand}</span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 10, fontWeight: 500 }}>Logged to {acting?.name} via the canonical stock path.</div>
+                  </div>
+                )}
+                <button onClick={() => { setPrepPick(null); setPrepResult(null) }} style={{ width: '100%', marginTop: 10, background: 'none', color: P.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>← all recipes</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>recipes · {freshRecipes.length}</div>
+                {freshRecipes.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center', fontWeight: 500 }}>No recipes yet — add them in the dashboard.</div>}
+                {freshRecipes.map(r => (
+                  <div key={r.id} onClick={() => { setPrepPick(r); setPrepBatches(1); setPrepResult(null) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '12px 14px', marginBottom: 9, cursor: 'pointer' }}>
+                    <div><div style={{ fontWeight: 800, fontSize: 14 }}>{r.name}</div><div style={{ fontSize: 11, color: P.muted }}>{r.linked}/{r.ingredients} linked · serves {r.serves}{r.cost != null ? ` · $${r.cost.toFixed(2)}` : ''}</div></div>
+                    <PIcon name="back" size={16} stroke={P.muted} />
+                  </div>
+                ))}
+              </>
+            )
+          ) : freshTab === 'markdown' ? (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>end-of-day markdown · {freshMarkdowns.length}</div>
+              {freshMarkdowns.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center', fontWeight: 500, lineHeight: 1.5 }}>No markdowns proposed — needs an active markdown rule + items near expiry. Nothing fabricated.</div>}
+              {freshMarkdowns.map((m, i) => (
+                <div key={i} style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 18, padding: 14, marginBottom: 11, boxShadow: HARD_SHADOW }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 800, fontSize: 15 }}>{m.name}</div>
+                    <span style={{ fontWeight: 800, fontSize: 11, padding: '3px 9px', borderRadius: 9, border: `1.5px solid ${P.ink}`, background: P.lime }}>{m.discount_pct}% off</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: P.muted, fontWeight: 600, marginTop: 3 }}><span style={{ textDecoration: 'line-through' }}>${m.current_price.toFixed(2)}</span> → <b style={{ color: P.ink }}>${m.marked_price.toFixed(2)}</b> · {m.days_left <= 0 ? 'expires today' : `${m.days_left}d left`} · {m.rule_name}</div>
+                  <button onClick={() => setTab('tickets')} style={{ width: '100%', marginTop: 11, background: '#fff', color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 13, padding: 11, fontFamily: BODY, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Apply via price tickets →</button>
+                </div>
+              ))}
+              <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5, fontWeight: 500 }}>Proposals only — applying changes the price through the existing tickets flow, never automatically.</div>
+            </>
+          ) : (
+            <>
+              <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW, marginBottom: 14 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>log a temperature</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: P.muted, marginBottom: 5 }}>Location</div>{inp(tempForm.location, v => setTempForm(f => ({ ...f, location: v })), 'Fridge 1')}
+                <div style={{ display: 'flex', gap: 10, marginTop: 11 }}>
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 11, fontWeight: 700, color: P.muted, marginBottom: 5 }}>Reading °C</div>{inp(tempForm.reading, v => setTempForm(f => ({ ...f, reading: v })), '3.5', true)}</div>
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 11, fontWeight: 700, color: P.muted, marginBottom: 5 }}>Max °C</div>{inp(tempForm.threshold, v => setTempForm(f => ({ ...f, threshold: v })), '5', true)}</div>
+                </div>
+                {tempMsg && <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 11, color: tempMsg.startsWith('✓') ? P.ink : P.red, background: tempMsg.startsWith('✓') ? P.lime : P.redSoft, border: `1.5px solid ${tempMsg.startsWith('✓') ? P.ink : P.red}`, borderRadius: 12, padding: '9px 12px', lineHeight: 1.4 }}>{tempMsg}</div>}
+                <div style={{ marginTop: 12 }}><PipelButton onClick={logTempUi} disabled={freshBusy || !tempForm.reading.trim()}>{freshBusy ? 'Logging…' : 'Log temperature'}</PipelButton></div>
+              </div>
+              {freshTemp && (
+                <>
+                  {!freshTemp.logged_today && <div style={{ fontSize: 11.5, color: P.amber, fontWeight: 700, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '9px 12px', marginBottom: 12 }}>⚑ No temperature logged today — overdue (in your tasks).</div>}
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 9px' }}>recent · {freshTemp.failed_today} failed today</div>
+                  {freshTemp.recent.map((t, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 14, padding: '10px 13px', marginBottom: 8 }}>
+                      <div><span style={{ fontWeight: 700, fontSize: 13 }}>{t.location}</span><div style={{ fontSize: 11, color: P.muted }}>{new Date(t.logged_at).toLocaleString('en-AU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}{t.by ? ` · ${t.by}` : ''}</div></div>
+                      <span style={{ fontWeight: 800, fontSize: 14, color: t.passed ? P.ink : P.red }}>{t.reading_c}°C {t.passed ? '✓' : '⚠'}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+        </div>
+        {tabbar}
+      </>
+    )
+  }
+
   // HOME
   const multiOutlet = (boot?.outlets.length ?? 0) > 1
   const vh = home?.value_hero
@@ -1980,6 +2139,7 @@ export default function InventoryStaffApp() {
       case 'scan': case 'gap_scan': setTab('scan'); break
       case 'stocktake': resetStocktake(); setTab('stocktake'); break
       case 'order': setTab('order'); break
+      case 'fresh': setTab('fresh'); break
       case 'tasks': case 'count': setTab('tasks'); break
       case 'receive': setReceiveData(null); setOpenPo(null); setTab('receive'); break
       case 'transfer': setTransferData(null); setTab('transfer'); break

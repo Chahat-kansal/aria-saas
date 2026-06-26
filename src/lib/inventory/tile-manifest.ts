@@ -64,6 +64,7 @@ export const INVENTORY_TILES: TileEntry[] = [
   { id: 'movement_audit', label: 'Movement audit', sublabel: 'stock ledger', icon: 'activity', route: 'reports', industries: ALL, capabilities: [] },
 
   // ── Perishable (café sees the first four; bigger food retailers add the rest) ──
+  { id: 'production', label: 'Production', sublabel: 'prep & recipes', icon: 'layers', route: 'fresh', industries: CAFE, capabilities: ['perishable'] },
   { id: 'expiring', label: 'Expiring', sublabel: 'near expiry', icon: 'clock', route: 'expiring', industries: CAFE, capabilities: ['perishable'], badge: 'expiring' },
   { id: 'fefo', label: 'FEFO', sublabel: 'first-expiry first-out', icon: 'sort-asc', route: 'expiring', industries: CAFE, capabilities: ['perishable'] },
   { id: 'batches', label: 'Batches', sublabel: 'batch tracking', icon: 'layers', route: 'expiring', industries: CAFE, capabilities: ['perishable'] },
