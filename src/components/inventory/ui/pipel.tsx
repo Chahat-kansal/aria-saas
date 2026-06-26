@@ -117,9 +117,9 @@ export function PipelTitle({ title, subtitle }: { title: string; subtitle?: stri
 }
 
 // ───────────────────────── segment / outlet toggle ─────────────────────────
-export function PipelSegment<T extends string>({ options, value, onChange }: { options: Array<{ value: T; label: string }>; value: T; onChange: (v: T) => void }) {
+export function PipelSegment<T extends string>({ options, value, onChange, inset = true }: { options: Array<{ value: T; label: string }>; value: T; onChange: (v: T) => void; inset?: boolean }) {
   return (
-    <div style={{ display: 'flex', margin: '0 16px 14px', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 30, padding: 5, gap: 5 }}>
+    <div style={{ display: 'flex', margin: inset ? '0 16px 14px' : 0, background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 30, padding: 5, gap: 5 }}>
       {options.map(o => {
         const on = o.value === value
         return (

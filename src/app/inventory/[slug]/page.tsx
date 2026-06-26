@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { P, JAKARTA, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
-import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton } from '@/components/inventory/ui/pipel'
+import { P, JAKARTA, HARD_SHADOW, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
+import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton, PipelStat, PIcon } from '@/components/inventory/ui/pipel'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -23,6 +23,23 @@ const AV_PALETTE = ['#185FA5', '#2D5240', '#C9A37A', '#7c5cbf', '#BA7517']
 const money = (n: number) => `$${(Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 const initials = (name: string) => name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 const firstName = (name: string) => name.split(' ')[0] ?? name
+
+// INV-PIPEL-4 — report-tile glyph + a live headline number drawn ONLY from the already-loaded KPIs (no new
+// fetch): stock value → $ at cost, sold-vs-stock → units sold, shrinkage/waste → $ shrinkage. Others show their
+// blurb. Grounded — never a fabricated figure.
+const reportIcon = (type: string): string => (({
+  sold_vs_stock: 'bar-chart', stock_value: 'dollar-sign', margin: 'percent', top_sellers: 'trending-up',
+  shrinkage_waste: 'trash', dead_stock: 'archive', reorder: 'shopping-cart', days_cover: 'clock',
+  count_accuracy: 'check-square', received_vs_ordered: 'truck', transfers: 'transfer', expiring: 'clock',
+  movement_audit: 'activity',
+} as Record<string, string>)[type] ?? 'bar-chart')
+const reportLiveStat = (type: string, k: ReportKpis | null | undefined): { v: string; s: string } | null => {
+  if (!k) return null
+  if (type === 'stock_value') return { v: money(k.stock_at_cost), s: 'at cost' }
+  if (type === 'sold_vs_stock') return { v: String(k.units_sold), s: 'units sold' }
+  if (type === 'shrinkage_waste') return { v: money(k.shrinkage_dollars), s: 'shrinkage' }
+  return null
+}
 
 interface Staff { id: string; name: string; role: string; color: string | null }
 interface Outlet { id: string; name: string; is_default: boolean }
@@ -732,10 +749,13 @@ export default function InventoryStaffApp() {
         {statusbar}{header(true, 'Reports', 'Sold vs in-stock · PDF + email')}
         {body(
           <>
-            <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 12, padding: 4, marginBottom: 14 }}>
-              {(['daily', 'weekly'] as const).map(p => (
-                <button key={p} onClick={() => setReportPeriod(p)} style={{ flex: 1, padding: '8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: BODY, fontSize: 13, fontWeight: 600, background: reportPeriod === p ? T.green : 'transparent', color: reportPeriod === p ? '#fff' : T.muted }}>{p === 'daily' ? 'Daily' : 'Weekly'}</button>
-              ))}
+            <div style={{ marginBottom: 14 }}>
+              <PipelSegment
+                inset={false}
+                options={[{ value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }]}
+                value={reportPeriod}
+                onChange={(v) => setReportPeriod(v)}
+              />
             </div>
 
             {reportsState === 'loading' ? (
@@ -746,12 +766,10 @@ export default function InventoryStaffApp() {
               <>
                 {k && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginBottom: 14 }}>
-                    {([['Stock at cost', money(k.stock_at_cost), T.green], ['At retail', money(k.stock_at_retail), T.ink], ['Sold', String(k.units_sold), T.ink], ['Shrinkage', money(k.shrinkage_dollars), k.shrinkage_dollars > 0 ? T.red : T.ink]] as const).map(([l, v, col]) => (
-                      <div key={l} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px' }}>
-                        <div style={{ fontSize: 10, color: T.muted, textTransform: 'uppercase', letterSpacing: '.4px' }}>{l}</div>
-                        <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: col, marginTop: 3 }}>{v}</div>
-                      </div>
-                    ))}
+                    <PipelStat n={money(k.stock_at_cost)} k="stock at cost" />
+                    <PipelStat n={money(k.stock_at_retail)} k="at retail" />
+                    <PipelStat n={String(k.units_sold)} k="units sold" />
+                    <PipelStat n={money(k.shrinkage_dollars)} k="shrinkage" tone={k.shrinkage_dollars > 0 ? 'alert' : undefined} />
                   </div>
                 )}
 
@@ -764,34 +782,43 @@ export default function InventoryStaffApp() {
                 )}
 
                 {soldSection && soldSection.rows.length > 0 && (
-                  <div style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <b style={{ fontSize: 14, fontWeight: 600 }}>Sold vs on-hand</b>
-                      <span style={{ fontSize: 11, color: T.muted }}>{rep?.period_label}</span>
+                  <div style={{ background: '#fff', border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, marginBottom: 16, boxShadow: HARD_SHADOW }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <b style={{ fontSize: 15, fontWeight: 800 }}>sold vs on-hand</b>
+                      <span style={{ fontSize: 11, color: P.muted, fontWeight: 600 }}>{rep?.period_label}</span>
                     </div>
-                    <div style={{ display: 'flex', fontSize: 10, fontWeight: 600, color: T.muted, textTransform: 'uppercase', letterSpacing: '.3px', padding: '0 2px 6px' }}>
+                    <div style={{ display: 'flex', fontSize: 10, fontWeight: 700, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', padding: '0 2px 8px' }}>
                       <span style={{ flex: 1 }}>Product</span><span style={{ width: 60, textAlign: 'right' }}>Sold</span><span style={{ width: 64, textAlign: 'right' }}>On hand</span>
                     </div>
                     {soldSection.rows.slice(0, 12).map((r, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 2px', borderTop: `1.5px solid ${T.line}`, fontSize: 13 }}>
-                        <span style={{ flex: 1, fontWeight: 600 }}>{r[0]}</span>
-                        <span style={{ width: 60, textAlign: 'right', color: T.green, fontWeight: 600 }}>{r[1]}</span>
-                        <span style={{ width: 64, textAlign: 'right' }}>{r[2]}</span>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '9px 2px', borderTop: `1.5px solid ${P.ink}`, fontSize: 13 }}>
+                        <span style={{ flex: 1, fontWeight: 700 }}>{r[0]}</span>
+                        <span style={{ width: 60, textAlign: 'right', fontWeight: 800 }}>{r[1]}</span>
+                        <span style={{ width: 64, textAlign: 'right', fontWeight: 600 }}>{r[2]}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div style={{ margin: '4px 2px 10px', fontSize: 14, fontWeight: 600 }}>Report library</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  {lib.map(item => (
-                    <button key={item.type} onClick={() => exportReport(item.type)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                      <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{item.title}</b><div style={{ fontSize: 11, color: T.muted, lineHeight: 1.4, marginTop: 1 }}>{item.blurb}</div></div>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: T.green, background: T.greenSoft, borderRadius: 8, padding: '6px 10px', whiteSpace: 'nowrap' }}>PDF ↓</span>
-                    </button>
-                  ))}
+                <div style={{ margin: '4px 2px 12px', fontSize: 16, fontWeight: 800 }}>report library</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 13 }}>
+                  {lib.map(item => {
+                    const ls = reportLiveStat(item.type, k)
+                    const variant = item.type === 'sold_vs_stock' ? 'featured' : item.type === 'shrinkage_waste' ? 'loss' : 'default'
+                    return (
+                      <PipelTile
+                        key={item.type}
+                        icon={reportIcon(item.type)}
+                        label={item.title}
+                        statValue={ls?.v}
+                        statSuffix={ls ? ls.s : item.blurb}
+                        variant={variant}
+                        onClick={() => exportReport(item.type)}
+                      />
+                    )
+                  })}
                 </div>
-                <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 14, lineHeight: 1.5 }}>Tap a report to export a branded PDF. The owner can schedule any of these to auto-email daily or weekly from the dashboard.</div>
+                <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 16, lineHeight: 1.5, fontWeight: 500 }}>Tap a report to export a branded PDF. The owner can schedule any of these to auto-email daily or weekly from the dashboard.</div>
               </>
             )}
           </>
@@ -878,12 +905,6 @@ export default function InventoryStaffApp() {
 
   // ── SCAN / LOOKUP ──
   if (tab === 'scan') {
-    const scanCell = (l: string, v: React.ReactNode, col: string, i: number) => (
-      <div key={i} style={{ flex: 1, background: T.paper, borderRadius: 11, padding: '9px 8px', textAlign: 'center' }}>
-        <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, lineHeight: 1, color: col }}>{v}</div>
-        <div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{l}</div>
-      </div>
-    )
     return shell(
       <>
         {statusbar}{header(true, 'Scan', 'Look up an item · live stock')}
@@ -929,21 +950,25 @@ export default function InventoryStaffApp() {
               </div>
             )}
             {scanState === 'found' && scanResult && (
-              <div style={{ background: '#fff', border: `1.5px solid ${T.green}`, borderRadius: 16, padding: 15, boxShadow: '0 6px 20px rgba(45,82,64,.1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.ink, color: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 13 }}>
-                  <svg width="20" height="20" fill="none" stroke={T.sage} strokeWidth={2} viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10" /></svg>
-                  <b style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{scanResult.name}</b><span style={{ fontSize: 11, color: '#9aa3b2' }}>{scanResult.sku ? `SKU ${scanResult.sku}` : 'no SKU'}</span>
+              <div style={{ background: '#fff', border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 13, border: `1.5px solid ${P.ink}`, background: P.lime, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PIcon name="scan" size={22} /></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.05 }}>{scanResult.name}</div>
+                    <div style={{ fontSize: 11.5, color: P.muted, fontWeight: 600, marginTop: 2 }}>{scanResult.sku ? `SKU ${scanResult.sku}` : 'no SKU'}</div>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 9, marginBottom: 9 }}>
-                  {scanCell('on hand', scanResult.on_hand, T.green, 0)}
-                  {scanCell('price', money(scanResult.price), T.ink, 1)}
-                  {scanCell('unit cost', scanResult.cost != null ? money(scanResult.cost) : '—', T.ink, 2)}
+                  <PipelStat n={scanResult.on_hand} k="on hand" />
+                  <PipelStat n={money(scanResult.price)} k="price" />
+                  <PipelStat n={scanResult.cost != null && scanResult.price > 0 ? `${Math.round(((scanResult.price - scanResult.cost) / scanResult.price) * 100)}%` : '—'} k="margin" />
                 </div>
-                <div style={{ display: 'flex', gap: 9, marginBottom: 12 }}>
-                  {scanCell('sells / day', scanResult.units_per_day, T.ink, 0)}
-                  {scanCell('days cover', scanResult.days_of_cover != null ? scanResult.days_of_cover : '—', scanResult.days_of_cover != null && scanResult.days_of_cover < 7 ? T.red : T.ink, 1)}
-                  {scanCell('cost basis', scanResult.cost_source, T.muted, 2)}
+                <div style={{ display: 'flex', gap: 9, marginBottom: 4 }}>
+                  <PipelStat n={scanResult.cost != null ? money(scanResult.cost) : '—'} k="unit cost" />
+                  <PipelStat n={scanResult.units_per_day} k="sells / day" />
+                  <PipelStat n={scanResult.days_of_cover != null ? scanResult.days_of_cover : '—'} k="days cover" tone={scanResult.days_of_cover != null && scanResult.days_of_cover < 7 ? 'alert' : undefined} />
                 </div>
+                <div style={{ fontSize: 10.5, color: P.muted, fontWeight: 600, textAlign: 'center', margin: '9px 0 12px' }}>cost basis · {scanResult.cost_source}</div>
                 {scanCount == null ? (
                   <>
                     <button onClick={() => { setScanCount(scanResult.on_hand); setScanCountMsg(null) }} style={{ width: '100%', background: P.lime, color: P.ink, border: 0, borderRadius: 13, padding: 13, fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>Count this item</button>
