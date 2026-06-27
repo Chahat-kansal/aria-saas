@@ -73,7 +73,7 @@ interface ReceiveData { acting: { id: string; name: string }; receivable: Receiv
 interface TransferItem { id: string; product_id: string; product_name: string; quantity_approved: number; quantity_sent: number | null; quantity_received: number | null; variance_units: number | null }
 interface TransferRow { id: string; status: string; from_outlet_id: string; to_outlet_id: string; from_name: string; to_name: string; total_cost: number | null; items: TransferItem[] }
 interface TransferData { acting: { id: string; name: string }; outlet_count: number; transfers: TransferRow[] }
-interface ExpBatch { id: string; product_id: string; product_name: string; outlet_id: string; outlet_name: string; batch_ref: string; quantity_remaining: number; expiry_date: string; days_left: number; bucket: 'expired' | 'urgent' | 'soon' | 'ok' }
+interface ExpBatch { id: string; product_id: string; product_name: string; outlet_id: string; outlet_name: string; batch_ref: string; quantity_remaining: number; expiry_date: string; days_left: number; bucket: 'expired' | 'urgent' | 'soon' | 'ok'; cost_at_risk: number | null; alert_id: string | null }
 interface ExpData { acting: { id: string; name: string }; counts: { expired: number; urgent: number; soon: number; ok: number }; batches: ExpBatch[] }
 
 const TILES = [
@@ -546,7 +546,7 @@ export default function InventoryStaffApp() {
   }
   async function submitAdjust() {
     if (!adjustProduct) return
-    if (!online) { setAdjustErr('You’re offline — stock corrections need a connection.'); return }
+    if (!online) { setAdjustErr("You're offline — stock corrections need a connection."); return }
     if (!adjustReason) { setAdjustErr('Pick a reason — corrections need one.'); return }
     setAdjustSubmitting(true); setAdjustErr('')
     try {
@@ -604,7 +604,7 @@ export default function InventoryStaffApp() {
   const ticketRemove = (id: string) => setTicketBatch(b => b.filter(x => x.id !== id))
   async function ticketSaveBatch() {
     if (!ticketName.trim() || ticketBatch.length === 0) return
-    if (!online) { setTicketMsg('You’re offline — saving a print batch needs a connection.'); return }
+    if (!online) { setTicketMsg("You're offline — saving a print batch needs a connection."); return }
     setTicketSaving(true)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/ticket-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: ticketName.trim(), outlet_id: outletId, items: ticketBatch.map(x => ({ product_id: x.id, qty: x.qty })) }) })
@@ -652,7 +652,7 @@ export default function InventoryStaffApp() {
     setRecvQty(q); setRecvExpiry({}); setRecvNote(''); setRecvMsg('')
   }
   async function submitReceive(po: ReceivePO) {
-    if (!online) { setRecvMsg('You’re offline — receiving a delivery needs a connection.'); return }
+    if (!online) { setRecvMsg("You're offline — receiving a delivery needs a connection."); return }
     setRecvSubmitting(true); setRecvMsg('')
     try {
       const lines = po.items.map(l => ({ line_id: l.id, product_id: l.product_id, received_qty: recvQty[l.id] ?? 0, expiry_date: recvExpiry[l.id] || undefined }))
@@ -688,7 +688,7 @@ export default function InventoryStaffApp() {
   }, [slug])
   useEffect(() => { if (stage === 'app' && tab === 'transfer' && !transferData) loadTransfer() }, [stage, tab, transferData, loadTransfer])
   async function transferAction(id: string, action: 'approve' | 'send' | 'receive') {
-    if (!online) { setTransferMsg('You’re offline — transfers need a connection.'); return }
+    if (!online) { setTransferMsg("You're offline — transfers need a connection."); return }
     setTransferBusy(id); setTransferMsg('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/transfer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transfer_id: id, action }) })
@@ -703,23 +703,34 @@ export default function InventoryStaffApp() {
   const loadExpiring = useCallback(async () => {
     setExpState('loading')
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/expiring`)
+      const r = await fetch('/api/inventory/app/' + slug + '/expiring' + (outletId ? '?outlet_id=' + outletId : ''))
       if (r.status === 401) { setStage('pick'); return }
       if (!r.ok) { setExpState('error'); return }
       const d = await r.json() as ExpData
       setExpData(d)
       setExpState(d.batches.length === 0 ? 'empty' : 'ok')
     } catch { setExpState('error') }
-  }, [slug])
+  }, [slug, outletId])
   useEffect(() => { if (stage === 'app' && tab === 'expiring' && !expData) loadExpiring() }, [stage, tab, expData, loadExpiring])
   async function expiringAction(batchId: string, action: 'waste' | 'markdown') {
-    if (!online) { setExpMsg('You’re offline — reconnect to action expiring stock.'); return }
+    if (!online) { setExpMsg("You're offline — reconnect to action expiring stock."); return }
     setExpBusy(batchId); setExpMsg('')
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/expiring`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch_id: batchId, action }) })
+      const r = await fetch('/api/inventory/app/' + slug + '/expiring', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch_id: batchId, action }) })
       const d = await r.json().catch(() => ({}))
-      if (r.ok && d.ok) { setExpMsg(action === 'waste' ? (d.stock_changed ? `✓ Wasted ${d.wasted} — stock written off.` : 'Already cleared.') : '✓ Markdown flagged for the owner.'); setExpData(null); loadExpiring(); loadHome(outletId) }
-      else setExpMsg(d.error ? `Couldn't ${action}: ${d.error}` : `Could not ${action}.`)
+      if (r.ok && d.ok) { setExpMsg(action === 'waste' ? (d.stock_changed ? '✓ Wasted ' + d.wasted + ' — stock written off.' : 'Already cleared.') : '✓ Markdown flagged for the owner.'); setExpData(null); loadExpiring(); loadHome(outletId) }
+      else setExpMsg(d.error ? "Couldn't " + action + ': ' + d.error : 'Could not ' + action + '.')
+    } catch { setExpMsg('Something went wrong.') }
+    setExpBusy(null)
+  }
+  async function acknowledgeExpiry(alertId: string, batchId: string) {
+    if (!alertId || !online) { setExpMsg("You're offline — reconnect to clear this flag."); return }
+    setExpBusy(batchId); setExpMsg('')
+    try {
+      const r = await fetch('/api/inventory/app/' + slug + '/expiring', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alert_id: alertId, action: 'acknowledge_markdown' }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) { setExpMsg('Markdown flag cleared.'); setExpData(null); loadExpiring() }
+      else setExpMsg('Could not clear the flag.')
     } catch { setExpMsg('Something went wrong.') }
     setExpBusy(null)
   }
@@ -809,14 +820,14 @@ export default function InventoryStaffApp() {
   useEffect(() => { if (stage === 'app' && tab === 'order') loadBuying(outletId) }, [stage, tab, outletId, loadBuying])
   async function draftFromGroup(g: BuyGroup) {
     if (g.needs_supplier || !g.supplier_id) return
-    if (!online) { setBuyMsg('You’re offline — drafting a PO needs a connection.'); return }
+    if (!online) { setBuyMsg("You're offline — drafting a PO needs a connection."); return }
     setBuyBusy(g.supplier_id); setBuyMsg('')
     try {
       const lines = g.items.map(i => ({ product_id: i.product_id, product_name: i.name, quantity: i.suggested_qty, unit_cost: i.unit_cost }))
       const r = await fetch(`/api/inventory/app/${slug}/buying`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draft', supplier_id: g.supplier_id, lines }) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.po) { setBuyMsg(`✓ Draft ${d.po.order_number} created — approve it below to send.`); loadBuying(outletId) }
-      else setBuyMsg(d.error ? `Couldn’t draft: ${d.error}` : 'Could not create the draft.')
+      else setBuyMsg(d.error ? `Couldn't draft: ${d.error}` : 'Could not create the draft.')
     } catch { setBuyMsg('Something went wrong.') }
     setBuyBusy(null)
   }
@@ -825,7 +836,7 @@ export default function InventoryStaffApp() {
     try { const r = await fetch(`/api/inventory/app/${slug}/buying?po=${id}`); if (r.ok) { const d = await r.json(); setBuyPo({ po: d.po, lines: d.lines ?? [] }) } } catch { /* ignore */ }
   }
   async function approveBuyPo(id: string) {
-    if (!online) { setBuyPermErr('You’re offline — a purchase order can’t be sent without a connection.'); return } // money: never queued
+    if (!online) { setBuyPermErr("You're offline — a purchase order can't be sent without a connection."); return } // money: never queued
     setBuyBusy(id); setBuyPermErr('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/buying`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve', po_id: id }) })
@@ -927,7 +938,7 @@ export default function InventoryStaffApp() {
   }
   async function placeRecall() {
     if (!recallPick) return
-    if (!online) { setLossMsg('You’re offline — reconnect to place a hold.'); return }
+    if (!online) { setLossMsg("You're offline — reconnect to place a hold."); return }
     setLossBusy('recall'); setLossMsg('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'recall', product_id: recallPick.id, quantity: recallQty, reason: recallReason, outlet_id: outletId }) })
@@ -938,7 +949,7 @@ export default function InventoryStaffApp() {
     setLossBusy(null)
   }
   async function resolveHoldUi(holdId: string, resolution: 'released' | 'disposed' | 'returned_to_supplier') {
-    if (!online) { setLossPermErr('You’re offline — resolving a hold needs a connection.'); return }
+    if (!online) { setLossPermErr("You're offline — resolving a hold needs a connection."); return }
     setLossBusy(holdId); setLossPermErr('')
     try {
       const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'resolve', hold_id: holdId, resolution, outlet_id: outletId }) })
@@ -964,7 +975,7 @@ export default function InventoryStaffApp() {
         } catch { break } // a network blip mid-replay — stop, keep the rest pending
       }
       setSyncing(false); await refreshPending()
-      setSyncMsg(failed ? `${failed} change${failed === 1 ? '' : 's'} couldn’t sync — review` : 'Synced ✓')
+      setSyncMsg(failed ? `${failed} change${failed === 1 ? '' : 's'} couldn't sync — review` : 'Synced ✓')
       setTimeout(() => setSyncMsg(''), 6000)
     }
     loadHome(outletId)
@@ -986,11 +997,11 @@ export default function InventoryStaffApp() {
   const enqueueSafe = useCallback(async (endpoint: string, payload: unknown, label: string): Promise<boolean> => {
     const ok = await enqueueWrite({ endpoint, method: 'POST', payload, label, client_ts: Date.now() })
     if (ok) { await refreshPending(); setOfflineToast('✓ Saved offline — will sync when you reconnect'); setTimeout(() => setOfflineToast(''), 4000) }
-    else { setOfflineToast('Couldn’t save offline on this device — reconnect to record it'); setTimeout(() => setOfflineToast(''), 5000) }
+    else { setOfflineToast("Couldn't save offline on this device — reconnect to record it"); setTimeout(() => setOfflineToast(''), 5000) }
     return ok
   }, [refreshPending])
   // Block a NON-queueable write (money / stock move) when offline — clear message, never a silent fail.
-  const blockOffline = useCallback(() => { setOfflineToast('You’re offline — reconnect to do this'); setTimeout(() => setOfflineToast(''), 4000) }, [])
+  const blockOffline = useCallback(() => { setOfflineToast("You're offline — reconnect to do this"); setTimeout(() => setOfflineToast(''), 4000) }, [])
 
   // Bootstrap + resume session.
   useEffect(() => {
@@ -1040,7 +1051,7 @@ export default function InventoryStaffApp() {
     <div style={{ flexShrink: 0, padding: '8px 16px', textAlign: 'center', fontSize: 12, fontWeight: 700, lineHeight: 1.35,
       background: !online ? P.ink : syncMsg.includes('couldn') ? P.red : P.lime, color: !online ? P.lime : syncMsg.includes('couldn') ? '#fff' : P.ink }}>
       {!online
-        ? (pending > 0 ? `Offline · ${pending} change${pending === 1 ? '' : 's'} waiting to sync` : 'You’re offline — counts, waste & temp logs save and sync when you reconnect')
+        ? (pending > 0 ? `Offline · ${pending} change${pending === 1 ? '' : 's'} waiting to sync` : "You're offline — counts, waste & temp logs save and sync when you reconnect")
         : syncing ? `Syncing ${pending} change${pending === 1 ? '' : 's'}…`
           : syncMsg ? syncMsg
             : `${pending} change${pending === 1 ? '' : 's'} pending sync`}
@@ -2064,52 +2075,100 @@ export default function InventoryStaffApp() {
     )
   }
 
-  // ── EXPIRING (batch buckets) ──
+  // ── EXPIRING (batch buckets — FEFO split: Expired | ≤7d | 8-14d) ──
   if (tab === 'expiring') {
-    const bucketMeta = (b: string) => ({
-      expired: { label: 'Expired', bg: T.redSoft, col: T.red }, urgent: { label: '≤3 days', bg: T.redSoft, col: T.red },
-      soon: { label: '≤14 days', bg: T.amberSoft, col: T.amber }, ok: { label: 'OK', bg: T.sageSoft, col: T.green },
-    } as Record<string, { label: string; bg: string; col: string }>)[b] ?? { label: b, bg: T.paper, col: T.muted }
     const c = expData?.counts
+    const allBatches = expData?.batches ?? []
+    const expiredBatches = allBatches.filter(b => b.bucket === 'expired')
+    const soonBatches = allBatches.filter(b => b.days_left >= 0 && b.days_left <= 7)
+    const comingBatches = allBatches.filter(b => b.days_left >= 8 && b.days_left <= 14)
+    const riskBatches = allBatches.filter(b => b.bucket !== 'ok')
+    const totalAtRisk = riskBatches.filter(b => b.cost_at_risk != null).reduce((s, b) => s + (b.cost_at_risk ?? 0), 0)
+    const hasAtRisk = riskBatches.some(b => b.cost_at_risk != null)
+    const renderExpBatch = (b: ExpBatch, showWaste: boolean) => {
+      const busy = expBusy === b.id
+      const dayLabel = b.days_left < 0 ? Math.abs(b.days_left) + 'd ago' : b.days_left === 0 ? 'today' : b.days_left + 'd left'
+      const colDay = b.bucket === 'expired' || b.bucket === 'urgent' ? T.red : T.amber
+      return (
+        <div key={b.id} style={{ background: '#fff', border: '1.5px solid ' + T.line, borderLeft: '3px solid ' + colDay, borderRadius: 14, padding: 13, marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+            <b style={{ fontSize: 14, fontWeight: 600 }}>{b.product_name}</b>
+            <span style={{ fontSize: 11, fontWeight: 700, color: colDay }}>{dayLabel}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{b.batch_ref} · {b.quantity_remaining} left · {b.outlet_name} · use-by {new Date(b.expiry_date + 'T00:00:00+10:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
+          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {b.cost_at_risk != null ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.amber, background: T.amberSoft, borderRadius: 8, padding: '3px 8px' }}>{'$' + b.cost_at_risk.toFixed(2) + ' at risk'}</span>
+            ) : (
+              <span style={{ fontSize: 11, color: T.muted, background: T.paper, borderRadius: 8, padding: '3px 8px' }}>cost unknown</span>
+            )}
+            {b.alert_id && <span style={{ fontSize: 11, fontWeight: 700, color: T.amber, background: T.amberSoft, borderRadius: 8, padding: '3px 8px' }}>Markdown flagged</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
+            {showWaste && <button disabled={busy} onClick={() => expiringAction(b.id, 'waste')} style={{ flex: 1, background: '#fff', color: T.red, border: '1.5px solid ' + T.redSoft, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Waste'}</button>}
+            {b.alert_id ? (
+              <button disabled={busy} onClick={() => acknowledgeExpiry(b.alert_id || '', b.id)} style={{ flex: 1, background: '#fff', color: T.green, border: '1.5px solid ' + T.sageSoft, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Clear flag'}</button>
+            ) : (
+              <button disabled={busy} onClick={() => expiringAction(b.id, 'markdown')} style={{ flex: 1, background: '#fff', color: T.amber, border: '1.5px solid ' + T.amberSoft, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Flag markdown'}</button>
+            )}
+          </div>
+        </div>
+      )
+    }
+    const sectionHead = (label: string, count: number, col: string, bg: string) => count > 0 ? (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: col, background: bg, borderRadius: 8, padding: '3px 10px' }}>{label}</span>
+        <span style={{ fontSize: 11, color: T.muted }}>{count} batch{count > 1 ? 'es' : ''}</span>
+      </div>
+    ) : null
     return shell(
       <>
-        {statusbar}{header(true, 'Expiring', 'Batches nearing expiry')}
+        {statusbar}{header(true, 'Expiring', 'FEFO — earliest expiry first')}
         {body(
           expState === 'loading' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 16, background: '#fff', border: '1.5px solid ' + T.line }} />)}</div>
           ) : expState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load expiring stock</p><button onClick={() => { setExpData(null); loadExpiring() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
+            <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: '1px solid ' + T.redSoft, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load expiring stock</p><button onClick={() => { setExpData(null); loadExpiring() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : expState === 'empty' ? (
             <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🌿</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>Nothing tracked for expiry</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Batches with an expiry date appear here as they near their use-by. Add an expiry when receiving a delivery.</p></div>
           ) : (
             <>
               {c && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
-                  {([['expired', c.expired], ['urgent', c.urgent], ['soon', c.soon]] as const).map(([b, n]) => {
-                    const m = bucketMeta(b)
-                    return <div key={b} style={{ flex: 1, background: m.bg, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}><div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: m.col, lineHeight: 1 }}>{n}</div><div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{m.label}</div></div>
-                  })}
+                  {([['Expired', c.expired, T.redSoft, T.red], ['≤3d', c.urgent, T.redSoft, T.red], ['≤14d', c.soon, T.amberSoft, T.amber]] as const).map(([label, n, bg, col]) => (
+                    <div key={label} style={{ flex: 1, background: bg, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: col, lineHeight: 1 }}>{n}</div>
+                      <div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>{label}</div>
+                    </div>
+                  ))}
+                  {hasAtRisk && (
+                    <div style={{ flex: 1.4, background: T.amberSoft, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color: T.amber, lineHeight: 1 }}>{'$' + totalAtRisk.toFixed(0)}</div>
+                      <div style={{ fontSize: 9.5, color: T.muted, marginTop: 3 }}>at risk</div>
+                    </div>
+                  )}
                 </div>
               )}
-              {expMsg && <p style={{ fontSize: 12.5, color: expMsg.startsWith('✓') ? T.green : T.red, marginBottom: 12, background: expMsg.startsWith('✓') ? T.sageSoft : T.redSoft, borderRadius: 10, padding: '10px 12px' }}>{expMsg}</p>}
-              {(expData?.batches ?? []).map(b => {
-                const m = bucketMeta(b.bucket)
-                const busy = expBusy === b.id
-                return (
-                  <div key={b.id} style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderLeft: `3px solid ${m.col}`, borderRadius: 14, padding: 13, marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <b style={{ fontSize: 14, fontWeight: 600 }}>{b.product_name}</b>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: m.col }}>{b.days_left < 0 ? `${Math.abs(b.days_left)}d ago` : `${b.days_left}d left`}</span>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{b.batch_ref} · {b.quantity_remaining} left · {b.outlet_name} · use-by {new Date(`${b.expiry_date}T00:00:00+10:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-                      <button disabled={busy} onClick={() => expiringAction(b.id, 'waste')} style={{ flex: 1, background: '#fff', color: T.red, border: `1.5px solid ${T.redSoft}`, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Waste'}</button>
-                      <button disabled={busy} onClick={() => expiringAction(b.id, 'markdown')} style={{ flex: 1, background: '#fff', color: T.amber, border: `1.5px solid ${T.amberSoft}`, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Markdown</button>
-                    </div>
-                  </div>
-                )
-              })}
-              <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 4, lineHeight: 1.5 }}>Waste writes the batch off (decrements stock, logged to <b style={{ color: T.green }}>{acting?.name}</b>). Markdown flags it for the owner — no price change.</div>
+              {expMsg && <p style={{ fontSize: 12.5, color: expMsg.startsWith('✓') || expMsg.startsWith('Markdown flag') ? T.green : T.red, marginBottom: 12, background: expMsg.startsWith('✓') || expMsg.startsWith('Markdown flag') ? T.sageSoft : T.redSoft, borderRadius: 10, padding: '10px 12px' }}>{expMsg}</p>}
+              {expiredBatches.length > 0 && (
+                <>
+                  {sectionHead('EXPIRED', expiredBatches.length, T.red, T.redSoft)}
+                  {expiredBatches.map(b => renderExpBatch(b, true))}
+                </>
+              )}
+              {soonBatches.length > 0 && (
+                <>
+                  {sectionHead('EXPIRING SOON ≤7d', soonBatches.length, T.amber, T.amberSoft)}
+                  {soonBatches.map(b => renderExpBatch(b, false))}
+                </>
+              )}
+              {comingBatches.length > 0 && (
+                <>
+                  {sectionHead('COMING UP 8–14d', comingBatches.length, T.amber, T.amberSoft)}
+                  {comingBatches.map(b => renderExpBatch(b, false))}
+                </>
+              )}
+              <div style={{ fontSize: 10.5, color: T.muted, textAlign: 'center', marginTop: 4, lineHeight: 1.5 }}>Waste writes the batch off (decrements stock, logged to <b style={{ color: T.green }}>{acting?.name}</b>). Flag markdown alerts the owner — no price change.</div>
             </>
           )
         )}
@@ -2123,7 +2182,7 @@ export default function InventoryStaffApp() {
     const outletName = boot?.outlets.find(o => o.id === outletId)?.name.replace(/^\[TEST\]\s*/, '') ?? ''
     const modes: Array<{ k: 'full' | 'cycle' | 'perpetual'; icon: string; label: string; sub: string }> = [
       { k: 'full', icon: 'check-square', label: 'Full stocktake', sub: 'count everything in this outlet' },
-      { k: 'cycle', icon: 'trending-up', label: 'ABC cycle count', sub: 'today’s smart subset — A items first' },
+      { k: 'cycle', icon: 'trending-up', label: 'ABC cycle count', sub: "today's smart subset — A items first" },
       { k: 'perpetual', icon: 'scan', label: 'Spot count', sub: 'quick single-item accuracy check' },
     ]
     const countedIds = new Set(stLines.filter(l => l.counted_qty != null).map(l => l.product_id))
@@ -2204,7 +2263,7 @@ export default function InventoryStaffApp() {
                   {/* product source: cycle list OR search */}
                   {stType === 'cycle' ? (
                     <div style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>today’s cycle list · {stCycle.length} items</div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 10px' }}>today's cycle list · {stCycle.length} items</div>
                       {stCycle.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center' }}>Nothing due to count right now.</div>}
                       {stCycle.map(c => {
                         const done = countedIds.has(c.product_id)
@@ -2303,7 +2362,7 @@ export default function InventoryStaffApp() {
           ) : buyState === 'loading' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 120, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />)}</div>
           ) : buyState === 'error' ? (
-            <div style={{ padding: 24, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>Couldn’t load buying</p><PipelButton onClick={() => loadBuying(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
+            <div style={{ padding: 24, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>Couldn't load buying</p><PipelButton onClick={() => loadBuying(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
           ) : (
             <>
               {/* REORDER SUGGESTIONS grouped by supplier */}
@@ -2367,7 +2426,7 @@ export default function InventoryStaffApp() {
           {freshState === 'loading' ? (
             <div style={{ height: 130, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />
           ) : freshState === 'error' ? (
-            <div style={{ padding: 22, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontWeight: 800, marginBottom: 12 }}>Couldn’t load production</p><PipelButton onClick={() => loadFresh(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
+            <div style={{ padding: 22, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontWeight: 800, marginBottom: 12 }}>Couldn't load production</p><PipelButton onClick={() => loadFresh(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
           ) : freshTab === 'prep' ? (
             prepPick ? (
               <div style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 16, boxShadow: HARD_SHADOW }}>
@@ -2474,7 +2533,7 @@ export default function InventoryStaffApp() {
           {lossState === 'loading' ? (
             <div style={{ height: 130, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}` }} />
           ) : lossState === 'error' ? (
-            <div style={{ padding: 22, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontWeight: 800, marginBottom: 12 }}>Couldn’t load</p><PipelButton onClick={() => loadLoss(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
+            <div style={{ padding: 22, borderRadius: 22, background: P.card, border: `1.5px solid ${P.ink}`, textAlign: 'center' }}><p style={{ fontWeight: 800, marginBottom: 12 }}>Couldn't load</p><PipelButton onClick={() => loadLoss(outletId)} style={{ width: 'auto', padding: '10px 20px', display: 'inline-block' }}>Try again</PipelButton></div>
           ) : lossTab === 'quarantine' ? (
             <>
               {lossHolds.length === 0 && lossFailedTemps.length === 0 && <div style={{ fontSize: 12.5, color: P.muted, padding: 16, textAlign: 'center', fontWeight: 500 }}>Nothing on hold — all stock is sellable.</div>}
@@ -2533,7 +2592,7 @@ export default function InventoryStaffApp() {
                 ))}
                 {recallFromCache && recallMatches.length > 0 && <div style={{ fontSize: 11, color: T.amber, background: T.amberSoft, borderRadius: 9, padding: "8px 12px", marginBottom: 9, lineHeight: 1.5 }}>⚡ Offline — saved catalog. Stock levels may be slightly stale.</div>}
                 {!lossBusy && recallMatches.length === 0 && !online && recallSearch.trim() && <div style={{ padding: 16, borderRadius: 12, background: T.amberSoft, border: "1.5px solid " + T.amber, textAlign: "center", fontSize: 12.5, color: T.ink, lineHeight: 1.6, marginBottom: 9 }}>You&apos;re offline — open this tab while connected to enable offline search.</div>}
-                <div style={{ fontSize: 10.5, color: P.muted, textAlign: "center", marginTop: 8, lineHeight: 1.5, fontWeight: 500 }}>Recall is open to any staff — pulling unsafe stock fast. Stock isn’t deleted; it’s held for the owner to resolve.</div>
+                <div style={{ fontSize: 10.5, color: P.muted, textAlign: "center", marginTop: 8, lineHeight: 1.5, fontWeight: 500 }}>Recall is open to any staff — pulling unsafe stock fast. Stock isn't deleted; it's held for the owner to resolve.</div>
               </>
             )
           ) : lossShrink ? (

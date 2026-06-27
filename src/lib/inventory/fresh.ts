@@ -185,3 +185,54 @@ export async function tempStatus(sb: SupabaseClient, businessId: string, outletI
     recent: rows.slice(0, 6).map(r => ({ location: r.location as string, reading_c: Number(r.reading_c), passed: !!r.passed, logged_at: r.logged_at as string, by: (r.logged_by_name as string | null) ?? null })),
   }
 }
+
+// ── expiry ground truth ───────────────────────────────────────────────────────────────────────────────────────
+// Near-window (0–7d) and expired batches still in stock. null = no cost configured (never fabricate $0).
+export async function expiryGroundTruth(sb: SupabaseClient, businessId: string): Promise<{
+  expiry_at_risk_dollars: number | null
+  expiry_no_cost_count: number
+  expired_not_wasted: number
+  highest_at_risk_product: string | null
+}> {
+  const aestNow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date())
+  const cutoff = new Date(aestNow)
+  cutoff.setDate(cutoff.getDate() + 7)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+  const { data: batches } = await sb.from('pos_product_batches')
+    .select('product_id, quantity_remaining, expiry_date')
+    .eq('business_id', businessId).eq('expiry_tracked', true).gt('quantity_remaining', 0)
+    .lte('expiry_date', cutoffStr).limit(300)
+  if (!batches?.length) return { expiry_at_risk_dollars: null, expiry_no_cost_count: 0, expired_not_wasted: 0, highest_at_risk_product: null }
+  const pIds = [...new Set(batches.map(b => b.product_id as string))]
+  const { data: prods } = await sb.from('pos_products').select('id, name, cost_price').in('id', pIds)
+  const pCost = new Map((prods ?? []).map(p => [p.id as string, p.cost_price != null && Number(p.cost_price) > 0 ? Number(p.cost_price) : null]))
+  const pName = new Map((prods ?? []).map(p => [p.id as string, p.name as string]))
+  let atRiskTotal = 0
+  let noCostCount = 0
+  let expiredNotWasted = 0
+  const riskByProduct = new Map<string, number>()
+  for (const b of batches) {
+    const expiredAlready = (b.expiry_date as string) < aestNow
+    if (expiredAlready) expiredNotWasted++
+    const cost = pCost.get(b.product_id as string) ?? null
+    if (cost == null) { noCostCount++; continue }
+    const risk = Math.round(Number(b.quantity_remaining) * cost * 100) / 100
+    atRiskTotal += risk
+    const pid = b.product_id as string
+    riskByProduct.set(pid, (riskByProduct.get(pid) ?? 0) + risk)
+  }
+  const hasAny = atRiskTotal > 0
+  let highestProd: string | null = null
+  if (hasAny) {
+    let maxRisk = 0
+    for (const [pid, risk] of riskByProduct) {
+      if (risk > maxRisk) { maxRisk = risk; highestProd = pName.get(pid) ?? null }
+    }
+  }
+  return {
+    expiry_at_risk_dollars: hasAny ? Math.round(atRiskTotal * 100) / 100 : null,
+    expiry_no_cost_count: noCostCount,
+    expired_not_wasted: expiredNotWasted,
+    highest_at_risk_product: highestProd,
+  }
+}

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { reorderSuggestions } from '@/lib/inventory/buying'
-import { tempStatus } from '@/lib/inventory/fresh'
+import { tempStatus, expiryGroundTruth } from '@/lib/inventory/fresh'
 import { computeAvT } from '@/lib/inventory/avt'
 import { periodRange } from '@/lib/inventory/reports'
 
@@ -85,13 +85,14 @@ export async function velocitySignals(sb: SupabaseClient, businessId: string, mi
 /** Generate (idempotently, once/day) the velocity + weather tasks — the signals the INV-STAFF-APP-2 base generator
  *  (par/cycle/expiry) doesn't cover. Never duplicates: velocity dedupes on the product constraint; the
  *  product-less weather task is guarded by an explicit "exists today" check. Returns what was added. */
-export async function generateGuidanceTasks(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<{ velocity_added: number; weather_added: number; waste_task_added: number; weather: WeatherInsight | null }> {
+export async function generateGuidanceTasks(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<{ velocity_added: number; weather_added: number; waste_task_added: number; expiry_task_added: number; weather: WeatherInsight | null }> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
   const due = aestDate()
-  const { data: existing } = await sb.from('inventory_tasks').select('task_type').eq('business_id', businessId).eq('due_date', due).in('task_type', ['velocity', 'weather', 'waste'])
+  const { data: existing } = await sb.from('inventory_tasks').select('task_type').eq('business_id', businessId).eq('due_date', due).in('task_type', ['velocity', 'weather', 'waste', 'expiry_risk'])
   const haveVel = (existing ?? []).some(t => t.task_type === 'velocity')
   const haveWx = (existing ?? []).some(t => t.task_type === 'weather')
   const haveWaste = (existing ?? []).some(t => t.task_type === 'waste')
+  const haveExpiry = (existing ?? []).some(t => t.task_type === 'expiry_risk')
 
   let velAdded = 0
   if (!haveVel) {
@@ -162,7 +163,25 @@ export async function generateGuidanceTasks(sb: SupabaseClient, businessId: stri
       }
     }
   }
-  return { velocity_added: velAdded, weather_added: wxAdded, waste_task_added: wasteTaskAdded, weather: wi }
+  // Expiry-risk Tanpin task: fire once/day when ≥$5 of near-window/expired stock exists with known cost.
+  // Grounded: $ and product name come from real pos_product_batches × cost_price, never fabricated.
+  let expiryTaskAdded = 0
+  if (!haveExpiry) {
+    const expiry = await expiryGroundTruth(sb, businessId)
+    if (expiry.expiry_at_risk_dollars != null && expiry.expiry_at_risk_dollars >= 5) {
+      const riskStr = '$' + expiry.expiry_at_risk_dollars.toFixed(0)
+      const prodLabel = expiry.highest_at_risk_product ? ' — ' + expiry.highest_at_risk_product + ' is highest' : ''
+      const { error } = await sb.from('inventory_tasks').insert({
+        business_id: businessId, outlet_id: outletId, task_type: 'expiry_risk', product_id: null,
+        title: 'Review expiring stock · ' + riskStr + ' at risk',
+        detail: riskStr + ' of stock expires within 7 days' + prodLabel,
+        hypothesis: riskStr + ' of tracked stock expires within the next 7 days' + prodLabel + '. Review the Expiring tab, action any expired batches as waste, and flag items for markdown where appropriate.',
+        priority: 25, generated_by: 'aria', due_date: due, status: 'open',
+      })
+      if (!error) expiryTaskAdded = 1
+    }
+  }
+  return { velocity_added: velAdded, weather_added: wxAdded, waste_task_added: wasteTaskAdded, expiry_task_added: expiryTaskAdded, weather: wi }
 }
 
 // INV-AVT — Tanpin task generation for large food-cost gaps. Triggered when over-portion > 15% OR > $10 for the

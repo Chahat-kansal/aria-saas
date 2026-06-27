@@ -38,30 +38,43 @@ async function _GET(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const { data: batches } = await supabaseAdmin.from('pos_product_batches')
+  const outletId = new URL(req.url).searchParams.get('outlet_id') || null
+
+  // True FEFO: expiry_date asc, created_at asc as tie-breaker. Scoped to outlet when provided.
+  let bq = supabaseAdmin.from('pos_product_batches')
     .select('id, product_id, outlet_id, batch_ref, quantity_remaining, expiry_date, expiry_tracked')
     .eq('business_id', bid).eq('expiry_tracked', true).gt('quantity_remaining', 0)
-    .order('expiry_date', { ascending: true }).limit(200)
+    .order('expiry_date', { ascending: true }).order('created_at', { ascending: true }).limit(200)
+  if (outletId) bq = bq.eq('outlet_id', outletId)
+  const { data: batches } = await bq
 
   const pIds = [...new Set((batches ?? []).map(b => b.product_id as string).filter(Boolean))]
   const oIds = [...new Set((batches ?? []).map(b => b.outlet_id as string).filter(Boolean))]
-  const [{ data: prods }, { data: outlets }] = await Promise.all([
-    pIds.length ? supabaseAdmin.from('pos_products').select('id, name').in('id', pIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+  const bIds = (batches ?? []).map(b => b.id as string)
+  const [{ data: prods }, { data: outlets }, { data: activeAlerts }] = await Promise.all([
+    pIds.length ? supabaseAdmin.from('pos_products').select('id, name, cost_price').in('id', pIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string; cost_price: number | null }> }),
     oIds.length ? supabaseAdmin.from('pos_outlets').select('id, name').in('id', oIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+    bIds.length ? supabaseAdmin.from('pos_expiry_alerts').select('id, batch_id').in('batch_id', bIds).eq('acknowledged', false).eq('alert_type', 'markdown') : Promise.resolve({ data: [] as Array<{ id: string; batch_id: string }> }),
   ])
   const pName = new Map((prods ?? []).map(p => [p.id as string, p.name as string]))
+  const pCost = new Map((prods ?? []).map(p => [p.id as string, p.cost_price != null && Number(p.cost_price) > 0 ? Number(p.cost_price) : null]))
   const oName = new Map((outlets ?? []).map(o => [o.id as string, o.name as string]))
+  const alertByBatch = new Map((activeAlerts ?? []).map(a => [a.batch_id as string, a.id as string]))
 
   const counts = { expired: 0, urgent: 0, soon: 0, ok: 0 }
   const rows = (batches ?? []).map(b => {
     const d = daysLeft(b.expiry_date as string)
     const bucket = bucketOf(d)
     counts[bucket]++
+    const qty = Number(b.quantity_remaining) || 0
+    const cost = pCost.get(b.product_id as string) ?? null
     return {
       id: b.id, product_id: b.product_id, product_name: pName.get(b.product_id as string) ?? 'Item',
       outlet_id: b.outlet_id, outlet_name: oName.get(b.outlet_id as string) ?? '—',
-      batch_ref: b.batch_ref, quantity_remaining: Number(b.quantity_remaining) || 0,
+      batch_ref: b.batch_ref, quantity_remaining: qty,
       expiry_date: b.expiry_date, days_left: d, bucket,
+      cost_at_risk: cost != null ? Math.round(qty * cost * 100) / 100 : null,
+      alert_id: alertByBatch.get(b.id as string) ?? null,
     }
   })
 
@@ -75,8 +88,19 @@ async function _POST(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { batch_id?: string; action?: 'waste' | 'markdown' }
-  if (!body.batch_id || !['waste', 'markdown'].includes(body.action ?? '')) return NextResponse.json({ error: 'batch_id + valid action required' }, { status: 400 })
+  const body = await req.json().catch(() => ({})) as { batch_id?: string; alert_id?: string; action?: 'waste' | 'markdown' | 'acknowledge_markdown' }
+  if (!body.action || !['waste', 'markdown', 'acknowledge_markdown'].includes(body.action)) return NextResponse.json({ error: 'valid action required' }, { status: 400 })
+
+  // ── ACKNOWLEDGE MARKDOWN: dismiss the alert flag (owner has actioned it) ──
+  if (body.action === 'acknowledge_markdown') {
+    if (!body.alert_id) return NextResponse.json({ error: 'alert_id required' }, { status: 400 })
+    const { error } = await supabaseAdmin.from('pos_expiry_alerts')
+      .update({ acknowledged: true }).eq('id', body.alert_id).eq('business_id', bid)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, action: 'acknowledge_markdown' })
+  }
+
+  if (!body.batch_id) return NextResponse.json({ error: 'batch_id required' }, { status: 400 })
 
   const { data: batch } = await supabaseAdmin.from('pos_product_batches')
     .select('id, product_id, outlet_id, batch_ref, quantity_remaining, expiry_date').eq('id', body.batch_id).eq('business_id', bid).maybeSingle()
