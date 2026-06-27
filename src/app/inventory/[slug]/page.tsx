@@ -229,7 +229,7 @@ export default function InventoryStaffApp() {
   const [buyPo, setBuyPo] = useState<{ po: { id: string; order_number: string; status: string; total: number | null; created_by: string | null }; lines: Array<{ product_name: string; quantity_ordered: number; unit_cost: number | null; line_total: number | null }> } | null>(null)
   const [buyPermErr, setBuyPermErr] = useState('')
   // INV-6 — Pulse + Handover (guidance) on the Tasks screen
-  interface PulseData { today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number } }
+  interface PulseData { today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number }; top_waste_7d?: Array<{ name: string; cost_cents: number; reason: string }> }
   interface WeatherData { forecast_rain_pct: number | null; sufficient: boolean; matched_days: number; rain_days: number; dry_days: number; rain_lift_pct: number | null; reason: string | null }
   interface HandoverData { done: Array<{ title: string; type: string; by: string }>; open: Array<{ title: string; type: string; why: string | null }>; flagged: { open_reviews: number; expiring: number; below_reorder: number } }
   const [pulseData, setPulseData] = useState<PulseData | null>(null)
@@ -1163,6 +1163,17 @@ export default function InventoryStaffApp() {
             ☂ rain {weatherData.forecast_rain_pct ?? '—'}% tomorrow · {weatherData.sufficient && weatherData.rain_lift_pct != null ? `your rain-day sales ${weatherData.rain_lift_pct >= 0 ? '+' : ''}${weatherData.rain_lift_pct}% (${weatherData.matched_days}d)` : `correlation: ${weatherData.reason ?? 'n/a'}`}
           </div>
         )}
+        {pulseData.top_waste_7d != null && (
+          <div style={{ fontSize: 10.5, color: '#cfd2cc', marginTop: 12, paddingTop: 11, borderTop: '1px solid rgba(255,255,255,.12)', lineHeight: 1.4 }}>
+            <span style={{ color: '#9aa3b2', fontWeight: 600 }}>waste 7d:</span>
+            {pulseData.top_waste_7d.length === 0
+              ? <span style={{ color: '#9aa3b2' }}>{' '}nothing logged this week</span>
+              : pulseData.top_waste_7d.map((w, i) => (
+                  <span key={i}>{i > 0 ? ' · ' : ' '}{w.name} <span style={{ color: P.red }}>{`$${Math.round(w.cost_cents / 100)}`}</span></span>
+                ))
+            }
+          </div>
+        )}
       </div>
     )
     const handoverSection = handoverData && (
@@ -1599,10 +1610,10 @@ export default function InventoryStaffApp() {
 
   // ── WASTE ──
   if (tab === 'waste') {
-    const reasons = wasteToday?.reasons ?? ['spoilage', 'breakage', 'expiry', 'over-pour', 'prep-error', 'other']
+    const reasons = wasteToday?.reasons ?? ['spoilage', 'prep_error', 'over_portion', 'breakage', 'expired', 'damaged', 'other']
     const costOfWaste = wasteProduct?.unit_cost != null ? wasteProduct.unit_cost * wasteQty : null
     const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
-    const reasonLabel = (r: string) => r.charAt(0).toUpperCase() + r.slice(1).replace('-', ' ')
+    const reasonLabel = (r: string) => ({ spoilage: 'Spoilage', prep_error: 'Prep error', over_portion: 'Over portion', breakage: 'Breakage', expired: 'Expired', damaged: 'Damaged', other: 'Other' } as Record<string, string>)[r] ?? r.charAt(0).toUpperCase() + r.slice(1).replace(/_/g, ' ')
     return shell(
       <>
         {statusbar}{header(true, 'Waste', 'Log spoilage — this reduces stock')}

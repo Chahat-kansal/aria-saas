@@ -200,6 +200,7 @@ export interface Pulse {
   outlet_id: string | null; today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null
   top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number
   attention: { below_reorder: number; expiring: number; open_reviews: number; temp_logged: boolean; temp_failed: number; on_hold: number }
+  top_waste_7d: Array<{ name: string; cost_cents: number; reason: string }>
 }
 export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<Pulse> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
@@ -250,7 +251,21 @@ export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?:
   let onHold = 0
   try { const { count } = await sb.from('warehouse_quarantine').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'quarantined'); onHold = count ?? 0 } catch { /* non-fatal */ }
 
-  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed, on_hold: onHold } }
+  // Top waste by cost over the past 7 days — pos_waste_log has no outlet_id column, so business-scoped.
+  const waste7Start = new Date(Date.now() - 7 * 86400_000).toISOString()
+  const { data: wasteRows } = await sb.from('pos_waste_log')
+    .select('product_name, cost_cents, reason').eq('business_id', businessId)
+    .gte('recorded_at', waste7Start).limit(5000)
+  const wasteByProduct = new Map<string, { name: string; cost_cents: number; reason: string }>()
+  for (const w of wasteRows ?? []) {
+    const n = (w.product_name as string | null) ?? 'Item'
+    const c = wasteByProduct.get(n) ?? { name: n, cost_cents: 0, reason: (w.reason as string | null) ?? 'other' }
+    c.cost_cents += Number(w.cost_cents) || 0
+    wasteByProduct.set(n, c)
+  }
+  const topWaste7d = [...wasteByProduct.values()].sort((a, b) => b.cost_cents - a.cost_cents).slice(0, 3)
+
+  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed, on_hold: onHold }, top_waste_7d: topWaste7d }
 }
 
 // ── Handover ──────────────────────────────────────────────────────────────────────────────────────────────

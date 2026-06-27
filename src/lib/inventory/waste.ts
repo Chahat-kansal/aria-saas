@@ -9,7 +9,7 @@ import { resolveCostFor } from '@/lib/inventory/resolve-cost'
 // an ABNORMAL waste (a spike vs the product's own recent norm / on-hand) ALSO files a waste_spike review so
 // the owner sees unusual loss. cost_cents is stored in CENTS (the column's unit) and NULL when cost unknown.
 
-export const WASTE_REASONS = ['spoilage', 'breakage', 'expiry', 'over-pour', 'prep-error', 'other'] as const
+export const WASTE_REASONS = ['spoilage', 'prep_error', 'over_portion', 'breakage', 'expired', 'damaged', 'other'] as const
 
 // Spike thresholds — documented + grounded (no unexplained magic):
 //  • SPIKE_MIN_UNITS: never flag a trivial 1–2 unit loss as a "spike".
