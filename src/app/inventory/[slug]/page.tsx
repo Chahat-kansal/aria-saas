@@ -55,6 +55,8 @@ interface ReviewData { acting: { id: string; name: string }; reviews: Review[]; 
 interface ScanLocate { outlet_id: string; outlet_name: string; items_on_hand: number }
 interface ScanProduct { id: string; name: string; sku: string | null; price: number; on_hand: number; cost: number | null; cost_source: string; units_per_day: number; days_of_cover: number | null; locate?: ScanLocate[] }
 interface ScanMatch { id: string; name: string; sku: string | null; price: number; on_hand: number }
+// INV-OFFLINE-2: in-session product catalog shape (cost_price from pos_products, not enriched).
+interface CatalogProduct { id: string; name: string; sku: string | null; price: number; on_hand: number; cost_price: number | null }
 interface WasteItem { id: string; product_name: string; quantity: number; unit: string; reason: string; recorded_by: string; recorded_at: string; cost_cents: number | null }
 interface WasteToday { acting: { id: string; name: string }; reasons: string[]; items: WasteItem[]; total_cost_cents: number; count: number }
 interface AdjustRecent { id: string; product_id: string; product_name: string; delta: number; reason: string; adjusted_by: string; created_at: string; value_dollars: number | null }
@@ -266,6 +268,13 @@ export default function InventoryStaffApp() {
   const [recallPick, setRecallPick] = useState<{ id: string; name: string } | null>(null)
   const [recallQty, setRecallQty] = useState(1)
   const [recallReason, setRecallReason] = useState('supplier recall')
+  // INV-OFFLINE-2: React ref for in-session product catalog cache (survives tab switches, cleared on page reload).
+  const productCatalogRef = useRef<CatalogProduct[]>([])
+  const [catalogLoaded, setCatalogLoaded] = useState(false)
+  const [wasteFromCache, setWasteFromCache] = useState(false)
+  const [adjustFromCache, setAdjustFromCache] = useState(false)
+  const [ticketFromCache, setTicketFromCache] = useState(false)
+  const [recallFromCache, setRecallFromCache] = useState(false)
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -294,6 +303,19 @@ export default function InventoryStaffApp() {
     } catch { setHomeState('error') }
   }, [slug])
 
+  // INV-OFFLINE-2: prefetch lightweight product catalog once per session (on app load while online).
+  const prefetchCatalog = useCallback(async () => {
+    if (productCatalogRef.current.length > 0) return
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?mode=catalog${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.mode === 'catalog' && Array.isArray(d.products) && d.products.length > 0) {
+        productCatalogRef.current = d.products as CatalogProduct[]
+        setCatalogLoaded(true)
+      }
+    } catch { /* best-effort — offline at page load, catalog unavailable */ }
+  }, [slug, outletId])
+
   const loadTasks = useCallback(async (oid: string | null) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) { setTasksState(s => (s === 'ok' || s === 'empty') ? s : 'error'); return } // INV-OFFLINE: keep last data offline
     setTasksState('loading')
@@ -313,6 +335,8 @@ export default function InventoryStaffApp() {
   }, [slug])
 
   useEffect(() => { if (stage === 'app' && tab === 'tasks' && !tasksData) loadTasks(outletId) }, [stage, tab, tasksData, outletId, loadTasks])
+  // INV-OFFLINE-2: warm the catalog cache as soon as the app stage begins (online). One fetch, one ref write.
+  useEffect(() => { if (stage === 'app' && online && productCatalogRef.current.length === 0) prefetchCatalog() }, [stage, online, prefetchCatalog])
 
   async function submitCount(task: Task) {
     if (!task.product_id) return
@@ -432,13 +456,24 @@ export default function InventoryStaffApp() {
   }, [slug])
   useEffect(() => { if (stage === 'app' && tab === 'waste' && !wasteToday) loadWasteToday(outletId) }, [stage, tab, wasteToday, outletId, loadWasteToday])
 
+  // INV-OFFLINE-2: client-side substring filter on the in-session catalog (name or SKU, up to 8 results).
+  function catalogSearch(term: string): CatalogProduct[] {
+    const t = term.trim().toLowerCase()
+    return productCatalogRef.current.filter(p => p.name.toLowerCase().includes(t) || (p.sku ?? '').toLowerCase().includes(t)).slice(0, 8)
+  }
+
   async function wasteSearchRun(term: string) {
     if (!term.trim()) return
-    setWasteSearching(true); setWasteMatches([])
+    setWasteSearching(true); setWasteMatches([]); setWasteFromCache(false)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
       const d = await r.json()
       if (d.mode === 'search') setWasteMatches(d.matches ?? [])
+      else if (d.offline) {
+        const hits = catalogSearch(term)
+        setWasteMatches(hits.map(p => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, on_hand: p.on_hand })))
+        setWasteFromCache(true)
+      }
     } catch { /* ignore */ }
     setWasteSearching(false)
   }
@@ -447,7 +482,8 @@ export default function InventoryStaffApp() {
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?product_id=${id}${outletId ? `&outlet_id=${outletId}` : ''}`)
       const d = await r.json()
-      if (d.found) { setWasteProduct({ id: d.product.id, name: d.product.name, unit_cost: d.product.cost, on_hand: d.product.on_hand }); setWasteQty(1); setWasteReason('spoilage'); setWasteOther(''); setWasteMsg(null); setWasteMatches([]); setWasteSearch('') }
+      if (d.found) { setWasteProduct({ id: d.product.id, name: d.product.name, unit_cost: d.product.cost, on_hand: d.product.on_hand }); setWasteQty(1); setWasteReason('spoilage'); setWasteOther(''); setWasteMsg(null); setWasteMatches([]); setWasteSearch(''); setWasteFromCache(false) }
+      else if (d.offline) { const p = productCatalogRef.current.find(x => x.id === id); if (p) { setWasteProduct({ id: p.id, name: p.name, unit_cost: p.cost_price, on_hand: p.on_hand }); setWasteQty(1); setWasteReason('spoilage'); setWasteOther(''); setWasteMsg(null); setWasteMatches([]); setWasteSearch(''); setWasteFromCache(false) } }
     } catch { /* ignore */ }
     setWasteSearching(false)
   }
@@ -480,11 +516,16 @@ export default function InventoryStaffApp() {
 
   async function adjustSearchRun(term: string) {
     if (!term.trim()) return
-    setAdjustSearching(true); setAdjustMatches([])
+    setAdjustSearching(true); setAdjustMatches([]); setAdjustFromCache(false)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
       const d = await r.json()
       if (d.mode === 'search') setAdjustMatches(d.matches ?? [])
+      else if (d.offline) {
+        const hits = catalogSearch(term)
+        setAdjustMatches(hits.map(p => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, on_hand: p.on_hand })))
+        setAdjustFromCache(true)
+      }
     } catch { /* ignore */ }
     setAdjustSearching(false)
   }
@@ -493,7 +534,8 @@ export default function InventoryStaffApp() {
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?product_id=${id}${outletId ? `&outlet_id=${outletId}` : ''}`)
       const d = await r.json()
-      if (d.found) { setAdjustProduct({ id: d.product.id, name: d.product.name, unit_cost: d.product.cost, on_hand: d.product.on_hand }); setAdjustMode('set'); setAdjustValue(d.product.on_hand); setAdjustReason(''); setAdjustOther(''); setAdjustMsg(null); setAdjustErr(''); setAdjustMatches([]); setAdjustSearch('') }
+      if (d.found) { setAdjustProduct({ id: d.product.id, name: d.product.name, unit_cost: d.product.cost, on_hand: d.product.on_hand }); setAdjustMode('set'); setAdjustValue(d.product.on_hand); setAdjustReason(''); setAdjustOther(''); setAdjustMsg(null); setAdjustErr(''); setAdjustMatches([]); setAdjustSearch(''); setAdjustFromCache(false) }
+      else if (d.offline) { const p = productCatalogRef.current.find(x => x.id === id); if (p) { setAdjustProduct({ id: p.id, name: p.name, unit_cost: p.cost_price, on_hand: p.on_hand }); setAdjustMode('set'); setAdjustValue(p.on_hand); setAdjustReason(''); setAdjustOther(''); setAdjustMsg(null); setAdjustErr(''); setAdjustMatches([]); setAdjustSearch(''); setAdjustFromCache(false) } }
     } catch { /* ignore */ }
     setAdjustSearching(false)
   }
@@ -515,11 +557,16 @@ export default function InventoryStaffApp() {
   // ── Price tickets (scan-to-batch) ──
   async function ticketSearchRun(term: string) {
     if (!term.trim()) return
-    setTicketSearching(true); setTicketMatches([])
+    setTicketSearching(true); setTicketMatches([]); setTicketFromCache(false)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
       const d = await r.json()
       if (d.mode === 'search') setTicketMatches(d.matches ?? [])
+      else if (d.offline) {
+        const hits = catalogSearch(term)
+        setTicketMatches(hits.map(p => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, on_hand: p.on_hand })))
+        setTicketFromCache(true)
+      }
     } catch { /* ignore */ }
     setTicketSearching(false)
   }
@@ -532,6 +579,9 @@ export default function InventoryStaffApp() {
         const p = d.product
         setTicketBatch(b => b.some(x => x.id === p.id) ? b.map(x => x.id === p.id ? { ...x, qty: x.qty + 1 } : x) : [...b, { id: p.id, name: p.name, price: p.ticket_price ?? p.price, was: p.was_price ?? null, promo: p.promo_label ?? null, qty: 1 }])
         setTicketMsg(''); setTicketMatches([]); setTicketSearch('')
+      } else if (d.offline) {
+        const p = productCatalogRef.current.find(x => x.id === id)
+        if (p) { setTicketBatch(b => b.some(x => x.id === p.id) ? b.map(x => x.id === p.id ? { ...x, qty: x.qty + 1 } : x) : [...b, { id: p.id, name: p.name, price: p.price, was: null, promo: null, qty: 1 }]); setTicketMsg(''); setTicketMatches([]); setTicketSearch(''); setTicketFromCache(false) }
       }
     } catch { /* ignore */ }
     setTicketSearching(false)
@@ -841,8 +891,17 @@ export default function InventoryStaffApp() {
   useEffect(() => { if (stage === 'app' && tab === 'loss') loadLoss(outletId) }, [stage, tab, outletId, loadLoss])
   async function recallSearchRun(term: string) {
     if (!term.trim()) return
-    setLossBusy('search'); setRecallMatches([])
-    try { const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`); const d = await r.json(); if (d.mode === 'search') setRecallMatches(d.matches ?? []) } catch { /* ignore */ }
+    setLossBusy('search'); setRecallMatches([]); setRecallFromCache(false)
+    try {
+      const r = await fetch(`/api/inventory/app/${slug}/scan?q=${encodeURIComponent(term.trim())}${outletId ? `&outlet_id=${outletId}` : ''}`)
+      const d = await r.json()
+      if (d.mode === 'search') setRecallMatches(d.matches ?? [])
+      else if (d.offline) {
+        const hits = catalogSearch(term)
+        setRecallMatches(hits.map(p => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, on_hand: p.on_hand })))
+        setRecallFromCache(true)
+      }
+    } catch { /* ignore */ }
     setLossBusy(null)
   }
   async function placeRecall() {
@@ -1521,14 +1580,19 @@ export default function InventoryStaffApp() {
                 </div>
                 {wasteSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />
                   : wasteMatches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                      {wasteMatches.map(m => (
-                        <button key={m.id} onClick={() => pickWasteProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
-                          <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                        {wasteMatches.map(m => (
+                          <button key={m.id} onClick={() => pickWasteProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
+                            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                          </button>
+                        ))}
+                      </div>
+                      {wasteFromCache && <div style={{ fontSize: 11, color: T.amber, background: T.amberSoft, borderRadius: 9, padding: '8px 12px', marginTop: 8, lineHeight: 1.5 }}>⚡ Offline — saved catalog. Stock levels may be slightly stale.</div>}
+                    </>
+                  ) : !online && wasteSearch.trim() ? (
+                    <div style={{ padding: 20, borderRadius: 14, background: T.amberSoft, border: '1.5px solid ' + T.amber, textAlign: 'center', fontSize: 12.5, color: T.ink, lineHeight: 1.6 }}>You&apos;re offline — open this tab while connected to enable offline search.</div>
                   ) : <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13, lineHeight: 1.6 }}>Search for the item you&apos;re writing off — spoilage, breakage, expiry or a prep mistake.</div>}
               </>
             ) : wasteMsg ? (
@@ -1645,14 +1709,19 @@ export default function InventoryStaffApp() {
                   </div>
                   {adjustSearching ? <div style={{ height: 120, borderRadius: 16, background: '#fff', border: `1.5px solid ${T.line}` }} />
                     : adjustMatches.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 4 }}>
-                        {adjustMatches.map(m => (
-                          <button key={m.id} onClick={() => pickAdjustProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
-                            <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
-                          </button>
-                        ))}
-                      </div>
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 4 }}>
+                          {adjustMatches.map(m => (
+                            <button key={m.id} onClick={() => pickAdjustProduct(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '12px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku}` : 'no SKU'}</div></div>
+                              <div style={{ textAlign: 'right' }}><div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: T.green }}>{m.on_hand}</div><div style={{ fontSize: 9.5, color: T.muted }}>on hand</div></div>
+                            </button>
+                          ))}
+                        </div>
+                        {adjustFromCache && <div style={{ fontSize: 11, color: T.amber, background: T.amberSoft, borderRadius: 9, padding: '8px 12px', marginTop: 4, lineHeight: 1.5 }}>⚡ Offline — saved catalog. Stock levels may be slightly stale.</div>}
+                      </>
+                    ) : !online && adjustSearch.trim() ? (
+                      <div style={{ padding: 20, borderRadius: 14, background: T.amberSoft, border: '1.5px solid ' + T.amber, textAlign: 'center', fontSize: 12.5, color: T.ink, lineHeight: 1.6 }}>You&apos;re offline — open this tab while connected to enable offline search.</div>
                     ) : <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13, lineHeight: 1.6 }}>Search the item whose book count is wrong, then set it to the true number.</div>}
                 </>
               ) : adjustMsg ? (
@@ -1731,7 +1800,7 @@ export default function InventoryStaffApp() {
 
             {ticketSearching && <div style={{ height: 60, borderRadius: 13, background: '#fff', border: `1.5px solid ${T.line}`, marginBottom: 12 }} />}
             {ticketMatches.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: ticketFromCache ? 4 : 14 }}>
                 {ticketMatches.map(m => (
                   <button key={m.id} onClick={() => ticketAdd(m.id)} style={{ textAlign: 'left', background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 13, padding: '11px 14px', cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div><b style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</b><div style={{ fontSize: 11, color: T.muted }}>{m.sku ? `SKU ${m.sku} · ` : ''}{money(m.price)}</div></div>
@@ -1740,6 +1809,8 @@ export default function InventoryStaffApp() {
                 ))}
               </div>
             )}
+            {ticketFromCache && ticketMatches.length > 0 && <div style={{ fontSize: 11, color: T.amber, background: T.amberSoft, borderRadius: 9, padding: '8px 12px', marginBottom: 10, lineHeight: 1.5 }}>⚡ Offline — saved catalog. Prices may be slightly stale.</div>}
+            {!ticketSearching && ticketMatches.length === 0 && !online && ticketSearch.trim() && <div style={{ padding: 16, borderRadius: 12, background: T.amberSoft, border: '1.5px solid ' + T.amber, textAlign: 'center', fontSize: 12.5, color: T.ink, lineHeight: 1.6, marginBottom: 12 }}>You&apos;re offline — open this tab while connected to enable offline search.</div>}
 
             {ticketMsg && <div style={{ fontSize: 12.5, color: T.green, background: T.greenSoft, borderRadius: 11, padding: '12px 14px', lineHeight: 1.45, marginBottom: 14, fontWeight: 500 }}>{ticketMsg}</div>}
 
@@ -2375,12 +2446,14 @@ export default function InventoryStaffApp() {
                   <button onClick={() => recallSearchRun(recallSearch)} style={{ background: P.lime, color: P.ink, border: `1.5px solid ${P.ink}`, borderRadius: 14, padding: '0 16px', fontFamily: BODY, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Find</button>
                 </div>
                 {recallMatches.map(m => (
-                  <div key={m.id} onClick={() => { setRecallPick({ id: m.id, name: m.name }); setRecallQty(1); setRecallReason('supplier recall') }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '11px 13px', marginBottom: 9, cursor: 'pointer' }}>
+                  <div key={m.id} onClick={() => { setRecallPick({ id: m.id, name: m.name }); setRecallQty(1); setRecallReason("supplier recall") }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: "11px 13px", marginBottom: 9, cursor: "pointer" }}>
                     <div><div style={{ fontWeight: 700, fontSize: 13.5 }}>{m.name}</div><div style={{ fontSize: 11, color: P.muted }}>{m.on_hand} on hand</div></div>
                     <PIcon name="back" size={16} stroke={P.muted} />
                   </div>
                 ))}
-                <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5, fontWeight: 500 }}>Recall is open to any staff — pulling unsafe stock fast. Stock isn’t deleted; it’s held for the owner to resolve.</div>
+                {recallFromCache && recallMatches.length > 0 && <div style={{ fontSize: 11, color: T.amber, background: T.amberSoft, borderRadius: 9, padding: "8px 12px", marginBottom: 9, lineHeight: 1.5 }}>⚡ Offline — saved catalog. Stock levels may be slightly stale.</div>}
+                {!lossBusy && recallMatches.length === 0 && !online && recallSearch.trim() && <div style={{ padding: 16, borderRadius: 12, background: T.amberSoft, border: "1.5px solid " + T.amber, textAlign: "center", fontSize: 12.5, color: T.ink, lineHeight: 1.6, marginBottom: 9 }}>You&apos;re offline — open this tab while connected to enable offline search.</div>}
+                <div style={{ fontSize: 10.5, color: P.muted, textAlign: "center", marginTop: 8, lineHeight: 1.5, fontWeight: 500 }}>Recall is open to any staff — pulling unsafe stock fast. Stock isn’t deleted; it’s held for the owner to resolve.</div>
               </>
             )
           ) : lossShrink ? (

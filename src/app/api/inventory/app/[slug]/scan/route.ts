@@ -88,6 +88,35 @@ async function _GET(req: Request, { params }: Params) {
     return NextResponse.json({ mode: 'barcode', found: false, barcode: result.barcode, external: result.external })
   }
 
+  // INV-OFFLINE-2 — full product catalog for offline client-side search fallback.
+  // Returns id/name/sku/price/on_hand/cost_price for all active tracked products in the outlet.
+  if (sp.get('mode') === 'catalog') {
+    const { data: prods } = await supabaseAdmin.from('pos_products')
+      .select('id, name, sku, price, cost_price')
+      .eq('business_id', bid).eq('track_stock', true).eq('is_active', true)
+      .order('name').limit(500)
+    const ids = (prods ?? []).map(m => m.id as string)
+    const ohMap = new Map<string, number>()
+    if (ids.length) {
+      let iq = supabaseAdmin.from('pos_outlet_inventory').select('product_id, items_on_hand').eq('business_id', bid).in('product_id', ids)
+      if (outletId) iq = iq.eq('outlet_id', outletId)
+      const { data: inv } = await iq
+      for (const r of (inv ?? []) as Array<{ product_id: string; items_on_hand: number | null }>) {
+        ohMap.set(r.product_id, (ohMap.get(r.product_id) ?? 0) + (Number(r.items_on_hand) || 0))
+      }
+    }
+    return NextResponse.json({
+      mode: 'catalog',
+      products: (prods ?? []).map(m => ({
+        id: m.id as string, name: m.name as string,
+        sku: (m.sku as string | null) ?? null,
+        price: Number(m.price) || 0,
+        on_hand: ohMap.get(m.id as string) ?? 0,
+        cost_price: m.cost_price != null ? Number(m.cost_price) : null,
+      })),
+    })
+  }
+
   // Name / SKU search fallback (lightweight list with live on-hand).
   if (query) {
     const like = `%${query.replace(/[%_]/g, '')}%`
