@@ -50,7 +50,7 @@ interface VisibleTile { id: string; label: string; sublabel: string; icon: strin
 interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number; receive: number }; visible_tiles?: VisibleTile[]; tile_industry?: string }
 interface Task { id: string; task_type: string; product_id: string | null; title: string; detail: string | null; hypothesis: string | null; priority: number; status: string; completed_by: string | null; product_name: string | null; product_sku: string | null; expected: number | null }
 interface TasksData { acting: { id: string; name: string }; tasks: Task[]; pills: { accuracy: number | null; streak: number; left_today: number } }
-interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string }
+interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string; evidence?: Record<string, unknown> }
 interface ReviewData { acting: { id: string; name: string }; reviews: Review[]; counts: { open: number; resolved_today: number } }
 interface ScanLocate { outlet_id: string; outlet_name: string; items_on_hand: number }
 interface ScanProduct { id: string; name: string; sku: string | null; price: number; on_hand: number; cost: number | null; cost_source: string; units_per_day: number; days_of_cover: number | null; locate?: ScanLocate[] }
@@ -210,6 +210,8 @@ export default function InventoryStaffApp() {
   const [stCycle, setStCycle] = useState<CycleItem[]>([])
   const [stPick, setStPick] = useState<{ id: string; name: string; expected: number } | null>(null)
   const [stCountVal, setStCountVal] = useState(0)
+  const [stRecountWarn, setStRecountWarn] = useState<string | null>(null)  // INV-DEPTH-COUNTING B: product name needing recount
+  const [reviewReasons, setReviewReasons] = useState<Record<string, string>>({})  // INV-DEPTH-COUNTING D: reason per review_id
   const [stPattern, setStPattern] = useState<string | null>(null)
   const [stSearch, setStSearch] = useState('')
   const [stMatches, setStMatches] = useState<ScanMatch[]>([])
@@ -372,13 +374,16 @@ export default function InventoryStaffApp() {
   }, [slug])
   useEffect(() => { if (stage === 'app' && tab === 'review' && !reviewData) loadReview(outletId) }, [stage, tab, reviewData, outletId, loadReview])
 
-  async function reviewAction(id: string, action: 'accept' | 'investigate' | 'dismiss') {
+  async function reviewAction(id: string, action: 'accept' | 'investigate' | 'dismiss', reasonCode?: string) {
     if (!online) { blockOffline(); return } // accept moves stock — needs a connection
     setActingReview(id)
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_id: id, action }) })
+      const body: Record<string, string> = { review_id: id, action }
+      if (action === 'accept' && reasonCode) body.reason_code = reasonCode
+      const r = await fetch(`/api/inventory/app/${slug}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { await loadReview(outletId); loadHome(outletId) }
+      else if (!r.ok && d.error === 'recount_required') { alert(d.message ?? 'A recount is required before accepting this variance.') }
     } catch { /* ignore */ }
     setActingReview(null)
   }
@@ -755,7 +760,13 @@ export default function InventoryStaffApp() {
     setStBusy(true)
     try {
       const r = await fetch(`/api/inventory/app/${slug}/stocktake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'count', session_id: stSession.id, product_id: stPick.id, counted: stCountVal }) })
-      if (r.ok) { setStPick(null); await loadStLines(stSession.id); if (stType === 'cycle') await loadStCycle(outletId) }
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) {
+        const pickName = stPick.name
+        const recountNeeded = d.line?.recount_required ?? false
+        setStPick(null); await loadStLines(stSession.id); if (stType === 'cycle') await loadStCycle(outletId)
+        setStRecountWarn(recountNeeded ? pickName : null)  // INV-DEPTH-COUNTING B
+      }
     } catch { /* ignore */ }
     setStBusy(false)
   }
@@ -769,7 +780,7 @@ export default function InventoryStaffApp() {
     } catch { /* ignore */ }
     setStBusy(false)
   }
-  function resetStocktake() { setStType(null); setStSession(null); setStLines([]); setStCycle([]); setStPick(null); setStSummary(null); setStState('pick') }
+  function resetStocktake() { setStType(null); setStSession(null); setStLines([]); setStCycle([]); setStPick(null); setStSummary(null); setStState('pick'); setStRecountWarn(null) }
 
   // ── INV-5 buying ──
   const loadBuying = useCallback(async (oid: string | null) => {
@@ -1396,11 +1407,36 @@ export default function InventoryStaffApp() {
                         {cell('Variance', `${v > 0 ? '+' : ''}${v}`, v === 0 ? T.greenSoft : T.redSoft, v === 0 ? T.green : T.red, 2)}
                       </div>
                     )}
-                    <div style={{ fontSize: 11, color: T.muted, marginBottom: 12 }}>Raised by <b style={{ color: T.ink }}>{rv.staff_name}</b> · {timeAgo(rv.created_at)}{v !== 0 ? ` · ${Math.abs(v)} units ${v < 0 ? 'short' : 'over'}` : ''}</div>
+                    <div style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>Raised by <b style={{ color: T.ink }}>{rv.staff_name}</b> · {timeAgo(rv.created_at)}{v !== 0 ? ` · ${Math.abs(v)} units ${v < 0 ? 'short' : 'over'}` : ''}</div>
+                    {/* INV-DEPTH-COUNTING E: movement context — shown when stock moved during the count */}
+                    {rv.flag_type === 'count_variance' && typeof rv.evidence?.movements_during_count === 'number' && (rv.evidence.movements_during_count as number) > 0 && (
+                      <div style={{ fontSize: 10.5, color: T.amber, background: T.amberSoft, borderRadius: 9, padding: '6px 10px', marginBottom: 9, lineHeight: 1.4 }}>
+                        &#9432; {rv.evidence.movements_during_count as number} stock movement{(rv.evidence.movements_during_count as number) > 1 ? 's' : ''} occurred while this count was open — may explain the variance.
+                      </div>
+                    )}
+                    {/* INV-DEPTH-COUNTING B: recount required indicator */}
+                    {rv.flag_type === 'count_variance' && rv.evidence?.recount_required === true && (
+                      <div style={{ fontSize: 10.5, color: '#7A5C00', background: '#FEF9C3', border: '1px solid #F5C518', borderRadius: 9, padding: '6px 10px', marginBottom: 9, lineHeight: 1.4 }}>
+                        &#9888; High variance — a second count is required before accepting.
+                      </div>
+                    )}
+                    {/* INV-DEPTH-COUNTING D: reason code — optional, shown for count_variance accept */}
+                    {rv.flag_type === 'count_variance' && (
+                      <select value={reviewReasons[rv.id] ?? ''} onChange={e => setReviewReasons(prev => ({ ...prev, [rv.id]: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 10, border: '1.5px solid ' + T.line, background: '#fff', color: T.ink, fontFamily: BODY, fontSize: 12, fontWeight: 500, marginBottom: 9, appearance: 'none', WebkitAppearance: 'none' }}>
+                        <option value="">Reason (optional)</option>
+                        <option value="mis_count">Mis-count</option>
+                        <option value="receiving_error">Receiving error</option>
+                        <option value="spoilage">Spoilage</option>
+                        <option value="theft_suspected">Theft (suspected)</option>
+                        <option value="supplier_short">Supplier short</option>
+                        <option value="other">Other</option>
+                      </select>
+                    )}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'accept')} style={{ flex: 1.5, background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : rv.flag_type === 'count_variance' ? 'Accept · adjust stock' : 'Accept'}</button>
-                      {rv.status !== 'investigating' && <button disabled={busy} onClick={() => reviewAction(rv.id, 'investigate')} style={{ flex: 1, background: '#fff', color: T.amber, border: `1.5px solid ${T.amberSoft}`, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Investigate</button>}
-                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'dismiss')} style={{ flex: 0.9, background: '#fff', color: T.muted, border: `1.5px solid ${T.line}`, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Dismiss</button>
+                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'accept', reviewReasons[rv.id] || undefined)} style={{ flex: 1.5, background: P.lime, color: P.ink, border: 0, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : rv.flag_type === 'count_variance' ? 'Accept · adjust stock' : 'Accept'}</button>
+                      {rv.status !== 'investigating' && <button disabled={busy} onClick={() => reviewAction(rv.id, 'investigate')} style={{ flex: 1, background: '#fff', color: T.amber, border: '1.5px solid ' + T.amberSoft, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Investigate</button>}
+                      <button disabled={busy} onClick={() => reviewAction(rv.id, 'dismiss')} style={{ flex: 0.9, background: '#fff', color: T.muted, border: '1.5px solid ' + T.line, borderRadius: 11, padding: '11px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Dismiss</button>
                     </div>
                     {rv.flag_type === 'count_variance' && rv.status !== 'investigating' && <div style={{ fontSize: 10, color: T.muted, marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>Accept moves stock to {rv.actual_value ?? '—'} and logs the adjustment to you.</div>}
                   </div>
@@ -2109,6 +2145,15 @@ export default function InventoryStaffApp() {
                 <div><div style={{ fontWeight: 800, fontSize: 14, textTransform: 'capitalize' }}>{stSession.count_type} count</div><div style={{ fontSize: 11, color: '#cfd2cc' }}>{countedIds.size} counted{outletName ? ` · ${outletName}` : ''}</div></div>
                 <button onClick={resetStocktake} style={{ background: 'none', border: 'none', color: '#cfd2cc', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>switch</button>
               </div>
+
+              {/* INV-DEPTH-COUNTING B: recount warning — shown after recording a high-variance line */}
+              {stRecountWarn && !stPick && (
+                <div style={{ fontSize: 11.5, color: '#7A5C00', background: '#FEF9C3', border: '1.5px solid #F5C518', borderRadius: 12, padding: '10px 13px', marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', lineHeight: 1.4 }}>
+                  <span style={{ flexShrink: 0 }}>&#9888;</span>
+                  <span><b>{stRecountWarn}</b> — big variance. Count this item again (ideally a different staff member) to confirm.</span>
+                  <button onClick={() => setStRecountWarn(null)} style={{ background: 'none', border: 'none', color: '#7A5C00', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>&#x2715;</button>
+                </div>
+              )}
 
               {/* active count card */}
               {stPick ? (

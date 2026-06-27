@@ -87,6 +87,9 @@ async function _GET(req: Request, { params }: Params) {
   })
 }
 
+// INV-DEPTH-COUNTING D — valid reason codes for variance acceptance.
+const REASON_CODES = new Set(['receiving_error', 'mis_count', 'spoilage', 'theft_suspected', 'supplier_short', 'other'])
+
 async function _POST(req: Request, { params }: Params) {
   const { slug } = await params
   const bid = await resolveBusinessId(supabaseAdmin, slug)
@@ -94,7 +97,7 @@ async function _POST(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { review_id?: string; action?: string }
+  const body = await req.json().catch(() => ({})) as { review_id?: string; action?: string; reason_code?: string; notes?: string }
   if (!body.review_id || !['accept', 'investigate', 'dismiss'].includes(body.action ?? '')) {
     return NextResponse.json({ error: 'review_id and a valid action required' }, { status: 400 })
   }
@@ -118,10 +121,29 @@ async function _POST(req: Request, { params }: Params) {
 
   // ACCEPT — the ONLY path that moves stock from a count. Atomic claim first (idempotent: a second accept of
   // an already-resolved row claims nothing → no double-adjust), then the attributed adjustment + stock move.
+
+  // INV-DEPTH-COUNTING B: pre-read to check blind recount gate BEFORE claiming (non-destructive check).
+  const { data: preRead } = await supabaseAdmin.from('inventory_review_queue')
+    .select('id, status, evidence, product_id')
+    .eq('id', body.review_id).eq('business_id', bid).in('status', ['open', 'investigating']).maybeSingle()
+  if (!preRead?.id) {
+    return NextResponse.json({ ok: true, action: 'accept', idempotent: true, stock_changed: false })
+  }
+  const preEv = (preRead.evidence as Record<string, unknown>) ?? {}
+  if (preEv.recount_required && preEv.session_id) {
+    const { data: lineItem } = await supabaseAdmin.from('pos_stock_take_items')
+      .select('recount_count')
+      .eq('stock_take_id', preEv.session_id as string).eq('product_id', preRead.product_id as string)
+      .maybeSingle()
+    if ((Number(lineItem?.recount_count) || 0) < 1) {
+      return NextResponse.json({ ok: false, error: 'recount_required', message: 'A second count is required before approving this variance — ask staff to recount this item.' }, { status: 422 })
+    }
+  }
+
   const { data: claimed } = await supabaseAdmin.from('inventory_review_queue')
     .update({ status: 'resolved', resolution: 'accepted', resolved_by: acting.staff_id, resolved_at: nowIso })
     .eq('id', body.review_id).eq('business_id', bid).in('status', ['open', 'investigating'])
-    .select('id, product_id, outlet_id, variance').maybeSingle()
+    .select('id, product_id, outlet_id, variance, evidence').maybeSingle()
   if (!claimed?.id) {
     return NextResponse.json({ ok: true, action: 'accept', idempotent: true, stock_changed: false })
   }
@@ -131,18 +153,24 @@ async function _POST(req: Request, { params }: Params) {
   let outletId = (claimed.outlet_id as string | null) ?? null
   if (!outletId) outletId = await resolveOutletId(supabaseAdmin, bid, null)
 
+  // INV-DEPTH-COUNTING D: reason_code stored in pos_stock_adjustments + evidence (defaults to review_accepted).
+  const reasonCode = (body.reason_code && REASON_CODES.has(body.reason_code)) ? body.reason_code : 'review_accepted'
   let newOnHand: number | null = null
   if (productId && outletId && variance !== 0) {
-    // Attributed correction (the adjustment ledger). adjusted_by is TEXT → human-readable actor.
     await supabaseAdmin.from('pos_stock_adjustments').insert({
       business_id: bid, product_id: productId, outlet_id: outletId,
-      adjustment_qty: variance, reason: 'review_accepted', adjusted_by: acting.staff_name,
+      adjustment_qty: variance, reason: reasonCode, adjusted_by: acting.staff_name,
     })
-    // Canonical stock move — the same helper sale/void use. THIS is the only count-driven items_on_hand change.
     newOnHand = await adjustOutletStock(supabaseAdmin, { businessId: bid, outletId, productId, delta: variance })
   }
 
-  return NextResponse.json({ ok: true, action: 'accept', idempotent: false, stock_changed: variance !== 0, adjustment_qty: variance, new_on_hand: newOnHand, by: acting.staff_name })
+  // Merge reason_code (+ optional notes) into evidence for the permanent audit trail.
+  const existingEvidence = (claimed.evidence as Record<string, unknown>) ?? {}
+  await supabaseAdmin.from('inventory_review_queue')
+    .update({ evidence: { ...existingEvidence, reason_code: reasonCode, ...(body.notes?.trim() ? { reason_notes: body.notes.trim() } : {}) } })
+    .eq('id', body.review_id)
+
+  return NextResponse.json({ ok: true, action: 'accept', idempotent: false, stock_changed: variance !== 0, adjustment_qty: variance, new_on_hand: newOnHand, by: acting.staff_name, reason_code: reasonCode })
 }
 
 export const GET = withErrorCapture('inventory/app/review:get', _GET)

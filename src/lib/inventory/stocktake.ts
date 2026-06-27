@@ -19,9 +19,22 @@ export interface StocktakeSession {
 export interface StocktakeLine {
   product_id: string; product_name: string | null; expected_qty: number; counted_qty: number | null
   variance_qty: number | null; variance_cents: number | null; counted_by: string | null; counted_at: string | null
+  recount_required?: boolean  // INV-DEPTH-COUNTING: true when variance exceeds dual threshold
 }
 
 const nowIso = () => new Date().toISOString()
+
+// INV-DEPTH-COUNTING — dual-threshold config (constants, not magic numbers inline).
+const RECOUNT_THRESHOLD_UNITS = 5    // |variance_qty| > 5 units → blind recount required
+const RECOUNT_THRESHOLD_PCT  = 0.10  // |variance_pct| > 10% of system_qty → blind recount required
+function needsRecount(varianceQty: number, systemQty: number): boolean {
+  const absV = Math.abs(varianceQty)
+  if (absV === 0) return false
+  if (systemQty === 0 && varianceQty > 0) return true  // phantom stock: counted where none expected
+  if (absV > RECOUNT_THRESHOLD_UNITS) return true
+  if (systemQty > 0 && absV / systemQty > RECOUNT_THRESHOLD_PCT) return true
+  return false
+}
 
 /** Open (or RESUME) the one in-progress session for this outlet + type. Resumable across a shift. */
 export async function openStocktake(sb: SupabaseClient, businessId: string, outletIdIn: string | null, type: CountType, staffId: string): Promise<StocktakeSession | null> {
@@ -80,7 +93,8 @@ export async function countStocktakeLine(sb: SupabaseClient, businessId: string,
     ? await sb.from('pos_stock_take_items').update({ ...payload, recount_count: (Number(existing.recount_count) || 0) + 1 }).eq('id', existing.id)
     : await sb.from('pos_stock_take_items').insert({ stock_take_id: sessionId, product_id: productId, recount_count: 0, ...payload })
   if (lineErr) return null // never report a count as recorded when the line didn't persist
-  return { product_id: productId, product_name: productName, expected_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: payload.counted_at }
+  const recountRequired = needsRecount(variance, expected)
+  return { product_id: productId, product_name: productName, expected_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: payload.counted_at, recount_required: recountRequired }
 }
 
 export interface SubmitResult { session_id: string; lines_counted: number; variances: number; total_variance_cents: number; reviews_raised: number; review_ids: string[] }
@@ -92,27 +106,44 @@ export async function submitStocktake(sb: SupabaseClient, businessId: string, se
   const { data: claimed } = await sb.from('pos_stock_takes')
     .update({ status: 'committed', completed_at: nowIso() })
     .eq('business_id', businessId).eq('id', sessionId).eq('status', 'in_progress')
-    .select('id, outlet_id, count_type').maybeSingle()
+    .select('id, outlet_id, count_type, started_at').maybeSingle()
   if (!claimed?.id) return null
   const outletId = claimed.outlet_id as string | null
+  const sessionStartedAt = (claimed.started_at as string | null) ?? null
 
+  // INV-DEPTH-COUNTING: include recount_count so the evidence and threshold gate have the live value.
   const { data: lines } = await sb.from('pos_stock_take_items')
-    .select('product_id, product_name, system_qty, counted_qty, variance_qty, variance_cents, counted_by')
+    .select('product_id, product_name, system_qty, counted_qty, variance_qty, variance_cents, counted_by, recount_count')
     .eq('stock_take_id', sessionId).limit(5000)
   const counted = (lines ?? []).filter(l => l.counted_qty != null)
   const varianceLines = counted.filter(l => (Number(l.variance_qty) || 0) !== 0)
   let totalCents = 0
   const reviewIds: string[] = []
 
+  // INV-DEPTH-COUNTING E: batch-fetch movements during the session for movement-context evidence.
+  const varProductIds = varianceLines.map(l => l.product_id as string).filter(Boolean)
+  const movementCount = new Map<string, number>()
+  if (sessionStartedAt && varProductIds.length && outletId) {
+    const { data: moves } = await sb.from('pos_stock_adjustments')
+      .select('product_id').eq('business_id', businessId).eq('outlet_id', outletId)
+      .in('product_id', varProductIds).gte('created_at', sessionStartedAt).limit(2000)
+    for (const m of (moves ?? []) as Array<{ product_id: string }>) {
+      movementCount.set(m.product_id, (movementCount.get(m.product_id) ?? 0) + 1)
+    }
+  }
+
   for (const l of varianceLines) {
     const expected = Number(l.system_qty) || 0
     const countedQ = Number(l.counted_qty) || 0
     const variance = Number(l.variance_qty) || 0
+    const recountCount = Number(l.recount_count) || 0
+    const recountRequired = needsRecount(variance, expected)
+    const movsDuring = movementCount.get(l.product_id as string) ?? 0
     totalCents += Number(l.variance_cents) || 0
     const { data: rev } = await sb.from('inventory_review_queue').insert({
       business_id: businessId, outlet_id: outletId, flag_type: 'count_variance', product_id: l.product_id,
       expected_value: expected, actual_value: countedQ, variance,
-      evidence: { expected, counted: countedQ, variance, variance_cents: Number(l.variance_cents) || 0, product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso() },
+      evidence: { expected, counted: countedQ, variance, variance_cents: Number(l.variance_cents) || 0, product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt },
       raised_by_staff_id: (l.counted_by as string | null) ?? staffId, status: 'open',
     }).select('id').maybeSingle()
     if (rev?.id) reviewIds.push(rev.id as string)

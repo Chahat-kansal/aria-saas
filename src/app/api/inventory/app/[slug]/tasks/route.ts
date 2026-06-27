@@ -53,9 +53,12 @@ async function _GET(req: Request, { params }: Params) {
     expected: t.product_id && onHandMap.has(t.product_id) ? onHandMap.get(t.product_id)! : null,
   }))
 
-  // Habit pills — count accuracy from THIS staff's own stock-take history.
+  // Habit pills — count accuracy from THIS staff's committed counts (last 30d). INV-DEPTH-COUNTING G.
+  const since30 = new Date(Date.now() - 30 * 86400_000).toISOString()
   const { data: takes } = await supabaseAdmin.from('pos_stock_takes')
-    .select('items_counted, items_with_variance, completed_at').eq('business_id', bid).eq('started_by', acting.staff_id).limit(2000)
+    .select('items_counted, items_with_variance')
+    .eq('business_id', bid).eq('started_by', acting.staff_id).eq('status', 'committed')
+    .gte('completed_at', since30).limit(2000)
   const counted = (takes ?? []).reduce((s, t) => s + (Number(t.items_counted) || 0), 0)
   const variances = (takes ?? []).reduce((s, t) => s + (Number(t.items_with_variance) || 0), 0)
   const accuracy = counted > 0 ? Math.round((1 - variances / counted) * 100) : null
