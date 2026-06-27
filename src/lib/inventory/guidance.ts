@@ -85,12 +85,13 @@ export async function velocitySignals(sb: SupabaseClient, businessId: string, mi
 /** Generate (idempotently, once/day) the velocity + weather tasks — the signals the INV-STAFF-APP-2 base generator
  *  (par/cycle/expiry) doesn't cover. Never duplicates: velocity dedupes on the product constraint; the
  *  product-less weather task is guarded by an explicit "exists today" check. Returns what was added. */
-export async function generateGuidanceTasks(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<{ velocity_added: number; weather_added: number; weather: WeatherInsight | null }> {
+export async function generateGuidanceTasks(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<{ velocity_added: number; weather_added: number; waste_task_added: number; weather: WeatherInsight | null }> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
   const due = aestDate()
-  const { data: existing } = await sb.from('inventory_tasks').select('task_type').eq('business_id', businessId).eq('due_date', due).in('task_type', ['velocity', 'weather'])
+  const { data: existing } = await sb.from('inventory_tasks').select('task_type').eq('business_id', businessId).eq('due_date', due).in('task_type', ['velocity', 'weather', 'waste'])
   const haveVel = (existing ?? []).some(t => t.task_type === 'velocity')
   const haveWx = (existing ?? []).some(t => t.task_type === 'weather')
+  const haveWaste = (existing ?? []).some(t => t.task_type === 'waste')
 
   let velAdded = 0
   if (!haveVel) {
@@ -127,7 +128,41 @@ export async function generateGuidanceTasks(sb: SupabaseClient, businessId: stri
       if (!error) wxAdded = 1
     }
   }
-  return { velocity_added: velAdded, weather_added: wxAdded, weather: wi }
+  // Waste Tanpin task: emit once/day when one product clearly dominates 7d waste by cost ($3+ and ≥2× avg others).
+  // Grounded: $ and reason come from real pos_waste_log rows, never fabricated.
+  let wasteTaskAdded = 0
+  if (!haveWaste) {
+    const waste7Start = new Date(Date.now() - 7 * 86400_000).toISOString()
+    const { data: wasteW } = await sb.from('pos_waste_log')
+      .select('product_name, cost_cents, reason').eq('business_id', businessId)
+      .gte('recorded_at', waste7Start).limit(2000)
+    const wByProduct = new Map<string, { name: string; cents: number; reason: string }>()
+    for (const w of wasteW ?? []) {
+      const n = (w.product_name as string | null) ?? 'Item'
+      const c = wByProduct.get(n) ?? { name: n, cents: 0, reason: (w.reason as string | null) ?? 'other' }
+      c.cents += Number(w.cost_cents) || 0
+      wByProduct.set(n, c)
+    }
+    const wTop = [...wByProduct.values()].filter(w => w.cents > 0).sort((a, b) => b.cents - a.cents)
+    if (wTop.length >= 1) {
+      const top = wTop[0]
+      const restCents = wTop.slice(1).reduce((s, w) => s + w.cents, 0)
+      const avgRest = wTop.length > 1 ? restCents / (wTop.length - 1) : 0
+      if (top.cents >= 300 && (avgRest === 0 || top.cents >= 2 * avgRest)) {
+        const reasonCode = top.reason.startsWith('other:') ? 'other' : top.reason
+        const topDollars = (top.cents / 100).toFixed(2)
+        const { error } = await sb.from('inventory_tasks').insert({
+          business_id: businessId, outlet_id: outletId, task_type: 'waste', product_id: null,
+          title: 'Reduce ' + top.name + ' waste',
+          detail: '$' + topDollars + ' lost this week · reason: ' + reasonCode,
+          hypothesis: top.name + ' is your biggest waste source over the last 7 days — $' + topDollars + ' lost (logged as ' + reasonCode + '). Review prep quantities, storage conditions, or portion sizes to cut this loss.',
+          priority: 23, generated_by: 'aria', due_date: due, status: 'open',
+        })
+        if (!error) wasteTaskAdded = 1
+      }
+    }
+  }
+  return { velocity_added: velAdded, weather_added: wxAdded, waste_task_added: wasteTaskAdded, weather: wi }
 }
 
 // INV-AVT — Tanpin task generation for large food-cost gaps. Triggered when over-portion > 15% OR > $10 for the
@@ -201,6 +236,7 @@ export interface Pulse {
   top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number
   attention: { below_reorder: number; expiring: number; open_reviews: number; temp_logged: boolean; temp_failed: number; on_hold: number }
   top_waste_7d: Array<{ name: string; cost_cents: number; reason: string }>
+  waste_null_cost_count: number
 }
 export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<Pulse> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
@@ -251,21 +287,29 @@ export async function pulse(sb: SupabaseClient, businessId: string, outletIdIn?:
   let onHold = 0
   try { const { count } = await sb.from('warehouse_quarantine').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'quarantined'); onHold = count ?? 0 } catch { /* non-fatal */ }
 
-  // Top waste by cost over the past 7 days — pos_waste_log has no outlet_id column, so business-scoped.
+  // Top 5 costed waste items (7d). pos_waste_log has no outlet_id — business-scoped.
+  // Null-cost rows excluded from $ ranking and counted separately (spec: "add product costs to see waste in dollars").
   const waste7Start = new Date(Date.now() - 7 * 86400_000).toISOString()
   const { data: wasteRows } = await sb.from('pos_waste_log')
     .select('product_name, cost_cents, reason').eq('business_id', businessId)
     .gte('recorded_at', waste7Start).limit(5000)
-  const wasteByProduct = new Map<string, { name: string; cost_cents: number; reason: string }>()
+  const costedMap = new Map<string, { name: string; cost_cents: number; reason: string }>()
+  const nullCostNames = new Set<string>()
   for (const w of wasteRows ?? []) {
     const n = (w.product_name as string | null) ?? 'Item'
-    const c = wasteByProduct.get(n) ?? { name: n, cost_cents: 0, reason: (w.reason as string | null) ?? 'other' }
-    c.cost_cents += Number(w.cost_cents) || 0
-    wasteByProduct.set(n, c)
+    if (w.cost_cents != null) {
+      const c = costedMap.get(n) ?? { name: n, cost_cents: 0, reason: (w.reason as string | null) ?? 'other' }
+      c.cost_cents += Number(w.cost_cents)
+      costedMap.set(n, c)
+    } else {
+      if (!costedMap.has(n)) nullCostNames.add(n)
+    }
   }
-  const topWaste7d = [...wasteByProduct.values()].sort((a, b) => b.cost_cents - a.cost_cents).slice(0, 3)
+  for (const n of costedMap.keys()) nullCostNames.delete(n)
+  const topWaste7d = [...costedMap.values()].sort((a, b) => b.cost_cents - a.cost_cents).slice(0, 5)
+  const wasteNullCostCount = nullCostNames.size
 
-  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed, on_hold: onHold }, top_waste_7d: topWaste7d }
+  return { outlet_id: outletId, today_revenue: todayRevenue, today_txns: todayTxns, baseline_avg: baselineAvg, vs_baseline_pct: vsBaseline, top_movers: topMovers, tasks_done: done ?? 0, tasks_open: open ?? 0, attention: { below_reorder: belowReorder, expiring, open_reviews: reviews ?? 0, temp_logged: tempLogged, temp_failed: tempFailed, on_hold: onHold }, top_waste_7d: topWaste7d, waste_null_cost_count: wasteNullCostCount }
 }
 
 // ── Handover ──────────────────────────────────────────────────────────────────────────────────────────────

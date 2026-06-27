@@ -219,6 +219,18 @@ async function rShrinkageWaste(sb: SupabaseClient, bid: string, outletId: string
     const p = byProduct.get(pid) ?? { name, units: 0, dollars: 0 }; p.units += u; p.dollars += d; byProduct.set(pid, p)
     const who = (a.adjusted_by as string) ?? 'Unknown'; const s = byStaff.get(who) ?? { units: 0, dollars: 0 }; s.units += u; s.dollars += d; byStaff.set(who, s)
   }
+  // Reason-code breakdown — tolerates any reason string (legacy, unknown, "other: <note>" normalized to "other").
+  const byReason = new Map<string, { units: number; dollars: number }>()
+  for (const w of waste ?? []) {
+    const raw = (w.reason as string | null) ?? 'other'
+    const code = raw.startsWith('other:') ? 'other' : raw
+    const d = (Number(w.cost_cents) || 0) / 100
+    const u = Number(w.quantity) || 0
+    const s = byReason.get(code) ?? { units: 0, dollars: 0 }
+    s.units += u; s.dollars += d; byReason.set(code, s)
+  }
+  const reasonRows = Array.from(byReason.entries()).sort((a, b) => b[1].dollars - a[1].dollars).map(([code, s]) => [code, s.units, money(s.dollars)])
+
   const prodRows = Array.from(byProduct.values()).sort((a, b) => b.dollars - a.dollars).map(p => [p.name, p.units, money(p.dollars)])
   const staffRows = Array.from(byStaff.entries()).sort((a, b) => b[1].dollars - a[1].dollars).map(([who, s]) => [who, s.units, money(s.dollars)])
   const totalD = Array.from(byProduct.values()).reduce((s, p) => s + p.dollars, 0)
@@ -226,8 +238,9 @@ async function rShrinkageWaste(sb: SupabaseClient, bid: string, outletId: string
     sections: [
       { title: 'By product', columns: ['Product', 'Units', 'Value lost'], rows: prodRows, empty: 'No waste or shrinkage this period.', total_row: prodRows.length ? ['Total', '', money(totalD)] : undefined },
       { title: 'By staff (attribution)', columns: ['Staff', 'Units', 'Value lost'], rows: staffRows, empty: 'No attributed loss this period.' },
+      { title: 'By reason code', columns: ['Reason', 'Units', 'Value lost'], rows: reasonRows, empty: 'No waste logged with reason codes this period.' },
     ],
-    note: 'Waste $ from pos_waste_log (cents → dollars); shrinkage from negative stock adjustments valued at resolved cost.',
+    note: 'Waste $ from pos_waste_log (cents → dollars); shrinkage from negative stock adjustments valued at resolved cost. Reason codes are free-text; "other: <note>" entries aggregated under "other".',
   }
 }
 

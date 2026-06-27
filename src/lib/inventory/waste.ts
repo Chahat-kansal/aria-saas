@@ -161,13 +161,36 @@ export async function wasteTodaySummary(supabase: SupabaseClient, businessId: st
   return { items, total_cost_cents, count: items.length }
 }
 
-/** GroundTruth signals: today's waste $ + open waste-spike count (RULE 9 → business-context). */
-export async function wasteGroundTruth(supabase: SupabaseClient, businessId: string): Promise<{ waste_today_dollars: number; waste_spikes_open: number }> {
+/** GroundTruth signals: today's + 7-day waste $, top wasted item, dominant reason — feed the business brain. */
+export async function wasteGroundTruth(supabase: SupabaseClient, businessId: string): Promise<{ waste_today_dollars: number; waste_spikes_open: number; waste_7d_dollars: number; top_waste_item: string | null; dominant_reason: string | null }> {
   const todayStart = aestStartIso(0)
-  const [{ data: rows }, { count: spikes }] = await Promise.all([
+  const week7Start = aestStartIso(7)
+  const [{ data: todayRows }, { count: spikes }, { data: weekRows }] = await Promise.all([
     supabase.from('pos_waste_log').select('cost_cents').eq('business_id', businessId).gte('recorded_at', todayStart),
     supabase.from('inventory_review_queue').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('flag_type', 'waste_spike').eq('status', 'open'),
+    supabase.from('pos_waste_log').select('product_name, cost_cents, reason').eq('business_id', businessId).gte('recorded_at', week7Start).limit(5000),
   ])
-  const cents = (rows ?? []).reduce((s, r) => s + (Number(r.cost_cents) || 0), 0)
-  return { waste_today_dollars: Math.round(cents) / 100, waste_spikes_open: spikes ?? 0 }
+  const todayCents = (todayRows ?? []).reduce((s, r) => s + (Number(r.cost_cents) || 0), 0)
+  const weekCents = (weekRows ?? []).reduce((s, r) => s + (Number(r.cost_cents) || 0), 0)
+
+  // Top wasted item by total cost_cents over 7 days.
+  const byProduct = new Map<string, number>()
+  for (const w of weekRows ?? []) {
+    const n = (w.product_name as string | null) ?? 'Item'
+    byProduct.set(n, (byProduct.get(n) ?? 0) + (Number(w.cost_cents) || 0))
+  }
+  const sortedProducts = [...byProduct.entries()].sort((a, b) => b[1] - a[1])
+  const topWasteItem = sortedProducts.length > 0 ? sortedProducts[0][0] : null
+
+  // Dominant reason code. Normalize "other: <note>" → "other".
+  const byReason = new Map<string, number>()
+  for (const w of weekRows ?? []) {
+    const raw = (w.reason as string | null) ?? 'other'
+    const code = raw.startsWith('other:') ? 'other' : raw
+    byReason.set(code, (byReason.get(code) ?? 0) + 1)
+  }
+  const sortedReasons = [...byReason.entries()].sort((a, b) => b[1] - a[1])
+  const dominantReason = sortedReasons.length > 0 ? sortedReasons[0][0] : null
+
+  return { waste_today_dollars: Math.round(todayCents) / 100, waste_spikes_open: spikes ?? 0, waste_7d_dollars: Math.round(weekCents) / 100, top_waste_item: topWasteItem, dominant_reason: dominantReason }
 }

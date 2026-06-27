@@ -43,7 +43,7 @@ export interface AskAriaContext {
   // INV-PAR-1 — products below their reorder point right now (real, from velocity-derived par)
   inventory_reorder: { below_count: number; review_count: number; top: Array<{ name: string; on_hand: number; reorder_point: number; days_of_cover: number | null; suggested_qty: number }> } | null
   // INV-STAFF-APP-2 / INV-WASTE-1 / INV-ADJUST-1 — open tasks + reviews + today's waste $ / spikes + manual adjustments
-  inventory_ops: { open_tasks: number; open_reviews: number; waste_today_dollars: number; waste_spikes_open: number; adjustments_today: number; adjustments_net_value: number } | null
+  inventory_ops: { open_tasks: number; open_reviews: number; waste_today_dollars: number; waste_spikes_open: number; waste_7d_dollars: number; top_waste_item: string | null; dominant_reason: string | null; adjustments_today: number; adjustments_net_value: number } | null
   staff_count: number
   open_support_tickets: number
   pending_aria_actions: number

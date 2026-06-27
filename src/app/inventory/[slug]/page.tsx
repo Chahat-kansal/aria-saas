@@ -229,7 +229,7 @@ export default function InventoryStaffApp() {
   const [buyPo, setBuyPo] = useState<{ po: { id: string; order_number: string; status: string; total: number | null; created_by: string | null }; lines: Array<{ product_name: string; quantity_ordered: number; unit_cost: number | null; line_total: number | null }> } | null>(null)
   const [buyPermErr, setBuyPermErr] = useState('')
   // INV-6 — Pulse + Handover (guidance) on the Tasks screen
-  interface PulseData { today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number }; top_waste_7d?: Array<{ name: string; cost_cents: number; reason: string }> }
+  interface PulseData { today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number }; top_waste_7d?: Array<{ name: string; cost_cents: number; reason: string }>; waste_null_cost_count?: number }
   interface WeatherData { forecast_rain_pct: number | null; sufficient: boolean; matched_days: number; rain_days: number; dry_days: number; rain_lift_pct: number | null; reason: string | null }
   interface HandoverData { done: Array<{ title: string; type: string; by: string }>; open: Array<{ title: string; type: string; why: string | null }>; flagged: { open_reviews: number; expiring: number; below_reorder: number } }
   const [pulseData, setPulseData] = useState<PulseData | null>(null)
@@ -494,7 +494,7 @@ export default function InventoryStaffApp() {
   }
   async function submitWaste() {
     if (!wasteProduct) return
-    const reason = wasteReason === 'other' ? (wasteOther.trim() || 'other') : wasteReason
+    const reason = wasteReason === 'other' ? ('other' + (wasteOther.trim() ? ': ' + wasteOther.trim() : '')) : wasteReason
     const payload = { product_id: wasteProduct.id, product_name: wasteProduct.name, quantity: wasteQty, reason, outlet_id: outletId }
     if (!online) { const ok = await enqueueSafe(`/api/inventory/app/${slug}/waste`, payload, `Waste ${wasteProduct.name} ×${wasteQty}`); if (ok) setWasteMsg({ cost_cents: wasteProduct.unit_cost != null ? Math.round(wasteProduct.unit_cost * wasteQty * 100) : null, spike: false }); return }
     setWasteSubmitting(true)
@@ -1166,12 +1166,20 @@ export default function InventoryStaffApp() {
         {pulseData.top_waste_7d != null && (
           <div style={{ fontSize: 10.5, color: '#cfd2cc', marginTop: 12, paddingTop: 11, borderTop: '1px solid rgba(255,255,255,.12)', lineHeight: 1.4 }}>
             <span style={{ color: '#9aa3b2', fontWeight: 600 }}>waste 7d:</span>
-            {pulseData.top_waste_7d.length === 0
-              ? <span style={{ color: '#9aa3b2' }}>{' '}nothing logged this week</span>
-              : pulseData.top_waste_7d.map((w, i) => (
-                  <span key={i}>{i > 0 ? ' · ' : ' '}{w.name} <span style={{ color: P.red }}>{`$${Math.round(w.cost_cents / 100)}`}</span></span>
-                ))
-            }
+            {pulseData.top_waste_7d.length === 0 ? (
+              (pulseData.waste_null_cost_count ?? 0) > 0
+                ? <span style={{ color: '#9aa3b2' }}>{' '}add product costs to see waste in dollars</span>
+                : <span style={{ color: '#9aa3b2' }}>{' '}nothing logged this week</span>
+            ) : (
+              <>
+                {pulseData.top_waste_7d.map((w, i) => (
+                  <span key={i}>{i > 0 ? ' · ' : ' '}{w.name} <span style={{ color: P.red }}>{`$${(w.cost_cents / 100).toFixed(0)}`}</span></span>
+                ))}
+                {(pulseData.waste_null_cost_count ?? 0) > 0 && (
+                  <span style={{ color: '#9aa3b2' }}>{' '}+{pulseData.waste_null_cost_count} no cost</span>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
