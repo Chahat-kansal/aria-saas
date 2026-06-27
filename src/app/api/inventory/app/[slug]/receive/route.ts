@@ -94,7 +94,8 @@ async function _POST(req: Request, { params }: Params) {
       expiry_date: line.expiry_date || null, expiry_tracked: !!line.expiry_date, source: 'receive',
     }).select('id').maybeSingle()
 
-    results.push({ product_id: line.product_id, received: qty, new_on_hand: newOnHand, cost_captured: unitCost, batch_id: batch?.id ?? null })
+    const ordered = Number(poLine?.quantity_ordered) || 0
+    results.push({ product_id: line.product_id, received: qty, ordered, variance: qty - ordered, new_on_hand: newOnHand, cost_captured: unitCost, batch_id: batch?.id ?? null })
   }
 
   return NextResponse.json({ ok: true, po: claimed.order_number, by: acting.staff_name, lines: results })

@@ -658,7 +658,17 @@ export default function InventoryStaffApp() {
       const lines = po.items.map(l => ({ line_id: l.id, product_id: l.product_id, received_qty: recvQty[l.id] ?? 0, expiry_date: recvExpiry[l.id] || undefined }))
       const r = await fetch(`/api/inventory/app/${slug}/receive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ po_id: po.id, outlet_id: outletId, note: recvNote || undefined, lines }) })
       const d = await r.json().catch(() => ({}))
-      if (r.ok && d.ok) { setRecvMsg(`✓ Received ${po.order_number} — stock updated.`); setOpenPo(null); setReceiveData(null); loadReceive(); loadHome(outletId) }
+      if (r.ok && d.ok) {
+        const rlines = (d.lines ?? []) as Array<{ variance: number }>
+        const nShort = rlines.filter(l => l.variance < 0).length
+        const nOver = rlines.filter(l => l.variance > 0).length
+        const parts: string[] = []
+        if (nShort > 0) parts.push(nShort + (nShort === 1 ? ' line short' : ' lines short'))
+        if (nOver > 0) parts.push(nOver + (nOver === 1 ? ' line over' : ' lines over'))
+        const suffix = parts.length > 0 ? ' · ' + parts.join(', ') + ' vs PO.' : ' · all quantities matched.'
+        setRecvMsg('✓ Received ' + po.order_number + ' — stock updated' + suffix)
+        setOpenPo(null); setReceiveData(null); loadReceive(); loadHome(outletId)
+      }
       else setRecvMsg(d.error ? `Couldn't receive: ${d.error}` : 'Could not receive this delivery.')
     } catch { setRecvMsg('Something went wrong.') }
     setRecvSubmitting(false)

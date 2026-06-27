@@ -143,6 +143,50 @@ export async function approveAndSendPO(sb: SupabaseClient, businessId: string, p
   return { ok: true, channel, order_number: claimed.order_number as string, supplier_email: to }
 }
 
+/** PART 3B — delivery accuracy ground truth: 30-day short-delivery count + value + worst supplier by fill rate.
+ *  Reads only RECEIVED POs in the window; never fakes missing data — returns 0 counts when no history. */
+export async function deliveryAccuracyGroundTruth(
+  sb: SupabaseClient, businessId: string
+): Promise<{ short_lines_30d: number; short_dollars_30d: number; worst_supplier: string | null; worst_supplier_short_rate: number | null }> {
+  const thirtyAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const { data: pos } = await sb.from('pos_purchase_orders')
+    .select('id, supplier_name')
+    .eq('business_id', businessId).eq('status', 'received')
+    .gte('received_at', thirtyAgo).limit(500)
+  const poIds = (pos ?? []).map(p => p.id as string)
+  const supplierOf = new Map((pos ?? []).map(p => [p.id as string, String(p.supplier_name ?? 'Unknown')]))
+  if (!poIds.length) return { short_lines_30d: 0, short_dollars_30d: 0, worst_supplier: null, worst_supplier_short_rate: null }
+  const { data: lines } = await sb.from('pos_purchase_order_items')
+    .select('order_id, quantity_ordered, quantity_received, unit_cost')
+    .in('order_id', poIds).in('receive_status', ['received', 'partial']).limit(5000)
+  let shortCount = 0
+  let shortDollars = 0
+  const supplierStats = new Map<string, { total: number; short: number }>()
+  for (const l of lines ?? []) {
+    const ordered = Number(l.quantity_ordered) || 0
+    const received = Number(l.quantity_received) || 0
+    const supplier = supplierOf.get(l.order_id as string) ?? 'Unknown'
+    const s = supplierStats.get(supplier) ?? { total: 0, short: 0 }
+    s.total++
+    if (received < ordered) { shortCount++; shortDollars += (ordered - received) * (Number(l.unit_cost) || 0); s.short++ }
+    supplierStats.set(supplier, s)
+  }
+  let worstSupplier: string | null = null
+  let worstRate: number | null = null
+  for (const [name, s] of supplierStats.entries()) {
+    if (s.total >= 2) {
+      const rate = s.short / s.total
+      if (worstRate === null || rate > worstRate) { worstRate = rate; worstSupplier = name }
+    }
+  }
+  return {
+    short_lines_30d: shortCount,
+    short_dollars_30d: Math.round(shortDollars * 100) / 100,
+    worst_supplier: worstSupplier,
+    worst_supplier_short_rate: worstRate !== null ? Math.round(worstRate * 100) : null,
+  }
+}
+
 /** PART 3 — a supplier's price list (supplier_product_prices), matched to catalogue cost → auto-fill + a grounded
  *  cost-CHANGE signal when the list cost differs from the captured catalogue cost (never auto-applied). */
 export async function supplierPriceList(sb: SupabaseClient, businessId: string, supplierId: string): Promise<Array<{ product_id: string; product_name: string; list_cost: number; captured_cost: number | null; changed: boolean; delta_pct: number | null }>> {

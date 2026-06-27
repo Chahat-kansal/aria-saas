@@ -6,6 +6,7 @@ import { reorderSummary } from '@/lib/inventory/par-levels'
 import { taskAndReviewCounts } from '@/lib/inventory/daily-tasks'
 import { wasteGroundTruth } from '@/lib/inventory/waste'
 import { adjustGroundTruth } from '@/lib/inventory/adjust'
+import { deliveryAccuracyGroundTruth } from '@/lib/inventory/buying'
 
 export interface ConversationSummary {
   id: string
@@ -42,8 +43,8 @@ export interface AskAriaContext {
   inventory_velocity: { scored_at: string | null; top_movers: Array<{ name: string; units_per_day: number; abc_tier: string }>; dead_stock: Array<{ name: string }>; abc_counts: { A: number; B: number; C: number; dead: number }; uncosted_count: number } | null
   // INV-PAR-1 — products below their reorder point right now (real, from velocity-derived par)
   inventory_reorder: { below_count: number; review_count: number; top: Array<{ name: string; on_hand: number; reorder_point: number; days_of_cover: number | null; suggested_qty: number }> } | null
-  // INV-STAFF-APP-2 / INV-WASTE-1 / INV-ADJUST-1 — open tasks + reviews + today's waste $ / spikes + manual adjustments
-  inventory_ops: { open_tasks: number; open_reviews: number; waste_today_dollars: number; waste_spikes_open: number; waste_7d_dollars: number; top_waste_item: string | null; dominant_reason: string | null; adjustments_today: number; adjustments_net_value: number } | null
+  // INV-STAFF-APP-2 / INV-WASTE-1 / INV-ADJUST-1 / INV-RECEIVE-DEEP — open tasks + reviews + today's waste $ / spikes + manual adjustments + delivery accuracy
+  inventory_ops: { open_tasks: number; open_reviews: number; waste_today_dollars: number; waste_spikes_open: number; waste_7d_dollars: number; top_waste_item: string | null; dominant_reason: string | null; adjustments_today: number; adjustments_net_value: number; short_lines_30d: number; short_dollars_30d: number; worst_supplier: string | null; worst_supplier_short_rate: number | null } | null
   staff_count: number
   open_support_tickets: number
   pending_aria_actions: number
@@ -465,8 +466,8 @@ export async function buildAskAriaContext(
   // INV-STAFF-APP-2 / INV-WASTE-1 — open tasks + pending owner reviews + today's waste $ + open spikes.
   let inventoryOps: AskAriaContext['inventory_ops'] = null
   try {
-    const [ops, waste, adjust] = await Promise.all([taskAndReviewCounts(supabaseAdmin, businessId), wasteGroundTruth(supabaseAdmin, businessId), adjustGroundTruth(supabaseAdmin, businessId)])
-    inventoryOps = { ...ops, ...waste, ...adjust }
+    const [ops, waste, adjust, delivery] = await Promise.all([taskAndReviewCounts(supabaseAdmin, businessId), wasteGroundTruth(supabaseAdmin, businessId), adjustGroundTruth(supabaseAdmin, businessId), deliveryAccuracyGroundTruth(supabaseAdmin, businessId)])
+    inventoryOps = { ...ops, ...waste, ...adjust, ...delivery }
   } catch (e) { console.error('[business-context] ops counts failed (non-fatal):', (e as Error).message) }
 
   return {

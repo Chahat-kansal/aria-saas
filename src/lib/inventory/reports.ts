@@ -286,9 +286,59 @@ async function rCountAccuracy(sb: SupabaseClient, bid: string, range: { start: s
 }
 
 async function rReceivedVsOrdered(sb: SupabaseClient, bid: string, range: { start: string; end: string }): Promise<{ sections: ReportSection[]; note: string | null }> {
-  const { data: pos } = await sb.from('pos_purchase_orders').select('id, po_number, supplier_id, total_amount, status, created_at, received_at').eq('business_id', bid).gte('created_at', range.start).lte('created_at', range.end).limit(500)
-  const rows = (pos ?? []).map(p => [String(p.po_number ?? p.id).slice(0, 12), p.status ?? '—', money(Number(p.total_amount) || 0), p.received_at ? 'received' : 'open'])
-  return { sections: [{ title: 'Purchase orders this period', columns: ['PO', 'Status', 'Value', 'Received?'], rows, empty: 'No purchase orders this period.' }], note: 'Received vs ordered needs PO/receiving data; honest empty state when none exists.' }
+  const { data: pos } = await sb.from('pos_purchase_orders')
+    .select('id, order_number, po_number, supplier_name, total_amount, status, created_at, received_at')
+    .eq('business_id', bid).gte('created_at', range.start).lte('created_at', range.end).limit(500)
+
+  const receivedIds = (pos ?? []).filter(p => p.status === 'received').map(p => p.id as string)
+  const { data: items } = receivedIds.length
+    ? await sb.from('pos_purchase_order_items')
+        .select('order_id, product_name, quantity_ordered, quantity_received, unit_cost')
+        .in('order_id', receivedIds).limit(5000)
+    : { data: [] as Array<Record<string, unknown>> }
+
+  const poLabel = (p: Record<string, unknown>) => String(p.order_number ?? p.po_number ?? p.id).slice(0, 14)
+  const poRows = (pos ?? []).map(p => [
+    poLabel(p), String(p.supplier_name ?? '—'), String(p.status ?? '—'),
+    money(Number(p.total_amount) || 0),
+    p.received_at ? String(p.received_at).slice(0, 10) : 'open',
+  ])
+
+  // Per-line received vs ordered with over/short flag
+  const varRows: Array<Array<string | number>> = []
+  for (const it of items ?? []) {
+    const ordered = Number(it.quantity_ordered) || 0
+    const received = Number(it.quantity_received) || 0
+    const variance = received - ordered
+    const flag = variance < 0 ? 'SHORT' : variance > 0 ? 'OVER' : 'exact'
+    const po = (pos ?? []).find(p => p.id === it.order_id)
+    varRows.push([poLabel(po ?? {}), String(it.product_name ?? 'Item'), ordered, received, variance >= 0 ? '+' + variance : String(variance), flag])
+  }
+
+  // Supplier delivery accuracy — min 1 line to appear
+  const supplierMap = new Map<string, { total: number; short: number; shortDollars: number }>()
+  for (const it of items ?? []) {
+    const po = (pos ?? []).find(p => p.id === it.order_id)
+    const sname = String(po?.supplier_name ?? 'Unknown')
+    const ordered = Number(it.quantity_ordered) || 0
+    const received = Number(it.quantity_received) || 0
+    const s = supplierMap.get(sname) ?? { total: 0, short: 0, shortDollars: 0 }
+    s.total++
+    if (received < ordered) { s.short++; s.shortDollars += (ordered - received) * (Number(it.unit_cost) || 0) }
+    supplierMap.set(sname, s)
+  }
+  const supplierRows = Array.from(supplierMap.entries())
+    .sort((a, b) => b[1].short - a[1].short)
+    .map(([name, s]) => [name, s.total, s.short, s.total > 0 ? Math.round((1 - s.short / s.total) * 100) + '%' : '—', money(s.shortDollars)])
+
+  return {
+    sections: [
+      { title: 'Purchase orders', columns: ['PO', 'Supplier', 'Status', 'Value', 'Received date'], rows: poRows, empty: 'No purchase orders this period.' },
+      { title: 'Received vs ordered (per line)', columns: ['PO', 'Product', 'Ordered', 'Received', 'Variance', 'Flag'], rows: varRows, empty: 'No received deliveries to compare.' },
+      { title: 'Supplier delivery accuracy', columns: ['Supplier', 'Lines', 'Short', 'Fill rate', 'Short $'], rows: supplierRows, empty: 'No received deliveries yet.' },
+    ],
+    note: 'SHORT = received < ordered; OVER = received > ordered; fill rate = lines fully delivered ÷ total lines.',
+  }
 }
 
 async function rExpiring(sb: SupabaseClient, bid: string): Promise<{ sections: ReportSection[]; note: string | null }> {
