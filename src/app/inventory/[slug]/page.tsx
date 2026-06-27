@@ -932,21 +932,27 @@ export default function InventoryStaffApp() {
   const refreshPending = useCallback(async () => { const w = await allWrites(); setPending(w.filter(x => x.status === 'pending').length) }, [])
   const replayQueue = useCallback(async () => {
     const w = (await allWrites()).filter(x => x.status === 'pending').sort((a, b) => a.client_ts - b.client_ts)
-    if (!w.length) return
-    setSyncing(true); let failed = 0
-    for (const e of w) {
-      try {
-        const r = await fetch(e.endpoint, { method: e.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e.payload) })
-        if (r.ok) { const d = await r.json().catch(() => ({})); if (d && d.ok === false) { await markFailed(e.id!, (d.error as string) ?? 'rejected'); failed++ } else await removeWrite(e.id!) }
-        else if (r.status >= 400 && r.status < 500 && r.status !== 401) { await markFailed(e.id!, `rejected (${r.status})`); failed++ }
-        // 401 (session expired) / 5xx / network mid-sync → leave pending, retry next reconnect
-      } catch { break } // a network blip mid-replay — stop, keep the rest pending
+    if (w.length) {
+      setSyncing(true); let failed = 0
+      for (const e of w) {
+        try {
+          const r = await fetch(e.endpoint, { method: e.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e.payload) })
+          if (r.ok) { const d = await r.json().catch(() => ({})); if (d && d.ok === false) { await markFailed(e.id!, (d.error as string) ?? 'rejected'); failed++ } else await removeWrite(e.id!) }
+          else if (r.status >= 400 && r.status < 500 && r.status !== 401) { await markFailed(e.id!, `rejected (${r.status})`); failed++ }
+          // 401 (session expired) / 5xx / network mid-sync → leave pending, retry next reconnect
+        } catch { break } // a network blip mid-replay — stop, keep the rest pending
+      }
+      setSyncing(false); await refreshPending()
+      setSyncMsg(failed ? `${failed} change${failed === 1 ? '' : 's'} couldn’t sync — review` : 'Synced ✓')
+      setTimeout(() => setSyncMsg(''), 6000)
     }
-    setSyncing(false); await refreshPending()
-    setSyncMsg(failed ? `${failed} change${failed === 1 ? '' : 's'} couldn’t sync — review` : 'Synced ✓')
-    setTimeout(() => setSyncMsg(''), 6000)
-    loadHome(outletId) // refresh the value hero etc. after the queue replays
-  }, [refreshPending, loadHome, outletId])
+    loadHome(outletId)
+    if (tab === 'tasks') loadTasks(outletId)
+    else if (tab === 'waste') loadWasteToday(outletId)
+    else if (tab === 'reports') loadReports(reportPeriod, outletId)
+    // Refresh catalog so on_hand values are fresh after sync.
+    productCatalogRef.current = []; prefetchCatalog()
+  }, [refreshPending, loadHome, loadTasks, loadWasteToday, loadReports, prefetchCatalog, tab, reportPeriod, outletId])
   useEffect(() => {
     if (typeof navigator !== 'undefined') setOnline(navigator.onLine)
     refreshPending()
