@@ -330,7 +330,7 @@ export default function InventoryStaffApp() {
         setCountMsg({ variance: d.variance, review: d.review_raised, time: new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase() })
         setTasksData(td => td ? { ...td, tasks: td.tasks.map(t => t.id === task.id ? { ...t, status: 'done', completed_by: acting?.id ?? null } : t) } : td)
       }
-    } catch { /* ignore */ }
+    } catch (err) { if (err instanceof TypeError) await enqueueSafe(`/api/inventory/app/${slug}/count`, payload, `Count ${task.product_name ?? 'item'} = ${countVal}`) }
     setSubmitting(false)
   }
 
@@ -414,7 +414,7 @@ export default function InventoryStaffApp() {
       const r = await fetch(`/api/inventory/app/${slug}/count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setScanCountMsg({ variance: d.variance, review: d.review_raised }); loadHome(outletId) }
-    } catch { /* ignore */ }
+    } catch (err) { if (err instanceof TypeError) await enqueueSafe(`/api/inventory/app/${slug}/count`, payload, `Count ${product.name} = ${scanCount}`) }
     setScanCounting(false)
   }
 
@@ -461,7 +461,7 @@ export default function InventoryStaffApp() {
       const r = await fetch(`/api/inventory/app/${slug}/waste`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setWasteMsg({ cost_cents: d.cost_cents, spike: d.spike }); loadWasteToday(outletId); loadHome(outletId) }
-    } catch { /* ignore */ }
+    } catch (err) { if (err instanceof TypeError) await enqueueSafe(`/api/inventory/app/${slug}/waste`, payload, `Waste ${wasteProduct.name} ×${wasteQty}`) }
     setWasteSubmitting(false)
   }
 
@@ -823,7 +823,7 @@ export default function InventoryStaffApp() {
       const r = await fetch(`/api/inventory/app/${slug}/fresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setTempMsg(d.passed ? `✓ ${tempForm.location} ${tempForm.reading}°C — within safe range.` : `⚠ ${tempForm.location} ${tempForm.reading}°C — ABOVE the ${tempForm.threshold}°C limit. Flagged.`); setTempForm(f => ({ ...f, reading: '' })); loadFresh(outletId) }
-    } catch { /* ignore */ }
+    } catch (err) { if (err instanceof TypeError) await enqueueSafe(`/api/inventory/app/${slug}/fresh`, payload, `Temp ${tempForm.location} ${tempForm.reading}°C`) }
     setFreshBusy(false)
   }
 
