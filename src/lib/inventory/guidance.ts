@@ -82,17 +82,22 @@ export async function velocitySignals(sb: SupabaseClient, businessId: string, mi
   return (scores ?? []).map(s => ({ product_id: s.product_id as string, name: names.get(s.product_id as string) ?? 'Item', velocity_vs_avg: Number(s.velocity_vs_avg) || 0, pct: Math.round(((Number(s.velocity_vs_avg) || 1) - 1) * 100), abc_tier: (s.abc_tier as string) ?? 'C' }))
 }
 
-/** Generate (idempotently, once/day) the velocity + weather tasks — the signals the INV-STAFF-APP-2 base generator
- *  (par/cycle/expiry) doesn't cover. Never duplicates: velocity dedupes on the product constraint; the
- *  product-less weather task is guarded by an explicit "exists today" check. Returns what was added. */
-export async function generateGuidanceTasks(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<{ velocity_added: number; weather_added: number; waste_task_added: number; expiry_task_added: number; weather: WeatherInsight | null }> {
+const DAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/** Generate (idempotently, once/day) the velocity + weather + demand-DOW + slow-mover tasks — the signals the
+ *  INV-STAFF-APP-2 base generator (par/cycle/expiry) doesn't cover. Never duplicates: per-product tasks dedupe
+ *  on the product constraint; product-less tasks are guarded by explicit "exists today" checks. Returns what
+ *  was added. GROUNDING-TEETH: every "why" traces to a real row — empty list > busywork. */
+export async function generateGuidanceTasks(sb: SupabaseClient, businessId: string, outletIdIn?: string | null): Promise<{ velocity_added: number; weather_added: number; waste_task_added: number; expiry_task_added: number; demand_dow_added: number; slow_mover_added: number; weather: WeatherInsight | null }> {
   const outletId = await resolveOutletId(sb, businessId, outletIdIn ?? null)
   const due = aestDate()
-  const { data: existing } = await sb.from('inventory_tasks').select('task_type').eq('business_id', businessId).eq('due_date', due).in('task_type', ['velocity', 'weather', 'waste', 'expiry_risk'])
+  const { data: existing } = await sb.from('inventory_tasks').select('task_type').eq('business_id', businessId).eq('due_date', due).in('task_type', ['velocity', 'weather', 'waste', 'expiry_risk', 'demand_dow', 'slow_mover'])
   const haveVel = (existing ?? []).some(t => t.task_type === 'velocity')
   const haveWx = (existing ?? []).some(t => t.task_type === 'weather')
   const haveWaste = (existing ?? []).some(t => t.task_type === 'waste')
   const haveExpiry = (existing ?? []).some(t => t.task_type === 'expiry_risk')
+  const haveDow = (existing ?? []).some(t => t.task_type === 'demand_dow')
+  const haveSlow = (existing ?? []).some(t => t.task_type === 'slow_mover')
 
   let velAdded = 0
   if (!haveVel) {
@@ -181,7 +186,119 @@ export async function generateGuidanceTasks(sb: SupabaseClient, businessId: stri
       if (!error) expiryTaskAdded = 1
     }
   }
-  return { velocity_added: velAdded, weather_added: wxAdded, waste_task_added: wasteTaskAdded, expiry_task_added: expiryTaskAdded, weather: wi }
+  // Demand-DOW task: products that sell ≥25% more on today's weekday vs other days (last 8 weeks).
+  // Grounded: ≥3 occurrences of this weekday. PROPOSE ONLY — no stock writes.
+  let dowAdded = 0
+  if (!haveDow) {
+    const todayAest = aestDate()
+    const todayAestWd = new Date(todayAest + 'T12:00:00Z').getDay()
+    const since56 = new Date(Date.now() - 56 * 86400_000).toISOString()
+    const { data: saleItems } = await sb.from('pos_sale_items')
+      .select('product_id, quantity, created_at')
+      .eq('business_id', businessId)
+      .gte('created_at', since56)
+      .gt('quantity', 0)
+      .limit(50000)
+
+    if (saleItems && saleItems.length > 0) {
+      const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' })
+      const getWd = (iso: string): { wd: number; date: string } => {
+        const aest = fmt.format(new Date(iso))
+        return { wd: new Date(aest + 'T12:00:00Z').getDay(), date: aest }
+      }
+      type WdBucket = { same: number; other: number; sameDates: Set<string> }
+      const byProduct = new Map<string, WdBucket>()
+      const globalOtherDates = new Set<string>()
+      for (const it of saleItems) {
+        const pid = it.product_id as string | null; if (!pid) continue
+        const { wd, date } = getWd(it.created_at as string)
+        const qty = Number(it.quantity) || 0
+        const b = byProduct.get(pid) ?? { same: 0, other: 0, sameDates: new Set<string>() }
+        if (wd === todayAestWd) { b.same += qty; b.sameDates.add(date) }
+        else { b.other += qty; globalOtherDates.add(date) }
+        byProduct.set(pid, b)
+      }
+      const otherDayCount = globalOtherDates.size || 1
+      const candidates: Array<{ product_id: string; lift_pct: number }> = []
+      for (const [pid, { same, other, sameDates }] of byProduct) {
+        if (sameDates.size < 3) continue   // GROUNDING-TEETH: ≥3 weekday occurrences
+        if (same < 1) continue
+        const samePerDay = same / sameDates.size
+        const otherPerDay = other / otherDayCount
+        if (otherPerDay < 0.2) continue    // no meaningful baseline on other days
+        const lift = (samePerDay - otherPerDay) / otherPerDay
+        if (lift >= 0.25 && samePerDay >= 0.3) candidates.push({ product_id: pid, lift_pct: Math.round(lift * 100) })
+      }
+      candidates.sort((a, b) => b.lift_pct - a.lift_pct)
+      const top = candidates.slice(0, 3)
+      if (top.length) {
+        const pids = top.map(c => c.product_id)
+        const { data: prods } = await sb.from('pos_products').select('id, name').in('id', pids)
+        const names = new Map((prods ?? []).map(p => [p.id as string, p.name as string]))
+        const dowLabel = DAYS_EN[todayAestWd]
+        const inserts = top.map(c => ({
+          business_id: businessId, outlet_id: outletId, task_type: 'demand_dow', product_id: c.product_id,
+          title: 'Stock check — ' + (names.get(c.product_id) ?? 'Item') + ' (' + dowLabel + ' peak)',
+          detail: '+' + c.lift_pct + '% on ' + dowLabel + 's vs other days',
+          hypothesis: (names.get(c.product_id) ?? 'Item') + ' sells +' + c.lift_pct + '% more on ' + dowLabel + 's vs other days (last 8 weeks of sales data). Make sure you have enough prepped and stocked for today.',
+          priority: 23, generated_by: 'aria', due_date: due, status: 'open',
+        }))
+        const { error } = await sb.from('inventory_tasks').upsert(inserts, { onConflict: 'business_id,outlet_id,product_id,task_type,due_date', ignoreDuplicates: true })
+        if (!error) dowAdded = inserts.length
+      }
+    }
+  }
+
+  // Slow-mover task: items with stock but zero sales in the last 14 days — idle cash/shelf space.
+  // Grounded: on_hand from pos_outlet_inventory, recent sales from pos_sale_items. PROPOSE ONLY.
+  let slowAdded = 0
+  if (!haveSlow) {
+    let invQ = sb.from('pos_outlet_inventory')
+      .select('product_id, items_on_hand').eq('business_id', businessId).gt('items_on_hand', 5).limit(200)
+    if (outletId) invQ = invQ.eq('outlet_id', outletId)
+    const { data: inv } = await invQ
+
+    if (inv && inv.length > 0) {
+      const invPids = inv.map(r => r.product_id as string)
+      const since14 = new Date(Date.now() - 14 * 86400_000).toISOString()
+      const { data: recentItems } = await sb.from('pos_sale_items')
+        .select('product_id')
+        .eq('business_id', businessId)
+        .gte('created_at', since14)
+        .in('product_id', invPids.slice(0, 400))
+        .gt('quantity', 0)
+        .limit(5000)
+      const soldPids = new Set((recentItems ?? []).map(it => it.product_id as string))
+      const stalePids = invPids.filter(pid => !soldPids.has(pid))
+      if (stalePids.length) {
+        const invMap = new Map(inv.map(r => [r.product_id as string, Number(r.items_on_hand) || 0]))
+        const { data: prods } = await sb.from('pos_products')
+          .select('id, name, cost_price').in('id', stalePids.slice(0, 200)).eq('business_id', businessId)
+        const cands = (prods ?? [])
+          .map(p => {
+            const onHand = invMap.get(p.id as string) ?? 0
+            const cost = Number(p.cost_price) || 0
+            return { product_id: p.id as string, name: (p.name as string) ?? 'Item', on_hand: onHand, value: Math.round(onHand * cost * 100) / 100 }
+          })
+          .filter(c => c.value >= 10)
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 3)
+        if (cands.length) {
+          const inserts = cands.map(c => ({
+            business_id: businessId, outlet_id: outletId, task_type: 'slow_mover', product_id: c.product_id,
+            title: 'Review dead stock — ' + c.name,
+            detail: c.on_hand + ' units · $' + c.value.toFixed(2) + ' tied up · 14d no sales',
+            hypothesis: c.name + ' has ' + c.on_hand + ' units on hand (approx $' + c.value.toFixed(2) + ') but no recorded sales in the last 14 days. Consider a promotion, markdown, or return to supplier — idle stock ties up cash and shelf space.',
+            priority: 21, generated_by: 'aria', due_date: due, status: 'open',
+          }))
+          const { error } = await sb.from('inventory_tasks').upsert(inserts, { onConflict: 'business_id,outlet_id,product_id,task_type,due_date', ignoreDuplicates: true })
+          if (!error) slowAdded = inserts.length
+        }
+      }
+    }
+  }
+
+  return { velocity_added: velAdded, weather_added: wxAdded, waste_task_added: wasteTaskAdded, expiry_task_added: expiryTaskAdded, demand_dow_added: dowAdded, slow_mover_added: slowAdded, weather: wi }
 }
 
 // INV-AVT — Tanpin task generation for large food-cost gaps. Triggered when over-portion > 15% OR > $10 for the

@@ -1188,11 +1188,12 @@ export default function InventoryStaffApp() {
         </div>
         <div style={{ flex: 1 }}>
           <b style={{ fontSize: 14, fontWeight: 600, textDecoration: isDone ? 'line-through' : 'none', color: isDone ? T.muted : T.ink }}>{t.title}</b>
-          {(t.task_type === 'velocity' || t.task_type === 'weather') && t.hypothesis
+          {(t.task_type === 'velocity' || t.task_type === 'weather' || t.task_type === 'demand_dow' || t.task_type === 'slow_mover') && t.hypothesis
             ? <span style={{ display: 'block', fontSize: 11.5, color: P.muted, marginTop: 2, lineHeight: 1.4 }}>{t.hypothesis}</span>
             : t.detail && <span style={{ display: 'block', fontSize: 11.5, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>{t.detail}</span>}
         </div>
         {!isDone && (t.task_type === 'velocity' || t.task_type === 'weather') && <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 7, border: `1.5px solid ${P.ink}`, background: t.task_type === 'weather' ? '#fff' : P.lime, textTransform: 'uppercase' }}>{t.task_type}</span>}
+        {!isDone && (t.task_type === 'demand_dow' || t.task_type === 'slow_mover') && <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 7, border: '1.5px solid ' + P.amber, background: t.task_type === 'slow_mover' ? P.amberSoft : P.lime, textTransform: 'uppercase', color: t.task_type === 'slow_mover' ? P.amber : P.ink }}>{t.task_type === 'demand_dow' ? 'demand' : 'slow'}</span>}
       </div>
     )
     // INV-6 — Pulse snapshot (grounded, per-outlet) + Handover
