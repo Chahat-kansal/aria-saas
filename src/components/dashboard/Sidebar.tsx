@@ -146,6 +146,8 @@ const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean
       // INV-NAV-FIX — the Inventory tool (stock value / valuation) shipped without a sidebar link; surface
       // it for every business. Plain href so the active-highlight matches every other nav item.
       { href: '/dashboard/inventory', label: 'Inventory', icon: BoxIcon, section: 'Operations', badge: 'New', fresh: true },
+      // INV-STAFF-MGMT — owner UI to manage inventory PWA staff (pos_staff) and set PINs.
+      { href: '/dashboard/staff/inventory-team', label: 'Inventory Team', icon: TeamIcon, section: 'Operations', badge: 'New', fresh: true },
     ],
   },
   {
