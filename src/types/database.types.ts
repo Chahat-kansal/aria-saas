@@ -17187,6 +17187,7 @@ export type Database = {
           outlet_id: string | null
           product_id: string | null
           reason: string | null
+          staff_id: string | null
         }
         Insert: {
           adjusted_by?: string | null
@@ -17197,6 +17198,7 @@ export type Database = {
           outlet_id?: string | null
           product_id?: string | null
           reason?: string | null
+          staff_id?: string | null
         }
         Update: {
           adjusted_by?: string | null
@@ -17207,6 +17209,7 @@ export type Database = {
           outlet_id?: string | null
           product_id?: string | null
           reason?: string | null
+          staff_id?: string | null
         }
         Relationships: [
           {
@@ -18118,6 +18121,7 @@ export type Database = {
           reason: string | null
           recorded_at: string | null
           recorded_by: string | null
+          staff_id: string | null
           unit: string | null
         }
         Insert: {
@@ -18130,6 +18134,7 @@ export type Database = {
           reason?: string | null
           recorded_at?: string | null
           recorded_by?: string | null
+          staff_id?: string | null
           unit?: string | null
         }
         Update: {
@@ -18142,6 +18147,7 @@ export type Database = {
           reason?: string | null
           recorded_at?: string | null
           recorded_by?: string | null
+          staff_id?: string | null
           unit?: string | null
         }
         Relationships: [

@@ -239,12 +239,12 @@ async function handleWasteQuery(sb: SupabaseClient, bid: string): Promise<InvHan
   const since28 = new Date(Date.now() - 28 * 86400000).toISOString()
 
   const { data: wasteRows } = await sb.from('pos_waste_log')
-    .select('product_id, reason, cost_cents, logged_at')
+    .select('product_id, reason, cost_cents, recorded_at')
     .eq('business_id', bid)
     .not('cost_cents', 'is', null)
     .gt('cost_cents', 0)
-    .gte('logged_at', since28)
-    .order('logged_at', { ascending: false })
+    .gte('recorded_at', since28)
+    .order('recorded_at', { ascending: false })
     .limit(300)
 
   if (!wasteRows || wasteRows.length === 0) {
@@ -353,14 +353,14 @@ async function handleCountAttribution(
     return { handled: true, text: 'No committed stocktakes in the last 7 days.', cost_cents: 0 }
   }
 
-  // Fetch staff names for all started_by IDs
+  // Fetch staff names for all started_by IDs — pos_stock_takes.started_by is a pos_staff.id UUID
   const staffIds = [...new Set(takes.map(t => t.started_by as string).filter(Boolean))]
   const { data: staffRows } = staffIds.length > 0
-    ? await sb.from('staff_members').select('id, first_name, last_name').in('id', staffIds)
+    ? await sb.from('pos_staff').select('id, name').in('id', staffIds)
     : { data: [] }
   const staffNameMap = new Map((staffRows ?? []).map(s => [
     s.id as string,
-    `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim(),
+    (s.name as string | null) ?? 'Staff',
   ]))
 
   // Group by started_by

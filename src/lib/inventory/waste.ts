@@ -79,11 +79,11 @@ export async function logWaste(supabase: SupabaseClient, p: WasteParams): Promis
   try { unitCost = (await resolveCostFor(supabase, p.businessId, p.productId, outletId)).cost } catch { /* unknown */ }
   const costCents = unitCost != null ? Math.round(unitCost * quantity * 100) : null
 
-  // 1) The waste record.
+  // 1) The waste record — recorded_by (text name) kept for legacy rows; staff_id is the stable UUID.
   const { data: wrow } = await supabase.from('pos_waste_log').insert({
     business_id: p.businessId, product_id: p.productId, product_name: p.productName ?? 'Item',
     quantity, unit: p.unit ?? 'unit', reason, recorded_by: p.staffName, recorded_at: new Date().toISOString(),
-    cost_cents: costCents,
+    cost_cents: costCents, staff_id: p.staffId,
   }).select('id').maybeSingle()
   const wasteId = (wrow?.id as string) ?? null
 
@@ -94,7 +94,7 @@ export async function logWaste(supabase: SupabaseClient, p: WasteParams): Promis
   if (outletId) {
     await supabase.from('pos_stock_adjustments').insert({
       business_id: p.businessId, product_id: p.productId, outlet_id: outletId,
-      adjustment_qty: -quantity, reason: 'waste', adjusted_by: p.staffName,
+      adjustment_qty: -quantity, reason: 'waste', adjusted_by: p.staffName, staff_id: p.staffId,
     })
   }
 

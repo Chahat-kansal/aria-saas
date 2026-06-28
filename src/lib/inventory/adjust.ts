@@ -77,7 +77,7 @@ export async function applyAdjustment(supabase: SupabaseClient, p: AdjustParams)
     // and gets the unique violation, it will see the row on its own check above and return idempotent.
     const { data: claimedRow, error: claimErr } = await supabase.from('pos_stock_adjustments').insert({
       id: idk, business_id: p.businessId, product_id: p.productId, outlet_id: outletId,
-      adjustment_qty: delta, reason, adjusted_by: p.staffName,
+      adjustment_qty: delta, reason, adjusted_by: p.staffName, staff_id: p.staffId,
     }).select('id').maybeSingle()
     if (claimErr || !claimedRow?.id) {
       // Claim failed — concurrent replay beat us; treat as idempotent.
@@ -103,7 +103,7 @@ export async function applyAdjustment(supabase: SupabaseClient, p: AdjustParams)
   // Attributed audit row (the SAME rail count-accept + waste use). This row does NOT move stock.
   const { data: row } = await supabase.from('pos_stock_adjustments').insert({
     business_id: p.businessId, product_id: p.productId, outlet_id: outletId,
-    adjustment_qty: delta, reason, adjusted_by: p.staffName,
+    adjustment_qty: delta, reason, adjusted_by: p.staffName, staff_id: p.staffId,
   }).select('id').maybeSingle()
 
   // THE SINGLE stock mutation (atomic, never negative).

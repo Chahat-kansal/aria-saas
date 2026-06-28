@@ -43,7 +43,7 @@ const reportLiveStat = (type: string, k: ReportKpis | null | undefined): { v: st
   return null
 }
 
-interface Staff { id: string; name: string; role: string; color: string | null }
+interface Staff { id: string; name: string; role: string; color: string | null; has_pin: boolean }
 interface Outlet { id: string; name: string; is_default: boolean }
 interface Boot { business: { id: string; name: string; slug: string }; outlets: Outlet[]; staff: Staff[] }
 interface VisibleTile { id: string; label: string; sublabel: string; icon: string; route: string; badge?: string }
@@ -495,7 +495,8 @@ export default function InventoryStaffApp() {
   async function submitWaste() {
     if (!wasteProduct) return
     const reason = wasteReason === 'other' ? ('other' + (wasteOther.trim() ? ': ' + wasteOther.trim() : '')) : wasteReason
-    const payload = { product_id: wasteProduct.id, product_name: wasteProduct.name, quantity: wasteQty, reason, outlet_id: outletId }
+    // INV-STAFF-IDENTITY: staff_id + staff_name captured at enqueue so attribution survives a staff switch before reconnect.
+    const payload = { product_id: wasteProduct.id, product_name: wasteProduct.name, quantity: wasteQty, reason, outlet_id: outletId, staff_id: acting?.id ?? null, staff_name: acting?.name ?? null }
     if (!online) { const ok = await enqueueSafe(`/api/inventory/app/${slug}/waste`, payload, `Waste ${wasteProduct.name} ×${wasteQty}`); if (ok) setWasteMsg({ cost_cents: wasteProduct.unit_cost != null ? Math.round(wasteProduct.unit_cost * wasteQty * 100) : null, spike: false }); return }
     setWasteSubmitting(true)
     try {
@@ -549,7 +550,8 @@ export default function InventoryStaffApp() {
     if (!adjustReason) { setAdjustErr('Pick a reason — corrections need one.'); return }
     setAdjustSubmitting(true); setAdjustErr('')
     const reason = adjustReason === 'other' ? (adjustOther.trim() || 'other') : adjustReason
-    const payload = { product_id: adjustProduct.id, product_name: adjustProduct.name, mode: adjustMode, value: adjustValue, reason, outlet_id: outletId, idempotency_key: mintKey() }
+    // INV-STAFF-IDENTITY: staff_id + staff_name captured at enqueue so attribution survives a staff switch before reconnect.
+    const payload = { product_id: adjustProduct.id, product_name: adjustProduct.name, mode: adjustMode, value: adjustValue, reason, outlet_id: outletId, idempotency_key: mintKey(), staff_id: acting?.id ?? null, staff_name: acting?.name ?? null }
     const label = 'Adjust ' + adjustProduct.name + ' (' + (adjustMode === 'add' ? '+' : adjustMode === 'remove' ? '-' : '=') + adjustValue + ')'
     if (!online) {
       const ok = await enqueueSafe('/api/inventory/app/' + slug + '/adjust', payload, label)
@@ -1115,10 +1117,16 @@ export default function InventoryStaffApp() {
         <h2 style={{ fontSize: 16, fontWeight: 700, margin: '4px 2px 14px' }}>Who&apos;s working?</h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {(boot?.staff ?? []).map((s, i) => (
-            <button key={s.id} onClick={() => { setSelStaff(s); setPin(''); setPinErr(''); setStage('pin') }}
-              style={{ background: '#fff', border: `1.5px solid ${T.line}`, borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: 'pointer', fontFamily: BODY, boxShadow: '0 1px 3px rgba(20,30,50,.03)' }}>
+            <button key={s.id}
+              onClick={() => { if (!s.has_pin) return; setSelStaff(s); setPin(''); setPinErr(''); setStage('pin') }}
+              style={{ background: s.has_pin ? '#fff' : P.soft, border: '1.5px solid ' + (s.has_pin ? T.line : P.muted), borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: s.has_pin ? 'pointer' : 'not-allowed', fontFamily: BODY, boxShadow: s.has_pin ? '0 1px 3px rgba(20,30,50,.03)' : 'none', opacity: s.has_pin ? 1 : 0.6 }}>
               <div style={{ width: 52, height: 52, borderRadius: '50%', background: avColor(s, i), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18 }}>{initials(s.name)}</div>
-              <div style={{ textAlign: 'center' }}><b style={{ fontSize: 13.5, fontWeight: 600, display: 'block' }}>{s.name}</b><span style={{ fontSize: 11, color: T.muted, textTransform: 'capitalize' }}>{s.role}</span></div>
+              <div style={{ textAlign: 'center' }}>
+                <b style={{ fontSize: 13.5, fontWeight: 600, display: 'block' }}>{s.name}</b>
+                {s.has_pin
+                  ? <span style={{ fontSize: 11, color: T.muted, textTransform: 'capitalize' }}>{s.role}</span>
+                  : <span style={{ fontSize: 10.5, color: T.red, fontWeight: 600 }}>No PIN — ask manager</span>}
+              </div>
             </button>
           ))}
           {(!boot || boot.staff.length === 0) && <p style={{ gridColumn: '1/-1', fontSize: 13, color: T.muted }}>No staff set up yet.</p>}

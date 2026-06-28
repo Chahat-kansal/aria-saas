@@ -40,15 +40,24 @@ async function _POST(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { product_id?: string; product_name?: string; mode?: string; value?: number; reason?: string; outlet_id?: string; idempotency_key?: string }
+  const body = await req.json().catch(() => ({})) as { product_id?: string; product_name?: string; mode?: string; value?: number; reason?: string; outlet_id?: string; idempotency_key?: string; staff_id?: string; staff_name?: string }
   if (!body.product_id || !['set', 'add', 'remove'].includes(body.mode ?? '') || body.value == null) {
     return NextResponse.json({ error: 'product_id, mode (set|add|remove) and value required' }, { status: 400 })
+  }
+
+  // Offline-queue replay: if body.staff_id differs from the current cookie (staff switched between enqueue
+  // and reconnect), use the original staff identity — validated against this business to prevent spoofing.
+  let useStaffId = acting.staff_id, useStaffName = acting.staff_name
+  if (body.staff_id && body.staff_id !== acting.staff_id) {
+    const { data: orig } = await supabaseAdmin.from('pos_staff')
+      .select('id, name').eq('id', body.staff_id).eq('business_id', bid).eq('is_active', true).maybeSingle()
+    if (orig) { useStaffId = orig.id as string; useStaffName = (orig.name as string) ?? acting.staff_name }
   }
 
   const outcome = await applyAdjustment(supabaseAdmin, {
     businessId: bid, outletIdIn: body.outlet_id ?? null, productId: body.product_id, productName: body.product_name ?? null,
     mode: body.mode as 'set' | 'add' | 'remove', value: Number(body.value), reason: body.reason ?? null,
-    staffId: acting.staff_id, staffName: acting.staff_name, idempotency_key: body.idempotency_key ?? null,
+    staffId: useStaffId, staffName: useStaffName, idempotency_key: body.idempotency_key ?? null,
   })
 
   if (!outcome.ok) {
