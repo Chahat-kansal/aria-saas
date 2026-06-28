@@ -47,6 +47,7 @@ import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildFactsPacket } from '@/lib/aria/ask/facts-packet'
 import { findProductByQuery } from '@/lib/aria/product-map'
 import { buildNavGrounding } from '@/lib/aria/nav-grounding'
+import { classifyInventoryIntent, handleInventoryQuestion } from '@/lib/inventory/owner-agent'
 
 // ALSO (audit Phase 4): tool-loop writes/outbound that must never auto-fire from a chat answer without
 // explicit owner confirmation. Intercepted in the main tool-loop's executeTool below.
@@ -425,6 +426,11 @@ async function _POST(req: Request) {
               return `Done — draft roster **${String(_ap.name)}** created for week starting ${String(_ap.week_start)}. Review and publish from Staff.`
             case 'create_invoice':
               return `Done — draft invoice created for **${String(_ap.customer_name)}**. Review and send from Invoices.`
+            case 'approve_po_draft': {
+              const totalDollars = (Number(_ap.total_cost_cents ?? 0) / 100).toFixed(2)
+              const itemCount = Number(_ap.items_count ?? result.affected_count)
+              return `Done — draft PO approved. **$${totalDollars}** across ${itemCount} item${itemCount !== 1 ? 's' : ''}. Go to **Inventory → Buying** to review or send to your supplier.`
+            }
             default:
               return `Done — ${parsedPending.title}: ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${_rollback}`
           }
@@ -553,6 +559,59 @@ async function _POST(req: Request) {
       action: null,
       cost_usd_cents: 0,
     })
+  }
+
+  // INV-AGENT-1: inventory owner agent fast-path — intercepts inventory questions BEFORE
+  // the full 19-query context build + 30-tool loop. Answers from real DB data; routes
+  // PO approvals through the existing pending_action gate. SURFACE + ROUTE ONLY.
+  const invIntent = classifyInventoryIntent(message)
+  if (invIntent !== 'none') {
+    try {
+      const invResult = await handleInventoryQuestion(supabaseAdmin, bid, message, invIntent)
+      if (invResult.handled) {
+        if (invResult.approve_action) {
+          // Pending-action gate — stores the approve_po_draft action for one-tap confirmation.
+          const planned = invResult.approve_action
+          let forkConvId = conversationId
+          try {
+            forkConvId = await upsertConversation(bid, user.id, conversationId, message, invResult.text, 'action_request')
+          } catch (e) { console.error('[aria/ask] inv_agent upsert failed:', (e as Error).message) }
+          if (forkConvId) {
+            await supabase.from('aria_conversations').update({
+              pending_action: planned,
+              pending_action_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+            }).eq('id', forkConvId).eq('business_id', bid)
+          }
+          return NextResponse.json({
+            response: invResult.text,
+            conversation_id: forkConvId ?? conversationId,
+            intent: 'action_request',
+            action: { action: 'fork', planned, propose_only: false },
+            cost_usd_cents: 0,
+          })
+        }
+        // Informational inventory answer — return directly.
+        let invConvId = conversationId
+        try {
+          invConvId = await upsertConversation(bid, user.id, conversationId, message, invResult.text, 'inventory')
+        } catch (e) { console.error('[aria/ask] inv_agent upsert failed:', (e as Error).message) }
+        return NextResponse.json({
+          response: invResult.text,
+          conversation_id: invConvId ?? conversationId,
+          intent: 'inventory',
+          action: null,
+          cost_usd_cents: invResult.cost_cents,
+          downloads: null,
+          tool_calls: [],
+          used_council: false,
+          ai_mode: 'haiku',
+          model_used: 'haiku',
+        })
+      }
+    } catch (e) {
+      console.error('[aria/ask] inv_agent failed, falling through:', (e as Error).message)
+      // RULE 0: non-fatal — fall through to main tool loop
+    }
   }
 
   // NAV fast-path — "where is X / how do I open X / where can I find X"

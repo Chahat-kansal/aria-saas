@@ -648,6 +648,36 @@ async function runAction(
         break
       }
 
+      case 'approve_po_draft': {
+        // INV-AGENT-1: approve a purchase_order_drafts row (AI-generated replenishment draft).
+        // NEVER sends to supplier — just sets status='approved' for the owner to act on.
+        const draftId = (action.payload as Record<string, unknown>).draft_id as string | undefined
+        if (!draftId) return { ok: false, affected_count: 0, error: 'No draft_id in payload.', rollback_available: false }
+
+        const { data: draft, error: draftErr } = await supabase.from('purchase_order_drafts')
+          .select('id, status, total_cost_cents, items')
+          .eq('id', draftId).eq('business_id', businessId).maybeSingle()
+
+        if (draftErr || !draft) return { ok: false, affected_count: 0, error: 'Draft not found.', rollback_available: false }
+        if ((draft.status as string) !== 'pending_approval') {
+          return { ok: false, affected_count: 0, error: `Draft is already ${draft.status}.`, rollback_available: false }
+        }
+
+        const { error: approveErr } = await supabase.from('purchase_order_drafts')
+          .update({ status: 'approved', approved_at: new Date().toISOString() })
+          .eq('id', draftId).eq('business_id', businessId)
+
+        if (approveErr) return { ok: false, affected_count: 0, error: approveErr.message, rollback_available: false }
+
+        const draftItems = (draft.items as Array<unknown> | null) ?? []
+        entityType = 'purchase_order_drafts'
+        entityIds = [draftId]
+        beforeState = { status: 'pending_approval' }
+        afterState = { status: 'approved', total_cost_cents: Number(draft.total_cost_cents ?? 0) }
+        affectedCount = draftItems.length
+        break
+      }
+
       default:
         return { ok: false, affected_count: 0, error: `Action type "${action.type}" not yet supported`, rollback_available: false }
     }

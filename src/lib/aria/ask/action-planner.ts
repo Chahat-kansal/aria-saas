@@ -12,6 +12,7 @@ export type ActionType =
   | 'update_promotion'
   | 'create_roster'
   | 'create_invoice'
+  | 'approve_po_draft'
 
 export interface PlannedAction {
   type: ActionType
