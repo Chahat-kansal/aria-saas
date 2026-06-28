@@ -12,6 +12,7 @@ import { generateDailyTasks, getTodayTasks } from '@/lib/inventory/daily-tasks'
 import { generateGuidanceTasks, completeTask } from '@/lib/inventory/guidance'
 import { ensureTempTask } from '@/lib/inventory/fresh'
 import { ensureRecallTask } from '@/lib/inventory/loss'
+import { generateReplenishmentDrafts } from '@/lib/inventory/replenishment-agent'
 
 // INV-STAFF-APP-2 / INV-6 — today's tasks for the acting staff. Generates (idempotently) the base par/cycle/expiry
 // set PLUS the INV-6 velocity/weather signals, enriches count tasks with the live "expected" (items_on_hand) for
@@ -31,6 +32,7 @@ async function _GET(req: Request, { params }: Params) {
   await generateGuidanceTasks(supabaseAdmin, bid, outletId)     // INV-6: velocity / weather (idempotent, once/day)
   await ensureTempTask(supabaseAdmin, bid, outletId)           // INV-7: a temp/compliance task if none logged today
   await ensureRecallTask(supabaseAdmin, bid, outletId)        // INV-8: a 'recall' task if any stock is on-hold
+  void generateReplenishmentDrafts(supabaseAdmin, bid, outletId)  // INV-AGENT-REPLENISH: draft POs once/week (fire-and-forget)
   const tasks = await getTodayTasks(supabaseAdmin, bid, outletId)
 
   // Enrich count/cycle_count tasks with the product's name/sku + live expected (items_on_hand).

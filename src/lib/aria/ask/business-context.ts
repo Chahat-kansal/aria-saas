@@ -8,6 +8,7 @@ import { wasteGroundTruth } from '@/lib/inventory/waste'
 import { adjustGroundTruth } from '@/lib/inventory/adjust'
 import { deliveryAccuracyGroundTruth } from '@/lib/inventory/buying'
 import { expiryGroundTruth } from '@/lib/inventory/fresh'
+import { replenishmentGroundTruth } from '@/lib/inventory/replenishment-agent'
 
 export interface ConversationSummary {
   id: string
@@ -44,6 +45,8 @@ export interface AskAriaContext {
   inventory_velocity: { scored_at: string | null; top_movers: Array<{ name: string; units_per_day: number; abc_tier: string }>; dead_stock: Array<{ name: string }>; abc_counts: { A: number; B: number; C: number; dead: number }; uncosted_count: number } | null
   // INV-PAR-1 — products below their reorder point right now (real, from velocity-derived par)
   inventory_reorder: { below_count: number; review_count: number; top: Array<{ name: string; on_hand: number; reorder_point: number; days_of_cover: number | null; suggested_qty: number }> } | null
+  // INV-AGENT-REPLENISH — open ai_generated draft POs for this week + line/spend summary (PROPOSE ONLY)
+  inventory_replenishment: { items_below_cover: number; proposed_spend_dollars: number | null; unassigned_supplier_count: number; open_draft_count: number } | null
   // INV-STAFF-APP-2 / INV-WASTE-1 / INV-ADJUST-1 / INV-RECEIVE-DEEP — open tasks + reviews + today's waste $ / spikes + manual adjustments + delivery accuracy
   inventory_ops: { open_tasks: number; open_reviews: number; waste_today_dollars: number; waste_spikes_open: number; waste_7d_dollars: number; top_waste_item: string | null; dominant_reason: string | null; adjustments_today: number; adjustments_net_value: number; short_lines_30d: number; short_dollars_30d: number; worst_supplier: string | null; worst_supplier_short_rate: number | null; expiry_at_risk_dollars: number | null; expiry_no_cost_count: number; expired_not_wasted: number; highest_at_risk_product: string | null } | null
   staff_count: number
@@ -464,6 +467,11 @@ export async function buildAskAriaContext(
   try { inventoryReorder = await reorderSummary(supabaseAdmin, businessId) }
   catch (e) { console.error('[business-context] reorder summary failed (non-fatal):', (e as Error).message) }
 
+  // INV-AGENT-REPLENISH — replenishment draft summary for this week (reads existing open drafts, cheap).
+  let inventoryReplenishment: AskAriaContext['inventory_replenishment'] = null
+  try { inventoryReplenishment = await replenishmentGroundTruth(supabaseAdmin, businessId) }
+  catch (e) { console.error('[business-context] replenishment ground truth failed (non-fatal):', (e as Error).message) }
+
   // INV-STAFF-APP-2 / INV-WASTE-1 — open tasks + pending owner reviews + today's waste $ + open spikes.
   let inventoryOps: AskAriaContext['inventory_ops'] = null
   try {
@@ -491,6 +499,7 @@ export async function buildAskAriaContext(
     inventory_value: inventoryValue,
     inventory_velocity: inventoryVelocity,
     inventory_reorder: inventoryReorder,
+    inventory_replenishment: inventoryReplenishment,
     inventory_ops: inventoryOps,
     staff_count: Number(staffRes.count) || 0,
     open_support_tickets: Number(ticketsRes.count) || 0,
