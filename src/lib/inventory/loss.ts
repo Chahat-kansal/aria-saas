@@ -20,13 +20,27 @@ async function productCost(sb: SupabaseClient, businessId: string, productId: st
 export interface Hold { id: string; product_id: string; item_name: string; quantity: number; reason: string; status: string; quarantined_by: string | null; quarantined_at: string; value_at_risk: number | null }
 
 /** Recall/hold a product (or batch): a not-sellable quarantine record. Stock is NOT deleted — held for the owner
- *  to resolve. Attributed. */
-export async function recallProduct(sb: SupabaseClient, businessId: string, productId: string, quantity: number, reason: string, staffName: string, lotId?: string | null): Promise<{ ok: boolean; id: string | null }> {
+ *  to resolve. Attributed.
+ *  idempotency_key: UUID minted client-side for offline queue replay — used as the explicit warehouse_quarantine.id
+ *  so a second replay finds the existing row and returns idempotent success without creating a duplicate hold. */
+export async function recallProduct(sb: SupabaseClient, businessId: string, productId: string, quantity: number, reason: string, staffName: string, lotId?: string | null, idempotency_key?: string | null): Promise<{ ok: boolean; id: string | null; idempotent?: boolean }> {
+  const idk = (idempotency_key ?? '').trim() || null
+  if (idk) {
+    // Check for existing hold with this key (idempotent replay guard).
+    const { data: existing } = await sb.from('warehouse_quarantine').select('id').eq('id', idk).maybeSingle()
+    if (existing?.id) return { ok: true, id: idk, idempotent: true }
+  }
   const { data: p } = await sb.from('pos_products').select('name').eq('id', productId).eq('business_id', businessId).maybeSingle()
-  const { data, error } = await sb.from('warehouse_quarantine').insert({
+  const row: Record<string, unknown> = {
     business_id: businessId, item_id: productId, item_name: (p?.name as string) ?? 'Item', lot_id: lotId ?? null,
     quantity: Math.max(0, Math.round(quantity)), reason: reason.trim() || 'recall', status: 'quarantined', quarantined_by: staffName,
-  }).select('id').maybeSingle()
+  }
+  if (idk) row.id = idk
+  const { data, error } = await sb.from('warehouse_quarantine').insert(row).select('id').maybeSingle()
+  if (error && idk) {
+    // Unique violation from concurrent replay — treat as idempotent success.
+    return { ok: true, id: idk, idempotent: true }
+  }
   return { ok: !error, id: (data?.id as string | null) ?? null }
 }
 

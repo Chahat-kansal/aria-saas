@@ -40,7 +40,7 @@ async function _POST(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { product_id?: string; product_name?: string; mode?: string; value?: number; reason?: string; outlet_id?: string }
+  const body = await req.json().catch(() => ({})) as { product_id?: string; product_name?: string; mode?: string; value?: number; reason?: string; outlet_id?: string; idempotency_key?: string }
   if (!body.product_id || !['set', 'add', 'remove'].includes(body.mode ?? '') || body.value == null) {
     return NextResponse.json({ error: 'product_id, mode (set|add|remove) and value required' }, { status: 400 })
   }
@@ -48,7 +48,7 @@ async function _POST(req: Request, { params }: Params) {
   const outcome = await applyAdjustment(supabaseAdmin, {
     businessId: bid, outletIdIn: body.outlet_id ?? null, productId: body.product_id, productName: body.product_name ?? null,
     mode: body.mode as 'set' | 'add' | 'remove', value: Number(body.value), reason: body.reason ?? null,
-    staffId: acting.staff_id, staffName: acting.staff_name,
+    staffId: acting.staff_id, staffName: acting.staff_name, idempotency_key: body.idempotency_key ?? null,
   })
 
   if (!outcome.ok) {

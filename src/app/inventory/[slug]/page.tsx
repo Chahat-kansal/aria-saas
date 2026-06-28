@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation'
 import { P, JAKARTA, HARD_SHADOW, greetWord as pgreet, pipelDate, pfirst } from '@/lib/inventory/ui/pipel-tokens'
 import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton, PipelStat, PIcon } from '@/components/inventory/ui/pipel'
 import { PipelScanner } from '@/components/inventory/ui/PipelScanner'
-import { enqueueWrite, allWrites, removeWrite, markFailed } from '@/lib/inventory/offline-queue'
+import { enqueueWrite, allWrites, removeWrite, markFailed, mintKey } from '@/lib/inventory/offline-queue'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -546,16 +546,25 @@ export default function InventoryStaffApp() {
   }
   async function submitAdjust() {
     if (!adjustProduct) return
-    if (!online) { setAdjustErr("You're offline — stock corrections need a connection."); return }
     if (!adjustReason) { setAdjustErr('Pick a reason — corrections need one.'); return }
     setAdjustSubmitting(true); setAdjustErr('')
+    const reason = adjustReason === 'other' ? (adjustOther.trim() || 'other') : adjustReason
+    const payload = { product_id: adjustProduct.id, product_name: adjustProduct.name, mode: adjustMode, value: adjustValue, reason, outlet_id: outletId, idempotency_key: mintKey() }
+    const label = 'Adjust ' + adjustProduct.name + ' (' + (adjustMode === 'add' ? '+' : adjustMode === 'remove' ? '-' : '=') + adjustValue + ')'
+    if (!online) {
+      const ok = await enqueueSafe('/api/inventory/app/' + slug + '/adjust', payload, label)
+      if (!ok) setAdjustErr("Couldn't save offline — reconnect to apply.")
+      setAdjustSubmitting(false); return
+    }
     try {
-      const reason = adjustReason === 'other' ? (adjustOther.trim() || 'other') : adjustReason
-      const r = await fetch(`/api/inventory/app/${slug}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: adjustProduct.id, product_name: adjustProduct.name, mode: adjustMode, value: adjustValue, reason, outlet_id: outletId }) })
+      const r = await fetch('/api/inventory/app/' + slug + '/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setAdjustMsg({ delta: d.delta, new_on_hand: d.new_on_hand }); loadAdjust(outletId); loadHome(outletId) }
       else setAdjustErr(d.message ?? 'Could not apply the correction.')
-    } catch { setAdjustErr('Something went wrong.') }
+    } catch (err) {
+      if (err instanceof TypeError) { const ok = await enqueueSafe('/api/inventory/app/' + slug + '/adjust', payload, label); if (!ok) setAdjustErr('Something went wrong.') }
+      else setAdjustErr('Something went wrong.')
+    }
     setAdjustSubmitting(false)
   }
 
@@ -652,11 +661,18 @@ export default function InventoryStaffApp() {
     setRecvQty(q); setRecvExpiry({}); setRecvNote(''); setRecvMsg('')
   }
   async function submitReceive(po: ReceivePO) {
-    if (!online) { setRecvMsg("You're offline — receiving a delivery needs a connection."); return }
     setRecvSubmitting(true); setRecvMsg('')
+    const lines = po.items.map(l => ({ line_id: l.id, product_id: l.product_id, received_qty: recvQty[l.id] ?? 0, expiry_date: recvExpiry[l.id] || undefined }))
+    const payload = { po_id: po.id, outlet_id: outletId, note: recvNote || undefined, lines }
+    const label = 'Receive ' + po.order_number + ' (' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + ')'
+    if (!online) {
+      const ok = await enqueueSafe('/api/inventory/app/' + slug + '/receive', payload, label)
+      if (!ok) setRecvMsg("Couldn't save offline — reconnect to receive this delivery.")
+      else { setOpenPo(null); setReceiveData(null) }
+      setRecvSubmitting(false); return
+    }
     try {
-      const lines = po.items.map(l => ({ line_id: l.id, product_id: l.product_id, received_qty: recvQty[l.id] ?? 0, expiry_date: recvExpiry[l.id] || undefined }))
-      const r = await fetch(`/api/inventory/app/${slug}/receive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ po_id: po.id, outlet_id: outletId, note: recvNote || undefined, lines }) })
+      const r = await fetch('/api/inventory/app/' + slug + '/receive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) {
         const rlines = (d.lines ?? []) as Array<{ variance: number }>
@@ -669,8 +685,11 @@ export default function InventoryStaffApp() {
         setRecvMsg('✓ Received ' + po.order_number + ' — stock updated' + suffix)
         setOpenPo(null); setReceiveData(null); loadReceive(); loadHome(outletId)
       }
-      else setRecvMsg(d.error ? `Couldn't receive: ${d.error}` : 'Could not receive this delivery.')
-    } catch { setRecvMsg('Something went wrong.') }
+      else setRecvMsg(d.error ? 'Could not receive: ' + d.error : 'Could not receive this delivery.')
+    } catch (err) {
+      if (err instanceof TypeError) { const ok = await enqueueSafe('/api/inventory/app/' + slug + '/receive', payload, label); if (!ok) setRecvMsg('Something went wrong.') }
+      else setRecvMsg('Something went wrong.')
+    }
     setRecvSubmitting(false)
   }
 
@@ -938,14 +957,24 @@ export default function InventoryStaffApp() {
   }
   async function placeRecall() {
     if (!recallPick) return
-    if (!online) { setLossMsg("You're offline — reconnect to place a hold."); return }
     setLossBusy('recall'); setLossMsg('')
+    const payload = { action: 'recall', product_id: recallPick.id, quantity: recallQty, reason: recallReason, outlet_id: outletId, idempotency_key: mintKey() }
+    const label = 'Hold ' + recallPick.name + ' x' + recallQty
+    if (!online) {
+      const ok = await enqueueSafe('/api/inventory/app/' + slug + '/loss', payload, label)
+      if (!ok) setLossMsg("Couldn't save offline — reconnect to place the hold.")
+      else { setRecallPick(null); setRecallMatches([]); setRecallSearch('') }
+      setLossBusy(null); return
+    }
     try {
-      const r = await fetch(`/api/inventory/app/${slug}/loss`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'recall', product_id: recallPick.id, quantity: recallQty, reason: recallReason, outlet_id: outletId }) })
+      const r = await fetch('/api/inventory/app/' + slug + '/loss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const d = await r.json().catch(() => ({}))
-      if (r.ok && d.ok) { setLossMsg(`✓ ${recallPick.name} placed on hold (${recallQty}). Stock is not sellable until resolved.`); setRecallPick(null); setRecallMatches([]); setRecallSearch(''); setLossTab('quarantine'); loadLoss(outletId) }
+      if (r.ok && d.ok) { setLossMsg('✓ ' + recallPick.name + ' placed on hold (' + recallQty + '). Stock is not sellable until resolved.'); setRecallPick(null); setRecallMatches([]); setRecallSearch(''); setLossTab('quarantine'); loadLoss(outletId) }
       else setLossMsg('Could not place the hold.')
-    } catch { setLossMsg('Something went wrong.') }
+    } catch (err) {
+      if (err instanceof TypeError) { const ok = await enqueueSafe('/api/inventory/app/' + slug + '/loss', payload, label); if (!ok) setLossMsg('Something went wrong.') }
+      else setLossMsg('Something went wrong.')
+    }
     setLossBusy(null)
   }
   async function resolveHoldUi(holdId: string, resolution: 'released' | 'disposed' | 'returned_to_supplier') {

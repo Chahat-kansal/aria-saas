@@ -42,6 +42,8 @@ interface AdjustParams {
   reason?: string | null
   staffId: string
   staffName: string
+  /** UUID minted client-side at enqueue time. When present, enables exactly-once idempotency via explicit row ID. */
+  idempotency_key?: string | null
 }
 
 export async function applyAdjustment(supabase: SupabaseClient, p: AdjustParams): Promise<AdjustOutcome> {
@@ -63,7 +65,35 @@ export async function applyAdjustment(supabase: SupabaseClient, p: AdjustParams)
   const delta = p.mode === 'set' ? Math.max(0, n) - before : p.mode === 'add' ? Math.abs(n) : -Math.abs(n)
   if (delta === 0) return { ok: false, error: 'no_change' }
 
-  // Idempotency: same staff+product+delta within a minute is a no-op (no dup row / no double move).
+  // Idempotency — two paths:
+  // 1. Explicit UUID key (offline queue replay): check for existing row with id = key → claim-first pattern.
+  // 2. No key (online submit): 1-minute time-window check as before (prevents double-click / form resubmit).
+  const idk = (p.idempotency_key ?? '').trim() || null
+  if (idk) {
+    // Offline path: check if this key was already claimed (another successful replay applied the adjustment).
+    const { data: existing } = await supabase.from('pos_stock_adjustments').select('id').eq('id', idk).maybeSingle()
+    if (existing?.id) return { ok: true, adjustment_id: idk, delta, on_hand_before: before, new_on_hand: before, reason, idempotent: true, staff_name: p.staffName }
+    // Claim the key by inserting the audit row with the explicit UUID. If a concurrent replay races here
+    // and gets the unique violation, it will see the row on its own check above and return idempotent.
+    const { data: claimedRow, error: claimErr } = await supabase.from('pos_stock_adjustments').insert({
+      id: idk, business_id: p.businessId, product_id: p.productId, outlet_id: outletId,
+      adjustment_qty: delta, reason, adjusted_by: p.staffName,
+    }).select('id').maybeSingle()
+    if (claimErr || !claimedRow?.id) {
+      // Claim failed — concurrent replay beat us; treat as idempotent.
+      return { ok: true, adjustment_id: idk, delta, on_hand_before: before, new_on_hand: before, reason, idempotent: true, staff_name: p.staffName }
+    }
+    // Claim succeeded — now apply the stock delta.
+    const newOnHand = outletId ? await adjustOutletStock(supabase, { businessId: p.businessId, outletId, productId: p.productId, delta }) : null
+    if (newOnHand === null && outletId) {
+      // Delta failed (RPC error or outlet missing) — release the claim so next retry can attempt the full operation.
+      await supabase.from('pos_stock_adjustments').delete().eq('id', idk)
+      return { ok: false, error: 'no_change' }
+    }
+    return { ok: true, adjustment_id: idk, delta, on_hand_before: before, new_on_hand: newOnHand, reason, idempotent: false, staff_name: p.staffName }
+  }
+
+  // Online path: 1-minute time-window guard (prevents double-click / form resubmit).
   const minuteAgo = new Date(Date.now() - 60_000).toISOString()
   const { data: dup } = await supabase.from('pos_stock_adjustments').select('id')
     .eq('business_id', p.businessId).eq('product_id', p.productId).eq('adjusted_by', p.staffName)

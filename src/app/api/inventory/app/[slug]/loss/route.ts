@@ -43,13 +43,13 @@ async function _POST(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { action?: string; product_id?: string; quantity?: number; reason?: string; hold_id?: string; resolution?: string; confirmed?: boolean; outlet_id?: string | null }
+  const body = await req.json().catch(() => ({})) as { action?: string; product_id?: string; quantity?: number; reason?: string; hold_id?: string; resolution?: string; confirmed?: boolean; outlet_id?: string | null; idempotency_key?: string }
   const outletId = await resolveOutletId(supabaseAdmin, bid, body.outlet_id ?? null)
 
   if (body.action === 'recall') {
     if (!body.product_id) return NextResponse.json({ error: 'product_id required' }, { status: 400 })
-    const res = await recallProduct(supabaseAdmin, bid, body.product_id, Number(body.quantity) || 0, body.reason ?? 'recall', acting.staff_name)
-    return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: 'Could not place the hold' }, { status: 400 })
+    const res = await recallProduct(supabaseAdmin, bid, body.product_id, Number(body.quantity) || 0, body.reason ?? 'recall', acting.staff_name, null, body.idempotency_key ?? null)
+    return res.ok ? NextResponse.json({ ok: true, id: res.id, idempotent: res.idempotent ?? false }) : NextResponse.json({ error: 'Could not place the hold' }, { status: 400 })
   }
   if (body.action === 'resolve') {
     const resn = body.resolution

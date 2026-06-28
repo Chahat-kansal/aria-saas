@@ -56,7 +56,15 @@ async function _POST(req: Request, { params }: Params) {
     .update({ status: 'received', received_at: new Date().toISOString(), received_by: acting.staff_name, receive_notes: body.note ?? null })
     .eq('id', body.po_id).eq('business_id', bid).eq('status', 'sent')
     .select('id, order_number').maybeSingle()
-  if (!claimed) return NextResponse.json({ error: 'This PO is not receivable (already received or not sent)' }, { status: 409 })
+  if (!claimed) {
+    // INV-OFFLINE-2: distinguish "already received" (idempotent offline replay success) from "not receivable".
+    const { data: existingPo } = await supabaseAdmin.from('pos_purchase_orders')
+      .select('id, order_number, status, received_by').eq('id', body.po_id).eq('business_id', bid).maybeSingle()
+    if (existingPo?.status === 'received') {
+      return NextResponse.json({ ok: true, idempotent: true, po: existingPo.order_number, by: existingPo.received_by ?? acting.staff_name })
+    }
+    return NextResponse.json({ error: 'This PO is not receivable (already received or not sent)' }, { status: 409 })
+  }
 
   const outletId = await resolveOutletId(supabaseAdmin, bid, body.outlet_id ?? null)
   const nowIso = new Date().toISOString()

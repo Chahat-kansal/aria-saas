@@ -73,3 +73,12 @@ export async function markFailed(id: number, error: string): Promise<void> {
 
 export async function pendingCount(): Promise<number> { return (await allWrites()).filter(w => w.status === 'pending').length }
 export async function failedCount(): Promise<number> { return (await allWrites()).filter(w => w.status === 'failed').length }
+
+/** Mint a UUID v4 idempotency key. Uses crypto.randomUUID() where available, falls back to Math.random(). */
+export function mintKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
