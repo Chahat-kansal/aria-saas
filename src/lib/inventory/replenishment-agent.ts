@@ -6,8 +6,9 @@ import { getOrSeedReorderSettings } from '@/lib/inventory/par-levels'
 // Groups proposals by supplier where known; unknown-supplier items go to an "unassigned" draft. Owner approves
 // in the existing purchase_order_drafts approve→send flow.
 //
-// HARD MONEY GATE: agent creates status='draft' only. Cannot approve, send, or spend. Idempotent per week:
-// one open ai_generated draft per supplier per week_starting (update in place if already exists).
+// HARD MONEY GATE: agent creates status='draft' only — never 'approved', 'pending_approval'→sent, or 'sent'.
+// Cannot approve, send, or spend. Idempotent per week: one open ai_generated draft per supplier per
+// week_starting (update in place if already exists).
 // GROUNDING-TEETH: every proposal cites real daily_rate + days_of_cover; assumed lead times are stated.
 // CENTS: total_cost_cents + unit_cost_cents are CENTS (integer). pos_products.cost_price is DOLLARS.
 
@@ -15,6 +16,12 @@ const DEFAULT_LEAD_DAYS = 5   // assumed when supplier has no delivery_days sche
 const MIN_DAILY_RATE = 0.05  // below this threshold = no meaningful velocity = skip (honest)
 const LOOK_BACK_DAYS = 28
 const TARGET_CYCLE_DAYS = 7  // additional buffer beyond lead+safety = one extra order cycle
+
+// ── HARD SAFETY CAPS (INV-AGENT-REPLENISH-VERIFY) ────────────────────────────────────────────────────────
+// These prevent a runaway draft from ever reaching the owner silently. Normal small-café orders are unaffected.
+const MAX_LINES_PER_DRAFT = 60        // hard cap per draft — truncate + note overflow in reasoning
+const MAX_QTY_DAYS_COVER = 60         // clamp suggested_qty to at most 60 days of demand per line
+const LARGE_DRAFT_WARN_DOLLARS = 2000 // flag in aria_reasoning when total exceeds this (not a block)
 
 const UNASSIGNED_KEY = '__unassigned__'
 
@@ -188,17 +195,23 @@ export async function generateReplenishmentDrafts(
     itemsBelowCover++
     const neededUnits = Math.max(0, (targetDays - daysOfCover) * dailyRate)
     const caseSize = Math.max(1, inv.perCase || Number(prod.items_per_case) || 1)
-    const suggestedQty = Math.ceil(neededUnits / caseSize) * caseSize
-    if (suggestedQty <= 0) continue
+    const rawQty = Math.ceil(neededUnits / caseSize) * caseSize
+    if (rawQty <= 0) continue
+
+    // QTY SAFETY CAP: clamp to MAX_QTY_DAYS_COVER days of demand — prevents single-line blowups
+    const maxQtyCap = Math.max(caseSize, Math.ceil(MAX_QTY_DAYS_COVER * dailyRate / caseSize) * caseSize)
+    const qtyClamped = rawQty > maxQtyCap
+    const finalQty = qtyClamped ? maxQtyCap : rawQty
 
     const costDollars = Number(prod.cost_price) || 0
     const unitCostCents = Math.round(costDollars * 100)
-    const lineTotalCents = suggestedQty * unitCostCents
+    const lineTotalCents = finalQty * unitCostCents
 
     const rateStr = (Math.round(dailyRate * 10) / 10).toString()
     const docStr = (Math.round(daysOfCover * 10) / 10).toString()
     const leadNote = hasSchedule ? 'next delivery ~' + leadDays + 'd' : 'assumed ' + leadDays + 'd lead (no schedule set)'
-    const reason = rateStr + '/day · ' + docStr + 'd cover · ' + leadNote
+    const clampNote = qtyClamped ? ' · qty capped at ' + finalQty + ' (' + MAX_QTY_DAYS_COVER + 'd max, was ' + rawQty + ')' : ''
+    const reason = rateStr + '/day · ' + docStr + 'd cover · ' + leadNote + clampNote
 
     const groupKey = sid ?? UNASSIGNED_KEY
     if (!groups.has(groupKey)) {
@@ -206,13 +219,16 @@ export async function generateReplenishmentDrafts(
       const supEmail = (sup?.order_email as string | null) ?? (sup?.email as string | null) ?? null
       groups.set(groupKey, { supplierId: sid, supplierName: supName, supplierEmail: supEmail, deliveryDays, lines: [] })
     }
-    groups.get(groupKey)!.lines.push({
+    // DEDUP GUARD: defensive check — invMap guarantees uniqueness but this makes it structurally impossible
+    const g = groups.get(groupKey)!
+    if (g.lines.some(l => l.product_id === pid)) continue
+    g.lines.push({
       product_id: pid,
       product_name: (prod.name as string) ?? 'Item',
       on_hand: onHand,
       daily_rate: Math.round(dailyRate * 100) / 100,
       days_of_cover: Math.round(daysOfCover * 10) / 10,
-      suggested_qty: suggestedQty,
+      suggested_qty: finalQty,
       unit_cost_cents: unitCostCents,
       line_total_cents: lineTotalCents,
       reason,
@@ -229,14 +245,28 @@ export async function generateReplenishmentDrafts(
     if (!g.lines.length) continue
     g.lines.sort((a, b) => a.days_of_cover - b.days_of_cover)
 
-    const totalCostCents = g.lines.reduce((s, l) => s + l.line_total_cents, 0)
+    // MAX LINES CAP: propose top N by urgency; note overflow in reasoning so owner sees there is more
+    const totalQualified = g.lines.length
+    const linesToWrite = g.lines.slice(0, MAX_LINES_PER_DRAFT)
+    const overflowCount = totalQualified - linesToWrite.length
+    const truncateNote = overflowCount > 0
+      ? ' Note: ' + overflowCount + ' more item' + (overflowCount === 1 ? '' : 's') + ' below cover — showing top ' + MAX_LINES_PER_DRAFT + ' by urgency.'
+      : ''
+
+    const totalCostCents = linesToWrite.reduce((s, l) => s + l.line_total_cents, 0)
     const hasSchedule = !!(g.deliveryDays?.length)
     const leadDays = hasSchedule ? nextDeliveryDays(g.deliveryDays!) : settings.lead_time_days
     const isUnassigned = key === UNASSIGNED_KEY
-    if (isUnassigned) unassignedLineCount += g.lines.length
+    if (isUnassigned) unassignedLineCount += linesToWrite.length
+
+    // $ GUARD: a large draft gets a visible warning in reasoning — money gate already prevents auto-send,
+    // but a loud flag ensures the owner reads carefully before approving
+    const largeDraftWarn = totalCostCents > LARGE_DRAFT_WARN_DOLLARS * 100
+      ? ' ⚠ UNUSUALLY LARGE PROPOSAL ($' + (totalCostCents / 100).toFixed(2) + ' exceeds $' + LARGE_DRAFT_WARN_DOLLARS.toString() + ') — please review carefully before approving.'
+      : ''
 
     // Grounded aria_reasoning — real numbers, stated assumptions
-    const topItems = g.lines.slice(0, 5).map(l => {
+    const topItems = linesToWrite.slice(0, 5).map(l => {
       const costNote = l.unit_cost_cents > 0 ? ' @ $' + (l.unit_cost_cents / 100).toFixed(2) : ' (cost unknown)'
       return l.product_name + ': ' + l.on_hand + ' on hand (' + l.days_of_cover + 'd cover), ' + l.daily_rate + '/day — order ' + l.suggested_qty + costNote
     }).join('; ')
@@ -244,10 +274,10 @@ export async function generateReplenishmentDrafts(
     const leadNote = hasSchedule
       ? 'next delivery for ' + g.supplierName + ' ~' + leadDays + 'd per schedule'
       : 'lead time assumed ' + leadDays + 'd (no delivery schedule set for ' + g.supplierName + ')'
-    const lineWord = g.lines.length === 1 ? 'line' : 'lines'
-    const reasoning = 'Velocity-derived replenishment for ' + g.supplierName + ' — ' + leadNote + '. Safety buffer: ' + safetyDays + 'd. Items (sorted by urgency): ' + topItems + '. Proposed total: ' + totalDollars + ' (' + g.lines.length + ' ' + lineWord + '). PROPOSE ONLY — no order placed. Owner must approve in the weekly-order flow.'
+    const lineWord = linesToWrite.length === 1 ? 'line' : 'lines'
+    const reasoning = 'Velocity-derived replenishment for ' + g.supplierName + ' — ' + leadNote + '. Safety buffer: ' + safetyDays + 'd. Items (sorted by urgency): ' + topItems + '. Proposed total: ' + totalDollars + ' (' + linesToWrite.length + ' ' + lineWord + ').' + truncateNote + largeDraftWarn + ' PROPOSE ONLY — no order placed. Owner must approve in the weekly-order flow.'
 
-    const itemsJson = g.lines.map(l => ({
+    const itemsJson = linesToWrite.map(l => ({
       product_id: l.product_id,
       product_name: l.product_name,
       suggested_qty: l.suggested_qty,
@@ -269,10 +299,11 @@ export async function generateReplenishmentDrafts(
       }).eq('id', existingId).eq('business_id', businessId)
       draftsUpdated++
     } else {
+      // HARD MONEY GATE: status='draft' only — agent can NEVER set approved, pending_approval→sent, or sent
       await sb.from('purchase_order_drafts').insert({
         business_id: businessId,
         draft_type: 'ai_generated',
-        status: 'draft',  // HARD MONEY GATE: agent sets draft only
+        status: 'draft',
         supplier_id: g.supplierId,
         supplier_name: g.supplierName,
         supplier_email: g.supplierEmail,
@@ -289,7 +320,7 @@ export async function generateReplenishmentDrafts(
       supplier_name: g.supplierName,
       assumed_lead_time: !hasSchedule,
       lead_days: leadDays,
-      lines: g.lines,
+      lines: linesToWrite,
       total_cost_cents: totalCostCents,
     })
   }
