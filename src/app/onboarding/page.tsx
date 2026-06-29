@@ -31,7 +31,7 @@ const CHALLENGES = ['cash flow', 'staffing', 'marketing', 'stock', 'compliance',
 const HEADINGS = ['Tell us about yourself', 'Your ABN details', 'Business location & type', 'Operations', 'Your goals'];
 const SUBHEADINGS = [
   "We'll use this to personalise your Aria experience.",
-  'Australian Business Number — required for tax and compliance.',
+  'Skip for now — add or verify your ABN in Settings at any time.',
   'Help us set up your industry-specific dashboard.',
   'Help us understand how your business runs.',
   'What challenges are you working to overcome?',
@@ -253,11 +253,12 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ entity_name?: string; gst_registered?: boolean; active?: boolean } | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifyUnavailable, setVerifyUnavailable] = useState(false);
 
   async function verifyABN() {
     const clean = form.abn.replace(/\D/g, '');
     if (clean.length !== 11) return;
-    setVerifying(true); setVerifyError(null); setVerifyResult(null);
+    setVerifying(true); setVerifyError(null); setVerifyResult(null); setVerifyUnavailable(false);
     try {
       const res = await fetch('/api/abn-lookup', {
         method: 'POST',
@@ -265,10 +266,14 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
         body: JSON.stringify({ abn: clean }),
       });
       const data = await res.json();
-      if (!res.ok || !data.found) { setVerifyError(data.error ?? 'ABN not found in Australian Business Register'); return; }
+      if (!res.ok) { setVerifyUnavailable(true); return; }
+      if (!data.found) {
+        setVerifyError("This ABN wasn't found in the register — double-check the digits, or continue and add it later.");
+        return;
+      }
       setVerifyResult(data);
       if (data.gst_registered !== undefined) set('gst_registered', data.gst_registered ? 'yes' : 'no');
-    } catch { setVerifyError('Could not reach ABN Lookup — check your connection'); }
+    } catch { setVerifyUnavailable(true); }
     finally { setVerifying(false); }
   }
 
@@ -277,19 +282,24 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-[#2D5240] mb-1">ABN (Australian Business Number)</label>
+        <label className="block text-xs font-medium text-[#2D5240] mb-1">ABN (optional)</label>
         <div className="flex gap-2">
           <input type="text" value={form.abn} onChange={e => set('abn', e.target.value)} onBlur={onABNBlur}
             placeholder="XX XXX XXX XXX"
             className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
           <button type="button" onClick={verifyABN} disabled={!canVerify || verifying}
-            className="px-3 py-3 rounded-lg bg-[#2D5240] text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap hover:bg-[#1e3d2e] transition-colors">
+            className="px-3 py-3 rounded-lg border border-[#2D5240] text-[#2D5240] bg-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap hover:bg-[#edf3ef] transition-colors">
             {verifying ? 'Checking…' : 'Verify ABN'}
           </button>
         </div>
         {abnState === 'valid' && !verifyResult && <p className="text-xs text-green-600 mt-1">✓ Valid ABN format</p>}
         {abnState === 'invalid' && <p className="text-xs text-amber-500 mt-1">⚠ Invalid ABN format</p>}
-        {verifyError && <p className="text-xs text-red-500 mt-1">✗ {verifyError}</p>}
+        {verifyUnavailable && (
+          <p className="text-xs text-[rgba(0,0,0,0.45)] mt-1">ABN verification isn&apos;t available right now — no problem, just continue and add it later.</p>
+        )}
+        {!verifyUnavailable && verifyError && (
+          <p className="text-xs text-amber-600 mt-1">⚠ {verifyError}</p>
+        )}
         {verifyResult && (
           <div className="mt-2 p-2.5 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-xs font-semibold text-green-700 mb-0.5">✓ Verified with Australian Business Register</p>

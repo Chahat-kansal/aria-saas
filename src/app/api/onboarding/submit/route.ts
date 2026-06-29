@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { form, abn_valid } = body as { form: Record<string, unknown>; abn_valid: boolean };
 
-  const abnIsValid = !!abn_valid && validateABN((form.abn as string) || '');
+  const abnRaw = ((form.abn as string) || '').replace(/\s/g, '');
+  const abnEmpty = abnRaw.length === 0;
+  const abnIsValid = !abnEmpty && !!abn_valid && validateABN((form.abn as string) || '');
 
   const { data: biz } = await supabaseAdmin
     .from('businesses')
@@ -72,7 +74,12 @@ export async function POST(request: NextRequest) {
     bizUpdate.abn_verified = true;
     bizUpdate.abn_verified_at = new Date().toISOString();
     bizUpdate.abn_verification_method = 'checksum';
+  } else if (abnEmpty) {
+    // No ABN provided — allow through; owner can add and verify later from Settings
+    bizUpdate.access_status = 'active';
+    bizUpdate.abn_verified = false;
   } else {
+    // ABN entered but checksum failed — intentional fraud gate
     bizUpdate.access_status = 'pending_review';
     bizUpdate.access_blocked_reason = 'abn_validation_failed';
   }
@@ -91,12 +98,13 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         current_step: 'provisioning',
         completed_steps: ['identity', 'abn', 'details', 'operations', 'goals'],
-        provisioning_status: abnIsValid ? 'pending' : 'blocked',
+        provisioning_status: (!abnIsValid && !abnEmpty) ? 'blocked' : 'pending',
       },
       { onConflict: 'business_id' }
     );
 
-  if (!abnIsValid) {
+  if (!abnIsValid && !abnEmpty) {
+    // ABN was entered but failed checksum — route to review for manual verification
     await supabaseAdmin
       .from('business_review_requests')
       .insert({
