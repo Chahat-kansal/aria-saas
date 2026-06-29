@@ -36,10 +36,17 @@ async function _GET(_req: NextRequest) {
   }
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
 
+  // Accept optional menu_key to generate PDF for a specific menu
+  const menuKey = _req.nextUrl?.searchParams?.get('menu_key') ?? null
+
   // Load all data in parallel (admin client bypasses RLS)
+  const configQuery = menuKey
+    ? supabaseAdmin.from('menu_configs').select('*').eq('business_id', bid).eq('menu_key', menuKey).maybeSingle()
+    : supabaseAdmin.from('menu_configs').select('*').eq('business_id', bid).eq('is_default', true).maybeSingle()
+
   const [bizRes, configRes, catsRes, productsRes] = await Promise.all([
     supabaseAdmin.from('businesses').select('name').eq('id', bid).maybeSingle(),
-    supabaseAdmin.from('menu_configs').select('*').eq('business_id', bid).maybeSingle(),
+    configQuery,
     supabaseAdmin.from('pos_categories')
       .select('id, name, color')
       .eq('business_id', bid)

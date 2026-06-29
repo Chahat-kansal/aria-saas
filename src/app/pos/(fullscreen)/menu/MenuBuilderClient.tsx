@@ -34,6 +34,7 @@ const BGS = [
 const ACCENTS = ['#BA7517','#16a34a','#d9f54e','#7FB897','#E24B4A','#0a0a0a','#C9A37A','#e8a87c','#6C5CE7','#1d9bf0']
 const BADGE_OPTS = ['Best seller','New','Vegan','Caffeine-free','Fresh batch','GF']
 const LOGOS = ['☕','🌿','✦','S','🫐','◆']
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,12 @@ type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_o
 type BrandKit = { accent?: string; font?: string; logoEmoji?: string; showPhotos?: boolean; showDesc?: boolean; showBadges?: boolean; printCols?: number }
 type MenuCfg = {
   id?: string
+  menu_key: string
+  menu_label: string
+  is_default: boolean
+  active_from: string | null
+  active_to: string | null
+  days_of_week: number[] | null
   template_id: string
   brand_kit: BrandKit
   section_order: string[]
@@ -59,7 +66,7 @@ interface Props {
   businessName: string
   logoUrl: string | null
   menuUrl: string
-  initialConfig: MenuCfg
+  initialConfigs: MenuCfg[]
   initialCats: Category[]
   initialProducts: Product[]
 }
@@ -132,19 +139,14 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
                   const badge = cfg.item_overrides[p.id]?.badge
                   return (
                     <div key={p.id} style={{ background: theme.card, borderRadius: 9, overflow: 'hidden', border: '1px solid ' + theme.line, display: 'flex', flexDirection: 'column' }}>
-                      {showPhotos && (
-                        p.image_url
-                          ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
-                          : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
+                      {showPhotos && (p.image_url
+                        ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
+                        : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
                       )}
                       <div style={{ padding: '6px 7px 7px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        {showBadges && badge && (
-                          <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>
-                        )}
+                        {showBadges && badge && <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>}
                         <div style={{ fontSize: 10, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 2 }}>{p.name}</div>
-                        {showDesc && p.description && (
-                          <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>
-                        )}
+                        {showDesc && p.description && <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>}
                         <div style={{ marginTop: 'auto', fontSize: 11, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss }}>{'$' + p.price.toFixed(2)}</div>
                       </div>
                     </div>
@@ -162,19 +164,14 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
                 const badge = cfg.item_overrides[p.id]?.badge
                 return (
                   <div key={p.id} style={{ background: theme.card, borderRadius: 9, overflow: 'hidden', border: '1px solid ' + theme.line, display: 'flex', flexDirection: 'column' }}>
-                    {showPhotos && (
-                      p.image_url
-                        ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
-                        : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
+                    {showPhotos && (p.image_url
+                      ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
+                      : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
                     )}
                     <div style={{ padding: '6px 7px 7px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      {showBadges && badge && (
-                        <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>
-                      )}
+                      {showBadges && badge && <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>}
                       <div style={{ fontSize: 10, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 2 }}>{p.name}</div>
-                      {showDesc && p.description && (
-                        <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>
-                      )}
+                      {showDesc && p.description && <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>}
                       <div style={{ marginTop: 'auto', fontSize: 11, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss }}>{'$' + p.price.toFixed(2)}</div>
                     </div>
                   </div>
@@ -196,7 +193,7 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
   )
 }
 
-// ── Shared design-panel content (desktop right + mobile sheets) ─────────────
+// ── Design panel sections ──────────────────────────────────────────────────
 
 function TemplatesSection({ cfg, onSelect }: { cfg: MenuCfg; onSelect: (id: string) => void }) {
   return (
@@ -318,7 +315,74 @@ function ShareSection({ menuUrl }: { menuUrl: string }) {
       </div>
       <div style={{ marginTop: 10, background: '#f0fdf4', borderRadius: 8, padding: '8px 10px' }}>
         <div style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', marginBottom: 3 }}>✦ Aria can share it</div>
-        <div style={{ fontSize: 10, color: '#4b7a5a', lineHeight: 1.5 }}>"Post your menu to Google Business + tomorrow's SMS?"</div>
+        <div style={{ fontSize: 10, color: '#4b7a5a', lineHeight: 1.5 }}>"Post your menu to Google Business + tomorrow&apos;s SMS?"</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Schedule section ───────────────────────────────────────────────────────
+
+function ScheduleSection({ cfg, onUpdate }: {
+  cfg: MenuCfg
+  onUpdate: (patch: Partial<MenuCfg>) => void
+}) {
+  const hasSchedule = !!(cfg.active_from && cfg.active_to && cfg.days_of_week && cfg.days_of_week.length > 0)
+
+  function toggleDay(d: number) {
+    const cur = cfg.days_of_week ?? []
+    const next = cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d].sort()
+    onUpdate({ days_of_week: next.length > 0 ? next : null })
+  }
+
+  function clearSchedule() {
+    onUpdate({ active_from: null, active_to: null, days_of_week: null })
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: '#71717a', marginBottom: 10, lineHeight: 1.5 }}>
+        Optional · AEST. When scheduled, this menu replaces the default during the set window.
+      </div>
+
+      {hasSchedule && (
+        <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 10.5, color: '#16a34a', fontWeight: 600 }}>
+            {'Active: ' + cfg.active_from!.slice(0, 5) + ' – ' + cfg.active_to!.slice(0, 5) + ' AEST'}
+          </span>
+          <button onClick={clearSchedule} style={{ fontSize: 10, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#71717a', marginBottom: 3 }}>From (AEST)</div>
+          <input
+            type="time"
+            value={cfg.active_from?.slice(0, 5) ?? ''}
+            onChange={e => onUpdate({ active_from: e.target.value ? e.target.value + ':00' : null })}
+            style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid #e4e4e7', fontSize: 12, outline: 'none', boxSizing: 'border-box' as const }}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#71717a', marginBottom: 3 }}>To (AEST)</div>
+          <input
+            type="time"
+            value={cfg.active_to?.slice(0, 5) ?? ''}
+            onChange={e => onUpdate({ active_to: e.target.value ? e.target.value + ':00' : null })}
+            style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid #e4e4e7', fontSize: 12, outline: 'none', boxSizing: 'border-box' as const }}
+          />
+        </div>
+      </div>
+
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#71717a', marginBottom: 5 }}>Days active</div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
+        {DAYS.map((d, i) => {
+          const on = (cfg.days_of_week ?? []).includes(i)
+          return (
+            <button key={d} onClick={() => toggleDay(i)} style={{ padding: '4px 8px', borderRadius: 20, border: '1.5px solid ' + (on ? '#18181b' : '#e4e4e7'), background: on ? '#18181b' : '#fff', color: on ? '#fff' : '#71717a', fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}>{d}</button>
+          )
+        })}
       </div>
     </div>
   )
@@ -347,8 +411,6 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#71717a', padding: 0 }}>←</button>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#18181b' }}>Edit item</span>
       </div>
-
-      {/* Available toggle */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f4f4f5', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#18181b' }}>Available now</div>
@@ -358,8 +420,6 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
           <div style={{ position: 'absolute', top: 3, left: isHidden ? 3 : 17, width: 14, height: 14, borderRadius: '50%', background: '#fff' }} />
         </button>
       </div>
-
-      {/* Description override */}
       <div style={{ marginBottom: 10 }}>
         <label style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', display: 'block', marginBottom: 4 }}>Description</label>
         <textarea
@@ -369,8 +429,6 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
           style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #e4e4e7', fontSize: 12, resize: 'vertical' as const, minHeight: 60, boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#18181b', outline: 'none' }}
         />
       </div>
-
-      {/* Photo */}
       <div style={{ marginBottom: 10 }}>
         <label style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', display: 'block', marginBottom: 4 }}>Photo override</label>
         {photoSrc && <img src={photoSrc} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, marginBottom: 6 }} />}
@@ -380,8 +438,6 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
         </div>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
       </div>
-
-      {/* Display price (override only) */}
       <div style={{ marginBottom: 10 }}>
         <label style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', display: 'block', marginBottom: 2 }}>Display price</label>
         <div style={{ fontSize: 9.5, color: '#f59e0b', marginBottom: 5 }}>⚠ Display-only — does not change your POS price</div>
@@ -398,8 +454,6 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
           )}
         </div>
       </div>
-
-      {/* Badge */}
       <div>
         <label style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', display: 'block', marginBottom: 6 }}>Badge</label>
         <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 5 }}>
@@ -418,8 +472,17 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export default function MenuBuilderClient({ businessId: _bid, slug, businessName, logoUrl: _logoUrl, menuUrl, initialConfig, initialCats, initialProducts }: Props) {
-  const [cfg, setCfg] = useState<MenuCfg>(initialConfig)
+export default function MenuBuilderClient({ businessId: _bid, slug, businessName, logoUrl: _logoUrl, menuUrl, initialConfigs, initialCats, initialProducts }: Props) {
+  const defaultConfigs = initialConfigs.length > 0 ? initialConfigs : [{
+    id: undefined, menu_key: 'main', menu_label: 'Main Menu', is_default: true,
+    active_from: null, active_to: null, days_of_week: null,
+    template_id: 'editorial', brand_kit: {}, section_order: [], item_overrides: {}, background_id: 'none', is_published: false,
+  }]
+
+  const [configs, setConfigs] = useState<MenuCfg[]>(defaultConfigs)
+  const [activeMenuId, setActiveMenuId] = useState<string | undefined>(
+    (defaultConfigs.find(c => c.is_default) ?? defaultConfigs[0])?.id
+  )
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [sheetContent, setSheetContent] = useState<string | null>(null)
   const [outputMode, setOutputMode] = useState<'digital' | 'a4'>('digital')
@@ -431,6 +494,10 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   const [importStep, setImportStep] = useState<'idle' | 'analysing' | 'review' | 'creating'>('idle')
   const [importItems, setImportItems] = useState<ExtractedItem[]>([])
   const [toast, setToast] = useState<string | null>(null)
+  const [showCreateMenu, setShowCreateMenu] = useState(false)
+  const [newMenuLabel, setNewMenuLabel] = useState('')
+  const [createBusy, setCreateBusy] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const importFileRef = useRef<HTMLInputElement | null>(null)
   const router = useRouter()
@@ -443,10 +510,21 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  // Derive the active config
+  const cfg = configs.find(c => c.id === activeMenuId) ?? configs[0]
+
+  // Per-menu public URL: default uses /menu/<slug>, others use /menu/<slug>/<menu_key>
+  const activeMenuUrl = cfg?.is_default ? menuUrl : menuUrl + '/' + (cfg?.menu_key ?? '')
+
   const save = useCallback(async (c: MenuCfg) => {
+    if (!c.id) return
     setSaveState('saving')
     try {
-      await fetch('/api/pos/menu-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
+      await fetch('/api/pos/menu-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, ...c }),
+      })
       setSaveState('saved')
     } catch {
       setSaveState('unsaved')
@@ -454,24 +532,30 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   }, [])
 
   function updateCfg(partial: Partial<MenuCfg>) {
-    const next = { ...cfg, ...partial }
-    setCfg(next)
-    setSaveState('unsaved')
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => { void save(next) }, 1500)
+    setConfigs(prev => {
+      const idx = prev.findIndex(c => c.id === activeMenuId)
+      if (idx < 0) return prev
+      const next = { ...prev[idx], ...partial }
+      const updated = [...prev]
+      updated[idx] = next
+      setSaveState('unsaved')
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => { void save(next) }, 1500)
+      return updated
+    })
   }
 
   function updateBk(partial: Partial<BrandKit>) {
-    updateCfg({ brand_kit: { ...cfg.brand_kit, ...partial } })
+    updateCfg({ brand_kit: { ...(cfg?.brand_kit ?? {}), ...partial } })
   }
 
   function updateItemOv(id: string, partial: Partial<ItemOverride>) {
-    updateCfg({ item_overrides: { ...cfg.item_overrides, [id]: { ...(cfg.item_overrides[id] ?? {}), ...partial } } })
+    updateCfg({ item_overrides: { ...(cfg?.item_overrides ?? {}), [id]: { ...((cfg?.item_overrides ?? {})[id] ?? {}), ...partial } } })
   }
 
   function selectTemplate(templateId: string) {
     const tpl = TEMPLATES.find(t => t.id === templateId) ?? TEMPLATES[0]
-    updateCfg({ template_id: templateId, brand_kit: { ...cfg.brand_kit, accent: tpl.look.accent, font: tpl.font } })
+    updateCfg({ template_id: templateId, brand_kit: { ...(cfg?.brand_kit ?? {}), accent: tpl.look.accent, font: tpl.font } })
   }
 
   async function uploadItemPhoto(id: string, file: File) {
@@ -490,11 +574,16 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   }
 
   async function handlePublish() {
+    if (!cfg) return
     setPublishBusy(true)
     try {
       const next = { ...cfg, is_published: true }
-      setCfg(next)
-      await fetch('/api/pos/menu-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+      setConfigs(prev => prev.map(c => c.id === next.id ? next : c))
+      await fetch('/api/pos/menu-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: next.id, is_published: true }),
+      })
       setSaveState('saved')
       showToast('✓ Published — your menu is live')
     } finally {
@@ -503,23 +592,79 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   }
 
   async function handleDownloadPdf() {
+    if (!cfg) return
     setPdfBusy(true)
     try {
-      const res = await fetch('/api/pos/menu-pdf')
-      if (!res.ok) throw new Error('PDF generation failed (' + res.status + ')')
+      const url = '/api/pos/menu-pdf' + (cfg.is_default ? '' : '?menu_key=' + encodeURIComponent(cfg.menu_key))
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('PDF failed (' + res.status + ')')
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
-      a.download = 'menu.pdf'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      a.href = URL.createObjectURL(blob)
+      a.download = cfg.menu_key + '-menu.pdf'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(a.href)
     } catch {
       showToast('PDF generation failed — try again.')
     } finally {
       setPdfBusy(false)
+    }
+  }
+
+  async function createMenu() {
+    if (!newMenuLabel.trim()) return
+    setCreateBusy(true)
+    try {
+      const res = await fetch('/api/pos/menu-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menu_label: newMenuLabel.trim() }),
+      })
+      const data = await res.json() as { config?: MenuCfg; error?: string }
+      if (data.config) {
+        setConfigs(prev => [...prev, data.config!])
+        setActiveMenuId(data.config.id)
+        showToast('Menu "' + newMenuLabel.trim() + '" created')
+      }
+      setShowCreateMenu(false)
+      setNewMenuLabel('')
+    } catch {
+      showToast('Failed to create menu')
+    } finally {
+      setCreateBusy(false)
+    }
+  }
+
+  async function setAsDefault(id: string) {
+    const res = await fetch('/api/pos/menu-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, is_default: true }),
+    })
+    const data = await res.json() as { configs?: MenuCfg[] }
+    if (data.configs) {
+      setConfigs(data.configs)
+      showToast('Default menu updated')
+    }
+  }
+
+  async function deleteMenu(id: string) {
+    setDeleteBusy(true)
+    try {
+      const res = await fetch('/api/pos/menu-config?id=' + encodeURIComponent(id), { method: 'DELETE' })
+      if (res.ok) {
+        setConfigs(prev => {
+          const next = prev.filter(c => c.id !== id)
+          if (activeMenuId === id) setActiveMenuId(next[0]?.id)
+          return next
+        })
+        showToast('Menu deleted')
+      } else {
+        const d = await res.json() as { error?: string }
+        showToast(d.error ?? 'Delete failed')
+      }
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -530,11 +675,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
       fd.append('file', file)
       const res = await fetch('/api/pos/menu-extract', { method: 'POST', body: fd })
       const data = await res.json() as { items?: ExtractedItem[]; error?: string }
-      if (!res.ok || data.error) {
-        setImportStep('idle')
-        showToast(data.error ?? 'Menu extraction failed — try a clearer photo.')
-        return
-      }
+      if (!res.ok || data.error) { setImportStep('idle'); showToast(data.error ?? 'Extraction failed'); return }
       setImportItems(data.items ?? [])
       setImportStep('review')
     } catch {
@@ -550,73 +691,28 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   async function handleApproveImport() {
     setImportStep('creating')
     const active = importItems.filter(it => !it.removed && it.name.trim().length > 0 && it.price > 0)
-
-    // Build category name→id map from existing categories
     const catMap = new Map<string, string>(initialCats.map(c => [c.name.toLowerCase(), c.id]))
-
-    // Track names already in catalog (dedupe: name + category_id)
-    const existingKeys = new Set(
-      initialProducts.map(p => p.name.trim().toLowerCase() + '|' + (p.category_id ?? ''))
-    )
-
-    let created = 0
-    let skipped = 0
-    let nextSort = initialProducts.length
-
+    const existingKeys = new Set(initialProducts.map(p => p.name.trim().toLowerCase() + '|' + (p.category_id ?? '')))
+    let created = 0, skipped = 0, nextSort = initialProducts.length
     for (const item of active) {
       const catKey = item.category.trim().toLowerCase()
-
-      // Create category if it doesn't exist yet
       if (!catMap.has(catKey)) {
         try {
-          const catRes = await fetch('/api/pos/categories', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: item.category.trim(), is_active: true }),
-          })
-          if (catRes.ok) {
-            const catData = await catRes.json() as { category?: { id: string } }
-            if (catData.category?.id) catMap.set(catKey, catData.category.id)
-          }
-        } catch { /* non-fatal — product will be created without category */ }
+          const catRes = await fetch('/api/pos/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: item.category.trim(), is_active: true }) })
+          if (catRes.ok) { const cd = await catRes.json() as { category?: { id: string } }; if (cd.category?.id) catMap.set(catKey, cd.category.id) }
+        } catch { /* non-fatal */ }
       }
-
       const catId = catMap.get(catKey) ?? null
-      const dedupeKey = item.name.trim().toLowerCase() + '|' + (catId ?? '')
-
-      if (existingKeys.has(dedupeKey)) {
-        skipped++
-        continue
-      }
-      existingKeys.add(dedupeKey)
-
-      // Create via the existing products route (dollars, is_active=true)
+      const dk = item.name.trim().toLowerCase() + '|' + (catId ?? '')
+      if (existingKeys.has(dk)) { skipped++; continue }
+      existingKeys.add(dk)
       try {
-        const prodRes = await fetch('/api/pos/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name:         item.name.trim(),
-            price:        item.price,
-            description:  item.description.trim() || null,
-            category_id:  catId,
-            is_active:    true,
-            sort_order:   nextSort++,
-            image_source: 'pending',
-          }),
-        })
-        if (prodRes.ok) created++
+        const pr = await fetch('/api/pos/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: item.name.trim(), price: item.price, description: item.description.trim() || null, category_id: catId, is_active: true, sort_order: nextSort++, image_source: 'pending' }) })
+        if (pr.ok) created++
       } catch { /* non-fatal */ }
     }
-
-    setImportStep('idle')
-    setImportItems([])
-    const msg = created > 0
-      ? '✓ ' + created + ' product' + (created !== 1 ? 's' : '') + ' added' +
-        (skipped > 0 ? ' · ' + skipped + ' duplicate' + (skipped !== 1 ? 's' : '') + ' skipped' : '')
-      : skipped > 0
-        ? 'All items already exist in your catalog.'
-        : 'No items were added.'
+    setImportStep('idle'); setImportItems([])
+    const msg = created > 0 ? '✓ ' + created + ' product' + (created !== 1 ? 's' : '') + ' added' + (skipped > 0 ? ' · ' + skipped + ' skipped' : '') : skipped > 0 ? 'All items already exist.' : 'No items were added.'
     showToast(msg)
     if (created > 0) router.refresh()
   }
@@ -637,9 +733,10 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
     if (isMobile) setSheetContent(null)
   }
 
+  if (!cfg) return null
+
   const theme = deriveTheme(cfg)
 
-  // Ordered cats per section_order
   let orderedCats = initialCats
   if (cfg.section_order.length > 0) {
     const pos: Record<string, number> = {}
@@ -647,15 +744,43 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
     orderedCats = [...initialCats].sort((a, b) => (pos[a.id] ?? 9999) - (pos[b.id] ?? 9999) || a.name.localeCompare(b.name))
   }
 
-  // C — colours for builder chrome (not the menu theme)
   const C = { bg: '#f4f4f5', card: '#fff', border: '#e4e4e7', ink: '#18181b', muted: '#71717a', accent: '#2D5240' }
 
-  // ── Design panel content (shared desktop + mobile sheets) ──────────────
+  // ── Design panel content ───────────────────────────────────────────────
 
   function renderDesignPanelContent(scope?: string) {
     const s = scope ?? 'all'
     return (
       <div style={{ padding: 14 }}>
+        {(s === 'all' || s === 'menus') && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Schedule</div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', marginBottom: 4 }}>Menu name</div>
+              <input
+                value={cfg.menu_label}
+                onChange={e => updateCfg({ menu_label: e.target.value })}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e4e4e7', fontSize: 12, outline: 'none', boxSizing: 'border-box' as const, color: C.ink }}
+              />
+            </div>
+            {!cfg.is_default && (
+              <div style={{ marginBottom: 10 }}>
+                <button onClick={() => { if (cfg.id) void setAsDefault(cfg.id) }} style={{ width: '100%', padding: '7px 0', borderRadius: 8, border: '1.5px solid ' + C.accent, background: 'transparent', color: C.accent, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                  Set as default menu
+                </button>
+              </div>
+            )}
+            {cfg.is_default && <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 600, marginBottom: 8 }}>✓ This is the default menu</div>}
+            {!cfg.is_default && (
+              <ScheduleSection cfg={cfg} onUpdate={updateCfg} />
+            )}
+            {!cfg.is_default && configs.length > 1 && (
+              <button onClick={() => { if (cfg.id && window.confirm('Delete "' + cfg.menu_label + '"? This cannot be undone.')) void deleteMenu(cfg.id) }} disabled={deleteBusy} style={{ width: '100%', marginTop: 14, padding: '7px 0', borderRadius: 8, border: '1.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: deleteBusy ? 'wait' : 'pointer' }}>
+                Delete this menu
+              </button>
+            )}
+          </div>
+        )}
         {(s === 'all' || s === 'template') && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Template</div>
@@ -683,14 +808,12 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         {(s === 'all' || s === 'share') && (
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Share</div>
-            <ShareSection menuUrl={menuUrl} />
+            <ShareSection menuUrl={activeMenuUrl} />
           </div>
         )}
       </div>
     )
   }
-
-  // ── Right panel (desktop only) ─────────────────────────────────────────
 
   const selectedProduct = selectedItemId ? initialProducts.find(p => p.id === selectedItemId) ?? null : null
   const selectedOverride = selectedItemId ? (cfg.item_overrides[selectedItemId] ?? {}) : {}
@@ -710,13 +833,9 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         </div>
       )
     }
-    if (!isMobile) {
-      return renderDesignPanelContent('all')
-    }
+    if (!isMobile) return renderDesignPanelContent('all')
     return null
   }
-
-  // ── Items panel content ────────────────────────────────────────────────
 
   function renderItemsPanel() {
     const knownCatIds = new Set(orderedCats.map(c => c.id))
@@ -731,22 +850,8 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
               Live from your POS · {initialProducts.length} products
             </div>
           </div>
-          <button
-            onClick={() => importFileRef.current?.click()}
-            title="Upload a photo of your existing menu — AI extracts items for review"
-            style={{ padding: '5px 9px', borderRadius: 7, border: '1.5px solid ' + C.border, background: C.card, color: C.ink, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
-          >⬆ Import</button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            style={{ display: 'none' }}
-            onChange={e => {
-              const f = e.target.files?.[0]
-              if (f) { void handleImportFile(f) }
-              e.target.value = ''
-            }}
-          />
+          <button onClick={() => importFileRef.current?.click()} title="Upload a photo of your existing menu — AI extracts items for review" style={{ padding: '5px 9px', borderRadius: 7, border: '1.5px solid ' + C.border, background: C.card, color: C.ink, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}>⬆ Import</button>
+          <input ref={importFileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { void handleImportFile(f) } e.target.value = '' }} />
         </div>
         {orderedCats.map(cat => {
           const catProds = initialProducts.filter(p => p.category_id === cat.id)
@@ -765,20 +870,13 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                 return (
                   <div key={p.id} onClick={() => openItemEditor(p.id)} style={{ padding: '8px 12px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: sel ? '#f0fdf4' : (isHidden ? '#fafafa' : C.card), opacity: isHidden ? 0.5 : 1 }}>
                     <span style={{ fontSize: 14, color: C.muted, cursor: 'grab' }}>⠿</span>
-                    {p.image_url
-                      ? <img src={p.image_url} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
-                      : <div style={{ width: 34, height: 34, borderRadius: 6, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>☕</div>
-                    }
+                    {p.image_url ? <img src={p.image_url} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 34, height: 34, borderRadius: 6, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>☕</div>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.name}</div>
                       {p.description && <div style={{ fontSize: 10, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.description}</div>}
                     </div>
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'$' + p.price.toFixed(2)}</div>
-                    <button
-                      onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }}
-                      title={isHidden ? 'Show on menu' : 'Hide from menu'}
-                      style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
+                    <button onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }} title={isHidden ? 'Show on menu' : 'Hide from menu'} style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {!isHidden && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                     </button>
                   </div>
@@ -799,20 +897,13 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
               return (
                 <div key={p.id} onClick={() => openItemEditor(p.id)} style={{ padding: '8px 12px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: sel ? '#f0fdf4' : (isHidden ? '#fafafa' : C.card), opacity: isHidden ? 0.5 : 1 }}>
                   <span style={{ fontSize: 14, color: C.muted, cursor: 'grab' }}>⠿</span>
-                  {p.image_url
-                    ? <img src={p.image_url} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
-                    : <div style={{ width: 34, height: 34, borderRadius: 6, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>☕</div>
-                  }
+                  {p.image_url ? <img src={p.image_url} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 34, height: 34, borderRadius: 6, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>☕</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.name}</div>
                     {p.description && <div style={{ fontSize: 10, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.description}</div>}
                   </div>
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'$' + p.price.toFixed(2)}</div>
-                  <button
-                    onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }}
-                    title={isHidden ? 'Show on menu' : 'Hide from menu'}
-                    style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
+                  <button onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }} title={isHidden ? 'Show on menu' : 'Hide from menu'} style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {!isHidden && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                   </button>
                 </div>
@@ -831,10 +922,9 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
     )
   }
 
-  // ── Mobile tabs & sheet ────────────────────────────────────────────────
-
   const MOBILE_TABS = [
     { id: 'items',    icon: '≣', label: 'Items' },
+    { id: 'menus',   icon: '☰', label: 'Menus' },
     { id: 'template', icon: '◳', label: 'Template' },
     { id: 'brand',    icon: '✦', label: 'Brand' },
     { id: 'bg',       icon: '▦', label: 'Bg' },
@@ -845,8 +935,6 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   const saveLabel = saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : '•'
   const activeImportCount = importItems.filter(it => !it.removed).length
 
-  // ── Render ─────────────────────────────────────────────────────────────
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: C.bg, overflow: 'hidden', fontFamily: "'Inter',system-ui,sans-serif" }}>
 
@@ -856,7 +944,6 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         <span style={{ fontSize: 12, color: C.muted }}>Menu ·</span>
         <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{businessName}</span>
         <div style={{ flex: 1 }} />
-        {/* Digital / A4 toggle */}
         {!isMobile && (
           <div style={{ display: 'flex', background: C.bg, borderRadius: 8, padding: 2, gap: 2 }}>
             {(['digital', 'a4'] as const).map(m => (
@@ -867,10 +954,34 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
           </div>
         )}
         <span style={{ fontSize: 11, color: C.muted, marginLeft: 4 }}>{saveLabel}</span>
-        <button onClick={() => window.open(menuUrl, '_blank')} style={{ padding: '5px 10px', borderRadius: 7, border: '1.5px solid ' + C.border, background: C.card, color: C.ink, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Preview ↗</button>
+        <button onClick={() => window.open(activeMenuUrl, '_blank')} style={{ padding: '5px 10px', borderRadius: 7, border: '1.5px solid ' + C.border, background: C.card, color: C.ink, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Preview ↗</button>
         <button onClick={() => { void handlePublish() }} disabled={publishBusy} style={{ padding: '5px 12px', borderRadius: 7, border: 'none', background: cfg.is_published ? '#16a34a' : C.accent, color: '#fff', fontSize: 11.5, fontWeight: 700, cursor: publishBusy ? 'wait' : 'pointer', opacity: publishBusy ? 0.7 : 1 }}>
           {publishBusy ? 'Publishing…' : cfg.is_published ? '✓ Published' : 'Publish'}
         </button>
+      </div>
+
+      {/* Multi-menu switcher bar */}
+      <div style={{ height: 40, display: 'flex', alignItems: 'center', gap: 0, background: C.card, borderBottom: '1px solid ' + C.border, flexShrink: 0, overflowX: 'auto' as const, paddingLeft: 8, zIndex: 15 }}>
+        {configs.map(m => {
+          const isActive = m.id === activeMenuId
+          const hasSchedule = !!(m.active_from && m.active_to && m.days_of_week && m.days_of_week.length > 0)
+          return (
+            <button
+              key={m.id ?? m.menu_key}
+              onClick={() => { setActiveMenuId(m.id); setSelectedItemId(null) }}
+              style={{ flexShrink: 0, height: '100%', padding: '0 14px', border: 'none', borderBottom: '2px solid ' + (isActive ? C.accent : 'transparent'), background: 'transparent', color: isActive ? C.accent : C.muted, fontSize: 12, fontWeight: isActive ? 700 : 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, transition: 'color 0.15s' }}
+            >
+              {m.menu_label}
+              {m.is_default && <span style={{ fontSize: 9, background: '#f0fdf4', color: '#16a34a', borderRadius: 8, padding: '1px 5px', fontWeight: 700 }}>Default</span>}
+              {hasSchedule && !m.is_default && <span style={{ fontSize: 9 }}>🕐</span>}
+            </button>
+          )
+        })}
+        <button
+          onClick={() => setShowCreateMenu(true)}
+          style={{ flexShrink: 0, height: '100%', padding: '0 12px', border: 'none', background: 'transparent', color: C.muted, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          title="Add a new menu"
+        >+</button>
       </div>
 
       {/* 3-pane layout */}
@@ -885,24 +996,17 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
 
         {/* Center: Preview */}
         <div style={{ overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: isMobile ? 12 : 20, background: '#dde3e0', backgroundImage: 'repeating-linear-gradient(0deg,#00000008 0 1px,transparent 1px 20px),repeating-linear-gradient(90deg,#00000008 0 1px,transparent 1px 20px)', gap: 12 }}>
-          {/* Preview toolbar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.card, borderRadius: 10, padding: '6px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', width: '100%', maxWidth: 400, boxSizing: 'border-box' as const }}>
-            <span style={{ fontSize: 10.5, color: C.muted, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flex: 1 }}>{menuUrl.replace('https://', '')}</span>
+            <span style={{ fontSize: 10.5, color: C.muted, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flex: 1 }}>{activeMenuUrl.replace('https://', '')}</span>
             {outputMode === 'a4' && (
-              <button
-                onClick={() => { void handleDownloadPdf() }}
-                disabled={pdfBusy}
-                style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: C.accent, color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: pdfBusy ? 'wait' : 'pointer', opacity: pdfBusy ? 0.7 : 1, whiteSpace: 'nowrap' as const, flexShrink: 0 }}
-              >
+              <button onClick={() => { void handleDownloadPdf() }} disabled={pdfBusy} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: C.accent, color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: pdfBusy ? 'wait' : 'pointer', opacity: pdfBusy ? 0.7 : 1, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>
                 {pdfBusy ? 'Generating…' : '⬇ PDF'}
               </button>
             )}
           </div>
 
-          {/* Phone frame */}
           {outputMode === 'digital' && (
             <div style={{ width: 360, maxWidth: '100%', borderRadius: 32, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25), 0 0 0 8px #1a1a1a, 0 0 0 9px #333', background: '#fff', flexShrink: 0 }}>
-              {/* Notch */}
               <div style={{ height: 28, background: '#1a1a1a', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <div style={{ width: 80, height: 6, borderRadius: 3, background: '#333' }} />
               </div>
@@ -912,7 +1016,6 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
             </div>
           )}
 
-          {/* A4 frame */}
           {outputMode === 'a4' && (
             <div style={{ width: 360, background: theme.bg, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', borderRadius: 4, padding: '28px 24px', flexShrink: 0, color: theme.ink, fontFamily: theme.fontCss }}>
               <div style={{ textAlign: 'center', marginBottom: 18 }}>
@@ -981,45 +1084,48 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         </div>
       )}
 
-      {/* Mobile sheet scrim */}
-      {isMobile && sheetContent && (
-        <div onClick={() => setSheetContent(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 40 }} />
-      )}
+      {isMobile && sheetContent && <div onClick={() => setSheetContent(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 40 }} />}
 
-      {/* Mobile sheet */}
       {isMobile && sheetContent && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.card, borderRadius: '18px 18px 0 0', zIndex: 50, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div onClick={() => setSheetContent(null)} style={{ width: 36, height: 4, borderRadius: 2, background: '#d4d4d8', margin: '10px auto 0', cursor: 'pointer', flexShrink: 0 }} />
           <div style={{ overflowY: 'auto' as const, flex: 1, padding: '4px 0 32px' }}>
-            {sheetContent === 'items' && (
-              <div style={{ padding: '10px 0' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, padding: '0 14px 10px', color: C.ink }}>Menu items</div>
-                {renderItemsPanel()}
-              </div>
-            )}
+            {sheetContent === 'items' && <div style={{ padding: '10px 0' }}><div style={{ fontSize: 14, fontWeight: 700, padding: '0 14px 10px', color: C.ink }}>Menu items</div>{renderItemsPanel()}</div>}
             {sheetContent === 'editor' && selectedProduct && (
               <div style={{ padding: 14 }}>
-                <ItemEditor
-                  product={selectedProduct}
-                  override={selectedOverride}
-                  onUpdate={partial => updateItemOv(selectedItemId!, partial)}
-                  onClose={closeItemEditor}
-                  onUploadPhoto={f => { void uploadItemPhoto(selectedItemId!, f) }}
-                  imgBusy={imgBusy}
-                />
+                <ItemEditor product={selectedProduct} override={selectedOverride} onUpdate={partial => updateItemOv(selectedItemId!, partial)} onClose={closeItemEditor} onUploadPhoto={f => { void uploadItemPhoto(selectedItemId!, f) }} imgBusy={imgBusy} />
                 <button onClick={closeItemEditor} style={{ width: '100%', marginTop: 12, padding: 13, borderRadius: 12, border: 'none', background: C.ink, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Done</button>
               </div>
             )}
-            {sheetContent !== 'items' && sheetContent !== 'editor' && (
-              <div style={{ padding: '10px 0' }}>
-                {renderDesignPanelContent(sheetContent)}
-              </div>
-            )}
+            {sheetContent !== 'items' && sheetContent !== 'editor' && <div style={{ padding: '10px 0' }}>{renderDesignPanelContent(sheetContent)}</div>}
           </div>
         </div>
       )}
 
-      {/* Import: analysing overlay */}
+      {/* Create menu modal */}
+      {showCreateMenu && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.ink, marginBottom: 4 }}>New menu</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 16 }}>e.g. Breakfast, Lunch, Dinner, Weekend</div>
+            <input
+              autoFocus
+              value={newMenuLabel}
+              onChange={e => setNewMenuLabel(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void createMenu() }}
+              placeholder="Menu name"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e4e4e7', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, marginBottom: 14, color: C.ink }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setShowCreateMenu(false); setNewMenuLabel('') }} style={{ flex: 1, padding: 11, borderRadius: 10, border: '1.5px solid #e4e4e7', background: '#fff', color: C.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { void createMenu() }} disabled={createBusy || !newMenuLabel.trim()} style={{ flex: 2, padding: 11, borderRadius: 10, border: 'none', background: newMenuLabel.trim() ? C.accent : '#e4e4e7', color: newMenuLabel.trim() ? '#fff' : '#a1a1aa', fontSize: 13, fontWeight: 700, cursor: createBusy || !newMenuLabel.trim() ? 'not-allowed' : 'pointer' }}>
+                {createBusy ? 'Creating…' : 'Create menu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {importStep === 'analysing' && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' as const, gap: 14 }}>
           <div style={{ fontSize: 36 }}>🔍</div>
@@ -1028,7 +1134,6 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         </div>
       )}
 
-      {/* Import: creating overlay */}
       {importStep === 'creating' && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' as const, gap: 14 }}>
           <div style={{ fontSize: 36 }}>✨</div>
@@ -1037,95 +1142,38 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         </div>
       )}
 
-      {/* Import: review modal — owner verifies before any products are created */}
       {importStep === 'review' && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: '18px 18px 0 0', width: '100%', maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column' as const, boxShadow: '0 -8px 40px rgba(0,0,0,0.3)' }}>
-
-            {/* Modal header */}
             <div style={{ padding: '16px 20px 10px', borderBottom: '1px solid #e4e4e7', flexShrink: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: '#18181b' }}>Review extracted items</div>
-              <div style={{ fontSize: 11, color: '#d97706', marginTop: 3, fontWeight: 600 }}>
-                ⚠ AI may misread prices — verify every price before adding
-              </div>
-              <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2 }}>
-                {activeImportCount + ' item' + (activeImportCount !== 1 ? 's' : '') + ' across ' + new Set(importItems.filter(it => !it.removed).map(it => it.category)).size + ' section' + (new Set(importItems.filter(it => !it.removed).map(it => it.category)).size !== 1 ? 's' : '') + ' will be added to your products'}
-              </div>
+              <div style={{ fontSize: 11, color: '#d97706', marginTop: 3, fontWeight: 600 }}>⚠ AI may misread prices — verify every price before adding</div>
+              <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2 }}>{activeImportCount + ' item' + (activeImportCount !== 1 ? 's' : '') + ' across ' + new Set(importItems.filter(it => !it.removed).map(it => it.category)).size + ' section' + (new Set(importItems.filter(it => !it.removed).map(it => it.category)).size !== 1 ? 's' : '') + ' will be added to your products'}</div>
             </div>
-
-            {/* Grouped item rows */}
             <div style={{ overflowY: 'auto' as const, flex: 1 }}>
-              {Object.entries(
-                importItems.reduce((acc: Record<string, ExtractedItem[]>, item) => {
-                  const cat = item.category || 'General'
-                  if (!acc[cat]) acc[cat] = []
-                  acc[cat].push(item)
-                  return acc
-                }, {})
-              ).map(([cat, catItems]) => (
+              {Object.entries(importItems.reduce((acc: Record<string, ExtractedItem[]>, item) => { const cat = item.category || 'General'; if (!acc[cat]) acc[cat] = []; acc[cat].push(item); return acc }, {})).map(([cat, catItems]) => (
                 <div key={cat}>
                   <div style={{ padding: '7px 20px', background: '#f4f4f5', fontSize: 10, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' as const, letterSpacing: '0.8px', borderBottom: '1px solid #e4e4e7', borderTop: '1px solid #e4e4e7' }}>{cat}</div>
                   {(catItems as ExtractedItem[]).map(item => (
                     <div key={item._id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: '1px solid #f4f4f5', opacity: item.removed ? 0.4 : 1, background: item.removed ? '#fafafa' : '#fff' }}>
-                      {/* Remove toggle */}
-                      <button
-                        onClick={() => updateImportItem(item._id, { removed: !item.removed })}
-                        title={item.removed ? 'Restore' : 'Remove this item'}
-                        style={{ width: 22, height: 22, borderRadius: 5, border: '1.5px solid ' + (item.removed ? '#e4e4e7' : '#fca5a5'), background: item.removed ? '#f4f4f5' : '#fee2e2', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: item.removed ? '#a1a1aa' : '#dc2626' }}
-                      >{item.removed ? '+' : '✕'}</button>
-
-                      {/* Name + description */}
+                      <button onClick={() => updateImportItem(item._id, { removed: !item.removed })} style={{ width: 22, height: 22, borderRadius: 5, border: '1.5px solid ' + (item.removed ? '#e4e4e7' : '#fca5a5'), background: item.removed ? '#f4f4f5' : '#fee2e2', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: item.removed ? '#a1a1aa' : '#dc2626' }}>{item.removed ? '+' : '✕'}</button>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <input
-                          value={item.name}
-                          onChange={e => updateImportItem(item._id, { name: e.target.value })}
-                          style={{ width: '100%', fontSize: 12, fontWeight: 600, color: '#18181b', border: 'none', outline: 'none', background: 'transparent', padding: 0, marginBottom: 1 }}
-                          placeholder="Item name"
-                        />
-                        <input
-                          value={item.description}
-                          onChange={e => updateImportItem(item._id, { description: e.target.value })}
-                          style={{ width: '100%', fontSize: 10.5, color: '#71717a', border: 'none', outline: 'none', background: 'transparent', padding: 0 }}
-                          placeholder="Description (optional)"
-                        />
+                        <input value={item.name} onChange={e => updateImportItem(item._id, { name: e.target.value })} style={{ width: '100%', fontSize: 12, fontWeight: 600, color: '#18181b', border: 'none', outline: 'none', background: 'transparent', padding: 0, marginBottom: 1 }} placeholder="Item name" />
+                        <input value={item.description} onChange={e => updateImportItem(item._id, { description: e.target.value })} style={{ width: '100%', fontSize: 10.5, color: '#71717a', border: 'none', outline: 'none', background: 'transparent', padding: 0 }} placeholder="Description (optional)" />
                       </div>
-
-                      {/* Category (editable) */}
-                      <input
-                        value={item.category}
-                        onChange={e => updateImportItem(item._id, { category: e.target.value })}
-                        style={{ width: 78, fontSize: 9.5, color: '#71717a', border: '1.5px solid #e4e4e7', borderRadius: 20, padding: '2px 7px', outline: 'none', background: '#f4f4f5', textAlign: 'center' as const }}
-                      />
-
-                      {/* Price (owner verifies) */}
+                      <input value={item.category} onChange={e => updateImportItem(item._id, { category: e.target.value })} style={{ width: 78, fontSize: 9.5, color: '#71717a', border: '1.5px solid #e4e4e7', borderRadius: 20, padding: '2px 7px', outline: 'none', background: '#f4f4f5', textAlign: 'center' as const }} />
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
                         <span style={{ fontSize: 11, color: '#71717a' }}>$</span>
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={item.price}
-                          onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) updateImportItem(item._id, { price: v }) }}
-                          style={{ width: 58, fontSize: 12, fontWeight: 700, color: '#18181b', border: '1.5px solid #e4e4e7', borderRadius: 6, padding: '3px 5px', outline: 'none', textAlign: 'right' as const }}
-                        />
+                        <input type="number" min="0.01" step="0.01" value={item.price} onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) updateImportItem(item._id, { price: v }) }} style={{ width: 58, fontSize: 12, fontWeight: 700, color: '#18181b', border: '1.5px solid #e4e4e7', borderRadius: 6, padding: '3px 5px', outline: 'none', textAlign: 'right' as const }} />
                       </div>
                     </div>
                   ))}
                 </div>
               ))}
             </div>
-
-            {/* Footer */}
             <div style={{ padding: '12px 20px', borderTop: '1px solid #e4e4e7', display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button
-                onClick={() => { setImportStep('idle'); setImportItems([]) }}
-                style={{ flex: 1, padding: 11, borderRadius: 10, border: '1.5px solid #e4e4e7', background: '#fff', color: '#18181b', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-              >Cancel</button>
-              <button
-                onClick={() => { void handleApproveImport() }}
-                disabled={activeImportCount === 0}
-                style={{ flex: 2, padding: 11, borderRadius: 10, border: 'none', background: activeImportCount === 0 ? '#e4e4e7' : C.accent, color: activeImportCount === 0 ? '#a1a1aa' : '#fff', fontSize: 13, fontWeight: 700, cursor: activeImportCount === 0 ? 'not-allowed' : 'pointer' }}
-              >
+              <button onClick={() => { setImportStep('idle'); setImportItems([]) }} style={{ flex: 1, padding: 11, borderRadius: 10, border: '1.5px solid #e4e4e7', background: '#fff', color: '#18181b', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { void handleApproveImport() }} disabled={activeImportCount === 0} style={{ flex: 2, padding: 11, borderRadius: 10, border: 'none', background: activeImportCount === 0 ? '#e4e4e7' : C.accent, color: activeImportCount === 0 ? '#a1a1aa' : '#fff', fontSize: 13, fontWeight: 700, cursor: activeImportCount === 0 ? 'not-allowed' : 'pointer' }}>
                 {'Add ' + activeImportCount + ' item' + (activeImportCount !== 1 ? 's' : '') + ' to products →'}
               </button>
             </div>
@@ -1133,7 +1181,6 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
         <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#18181b', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 600, zIndex: 100, whiteSpace: 'nowrap' as const, boxShadow: '0 4px 16px rgba(0,0,0,0.3)' }}>
           {toast}

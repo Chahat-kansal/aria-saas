@@ -6,6 +6,12 @@ import MenuBuilderClient from './MenuBuilderClient'
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
 type MenuCfg = {
   id?: string
+  menu_key: string
+  menu_label: string
+  is_default: boolean
+  active_from: string | null
+  active_to: string | null
+  days_of_week: number[] | null
   template_id: string
   brand_kit: Record<string, unknown>
   section_order: string[]
@@ -43,9 +49,14 @@ export default async function MenuBuilderPage() {
   }
   if (!bid) redirect('/pos/setup/welcome')
 
-  const [bizRes, configRes, catsRes, productsRes] = await Promise.all([
+  const [bizRes, configsRes, catsRes, productsRes] = await Promise.all([
     supabaseAdmin.from('businesses').select('name, slug, logo_url').eq('id', bid).maybeSingle(),
-    supabaseAdmin.from('menu_configs').select('*').eq('business_id', bid).maybeSingle(),
+    supabaseAdmin
+      .from('menu_configs')
+      .select('*')
+      .eq('business_id', bid)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true }),
     supabaseAdmin.from('pos_categories').select('id, name, color').eq('business_id', bid).eq('is_active', true).order('sort_order', { ascending: true }),
     supabaseAdmin.from('pos_products').select('id, name, description, price, image_url, category_id, sort_order').eq('business_id', bid).eq('is_active', true).is('deleted_at', null).order('sort_order', { ascending: true }),
   ])
@@ -57,23 +68,38 @@ export default async function MenuBuilderPage() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
   const menuUrl = appUrl + '/menu/' + slug
 
-  let config: MenuCfg = configRes.data as MenuCfg
-  if (!config) {
+  let configs: MenuCfg[] = (configsRes.data ?? []) as MenuCfg[]
+
+  // Seed the first menu if none exist
+  if (configs.length === 0) {
     const { data: seeded } = await supabaseAdmin
       .from('menu_configs')
-      .insert({ business_id: bid, template_id: 'editorial', is_published: false })
+      .insert({
+        business_id: bid,
+        menu_key: 'main',
+        menu_label: 'Main Menu',
+        is_default: true,
+        template_id: 'editorial',
+        is_published: false,
+      })
       .select()
       .maybeSingle()
-    config = (seeded as MenuCfg) ?? { template_id: 'editorial', brand_kit: {}, section_order: [], item_overrides: {}, background_id: 'none', is_published: false }
+    configs = seeded ? [seeded as MenuCfg] : []
   }
 
-  const safeConfig: MenuCfg = {
-    ...config,
-    brand_kit: (config.brand_kit as Record<string, unknown>) ?? {},
-    section_order: (config.section_order as string[]) ?? [],
-    item_overrides: (config.item_overrides as Record<string, ItemOverride>) ?? {},
-    background_id: (config.background_id as string | null) ?? 'none',
-  }
+  const safeConfigs: MenuCfg[] = configs.map(c => ({
+    ...c,
+    menu_key: (c.menu_key as string | null) ?? 'main',
+    menu_label: (c.menu_label as string | null) ?? 'Main Menu',
+    is_default: (c.is_default as boolean | null) ?? false,
+    active_from: (c.active_from as string | null) ?? null,
+    active_to: (c.active_to as string | null) ?? null,
+    days_of_week: (c.days_of_week as number[] | null) ?? null,
+    brand_kit: (c.brand_kit as Record<string, unknown>) ?? {},
+    section_order: (c.section_order as string[]) ?? [],
+    item_overrides: (c.item_overrides as Record<string, ItemOverride>) ?? {},
+    background_id: (c.background_id as string | null) ?? 'none',
+  }))
 
   return (
     <>
@@ -89,7 +115,7 @@ export default async function MenuBuilderPage() {
         businessName={(biz.name as string | null) ?? 'My Business'}
         logoUrl={(biz.logo_url as string | null) ?? null}
         menuUrl={menuUrl}
-        initialConfig={safeConfig}
+        initialConfigs={safeConfigs}
         initialCats={(catsRes.data ?? []) as Category[]}
         initialProducts={(productsRes.data ?? []) as Product[]}
       />
