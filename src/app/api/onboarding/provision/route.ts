@@ -13,7 +13,7 @@ import { seedDefaultTrainingPack } from '@/lib/training/seed-default-pack'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-type ProvStep = { step: string; label: string; status: 'pending' | 'running' | 'done' | 'failed' }
+type ProvStep = { step: string; label: string; status: 'pending' | 'running' | 'done' | 'failed'; error?: string }
 
 const STEP_DEFS: ProvStep[] = [
   { step: 'categories', label: 'Setting up your menu & categories', status: 'pending' },
@@ -59,25 +59,31 @@ async function runProvision(
 ) {
   const steps: ProvStep[] = STEP_DEFS.map(s => ({ ...s }))
 
-  // Step 1: categories
+  // Step 1: categories — CRITICAL for product businesses.
+  // Categories are always upserted (idempotent) independent of the product-seed guard.
+  // This fixes businesses that have existing products but 0 categories from a prior partial failure.
   steps[0].status = 'running'
   await writeSteps(bizId, steps)
   try {
     if (businessModel !== 'service') {
       if (industry === 'cafe') {
-        // PP STEP 2 — seed the full cafe menu (6 categories + 80+ products), idempotent.
+        const CAFE_CAT_COLORS: Record<string, string> = {
+          Coffee: '#6F4E37', Tea: '#7FB897', Breakfast: '#F59E0B',
+          Lunch: '#10B981', Bakery: '#EC4899', 'Cold Drinks': '#4A9EBA',
+        }
+        const categoryMap: Record<string, string> = {}
+        for (const catName of CAFE_CATEGORIES) {
+          const { data: cat, error: catErr } = await supabaseAdmin.from('pos_categories').upsert(
+            { business_id: bizId, name: catName, color: CAFE_CAT_COLORS[catName] ?? '#7FB897' },
+            { onConflict: 'business_id,name' }
+          ).select('id').single()
+          if (catErr) throw new Error('Category upsert failed (' + catName + '): ' + catErr.message)
+          if (cat) categoryMap[catName] = cat.id as string
+        }
+        // Products only seeded once — idempotent guard prevents duplicates on re-run
         const { count: prodCount } = await supabaseAdmin
           .from('pos_products').select('id', { count: 'exact', head: true }).eq('business_id', bizId)
         if (!prodCount) {
-          const CAFE_CAT_COLORS: Record<string, string> = { Coffee: '#6F4E37', Tea: '#7FB897', Breakfast: '#F59E0B', Lunch: '#10B981', Bakery: '#EC4899', 'Cold Drinks': '#4A9EBA' }
-          const categoryMap: Record<string, string> = {}
-          for (const catName of CAFE_CATEGORIES) {
-            const { data: cat } = await supabaseAdmin.from('pos_categories').upsert(
-              { business_id: bizId, name: catName, color: CAFE_CAT_COLORS[catName] ?? '#7FB897' },
-              { onConflict: 'business_id,name' }
-            ).select('id').single()
-            if (cat) categoryMap[catName] = cat.id as string
-          }
           const products = CAFE_SEED_PRODUCTS.map(p => ({
             business_id: bizId, name: p.name, category_id: categoryMap[p.category] ?? null,
             price: p.price, cost_price: p.cost_price, description: p.description ?? null,
@@ -91,20 +97,30 @@ async function runProvision(
       } else {
         const cats = INDUSTRY_CATEGORIES[industry ?? ''] ?? DEFAULT_CATEGORIES
         for (const cat of cats) {
-          await supabaseAdmin.from('pos_categories').upsert(
+          const { error: catErr } = await supabaseAdmin.from('pos_categories').upsert(
             { business_id: bizId, name: cat.name, color: cat.color },
             { onConflict: 'business_id,name' }
           )
+          if (catErr) throw new Error('Category upsert failed (' + cat.name + '): ' + catErr.message)
         }
       }
     }
     steps[0].status = 'done'
-  } catch {
-    steps[0].status = 'done' // non-fatal — categories can be added manually
+  } catch (e) {
+    const msg = (e as Error).message ?? 'Category seeding failed'
+    steps[0].status = 'failed'
+    steps[0].error = msg
+    console.error('[provision] categories step failed for', bizId + ':', msg)
+    await writeSteps(bizId, steps)
+    // CRITICAL — abort provisioning for product businesses so the owner lands on a retry screen,
+    // not a silently broken empty dashboard.
+    if (businessModel !== 'service') {
+      throw new Error('Category setup failed: ' + msg)
+    }
   }
   await writeSteps(bizId, steps)
 
-  // Step 2: trading hours
+  // Step 2: trading hours — non-critical
   steps[1].status = 'running'
   await writeSteps(bizId, steps)
   try {
@@ -128,12 +144,15 @@ async function runProvision(
       )
     }
     steps[1].status = 'done'
-  } catch {
-    steps[1].status = 'done' // non-fatal
+  } catch (e) {
+    const msg = (e as Error).message ?? 'Trading hours seeding failed'
+    steps[1].status = 'failed'
+    steps[1].error = msg
+    console.error('[provision] hours step failed for', bizId + ':', msg)
   }
   await writeSteps(bizId, steps)
 
-  // Step 3: compliance items
+  // Step 3: compliance items — non-critical
   steps[2].status = 'running'
   await writeSteps(bizId, steps)
   try {
@@ -145,12 +164,15 @@ async function runProvision(
       )
     }
     steps[2].status = 'done'
-  } catch {
-    steps[2].status = 'done' // non-fatal
+  } catch (e) {
+    const msg = (e as Error).message ?? 'Compliance seeding failed'
+    steps[2].status = 'failed'
+    steps[2].error = msg
+    console.error('[provision] compliance step failed for', bizId + ':', msg)
   }
   await writeSteps(bizId, steps)
 
-  // Step 4: first aria_daily_briefing
+  // Step 4: first aria_daily_briefing — non-critical (regenerates on next cron)
   steps[3].status = 'running'
   await writeSteps(bizId, steps)
   try {
@@ -181,15 +203,18 @@ async function runProvision(
       )
     }
     steps[3].status = 'done'
-  } catch {
-    steps[3].status = 'done' // non-fatal — briefing regenerates on next cron
+  } catch (e) {
+    const msg = (e as Error).message ?? 'Briefing generation failed'
+    steps[3].status = 'failed'
+    steps[3].error = msg
+    console.error('[provision] briefing step failed for', bizId + ':', msg)
   }
   await writeSteps(bizId, steps)
 
-  // TP-SEED — default day-one training pack (Run the POS game + Welcome). Non-fatal, idempotent.
+  // TP-SEED — default day-one training pack. Non-fatal, idempotent.
   try { await seedDefaultTrainingPack(bizId, null, bizName) } catch (e) { console.error('[non-fatal] training seed', e) }
 
-  // Step 5: finalize
+  // Step 5: finalize — only reached when all CRITICAL steps passed (no throw above)
   steps[4].status = 'running'
   await writeSteps(bizId, steps)
   await supabaseAdmin.from('businesses').update({ onboarding_complete: true }).eq('id', bizId)
@@ -263,10 +288,19 @@ async function _POST(_req: Request) {
     return NextResponse.json({ provisioning_status: 'complete' })
   }
 
-  await supabaseAdmin
-    .from('business_onboarding')
-    .update({ provisioning_status: 'running', provisioning_error: null })
-    .eq('business_id', biz.id)
+  if (!onb) {
+    // Bootstrap row for businesses that pre-date the onboarding wizard.
+    // Without this, every update/writeSteps call in runProvision silently no-ops.
+    await supabaseAdmin.from('business_onboarding').insert({
+      business_id: biz.id, user_id: user.id, current_step: 'provisioning',
+      provisioning_status: 'running', step_data: {},
+    })
+  } else {
+    await supabaseAdmin
+      .from('business_onboarding')
+      .update({ provisioning_status: 'running', provisioning_error: null })
+      .eq('business_id', biz.id)
+  }
 
   try {
     await runProvision(
