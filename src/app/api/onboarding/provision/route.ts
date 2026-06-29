@@ -33,15 +33,47 @@ const INDUSTRY_CATEGORIES: Record<string, Array<{ name: string; color: string }>
 }
 const DEFAULT_CATEGORIES = [{ name: 'Products', color: '#7FB897' }, { name: 'Services', color: '#4A9EBA' }]
 
-const COMPLIANCE_KEYS: Record<string, string[]> = {
-  cafe:       ['food_safety_cert', 'food_safety_plan', 'rsa_training', 'allergen_labelling'],
-  retail:     ['rsa_training', 'fire_safety', 'public_liability', 'hazmat_compliance'],
-  restaurant: ['food_safety_cert', 'food_safety_plan', 'rsa_training', 'fire_safety'],
-  salon:      ['public_liability', 'product_safety', 'fire_safety'],
-  gym:        ['public_liability', 'first_aid_cert', 'equipment_checks'],
-  tradie:     ['public_liability', 'whs_policy', 'contractor_insurance'],
+// Compliance item seeds use the actual compliance_items schema (title + category).
+// Check-then-insert (not upsert) — no unique constraint exists on this table.
+const COMPLIANCE_ITEMS: Record<string, Array<{ title: string; category: string }>> = {
+  cafe:       [
+    { title: 'Food Safety Certificate',         category: 'health' },
+    { title: 'Food Safety Plan',                category: 'health' },
+    { title: 'RSA Training Records',            category: 'licensing' },
+    { title: 'Allergen Labelling Compliance',   category: 'health' },
+  ],
+  retail:     [
+    { title: 'Staff RSA Certificates',          category: 'licensing' },
+    { title: 'Fire Safety Inspection',          category: 'safety' },
+    { title: 'Public Liability Insurance',      category: 'insurance' },
+    { title: 'Hazardous Materials Compliance',  category: 'safety' },
+  ],
+  restaurant: [
+    { title: 'Food Safety Certificate',         category: 'health' },
+    { title: 'Food Safety Plan',                category: 'health' },
+    { title: 'RSA Training Records',            category: 'licensing' },
+    { title: 'Fire Safety Inspection',          category: 'safety' },
+  ],
+  salon:      [
+    { title: 'Public Liability Insurance',      category: 'insurance' },
+    { title: 'Product Safety Compliance',       category: 'safety' },
+    { title: 'Fire Safety Inspection',          category: 'safety' },
+  ],
+  gym:        [
+    { title: 'Public Liability Insurance',      category: 'insurance' },
+    { title: 'First Aid Certificate',           category: 'health' },
+    { title: 'Equipment Safety Checks',         category: 'safety' },
+  ],
+  tradie:     [
+    { title: 'Public Liability Insurance',      category: 'insurance' },
+    { title: 'WHS Policy',                      category: 'safety' },
+    { title: 'Contractor Insurance',            category: 'insurance' },
+  ],
 }
-const DEFAULT_COMPLIANCE = ['public_liability', 'fire_safety']
+const DEFAULT_COMPLIANCE_ITEMS = [
+  { title: 'Public Liability Insurance',        category: 'insurance' },
+  { title: 'Fire Safety Inspection',            category: 'safety' },
+]
 
 async function writeSteps(bizId: string, steps: ProvStep[]) {
   await supabaseAdmin
@@ -153,15 +185,29 @@ async function runProvision(
   await writeSteps(bizId, steps)
 
   // Step 3: compliance items — non-critical
+  // Uses check-then-insert (not upsert) because compliance_items has no unique constraint
+  // on (business_id, title). The previous upsert targeted columns that don't exist in the
+  // live schema ('key', 'checked') and silently failed for every business.
   steps[2].status = 'running'
   await writeSteps(bizId, steps)
   try {
-    const keys = COMPLIANCE_KEYS[industry ?? ''] ?? DEFAULT_COMPLIANCE
-    for (const key of keys) {
-      await supabaseAdmin.from('compliance_items').upsert(
-        { business_id: bizId, key, checked: false },
-        { onConflict: 'business_id,key' }
-      )
+    const industryKey = industry ?? 'general'
+    const items = COMPLIANCE_ITEMS[industryKey] ?? DEFAULT_COMPLIANCE_ITEMS
+    for (const item of items) {
+      const { count: existing } = await supabaseAdmin
+        .from('compliance_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', bizId)
+        .eq('title', item.title)
+      if (!existing) {
+        await supabaseAdmin.from('compliance_items').insert({
+          business_id: bizId,
+          industry: industryKey,
+          title: item.title,
+          category: item.category,
+          is_completed: false,
+        })
+      }
     }
     steps[2].status = 'done'
   } catch (e) {
