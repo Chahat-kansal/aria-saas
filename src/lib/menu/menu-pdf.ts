@@ -60,14 +60,8 @@ export function renderMenuHtml(opts: {
 
   const overrides = config.item_overrides ?? {}
 
-  // Build item rows
-  const sectionsHtml = orderedCatIds.map(catId => {
-    const cat = catMap.get(catId)
-    if (!cat) return ''
-    const catProducts = products.filter(p => p.category_id === catId && !overrides[p.id]?.hidden)
-    if (catProducts.length === 0) return ''
-
-    const itemsHtml = catProducts.map(p => {
+  function buildItemsHtml(prods: Product[]): string {
+    return prods.map(p => {
       const ov    = overrides[p.id] ?? {}
       const name  = p.name
       const desc  = ov.desc !== undefined ? ov.desc : (p.description ?? '')
@@ -104,14 +98,30 @@ export function renderMenuHtml(opts: {
         '</div>'
       )
     }).join('')
+  }
+
+  // Build item rows
+  const sectionsHtml = orderedCatIds.map(catId => {
+    const cat = catMap.get(catId)
+    if (!cat) return ''
+    const catProducts = products.filter(p => p.category_id === catId && !overrides[p.id]?.hidden)
+    if (catProducts.length === 0) return ''
 
     return (
       '<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:16px;">' +
         '<div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:1.6px;color:' + accent + ';padding-bottom:4px;border-bottom:1.5px solid ' + accent + ';margin-bottom:6px;">' + esc(cat.name) + '</div>' +
-        itemsHtml +
+        buildItemsHtml(catProducts) +
       '</div>'
     )
   }).join('')
+
+  const uncatPdfProds = products.filter(p => (!p.category_id || !catMap.has(p.category_id)) && !overrides[p.id]?.hidden)
+  const uncatSectionHtml = uncatPdfProds.length === 0 ? '' : (
+    '<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:16px;">' +
+      '<div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:1.6px;color:' + muted + ';padding-bottom:4px;border-bottom:1.5px solid ' + line + ';margin-bottom:6px;">Other</div>' +
+      buildItemsHtml(uncatPdfProds) +
+    '</div>'
+  )
 
   const colCss = printCols === 2
     ? 'columns:2;column-gap:22px;'
@@ -147,7 +157,7 @@ export function renderMenuHtml(opts: {
         '<div class="bizname">' + esc(businessName) + '</div>' +
         '<div class="divider"></div>' +
       '</div>' +
-      '<div class="content">' + sectionsHtml + '</div>' +
+      '<div class="content">' + sectionsHtml + uncatSectionHtml + '</div>' +
     '</div>' +
     '</body></html>'
   )

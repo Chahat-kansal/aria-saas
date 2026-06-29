@@ -102,6 +102,9 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
       return { ...p, description: ov.desc !== undefined ? ov.desc : p.description, image_url: ov.photo_url !== undefined ? ov.photo_url : p.image_url, price: ov.price_override !== undefined ? ov.price_override : p.price }
     })
 
+  const miniCatIds = new Set(orderedCats.map(c => c.id))
+  const uncatMini = visProds.filter(p => !p.category_id || !miniCatIds.has(p.category_id))
+
   return (
     <div style={{ background: theme.bg, color: theme.ink, fontFamily: theme.fontCss, minHeight: '100%', fontSize: 12 }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: theme.card, borderBottom: '1px solid ' + theme.line, padding: '9px 11px 0' }}>
@@ -151,7 +154,36 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
             </div>
           )
         })}
-        {visProds.length === 0 && (
+        {uncatMini.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: theme.muted, marginBottom: 7, fontFamily: theme.fontCss }}>Other</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+              {uncatMini.map(p => {
+                const badge = cfg.item_overrides[p.id]?.badge
+                return (
+                  <div key={p.id} style={{ background: theme.card, borderRadius: 9, overflow: 'hidden', border: '1px solid ' + theme.line, display: 'flex', flexDirection: 'column' }}>
+                    {showPhotos && (
+                      p.image_url
+                        ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
+                        : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
+                    )}
+                    <div style={{ padding: '6px 7px 7px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      {showBadges && badge && (
+                        <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>
+                      )}
+                      <div style={{ fontSize: 10, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 2 }}>{p.name}</div>
+                      {showDesc && p.description && (
+                        <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>
+                      )}
+                      <div style={{ marginTop: 'auto', fontSize: 11, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss }}>{'$' + p.price.toFixed(2)}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {visProds.length === 0 && uncatMini.length === 0 && (
           <div style={{ textAlign: 'center', padding: '32px 12px', color: theme.muted }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>☕</div>
             <p style={{ fontSize: 11, fontWeight: 600, margin: '0 0 3px' }}>No visible items</p>
@@ -687,6 +719,8 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   // ── Items panel content ────────────────────────────────────────────────
 
   function renderItemsPanel() {
+    const knownCatIds = new Set(orderedCats.map(c => c.id))
+    const uncatProds = initialProducts.filter(p => !p.category_id || !knownCatIds.has(p.category_id))
     return (
       <div style={{ flex: 1, overflowY: 'auto' as const }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: C.card, zIndex: 5 }}>
@@ -753,7 +787,40 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
             </div>
           )
         })}
-        {orderedCats.length === 0 && (
+        {uncatProds.length > 0 && (
+          <div>
+            <div style={{ padding: '8px 12px', background: '#fef3c7', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid ' + C.border }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#92400e', flex: 1 }}>Uncategorised</span>
+              <span style={{ fontSize: 10.5, color: '#92400e' }}>{uncatProds.filter(p => !cfg.item_overrides[p.id]?.hidden).length}/{uncatProds.length}</span>
+            </div>
+            {uncatProds.map(p => {
+              const isHidden = cfg.item_overrides[p.id]?.hidden ?? false
+              const sel = selectedItemId === p.id
+              return (
+                <div key={p.id} onClick={() => openItemEditor(p.id)} style={{ padding: '8px 12px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: sel ? '#f0fdf4' : (isHidden ? '#fafafa' : C.card), opacity: isHidden ? 0.5 : 1 }}>
+                  <span style={{ fontSize: 14, color: C.muted, cursor: 'grab' }}>⠿</span>
+                  {p.image_url
+                    ? <img src={p.image_url} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                    : <div style={{ width: 34, height: 34, borderRadius: 6, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>☕</div>
+                  }
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.name}</div>
+                    {p.description && <div style={{ fontSize: 10, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.description}</div>}
+                  </div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'$' + p.price.toFixed(2)}</div>
+                  <button
+                    onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }}
+                    title={isHidden ? 'Show on menu' : 'Hide from menu'}
+                    style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    {!isHidden && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {orderedCats.length === 0 && uncatProds.length === 0 && (
           <div style={{ padding: 24, textAlign: 'center', color: C.muted }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>☕</div>
             <p style={{ fontSize: 12, fontWeight: 600, margin: 0 }}>No categories yet</p>
@@ -869,6 +936,23 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                   </div>
                 )
               })}
+              {(() => {
+                const a4CatIds = new Set(orderedCats.map(c => c.id))
+                const a4Uncat = initialProducts.filter(p => (!p.category_id || !a4CatIds.has(p.category_id)) && !cfg.item_overrides[p.id]?.hidden)
+                if (a4Uncat.length === 0) return null
+                return (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '1.2px', color: theme.muted, marginBottom: 5 }}>Other</div>
+                    {a4Uncat.map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 600 }}>{p.name}</span>
+                        <div style={{ flex: 1, borderBottom: '1.5px dotted ' + theme.line, marginBottom: 2, opacity: 0.4 }} />
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.accent }}>{'$' + p.price.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
               <div style={{ textAlign: 'center', fontSize: 8, opacity: 0.4, marginTop: 12, letterSpacing: '1.5px', textTransform: 'uppercase' as const }}>Powered by Aria</div>
             </div>
           )}

@@ -47,7 +47,7 @@ export default async function MenuBuilderPage() {
     supabaseAdmin.from('businesses').select('name, slug, logo_url').eq('id', bid).maybeSingle(),
     supabaseAdmin.from('menu_configs').select('*').eq('business_id', bid).maybeSingle(),
     supabaseAdmin.from('pos_categories').select('id, name, color').eq('business_id', bid).eq('is_active', true).order('sort_order', { ascending: true }),
-    supabaseAdmin.from('pos_products').select('id, name, description, price, image_url, category_id, sort_order').eq('business_id', bid).eq('is_active', true).order('sort_order', { ascending: true }),
+    supabaseAdmin.from('pos_products').select('id, name, description, price, image_url, category_id, sort_order').eq('business_id', bid).eq('is_active', true).is('deleted_at', null).order('sort_order', { ascending: true }),
   ])
 
   const biz = bizRes.data

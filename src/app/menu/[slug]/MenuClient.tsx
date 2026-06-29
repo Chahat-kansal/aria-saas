@@ -241,14 +241,15 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
               <div key={i} style={{ borderRadius: 14, background: '#e5e7eb', height: 200 }} />
             ))}
           </div>
-        ) : cats.length === 0 || products.length === 0 ? (
+        ) : products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED }}>
             <div style={{ fontSize: 44, marginBottom: 14 }}>☕</div>
             <p style={{ fontSize: 15, fontWeight: 600, color: DARK, margin: '0 0 6px' }}>Menu coming soon</p>
             <p style={{ fontSize: 13 }}>Check back shortly — this menu is being set up.</p>
           </div>
         ) : (
-          cats.map(cat => {
+          <>
+          {cats.map(cat => {
             const catProducts = products.filter(p => p.category_id === cat.id)
             if (catProducts.length === 0) return null
             return (
@@ -312,7 +313,51 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
                 </div>
               </div>
             )
-          })
+          })}
+          {(() => {
+            const pubCatIds = new Set(cats.map(c => c.id))
+            const uncat = products.filter(p => !p.category_id || !pubCatIds.has(p.category_id))
+            if (uncat.length === 0) return null
+            return (
+              <div style={{ marginTop: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <h2 style={{ fontSize: 13, fontWeight: 800, color: DARK, margin: 0, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Other</h2>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}>
+                  {uncat.map(p => {
+                    const badge = itemOverrides?.[p.id]?.badge ?? null
+                    return (
+                      <div key={p.id} onClick={() => { if (orderingEnabled) setProductModal(p) }} style={{ background: CARD, borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.07)', cursor: orderingEnabled ? 'pointer' : 'default', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                        {badge && (
+                          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, background: GREEN, color: SAGE, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, letterSpacing: '0.04em' }}>{badge}</div>
+                        )}
+                        {p.image_url ? (
+                          <div style={{ width: '100%', height: 118, background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, boxSizing: 'border-box' as const }}>
+                            <img src={p.image_url} alt={p.name} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+                          </div>
+                        ) : (
+                          <PlaceholderImg />
+                        )}
+                        <div style={{ padding: '10px 12px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 700, color: DARK, lineHeight: 1.3, marginBottom: 3 }}>{p.name}</div>
+                          {p.description && (
+                            <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.4, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>{p.description}</div>
+                          )}
+                          <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: GREEN, fontFamily: FONT_BRAND, fontStyle: 'italic' }}>{fmtPrice(p.price)}</span>
+                            {orderingEnabled && (
+                              <button onClick={e => { e.stopPropagation(); addToCart(p) }} style={{ width: 28, height: 28, borderRadius: '50%', background: SAGE, color: CARD, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }} aria-label={'Add ' + p.name}>+</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+          </>
         )}
       </div>
 
