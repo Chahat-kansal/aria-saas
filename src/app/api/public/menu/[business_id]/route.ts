@@ -13,28 +13,33 @@ function adminClient() {
   )
 }
 
-export async function GET(_req: Request, { params }: { params: { business_id: string } }) {
-  const idOrSlug = params.business_id
+export async function GET(_req: Request, { params }: { params: Promise<{ business_id: string }> | { business_id: string } }) {
+  const { business_id: idOrSlug } = 'then' in params ? await params : params
   if (!idOrSlug) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
   const sb = adminClient()
   const business_id = await resolveBusinessId(sb, idOrSlug)
-  if (!business_id) return NextResponse.json({ error: 'Business not found or not accepting orders' }, { status: 404 })
+  if (!business_id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const [bizRes, productsRes] = await Promise.all([
-    sb.from('businesses').select('id, name, industry, address, phone').eq('id', business_id).eq('is_active', true).maybeSingle(),
+  const { data: biz } = await sb.from('businesses').select('id').eq('id', business_id).eq('is_active', true).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const [catsRes, productsRes] = await Promise.all([
+    sb.from('pos_categories')
+      .select('id, name, color')
+      .eq('business_id', business_id)
+      .order('name'),
     sb.from('pos_products')
-      .select('id, name, description, price, image_url, pos_categories(id, name, color)')
+      .select('id, name, description, price, image_url, sort_order, category_id')
       .eq('business_id', business_id)
       .eq('is_active', true)
-      .gt('price', 0)
+      .is('deleted_at', null)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('name'),
   ])
 
-  if (!bizRes.data) return NextResponse.json({ error: 'Business not found or not accepting orders' }, { status: 404 })
-
   return NextResponse.json({
-    business: bizRes.data,
+    categories: catsRes.data ?? [],
     products: productsRes.data ?? [],
   })
 }

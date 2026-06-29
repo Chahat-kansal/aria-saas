@@ -241,6 +241,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       business_model:   biz.business_model ?? null,
       year_established: biz.year_established ?? null,
       biggest_challenge: biz.biggest_challenge ?? null,
+      menu_url: biz.slug ? ((process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site') + '/menu/' + biz.slug) : null,
     } : null,
     revenue: {
       last_7_days:    rev7,
