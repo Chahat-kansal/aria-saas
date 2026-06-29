@@ -36,7 +36,7 @@ interface Props {
 
 function PlaceholderImg() {
   return (
-    <div style={{ width: '100%', height: 118, background: 'linear-gradient(135deg,#e8f4e8 0%,#d4ead4 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, color: SAGE }}>
+    <div style={{ width: '100%', height: 118, background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, color: '#c4c4c8' }}>
       ☕
     </div>
   )
@@ -278,7 +278,9 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
                           </div>
                         )}
                         {p.image_url ? (
-                          <img src={p.image_url} alt={p.name} style={{ width: '100%', height: 118, objectFit: 'cover', display: 'block' }} />
+                          <div style={{ width: '100%', height: 118, background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, boxSizing: 'border-box' as const }}>
+                            <img src={p.image_url} alt={p.name} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+                          </div>
                         ) : (
                           <PlaceholderImg />
                         )}
@@ -335,9 +337,11 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
         <div onClick={() => setProductModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: CARD, borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80dvh', overflowY: 'auto', maxWidth: 540, margin: '0 auto' }}>
             {productModal.image_url ? (
-              <img src={productModal.image_url} alt="" style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block', borderRadius: '20px 20px 0 0' }} />
+              <div style={{ width: '100%', height: 220, background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, boxSizing: 'border-box' as const, borderRadius: '20px 20px 0 0' }}>
+                <img src={productModal.image_url} alt="" loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+              </div>
             ) : (
-              <div style={{ width: '100%', height: 140, background: 'linear-gradient(135deg,#e8f4e8 0%,#d4ead4 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 52, color: SAGE, borderRadius: '20px 20px 0 0' }}>☕</div>
+              <div style={{ width: '100%', height: 140, background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 52, color: '#c4c4c8', borderRadius: '20px 20px 0 0' }}>☕</div>
             )}
             <div style={{ padding: '20px 20px 32px' }}>
               <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 6px', color: DARK, fontFamily: FONT_BRAND, fontStyle: 'italic' }}>{productModal.name}</h2>

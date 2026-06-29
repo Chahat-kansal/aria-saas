@@ -169,11 +169,11 @@ export function PipelBadge({ children, tone = 'default' }: { children: React.Rea
   return <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 9, border: `1.5px solid ${P.ink}`, ...t }}>{children}</span>
 }
 
-/** Ink-bordered stat chip (hero footer + buckets). `tone` colours the number only. */
-export function PipelStat({ n, k, tone }: { n: React.ReactNode; k: string; tone?: 'warn' | 'alert' }) {
+/** Ink-bordered stat chip (hero footer + buckets). `tone` colours the number only. `onClick` makes it a tappable deep-link. */
+export function PipelStat({ n, k, tone, onClick }: { n: React.ReactNode; k: string; tone?: 'warn' | 'alert'; onClick?: () => void }) {
   const col = tone === 'warn' ? P.amber : tone === 'alert' ? P.red : P.ink
   return (
-    <div style={{ flex: 1, background: P.bg, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: 11, textAlign: 'center' }}>
+    <div onClick={onClick} style={{ flex: 1, background: P.bg, border: '1.5px solid ' + P.ink, borderRadius: 16, padding: 11, textAlign: 'center', cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ fontWeight: 800, fontSize: 22, lineHeight: 1, color: col }}>{n}</div>
       <div style={{ fontSize: 10.5, color: P.muted, marginTop: 3, fontWeight: 600 }}>{k}</div>
     </div>
@@ -183,25 +183,25 @@ export function PipelStat({ n, k, tone }: { n: React.ReactNode; k: string; tone?
 // ───────────────────────── hero (stock value + margin bar + stat chips) ─────────────────────────
 export function PipelHero({ caption, value, costPct, costLabel, retailLabel, marginTag, stats }: {
   caption: string; value: string; costPct: number; costLabel: string; retailLabel: string; marginTag: string | null
-  stats: Array<{ n: React.ReactNode; k: string; tone?: 'warn' | 'alert' }>
+  stats: Array<{ n: React.ReactNode; k: string; tone?: 'warn' | 'alert'; onClick?: () => void }>
 }) {
   const cp = Math.max(6, Math.min(94, costPct))
   return (
-    <div style={{ margin: '16px 16px 0', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 28, padding: 20 }}>
+    <div style={{ margin: '16px 16px 0', background: P.card, border: '1.5px solid ' + P.ink, borderRadius: 28, padding: 20 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: P.muted, textTransform: 'uppercase', letterSpacing: '.06em' }}>{caption}</div>
       <div style={{ fontWeight: 800, fontSize: 50, letterSpacing: '-.03em', lineHeight: 1, margin: '8px 0 2px' }}>{value}</div>
-      <div style={{ height: 14, borderRadius: 8, background: P.soft, border: `1.5px solid ${P.ink}`, margin: '16px 0 11px', overflow: 'hidden', display: 'flex' }}>
-        <div style={{ width: `${cp}%`, background: P.ink }} />
+      <div style={{ height: 14, borderRadius: 8, background: P.soft, border: '1.5px solid ' + P.ink, margin: '16px 0 11px', overflow: 'hidden', display: 'flex' }}>
+        <div style={{ width: cp + '%', background: P.ink }} />
         <div style={{ flex: 1, background: P.lime }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, color: P.muted, fontWeight: 600 }}>
         <span><b style={{ color: P.ink, fontWeight: 800 }}>{costLabel}</b> cost</span>
-        {marginTag && <span style={{ background: P.lime, border: `1.5px solid ${P.ink}`, borderRadius: 8, padding: '1px 7px', color: P.ink, fontWeight: 800 }}>{marginTag}</span>}
+        {marginTag && <span style={{ background: P.lime, border: '1.5px solid ' + P.ink, borderRadius: 8, padding: '1px 7px', color: P.ink, fontWeight: 800 }}>{marginTag}</span>}
         <span><b style={{ color: P.ink, fontWeight: 800 }}>{retailLabel}</b> retail</span>
       </div>
       {stats.length > 0 && (
         <div style={{ display: 'flex', marginTop: 16, gap: 9 }}>
-          {stats.map((s, i) => <PipelStat key={i} n={s.n} k={s.k} tone={s.tone} />)}
+          {stats.map((s, i) => <PipelStat key={i} n={s.n} k={s.k} tone={s.tone} onClick={s.onClick} />)}
         </div>
       )}
     </div>
