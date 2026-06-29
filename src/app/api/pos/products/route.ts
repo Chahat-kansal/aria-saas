@@ -13,6 +13,15 @@ import { validateBody } from '@/lib/api/validate'
 
 const ProductBodySchema = z.object({ name: z.string().min(1).max(500) }).passthrough()
 
+function isAllowedImageUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return /\.(jpe?g|png|webp)(\?.*)?$/i.test(u.pathname)
+  } catch {
+    return false
+  }
+}
+
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
     .from('user_active_business')
@@ -125,6 +134,11 @@ async function _POST(req: Request) {
   const parsed = await validateBody(req, ProductBodySchema)
   if ('error' in parsed) return parsed.error
   const body = parsed.data as Record<string, unknown>
+
+  // Image URL format guard — reject non-image extensions (svg/bmp/tiff/data URIs etc.)
+  if (body.image_url && typeof body.image_url === 'string' && !isAllowedImageUrl(body.image_url)) {
+    return NextResponse.json({ error: 'image_url must point to a .jpg, .jpeg, .png, or .webp image' }, { status: 400 })
+  }
 
   // Price validation — block $0 products (prevents silent $0 duplicates)
   const priceVal = body.price !== undefined && body.price !== null && body.price !== ''
@@ -304,6 +318,11 @@ async function _PATCH(req: Request) {
   }
   // Alias handling
   if ('active' in body) updates.is_active = !!body.active;
+
+  // Image URL format guard — reject non-image extensions on edit too
+  if (updates.image_url && typeof updates.image_url === 'string' && !isAllowedImageUrl(updates.image_url)) {
+    return NextResponse.json({ error: 'image_url must point to a .jpg, .jpeg, .png, or .webp image' }, { status: 400 })
+  }
 
   const { error } = await supabase
     .from('pos_products')

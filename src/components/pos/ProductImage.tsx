@@ -24,12 +24,13 @@ export default function ProductImage({ name, category, size = 80, imageUrl }: Pr
   const key = category?.toLowerCase() || 'default';
   const [c1, c2] = CAT_COLORS[key] || CAT_COLORS.default;
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const pad = Math.round(size * 0.08);
 
   if (imageUrl) {
     return (
-      <div style={{ width: size, height: size, borderRadius: 10, overflow: 'hidden', flexShrink: 0, border: `1px solid ${c1}44` }}>
+      <div style={{ width: size, height: size, borderRadius: 10, overflow: 'hidden', flexShrink: 0, border: '1px solid ' + c1 + '44', background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: pad, boxSizing: 'border-box' as const }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imageUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img src={imageUrl} alt={name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
       </div>
     );
   }
@@ -37,12 +38,12 @@ export default function ProductImage({ name, category, size = 80, imageUrl }: Pr
   return (
     <div style={{
       width: size, height: size, borderRadius: 10,
-      background: `linear-gradient(135deg, ${c1}33, ${c2}66)`,
-      border: `1px solid ${c1}44`,
+      background: 'linear-gradient(135deg, ' + c1 + '33, ' + c2 + '66)',
+      border: '1px solid ' + c1 + '44',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       flexShrink: 0, position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ position: 'absolute', inset: 0, opacity: 0.15, background: `radial-gradient(circle at 30% 30%, ${c1}, transparent 60%)` }} />
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.15, background: 'radial-gradient(circle at 30% 30%, ' + c1 + ', transparent 60%)' }} />
       <span style={{
         fontFamily: 'var(--font-mono)',
         fontSize: size * 0.25,

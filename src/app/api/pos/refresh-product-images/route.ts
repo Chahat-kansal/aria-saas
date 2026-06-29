@@ -83,7 +83,7 @@ async function _POST(req: Request) {
       if (url) {
         await supabase
           .from('pos_products')
-          .update({ image_url: url, image_source: 'owner' })
+          .update({ image_url: url, image_source: 'unsplash' })
           .eq('id', id)
           .eq('business_id', bid)
         updated++

@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Papa from 'papaparse'
+import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
 
 const HEADER_MAP: Record<string, string> = {
   // Name
@@ -127,6 +128,7 @@ async function _POST(req: Request) {
   const errors: string[] = []
   let skipped = 0
   let imported = 0
+  const noImageNames: string[] = []
 
   const withBarcode: object[] = []
   const withSku: object[] = []
@@ -179,6 +181,9 @@ async function _POST(req: Request) {
     }
     if (product.price === undefined || product.price === null) product.price = 0
 
+    // Track products with no image so we can auto-fetch after upsert
+    if (!product.image_url) noImageNames.push(product.name as string)
+
     // Route to correct upsert bucket
     const barcode = product.barcode as string | undefined
     const sku = product.sku as string | undefined
@@ -224,6 +229,24 @@ async function _POST(req: Request) {
     } else {
       imported += chunk.length
     }
+  }
+
+  // Fire-and-forget auto-image-fetch for imported products that landed without an image.
+  // Mirrors the create-product path. Capped at 50 to avoid hammering the API on large imports.
+  if (imported > 0 && noImageNames.length > 0) {
+    try {
+      const { data: bizInfo } = await supabaseAdmin.from('businesses').select('industry').eq('id', bid).maybeSingle()
+      const industry = (bizInfo?.industry as string | null) ?? null
+      const { data: noImgProducts } = await supabaseAdmin
+        .from('pos_products')
+        .select('id, name')
+        .eq('business_id', bid)
+        .is('image_url', null)
+        .in('name', noImageNames.slice(0, 50))
+      for (const p of noImgProducts ?? []) {
+        autoFetchProductImage({ productId: p.id as string, productName: p.name as string, industry, businessId: bid })
+      }
+    } catch { /* non-critical; import already succeeded */ }
   }
 
   return NextResponse.json({
