@@ -5,11 +5,20 @@ import { withSentryConfig } from '@sentry/nextjs'
 const nextConfig = {
   // Prevent Node.js-only @huggingface/transformers modules from being bundled
   // in browser chunks (including the kokoro-js Web Worker bundle).
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'sharp$': false,
-      'onnxruntime-node$': false,
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Prevent Node.js-only modules from being bundled in browser chunks
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'sharp$': false,
+        'onnxruntime-node$': false,
+      }
+    } else {
+      // onnxruntime-node is also not needed server-side (we use WASM transforms client-side)
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'onnxruntime-node$': false,
+      }
     }
     return config
   },
@@ -30,20 +39,19 @@ const nextConfig = {
       '@vercel/sandbox',
       '@sparticuz/chromium',
       'puppeteer-core',
+      'sharp',
     ],
     serverSourceMaps: false,
     outputFileTracingExcludes: {
       '*': [
         './node_modules/puppeteer/**',
         './node_modules/chromium/**',
-        './node_modules/sharp/**',
         './node_modules/@aws-sdk/**',
         './node_modules/canvas/**',
         './node_modules/three/**/*',
         './node_modules/fluent-ffmpeg/**/*',
         './node_modules/@xenova/**/*',
         './node_modules/onnxruntime-node/**/*',
-        './node_modules/sharp/**/*',
       ],
     },
     outputFileTracingIncludes: {
@@ -111,7 +119,7 @@ const nextConfig = {
               // Media: blob for voice/audio, Bunny Stream + Cloudflare Stream for Go Live/reels
               "media-src 'self' blob: https://*.supabase.co https://nxfzippunqvqsvkmwtjv.supabase.co https://*.public.blob.vercel-storage.com https://*.b-cdn.net https://*.cloudflarestream.com https://videodelivery.net https://d8j0ntlcm91z4.cloudfront.net https://*.cloudfront.net https://v3.fal.media https://v3b.fal.media",
               // API connections — Bunny/CF Stream for Go Live; Upstash for Redis; external AI/payment APIs are server-side
-              "connect-src 'self' blob: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com https://*.b-cdn.net https://*.cloudflarestream.com https://videodelivery.net https://video.bunnycdn.com https://*.upstash.io https://api.higgsfield.ai https://queue.fal.run https://v3.fal.media https://v3b.fal.media https://huggingface.co https://*.huggingface.co https://*.hf.co",
+              "connect-src 'self' blob: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com https://*.b-cdn.net https://*.cloudflarestream.com https://videodelivery.net https://video.bunnycdn.com https://*.upstash.io https://api.higgsfield.ai https://queue.fal.run https://v3.fal.media https://v3b.fal.media https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.img.ly",
               // Frames: allow blob + data + any origin for srcdoc previews
               "frame-src 'self' blob: data: https: http:",
               // Workers

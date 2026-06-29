@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { MetricLabel } from '@/components/ui/MetricLabel'
@@ -26,6 +26,7 @@ export interface ProductFormData {
   is_active: boolean
   track_stock: boolean
   image_url: string
+  image_thumb_url: string
   is_age_restricted: boolean
   is_weight_based: boolean
   price_per_kg: number
@@ -39,7 +40,8 @@ const EMPTY: ProductFormData = {
   tax_code_id: null, additional_tax_code_ids: [],
   stock_quantity: 0, low_stock_threshold: 5, case_quantity: 1,
   is_active: true, track_stock: true,
-  image_url: '', is_age_restricted: false,
+  image_url: '', image_thumb_url: '',
+  is_age_restricted: false,
   is_weight_based: false, price_per_kg: 0,
 }
 
@@ -68,6 +70,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+type ImgState = 'idle' | 'removing-bg' | 'uploading' | 'error'
+
 export function ProductForm({ initial, mode, suppliers = [], categories = [] }: Props) {
   const router = useRouter()
   const [data, setData] = useState<ProductFormData>({ ...EMPTY, ...initial })
@@ -75,8 +79,19 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
   const [error, setError] = useState<string | null>(null)
   const [taxCodes, setTaxCodes] = useState<Array<{ id: string; code: string; name: string }>>([])
 
+  // Image picker state
+  const [imgFile, setImgFile] = useState<File | null>(null)
+  const [localPreview, setLocalPreview] = useState<string | null>(null)
+  const [removeBg, setRemoveBg] = useState(false)
+  const [imgState, setImgState] = useState<ImgState>('idle')
+  const [imgError, setImgError] = useState<string | null>(null)
+  const [credits, setCredits] = useState<{ free_remaining: number; paid_credits: number } | null>(null)
+  const [aiGenBusy, setAiGenBusy] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     fetch('/api/pos/tax-codes').then(r => r.json()).then(d => setTaxCodes(d.tax_codes ?? [])).catch(() => {})
+    fetch('/api/pos/image-credits').then(r => r.json()).then(d => setCredits(d)).catch(() => {})
   }, [])
 
   // Auto-detect container type from product name
@@ -93,6 +108,100 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
 
   const set = <K extends keyof ProductFormData>(k: K, v: ProductFormData[K]) =>
     setData(d => ({ ...d, [k]: v }))
+
+  // ─── Image helpers ─────────────────────────────────────────────────────
+  const processAndUpload = async (file: File | Blob, withBgRemoval: boolean) => {
+    setImgError(null)
+    let uploadFile: File | Blob = file
+
+    if (withBgRemoval) {
+      setImgState('removing-bg')
+      try {
+        const { removeBackground } = await import('@imgly/background-removal')
+        const blob = await removeBackground(file instanceof File ? file : new File([file], 'image.png', { type: 'image/png' }))
+        uploadFile = blob
+        if (localPreview) URL.revokeObjectURL(localPreview)
+        setLocalPreview(URL.createObjectURL(blob))
+      } catch {
+        setImgError('Background removal failed — uploading original')
+        uploadFile = file
+      }
+    }
+
+    setImgState('uploading')
+    try {
+      const fd = new FormData()
+      fd.append('file', uploadFile)
+      if (data.id) fd.append('productId', data.id)
+
+      const res = await fetch('/api/pos/products/upload-image', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(err.error ?? 'Upload failed')
+      }
+      const json = await res.json() as { image_url: string; image_thumb_url: string }
+      set('image_url', json.image_url)
+      set('image_thumb_url', json.image_thumb_url ?? '')
+      setImgState('idle')
+    } catch (e) {
+      setImgState('error')
+      setImgError((e as Error).message ?? 'Image upload failed')
+    }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (fileInputRef.current) fileInputRef.current.value = ''
+
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
+    if (!ALLOWED.includes(file.type)) { setImgError('Image must be JPEG, PNG, or WebP'); return }
+    if (file.size > 5 * 1024 * 1024) { setImgError('Image must be ≤5MB'); return }
+
+    setImgFile(file)
+    if (localPreview) URL.revokeObjectURL(localPreview)
+    setLocalPreview(URL.createObjectURL(file))
+    setImgError(null)
+    await processAndUpload(file, removeBg)
+  }
+
+  const handleRemoveBgToggle = async (checked: boolean) => {
+    setRemoveBg(checked)
+    if (imgFile) await processAndUpload(imgFile, checked)
+  }
+
+  const handleAiGen = async () => {
+    setAiGenBusy(true)
+    setImgError(null)
+    const catName = categories.find(c => c.id === data.category_id)?.name ?? ''
+    try {
+      const res = await fetch('/api/pos/products/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: data.id || undefined,
+          name: data.name || 'Product',
+          description: data.description || undefined,
+          categoryName: catName || undefined,
+          businessId: (initial as any)?.business_id ?? undefined,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(err.error ?? 'Generation failed')
+      }
+      const json = await res.json() as { image_url: string; image_thumb_url: string | null; remaining_credits: number }
+      set('image_url', json.image_url)
+      set('image_thumb_url', json.image_thumb_url ?? '')
+      setLocalPreview(null)
+      setImgFile(null)
+      if (credits) setCredits({ ...credits, paid_credits: json.remaining_credits })
+    } catch (e) {
+      setImgError((e as Error).message ?? 'AI generation failed')
+    }
+    setAiGenBusy(false)
+  }
+  // ─── End image helpers ─────────────────────────────────────────────────
 
   const save = async () => {
     if (!data.name.trim()) { setError('Product name is required'); return }
@@ -118,21 +227,22 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
         is_active: data.is_active,
         track_stock: data.track_stock,
         image_url: data.image_url || null,
+        image_thumb_url: data.image_thumb_url || null,
         is_age_restricted: data.is_age_restricted,
         is_weight_based: data.is_weight_based,
         price_per_kg: data.is_weight_based ? data.price_per_kg : null,
       }
 
-      const url = mode === 'create' ? '/api/pos/products' : `/api/pos/products/${data.id}`
+      const url = mode === 'create' ? '/api/pos/products' : '/api/pos/products/' + data.id
       const method = mode === 'create' ? 'POST' : 'PATCH'
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(err.error ?? `Save failed (${res.status})`)
+        throw new Error(err.error ?? 'Save failed (' + res.status + ')')
       }
       const result = await res.json() as { product?: { id: string } }
       if (mode === 'create') {
-        router.push(`/pos/products/${result.product?.id ?? ''}/edit`)
+        router.push('/pos/products/' + (result.product?.id ?? '') + '/edit')
       } else {
         router.push('/pos/products')
       }
@@ -141,6 +251,11 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
       setSaving(false)
     }
   }
+
+  const previewSrc = localPreview || data.image_url || null
+  const imgBusy = imgState === 'uploading' || imgState === 'removing-bg' || aiGenBusy
+  const canAiGen = !!data.name.trim() && (credits?.paid_credits ?? 0) > 0 && !imgBusy
+  const creditLabel = credits === null ? '' : '(' + credits.paid_credits + ' credits)'
 
   return (
     <div style={{ maxWidth: 840, margin: '0 auto', padding: '28px 24px', fontFamily: "'Manrope',sans-serif" }}>
@@ -157,6 +272,94 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
           {error}
         </div>
       )}
+
+      {/* Image picker */}
+      <GlassPanel elevated style={{ padding: 20, marginBottom: 14 }}>
+        <MetricLabel>Product image</MetricLabel>
+        <div style={{ marginTop: 14, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          {/* Preview */}
+          <div style={{ width: 100, height: 100, borderRadius: 10, background: '#f4f4f5', border: '1px solid var(--divider)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+            {imgBusy && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(244,244,245,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, zIndex: 1 }}>
+                {imgState === 'removing-bg' ? 'Removing\nBG...' : aiGenBusy ? 'Generating...' : 'Uploading...'}
+              </div>
+            )}
+            {previewSrc ? (
+              <img src={previewSrc} alt="Product" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+            ) : (
+              <span style={{ fontSize: 36, color: '#c4c4c8' }}>{'☕'}</span>
+            )}
+          </div>
+
+          {/* Controls */}
+          <div style={{ flex: 1 }}>
+            {/* File picker button */}
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--divider)', cursor: imgBusy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 10, opacity: imgBusy ? 0.6 : 1 }}>
+              {'📷 Choose photo'}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={handleFileSelect}
+                disabled={imgBusy}
+              />
+            </label>
+
+            {/* BG removal toggle — shown when a file has been selected */}
+            {imgFile && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: imgBusy ? 'wait' : 'pointer', marginBottom: 8, color: 'var(--text-primary)' }}>
+                <input
+                  type="checkbox"
+                  checked={removeBg}
+                  disabled={imgBusy}
+                  onChange={e => handleRemoveBgToggle(e.target.checked)}
+                />
+                {'Remove background (free, in-browser)'}
+              </label>
+            )}
+
+            {/* AI gen button — shown when no image uploaded yet */}
+            {!data.image_url && (
+              <div style={{ marginBottom: 8 }}>
+                <button
+                  onClick={handleAiGen}
+                  disabled={!canAiGen}
+                  title={credits?.paid_credits === 0 ? 'No AI credits — purchase credits to generate' : ''}
+                  style={{ padding: '7px 14px', borderRadius: 8, background: canAiGen ? 'var(--gradient-aria)' : 'var(--bg-card)', border: canAiGen ? 'none' : '1px solid var(--divider)', color: canAiGen ? '#fff' : 'var(--text-tertiary)', cursor: canAiGen ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', opacity: aiGenBusy ? 0.6 : 1 }}
+                >
+                  {'✨ Generate with AI ' + creditLabel}
+                </button>
+                {credits?.paid_credits === 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 8 }}>{'No credits — add more in Settings'}</span>
+                )}
+              </div>
+            )}
+
+            {/* Status / error */}
+            {imgState !== 'idle' && !imgError && (
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {imgState === 'uploading' && '⬆ Uploading...'}
+                {imgState === 'removing-bg' && '✂ Removing background...'}
+                {imgState === 'error' && '⚠ Upload failed'}
+              </div>
+            )}
+            {imgError && (
+              <div style={{ fontSize: 12, color: 'var(--destructive)', marginTop: 4 }}>{imgError}</div>
+            )}
+
+            {/* Clear image */}
+            {data.image_url && !imgBusy && (
+              <button
+                onClick={() => { set('image_url', ''); set('image_thumb_url', ''); setLocalPreview(null); setImgFile(null); setRemoveBg(false); setImgState('idle'); setImgError(null) }}
+                style={{ fontSize: 11, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 6, display: 'block' }}
+              >
+                {'✕ Remove image'}
+              </button>
+            )}
+          </div>
+        </div>
+      </GlassPanel>
 
       {/* Basic info */}
       <GlassPanel elevated style={{ padding: 20, marginBottom: 14 }}>
@@ -176,7 +379,7 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Category">
               <select value={data.category_id} onChange={e => set('category_id', e.target.value)} style={iS}>
-                <option value="">— None —</option>
+                <option value="">{'— None —'}</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
@@ -219,8 +422,8 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
         <div style={{ marginTop: 12 }}>
           <Field label="Tax code">
             <select value={data.tax_code_id ?? ''} onChange={e => set('tax_code_id', e.target.value || null)} style={iS}>
-              <option value="">— Auto (from tax rate) —</option>
-              {taxCodes.map(tc => <option key={tc.id} value={tc.id}>{tc.code} — {tc.name}</option>)}
+              <option value="">{'— Auto (from tax rate) —'}</option>
+              {taxCodes.map(tc => <option key={tc.id} value={tc.id}>{tc.code} {' — '} {tc.name}</option>)}
             </select>
           </Field>
         </div>
@@ -234,7 +437,6 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
             <input type="checkbox" checked={data.track_stock} onChange={e => set('track_stock', e.target.checked)} />
             Track inventory levels for this product
           </label>
-          {/* Weight-based pricing toggle */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={data.is_weight_based} onChange={e => {
               set('is_weight_based', e.target.checked)
@@ -253,7 +455,7 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
               </Field>
               <div style={{ paddingTop: 20, fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
                 Cashier will enter weight at checkout.<br />
-                Price = weight × $/kg
+                Price = weight {'×'} $/kg
               </div>
             </div>
           )}
@@ -283,11 +485,11 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
 
       {/* Supplier + status */}
       <GlassPanel elevated style={{ padding: 20, marginBottom: 24 }}>
-        <MetricLabel>Supplier & status</MetricLabel>
+        <MetricLabel>{'Supplier & status'}</MetricLabel>
         <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Supplier">
             <select value={data.supplier_id} onChange={e => set('supplier_id', e.target.value)} style={iS}>
-              <option value="">— None —</option>
+              <option value="">{'— None —'}</option>
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>

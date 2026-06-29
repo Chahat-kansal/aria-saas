@@ -273,7 +273,7 @@ async function _PATCH(req: NextRequest, { params }: Params) {
     'costing_method','purchase_uom','purchase_uom_qty','sell_uom','source',
     'loyalty_earn_rate','loyalty_points_override','reorder_point','reorder_qty',
     'featured','sort_order','serial_tracked','quality_hold','stocktake_frozen',
-    'is_weight_based','price_per_kg',
+    'is_weight_based','price_per_kg','image_thumb_url',
   ]
   const LEGACY_UUID_COLS = new Set(['category_id', 'supplier_id', 'brand_id', 'family_id'])
   const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() }

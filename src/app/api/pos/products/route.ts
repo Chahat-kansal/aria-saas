@@ -184,6 +184,7 @@ async function _POST(req: Request) {
     is_age_restricted: !!body.is_age_restricted,
     gst_exempt: !!body.gst_exempt,
     image_url: body.image_url || null,
+    image_thumb_url: body.image_thumb_url || null,
     image_source: body.image_source || (body.image_url ? 'owner' : 'pending'),
     container_type: body.container_type || null,
     category_id: body.category_id || null,
