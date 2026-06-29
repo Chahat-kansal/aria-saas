@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react'
+import { useRouter } from 'next/navigation'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ type MenuCfg = {
 type Category = { id: string; name: string; color: string | null }
 type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; category_id: string | null; sort_order: number | null }
 type Theme = { bg: string; card: string; ink: string; accent: string; accentSoft: string; line: string; muted: string; fontCss: string; bgCss: string }
+type ExtractedItem = { _id: string; name: string; price: number; category: string; description: string; removed: boolean }
 
 interface Props {
   businessId: string
@@ -394,8 +396,12 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   const [imgBusy, setImgBusy] = useState(false)
   const [publishBusy, setPublishBusy] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
+  const [importStep, setImportStep] = useState<'idle' | 'analysing' | 'review' | 'creating'>('idle')
+  const [importItems, setImportItems] = useState<ExtractedItem[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const importFileRef = useRef<HTMLInputElement | null>(null)
+  const router = useRouter()
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -483,6 +489,104 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
     } finally {
       setPdfBusy(false)
     }
+  }
+
+  async function handleImportFile(file: File) {
+    setImportStep('analysing')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/pos/menu-extract', { method: 'POST', body: fd })
+      const data = await res.json() as { items?: ExtractedItem[]; error?: string }
+      if (!res.ok || data.error) {
+        setImportStep('idle')
+        showToast(data.error ?? 'Menu extraction failed — try a clearer photo.')
+        return
+      }
+      setImportItems(data.items ?? [])
+      setImportStep('review')
+    } catch {
+      setImportStep('idle')
+      showToast('Network error — check your connection and try again.')
+    }
+  }
+
+  function updateImportItem(id: string, patch: Partial<ExtractedItem>) {
+    setImportItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it))
+  }
+
+  async function handleApproveImport() {
+    setImportStep('creating')
+    const active = importItems.filter(it => !it.removed && it.name.trim().length > 0 && it.price > 0)
+
+    // Build category name→id map from existing categories
+    const catMap = new Map<string, string>(initialCats.map(c => [c.name.toLowerCase(), c.id]))
+
+    // Track names already in catalog (dedupe: name + category_id)
+    const existingKeys = new Set(
+      initialProducts.map(p => p.name.trim().toLowerCase() + '|' + (p.category_id ?? ''))
+    )
+
+    let created = 0
+    let skipped = 0
+    let nextSort = initialProducts.length
+
+    for (const item of active) {
+      const catKey = item.category.trim().toLowerCase()
+
+      // Create category if it doesn't exist yet
+      if (!catMap.has(catKey)) {
+        try {
+          const catRes = await fetch('/api/pos/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: item.category.trim(), is_active: true }),
+          })
+          if (catRes.ok) {
+            const catData = await catRes.json() as { category?: { id: string } }
+            if (catData.category?.id) catMap.set(catKey, catData.category.id)
+          }
+        } catch { /* non-fatal — product will be created without category */ }
+      }
+
+      const catId = catMap.get(catKey) ?? null
+      const dedupeKey = item.name.trim().toLowerCase() + '|' + (catId ?? '')
+
+      if (existingKeys.has(dedupeKey)) {
+        skipped++
+        continue
+      }
+      existingKeys.add(dedupeKey)
+
+      // Create via the existing products route (dollars, is_active=true)
+      try {
+        const prodRes = await fetch('/api/pos/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name:         item.name.trim(),
+            price:        item.price,
+            description:  item.description.trim() || null,
+            category_id:  catId,
+            is_active:    true,
+            sort_order:   nextSort++,
+            image_source: 'pending',
+          }),
+        })
+        if (prodRes.ok) created++
+      } catch { /* non-fatal */ }
+    }
+
+    setImportStep('idle')
+    setImportItems([])
+    const msg = created > 0
+      ? '✓ ' + created + ' product' + (created !== 1 ? 's' : '') + ' added' +
+        (skipped > 0 ? ' · ' + skipped + ' duplicate' + (skipped !== 1 ? 's' : '') + ' skipped' : '')
+      : skipped > 0
+        ? 'All items already exist in your catalog.'
+        : 'No items were added.'
+    showToast(msg)
+    if (created > 0) router.refresh()
   }
 
   function showToast(msg: string) {
@@ -593,6 +697,22 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
               Live from your POS · {initialProducts.length} products
             </div>
           </div>
+          <button
+            onClick={() => importFileRef.current?.click()}
+            title="Upload a photo of your existing menu — AI extracts items for review"
+            style={{ padding: '5px 9px', borderRadius: 7, border: '1.5px solid ' + C.border, background: C.card, color: C.ink, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+          >⬆ Import</button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={e => {
+              const f = e.target.files?.[0]
+              if (f) { void handleImportFile(f) }
+              e.target.value = ''
+            }}
+          />
         </div>
         {orderedCats.map(cat => {
           const catProds = initialProducts.filter(p => p.category_id === cat.id)
@@ -656,6 +776,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   ]
 
   const saveLabel = saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : '•'
+  const activeImportCount = importItems.filter(it => !it.removed).length
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -810,6 +931,120 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                 {renderDesignPanelContent(sheetContent)}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Import: analysing overlay */}
+      {importStep === 'analysing' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' as const, gap: 14 }}>
+          <div style={{ fontSize: 36 }}>🔍</div>
+          <div style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Analysing your menu…</div>
+          <div style={{ color: '#a1a1aa', fontSize: 12 }}>AI is reading item names and prices</div>
+        </div>
+      )}
+
+      {/* Import: creating overlay */}
+      {importStep === 'creating' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' as const, gap: 14 }}>
+          <div style={{ fontSize: 36 }}>✨</div>
+          <div style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Creating products…</div>
+          <div style={{ color: '#a1a1aa', fontSize: 12 }}>Adding items to your catalog</div>
+        </div>
+      )}
+
+      {/* Import: review modal — owner verifies before any products are created */}
+      {importStep === 'review' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: '18px 18px 0 0', width: '100%', maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column' as const, boxShadow: '0 -8px 40px rgba(0,0,0,0.3)' }}>
+
+            {/* Modal header */}
+            <div style={{ padding: '16px 20px 10px', borderBottom: '1px solid #e4e4e7', flexShrink: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#18181b' }}>Review extracted items</div>
+              <div style={{ fontSize: 11, color: '#d97706', marginTop: 3, fontWeight: 600 }}>
+                ⚠ AI may misread prices — verify every price before adding
+              </div>
+              <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2 }}>
+                {activeImportCount + ' item' + (activeImportCount !== 1 ? 's' : '') + ' across ' + new Set(importItems.filter(it => !it.removed).map(it => it.category)).size + ' section' + (new Set(importItems.filter(it => !it.removed).map(it => it.category)).size !== 1 ? 's' : '') + ' will be added to your products'}
+              </div>
+            </div>
+
+            {/* Grouped item rows */}
+            <div style={{ overflowY: 'auto' as const, flex: 1 }}>
+              {Object.entries(
+                importItems.reduce((acc: Record<string, ExtractedItem[]>, item) => {
+                  const cat = item.category || 'General'
+                  if (!acc[cat]) acc[cat] = []
+                  acc[cat].push(item)
+                  return acc
+                }, {})
+              ).map(([cat, catItems]) => (
+                <div key={cat}>
+                  <div style={{ padding: '7px 20px', background: '#f4f4f5', fontSize: 10, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' as const, letterSpacing: '0.8px', borderBottom: '1px solid #e4e4e7', borderTop: '1px solid #e4e4e7' }}>{cat}</div>
+                  {(catItems as ExtractedItem[]).map(item => (
+                    <div key={item._id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: '1px solid #f4f4f5', opacity: item.removed ? 0.4 : 1, background: item.removed ? '#fafafa' : '#fff' }}>
+                      {/* Remove toggle */}
+                      <button
+                        onClick={() => updateImportItem(item._id, { removed: !item.removed })}
+                        title={item.removed ? 'Restore' : 'Remove this item'}
+                        style={{ width: 22, height: 22, borderRadius: 5, border: '1.5px solid ' + (item.removed ? '#e4e4e7' : '#fca5a5'), background: item.removed ? '#f4f4f5' : '#fee2e2', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: item.removed ? '#a1a1aa' : '#dc2626' }}
+                      >{item.removed ? '+' : '✕'}</button>
+
+                      {/* Name + description */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <input
+                          value={item.name}
+                          onChange={e => updateImportItem(item._id, { name: e.target.value })}
+                          style={{ width: '100%', fontSize: 12, fontWeight: 600, color: '#18181b', border: 'none', outline: 'none', background: 'transparent', padding: 0, marginBottom: 1 }}
+                          placeholder="Item name"
+                        />
+                        <input
+                          value={item.description}
+                          onChange={e => updateImportItem(item._id, { description: e.target.value })}
+                          style={{ width: '100%', fontSize: 10.5, color: '#71717a', border: 'none', outline: 'none', background: 'transparent', padding: 0 }}
+                          placeholder="Description (optional)"
+                        />
+                      </div>
+
+                      {/* Category (editable) */}
+                      <input
+                        value={item.category}
+                        onChange={e => updateImportItem(item._id, { category: e.target.value })}
+                        style={{ width: 78, fontSize: 9.5, color: '#71717a', border: '1.5px solid #e4e4e7', borderRadius: 20, padding: '2px 7px', outline: 'none', background: '#f4f4f5', textAlign: 'center' as const }}
+                      />
+
+                      {/* Price (owner verifies) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, color: '#71717a' }}>$</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={item.price}
+                          onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) updateImportItem(item._id, { price: v }) }}
+                          style={{ width: 58, fontSize: 12, fontWeight: 700, color: '#18181b', border: '1.5px solid #e4e4e7', borderRadius: 6, padding: '3px 5px', outline: 'none', textAlign: 'right' as const }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #e4e4e7', display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button
+                onClick={() => { setImportStep('idle'); setImportItems([]) }}
+                style={{ flex: 1, padding: 11, borderRadius: 10, border: '1.5px solid #e4e4e7', background: '#fff', color: '#18181b', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >Cancel</button>
+              <button
+                onClick={() => { void handleApproveImport() }}
+                disabled={activeImportCount === 0}
+                style={{ flex: 2, padding: 11, borderRadius: 10, border: 'none', background: activeImportCount === 0 ? '#e4e4e7' : C.accent, color: activeImportCount === 0 ? '#a1a1aa' : '#fff', fontSize: 13, fontWeight: 700, cursor: activeImportCount === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                {'Add ' + activeImportCount + ' item' + (activeImportCount !== 1 ? 's' : '') + ' to products →'}
+              </button>
+            </div>
           </div>
         </div>
       )}
