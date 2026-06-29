@@ -88,7 +88,7 @@ async function _POST(req: Request, { params }: Params) {
   const acting = await getActingStaff(bid)
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { batch_id?: string; alert_id?: string; action?: 'waste' | 'markdown' | 'acknowledge_markdown' }
+  const body = await req.json().catch(() => ({})) as { batch_id?: string; alert_id?: string; action?: 'waste' | 'markdown' | 'acknowledge_markdown'; qty?: number }
   if (!body.action || !['waste', 'markdown', 'acknowledge_markdown'].includes(body.action)) return NextResponse.json({ error: 'valid action required' }, { status: 400 })
 
   // ── ACKNOWLEDGE MARKDOWN: dismiss the alert flag (owner has actioned it) ──
@@ -121,18 +121,20 @@ async function _POST(req: Request, { params }: Params) {
     return NextResponse.json({ ok: true, action: 'markdown', alert_id: alert?.id ?? null, stock_changed: false })
   }
 
-  // ── WASTE: atomically claim the batch (zero remaining) then run the canonical waste path ──
-  const claimQty = Number(batch.quantity_remaining) || 0
+  // ── WASTE: atomically claim qty (partial or full) then run the canonical waste path ──
+  const fullQty = Number(batch.quantity_remaining) || 0
+  const wasteQty = (body.qty != null && Number(body.qty) > 0 && Number(body.qty) <= fullQty) ? Number(body.qty) : fullQty
+  const newRemaining = fullQty - wasteQty
   const { data: claimed } = await supabaseAdmin.from('pos_product_batches')
-    .update({ quantity_remaining: 0 }).eq('id', batch.id).eq('business_id', bid).gt('quantity_remaining', 0)
+    .update({ quantity_remaining: newRemaining }).eq('id', batch.id).eq('business_id', bid).gte('quantity_remaining', wasteQty)
     .select('id').maybeSingle()
   if (!claimed) return NextResponse.json({ ok: true, action: 'waste', idempotent: true, stock_changed: false })
 
   const res = await logWaste(supabaseAdmin, {
     businessId: bid, outletIdIn: batch.outlet_id as string | null, productId: prodId, productName,
-    quantity: claimQty, reason: 'expiry', staffId: acting.staff_id, staffName: acting.staff_name,
+    quantity: wasteQty, reason: 'expiry', staffId: acting.staff_id, staffName: acting.staff_name,
   })
-  return NextResponse.json({ ok: true, action: 'waste', wasted: claimQty, new_on_hand: res.new_on_hand, waste_id: res.waste_id, stock_changed: true })
+  return NextResponse.json({ ok: true, action: 'waste', wasted: wasteQty, new_on_hand: res.new_on_hand, waste_id: res.waste_id, stock_changed: true })
 }
 
 export const GET = withErrorCapture('inventory/app/expiring:get', _GET)

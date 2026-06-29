@@ -92,6 +92,7 @@ export default function InventoryStaffApp() {
   const slug = (useParams()?.slug as string) ?? ''
   const [boot, setBoot] = useState<Boot | null>(null)
   const [bootErr, setBootErr] = useState(false)
+  const [bootNotFound, setBootNotFound] = useState(false)
   const [stage, setStage] = useState<'loading' | 'pick' | 'pin' | 'app'>('loading')
   const [selStaff, setSelStaff] = useState<Staff | null>(null)
   const [pin, setPin] = useState('')
@@ -197,11 +198,13 @@ export default function InventoryStaffApp() {
   const [transferState, setTransferState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
   const [transferBusy, setTransferBusy] = useState<string | null>(null)
   const [transferMsg, setTransferMsg] = useState('')
+  const [transferConfirm, setTransferConfirm] = useState<{ id: string; action: string } | null>(null)
   // Expiring screen state
   const [expData, setExpData] = useState<ExpData | null>(null)
   const [expState, setExpState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
   const [expBusy, setExpBusy] = useState<string | null>(null)
   const [expMsg, setExpMsg] = useState('')
+  const [expWasteTarget, setExpWasteTarget] = useState<{ id: string; max: number; qty: number } | null>(null)
   // INV-4 — stocktake / cycle / perpetual counting
   interface CycleItem { product_id: string; name: string; abc_tier: 'A' | 'B' | 'C'; expected_qty: number; last_counted_at: string | null; days_since: number | null; due_score: number }
   interface StLine { product_id: string; product_name: string | null; expected_qty: number; counted_qty: number | null; variance_qty: number | null; variance_cents: number | null }
@@ -239,6 +242,8 @@ export default function InventoryStaffApp() {
   const [handoverData, setHandoverData] = useState<HandoverData | null>(null)
   const [showHandover, setShowHandover] = useState(false)
   const [completingTask, setCompletingTask] = useState<string | null>(null)
+  const [taskUndoId, setTaskUndoId] = useState<string | null>(null)
+  const taskUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // INV-7 — fresh / production
   interface Recipe { id: string; name: string; serves: number; cost: number | null; ingredients: number; linked: number }
   interface MarkdownProp { product_id: string; name: string; expiry_date: string; days_left: number; current_price: number; discount_pct: number; marked_price: number; rule_name: string }
@@ -279,6 +284,7 @@ export default function InventoryStaffApp() {
   const [adjustFromCache, setAdjustFromCache] = useState(false)
   const [ticketFromCache, setTicketFromCache] = useState(false)
   const [recallFromCache, setRecallFromCache] = useState(false)
+  const [homeSearch, setHomeSearch] = useState('')
 
   // PWA: register SW + inject per-slug manifest link + fonts.
   useEffect(() => {
@@ -735,11 +741,11 @@ export default function InventoryStaffApp() {
     } catch { setExpState('error') }
   }, [slug, outletId])
   useEffect(() => { if (stage === 'app' && tab === 'expiring' && !expData) loadExpiring() }, [stage, tab, expData, loadExpiring])
-  async function expiringAction(batchId: string, action: 'waste' | 'markdown') {
+  async function expiringAction(batchId: string, action: 'waste' | 'markdown', qty?: number) {
     if (!online) { setExpMsg("You're offline — reconnect to action expiring stock."); return }
     setExpBusy(batchId); setExpMsg('')
     try {
-      const r = await fetch('/api/inventory/app/' + slug + '/expiring', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch_id: batchId, action }) })
+      const r = await fetch('/api/inventory/app/' + slug + '/expiring', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch_id: batchId, action, ...(qty != null ? { qty } : {}) }) })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d.ok) { setExpMsg(action === 'waste' ? (d.stock_changed ? '✓ Wasted ' + d.wasted + ' — stock written off.' : 'Already cleared.') : '✓ Markdown flagged for the owner.'); setExpData(null); loadExpiring(); loadHome(outletId) }
       else setExpMsg(d.error ? "Couldn't " + action + ': ' + d.error : 'Could not ' + action + '.')
@@ -889,6 +895,11 @@ export default function InventoryStaffApp() {
       if (r.ok) { setTasksData(td => td ? { ...td, tasks: td.tasks.map(t => t.id === taskId ? { ...t, status: 'done', completed_by: acting?.id ?? null } : t) } : td); loadPulse(outletId) }
     } catch { /* ignore */ }
     setCompletingTask(null)
+  }
+  function undoTaskComplete(taskId: string) {
+    if (taskUndoTimer.current) { clearTimeout(taskUndoTimer.current); taskUndoTimer.current = null }
+    setTaskUndoId(null)
+    setTasksData(td => td ? { ...td, tasks: td.tasks.map(t => t.id === taskId ? { ...t, status: 'open', completed_by: null } : t) } : td)
   }
 
   // ── INV-7 fresh / production ──
@@ -1042,6 +1053,7 @@ export default function InventoryStaffApp() {
     ;(async () => {
       try {
         const r = await fetch(`/api/inventory/app/${slug}`)
+        if (r.status === 404) { setBootNotFound(true); setBootErr(true); setStage('pick'); return }
         if (!r.ok) { setBootErr(true); setStage('pick'); return }
         const b = await r.json() as Boot
         setBoot(b)
@@ -1093,12 +1105,19 @@ export default function InventoryStaffApp() {
   const offlineToastEl = offlineToast ? (
     <div style={{ position: 'absolute', left: 16, right: 16, bottom: 92, zIndex: 50, background: P.ink, color: '#fff', borderRadius: 14, padding: '11px 14px', fontSize: 12.5, fontWeight: 700, textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,.25)' }}>{offlineToast}</div>
   ) : null
+  const undoTaskToast = taskUndoId ? (
+    <div style={{ position: 'absolute', left: 16, right: 16, bottom: 92, zIndex: 52, background: P.ink, color: '#fff', borderRadius: 14, padding: '11px 14px', fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(0,0,0,.25)' }}>
+      <span>Marked done</span>
+      <button onClick={() => undoTaskComplete(taskUndoId)} style={{ background: P.lime, color: P.ink, border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: BODY }}>Undo</button>
+    </div>
+  ) : null
   const shell = (children: React.ReactNode) => (
     <div style={{ minHeight: '100dvh', background: '#cfd2cc', display: 'flex', justifyContent: 'center', fontFamily: BODY, color: P.ink }}>
-      <div style={{ width: '100%', maxWidth: 440, background: P.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 0 60px rgba(20,30,20,.18)' }}>{offlineBanner}{children}{offlineToastEl}</div>
+      <div style={{ width: '100%', maxWidth: 440, background: P.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 0 60px rgba(20,30,20,.18)' }}>{offlineBanner}{children}{offlineToastEl}{undoTaskToast}</div>
     </div>
   )
   const statusbar = <PipelStatusBar right={`${boot?.business.name ?? 'Sip'} · PWA`} />
+  const neutralStatusbar = <PipelStatusBar right="Aria Inventory · PWA" />
   const header = (mini?: boolean, title?: string, subtitle?: string) => (
     <>
       <PipelTopBar word={(boot?.business.name ?? 'sip').toLowerCase()} crest={((boot?.business.name ?? 'S')[0] ?? 'S').toUpperCase()} acting={acting} onSwitch={logout} />
@@ -1109,33 +1128,67 @@ export default function InventoryStaffApp() {
   const tabbar = <PipelBottomNav active={tab} onHome={() => setTab('home')} onTasks={() => setTab('tasks')} onScan={() => setTab('scan')} onReports={() => setTab('reports')} onReview={() => setTab('review')} />
 
   // ── LOGIN: staff picker ──
-  if (stage === 'loading') return shell(<>{statusbar}{header()}<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13 }}>Loading…</div></>)
+  if (stage === 'loading') return shell(<>{neutralStatusbar}<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13 }}>Loading…</div></>)
 
-  if (stage === 'pick') return shell(
-    <>
-      {statusbar}{header()}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
-        {bootErr && <p style={{ fontSize: 13, color: T.red, marginBottom: 12 }}>Couldn&apos;t load this store.</p>}
-        <h2 style={{ fontSize: 16, fontWeight: 700, margin: '4px 2px 14px' }}>Who&apos;s working?</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {(boot?.staff ?? []).map((s, i) => (
-            <button key={s.id}
-              onClick={() => { if (!s.has_pin) return; setSelStaff(s); setPin(''); setPinErr(''); setStage('pin') }}
-              style={{ background: s.has_pin ? '#fff' : P.soft, border: '1.5px solid ' + (s.has_pin ? T.line : P.muted), borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: s.has_pin ? 'pointer' : 'not-allowed', fontFamily: BODY, boxShadow: s.has_pin ? '0 1px 3px rgba(20,30,50,.03)' : 'none', opacity: s.has_pin ? 1 : 0.6 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: avColor(s, i), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18 }}>{initials(s.name)}</div>
-              <div style={{ textAlign: 'center' }}>
-                <b style={{ fontSize: 13.5, fontWeight: 600, display: 'block' }}>{s.name}</b>
-                {s.has_pin
-                  ? <span style={{ fontSize: 11, color: T.muted, textTransform: 'capitalize' }}>{s.role}</span>
-                  : <span style={{ fontSize: 10.5, color: T.red, fontWeight: 600 }}>No PIN — ask manager</span>}
-              </div>
-            </button>
-          ))}
-          {(!boot || boot.staff.length === 0) && <p style={{ gridColumn: '1/-1', fontSize: 13, color: T.muted }}>No staff set up yet.</p>}
+  if (stage === 'pick') {
+    // State A — boot failed: neutral branding, no staff picker, honest single message
+    if (bootErr && !boot) return shell(
+      <>
+        {neutralStatusbar}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', textAlign: 'center' }}>
+          {bootNotFound ? (
+            <>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
+              <p style={{ fontSize: 17, fontWeight: 700, color: P.ink, margin: '0 0 8px' }}>Store not found</p>
+              <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.65 }}>This URL doesn&apos;t match any store in Aria. Check your link — ask your manager for the correct address.</p>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+              <p style={{ fontSize: 17, fontWeight: 700, color: P.ink, margin: '0 0 8px' }}>Couldn&apos;t load this store</p>
+              <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.65, marginBottom: 22 }}>Something went wrong. Check your connection and try again.</p>
+              <button onClick={() => window.location.reload()} style={{ background: P.ink, color: P.lime, border: 'none', borderRadius: 12, padding: '12px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: BODY }}>Try again</button>
+            </>
+          )}
         </div>
-      </div>
-    </>
-  )
+      </>
+    )
+    // State B — store confirmed, zero staff: actionable guidance, no error tone
+    if (boot && boot.staff.length === 0) return shell(
+      <>
+        {statusbar}{header()}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>👋</div>
+          <p style={{ fontSize: 17, fontWeight: 700, color: P.ink, margin: '0 0 8px' }}>No staff added yet</p>
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.65 }}>Ask your owner to add staff members in the Aria dashboard — then come back here to log in.</p>
+        </div>
+      </>
+    )
+    // State C — normal: staff picker
+    return shell(
+      <>
+        {statusbar}{header()}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: '4px 2px 14px' }}>Who&apos;s working?</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {(boot?.staff ?? []).map((s, i) => (
+              <button key={s.id}
+                onClick={() => { if (!s.has_pin) return; setSelStaff(s); setPin(''); setPinErr(''); setStage('pin') }}
+                style={{ background: s.has_pin ? '#fff' : P.soft, border: '1.5px solid ' + (s.has_pin ? T.line : P.muted), borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: s.has_pin ? 'pointer' : 'not-allowed', fontFamily: BODY, boxShadow: s.has_pin ? '0 1px 3px rgba(20,30,50,.03)' : 'none', opacity: s.has_pin ? 1 : 0.6 }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: avColor(s, i), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18 }}>{initials(s.name)}</div>
+                <div style={{ textAlign: 'center' }}>
+                  <b style={{ fontSize: 13.5, fontWeight: 600, display: 'block' }}>{s.name}</b>
+                  {s.has_pin
+                    ? <span style={{ fontSize: 11, color: T.muted, textTransform: 'capitalize' }}>{s.role}</span>
+                    : <span style={{ fontSize: 10.5, color: T.red, fontWeight: 600 }}>No PIN — ask manager</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </>
+    )
+  }
 
   // ── LOGIN: PIN entry ──
   if (stage === 'pin' && selStaff) return shell(
@@ -1191,7 +1244,13 @@ export default function InventoryStaffApp() {
         <div onClick={() => {
           if (isDone) return
           if ((t.task_type === 'count' || t.task_type === 'cycle_count') && t.product_id) { setActiveId(t.id); setCountVal(t.expected ?? 0); setCountMsg(null) }
-          else completeTaskUi(t.id) // INV-6 — velocity/weather/expiring/receive complete here (attributed); count routes to the count card
+          else {
+            if (taskUndoTimer.current) { clearTimeout(taskUndoTimer.current); taskUndoTimer.current = null; if (taskUndoId) completeTaskUi(taskUndoId) }
+            setTasksData(td => td ? { ...td, tasks: td.tasks.map(t2 => t2.id === t.id ? { ...t2, status: 'done', completed_by: acting?.id ?? null } : t2) } : td)
+            setTaskUndoId(t.id)
+            const tid = t.id
+            taskUndoTimer.current = setTimeout(() => { setTaskUndoId(null); completeTaskUi(tid) }, 5000)
+          }
         }}
           style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${P.ink}`, background: isDone ? P.lime : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: completingTask === t.id ? 0.5 : 1 }}>
           {isDone && <svg width="14" height="14" fill="none" stroke={P.ink} strokeWidth={3} viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>}
@@ -2078,7 +2137,7 @@ export default function InventoryStaffApp() {
           ) : transferState === 'error' ? (
             <div style={{ padding: 24, borderRadius: 16, background: '#fff', border: `1px solid ${T.redSoft}`, textAlign: 'center' }}><p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Couldn&apos;t load transfers</p><button onClick={() => { setTransferData(null); loadTransfer() }} style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: P.lime, color: P.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: BODY }}>Try again</button></div>
           ) : transferState === 'empty' ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🔁</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>No transfers right now</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>Create a stock transfer between outlets from the dashboard. It walks through approve → send → receive here.</p></div>
+            <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 38, marginBottom: 10 }}>🔁</div><p style={{ fontSize: 18, fontFamily: DISPLAY, marginBottom: 6 }}>No transfers right now</p><p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>When your manager sets up a stock transfer in the dashboard, it will appear here for you to action — approve, send and receive.</p></div>
           ) : (
             <>
               {transferMsg && <p style={{ fontSize: 12.5, color: transferMsg.startsWith('✓') ? T.green : T.red, marginBottom: 12, background: transferMsg.startsWith('✓') ? T.sageSoft : T.redSoft, borderRadius: 10, padding: '10px 12px' }}>{transferMsg}</p>}
@@ -2099,7 +2158,17 @@ export default function InventoryStaffApp() {
                       </div>
                     ))}
                     {na ? (
-                      <button disabled={busy} onClick={() => transferAction(tr.id, na.action)} style={{ width: '100%', marginTop: 11, background: P.lime, color: P.ink, border: 0, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : na.label}</button>
+                      transferConfirm?.id === tr.id ? (
+                        <div style={{ marginTop: 11 }}>
+                          <div style={{ fontSize: 12.5, color: T.amber, fontWeight: 700, marginBottom: 8, lineHeight: 1.45 }}>{transferConfirm.action === 'send' ? 'Send these items? This removes stock from ' + tr.from_name + '.' : 'Mark as received at ' + tr.to_name + '? This adds stock to the destination.'}</div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button disabled={busy} onClick={() => { setTransferConfirm(null); transferAction(tr.id, na.action) }} style={{ flex: 1, background: P.lime, color: P.ink, border: 0, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Yes, {transferConfirm.action === 'send' ? 'send' : 'receive'}</button>
+                            <button onClick={() => setTransferConfirm(null)} style={{ flex: 1, background: '#fff', color: T.muted, border: '1.5px solid ' + T.line, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button disabled={busy} onClick={() => (na.action === 'send' || na.action === 'receive') ? setTransferConfirm({ id: tr.id, action: na.action }) : transferAction(tr.id, na.action)} style={{ width: '100%', marginTop: 11, background: P.lime, color: P.ink, border: 0, borderRadius: 12, padding: 12, fontFamily: BODY, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : na.label}</button>
+                      )
                     ) : (
                       <div style={{ width: '100%', marginTop: 11, background: T.sageSoft, color: T.green, borderRadius: 12, padding: 12, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>✓ Completed</div>
                     )}
@@ -2145,7 +2214,25 @@ export default function InventoryStaffApp() {
             {b.alert_id && <span style={{ fontSize: 11, fontWeight: 700, color: T.amber, background: T.amberSoft, borderRadius: 8, padding: '3px 8px' }}>Markdown flagged</span>}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-            {showWaste && <button disabled={busy} onClick={() => expiringAction(b.id, 'waste')} style={{ flex: 1, background: '#fff', color: T.red, border: '1.5px solid ' + T.redSoft, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Waste'}</button>}
+            {showWaste && (
+              expWasteTarget?.id === b.id ? (
+                <div style={{ flex: 1, background: '#fff', border: '1.5px solid ' + T.redSoft, borderRadius: 11, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 7 }}>Waste how many?</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+                    <button onClick={() => setExpWasteTarget(tw => tw ? { ...tw, qty: Math.max(1, tw.qty - 1) } : tw)} style={{ width: 30, height: 30, borderRadius: 7, border: '1.5px solid ' + T.line, background: '#fff', fontSize: 16, cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                    <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 800, fontSize: 15 }}>{expWasteTarget.qty}</span>
+                    <button onClick={() => setExpWasteTarget(tw => tw ? { ...tw, qty: Math.min(tw.max, tw.qty + 1) } : tw)} style={{ width: 30, height: 30, borderRadius: 7, border: '1.5px solid ' + T.line, background: '#fff', fontSize: 16, cursor: 'pointer', fontFamily: BODY, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    <span style={{ fontSize: 11, color: T.muted }}>of {expWasteTarget.max}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button disabled={busy} onClick={() => { const qty = expWasteTarget.qty; setExpWasteTarget(null); expiringAction(b.id, 'waste', qty) }} style={{ flex: 1, background: T.redSoft, color: T.red, border: '1.5px solid ' + T.red, borderRadius: 9, padding: '8px 4px', fontFamily: BODY, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Confirm waste'}</button>
+                    <button onClick={() => setExpWasteTarget(null)} style={{ flex: 1, background: '#fff', color: T.muted, border: '1.5px solid ' + T.line, borderRadius: 9, padding: '8px 4px', fontFamily: BODY, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button disabled={busy} onClick={() => setExpWasteTarget({ id: b.id, max: b.quantity_remaining, qty: b.quantity_remaining })} style={{ flex: 1, background: '#fff', color: T.red, border: '1.5px solid ' + T.redSoft, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Waste</button>
+              )
+            )}
             {b.alert_id ? (
               <button disabled={busy} onClick={() => acknowledgeExpiry(b.alert_id || '', b.id)} style={{ flex: 1, background: '#fff', color: T.green, border: '1.5px solid ' + T.sageSoft, borderRadius: 11, padding: '10px 6px', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Clear flag'}</button>
             ) : (
@@ -2421,7 +2508,7 @@ export default function InventoryStaffApp() {
                     </div>
                   ))}
                   {g.needs_supplier ? (
-                    <div style={{ fontSize: 11, color: P.amber, fontWeight: 700, marginTop: 11, lineHeight: 1.4 }}>⚑ Assign a supplier (in the dashboard) to draft a PO for these.</div>
+                    <div style={{ fontSize: 11, color: P.amber, fontWeight: 700, marginTop: 11, lineHeight: 1.4 }}>⚑ No supplier linked — your manager can assign one to enable ordering.</div>
                   ) : (
                     <div style={{ marginTop: 12 }}><PipelButton onClick={() => draftFromGroup(g)} disabled={buyBusy === g.supplier_id}>{buyBusy === g.supplier_id ? 'Drafting…' : `Draft PO · ${g.items.length} line${g.items.length === 1 ? '' : 's'}`}</PipelButton></div>
                   )}
@@ -2706,6 +2793,8 @@ export default function InventoryStaffApp() {
   if (home && (tb?.receive ?? 0) > 0) needs.push({ icon: 'truck', title: `${tb!.receive} deliver${tb!.receive === 1 ? 'y' : 'ies'} to receive`, detail: 'Log it against its PO', cta: 'Receive', onCta: () => routeTile('receive') })
   if (home && (home.mini_stats.tasks_open ?? 0) > 0) needs.push({ icon: 'count', tone: 'plain', title: `${home.mini_stats.tasks_open} task${home.mini_stats.tasks_open === 1 ? '' : 's'} to count`, detail: 'Aria built your list from real sales', cta: 'Count', onCta: () => setTab('tasks') })
   if (home && (tb?.expiring ?? 0) > 0) needs.push({ icon: 'clock', title: `${tb!.expiring} expiring soon`, detail: 'Clear or mark it down', cta: 'Review', onCta: () => routeTile('expiring') })
+  if (home && (tb?.order ?? 0) > 0) needs.push({ icon: 'shopping-cart', title: `${tb!.order} item${tb!.order === 1 ? '' : 's'} below reorder point`, detail: 'Check reorder suggestions and raise a PO', cta: 'Order', onCta: () => routeTile('order') })
+  if (home && isMgr && (home.mini_stats.to_review ?? 0) > 0) needs.push({ icon: 'review', title: `${home.mini_stats.to_review} variance${home.mini_stats.to_review === 1 ? '' : 's'} need review`, detail: 'Accept, dismiss or flag for investigation', cta: 'Review', onCta: () => setTab('review') })
 
   const costPct = vh && vh.at_retail != null && vh.at_cost != null && vh.at_retail > 0 ? Math.round((vh.at_cost / vh.at_retail) * 100) : 39
 
@@ -2720,6 +2809,22 @@ export default function InventoryStaffApp() {
             onChange={(v) => { setOutletId(v); loadHome(v) }}
           />
         )}
+
+        {/* HOME SEARCH — staff product search, jumps to scan detail (no owner analytics) */}
+        <div style={{ margin: '16px 16px 0', display: 'flex', gap: 8 }}>
+          <input
+            value={homeSearch}
+            onChange={e => setHomeSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && homeSearch.trim()) { setSearchInput(homeSearch); runScan(homeSearch, 'q'); setTab('scan') } }}
+            placeholder="Search products…"
+            style={{ flex: 1, border: '1.5px solid ' + P.ink, borderRadius: 14, padding: '11px 14px', fontSize: 14, fontFamily: BODY, background: P.bg, color: P.ink, outline: 'none' }}
+          />
+          <button
+            onClick={() => { if (homeSearch.trim()) { setSearchInput(homeSearch); runScan(homeSearch, 'q'); setTab('scan') } }}
+            style={{ width: 46, height: 46, borderRadius: 14, background: P.ink, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <PIcon name="search" size={20} stroke={P.lime} />
+          </button>
+        </div>
 
         {/* VALUE HERO */}
         {homeState === 'loading' ? (
@@ -2745,8 +2850,8 @@ export default function InventoryStaffApp() {
             marginTag={vh.margin_pct != null ? `${vh.margin_pct}% margin` : null}
             stats={[
               { n: home!.mini_stats.sold_today, k: 'sold today' },
-              { n: home!.mini_stats.tasks_open, k: 'tasks open', tone: home!.mini_stats.tasks_open > 0 ? 'warn' : undefined },
-              { n: home!.mini_stats.to_review, k: 'to review', tone: home!.mini_stats.to_review > 0 ? 'alert' : undefined },
+              { n: home!.mini_stats.tasks_open, k: 'tasks open', tone: home!.mini_stats.tasks_open > 0 ? 'warn' : undefined, onClick: home!.mini_stats.tasks_open > 0 ? () => setTab('tasks') : undefined },
+              { n: home!.mini_stats.to_review, k: 'to review', tone: home!.mini_stats.to_review > 0 ? 'alert' : undefined, onClick: (isMgr && home!.mini_stats.to_review > 0) ? () => setTab('review') : undefined },
             ]}
           />
         ) : vh ? (
@@ -2755,8 +2860,8 @@ export default function InventoryStaffApp() {
             <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 14 }}>{vh.products_total} products tracked</div>
             <div style={{ display: 'flex', gap: 9 }}>
               <PipelStat n={home!.mini_stats.sold_today} k="sold today" />
-              <PipelStat n={home!.mini_stats.tasks_open} k="tasks open" tone={home!.mini_stats.tasks_open > 0 ? 'warn' : undefined} />
-              <PipelStat n={home!.mini_stats.to_review} k="to review" tone={home!.mini_stats.to_review > 0 ? 'alert' : undefined} />
+              <PipelStat n={home!.mini_stats.tasks_open} k="tasks open" tone={home!.mini_stats.tasks_open > 0 ? 'warn' : undefined} onClick={home!.mini_stats.tasks_open > 0 ? () => setTab('tasks') : undefined} />
+              <PipelStat n={home!.mini_stats.to_review} k="to review" tone={home!.mini_stats.to_review > 0 ? 'alert' : undefined} onClick={(isMgr && home!.mini_stats.to_review > 0) ? () => setTab('review') : undefined} />
             </div>
           </div>
         ) : null}
