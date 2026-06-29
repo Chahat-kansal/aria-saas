@@ -393,6 +393,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   const [isMobile, setIsMobile] = useState(false)
   const [imgBusy, setImgBusy] = useState(false)
   const [publishBusy, setPublishBusy] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -460,6 +461,27 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
       showToast('✓ Published — your menu is live')
     } finally {
       setPublishBusy(false)
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setPdfBusy(true)
+    try {
+      const res = await fetch('/api/pos/menu-pdf')
+      if (!res.ok) throw new Error('PDF generation failed (' + res.status + ')')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'menu.pdf'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      showToast('PDF generation failed — try again.')
+    } finally {
+      setPdfBusy(false)
     }
   }
 
@@ -678,6 +700,15 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
           {/* Preview toolbar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.card, borderRadius: 10, padding: '6px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', width: '100%', maxWidth: 400, boxSizing: 'border-box' as const }}>
             <span style={{ fontSize: 10.5, color: C.muted, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flex: 1 }}>{menuUrl.replace('https://', '')}</span>
+            {outputMode === 'a4' && (
+              <button
+                onClick={() => { void handleDownloadPdf() }}
+                disabled={pdfBusy}
+                style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: C.accent, color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: pdfBusy ? 'wait' : 'pointer', opacity: pdfBusy ? 0.7 : 1, whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+              >
+                {pdfBusy ? 'Generating…' : '⬇ PDF'}
+              </button>
+            )}
           </div>
 
           {/* Phone frame */}
