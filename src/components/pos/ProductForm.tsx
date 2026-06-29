@@ -46,7 +46,7 @@ const EMPTY: ProductFormData = {
 }
 
 interface Props {
-  initial?: Partial<ProductFormData>
+  initial?: Partial<ProductFormData> & { business_id?: string }
   mode: 'create' | 'edit'
   suppliers?: { id: string; name: string }[]
   categories?: { id: string; name: string }[]
@@ -71,6 +71,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 type ImgState = 'idle' | 'removing-bg' | 'uploading' | 'error'
+type AiCredits = { free_remaining: number; free_limit: number; paid_credits: number }
 
 export function ProductForm({ initial, mode, suppliers = [], categories = [] }: Props) {
   const router = useRouter()
@@ -79,20 +80,33 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
   const [error, setError] = useState<string | null>(null)
   const [taxCodes, setTaxCodes] = useState<Array<{ id: string; code: string; name: string }>>([])
 
+  // business_id for image-credits + generate-image calls
+  const businessId = initial?.business_id ?? ''
+
   // Image picker state
   const [imgFile, setImgFile] = useState<File | null>(null)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [removeBg, setRemoveBg] = useState(false)
   const [imgState, setImgState] = useState<ImgState>('idle')
   const [imgError, setImgError] = useState<string | null>(null)
-  const [credits, setCredits] = useState<{ free_remaining: number; paid_credits: number } | null>(null)
+  const [credits, setCredits] = useState<AiCredits | null>(null)
   const [aiGenBusy, setAiGenBusy] = useState(false)
+  // Paid confirm flow
+  const [aiConfirming, setAiConfirming] = useState(false)
+  const [aiIdempotencyKey, setAiIdempotencyKey] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch('/api/pos/tax-codes').then(r => r.json()).then(d => setTaxCodes(d.tax_codes ?? [])).catch(() => {})
-    fetch('/api/pos/image-credits').then(r => r.json()).then(d => setCredits(d)).catch(() => {})
-  }, [])
+    if (businessId) {
+      fetch('/api/pos/image-credits?business_id=' + businessId)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d) setCredits({ free_remaining: d.free_remaining ?? 0, free_limit: d.free_limit ?? 5, paid_credits: d.paid_credits ?? 0 })
+        })
+        .catch(() => {})
+    }
+  }, [businessId])
 
   // Auto-detect container type from product name
   useEffect(() => {
@@ -109,7 +123,7 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
   const set = <K extends keyof ProductFormData>(k: K, v: ProductFormData[K]) =>
     setData(d => ({ ...d, [k]: v }))
 
-  // ─── Image helpers ─────────────────────────────────────────────────────
+  // ─── Image upload helpers ───────────────────────────────────────────────
   const processAndUpload = async (file: File | Blob, withBgRemoval: boolean) => {
     setImgError(null)
     let uploadFile: File | Blob = file
@@ -170,8 +184,26 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
     if (imgFile) await processAndUpload(imgFile, checked)
   }
 
-  const handleAiGen = async () => {
+  // ─── AI generation helpers ──────────────────────────────────────────────
+  // Compute free-vs-paid from server-fetched credits (mirroring server logic).
+  // 'free'  = free_remaining > 0 (Aria absorbs cost, no charge to owner)
+  // 'paid'  = free exhausted, paid_credits > 0 (owner charged $0.04/image)
+  // 'none'  = no credits of any kind
+  const aiGenMode: 'free' | 'paid' | 'none' = credits === null
+    ? 'none'
+    : credits.free_remaining > 0
+    ? 'free'
+    : credits.paid_credits > 0
+    ? 'paid'
+    : 'none'
+
+  const imgBusy = imgState === 'uploading' || imgState === 'removing-bg' || aiGenBusy
+  const canAiGen = !!data.name.trim() && aiGenMode !== 'none' && !imgBusy
+
+  // Core API call — only called after any required owner confirmation.
+  const executeAiGen = async (confirmedPaid: boolean, idempotencyKey: string) => {
     setAiGenBusy(true)
+    setAiConfirming(false)
     setImgError(null)
     const catName = categories.find(c => c.id === data.category_id)?.name ?? ''
     try {
@@ -183,25 +215,94 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
           name: data.name || 'Product',
           description: data.description || undefined,
           categoryName: catName || undefined,
-          businessId: (initial as any)?.business_id ?? undefined,
+          businessId: businessId || undefined,
+          confirmedPaid,
+          idempotencyKey: idempotencyKey || undefined,
         }),
       })
+
+      // Server says it's actually a paid gen but we didn't confirm it yet.
+      // This handles the race where free_remaining hit 0 between client fetch
+      // and API call. Show the paid confirm dialog — never silently charge.
+      if (res.status === 402) {
+        const json = await res.json() as { requiresConfirm?: boolean; cost?: number; remaining_paid?: number; error?: string }
+        if (json.requiresConfirm) {
+          setCredits(prev => prev ? { ...prev, free_remaining: 0 } : null)
+          const key = typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : Math.random().toString(36).slice(2) + Date.now()
+          setAiIdempotencyKey(key)
+          setAiConfirming(true)
+          setAiGenBusy(false)
+          return
+        }
+        throw new Error(json.error ?? 'No credits remaining')
+      }
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(err.error ?? 'Generation failed')
+        throw new Error(err.error ?? 'Generation failed (' + res.status + ')')
       }
-      const json = await res.json() as { image_url: string; image_thumb_url: string | null; remaining_credits: number }
-      set('image_url', json.image_url)
-      set('image_thumb_url', json.image_thumb_url ?? '')
-      setLocalPreview(null)
-      setImgFile(null)
-      if (credits) setCredits({ ...credits, paid_credits: json.remaining_credits })
+
+      const json = await res.json() as {
+        image_url: string
+        image_thumb_url: string | null
+        was_free: boolean
+        remaining_free: number
+        remaining_paid: number
+        already_processed?: boolean
+      }
+
+      if (!json.already_processed) {
+        set('image_url', json.image_url)
+        set('image_thumb_url', json.image_thumb_url ?? '')
+        setLocalPreview(null)
+        setImgFile(null)
+      }
+
+      // Update credits from server truth
+      if (credits) {
+        setCredits({
+          ...credits,
+          free_remaining: json.remaining_free,
+          paid_credits: json.remaining_paid,
+        })
+      }
+      setAiIdempotencyKey('')
     } catch (e) {
       setImgError((e as Error).message ?? 'AI generation failed')
     }
     setAiGenBusy(false)
   }
-  // ─── End image helpers ─────────────────────────────────────────────────
+
+  // Click on the AI gen button.
+  // Free path: fire immediately — no charge to owner, no confirm needed.
+  // Paid path: show explicit confirm dialog BEFORE any API call.
+  const handleAiGen = () => {
+    if (!canAiGen) return
+    if (aiGenMode === 'paid') {
+      // Generate a per-confirm idempotency key so double-submit is harmless.
+      const key = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now()
+      setAiIdempotencyKey(key)
+      setAiConfirming(true)
+      return
+    }
+    // Free path — generate immediately, no idempotency key needed.
+    void executeAiGen(false, '')
+  }
+
+  // Called only when owner explicitly clicks "Yes — charge $0.04"
+  const handleAiGenConfirmed = () => {
+    void executeAiGen(true, aiIdempotencyKey)
+  }
+
+  const handleAiGenCancelConfirm = () => {
+    setAiConfirming(false)
+    setAiIdempotencyKey('')
+  }
+  // ─── End AI generation helpers ──────────────────────────────────────────
 
   const save = async () => {
     if (!data.name.trim()) { setError('Product name is required'); return }
@@ -253,9 +354,13 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
   }
 
   const previewSrc = localPreview || data.image_url || null
-  const imgBusy = imgState === 'uploading' || imgState === 'removing-bg' || aiGenBusy
-  const canAiGen = !!data.name.trim() && (credits?.paid_credits ?? 0) > 0 && !imgBusy
-  const creditLabel = credits === null ? '' : '(' + credits.paid_credits + ' credits)'
+
+  // AI gen button label: shows free/paid status clearly before the owner clicks
+  const aiGenLabel: string = aiGenMode === 'free'
+    ? '✨ Generate free (' + (credits?.free_remaining ?? 0) + ' of ' + (credits?.free_limit ?? 5) + ' left)'
+    : aiGenMode === 'paid'
+    ? '✨ Generate with AI · $0.04 · ' + (credits?.paid_credits ?? 0) + ' credit' + ((credits?.paid_credits ?? 0) !== 1 ? 's' : '') + ' left'
+    : '✨ Generate with AI'
 
   return (
     <div style={{ maxWidth: 840, margin: '0 auto', padding: '28px 24px', fontFamily: "'Manrope',sans-serif" }}>
@@ -280,8 +385,8 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
           {/* Preview */}
           <div style={{ width: 100, height: 100, borderRadius: 10, background: '#f4f4f5', border: '1px solid var(--divider)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
             {imgBusy && (
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(244,244,245,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, zIndex: 1 }}>
-                {imgState === 'removing-bg' ? 'Removing\nBG...' : aiGenBusy ? 'Generating...' : 'Uploading...'}
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(244,244,245,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, zIndex: 1, textAlign: 'center', padding: 4 }}>
+                {imgState === 'removing-bg' ? 'Removing BG...' : aiGenBusy ? 'Generating...' : 'Uploading...'}
               </div>
             )}
             {previewSrc ? (
@@ -293,7 +398,7 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
 
           {/* Controls */}
           <div style={{ flex: 1 }}>
-            {/* File picker button */}
+            {/* File picker */}
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--divider)', cursor: imgBusy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 10, opacity: imgBusy ? 0.6 : 1 }}>
               {'📷 Choose photo'}
               <input
@@ -306,7 +411,7 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
               />
             </label>
 
-            {/* BG removal toggle — shown when a file has been selected */}
+            {/* BG removal toggle — shown only after file selected (free, in-browser) */}
             {imgFile && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: imgBusy ? 'wait' : 'pointer', marginBottom: 8, color: 'var(--text-primary)' }}>
                 <input
@@ -319,29 +424,64 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
               </label>
             )}
 
-            {/* AI gen button — shown when no image uploaded yet */}
+            {/* AI gen — shown when no image uploaded yet */}
             {!data.image_url && (
               <div style={{ marginBottom: 8 }}>
-                <button
-                  onClick={handleAiGen}
-                  disabled={!canAiGen}
-                  title={credits?.paid_credits === 0 ? 'No AI credits — purchase credits to generate' : ''}
-                  style={{ padding: '7px 14px', borderRadius: 8, background: canAiGen ? 'var(--gradient-aria)' : 'var(--bg-card)', border: canAiGen ? 'none' : '1px solid var(--divider)', color: canAiGen ? '#fff' : 'var(--text-tertiary)', cursor: canAiGen ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', opacity: aiGenBusy ? 0.6 : 1 }}
-                >
-                  {'✨ Generate with AI ' + creditLabel}
-                </button>
-                {credits?.paid_credits === 0 && (
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 8 }}>{'No credits — add more in Settings'}</span>
+                {aiConfirming ? (
+                  /* ── Explicit paid confirm — shown ONLY when owner is about to spend a credit ── */
+                  <div style={{ padding: '12px 14px', borderRadius: 8, background: 'rgba(234,179,8,0.07)', border: '1px solid rgba(234,179,8,0.35)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                      {'Confirm: use 1 paid credit ($0.04)'}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
+                      {'You have ' + (credits?.paid_credits ?? 0) + ' credit' + ((credits?.paid_credits ?? 0) !== 1 ? 's' : '') + '. This generation costs $0.04. Your free quota is exhausted.'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={handleAiGenCancelConfirm}
+                        disabled={aiGenBusy}
+                        style={{ padding: '6px 14px', borderRadius: 7, background: 'var(--bg-card)', border: '1px solid var(--divider)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAiGenConfirmed}
+                        disabled={aiGenBusy}
+                        style={{ padding: '6px 14px', borderRadius: 7, background: '#dc2626', border: 'none', color: '#fff', cursor: aiGenBusy ? 'wait' : 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', opacity: aiGenBusy ? 0.6 : 1 }}
+                      >
+                        {aiGenBusy ? 'Generating...' : 'Yes — charge $0.04 and generate'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Normal AI gen button — label discloses free vs paid + price ── */
+                  <button
+                    onClick={handleAiGen}
+                    disabled={!canAiGen}
+                    title={aiGenMode === 'none' ? 'No image credits remaining — add more in Settings' : aiGenMode === 'paid' ? 'Will use 1 paid credit ($0.04)' : 'Free generation'}
+                    style={{ padding: '7px 14px', borderRadius: 8, background: canAiGen ? (aiGenMode === 'free' ? 'var(--gradient-aria)' : '#7c3aed') : 'var(--bg-card)', border: canAiGen ? 'none' : '1px solid var(--divider)', color: canAiGen ? '#fff' : 'var(--text-tertiary)', cursor: canAiGen ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', opacity: aiGenBusy ? 0.6 : 1 }}
+                  >
+                    {aiGenLabel}
+                  </button>
+                )}
+                {aiGenMode === 'none' && !aiConfirming && (
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                    {'No credits remaining — add more in Settings.'}
+                  </div>
+                )}
+                {aiGenMode === 'paid' && !aiConfirming && (
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                    {'Free quota used — this will prompt for confirmation before charging.'}
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Status / error */}
+            {/* Status */}
             {imgState !== 'idle' && !imgError && (
               <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                 {imgState === 'uploading' && '⬆ Uploading...'}
                 {imgState === 'removing-bg' && '✂ Removing background...'}
-                {imgState === 'error' && '⚠ Upload failed'}
               </div>
             )}
             {imgError && (
@@ -423,7 +563,7 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
           <Field label="Tax code">
             <select value={data.tax_code_id ?? ''} onChange={e => set('tax_code_id', e.target.value || null)} style={iS}>
               <option value="">{'— Auto (from tax rate) —'}</option>
-              {taxCodes.map(tc => <option key={tc.id} value={tc.id}>{tc.code} {' — '} {tc.name}</option>)}
+              {taxCodes.map(tc => <option key={tc.id} value={tc.id}>{tc.code}{' — '}{tc.name}</option>)}
             </select>
           </Field>
         </div>
