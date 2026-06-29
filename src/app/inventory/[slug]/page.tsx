@@ -37,7 +37,7 @@ const reportIcon = (type: string): string => (({
 } as Record<string, string>)[type] ?? 'bar-chart')
 const reportLiveStat = (type: string, k: ReportKpis | null | undefined): { v: string; s: string } | null => {
   if (!k) return null
-  if (type === 'stock_value') return { v: money(k.stock_at_cost), s: 'at cost' }
+  if (type === 'stock_value') return k.stock_at_cost != null ? { v: money(k.stock_at_cost), s: 'at cost' } : null
   if (type === 'sold_vs_stock') return { v: String(k.units_sold), s: 'units sold' }
   if (type === 'shrinkage_waste') return { v: money(k.shrinkage_dollars), s: 'shrinkage' }
   return null
@@ -47,7 +47,7 @@ interface Staff { id: string; name: string; role: string; color: string | null; 
 interface Outlet { id: string; name: string; is_default: boolean }
 interface Boot { business: { id: string; name: string; slug: string }; outlets: Outlet[]; staff: Staff[] }
 interface VisibleTile { id: string; label: string; sublabel: string; icon: string; route: string; badge?: string }
-interface Home { staff: { id: string; name: string }; value_hero: { at_cost: number; at_retail: number; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number; receive: number }; visible_tiles?: VisibleTile[]; tile_industry?: string }
+interface Home { acting_role: string; staff: { id: string; name: string }; value_hero: { at_cost: number | null; at_retail: number | null; margin_pct: number | null; products_valued: number; products_total: number; uncosted: number }; mini_stats: { sold_today: number; tasks_open: number; to_review: number }; tile_badges: { order: number; expiring: number; receive: number }; visible_tiles?: VisibleTile[]; tile_industry?: string }
 interface Task { id: string; task_type: string; product_id: string | null; title: string; detail: string | null; hypothesis: string | null; priority: number; status: string; completed_by: string | null; product_name: string | null; product_sku: string | null; expected: number | null }
 interface TasksData { acting: { id: string; name: string }; tasks: Task[]; pills: { accuracy: number | null; streak: number; left_today: number } }
 interface Review { id: string; flag_type: string; status: string; product_id: string | null; product_name: string; product_sku: string | null; expected_value: number | null; actual_value: number | null; variance: number | null; staff_name: string; created_at: string; evidence?: Record<string, unknown> }
@@ -62,7 +62,7 @@ interface WasteToday { acting: { id: string; name: string }; reasons: string[]; 
 interface AdjustRecent { id: string; product_id: string; product_name: string; delta: number; reason: string; adjusted_by: string; created_at: string; value_dollars: number | null }
 interface AdjustData { acting: { id: string; name: string }; role: string; can_adjust: boolean; reasons: string[]; recent: AdjustRecent[] }
 interface ReportSection { title: string; columns: string[]; rows: Array<Array<string | number>>; empty?: string; total_row?: Array<string | number> }
-interface ReportKpis { stock_at_cost: number; stock_at_retail: number; units_sold: number; shrinkage_dollars: number }
+interface ReportKpis { stock_at_cost: number | null; stock_at_retail: number | null; units_sold: number; shrinkage_dollars: number }
 interface ReportData { type: string; title: string; period: string; period_label: string; business_name: string; generated_at: string; kpis: ReportKpis | null; sections: ReportSection[]; note: string | null }
 interface ReportLibItem { type: string; title: string; blurb: string }
 interface ReportsResp { acting: { id: string; name: string }; library: ReportLibItem[]; report: ReportData }
@@ -98,6 +98,8 @@ export default function InventoryStaffApp() {
   const [pinErr, setPinErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [acting, setActing] = useState<{ id: string; name: string } | null>(null)
+  const [actingRole, setActingRole] = useState<string>('staff')
+  const isMgr = ['manager', 'owner', 'admin'].includes((actingRole ?? '').toLowerCase())
   const [outletId, setOutletId] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeState, setHomeState] = useState<'loading' | 'ok' | 'error' | 'empty'>('loading')
@@ -219,7 +221,7 @@ export default function InventoryStaffApp() {
   const [stSummary, setStSummary] = useState<{ variances: number; reviews: number; total_cents: number; counted: number } | null>(null)
   // INV-5 — buying (reorder suggestions → draft PO → owner approve → send)
   interface BuyItem { product_id: string; name: string; on_hand: number; reorder_point: number; target_stock: number; suggested_qty: number; abc_tier: string; unit_cost: number | null; line_total: number | null; needs_cost: boolean }
-  interface BuyGroup { supplier_id: string | null; supplier_name: string; needs_supplier: boolean; items: BuyItem[]; total: number }
+  interface BuyGroup { supplier_id: string | null; supplier_name: string; needs_supplier: boolean; items: BuyItem[]; total: number | null }
   interface BuyPo { id: string; order_number: string; status: string; supplier_name: string; total: number | null; created_by: string | null }
   const [buyGroups, setBuyGroups] = useState<BuyGroup[]>([])
   const [buyPos, setBuyPos] = useState<BuyPo[]>([])
@@ -229,7 +231,7 @@ export default function InventoryStaffApp() {
   const [buyPo, setBuyPo] = useState<{ po: { id: string; order_number: string; status: string; total: number | null; created_by: string | null }; lines: Array<{ product_name: string; quantity_ordered: number; unit_cost: number | null; line_total: number | null }> } | null>(null)
   const [buyPermErr, setBuyPermErr] = useState('')
   // INV-6 — Pulse + Handover (guidance) on the Tasks screen
-  interface PulseData { today_revenue: number; today_txns: number; baseline_avg: number; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number }; top_waste_7d?: Array<{ name: string; cost_cents: number; reason: string }>; waste_null_cost_count?: number }
+  interface PulseData { today_revenue: number | null; today_txns: number; baseline_avg: number | null; vs_baseline_pct: number | null; top_movers: Array<{ name: string; units: number }>; tasks_done: number; tasks_open: number; attention: { below_reorder: number; expiring: number; open_reviews: number }; top_waste_7d?: Array<{ name: string; cost_cents: number; reason: string }>; waste_null_cost_count?: number }
   interface WeatherData { forecast_rain_pct: number | null; sufficient: boolean; matched_days: number; rain_days: number; dry_days: number; rain_lift_pct: number | null; reason: string | null }
   interface HandoverData { done: Array<{ title: string; type: string; by: string }>; open: Array<{ title: string; type: string; why: string | null }>; flagged: { open_reviews: number; expiring: number; below_reorder: number } }
   const [pulseData, setPulseData] = useState<PulseData | null>(null)
@@ -299,7 +301,7 @@ export default function InventoryStaffApp() {
       if (r.status === 401) { setStage('pick'); return }
       if (!r.ok) { setHomeState('error'); return }
       const d = await r.json() as Home
-      setHome(d); setActing(d.staff)
+      setHome(d); setActing(d.staff); setActingRole(d.acting_role ?? 'staff')
       setHomeState(d.value_hero.products_total === 0 ? 'empty' : 'ok')
       setStage('app')
     } catch { setHomeState('error') }
@@ -1047,7 +1049,7 @@ export default function InventoryStaffApp() {
         setOutletId(oid)
         // resume if a session cookie is still valid
         const h = await fetch(`/api/inventory/app/${slug}/home${oid ? `?outlet_id=${oid}` : ''}`)
-        if (h.ok) { const d = await h.json() as Home; setHome(d); setActing(d.staff); setHomeState(d.value_hero.products_total === 0 ? 'empty' : 'ok'); setStage('app') }
+        if (h.ok) { const d = await h.json() as Home; setHome(d); setActing(d.staff); setActingRole(d.acting_role ?? 'staff'); setHomeState(d.value_hero.products_total === 0 ? 'empty' : 'ok'); setStage('app') }
         else setStage('pick')
       } catch { setBootErr(true); setStage('pick') }
     })()
@@ -1208,10 +1210,10 @@ export default function InventoryStaffApp() {
     const pulseCard = pulseData && (
       <div style={{ background: P.ink, color: '#fff', borderRadius: 22, padding: 16, marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <div><div style={{ fontSize: 11, color: '#cfd2cc', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>pulse · today</div><div style={{ fontWeight: 800, fontSize: 28, lineHeight: 1.1, marginTop: 3 }}>${pulseData.today_revenue.toFixed(0)}</div></div>
+          <div><div style={{ fontSize: 11, color: '#cfd2cc', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>pulse · today</div>{pulseData.today_revenue != null && <div style={{ fontWeight: 800, fontSize: 28, lineHeight: 1.1, marginTop: 3 }}>${pulseData.today_revenue.toFixed(0)}</div>}</div>
           {pulseData.vs_baseline_pct != null && <span style={{ fontSize: 12, fontWeight: 800, color: pulseData.vs_baseline_pct < 0 ? P.red : P.lime }}>{pulseData.vs_baseline_pct > 0 ? '+' : ''}{pulseData.vs_baseline_pct}% vs avg</span>}
         </div>
-        <div style={{ fontSize: 11, color: '#9aa3b2', marginTop: 2 }}>{pulseData.today_txns} txns · baseline ${pulseData.baseline_avg.toFixed(0)}/day{pulseData.top_movers.length ? ` · top: ${pulseData.top_movers.map(m => m.name).slice(0, 2).join(', ')}` : ''}</div>
+        <div style={{ fontSize: 11, color: '#9aa3b2', marginTop: 2 }}>{pulseData.today_txns} txns{pulseData.baseline_avg != null ? ` · baseline $${pulseData.baseline_avg.toFixed(0)}/day` : ''}{pulseData.top_movers.length ? ' · top: ' + pulseData.top_movers.map(m => m.name).slice(0, 2).join(', ') : ''}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
           {([['done', pulseData.tasks_done, P.lime], ['open', pulseData.tasks_open, '#fff'], ['low', pulseData.attention.below_reorder, P.lime], ['expiring', pulseData.attention.expiring, '#fff'], ['review', pulseData.attention.open_reviews, '#fff']] as const).map(([k, v, col]) => (
             <div key={k} style={{ flex: 1, textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 18, color: col as string }}>{v}</div><div style={{ fontSize: 9, color: '#9aa3b2', marginTop: 1 }}>{k}</div></div>
@@ -1366,8 +1368,8 @@ export default function InventoryStaffApp() {
               <>
                 {k && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginBottom: 14 }}>
-                    <PipelStat n={money(k.stock_at_cost)} k="stock at cost" />
-                    <PipelStat n={money(k.stock_at_retail)} k="at retail" />
+                    {k.stock_at_cost != null && <PipelStat n={money(k.stock_at_cost)} k="stock at cost" />}
+                    {k.stock_at_retail != null && <PipelStat n={money(k.stock_at_retail)} k="at retail" />}
                     <PipelStat n={String(k.units_sold)} k="units sold" />
                     <PipelStat n={money(k.shrinkage_dollars)} k="shrinkage" tone={k.shrinkage_dollars > 0 ? 'alert' : undefined} />
                   </div>
@@ -2387,7 +2389,7 @@ export default function InventoryStaffApp() {
                     <span style={{ width: 70, textAlign: 'right', fontWeight: 800 }}>{l.line_total != null ? `$${Number(l.line_total).toFixed(2)}` : '—'}</span>
                   </div>
                 ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 2px 2px', borderTop: `1.5px solid ${P.ink}`, fontWeight: 800, fontSize: 15 }}><span>Total</span><span>${Number(buyPo.po.total ?? 0).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 2px 2px', borderTop: `1.5px solid ${P.ink}`, fontWeight: 800, fontSize: 15 }}><span>Total</span><span>{buyPo.po.total != null ? '$' + Number(buyPo.po.total).toFixed(2) : '—'}</span></div>
               </div>
               {buyPermErr && <div style={{ fontSize: 12.5, color: P.amber, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '10px 13px', marginTop: 12, fontWeight: 700, lineHeight: 1.4 }}>⚑ {buyPermErr}</div>}
               {buyPo.po.status === 'draft' && (
@@ -2410,7 +2412,7 @@ export default function InventoryStaffApp() {
                 <div key={g.supplier_id ?? 'none'} style={{ background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 22, padding: 15, boxShadow: HARD_SHADOW, marginBottom: 13 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <div style={{ fontWeight: 800, fontSize: 15 }}>{g.supplier_name}</div>
-                    {!g.needs_supplier && <span style={{ fontWeight: 800, fontSize: 14 }}>${g.total.toFixed(2)}</span>}
+                    {!g.needs_supplier && g.total != null && <span style={{ fontWeight: 800, fontSize: 14 }}>${g.total.toFixed(2)}</span>}
                   </div>
                   {g.items.map(it => (
                     <div key={it.product_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px', borderTop: `1.5px solid ${P.ink}`, fontSize: 13 }}>
@@ -2432,7 +2434,7 @@ export default function InventoryStaffApp() {
                   <div style={{ fontSize: 11, fontWeight: 800, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '20px 2px 11px' }}>open orders</div>
                   {buyPos.map(p => (
                     <div key={p.id} onClick={() => openBuyPo(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '12px 14px', marginBottom: 9, cursor: 'pointer' }}>
-                      <div><div style={{ fontWeight: 800, fontSize: 13.5 }}>{p.order_number}</div><div style={{ fontSize: 11, color: P.muted }}>{p.supplier_name} · ${Number(p.total ?? 0).toFixed(2)}</div></div>
+                      <div><div style={{ fontWeight: 800, fontSize: 13.5 }}>{p.order_number}</div><div style={{ fontSize: 11, color: P.muted }}>{p.supplier_name}{p.total != null ? ' · $' + Number(p.total).toFixed(2) : ''}</div></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>{statusChip(p.status)}<PIcon name="back" size={16} stroke={P.muted} /></div>
                     </div>
                   ))}
@@ -2562,8 +2564,8 @@ export default function InventoryStaffApp() {
       <>
         {statusbar}{header(true, 'recall', 'on-hold · shrinkage · compliance')}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px' }}>
-          <PipelSegment inset={false} value={lossTab} onChange={v => setLossTab(v)}
-            options={[{ value: 'quarantine', label: 'On hold' }, { value: 'recall', label: 'Recall' }, { value: 'shrinkage', label: 'Shrinkage' }]} />
+          <PipelSegment inset={false} value={lossTab} onChange={v => setLossTab(v as typeof lossTab)}
+            options={[{ value: 'quarantine', label: 'On hold' }, { value: 'recall', label: 'Recall' }, ...(isMgr ? [{ value: 'shrinkage', label: 'Shrinkage' }] : [])]} />
           <div style={{ height: 14 }} />
           {lossMsg && <div style={{ fontSize: 12.5, color: P.ink, background: P.lime, border: `1.5px solid ${P.ink}`, borderRadius: 12, padding: '10px 13px', marginBottom: 13, fontWeight: 700, lineHeight: 1.4 }}>{lossMsg}</div>}
           {lossPermErr && <div style={{ fontSize: 12.5, color: P.amber, background: P.amberSoft, border: `1.5px solid ${P.amber}`, borderRadius: 12, padding: '10px 13px', marginBottom: 13, fontWeight: 700 }}>⚑ {lossPermErr}</div>}
@@ -2705,7 +2707,7 @@ export default function InventoryStaffApp() {
   if (home && (home.mini_stats.tasks_open ?? 0) > 0) needs.push({ icon: 'count', tone: 'plain', title: `${home.mini_stats.tasks_open} task${home.mini_stats.tasks_open === 1 ? '' : 's'} to count`, detail: 'Aria built your list from real sales', cta: 'Count', onCta: () => setTab('tasks') })
   if (home && (tb?.expiring ?? 0) > 0) needs.push({ icon: 'clock', title: `${tb!.expiring} expiring soon`, detail: 'Clear or mark it down', cta: 'Review', onCta: () => routeTile('expiring') })
 
-  const costPct = vh && vh.at_retail > 0 ? Math.round((vh.at_cost / vh.at_retail) * 100) : 39
+  const costPct = vh && vh.at_retail != null && vh.at_cost != null && vh.at_retail > 0 ? Math.round((vh.at_cost / vh.at_retail) * 100) : 39
 
   return shell(
     <>
@@ -2733,13 +2735,13 @@ export default function InventoryStaffApp() {
             <p style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>No products yet</p>
             <p style={{ fontSize: 12.5, color: P.muted, lineHeight: 1.5, fontWeight: 500 }}>Add products in the dashboard and your live stock value appears here.</p>
           </div>
-        ) : vh && (
+        ) : vh && vh.at_cost != null ? (
           <PipelHero
             caption="Stock value on hand · at cost"
             value={money(vh.at_cost)}
             costPct={costPct}
             costLabel={money(vh.at_cost)}
-            retailLabel={money(vh.at_retail)}
+            retailLabel={money(vh.at_retail ?? 0)}
             marginTag={vh.margin_pct != null ? `${vh.margin_pct}% margin` : null}
             stats={[
               { n: home!.mini_stats.sold_today, k: 'sold today' },
@@ -2747,7 +2749,17 @@ export default function InventoryStaffApp() {
               { n: home!.mini_stats.to_review, k: 'to review', tone: home!.mini_stats.to_review > 0 ? 'alert' : undefined },
             ]}
           />
-        )}
+        ) : vh ? (
+          <div style={{ margin: '16px 16px 0', padding: '20px 22px', borderRadius: 28, background: P.card, border: `1.5px solid ${P.ink}`, boxShadow: '0 4px 18px rgba(20,30,20,.08)' }}>
+            <div style={{ fontSize: 11, color: P.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>stock snapshot</div>
+            <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 14 }}>{vh.products_total} products tracked</div>
+            <div style={{ display: 'flex', gap: 9 }}>
+              <PipelStat n={home!.mini_stats.sold_today} k="sold today" />
+              <PipelStat n={home!.mini_stats.tasks_open} k="tasks open" tone={home!.mini_stats.tasks_open > 0 ? 'warn' : undefined} />
+              <PipelStat n={home!.mini_stats.to_review} k="to review" tone={home!.mini_stats.to_review > 0 ? 'alert' : undefined} />
+            </div>
+          </div>
+        ) : null}
 
         {/* NEEDS YOU — existing counts surfaced as actions */}
         {needs.length > 0 && (

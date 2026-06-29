@@ -27,8 +27,20 @@ async function _GET(req: Request, { params }: Params) {
   const sp = new URL(req.url).searchParams
   const outletId = await resolveOutletId(supabaseAdmin, bid, sp.get('outlet_id'))
 
+  // INV-ROLE-GATE-1 LEAK 4 — PO cost figures gated to manager+ (server gate)
+  const perm = await staffCanAdjust(supabaseAdmin, bid, acting.staff_id)
+
   if (sp.get('reorder') === '1') {
     const data = await reorderSuggestions(supabaseAdmin, bid, outletId)
+    if (!perm.allowed) {
+      const rawData = data as unknown as { groups?: Array<{ items?: Array<Record<string, unknown>>; [key: string]: unknown }> }
+      const groups = (rawData.groups ?? []).map(g => ({
+        ...g,
+        total: null,
+        items: (g.items ?? []).map(it => ({ ...it, unit_cost: null, line_total: null })),
+      }))
+      return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, ...data, groups })
+    }
     return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, ...data })
   }
   if (sp.get('suppliers') === '1') {
@@ -45,7 +57,9 @@ async function _GET(req: Request, { params }: Params) {
     const { data: po } = await supabaseAdmin.from('pos_purchase_orders').select('id, order_number, status, supplier_id, subtotal, total, created_by, created_at, expected_date, notes').eq('business_id', bid).eq('id', poId).maybeSingle()
     if (!po) return NextResponse.json({ error: 'PO not found' }, { status: 404 })
     const { data: lines } = await supabaseAdmin.from('pos_purchase_order_items').select('id, product_id, product_name, quantity_ordered, unit_cost, line_total, receive_status').eq('order_id', poId)
-    return NextResponse.json({ po, lines: lines ?? [] })
+    const safePo = perm.allowed ? po : { ...po, subtotal: null, total: null }
+    const safeLines = perm.allowed ? (lines ?? []) : (lines ?? []).map(l => ({ ...l, unit_cost: null, line_total: null }))
+    return NextResponse.json({ po: safePo, lines: safeLines })
   }
   // default: draft + sent POs (the buying overview), newest first
   const { data: pos } = await supabaseAdmin.from('pos_purchase_orders')
@@ -53,7 +67,7 @@ async function _GET(req: Request, { params }: Params) {
     .in('status', ['draft', 'sent']).order('created_at', { ascending: false }).limit(50)
   const { data: suppliers } = await supabaseAdmin.from('pos_suppliers').select('id, name').eq('business_id', bid)
   const supMap = new Map((suppliers ?? []).map(s => [s.id as string, s.name as string]))
-  return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, pos: (pos ?? []).map(p => ({ ...p, supplier_name: supMap.get(p.supplier_id as string) ?? '—' })) })
+  return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, pos: (pos ?? []).map(p => ({ ...p, total: perm.allowed ? p.total : null, supplier_name: supMap.get(p.supplier_id as string) ?? '—' })) })
 }
 
 async function _POST(req: Request, { params }: Params) {

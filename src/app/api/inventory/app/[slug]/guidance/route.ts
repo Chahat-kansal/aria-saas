@@ -9,6 +9,7 @@ import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { pulse, handover, weatherInsight } from '@/lib/inventory/guidance'
+import { staffCanAdjust } from '@/lib/inventory/adjust'
 
 // INV-6 — Pulse (live per-outlet snapshot) + Handover (open vs done + flagged). Grounded read-only; per-outlet.
 
@@ -29,8 +30,10 @@ async function _GET(req: Request, { params }: Params) {
     return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, handover: data })
   }
   // default: pulse (+ the weather insight so the UI can show the grounded correlation / honest "insufficient")
-  const [p, wx] = await Promise.all([pulse(supabaseAdmin, bid, outletId), weatherInsight(supabaseAdmin, bid).catch(() => null)])
-  return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, pulse: p, weather: wx })
+  // INV-ROLE-GATE-1 LEAK 6 — revenue figures gated to manager+ (server gate)
+  const [p, wx, perm] = await Promise.all([pulse(supabaseAdmin, bid, outletId), weatherInsight(supabaseAdmin, bid).catch(() => null), staffCanAdjust(supabaseAdmin, bid, acting.staff_id)])
+  const safeP = perm.allowed ? p : { ...p, today_revenue: null, baseline_avg: null, vs_baseline_pct: null }
+  return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, pulse: safeP, weather: wx })
 }
 
 export const GET = withErrorCapture('inventory/app/guidance', _GET)

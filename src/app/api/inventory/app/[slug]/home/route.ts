@@ -12,6 +12,7 @@ import { computeStockValue } from '@/lib/inventory/stock-value'
 import { computeParReadonly } from '@/lib/inventory/par-levels'
 import { taskAndReviewCounts } from '@/lib/inventory/daily-tasks'
 import { getVisibleTiles } from '@/lib/inventory/tile-manifest'
+import { staffCanAdjust } from '@/lib/inventory/adjust'
 
 // INV-STAFF-APP-1 — Home data. Requires the acting-staff cookie (scoped to this business). Value hero
 // reuses INV-COST-1; Order badge reuses INV-PAR-1; all live, GROUNDING (sold-today is the real count).
@@ -27,6 +28,9 @@ async function _GET(req: Request, { params }: Params) {
   if (!acting) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
   const outletId = await resolveOutletId(supabaseAdmin, bid, new URL(req.url).searchParams.get('outlet_id'))
+
+  // INV-ROLE-GATE-1 LEAK 1 — financial fields gated to manager+ (server gate)
+  const perm = await staffCanAdjust(supabaseAdmin, bid, acting.staff_id)
 
   // Stock value (cost/retail/completeness) for this outlet.
   const sv = await computeStockValue(supabaseAdmin, bid, outletId)
@@ -80,11 +84,14 @@ async function _GET(req: Request, { params }: Params) {
   } catch { /* manifest non-fatal — page falls back to its built-in tiles */ }
 
   return NextResponse.json({
+    acting_role: perm.role,
     staff: { id: acting.staff_id, name: acting.staff_name },
     visible_tiles,
     tile_industry,
     value_hero: {
-      at_cost: sv.at_cost, at_retail: sv.at_retail, margin_pct: sv.margin_pct,
+      at_cost: perm.allowed ? sv.at_cost : null,
+      at_retail: perm.allowed ? sv.at_retail : null,
+      margin_pct: perm.allowed ? sv.margin_pct : null,
       products_valued: sv.products_valued, products_total: sv.products_total, uncosted: sv.products_unknown_cost,
     },
     mini_stats: { sold_today: soldToday, tasks_open: tr.open_tasks, to_review: tr.open_reviews },

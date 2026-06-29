@@ -11,6 +11,7 @@ import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { resolveCostFor } from '@/lib/inventory/resolve-cost'
 import { resolveTicketPrice } from '@/lib/tickets/ticket-price'
 import { scanLookup, locateStock } from '@/lib/inventory/scan-engine'
+import { staffCanAdjust } from '@/lib/inventory/adjust'
 
 // INV-STAFF-APP-3 — scan lookup. A barcode resolves via pos_product_barcodes; Sip has 0 barcodes today, so a
 // miss falls back to a name/SKU search (the primary path). A resolved product shows live on-hand
@@ -69,10 +70,14 @@ async function _GET(req: Request, { params }: Params) {
   const productId = (sp.get('product_id') ?? '').trim()
   const query = (sp.get('q') ?? '').trim()
 
+  // INV-ROLE-GATE-1 LEAK 3 — cost/margin gated to manager+ (server gate; waste path uses resolveCostFor independently)
+  const perm = await staffCanAdjust(supabaseAdmin, bid, acting.staff_id)
+
   // Direct detail for a chosen search result.
   if (productId) {
     const product = await enrichOne(bid, productId, outletId)
-    return NextResponse.json(product ? { mode: 'product', found: true, product } : { mode: 'product', found: false })
+    const safeProduct = product && !perm.allowed ? { ...product, cost: null, cost_source: 'hidden' } : product
+    return NextResponse.json(safeProduct ? { mode: 'product', found: true, product: safeProduct } : { mode: 'product', found: false })
   }
 
   // INV-1 scan engine — barcode → price-check (name/retail/cost/margin/on-hand) + stock-locate (per-outlet)
@@ -83,7 +88,8 @@ async function _GET(req: Request, { params }: Params) {
       // INV-1-FINISH — re-resolve via enrichOne so the barcode path returns the SAME shape as search→pick
       // (price / velocity / days-cover) plus the per-outlet locate, for one consistent result card.
       const product = await enrichOne(bid, result.product.id, outletId)
-      return NextResponse.json({ mode: 'barcode', found: true, product })
+      const safeProduct = product && !perm.allowed ? { ...product, cost: null, cost_source: 'hidden' } : product
+      return NextResponse.json({ mode: 'barcode', found: true, product: safeProduct })
     }
     return NextResponse.json({ mode: 'barcode', found: false, barcode: result.barcode, external: result.external })
   }
@@ -112,7 +118,7 @@ async function _GET(req: Request, { params }: Params) {
         sku: (m.sku as string | null) ?? null,
         price: Number(m.price) || 0,
         on_hand: ohMap.get(m.id as string) ?? 0,
-        cost_price: m.cost_price != null ? Number(m.cost_price) : null,
+        cost_price: perm.allowed && m.cost_price != null ? Number(m.cost_price) : null,
       })),
     })
   }

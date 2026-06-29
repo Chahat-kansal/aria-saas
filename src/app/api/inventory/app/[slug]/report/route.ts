@@ -10,6 +10,7 @@ import { getActingStaff } from '@/lib/inventory/staff-session'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { generateReport, REPORT_LIBRARY, visibleReportLibrary, type ReportType, type Period } from '@/lib/inventory/reports'
 import { renderReportHtml, generateReportPdf } from '@/lib/inventory/report-pdf'
+import { staffCanAdjust } from '@/lib/inventory/adjust'
 
 // INV-REPORTS — staff-app report endpoint. JSON (for the Reports screen: KPIs + the requested report + the
 // 10-report library) and PDF export. All data is the deterministic generators — no fabricated numbers.
@@ -28,7 +29,13 @@ async function _GET(req: Request, { params }: Params) {
   const type = (TYPES.has(sp.get('type') as ReportType) ? sp.get('type') : 'sold_vs_stock') as ReportType
   const period = (sp.get('period') === 'weekly' ? 'weekly' : 'daily') as Period
   const outletId = await resolveOutletId(supabaseAdmin, bid, sp.get('outlet_id'))
-  const data = await generateReport(supabaseAdmin, bid, type, period, outletId)
+  // INV-ROLE-GATE-1 LEAK 2 — stock cost KPI chips gated to manager+ (server gate)
+  const [data, perm] = await Promise.all([generateReport(supabaseAdmin, bid, type, period, outletId), staffCanAdjust(supabaseAdmin, bid, acting.staff_id)])
+  if (!perm.allowed && data.kpis) {
+    const k = data.kpis as unknown as Record<string, unknown>
+    k.stock_at_cost = null
+    k.stock_at_retail = null
+  }
 
   if (sp.get('format') === 'pdf') {
     const pdf = await generateReportPdf(renderReportHtml(data))

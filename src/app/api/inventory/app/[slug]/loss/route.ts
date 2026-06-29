@@ -27,12 +27,18 @@ async function _GET(req: Request, { params }: Params) {
   const sp = new URL(req.url).searchParams
   const outletId = await resolveOutletId(supabaseAdmin, bid, sp.get('outlet_id'))
 
+  // INV-ROLE-GATE-1 LEAK 5 — shrinkage/theft-signal data is manager+ only (server gate)
+  const perm = await staffCanAdjust(supabaseAdmin, bid, acting.staff_id)
+
   const ageFor = sp.get('age')
   if (ageFor) return NextResponse.json(await ageGateCheck(supabaseAdmin, bid, ageFor))
-  if (sp.get('shrinkage') === '1') return NextResponse.json(await shrinkageReport(supabaseAdmin, bid, outletId, Math.min(180, Math.max(7, Number(sp.get('days')) || 30))))
+  if (sp.get('shrinkage') === '1') {
+    if (!perm.allowed) return NextResponse.json({ error: 'Manager access required for shrinkage data' }, { status: 403 })
+    return NextResponse.json(await shrinkageReport(supabaseAdmin, bid, outletId, Math.min(180, Math.max(7, Number(sp.get('days')) || 30))))
+  }
   if (sp.get('quarantine') === '1') return NextResponse.json(await quarantineView(supabaseAdmin, bid, outletId))
 
-  const [quarantine, shrinkage] = await Promise.all([quarantineView(supabaseAdmin, bid, outletId), shrinkageReport(supabaseAdmin, bid, outletId, 30)])
+  const [quarantine, shrinkage] = await Promise.all([quarantineView(supabaseAdmin, bid, outletId), perm.allowed ? shrinkageReport(supabaseAdmin, bid, outletId, 30) : Promise.resolve(null)])
   return NextResponse.json({ acting: { id: acting.staff_id, name: acting.staff_name }, quarantine, shrinkage })
 }
 
