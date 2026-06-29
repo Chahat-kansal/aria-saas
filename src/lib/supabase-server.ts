@@ -17,7 +17,10 @@ export function createServerSupabaseClient() {
         cookiesToSet.forEach(({ name, value, options }) => {
           try {
             cookieStore.set(name, value, options);
-          } catch (e) { console.error('[silent-catch]', e) }
+          } catch {
+            // Server Component context — cookie writes are not allowed here.
+            // Session refresh is handled by middleware for protected routes.
+          }
         });
       },
     },
