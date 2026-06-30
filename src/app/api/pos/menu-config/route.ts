@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -119,6 +120,20 @@ async function _PUT(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   // Honest: if no row matched (config is null) the update was a no-op — never silently 200
   if (!config) return NextResponse.json({ error: 'Config not found — 0 rows updated' }, { status: 422 })
+
+  // Bust the public menu page cache so it reflects this save immediately.
+  // revalidatePath clears both the Next.js Data Cache and the Vercel CDN cache
+  // for the public /menu/<slug> route — without this, force-dynamic still serves
+  // stale data from CDN edge nodes that cached a previous response.
+  try {
+    const { data: bizRow } = await supabaseAdmin
+      .from('businesses')
+      .select('slug')
+      .eq('id', bid)
+      .maybeSingle()
+    const slug = (bizRow?.slug as string | null) ?? null
+    if (slug) revalidatePath('/menu/' + slug)
+  } catch { /* non-fatal — page will self-correct on next request via force-dynamic */ }
 
   // If default changed, return the full refreshed list so client can sync
   if (payload.is_default === true) {

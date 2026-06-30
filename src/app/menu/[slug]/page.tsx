@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+
+// Force every request to re-read from Supabase — prevents Next.js Data Cache
+// from serving stale menu_configs after a builder save.
+export const dynamic = 'force-dynamic'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import MenuClient from './MenuClient'
 
