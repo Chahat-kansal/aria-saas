@@ -249,14 +249,16 @@ async function _POST(req: Request) {
     }).eq('id', openSession.id);
   }
 
-  // Loyalty points — wrapped so RPC failure cannot block payment save
+  // Loyalty earn — deferred, non-blocking, same shared helper as /api/pos/sale.
   if (customer_id) {
-    try {
-      const pts = Math.floor(total_amount);
-      await supabase.rpc('increment_loyalty_points', { customer_id, points: pts }).maybeSingle();
-    } catch (loyaltyErr) {
-      console.error('[pos/sales] loyalty rpc skipped:', (loyaltyErr as Error).message);
-    }
+    waitUntil((async () => {
+      try {
+        const { earnOnSale } = await import('@/lib/loyalty/earnOnSale')
+        await earnOnSale({ businessId: bid, customerId: customer_id, saleId: sale.id, totalAmount: total_amount ?? 0 })
+      } catch (e) {
+        console.error('[pos/sales] loyalty earn failed:', (e as Error).message)
+      }
+    })())
   }
 
   // ── Save payment record(s) — amount_cents is CENTS not dollars ──────────────

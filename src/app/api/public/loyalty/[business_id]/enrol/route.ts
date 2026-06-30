@@ -4,6 +4,14 @@ import { NextResponse } from 'next/server'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
+// Normalise common AU mobile formats to E.164. Other formats stored as-is.
+function normPhoneSimple(raw: string): string {
+  const digits = raw.replace(/[\s\-\.]/g, '')
+  if (/^04\d{8}$/.test(digits)) return '+61' + digits.slice(1)
+  if (/^\+614\d{8}$/.test(digits)) return digits
+  return digits
+}
+
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
 export async function POST(req: Request, { params }: Params) {
@@ -67,5 +75,40 @@ export async function POST(req: Request, { params }: Params) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // FIX 3 — LOY-IDENTITY-LINK: find or create a global loyalty_identity so this member
+  // is visible to evaluateRewardRules and the cross-business network.
+  // db is already service-role (bypasses RLS on loyalty_identity).
+  // Best-effort: failure does not block the enrolment response.
+  try {
+    const identEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : ''
+    const identPhone = normPhoneSimple(phone)
+
+    let identityId: string | null = null
+
+    if (identEmail) {
+      const { data: byEmail } = await db.from('loyalty_identity').select('id').eq('email', identEmail).maybeSingle()
+      if (byEmail?.id) identityId = byEmail.id as string
+    }
+    if (!identityId && identPhone) {
+      const { data: byPhone } = await db.from('loyalty_identity').select('id').eq('phone', identPhone).maybeSingle()
+      if (byPhone?.id) identityId = byPhone.id as string
+    }
+    if (!identityId) {
+      const idInsert: Record<string, string> = {}
+      if (identEmail) idInsert.email = identEmail
+      if (identPhone) idInsert.phone = identPhone
+      if (Object.keys(idInsert).length > 0) {
+        const { data: created } = await db.from('loyalty_identity').insert(idInsert).select('id').single()
+        if (created?.id) identityId = created.id as string
+      }
+    }
+    if (identityId) {
+      await db.from('pos_customers').update({ loyalty_identity_id: identityId }).eq('id', data.id)
+    }
+  } catch {
+    // Non-fatal — customer is enrolled, identity link will be established on first loyalty login
+  }
+
   return NextResponse.json({ customer: { id: data.id, name: data.name }, enrolled: true })
 }
