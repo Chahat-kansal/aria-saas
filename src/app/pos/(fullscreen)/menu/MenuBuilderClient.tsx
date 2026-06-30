@@ -15,13 +15,14 @@ const FONT_ITEMS = [
 ]
 
 const BG_ITEMS = [
-  { id: 'none',    label: 'None',    e: '∅'  },
-  { id: 'flowers', label: 'Flowers', e: '🌸' },
-  { id: 'coffee',  label: 'Coffee',  e: '☕' },
-  { id: 'linen',   label: 'Linen',   e: '🧵' },
-  { id: 'marble',  label: 'Marble',  e: '◜'  },
-  { id: 'botanic', label: 'Botanic', e: '🌿' },
-  { id: 'warm',    label: 'Warm',    e: '🌅' },
+  { id: 'none',    label: 'None',       e: '∅'  },
+  { id: 'flowers', label: 'Flowers',    e: '🌸' },
+  { id: 'coffee',  label: 'Coffee',     e: '☕' },
+  { id: 'linen',   label: 'Linen',      e: '🧵' },
+  { id: 'marble',  label: 'Marble',     e: '◜'  },
+  { id: 'botanic', label: 'Botanic',    e: '🌿' },
+  { id: 'warm',    label: 'Warm',       e: '🌅' },
+  { id: 'blobs',   label: 'Tonal Blobs', e: '●' },
 ]
 
 const ACCENTS = ['#BA7517','#16a34a','#d9f54e','#7FB897','#E24B4A','#0a0a0a','#C9A37A','#e8a87c','#6C5CE7','#1d9bf0']
@@ -39,7 +40,7 @@ function fmtTime(t: string): string {
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
-type BrandKit = { accent?: string; font?: string; logoEmoji?: string; showPhotos?: boolean; showDesc?: boolean; showBadges?: boolean; printCols?: number }
+type BrandKit = { accent?: string; font?: string; logoEmoji?: string; showPhotos?: boolean; showDesc?: boolean; showBadges?: boolean; printCols?: number; rowStyle?: string }
 type MenuCfg = {
   id?: string
   menu_key: string
@@ -90,6 +91,7 @@ function MiniMenu({ cats, products, cfg, businessName, theme, locationSubtitle, 
   const showPhotos = bk.showPhotos ?? true
   const showDesc = bk.showDesc ?? true
   const showBadges = bk.showBadges ?? true
+  const rowStyle = bk.rowStyle ?? 'default'
 
   let orderedCats = cats
   if (cfg.section_order.length > 0) {
@@ -155,6 +157,22 @@ function MiniMenu({ cats, products, cfg, businessName, theme, locationSubtitle, 
               {/* Item rows — exact mockup .mi: gap:12, padding:13px 0, flex-start */}
               {cp.map((p, idx) => {
                 const badge = cfg.item_overrides[p.id]?.badge
+                if (rowStyle === 'D') {
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 0', borderBottom: idx < cp.length - 1 ? '1px solid ' + theme.line : 'none' }}>
+                      {showPhotos && (p.image_url
+                        ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                        : <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, color: theme.accent, flexShrink: 0 }}>☕</div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, letterSpacing: '-0.2px', lineHeight: 1.3 }}>{p.name}</div>
+                        {showDesc && p.description && <div style={{ fontSize: 11, color: theme.muted, lineHeight: 1.45, marginTop: 3 }}>{p.description}</div>}
+                        {showBadges && badge && <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.03em', borderRadius: 20, padding: '2px 6px', border: '1.2px solid ' + theme.accent, color: theme.accent, display: 'inline-block', marginTop: 5 }}>{badge}</span>}
+                      </div>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>{'A$' + p.price.toFixed(2)}</div>
+                    </div>
+                  )
+                }
                 return (
                   <div key={p.id} style={{ display: 'flex', gap: 12, padding: '13px 0', borderBottom: idx < cp.length - 1 ? '1px solid ' + theme.line : 'none', alignItems: 'flex-start' }}>
                     {showPhotos && (p.image_url
@@ -189,6 +207,22 @@ function MiniMenu({ cats, products, cfg, businessName, theme, locationSubtitle, 
             </div>
             {uncatMini.map((p, idx) => {
               const badge = cfg.item_overrides[p.id]?.badge
+              if (rowStyle === 'D') {
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 0', borderBottom: idx < uncatMini.length - 1 ? '1px solid ' + theme.line : 'none' }}>
+                    {showPhotos && (p.image_url
+                      ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      : <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, color: theme.accent, flexShrink: 0 }}>☕</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, letterSpacing: '-0.2px', lineHeight: 1.3 }}>{p.name}</div>
+                      {showDesc && p.description && <div style={{ fontSize: 11, color: theme.muted, lineHeight: 1.45, marginTop: 3 }}>{p.description}</div>}
+                      {showBadges && badge && <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.03em', borderRadius: 20, padding: '2px 6px', border: '1.2px solid ' + theme.accent, color: theme.accent, display: 'inline-block', marginTop: 5 }}>{badge}</span>}
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>{'A$' + p.price.toFixed(2)}</div>
+                  </div>
+                )
+              }
               return (
                 <div key={p.id} style={{ display: 'flex', gap: 12, padding: '13px 0', borderBottom: idx < uncatMini.length - 1 ? '1px solid ' + theme.line : 'none', alignItems: 'flex-start' }}>
                   {showPhotos && (p.image_url
@@ -326,6 +360,27 @@ function LayoutSection({ cfg, onUpdateBk }: { cfg: MenuCfg; onUpdateBk: (p: Part
       {row('Item photos', 'showPhotos', true)}
       {row('Descriptions', 'showDesc', true)}
       {row('Badges', 'showBadges', true)}
+    </div>
+  )
+}
+
+function RowStyleSection({ cfg, onUpdateBk }: { cfg: MenuCfg; onUpdateBk: (p: Partial<BrandKit>) => void }) {
+  const cur = cfg.brand_kit.rowStyle ?? 'default'
+  const styles = [
+    { id: 'default', label: 'Standard',   desc: 'Square thumb · 2-line desc' },
+    { id: 'D',       label: 'Roomy Rows', desc: 'Round photo · full desc · price right' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {styles.map(s => {
+        const sel = cur === s.id
+        return (
+          <button key={s.id} onClick={() => onUpdateBk({ rowStyle: s.id })} style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1.5px solid ' + (sel ? '#18181b' : '#e4e4e7'), background: sel ? '#18181b' : '#fff', color: sel ? '#fff' : '#18181b', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700 }}>{s.label}</div>
+            <div style={{ fontSize: 9.5, color: sel ? '#d4d4d8' : '#71717a', marginTop: 2 }}>{s.desc}</div>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -839,6 +894,10 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Layout</div>
             <LayoutSection cfg={cfg} onUpdateBk={updateBk} />
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', marginBottom: 6 }}>Row style</div>
+              <RowStyleSection cfg={cfg} onUpdateBk={updateBk} />
+            </div>
           </div>
         )}
         {(s === 'all' || s === 'share') && (

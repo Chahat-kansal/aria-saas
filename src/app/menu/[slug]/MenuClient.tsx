@@ -69,6 +69,7 @@ export default function MenuClient({
   const showPhotos = (bk.showPhotos as boolean | undefined) ?? true
   const showDesc   = (bk.showDesc   as boolean | undefined) ?? true
   const showBadges = (bk.showBadges as boolean | undefined) ?? true
+  const rowStyle   = (bk.rowStyle   as string  | undefined) ?? 'default'
   // printCols is A4-PRINT ONLY — never used for the web list layout
 
   // Load the template's Google Font dynamically
@@ -298,11 +299,40 @@ export default function MenuClient({
                   {/* Item rows */}
                   {catProds.map((p, idx) => {
                     const badge = showBadges ? (itemOverrides?.[p.id]?.badge ?? null) : null
+                    const divider = idx < catProds.length - 1 ? '1px solid ' + theme.line : 'none'
+                    if (rowStyle === 'D') {
+                      return (
+                        <div key={p.id} onClick={() => { if (orderingEnabled) setProductModal(p) }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 0', borderBottom: divider, cursor: orderingEnabled ? 'pointer' : 'default' }}>
+                          {showPhotos && (p.image_url
+                            ? <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                            : <div style={{ width: 64, height: 64, borderRadius: '50%', background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: theme.accent, flexShrink: 0 }}>☕</div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, fontFamily: theme.fontCss, lineHeight: 1.3 }}>{p.name}</div>
+                            {showDesc && p.description && (
+                              <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginTop: 4 }}>{p.description}</div>
+                            )}
+                            {badge && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 6px', display: 'inline-block', marginTop: 6 }}>{badge}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic', whiteSpace: 'nowrap' }}>{fmtPrice(p.price)}</span>
+                            {orderingEnabled && (
+                              <button onClick={e => { e.stopPropagation(); addToCart(p) }}
+                                style={{ width: 28, height: 28, borderRadius: '50%', background: theme.accent, color: theme.bg, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
+                                aria-label={'Add ' + p.name}>+</button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
                     return (
                       <div
                         key={p.id}
                         onClick={() => { if (orderingEnabled) setProductModal(p) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: idx < catProds.length - 1 ? '1px solid ' + theme.line : 'none', cursor: orderingEnabled ? 'pointer' : 'default' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: divider, cursor: orderingEnabled ? 'pointer' : 'default' }}
                       >
                         {/* 56px thumb */}
                         {showPhotos && (p.image_url
@@ -350,11 +380,40 @@ export default function MenuClient({
                 </div>
                 {uncatProds.map((p, idx) => {
                   const badge = showBadges ? (itemOverrides?.[p.id]?.badge ?? null) : null
+                  const divider = idx < uncatProds.length - 1 ? '1px solid ' + theme.line : 'none'
+                  if (rowStyle === 'D') {
+                    return (
+                      <div key={p.id} onClick={() => { if (orderingEnabled) setProductModal(p) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 0', borderBottom: divider, cursor: orderingEnabled ? 'pointer' : 'default' }}>
+                        {showPhotos && (p.image_url
+                          ? <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                          : <div style={{ width: 64, height: 64, borderRadius: '50%', background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: theme.accent, flexShrink: 0 }}>☕</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, fontFamily: theme.fontCss, lineHeight: 1.3 }}>{p.name}</div>
+                          {showDesc && p.description && (
+                            <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginTop: 4 }}>{p.description}</div>
+                          )}
+                          {badge && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 6px', display: 'inline-block', marginTop: 6 }}>{badge}</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                          <span style={{ fontSize: 15, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic', whiteSpace: 'nowrap' }}>{fmtPrice(p.price)}</span>
+                          {orderingEnabled && (
+                            <button onClick={e => { e.stopPropagation(); addToCart(p) }}
+                              style={{ width: 28, height: 28, borderRadius: '50%', background: theme.accent, color: theme.bg, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
+                              aria-label={'Add ' + p.name}>+</button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
                   return (
                     <div
                       key={p.id}
                       onClick={() => { if (orderingEnabled) setProductModal(p) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: idx < uncatProds.length - 1 ? '1px solid ' + theme.line : 'none', cursor: orderingEnabled ? 'pointer' : 'default' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: divider, cursor: orderingEnabled ? 'pointer' : 'default' }}
                     >
                       {showPhotos && (p.image_url
                         ? <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />

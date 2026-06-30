@@ -32,6 +32,8 @@ export const BGS: Record<string, string> = {
   'marble':  'radial-gradient(circle at 28% 30%,#ececef,transparent 52%),radial-gradient(circle at 72% 70%,#dededf,transparent 55%)',
   'botanic': 'radial-gradient(circle at 12% 88%,#7FB89744,transparent 40%),radial-gradient(circle at 88% 12%,#2D524033,transparent 42%)',
   'warm':    'linear-gradient(135deg,#ffe9d0bb,#ffd9b388)',
+  // 'blobs' swatch — picker preview only. deriveTheme() replaces this with theme-derived CSS at render time.
+  'blobs':   'radial-gradient(circle at 25% 22%,rgba(160,140,120,0.26),transparent 44%),radial-gradient(circle at 72% 68%,rgba(140,120,100,0.20),transparent 48%)',
 }
 
 export function deriveTheme(
@@ -44,7 +46,21 @@ export function deriveTheme(
   const accent  = (bk.accent  as string  | undefined) ?? tpl.look.accent
   const fontId  = (bk.font    as string  | undefined) ?? tpl.font
   const fontCss = FONTS[fontId] ?? "'Inter',system-ui,sans-serif"
-  const bgCss   = BGS[backgroundId ?? 'none'] ?? ''
+  // For 'blobs', compute CSS dynamically from the active theme accent + template's accentSoft
+  // so blobs auto-tint per business. Other backgrounds use the static BGS map.
+  let bgCss = BGS[backgroundId ?? 'none'] ?? ''
+  if (backgroundId === 'blobs') {
+    const bgR = parseInt(tpl.look.bg.slice(1, 3) || '80', 16)
+    const isDark = bgR < 40
+    const a1 = isDark ? '44' : '28'
+    const a2 = isDark ? '33' : '1e'
+    const a3 = isDark ? '22' : '14'
+    bgCss =
+      'radial-gradient(circle at 22% 20%,' + accent + a1 + ',transparent 42%),' +
+      'radial-gradient(circle at 78% 72%,' + tpl.look.accentSoft + a2 + ',transparent 46%),' +
+      'radial-gradient(circle at 56% 88%,' + accent + a3 + ',transparent 36%),' +
+      'radial-gradient(circle at 14% 76%,' + tpl.look.accentSoft + a2 + ',transparent 38%)'
+  }
   return {
     bg: tpl.look.bg, card: tpl.look.card, ink: tpl.look.ink,
     accent, accentSoft: tpl.look.accentSoft, line: tpl.look.line, muted: tpl.look.muted,
