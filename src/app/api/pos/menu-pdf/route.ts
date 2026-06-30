@@ -45,7 +45,7 @@ async function _GET(_req: NextRequest) {
     : supabaseAdmin.from('menu_configs').select('*').eq('business_id', bid).eq('is_default', true).maybeSingle()
 
   const [bizRes, configRes, catsRes, productsRes] = await Promise.all([
-    supabaseAdmin.from('businesses').select('name').eq('id', bid).maybeSingle(),
+    supabaseAdmin.from('businesses').select('name, suburb, city').eq('id', bid).maybeSingle(),
     configQuery,
     supabaseAdmin.from('pos_categories')
       .select('id, name, color')
@@ -62,6 +62,10 @@ async function _GET(_req: NextRequest) {
 
   if (!bizRes.data) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
+  const suburb = (bizRes.data.suburb as string | null | undefined) ?? null
+  const city   = (bizRes.data.city   as string | null | undefined) ?? null
+  const locationSubtitle = [suburb, city].filter(Boolean).join(', ') || null
+
   const rawConfig = configRes.data
   const config = {
     template_id:     (rawConfig?.template_id    as string  | null) ?? 'editorial',
@@ -74,6 +78,7 @@ async function _GET(_req: NextRequest) {
 
   const html = renderMenuHtml({
     businessName: (bizRes.data.name as string | null) ?? 'Menu',
+    locationSubtitle,
     config,
     categories:   (catsRes.data ?? []) as Array<{ id: string; name: string; color: string | null }>,
     products:     (productsRes.data ?? []) as Array<{ id: string; name: string; description: string | null; price: number; image_url: string | null; category_id: string | null; sort_order: number | null }>,
