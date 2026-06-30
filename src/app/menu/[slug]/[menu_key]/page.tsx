@@ -33,8 +33,8 @@ export default async function SpecificMenuPage({ params }: Props) {
   const bid = await resolveBusinessId(supabaseAdmin, slug)
   if (!bid) notFound()
 
-  const [bizRes, onlineRes, configRes, catsRes, productsRes] = await Promise.all([
-    supabaseAdmin.from('businesses').select('id, name, slug, logo_url, is_active').eq('id', bid).maybeSingle(),
+  const [bizRes, onlineRes, configRes, catsRes, productsRes, hoursRes] = await Promise.all([
+    supabaseAdmin.from('businesses').select('id, name, slug, logo_url, is_active, suburb, city').eq('id', bid).maybeSingle(),
     supabaseAdmin.from('pos_online_settings').select('enabled, accept_orders').eq('business_id', bid).maybeSingle(),
     supabaseAdmin
       .from('menu_configs')
@@ -57,6 +57,10 @@ export default async function SpecificMenuPage({ params }: Props) {
       .is('deleted_at', null)
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('name'),
+    supabaseAdmin
+      .from('business_hours')
+      .select('day_of_week, open_time, close_time, is_closed')
+      .eq('business_id', bid),
   ])
 
   if (!bizRes.data || !bizRes.data.is_active) notFound()
@@ -67,6 +71,29 @@ export default async function SpecificMenuPage({ params }: Props) {
   const orderingEnabled = (onlineRes.data?.enabled === true) && (onlineRes.data?.accept_orders === true)
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
   const menuUrl = appUrl + '/menu/' + slug + '/' + menu_key
+
+  // Location subtitle: suburb + city (hidden if both empty)
+  const suburb = (biz.suburb as string | null | undefined) ?? null
+  const city   = (biz.city   as string | null | undefined) ?? null
+  const locationSubtitle = [suburb, city].filter(Boolean).join(', ') || null
+
+  // Open-now pill: compute in AEST. Show only when currently open; hide when closed or no hours row.
+  type HoursRow = { day_of_week: number; open_time: string | null; close_time: string | null; is_closed: boolean | null }
+  const hoursRows: HoursRow[] = (hoursRes.data ?? []) as HoursRow[]
+  const nowSyd = new Date(new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' }))
+  const dow = nowSyd.getDay()
+  const nowMin = nowSyd.getHours() * 60 + nowSyd.getMinutes()
+  const todayRow = hoursRows.find(h => h.day_of_week === dow && !h.is_closed && h.open_time && h.close_time)
+  let isOpenNow = false
+  let closesAt: string | null = null
+  if (todayRow && todayRow.open_time && todayRow.close_time) {
+    const [oh, om] = todayRow.open_time.split(':').map(Number)
+    const [ch, cm] = todayRow.close_time.split(':').map(Number)
+    if (nowMin >= oh * 60 + om && nowMin < ch * 60 + cm) {
+      isOpenNow = true
+      closesAt = todayRow.close_time
+    }
+  }
 
   type CatRow = { id: string; name: string; color: string | null }
   type ProdRow = { id: string; name: string; description: string | null; price: number; image_url: string | null; sort_order: number | null; category_id: string | null }
@@ -95,6 +122,9 @@ export default async function SpecificMenuPage({ params }: Props) {
       backgroundId={(menuConfig.background_id as string | null) ?? 'none'}
       initialCategories={orderedCats}
       initialProducts={(productsRes.data ?? []) as ProdRow[]}
+      locationSubtitle={locationSubtitle}
+      isOpenNow={isOpenNow}
+      closesAt={closesAt}
     />
   )
 }

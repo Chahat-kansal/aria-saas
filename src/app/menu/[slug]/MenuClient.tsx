@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 
-// ── Template/Font/Background system (mirrors the builder exactly) ───────────
+// ── Design system ────────────────────────────────────────────────────────────
 
 const TEMPLATES = [
   { id: 'editorial', font: 'Fraunces',         look: { bg: '#fbf8f1', card: '#fff',     ink: '#1a1206', accent: '#BA7517', accentSoft: '#f5e6c8', line: '#e6ddc9', muted: '#7a6a52' } },
@@ -31,7 +31,6 @@ const BGS: Record<string, string> = {
   'warm':    'linear-gradient(135deg,#ffe9d0bb,#ffd9b388)',
 }
 
-// Google Fonts IDs for dynamic loading
 const GFONT_IDS: Record<string, string> = {
   'Fraunces':         'Fraunces:ital,wght@0,400;0,700;1,400;1,700',
   'Space Grotesk':    'Space+Grotesk:wght@400;600;700',
@@ -44,22 +43,29 @@ type Theme = { bg: string; card: string; ink: string; accent: string; accentSoft
 function deriveTheme(templateId: string, brandKit: Record<string, unknown> | null, backgroundId: string | null): Theme {
   const tpl = TEMPLATES.find(t => t.id === templateId) ?? TEMPLATES[0]
   const bk = brandKit ?? {}
-  const accent  = (bk.accent  as string | undefined) ?? tpl.look.accent
-  const fontId  = (bk.font    as string | undefined) ?? tpl.font
+  const accent  = (bk.accent  as string  | undefined) ?? tpl.look.accent
+  const fontId  = (bk.font    as string  | undefined) ?? tpl.font
   const fontCss = FONTS[fontId] ?? "'Inter',system-ui,sans-serif"
   const bgCss   = BGS[backgroundId ?? 'none'] ?? ''
   return { bg: tpl.look.bg, card: tpl.look.card, ink: tpl.look.ink, accent, accentSoft: tpl.look.accentSoft, line: tpl.look.line, muted: tpl.look.muted, fontCss, bgCss }
 }
 
-const RED = '#ef4444'
-
 function fmtPrice(dollars: number) { return 'A$' + dollars.toFixed(2) }
 
-// ── Types ───────────────────────────────────────────────────────────────────
+function fmtTime(t: string): string {
+  const [h, m] = t.split(':').map(Number)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return m === 0 ? (h12 + suffix) : (h12 + ':' + m.toString().padStart(2, '0') + suffix)
+}
+
+const RED = '#ef4444'
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface Category { id: string; name: string; color: string | null }
 interface Product {
-  id: string; name: string; description: string | null; price: number;
+  id: string; name: string; description: string | null; price: number
   image_url: string | null; sort_order: number | null; category_id: string | null
 }
 interface CartItem { product: Product; qty: number; unit_price: number }
@@ -79,20 +85,28 @@ interface Props {
   backgroundId?: string | null
   initialCategories?: Category[]
   initialProducts?: Product[]
+  locationSubtitle?: string | null
+  isOpenNow?: boolean
+  closesAt?: string | null
 }
 
-// ── Component ───────────────────────────────────────────────────────────────
+// ── Component ────────────────────────────────────────────────────────────────
 
-export default function MenuClient({ businessId, slug: _slug, businessName, logoUrl, orderingEnabled, menuUrl, sectionOrder: _sectionOrder, itemOverrides, templateId, brandKit, backgroundId, initialCategories, initialProducts }: Props) {
+export default function MenuClient({
+  businessId, slug: _slug, businessName, logoUrl: _logoUrl, orderingEnabled, menuUrl,
+  sectionOrder: _sectionOrder, itemOverrides, templateId, brandKit, backgroundId,
+  initialCategories, initialProducts,
+  locationSubtitle, isOpenNow, closesAt,
+}: Props) {
   const theme = deriveTheme(templateId ?? 'editorial', brandKit ?? null, backgroundId ?? null)
 
   // Brand-kit fields (mirrors builder's BrandKit type)
   const bk = brandKit ?? {}
-  const logoEmoji   = (bk.logoEmoji   as string | undefined) ?? null
-  const showPhotos  = (bk.showPhotos  as boolean | undefined) ?? true
-  const showDesc    = (bk.showDesc    as boolean | undefined) ?? true
-  const showBadges  = (bk.showBadges  as boolean | undefined) ?? true
-  const printCols   = (bk.printCols   as number  | undefined) ?? 2
+  const logoEmoji  = (bk.logoEmoji  as string  | undefined) ?? '☕'
+  const showPhotos = (bk.showPhotos as boolean | undefined) ?? true
+  const showDesc   = (bk.showDesc   as boolean | undefined) ?? true
+  const showBadges = (bk.showBadges as boolean | undefined) ?? true
+  // printCols is A4-PRINT ONLY — never used for the web list layout
 
   // Load the template's Google Font dynamically
   useEffect(() => {
@@ -106,11 +120,14 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
     document.head.appendChild(link)
   }, [templateId, bk.font])
 
-  // Products + categories come from SSR (server-fetched via supabaseAdmin, sorted by sectionOrder).
-  // No client-side fetch needed — data is available immediately, no loading skeleton.
+  // Products + categories come from SSR props — no client-side fetch, no loading skeleton
   const [cats] = useState<Category[]>(initialCategories ?? [])
   const [rawProducts] = useState<Product[]>(initialProducts ?? [])
-  const [activeCat, setActiveCat] = useState<string | null>(initialCategories?.[0]?.id ?? null)
+  const [activeCat, setActiveCat] = useState<string | null>(
+    initialCategories && initialCategories.length > 0
+      ? initialCategories[0].id
+      : (initialProducts && initialProducts.length > 0 ? '__other__' : null)
+  )
   const [cart, setCart] = useState<CartItem[]>([])
   const [showCart, setShowCart] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
@@ -131,6 +148,8 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
       .catch(() => null)
   }, [showQr, qrDataUrl, menuUrl, theme.ink, theme.card])
 
+  // Derived product list — apply item_overrides (desc/photo/price overrides, hidden filter)
+  const catIds = new Set(cats.map(c => c.id))
   const products = rawProducts
     .filter(p => !(itemOverrides?.[p.id]?.hidden))
     .map(p => {
@@ -144,6 +163,8 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
       }
     })
 
+  const uncatProds = products.filter(p => !p.category_id || !catIds.has(p.category_id))
+  const hasUncat = uncatProds.length > 0
   const cartCount = cart.reduce((s, i) => s + i.qty, 0)
   const cartTotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0)
 
@@ -162,7 +183,10 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
   function scrollToSection(catId: string) {
     setActiveCat(catId)
     const el = sectionRefs.current[catId]
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (el) {
+      const top = el.getBoundingClientRect().top + window.scrollY - 54
+      window.scrollTo({ top, behavior: 'smooth' })
+    }
   }
 
   async function placeOrder() {
@@ -228,53 +252,70 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
   return (
     <div style={{ minHeight: '100dvh', background: theme.bg, backgroundImage: theme.bgCss, fontFamily: theme.fontCss, paddingBottom: orderingEnabled && cartCount > 0 ? 88 : 0 }}>
 
-      {/* STICKY HEADER */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: theme.card, borderBottom: '1px solid ' + theme.line }}>
-        <div style={{ maxWidth: 680, margin: '0 auto', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          {logoEmoji ? (
-            <div style={{ width: 38, height: 38, borderRadius: 10, border: '2px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent, flexShrink: 0 }}>{logoEmoji}</div>
-          ) : logoUrl ? (
-            <img src={logoUrl} alt="" style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
-          ) : null}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ fontSize: 17, fontWeight: 700, color: theme.ink, margin: 0, fontFamily: theme.fontCss, fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {businessName}
-            </h1>
-            {orderingEnabled && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#16a34a', marginTop: 2 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
-                Ordering open
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => setShowQr(true)}
-            title="Share menu"
-            style={{ width: 36, height: 36, borderRadius: 10, border: '1.5px solid ' + theme.line, background: theme.card, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, color: theme.ink, flexShrink: 0 }}
-          >
-            ⬡
-          </button>
+      {/* CENTERED HEADER — logo circle · business name · suburb+city subtitle · open-now pill */}
+      <div style={{ padding: '36px 24px 20px', textAlign: 'center' }}>
+        {/* Logo circle with accent border */}
+        <div style={{ width: 64, height: 64, borderRadius: '50%', border: '2.5px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: theme.accent, margin: '0 auto 14px' }}>
+          {logoEmoji}
         </div>
-
-        {/* CATEGORY PILLS */}
-        {cats.length > 0 && (
-          <div style={{ overflowX: 'auto', scrollbarWidth: 'none', display: 'flex', gap: 8, padding: '0 18px 12px', maxWidth: 680, margin: '0 auto' }}>
-            {cats.map(c => (
-              <button
-                key={c.id}
-                onClick={() => scrollToSection(c.id)}
-                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: activeCat === c.id ? ('2px solid ' + theme.accent) : ('2px solid ' + theme.line), background: activeCat === c.id ? theme.accent : theme.card, color: activeCat === c.id ? theme.bg : theme.muted, fontSize: 13, fontWeight: activeCat === c.id ? 700 : 500, cursor: 'pointer', fontFamily: theme.fontCss }}
-              >
-                {c.name}
-              </button>
-            ))}
+        {/* Business name — template font, italic */}
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: theme.ink, margin: '0 0 5px', fontFamily: theme.fontCss, fontStyle: 'italic', lineHeight: 1.2 }}>
+          {businessName}
+        </h1>
+        {/* Location subtitle: suburb, city — hidden if both empty */}
+        {locationSubtitle && (
+          <p style={{ fontSize: 13, color: theme.muted, margin: '0 0 12px', lineHeight: 1.4 }}>{locationSubtitle}</p>
+        )}
+        {/* Open-now pill — from business_hours (AEST). Hidden entirely when closed or no hours row. */}
+        {isOpenNow && closesAt && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#16a34a', color: '#fff', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', marginBottom: 4 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', display: 'inline-block', flexShrink: 0 }} />
+            {'OPEN NOW · TIL ' + fmtTime(closesAt)}
+          </div>
+        )}
+        {/* Ordering indicator */}
+        {orderingEnabled && (
+          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#16a34a', marginRight: 5, verticalAlign: 'middle' }} />
+            Ordering open
           </div>
         )}
       </div>
 
-      {/* MENU SECTIONS */}
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 18px 32px' }}>
-        {products.length === 0 ? (
+      {/* STICKY CATEGORY NAV — always shown (QR button lives here while scrolling) */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: theme.bg, borderBottom: '1px solid ' + theme.line }}>
+        <div style={{ overflowX: 'auto', scrollbarWidth: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px' }}>
+          {cats.map(c => (
+            <button
+              key={c.id}
+              onClick={() => scrollToSection(c.id)}
+              style={{ flexShrink: 0, padding: '5px 14px', borderRadius: 20, border: '1.5px solid ' + (activeCat === c.id ? theme.accent : theme.line), background: activeCat === c.id ? theme.accent : 'transparent', color: activeCat === c.id ? theme.bg : theme.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: theme.fontCss }}
+            >
+              {c.name}
+            </button>
+          ))}
+          {hasUncat && cats.length > 0 && (
+            <button
+              onClick={() => scrollToSection('__other__')}
+              style={{ flexShrink: 0, padding: '5px 14px', borderRadius: 20, border: '1.5px solid ' + (activeCat === '__other__' ? theme.accent : theme.line), background: activeCat === '__other__' ? theme.accent : 'transparent', color: activeCat === '__other__' ? theme.bg : theme.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: theme.fontCss }}
+            >
+              Other
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={() => setShowQr(true)}
+            title="Share menu"
+            style={{ flexShrink: 0, width: 34, height: 34, borderRadius: '50%', border: '1.5px solid ' + theme.line, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, color: theme.muted }}
+          >
+            ⬡
+          </button>
+        </div>
+      </div>
+
+      {/* PRODUCT LIST — single-column list, thumb-left rows, divider lines */}
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 18px 32px' }}>
+        {products.length === 0 && !hasUncat ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: theme.muted }}>
             <div style={{ fontSize: 44, marginBottom: 14 }}>☕</div>
             <p style={{ fontSize: 15, fontWeight: 600, color: theme.ink, margin: '0 0 6px' }}>Menu coming soon</p>
@@ -282,108 +323,110 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
           </div>
         ) : (
           <>
-          {cats.map(cat => {
-            const catProducts = products.filter(p => p.category_id === cat.id)
-            if (catProducts.length === 0) return null
-            return (
-              <div
-                key={cat.id}
-                ref={el => { sectionRefs.current[cat.id] = el }}
-                style={{ marginTop: 28 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  {cat.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color, display: 'inline-block', flexShrink: 0 }} />}
-                  <h2 style={{ fontSize: 13, fontWeight: 800, color: theme.accent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {cats.map(cat => {
+              const catProds = products.filter(p => p.category_id === cat.id)
+              if (catProds.length === 0) return null
+              return (
+                <div key={cat.id} ref={el => { sectionRefs.current[cat.id] = el }} style={{ marginTop: 28 }}>
+                  {/* Category heading */}
+                  <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.09em', color: theme.accent, marginBottom: 4, fontFamily: theme.fontCss }}>
                     {cat.name}
-                  </h2>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + printCols + ',1fr)', gap: 12 }}>
-                  {catProducts.map(p => {
-                    const badge = itemOverrides?.[p.id]?.badge ?? null
+                  </div>
+                  {/* Item rows */}
+                  {catProds.map((p, idx) => {
+                    const badge = showBadges ? (itemOverrides?.[p.id]?.badge ?? null) : null
                     return (
                       <div
                         key={p.id}
                         onClick={() => { if (orderingEnabled) setProductModal(p) }}
-                        style={{ background: theme.card, borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.1)', cursor: orderingEnabled ? 'pointer' : 'default', position: 'relative', display: 'flex', flexDirection: 'column', border: '1px solid ' + theme.line }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: idx < catProds.length - 1 ? '1px solid ' + theme.line : 'none', cursor: orderingEnabled ? 'pointer' : 'default' }}
                       >
-                        {showBadges && badge && (
-                          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, background: theme.accent, color: theme.bg, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, letterSpacing: '0.04em' }}>
-                            {badge}
-                          </div>
+                        {/* 56px thumb */}
+                        {showPhotos && (p.image_url
+                          ? <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                          : <div style={{ width: 56, height: 56, borderRadius: 10, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: theme.accent, flexShrink: 0 }}>☕</div>
                         )}
-                        {showPhotos && (p.image_url ? (
-                          <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: '100%', height: 118, objectFit: 'cover', display: 'block' }} />
-                        ) : (
-                          <div style={{ width: '100%', height: 118, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, color: theme.accent }}>☕</div>
-                        ))}
-                        <div style={{ padding: '10px 12px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 3 }}>{p.name}</div>
+                        {/* Name + desc + badge */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, lineHeight: 1.3 }}>{p.name}</div>
                           {showDesc && p.description && (
-                            <div style={{ fontSize: 11, color: theme.muted, lineHeight: 1.4, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+                            <div style={{ fontSize: 12, color: theme.muted, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
                               {p.description}
                             </div>
                           )}
-                          <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: 15, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic' }}>
-                              {fmtPrice(p.price)}
+                          {badge && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 6px', display: 'inline-block', marginTop: 4 }}>
+                              {badge}
                             </span>
-                            {orderingEnabled && (
-                              <button
-                                onClick={e => { e.stopPropagation(); addToCart(p) }}
-                                style={{ width: 28, height: 28, borderRadius: '50%', background: theme.accent, color: theme.bg, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
-                                aria-label={'Add ' + p.name}
-                              >
-                                +
-                              </button>
-                            )}
-                          </div>
+                          )}
+                        </div>
+                        {/* Price + add button */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic' }}>
+                            {fmtPrice(p.price)}
+                          </span>
+                          {orderingEnabled && (
+                            <button
+                              onClick={e => { e.stopPropagation(); addToCart(p) }}
+                              style={{ width: 28, height: 28, borderRadius: '50%', background: theme.accent, color: theme.bg, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
+                              aria-label={'Add ' + p.name}
+                            >+</button>
+                          )}
                         </div>
                       </div>
                     )
                   })}
                 </div>
-              </div>
-            )
-          })}
-          {(() => {
-            const pubCatIds = new Set(cats.map(c => c.id))
-            const uncat = products.filter(p => !p.category_id || !pubCatIds.has(p.category_id))
-            if (uncat.length === 0) return null
-            return (
-              <div style={{ marginTop: 28 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  <h2 style={{ fontSize: 13, fontWeight: 800, color: theme.muted, margin: 0, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Other</h2>
+              )
+            })}
+            {/* Uncategorized products */}
+            {hasUncat && (
+              <div ref={el => { sectionRefs.current['__other__'] = el }} style={{ marginTop: 28 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.09em', color: theme.muted, marginBottom: 4, fontFamily: theme.fontCss }}>
+                  {cats.length > 0 ? 'Other' : ''}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + printCols + ',1fr)', gap: 12 }}>
-                  {uncat.map(p => {
-                    const badge = itemOverrides?.[p.id]?.badge ?? null
-                    return (
-                      <div key={p.id} onClick={() => { if (orderingEnabled) setProductModal(p) }} style={{ background: theme.card, borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.1)', cursor: orderingEnabled ? 'pointer' : 'default', position: 'relative', display: 'flex', flexDirection: 'column', border: '1px solid ' + theme.line }}>
-                        {showBadges && badge && (
-                          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, background: theme.accent, color: theme.bg, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, letterSpacing: '0.04em' }}>{badge}</div>
+                {uncatProds.map((p, idx) => {
+                  const badge = showBadges ? (itemOverrides?.[p.id]?.badge ?? null) : null
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => { if (orderingEnabled) setProductModal(p) }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: idx < uncatProds.length - 1 ? '1px solid ' + theme.line : 'none', cursor: orderingEnabled ? 'pointer' : 'default' }}
+                    >
+                      {showPhotos && (p.image_url
+                        ? <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                        : <div style={{ width: 56, height: 56, borderRadius: 10, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: theme.accent, flexShrink: 0 }}>☕</div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, lineHeight: 1.3 }}>{p.name}</div>
+                        {showDesc && p.description && (
+                          <div style={{ fontSize: 12, color: theme.muted, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+                            {p.description}
+                          </div>
                         )}
-                        {showPhotos && (p.image_url ? (
-                          <img src={p.image_url} alt={p.name} loading="lazy" style={{ width: '100%', height: 118, objectFit: 'cover', display: 'block' }} />
-                        ) : (
-                          <div style={{ width: '100%', height: 118, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, color: theme.accent }}>☕</div>
-                        ))}
-                        <div style={{ padding: '10px 12px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 3 }}>{p.name}</div>
-                          {showDesc && p.description && <div style={{ fontSize: 11, color: theme.muted, lineHeight: 1.4, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>{p.description}</div>}
-                          <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: 15, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{fmtPrice(p.price)}</span>
-                            {orderingEnabled && (
-                              <button onClick={e => { e.stopPropagation(); addToCart(p) }} style={{ width: 28, height: 28, borderRadius: '50%', background: theme.accent, color: theme.bg, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }} aria-label={'Add ' + p.name}>+</button>
-                            )}
-                          </div>
-                        </div>
+                        {badge && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 6px', display: 'inline-block', marginTop: 4 }}>
+                            {badge}
+                          </span>
+                        )}
                       </div>
-                    )
-                  })}
-                </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic' }}>
+                          {fmtPrice(p.price)}
+                        </span>
+                        {orderingEnabled && (
+                          <button
+                            onClick={e => { e.stopPropagation(); addToCart(p) }}
+                            style={{ width: 28, height: 28, borderRadius: '50%', background: theme.accent, color: theme.bg, border: 'none', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
+                            aria-label={'Add ' + p.name}
+                          >+</button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })()}
+            )}
           </>
         )}
       </div>
@@ -394,7 +437,7 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
       {/* FLOATING CART BAR */}
       {orderingEnabled && cartCount > 0 && !showCart && (
         <div style={{ position: 'fixed', bottom: 20, left: 0, right: 0, padding: '0 18px', zIndex: 150 }}>
-          <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          <div style={{ maxWidth: 640, margin: '0 auto' }}>
             <button
               onClick={() => setShowCart(true)}
               style={{ width: '100%', padding: '14px 20px', borderRadius: 16, border: 'none', background: theme.accent, color: theme.bg, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: theme.fontCss, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}
