@@ -1,4 +1,5 @@
 import { callAnthropic } from '../providers/anthropic'
+import { callGemini } from '../providers/gemini'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 
 export type AriaIntentType = 'analytical' | 'artifact_request' | 'action' | 'general' | 'smalltalk'
@@ -98,6 +99,19 @@ Respond with JSON only (no extra text):
   "routing_reason": "one sentence explaining the classification"
 }`
 
+// Deterministic comparison_period from keyword patterns — used when AI is unavailable.
+// Mirrors the few-shot examples in SYSTEM so keyword coverage stays consistent.
+// Never invents numbers — only determines the time window so buildFactsPacket queries correctly.
+function detectComparisonPeriodDeterministic(message: string): ComparisonPeriod {
+  const m = message.toLowerCase()
+  if (/same week last (month|munth|mth|mnth)|this time last month|4 weeks? ago|same period last month/.test(m)) return 'same_week_last_month'
+  if (/last (month|munth|mth|mnth)|previous month|past month|a month ago|vs last (month|munth)|compared to last (month|munth)/.test(m)) return 'last_month'
+  if (/last week|las week|lst week|previous week|past week|a week ago|vs last week/.test(m)) return 'last_week'
+  if (/last year|year on year|\byoy\b|12 months? ago|same time last year/.test(m)) return 'last_year'
+  if (/\btoday\b|this morning|right now|since open|so far today/.test(m)) return 'today'
+  return null
+}
+
 export async function classifyAriaIntent(message: string): Promise<AriaIntent> {
   try {
     const result = await callAnthropic<AriaIntent>(
@@ -112,12 +126,45 @@ export async function classifyAriaIntent(message: string): Promise<AriaIntent> {
       FALLBACK,
     )
 
+    // Anthropic returned empty (provider down / billing exhausted) — try Gemini before falling back.
+    // Without this, comparison_period stays null → buildFactsPacket skips the comparison query →
+    // ground-truth has no comparison revenue → Gemini synthesis answers "cannot access data".
+    if (!result.raw) {
+      console.warn('[aria-intent] Anthropic returned empty — trying Gemini fallback for classification')
+      try {
+        const gemResult = await callGemini({
+          systemPrompt: SYSTEM,
+          userPrompt: message,
+          maxTokens: 200,
+          agentKey: 'aria_intent_classifier',
+          role: 'classify',
+        })
+        if (gemResult.raw) {
+          const parsed = parseLLMJsonOr<AriaIntent>(gemResult.raw, FALLBACK, 'aria-intent/classify-gemini')
+          if (parsed && VALID_INTENT_TYPES.has(parsed.intent_type) && parsed.routing_reason !== 'fallback-default') {
+            const cp = parsed.comparison_period as string | null
+            const comparison_period: ComparisonPeriod = VALID_COMPARISON_PERIODS.has(cp as ComparisonPeriod)
+              ? (cp as ComparisonPeriod)
+              : null
+            return { ...parsed, comparison_period }
+          }
+        }
+      } catch (gemErr) {
+        console.warn('[aria-intent] Gemini fallback failed:', (gemErr as Error).message)
+      }
+      // Both providers down — deterministic keyword detection preserves comparison_period so
+      // buildFactsPacket still fetches the right comparison window and the answer stays grounded.
+      const comparison_period = detectComparisonPeriodDeterministic(message)
+      console.warn('[aria-intent] Both providers down — deterministic fallback, period:', comparison_period)
+      return { ...FALLBACK, comparison_period }
+    }
+
     const parsed = parseLLMJsonOr<AriaIntent>(result.raw, FALLBACK, 'aria-intent/classify')
 
     // Validate intent_type is a known value — guard against LLM hallucination
     if (!VALID_INTENT_TYPES.has(parsed.intent_type)) {
       console.warn('[aria-intent] unknown intent_type:', parsed.intent_type, '— using fallback')
-      return FALLBACK
+      return { ...FALLBACK, comparison_period: detectComparisonPeriodDeterministic(message) }
     }
 
     // Validate comparison_period — coerce nulls properly
@@ -128,6 +175,6 @@ export async function classifyAriaIntent(message: string): Promise<AriaIntent> {
     return { ...parsed, comparison_period }
   } catch (err) {
     console.error('[aria-intent] classifyAriaIntent failed, using fallback:', (err as Error).message)
-    return FALLBACK
+    return { ...FALLBACK, comparison_period: detectComparisonPeriodDeterministic(message) }
   }
 }

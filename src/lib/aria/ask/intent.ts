@@ -1,4 +1,5 @@
 import { callAnthropic } from '../providers/anthropic'
+import { callGemini } from '../providers/gemini'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 
 export type IntentType = 'question' | 'file_export' | 'troubleshoot' | 'escalate' | 'smalltalk' | 'technical' | 'general'
@@ -86,24 +87,51 @@ export async function classifyIntent(
   message: string,
   conversationContext?: string,
 ): Promise<ClassifiedIntent> {
+  const SAFE_DEFAULT: ClassifiedIntent = { type: 'question', confidence: 'low', complexity: 'simple' }
   const userPrompt = conversationContext
     ? `Recent context:\n${conversationContext}\n\nNew message: ${message}`
     : message
 
-  // NOTE: Gemini Flash-Lite previously used here was causing 30s+ timeouts
-  // that ate the entire 60s Vercel function budget. Reverted to Haiku
-  // which is fast (~500ms) and reliable.
-  const result = await callAnthropic<ClassifiedIntent>(
-    {
-      model: 'haiku',
-      systemPrompt: SYSTEM,
-      userPrompt,
-      maxTokens: 200,
-      agentKey: 'intent_classifier',
-      role: 'classify',
-    },
-    { type: 'question', confidence: 'low', complexity: 'simple' },
-  )
+  try {
+    // NOTE: Gemini Flash-Lite previously used here was causing 30s+ timeouts
+    // that ate the entire 60s Vercel function budget. Haiku is fast (~500ms) and reliable.
+    const result = await callAnthropic<ClassifiedIntent>(
+      {
+        model: 'haiku',
+        systemPrompt: SYSTEM,
+        userPrompt,
+        maxTokens: 200,
+        agentKey: 'intent_classifier',
+        role: 'classify',
+      },
+      SAFE_DEFAULT,
+    )
 
-  return parseLLMJsonOr<ClassifiedIntent>(result.raw, { type: 'question', confidence: 'low', complexity: 'simple' }, 'intent/classify')
+    // Anthropic returned empty (provider down / billing) — try Gemini so classification is real,
+    // not a hardcoded default that might mis-route the question to the general fast-path.
+    if (!result.raw) {
+      console.warn('[intent] Anthropic returned empty — trying Gemini fallback for classification')
+      try {
+        const gemResult = await callGemini({
+          systemPrompt: SYSTEM,
+          userPrompt,
+          maxTokens: 200,
+          agentKey: 'intent_classifier',
+          role: 'classify',
+        })
+        if (gemResult.raw) {
+          const parsed = parseLLMJsonOr<ClassifiedIntent>(gemResult.raw, SAFE_DEFAULT, 'intent/classify-gemini')
+          if (parsed?.type) return parsed
+        }
+      } catch (gemErr) {
+        console.warn('[intent] Gemini fallback failed:', (gemErr as Error).message)
+      }
+      return SAFE_DEFAULT
+    }
+
+    return parseLLMJsonOr<ClassifiedIntent>(result.raw, SAFE_DEFAULT, 'intent/classify')
+  } catch (err) {
+    console.error('[intent] classifyIntent failed:', (err as Error).message)
+    return SAFE_DEFAULT
+  }
 }
