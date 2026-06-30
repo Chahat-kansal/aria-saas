@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 
 // ── Template/Font/Background system (mirrors the builder exactly) ───────────
@@ -77,11 +77,13 @@ interface Props {
   templateId?: string | null
   brandKit?: Record<string, unknown> | null
   backgroundId?: string | null
+  initialCategories?: Category[]
+  initialProducts?: Product[]
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function MenuClient({ businessId, slug: _slug, businessName, logoUrl, orderingEnabled, menuUrl, sectionOrder, itemOverrides, templateId, brandKit, backgroundId }: Props) {
+export default function MenuClient({ businessId, slug: _slug, businessName, logoUrl, orderingEnabled, menuUrl, sectionOrder: _sectionOrder, itemOverrides, templateId, brandKit, backgroundId, initialCategories, initialProducts }: Props) {
   const theme = deriveTheme(templateId ?? 'editorial', brandKit ?? null, backgroundId ?? null)
 
   // Brand-kit fields (mirrors builder's BrandKit type)
@@ -104,10 +106,11 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
     document.head.appendChild(link)
   }, [templateId, bk.font])
 
-  const [cats, setCats] = useState<Category[]>([])
-  const [rawProducts, setRawProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeCat, setActiveCat] = useState<string | null>(null)
+  // Products + categories come from SSR (server-fetched via supabaseAdmin, sorted by sectionOrder).
+  // No client-side fetch needed — data is available immediately, no loading skeleton.
+  const [cats] = useState<Category[]>(initialCategories ?? [])
+  const [rawProducts] = useState<Product[]>(initialProducts ?? [])
+  const [activeCat, setActiveCat] = useState<string | null>(initialCategories?.[0]?.id ?? null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [showCart, setShowCart] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
@@ -120,30 +123,6 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
   const [checkoutForm, setCheckoutForm] = useState({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' })
   const [checkoutError, setCheckoutError] = useState('')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-
-  const load = useCallback(async () => {
-    const res = await fetch('/api/public/menu/' + businessId).then(r => r.json()).catch(() => ({ categories: [], products: [] }))
-    const rawCats: Category[] = res.categories ?? []
-    const prods: Product[] = res.products ?? []
-
-    let orderedCats = rawCats
-    if (sectionOrder && sectionOrder.length > 0) {
-      const pos: Record<string, number> = {}
-      sectionOrder.forEach((id, i) => { pos[id] = i })
-      orderedCats = [...rawCats].sort((a, b) => {
-        const ai = pos[a.id] ?? 9999
-        const bi = pos[b.id] ?? 9999
-        return ai !== bi ? ai - bi : a.name.localeCompare(b.name)
-      })
-    }
-
-    setCats(orderedCats)
-    setRawProducts(prods)
-    if (orderedCats[0]) setActiveCat(prev => prev ?? orderedCats[0].id)
-    setLoading(false)
-  }, [businessId, sectionOrder])
-
-  useEffect(() => { load() }, [load])
 
   useEffect(() => {
     if (!showQr || qrDataUrl) return
@@ -295,13 +274,7 @@ export default function MenuClient({ businessId, slug: _slug, businessName, logo
 
       {/* MENU SECTIONS */}
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 18px 32px' }}>
-        {loading ? (
-          <div style={{ padding: '24px 0', display: 'grid', gridTemplateColumns: 'repeat(' + printCols + ',1fr)', gap: 12 }}>
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} style={{ borderRadius: 14, background: theme.line, height: 200 }} />
-            ))}
-          </div>
-        ) : products.length === 0 ? (
+        {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: theme.muted }}>
             <div style={{ fontSize: 44, marginBottom: 14 }}>☕</div>
             <p style={{ fontSize: 15, fontWeight: 600, color: theme.ink, margin: '0 0 6px' }}>Menu coming soon</p>

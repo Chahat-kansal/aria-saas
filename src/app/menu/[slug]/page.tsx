@@ -68,7 +68,7 @@ export default async function MenuPage({ params }: Props) {
   const bid = await resolveBusinessId(supabaseAdmin, slug)
   if (!bid) notFound()
 
-  const [bizRes, onlineRes, configsRes] = await Promise.all([
+  const [bizRes, onlineRes, configsRes, catsRes, productsRes] = await Promise.all([
     supabaseAdmin.from('businesses').select('id, name, slug, logo_url, is_active').eq('id', bid).maybeSingle(),
     supabaseAdmin.from('pos_online_settings').select('enabled, accept_orders').eq('business_id', bid).maybeSingle(),
     supabaseAdmin
@@ -77,6 +77,21 @@ export default async function MenuPage({ params }: Props) {
       .eq('business_id', bid)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true }),
+    supabaseAdmin
+      .from('pos_categories')
+      .select('id, name, color')
+      .eq('business_id', bid)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('name'),
+    supabaseAdmin
+      .from('pos_products')
+      .select('id, name, description, price, image_url, sort_order, category_id')
+      .eq('business_id', bid)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('name'),
   ])
 
   if (!bizRes.data || !bizRes.data.is_active) notFound()
@@ -97,6 +112,19 @@ export default async function MenuPage({ params }: Props) {
   }
 
   const menuConfig = resolveActiveConfig(configs)
+
+  // Sort categories by the resolved config's section_order (server-side, no client fetch needed)
+  type CatRow = { id: string; name: string; color: string | null }
+  type ProdRow = { id: string; name: string; description: string | null; price: number; image_url: string | null; sort_order: number | null; category_id: string | null }
+  const rawCats: CatRow[] = (catsRes.data ?? []) as CatRow[]
+  const so = (menuConfig?.section_order as string[] | null) ?? null
+  const orderedCats: CatRow[] = so && so.length > 0
+    ? [...rawCats].sort((a, b) => {
+        const pos: Record<string, number> = {}
+        so.forEach((id, i) => { pos[id] = i })
+        return (pos[a.id] ?? 9999) - (pos[b.id] ?? 9999) || a.name.localeCompare(b.name)
+      })
+    : rawCats
 
   const biz = bizRes.data
   const orderingEnabled = (onlineRes.data?.enabled === true) && (onlineRes.data?.accept_orders === true)
@@ -125,6 +153,8 @@ export default async function MenuPage({ params }: Props) {
         templateId={(menuConfig?.template_id as string | null) ?? 'editorial'}
         brandKit={(menuConfig?.brand_kit as Record<string, unknown> | null) ?? null}
         backgroundId={(menuConfig?.background_id as string | null) ?? 'none'}
+        initialCategories={orderedCats}
+        initialProducts={(productsRes.data ?? []) as ProdRow[]}
       />
     </>
   )
