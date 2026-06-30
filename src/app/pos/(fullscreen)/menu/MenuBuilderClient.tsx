@@ -113,71 +113,101 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
   const uncatMini = visProds.filter(p => !p.category_id || !miniCatIds.has(p.category_id))
 
   return (
-    <div style={{ background: theme.bg, color: theme.ink, fontFamily: theme.fontCss, minHeight: '100%', fontSize: 12 }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: theme.card, borderBottom: '1px solid ' + theme.line, padding: '9px 11px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-          <div style={{ width: 26, height: 26, borderRadius: 7, border: '1.5px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: theme.accent, flexShrink: 0 }}>{logoEmoji}</div>
-          <span style={{ fontFamily: theme.fontCss, fontWeight: 700, fontSize: 13, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{businessName}</span>
+    <div style={{ background: theme.bg, backgroundImage: theme.bgCss, color: theme.ink, fontFamily: theme.fontCss, minHeight: '100%', fontSize: 12 }}>
+
+      {/* CENTERED HEADER — exact mockup .mh / .mlogo / .mname / .msub / .mstat */}
+      <div style={{ padding: '26px 22px 16px', textAlign: 'center' }}>
+        {/* 56px circle logo — exact mockup .mlogo */}
+        <div style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: theme.accent, margin: '0 auto 10px' }}>{logoEmoji}</div>
+        {/* Business name — mockup .mname: 26px */}
+        <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.5px', color: theme.ink, fontFamily: theme.fontCss }}>{businessName}</div>
+        {/* Subtitle — mockup .msub: 11px, opacity .7 */}
+        <div style={{ fontSize: 11, color: theme.muted, marginTop: 5, opacity: 0.7 }}>Location · your hours</div>
+        {/* Open-now pill — mockup .mstat: 1.5px accent border, green dot, uppercase */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 11, fontSize: 9.5, fontWeight: 700, borderRadius: 20, padding: '5px 10px', border: '1.5px solid ' + theme.accent, color: theme.ink, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', display: 'inline-block', flexShrink: 0 }} />
+          Open now · til 5pm
         </div>
-        {orderedCats.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, overflowX: 'auto' as const, paddingBottom: 8, scrollbarWidth: 'none' as const }}>
+      </div>
+
+      {/* STICKY CATEGORY NAV — mockup .mnav: gap:6, padding:11px 18px */}
+      {orderedCats.length > 0 && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: theme.bg, borderBottom: '1px solid ' + theme.line }}>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' as const, padding: '11px 18px', scrollbarWidth: 'none' as const }}>
             {orderedCats.map((c, i) => (
-              <button key={c.id} style={{ flexShrink: 0, padding: '3px 9px', borderRadius: 20, border: '1.5px solid ' + (i === 0 ? theme.accent : theme.line), background: i === 0 ? theme.accent : 'transparent', color: i === 0 ? theme.bg : theme.muted, fontSize: 10, fontWeight: 600, cursor: 'default', fontFamily: theme.fontCss }}>{c.name}</button>
+              <button key={c.id} style={{ flexShrink: 0, padding: '6px 13px', borderRadius: 20, border: '1.5px solid ' + (i === 0 ? theme.accent : theme.line), background: i === 0 ? theme.accent : 'transparent', color: i === 0 ? theme.bg : theme.ink, fontSize: 10.5, fontWeight: 700, cursor: 'default', fontFamily: theme.fontCss, whiteSpace: 'nowrap' as const }}>{c.name}</button>
             ))}
           </div>
-        )}
-      </div>
-      <div style={{ padding: '0 11px 20px' }}>
+        </div>
+      )}
+
+      {/* PRODUCT LIST — exact mockup .mi rows */}
+      <div style={{ padding: '0 20px 20px' }}>
         {orderedCats.map(cat => {
           const cp = visProds.filter(p => p.category_id === cat.id)
           if (cp.length === 0) return null
           return (
             <div key={cat.id} style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: theme.accent, marginBottom: 7, fontFamily: theme.fontCss }}>{cat.name}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-                {cp.map(p => {
-                  const badge = cfg.item_overrides[p.id]?.badge
-                  return (
-                    <div key={p.id} style={{ background: theme.card, borderRadius: 9, overflow: 'hidden', border: '1px solid ' + theme.line, display: 'flex', flexDirection: 'column' }}>
-                      {showPhotos && (p.image_url
-                        ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
-                        : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
-                      )}
-                      <div style={{ padding: '6px 7px 7px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        {showBadges && badge && <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 2 }}>{p.name}</div>
-                        {showDesc && p.description && <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>}
-                        <div style={{ marginTop: 'auto', fontSize: 11, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss }}>{'$' + p.price.toFixed(2)}</div>
-                      </div>
-                    </div>
-                  )
-                })}
+              {/* Category heading — mockup .mcat-h: 10.5px/800/uppercase/1.6px tracking + ::after line */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '1.6px', padding: '16px 0 4px', color: theme.accent, fontFamily: theme.fontCss }}>
+                {cat.name}
+                <span style={{ flex: 1, height: 1.5, background: 'currentColor', opacity: 0.18, display: 'inline-block' }} />
               </div>
-            </div>
-          )
-        })}
-        {uncatMini.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: theme.muted, marginBottom: 7, fontFamily: theme.fontCss }}>Other</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              {uncatMini.map(p => {
+              {/* Item rows — exact mockup .mi: gap:12, padding:13px 0, flex-start */}
+              {cp.map((p, idx) => {
                 const badge = cfg.item_overrides[p.id]?.badge
                 return (
-                  <div key={p.id} style={{ background: theme.card, borderRadius: 9, overflow: 'hidden', border: '1px solid ' + theme.line, display: 'flex', flexDirection: 'column' }}>
+                  <div key={p.id} style={{ display: 'flex', gap: 12, padding: '13px 0', borderBottom: idx < cp.length - 1 ? '1px solid ' + theme.line : 'none', alignItems: 'flex-start' }}>
+                    {/* Thumb — exact mockup .ph: 52×52, border-radius:12, flex-shrink:0 */}
                     {showPhotos && (p.image_url
-                      ? <img src={p.image_url} alt="" style={{ width: '100%', height: 62, objectFit: 'cover' }} loading="lazy" />
-                      : <div style={{ height: 62, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: theme.accent }}>☕</div>
+                      ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
+                      : <div style={{ width: 52, height: 52, borderRadius: 12, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, color: theme.accent, flexShrink: 0 }}>☕</div>
                     )}
-                    <div style={{ padding: '6px 7px 7px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      {showBadges && badge && <span style={{ fontSize: 8, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 8, padding: '1px 4px', alignSelf: 'flex-start' as const, marginBottom: 2 }}>{badge}</span>}
-                      <div style={{ fontSize: 10, fontWeight: 700, color: theme.ink, lineHeight: 1.3, marginBottom: 2 }}>{p.name}</div>
-                      {showDesc && p.description && <div style={{ fontSize: 8.5, color: theme.muted, lineHeight: 1.4, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', marginBottom: 3 }}>{p.description}</div>}
-                      <div style={{ marginTop: 'auto', fontSize: 11, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss }}>{'$' + p.price.toFixed(2)}</div>
+                    {/* Content — exact mockup .nf: flex:1, min-width:0 */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Name + price — exact mockup .t: space-between, gap:9, baseline */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 9, alignItems: 'baseline' }}>
+                        {/* Name — exact mockup .nm: 14.5px, 700, letter-spacing:-.2px */}
+                        <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, letterSpacing: '-0.2px' }}>{p.name}</div>
+                        {/* Price — exact mockup .pr: 14px, 800, nowrap */}
+                        <div style={{ fontSize: 14, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>{'A$' + p.price.toFixed(2)}</div>
+                      </div>
+                      {/* Desc — exact mockup .ds: 11.5px, opacity .6, line-height 1.4 */}
+                      {showDesc && p.description && <div style={{ fontSize: 11.5, color: theme.muted, lineHeight: 1.4, marginTop: 2, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', opacity: 0.6 }}>{p.description}</div>}
+                      {/* Badge — exact mockup .b: 8.5px, 800, uppercase, border 1.2px */}
+                      {showBadges && badge && <span style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.03em', borderRadius: 20, padding: '2px 7px', border: '1.2px solid ' + theme.accent, color: theme.accent, display: 'inline-block', marginTop: 6 }}>{badge}</span>}
                     </div>
                   </div>
                 )
               })}
             </div>
+          )
+        })}
+        {uncatMini.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '1.6px', padding: '16px 0 4px', color: theme.muted, fontFamily: theme.fontCss }}>
+              Other
+              <span style={{ flex: 1, height: 1.5, background: 'currentColor', opacity: 0.18, display: 'inline-block' }} />
+            </div>
+            {uncatMini.map((p, idx) => {
+              const badge = cfg.item_overrides[p.id]?.badge
+              return (
+                <div key={p.id} style={{ display: 'flex', gap: 12, padding: '13px 0', borderBottom: idx < uncatMini.length - 1 ? '1px solid ' + theme.line : 'none', alignItems: 'flex-start' }}>
+                  {showPhotos && (p.image_url
+                    ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
+                    : <div style={{ width: 52, height: 52, borderRadius: 12, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, color: theme.accent, flexShrink: 0 }}>☕</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 9, alignItems: 'baseline' }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, letterSpacing: '-0.2px' }}>{p.name}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>{'A$' + p.price.toFixed(2)}</div>
+                    </div>
+                    {showDesc && p.description && <div style={{ fontSize: 11.5, color: theme.muted, lineHeight: 1.4, marginTop: 2, overflow: 'hidden', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, display: '-webkit-box', opacity: 0.6 }}>{p.description}</div>}
+                    {showBadges && badge && <span style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.03em', borderRadius: 20, padding: '2px 7px', border: '1.2px solid ' + theme.accent, color: theme.accent, display: 'inline-block', marginTop: 6 }}>{badge}</span>}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
         {visProds.length === 0 && uncatMini.length === 0 && (
@@ -188,7 +218,7 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
           </div>
         )}
       </div>
-      <div style={{ textAlign: 'center', fontSize: 8.5, color: theme.muted, padding: '0 0 10px', letterSpacing: '0.04em' }}>Powered by Aria</div>
+      <div style={{ textAlign: 'center', fontSize: 9.5, color: theme.muted, padding: '20px 0 10px', opacity: 0.5, fontWeight: 600 }}>Powered by Aria · updates live</div>
     </div>
   )
 }
@@ -875,7 +905,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                       <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.name}</div>
                       {p.description && <div style={{ fontSize: 10, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.description}</div>}
                     </div>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'$' + p.price.toFixed(2)}</div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'A$' + p.price.toFixed(2)}</div>
                     <button onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }} title={isHidden ? 'Show on menu' : 'Hide from menu'} style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {!isHidden && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                     </button>
@@ -902,7 +932,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                     <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.name}</div>
                     {p.description && <div style={{ fontSize: 10, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{p.description}</div>}
                   </div>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'$' + p.price.toFixed(2)}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{'A$' + p.price.toFixed(2)}</div>
                   <button onClick={e => { e.stopPropagation(); const cur = cfg.item_overrides[p.id]?.hidden ?? false; updateItemOv(p.id, { hidden: !cur }) }} title={isHidden ? 'Show on menu' : 'Hide from menu'} style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid ' + (isHidden ? C.border : C.accent), background: isHidden ? 'transparent' : C.accent, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {!isHidden && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                   </button>
@@ -1033,7 +1063,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                       <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 4, marginBottom: 4 }}>
                         <span style={{ fontSize: 10.5, fontWeight: 600 }}>{p.name}</span>
                         <div style={{ flex: 1, borderBottom: '1.5px dotted ' + theme.line, marginBottom: 2, opacity: 0.4 }} />
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.accent }}>{'$' + p.price.toFixed(2)}</span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.accent }}>{'A$' + p.price.toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -1050,7 +1080,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                       <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 4, marginBottom: 4 }}>
                         <span style={{ fontSize: 10.5, fontWeight: 600 }}>{p.name}</span>
                         <div style={{ flex: 1, borderBottom: '1.5px dotted ' + theme.line, marginBottom: 2, opacity: 0.4 }} />
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.accent }}>{'$' + p.price.toFixed(2)}</span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.accent }}>{'A$' + p.price.toFixed(2)}</span>
                       </div>
                     ))}
                   </div>

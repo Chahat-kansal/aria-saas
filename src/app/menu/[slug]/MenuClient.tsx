@@ -255,7 +255,7 @@ export default function MenuClient({
       {/* CENTERED HEADER — logo circle · business name · suburb+city subtitle · open-now pill */}
       <div style={{ padding: '36px 24px 20px', textAlign: 'center' }}>
         {/* Logo circle with accent border */}
-        <div style={{ width: 64, height: 64, borderRadius: '50%', border: '2.5px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: theme.accent, margin: '0 auto 14px' }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: theme.accent, margin: '0 auto 10px' }}>
           {logoEmoji}
         </div>
         {/* Business name — template font, italic */}
