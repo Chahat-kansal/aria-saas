@@ -547,14 +547,15 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   const activeMenuUrl = cfg?.is_default ? menuUrl : menuUrl + '/' + (cfg?.menu_key ?? '')
 
   const save = useCallback(async (c: MenuCfg) => {
-    if (!c.id) return
+    if (!c.menu_key) return
     setSaveState('saving')
     try {
-      await fetch('/api/pos/menu-config', {
+      const res = await fetch('/api/pos/menu-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: c.id, ...c }),
       })
+      if (!res.ok) { setSaveState('unsaved'); return }
       setSaveState('saved')
     } catch {
       setSaveState('unsaved')

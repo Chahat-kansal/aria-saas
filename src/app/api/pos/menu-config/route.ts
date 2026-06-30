@@ -68,8 +68,9 @@ async function _GET(_req: NextRequest) {
   return NextResponse.json({ configs: rows })
 }
 
-// PUT — update a specific menu config by id
-// Body: { id: string, ...allowedFields }
+// PUT — update a specific menu config
+// Body: { menu_key: string, ...allowedFields } — matched by (business_id, menu_key)
+// id is accepted but NOT used for matching (it was optional and caused silent 0-row updates)
 // Special: setting is_default=true unsets all others for this business
 async function _PUT(req: NextRequest) {
   const supabase = createServerSupabaseClient()
@@ -80,19 +81,12 @@ async function _PUT(req: NextRequest) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
 
   const body = await req.json() as Record<string, unknown>
-  const { id, ...rest } = body
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id: _id, ...rest } = body
 
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-
-  // Verify ownership
-  const { data: existing } = await supabaseAdmin
-    .from('menu_configs')
-    .select('id, business_id, is_default')
-    .eq('id', id as string)
-    .maybeSingle()
-  if (!existing || existing.business_id !== bid) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
+  // menu_key is the reliable match key — always non-optional in MenuCfg
+  const menuKey = rest.menu_key as string | undefined
+  if (!menuKey) return NextResponse.json({ error: 'Missing menu_key' }, { status: 400 })
 
   const ALLOWED = [
     'template_id', 'brand_kit', 'section_order', 'item_overrides',
@@ -110,17 +104,21 @@ async function _PUT(req: NextRequest) {
       .from('menu_configs')
       .update({ is_default: false })
       .eq('business_id', bid)
-      .neq('id', id as string)
+      .neq('menu_key', menuKey)
   }
 
+  // Match by (business_id, menu_key) — ownership enforced by business_id = bid
   const { data: config, error } = await supabaseAdmin
     .from('menu_configs')
     .update(payload)
-    .eq('id', id as string)
+    .eq('business_id', bid)
+    .eq('menu_key', menuKey)
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Honest: if no row matched (config is null) the update was a no-op — never silently 200
+  if (!config) return NextResponse.json({ error: 'Config not found — 0 rows updated' }, { status: 422 })
 
   // If default changed, return the full refreshed list so client can sync
   if (payload.is_default === true) {
