@@ -1,34 +1,27 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { TEMPLATES, FONTS, BGS, deriveTheme as sharedDeriveTheme } from '@/lib/menu/menu-theme'
+import type { Theme } from '@/lib/menu/menu-theme'
 
-// ── Constants ──────────────────────────────────────────────────────────────
+// ── Builder-only picker metadata (css comes from shared BGS/FONTS maps above) ──
 
-const TEMPLATES = [
-  { id: 'editorial', name: 'Editorial',       font: 'Fraunces',         look: { bg: '#fbf8f1', card: '#fff',     ink: '#1a1206', accent: '#BA7517', accentSoft: '#f5e6c8', line: '#e6ddc9', muted: '#7a6a52' } },
-  { id: 'pipel',     name: 'Pipel',           font: 'Space Grotesk',    look: { bg: '#0a0a0a', card: '#1a1a1a', ink: '#fafafa', accent: '#d9f54e', accentSoft: '#d9f54e', line: '#262626', muted: '#a0a0a0' } },
-  { id: 'garden',    name: 'Garden',          font: 'Cormorant',        look: { bg: '#f4f7f3', card: '#fff',     ink: '#21372b', accent: '#7FB897', accentSoft: '#d4edda', line: '#dde8df', muted: '#4a6b58' } },
-  { id: 'grand',     name: 'Grand',           font: 'Playfair Display', look: { bg: '#fffdf9', card: '#fff',     ink: '#161616', accent: '#9a7b3f', accentSoft: '#f2e8d6', line: '#eceae3', muted: '#6b6050' } },
-  { id: 'mono',      name: 'Mono',            font: 'Inter',            look: { bg: '#ffffff', card: '#f4f4f5', ink: '#111',    accent: '#111',    accentSoft: '#e4e4e7', line: '#ededed', muted: '#71717a' } },
-  { id: 'noir',      name: 'Noir',            font: 'Inter',            look: { bg: '#16151a', card: '#1f1e24', ink: '#f4f4f5', accent: '#e8a87c', accentSoft: '#e8a87c', line: '#2c2b32', muted: '#9ca3af' } },
+const FONT_ITEMS = [
+  { id: 'Fraunces',         label: 'Serif'   },
+  { id: 'Space Grotesk',    label: 'Grotesk' },
+  { id: 'Cormorant',        label: 'Elegant' },
+  { id: 'Playfair Display', label: 'Classic' },
+  { id: 'Inter',            label: 'Clean'   },
 ]
 
-const FONTS = [
-  { id: 'Fraunces',         label: 'Serif',   css: "'Fraunces',Georgia,serif" },
-  { id: 'Space Grotesk',    label: 'Grotesk', css: "'Space Grotesk',system-ui,sans-serif" },
-  { id: 'Cormorant',        label: 'Elegant', css: "'Cormorant',Georgia,serif" },
-  { id: 'Playfair Display', label: 'Classic', css: "'Playfair Display',Georgia,serif" },
-  { id: 'Inter',            label: 'Clean',   css: "'Inter',system-ui,sans-serif" },
-]
-
-const BGS = [
-  { id: 'none',    label: 'None',    e: '∅',  css: '' },
-  { id: 'flowers', label: 'Flowers', e: '🌸', css: 'radial-gradient(circle at 18% 12%,#f6d7e4cc,transparent 36%),radial-gradient(circle at 82% 78%,#e9c6dccc,transparent 38%)' },
-  { id: 'coffee',  label: 'Coffee',  e: '☕', css: 'radial-gradient(circle at 75% 18%,#caa98266,transparent 42%),radial-gradient(circle at 22% 82%,#a87f4f66,transparent 45%)' },
-  { id: 'linen',   label: 'Linen',   e: '🧵', css: 'repeating-linear-gradient(45deg,#00000008 0 2px,transparent 2px 7px),repeating-linear-gradient(-45deg,#00000008 0 2px,transparent 2px 7px)' },
-  { id: 'marble',  label: 'Marble',  e: '◜',  css: 'radial-gradient(circle at 28% 30%,#ececef,transparent 52%),radial-gradient(circle at 72% 70%,#dededf,transparent 55%)' },
-  { id: 'botanic', label: 'Botanic', e: '🌿', css: 'radial-gradient(circle at 12% 88%,#7FB89744,transparent 40%),radial-gradient(circle at 88% 12%,#2D524033,transparent 42%)' },
-  { id: 'warm',    label: 'Warm',    e: '🌅', css: 'linear-gradient(135deg,#ffe9d0bb,#ffd9b388)' },
+const BG_ITEMS = [
+  { id: 'none',    label: 'None',    e: '∅'  },
+  { id: 'flowers', label: 'Flowers', e: '🌸' },
+  { id: 'coffee',  label: 'Coffee',  e: '☕' },
+  { id: 'linen',   label: 'Linen',   e: '🧵' },
+  { id: 'marble',  label: 'Marble',  e: '◜'  },
+  { id: 'botanic', label: 'Botanic', e: '🌿' },
+  { id: 'warm',    label: 'Warm',    e: '🌅' },
 ]
 
 const ACCENTS = ['#BA7517','#16a34a','#d9f54e','#7FB897','#E24B4A','#0a0a0a','#C9A37A','#e8a87c','#6C5CE7','#1d9bf0']
@@ -64,7 +57,6 @@ type MenuCfg = {
 }
 type Category = { id: string; name: string; color: string | null }
 type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; category_id: string | null; sort_order: number | null }
-type Theme = { bg: string; card: string; ink: string; accent: string; accentSoft: string; line: string; muted: string; fontCss: string; bgCss: string }
 type ExtractedItem = { _id: string; name: string; price: number; category: string; description: string; removed: boolean }
 
 interface Props {
@@ -84,13 +76,7 @@ interface Props {
 // ── Theme derivation ───────────────────────────────────────────────────────
 
 function deriveTheme(cfg: MenuCfg): Theme {
-  const tpl = TEMPLATES.find(t => t.id === cfg.template_id) ?? TEMPLATES[0]
-  const bk = cfg.brand_kit
-  const accent = bk.accent ?? tpl.look.accent
-  const fontId = bk.font ?? tpl.font
-  const fontCss = FONTS.find(f => f.id === fontId)?.css ?? "'Inter',system-ui,sans-serif"
-  const bgCss = BGS.find(b => b.id === cfg.background_id)?.css ?? ''
-  return { bg: tpl.look.bg, card: tpl.look.card, ink: tpl.look.ink, accent, accentSoft: tpl.look.accentSoft, line: tpl.look.line, muted: tpl.look.muted, fontCss, bgCss }
+  return sharedDeriveTheme(cfg.template_id, cfg.brand_kit as Record<string, unknown>, cfg.background_id)
 }
 
 // ── Mini-menu preview ──────────────────────────────────────────────────────
@@ -241,7 +227,7 @@ function TemplatesSection({ cfg, onSelect }: { cfg: MenuCfg; onSelect: (id: stri
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
       {TEMPLATES.map(t => {
-        const fc = FONTS.find(f => f.id === t.font)?.css ?? "'Inter',sans-serif"
+        const fc = FONTS[t.font] ?? "'Inter',sans-serif"
         const sel = cfg.template_id === t.id
         return (
           <div key={t.id} onClick={() => onSelect(t.id)} style={{ border: '2px solid ' + (sel ? '#18181b' : '#e4e4e7'), borderRadius: 10, cursor: 'pointer', overflow: 'hidden', position: 'relative' }}>
@@ -282,10 +268,10 @@ function BrandSection({ cfg, businessName, onUpdateBk }: { cfg: MenuCfg; busines
       <div>
         <div style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', marginBottom: 6 }}>Typeface</div>
         <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 5 }}>
-          {FONTS.map(f => {
+          {FONT_ITEMS.map(f => {
             const sel = (bk.font ?? TEMPLATES.find(t => t.id === cfg.template_id)?.font ?? 'Fraunces') === f.id
             return (
-              <button key={f.id} onClick={() => onUpdateBk({ font: f.id })} style={{ padding: '4px 10px', borderRadius: 20, border: '1.5px solid ' + (sel ? '#18181b' : '#e4e4e7'), background: sel ? '#18181b' : '#fff', color: sel ? '#fff' : '#18181b', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: f.css }}>{f.label}</button>
+              <button key={f.id} onClick={() => onUpdateBk({ font: f.id })} style={{ padding: '4px 10px', borderRadius: 20, border: '1.5px solid ' + (sel ? '#18181b' : '#e4e4e7'), background: sel ? '#18181b' : '#fff', color: sel ? '#fff' : '#18181b', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: FONTS[f.id] ?? "'Inter',system-ui,sans-serif" }}>{f.label}</button>
             )
           })}
         </div>
@@ -297,10 +283,11 @@ function BrandSection({ cfg, businessName, onUpdateBk }: { cfg: MenuCfg; busines
 function BackgroundSection({ cfg, onSet }: { cfg: MenuCfg; onSet: (id: string) => void }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 7 }}>
-      {BGS.map(b => {
+      {BG_ITEMS.map(b => {
         const sel = cfg.background_id === b.id
+        const bgCss = BGS[b.id] ?? ''
         return (
-          <div key={b.id} onClick={() => onSet(b.id)} style={{ border: '2px solid ' + (sel ? '#18181b' : '#e4e4e7'), borderRadius: 8, cursor: 'pointer', aspectRatio: '1', background: b.css || '#fafafa', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <div key={b.id} onClick={() => onSet(b.id)} style={{ border: '2px solid ' + (sel ? '#18181b' : '#e4e4e7'), borderRadius: 8, cursor: 'pointer', aspectRatio: '1', background: bgCss || '#fafafa', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
             <span style={{ fontSize: 13 }}>{b.e}</span>
             <span style={{ fontSize: 8.5, fontWeight: 600, color: '#71717a' }}>{b.label}</span>
           </div>
