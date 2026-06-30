@@ -122,6 +122,9 @@ export default async function MenuPage({ params }: Props) {
         menuUrl={menuUrl}
         sectionOrder={(menuConfig?.section_order as string[] | null) ?? null}
         itemOverrides={(menuConfig?.item_overrides as Record<string, ItemOverride> | null) ?? null}
+        templateId={(menuConfig?.template_id as string | null) ?? 'editorial'}
+        brandKit={(menuConfig?.brand_kit as Record<string, unknown> | null) ?? null}
+        backgroundId={(menuConfig?.background_id as string | null) ?? 'none'}
       />
     </>
   )
