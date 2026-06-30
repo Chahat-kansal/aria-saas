@@ -36,6 +36,13 @@ const BADGE_OPTS = ['Best seller','New','Vegan','Caffeine-free','Fresh batch','G
 const LOGOS = ['☕','🌿','✦','S','🫐','◆']
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
+function fmtTime(t: string): string {
+  const [h, m] = t.split(':').map(Number)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return m === 0 ? (h12 + suffix) : (h12 + ':' + m.toString().padStart(2, '0') + suffix)
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
@@ -69,6 +76,9 @@ interface Props {
   initialConfigs: MenuCfg[]
   initialCats: Category[]
   initialProducts: Product[]
+  locationSubtitle?: string | null
+  isOpenNow?: boolean
+  closesAt?: string | null
 }
 
 // ── Theme derivation ───────────────────────────────────────────────────────
@@ -85,8 +95,9 @@ function deriveTheme(cfg: MenuCfg): Theme {
 
 // ── Mini-menu preview ──────────────────────────────────────────────────────
 
-function MiniMenu({ cats, products, cfg, businessName, theme }: {
+function MiniMenu({ cats, products, cfg, businessName, theme, locationSubtitle, isOpenNow, closesAt }: {
   cats: Category[]; products: Product[]; cfg: MenuCfg; businessName: string; theme: Theme
+  locationSubtitle?: string | null; isOpenNow?: boolean; closesAt?: string | null
 }) {
   const bk = cfg.brand_kit
   const logoEmoji = bk.logoEmoji ?? LOGOS[0]
@@ -121,13 +132,15 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
         <div style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid ' + theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: theme.accent, margin: '0 auto 10px' }}>{logoEmoji}</div>
         {/* Business name — mockup .mname: 26px */}
         <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.5px', color: theme.ink, fontFamily: theme.fontCss }}>{businessName}</div>
-        {/* Subtitle — mockup .msub: 11px, opacity .7 */}
-        <div style={{ fontSize: 11, color: theme.muted, marginTop: 5, opacity: 0.7 }}>Location · your hours</div>
-        {/* Open-now pill — mockup .mstat: 1.5px accent border, green dot, uppercase */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 11, fontSize: 9.5, fontWeight: 700, borderRadius: 20, padding: '5px 10px', border: '1.5px solid ' + theme.accent, color: theme.ink, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', display: 'inline-block', flexShrink: 0 }} />
-          Open now · til 5pm
-        </div>
+        {/* businesses.suburb/city subtitle — hidden when both empty */}
+        {locationSubtitle && <div style={{ fontSize: 11, color: theme.muted, marginTop: 5, opacity: 0.7 }}>{locationSubtitle}</div>}
+        {/* Open-now pill — shown only when business_hours says currently open (matches public page) */}
+        {isOpenNow && closesAt && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 11, fontSize: 9.5, fontWeight: 700, borderRadius: 20, padding: '5px 10px', border: '1.5px solid ' + theme.accent, color: theme.ink, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', display: 'inline-block', flexShrink: 0 }} />
+            {'Open now · til ' + fmtTime(closesAt)}
+          </div>
+        )}
       </div>
 
       {/* STICKY CATEGORY NAV — mockup .mnav: gap:6, padding:11px 18px */}
@@ -158,10 +171,9 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
                 const badge = cfg.item_overrides[p.id]?.badge
                 return (
                   <div key={p.id} style={{ display: 'flex', gap: 12, padding: '13px 0', borderBottom: idx < cp.length - 1 ? '1px solid ' + theme.line : 'none', alignItems: 'flex-start' }}>
-                    {/* Thumb — exact mockup .ph: 52×52, border-radius:12, flex-shrink:0 */}
                     {showPhotos && (p.image_url
-                      ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
-                      : <div style={{ width: 52, height: 52, borderRadius: 12, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, color: theme.accent, flexShrink: 0 }}>☕</div>
+                      ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                      : <div style={{ width: 56, height: 56, borderRadius: 10, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, color: theme.accent, flexShrink: 0 }}>☕</div>
                     )}
                     {/* Content — exact mockup .nf: flex:1, min-width:0 */}
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -194,8 +206,8 @@ function MiniMenu({ cats, products, cfg, businessName, theme }: {
               return (
                 <div key={p.id} style={{ display: 'flex', gap: 12, padding: '13px 0', borderBottom: idx < uncatMini.length - 1 ? '1px solid ' + theme.line : 'none', alignItems: 'flex-start' }}>
                   {showPhotos && (p.image_url
-                    ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
-                    : <div style={{ width: 52, height: 52, borderRadius: 12, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, color: theme.accent, flexShrink: 0 }}>☕</div>
+                    ? <img src={p.image_url} alt="" loading="lazy" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                    : <div style={{ width: 56, height: 56, borderRadius: 10, background: theme.accentSoft + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, color: theme.accent, flexShrink: 0 }}>☕</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 9, alignItems: 'baseline' }}>
@@ -502,7 +514,7 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export default function MenuBuilderClient({ businessId: _bid, slug, businessName, logoUrl: _logoUrl, menuUrl, initialConfigs, initialCats, initialProducts }: Props) {
+export default function MenuBuilderClient({ businessId: _bid, slug, businessName, logoUrl: _logoUrl, menuUrl, initialConfigs, initialCats, initialProducts, locationSubtitle, isOpenNow, closesAt }: Props) {
   const defaultConfigs = initialConfigs.length > 0 ? initialConfigs : [{
     id: undefined, menu_key: 'main', menu_label: 'Main Menu', is_default: true,
     active_from: null, active_to: null, days_of_week: null,
@@ -585,8 +597,14 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   }
 
   function selectTemplate(templateId: string) {
-    const tpl = TEMPLATES.find(t => t.id === templateId) ?? TEMPLATES[0]
-    updateCfg({ template_id: templateId, brand_kit: { ...(cfg?.brand_kit ?? {}), accent: tpl.look.accent, font: tpl.font } })
+    const tpl     = TEMPLATES.find(t => t.id === templateId) ?? TEMPLATES[0]
+    const prevTpl = TEMPLATES.find(t => t.id === cfg?.template_id) ?? TEMPLATES[0]
+    const curAccent = cfg?.brand_kit?.accent
+    // Preserve user's custom accent across template switches.
+    // Only reset to the new template default when the accent was never customized
+    // (still equals the previous template's default).
+    const accent = (!curAccent || curAccent === prevTpl.look.accent) ? tpl.look.accent : curAccent
+    updateCfg({ template_id: templateId, brand_kit: { ...(cfg?.brand_kit ?? {}), accent, font: tpl.font } })
   }
 
   async function uploadItemPhoto(id: string, file: File) {
@@ -613,7 +631,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
       await fetch('/api/pos/menu-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: next.id, is_published: true }),
+        body: JSON.stringify({ id: next.id, menu_key: next.menu_key, is_published: true }),
       })
       setSaveState('saved')
       showToast('✓ Published — your menu is live')
@@ -1042,7 +1060,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                 <div style={{ width: 80, height: 6, borderRadius: 3, background: '#333' }} />
               </div>
               <div style={{ height: 580, overflowY: 'auto' as const, overflowX: 'hidden' as const }}>
-                <MiniMenu cats={initialCats} products={initialProducts} cfg={cfg} businessName={businessName} theme={theme} />
+                <MiniMenu cats={initialCats} products={initialProducts} cfg={cfg} businessName={businessName} theme={theme} locationSubtitle={locationSubtitle} isOpenNow={isOpenNow} closesAt={closesAt} />
               </div>
             </div>
           )}

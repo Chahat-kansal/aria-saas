@@ -49,8 +49,8 @@ export default async function MenuBuilderPage() {
   }
   if (!bid) redirect('/pos/setup/welcome')
 
-  const [bizRes, configsRes, catsRes, productsRes] = await Promise.all([
-    supabaseAdmin.from('businesses').select('name, slug, logo_url').eq('id', bid).maybeSingle(),
+  const [bizRes, configsRes, catsRes, productsRes, hoursRes] = await Promise.all([
+    supabaseAdmin.from('businesses').select('name, slug, logo_url, suburb, city').eq('id', bid).maybeSingle(),
     supabaseAdmin
       .from('menu_configs')
       .select('*')
@@ -59,10 +59,32 @@ export default async function MenuBuilderPage() {
       .order('created_at', { ascending: true }),
     supabaseAdmin.from('pos_categories').select('id, name, color').eq('business_id', bid).eq('is_active', true).order('sort_order', { ascending: true }),
     supabaseAdmin.from('pos_products').select('id, name, description, price, image_url, category_id, sort_order').eq('business_id', bid).eq('is_active', true).is('deleted_at', null).order('sort_order', { ascending: true }),
+    supabaseAdmin.from('business_hours').select('day_of_week, open_time, close_time, is_closed').eq('business_id', bid),
   ])
 
   const biz = bizRes.data
   if (!biz) redirect('/pos/setup/welcome')
+
+  const suburb = (biz.suburb as string | null | undefined) ?? null
+  const city   = (biz.city   as string | null | undefined) ?? null
+  const locationSubtitle = [suburb, city].filter(Boolean).join(', ') || null
+
+  type HoursRow = { day_of_week: number; open_time: string | null; close_time: string | null; is_closed: boolean | null }
+  const hoursRows: HoursRow[] = (hoursRes.data ?? []) as HoursRow[]
+  const nowSyd = new Date(new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' }))
+  const dow = nowSyd.getDay()
+  const nowMin = nowSyd.getHours() * 60 + nowSyd.getMinutes()
+  const todayHours = hoursRows.find(h => h.day_of_week === dow && !h.is_closed && h.open_time && h.close_time)
+  let isOpenNow = false
+  let closesAt: string | null = null
+  if (todayHours && todayHours.open_time && todayHours.close_time) {
+    const [oh, om] = todayHours.open_time.split(':').map(Number)
+    const [ch, cm] = todayHours.close_time.split(':').map(Number)
+    if (nowMin >= oh * 60 + om && nowMin < ch * 60 + cm) {
+      isOpenNow = true
+      closesAt = todayHours.close_time
+    }
+  }
 
   const slug = (biz.slug as string | null) ?? bid
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
@@ -118,6 +140,9 @@ export default async function MenuBuilderPage() {
         initialConfigs={safeConfigs}
         initialCats={(catsRes.data ?? []) as Category[]}
         initialProducts={(productsRes.data ?? []) as Product[]}
+        locationSubtitle={locationSubtitle}
+        isOpenNow={isOpenNow}
+        closesAt={closesAt}
       />
     </>
   )
