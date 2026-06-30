@@ -69,6 +69,63 @@ export default async function SpecificMenuPage({ params }: Props) {
   const biz = bizRes.data
   const menuConfig = configRes.data
   const orderingEnabled = (onlineRes.data?.enabled === true) && (onlineRes.data?.accept_orders === true)
+
+  // ── Modifier groups (ordering only) ──
+  type ModifierOption = { id: string; name: string; priceCents: number; displayOrder: number | null }
+  type ModifierGroup  = { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; options: ModifierOption[] }
+  type RawPmg = { product_id: string; display_order: number | null; override_required: boolean | null; override_min: number | null; override_max: number | null; group_id: string }
+  type RawGrp = { id: string; name: string; min_selections: number | null; max_selections: number | null; is_required: boolean | null; display_order: number | null }
+  type RawMod = { id: string; name: string; price_cents: number | null; display_order: number | null; group_id: string }
+  const productModifiers: Record<string, ModifierGroup[]> = {}
+
+  if (orderingEnabled) {
+    const pids = (productsRes.data ?? []).map(p => (p as { id: string }).id)
+    if (pids.length > 0) {
+      const { data: pmgData } = await supabaseAdmin
+        .from('pos_product_modifier_groups')
+        .select('product_id, display_order, override_required, override_min, override_max, group_id')
+        .in('product_id', pids)
+      const pmgRows = (pmgData ?? []) as RawPmg[]
+      if (pmgRows.length > 0) {
+        const groupIds = [...new Set(pmgRows.map(r => r.group_id))]
+        const [grpRes, modRes] = await Promise.all([
+          supabaseAdmin.from('pos_modifier_groups').select('id, name, min_selections, max_selections, is_required, display_order').in('id', groupIds),
+          supabaseAdmin.from('pos_modifiers').select('id, name, price_cents, display_order, group_id').in('group_id', groupIds).eq('is_active', true).order('display_order', { ascending: true, nullsFirst: false }),
+        ])
+        const grpMap: Record<string, RawGrp> = {}
+        ;(grpRes.data ?? []).forEach(g => { grpMap[(g as RawGrp).id] = g as RawGrp })
+        const modsByGrp: Record<string, ModifierOption[]> = {}
+        ;(modRes.data ?? []).forEach(m => {
+          const rm = m as RawMod
+          if (!modsByGrp[rm.group_id]) modsByGrp[rm.group_id] = []
+          modsByGrp[rm.group_id].push({ id: rm.id, name: rm.name, priceCents: rm.price_cents ?? 0, displayOrder: rm.display_order ?? null })
+        })
+        const byProd: Record<string, RawPmg[]> = {}
+        pmgRows.forEach(r => { if (!byProd[r.product_id]) byProd[r.product_id] = []; byProd[r.product_id].push(r) })
+        Object.entries(byProd).forEach(([pid, rows]) => {
+          rows.sort((a, b) => {
+            const aO = a.display_order ?? grpMap[a.group_id]?.display_order ?? 9999
+            const bO = b.display_order ?? grpMap[b.group_id]?.display_order ?? 9999
+            return aO - bO
+          })
+          productModifiers[pid] = rows
+            .map(r => {
+              const g = grpMap[r.group_id]; if (!g) return null
+              const opts = modsByGrp[r.group_id] ?? []; if (opts.length === 0) return null
+              return {
+                id: g.id, name: g.name,
+                isRequired: r.override_required !== null ? r.override_required : (g.is_required ?? false),
+                minSelections: r.override_min !== null ? r.override_min : (g.min_selections ?? 0),
+                maxSelections: r.override_max !== null ? r.override_max : (g.max_selections ?? 1),
+                options: opts,
+              } as ModifierGroup
+            })
+            .filter((g): g is ModifierGroup => g !== null)
+        })
+      }
+    }
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
   const menuUrl = appUrl + '/menu/' + slug + '/' + menu_key
 
@@ -125,6 +182,7 @@ export default async function SpecificMenuPage({ params }: Props) {
       locationSubtitle={locationSubtitle}
       isOpenNow={isOpenNow}
       closesAt={closesAt}
+      productModifiers={productModifiers}
     />
   )
 }

@@ -31,7 +31,9 @@ interface Product {
   id: string; name: string; description: string | null; price: number
   image_url: string | null; sort_order: number | null; category_id: string | null
 }
-interface CartItem { product: Product; qty: number; unit_price: number }
+interface CartItem { product: Product; qty: number; unit_price: number; modifiers: { id: string; name: string; priceCents: number }[] }
+interface ModifierOption { id: string; name: string; priceCents: number; displayOrder: number | null }
+interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; options: ModifierOption[] }
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
 
 interface Props {
@@ -51,6 +53,7 @@ interface Props {
   locationSubtitle?: string | null
   isOpenNow?: boolean
   closesAt?: string | null
+  productModifiers?: Record<string, ModifierGroup[]>
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -59,7 +62,7 @@ export default function MenuClient({
   businessId, slug: _slug, businessName, logoUrl: _logoUrl, orderingEnabled, menuUrl,
   sectionOrder: _sectionOrder, itemOverrides, templateId, brandKit, backgroundId,
   initialCategories, initialProducts,
-  locationSubtitle, isOpenNow, closesAt,
+  locationSubtitle, isOpenNow, closesAt, productModifiers,
 }: Props) {
   const theme = deriveTheme(templateId ?? 'editorial', brandKit ?? null, backgroundId ?? null)
 
@@ -104,6 +107,7 @@ export default function MenuClient({
   const [checkoutForm, setCheckoutForm] = useState({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' })
   const [checkoutError, setCheckoutError] = useState('')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [modalMods, setModalMods] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     if (!showQr || qrDataUrl) return
@@ -111,6 +115,8 @@ export default function MenuClient({
       .then(url => setQrDataUrl(url))
       .catch(() => null)
   }, [showQr, qrDataUrl, menuUrl, theme.ink, theme.card])
+
+  useEffect(() => { setModalMods({}) }, [productModal])
 
   // Derived product list — apply item_overrides (desc/photo/price overrides, hidden filter)
   const catIds = new Set(cats.map(c => c.id))
@@ -133,10 +139,40 @@ export default function MenuClient({
   const cartTotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0)
 
   function addToCart(p: Product) {
+    const mgs = productModifiers?.[p.id] ?? []
+    if (mgs.length > 0) { setProductModal(p); return }
     setCart(c => {
-      const idx = c.findIndex(i => i.product.id === p.id)
+      const idx = c.findIndex(i => i.product.id === p.id && i.modifiers.length === 0)
       if (idx >= 0) { const n = [...c]; n[idx] = { ...n[idx], qty: n[idx].qty + 1 }; return n }
-      return [...c, { product: p, qty: 1, unit_price: p.price }]
+      return [...c, { product: p, qty: 1, unit_price: p.price, modifiers: [] }]
+    })
+  }
+
+  function toggleMod(grpId: string, modId: string, maxSel: number) {
+    setModalMods(prev => {
+      const cur = prev[grpId] ?? []
+      if (cur.includes(modId)) return { ...prev, [grpId]: cur.filter(id => id !== modId) }
+      if (maxSel === 1) return { ...prev, [grpId]: [modId] }
+      if (cur.length >= maxSel) return prev
+      return { ...prev, [grpId]: [...cur, modId] }
+    })
+  }
+
+  function addToCartWithMods(p: Product, groups: ModifierGroup[]) {
+    const mods: CartItem['modifiers'] = []
+    let extraCents = 0
+    for (const g of groups) {
+      for (const mid of modalMods[g.id] ?? []) {
+        const opt = g.options.find(o => o.id === mid)
+        if (opt) { mods.push({ id: opt.id, name: opt.name, priceCents: opt.priceCents }); extraCents += opt.priceCents }
+      }
+    }
+    const unitPrice = (Number(p.price) || 0) + extraCents / 100
+    setCart(c => {
+      if (mods.length > 0) return [...c, { product: p, qty: 1, unit_price: unitPrice, modifiers: mods }]
+      const idx = c.findIndex(i => i.product.id === p.id && i.modifiers.length === 0)
+      if (idx >= 0) { const n = [...c]; n[idx] = { ...n[idx], qty: n[idx].qty + 1 }; return n }
+      return [...c, { product: p, qty: 1, unit_price: unitPrice, modifiers: [] }]
     })
   }
 
@@ -170,7 +206,8 @@ export default function MenuClient({
         source: 'web',
         items: cart.map(i => ({
           product_id: i.product.id, product_name: i.product.name,
-          quantity: i.qty, unit_price: i.unit_price, modifiers: [],
+          quantity: i.qty, unit_price: i.unit_price,
+          modifiers: i.modifiers.map(m => ({ id: m.id, name: m.name, price_cents: m.priceCents })),
         })),
       }),
     }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
@@ -182,6 +219,24 @@ export default function MenuClient({
   function copyLink() {
     navigator.clipboard.writeText(menuUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
   }
+
+  // ── Modal modifier state ──
+  const modGroups: ModifierGroup[] = productModal ? (productModifiers?.[productModal.id] ?? []) : []
+  const liveTotal = modGroups.reduce((sum, g) => {
+    let s = sum
+    for (const mid of modalMods[g.id] ?? []) {
+      const opt = g.options.find(o => o.id === mid)
+      if (opt) s += opt.priceCents / 100
+    }
+    return s
+  }, Number(productModal?.price) || 0)
+  const modalError = modGroups.reduce<string | null>((err, g) => {
+    if (err) return err
+    const n = (modalMods[g.id] ?? []).length
+    if (g.isRequired && n === 0) return 'Please choose ' + g.name
+    if (n < g.minSelections) return 'Choose at least ' + g.minSelections + ' from ' + g.name
+    return null
+  }, null)
 
   // ── Order done screen ──
   if (orderDone) return (
@@ -484,15 +539,47 @@ export default function MenuClient({
             <div style={{ padding: '20px 20px 32px' }}>
               <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 6px', color: theme.ink, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{productModal.name}</h2>
               {productModal.description && <p style={{ fontSize: 13, color: theme.muted, margin: '0 0 16px', lineHeight: 1.55 }}>{productModal.description}</p>}
+              {/* Modifier groups */}
+              {modGroups.map(grp => {
+                const sel = modalMods[grp.id] ?? []
+                const atMax = sel.length >= grp.maxSelections
+                return (
+                  <div key={grp.id} style={{ marginBottom: 18 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: theme.muted }}>{grp.name}</span>
+                      {grp.isRequired && <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 4, padding: '1px 5px' }}>Required</span>}
+                      {grp.maxSelections > 1 && <span style={{ fontSize: 10, color: theme.muted }}>{'up to ' + grp.maxSelections}</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {grp.options.map(opt => {
+                        const isSel = sel.includes(opt.id)
+                        const isDisabled = !isSel && atMax
+                        return (
+                          <button key={opt.id} onClick={() => { if (!isDisabled) toggleMod(grp.id, opt.id, grp.maxSelections) }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 10, border: '1.5px solid ' + (isSel ? theme.accent : theme.line), background: isSel ? theme.accent + '18' : theme.bg, cursor: isDisabled ? 'default' : 'pointer', opacity: isDisabled ? 0.45 : 1, textAlign: 'left' as const }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 16, height: 16, borderRadius: grp.maxSelections === 1 ? '50%' : 3, border: '2px solid ' + (isSel ? theme.accent : theme.line), background: isSel ? theme.accent : 'transparent', flexShrink: 0 }} />
+                              <span style={{ fontSize: 14, color: theme.ink, fontWeight: isSel ? 700 : 400 }}>{opt.name}</span>
+                            </div>
+                            {opt.priceCents > 0 && <span style={{ fontSize: 13, color: isSel ? theme.accent : theme.muted, fontWeight: 600 }}>{'+ ' + fmtPrice(opt.priceCents / 100)}</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <span style={{ fontSize: 22, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{fmtPrice(productModal.price)}</span>
               </div>
+              {modalError && <p style={{ fontSize: 12, color: theme.muted, marginBottom: 10, lineHeight: 1.4 }}>{modalError}</p>}
               {orderingEnabled && (
                 <button
-                  onClick={() => { addToCart(productModal); setProductModal(null) }}
-                  style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: theme.accent, color: theme.bg, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: theme.fontCss }}
+                  onClick={() => { if (!modalError) { addToCartWithMods(productModal, modGroups); setProductModal(null) } }}
+                  disabled={!!modalError}
+                  style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: modalError ? theme.muted : theme.accent, color: theme.bg, fontSize: 15, fontWeight: 700, cursor: modalError ? 'default' : 'pointer', fontFamily: theme.fontCss, opacity: modalError ? 0.7 : 1 }}
                 >
-                  Add to order
+                  {'Add to order — ' + fmtPrice(liveTotal)}
                 </button>
               )}
             </div>
@@ -512,6 +599,9 @@ export default function MenuClient({
               <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid ' + theme.line }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>{item.product.name}</div>
+                  {item.modifiers.length > 0 && (
+                    <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{item.modifiers.map(m => m.name).join(', ')}</div>
+                  )}
                   <div style={{ fontSize: 13, fontWeight: 700, color: theme.accent, marginTop: 2, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{fmtPrice(item.unit_price)}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
