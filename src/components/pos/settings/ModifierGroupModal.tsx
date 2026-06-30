@@ -4,6 +4,7 @@ import { useState } from 'react'
 interface ModifierRow {
   id?: string
   name: string
+  price_cents?: number | null
   price_adjustment: number
   is_default: boolean
   allow_quantity: boolean
@@ -56,7 +57,7 @@ export default function ModifierGroupModal({ initial, onSave, onClose }: Props) 
     color: initial?.color ?? '#7FB897',
     modifiers: initial?.modifiers?.map(m => ({
       name: m.name ?? '',
-      price_adjustment: Number(m.price_adjustment) || 0,
+      price_adjustment: m.price_cents != null && m.price_cents > 0 ? m.price_cents / 100 : (Number(m.price_adjustment) || 0),
       is_default: !!m.is_default,
       allow_quantity: !!m.allow_quantity,
       max_quantity: Number(m.max_quantity) || 1,
@@ -153,10 +154,10 @@ export default function ModifierGroupModal({ initial, onSave, onClose }: Props) 
                   placeholder="Option name"
                   className="col-span-4 bg-[rgba(255,255,255,0.04)] border border-[rgba(127,184,151,0.2)] rounded-xl px-3 py-1.5 text-sm text-[#E8EDE8]"
                 />
-                <div className="col-span-3 flex items-center gap-1">
-                  <span className="text-xs text-[rgba(232,237,232,0.5)]">+$</span>
+                <div className="col-span-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-[rgba(232,237,232,0.4)] leading-none">Extra charge (A$)</span>
                   <input
-                    type="number" step="0.50"
+                    type="number" step="0.01" min="0"
                     value={m.price_adjustment}
                     onChange={e => updateModifier(idx, 'price_adjustment', parseFloat(e.target.value) || 0)}
                     className="w-full bg-[rgba(255,255,255,0.04)] border border-[rgba(127,184,151,0.2)] rounded-xl px-2 py-1.5 text-sm text-[#E8EDE8]"

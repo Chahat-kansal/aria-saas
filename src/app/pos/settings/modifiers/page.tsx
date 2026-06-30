@@ -5,6 +5,7 @@ import ModifierGroupModal from '@/components/pos/settings/ModifierGroupModal'
 interface Modifier {
   id: string
   name: string
+  price_cents?: number | null
   price_adjustment: number
   is_default: boolean
   allow_quantity: boolean

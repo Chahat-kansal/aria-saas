@@ -36,6 +36,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
         group_id: params.id,
         name: String(m.name ?? '').slice(0, 100),
         price_adjustment: Number(m.price_adjustment) || 0,
+        price_cents: Math.round((Number(m.price_adjustment) || 0) * 100),
         is_default: !!m.is_default,
         is_active: true,
         allow_quantity: !!m.allow_quantity,
