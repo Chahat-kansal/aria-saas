@@ -44,14 +44,14 @@ export default async function SpecificMenuPage({ params }: Props) {
       .maybeSingle(),
     supabaseAdmin
       .from('pos_categories')
-      .select('id, name, color')
+      .select('id, name, color, ordering_archetype')
       .eq('business_id', bid)
       .eq('is_active', true)
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('name'),
     supabaseAdmin
       .from('pos_products')
-      .select('id, name, description, price, image_url, sort_order, category_id')
+      .select('id, name, description, price, image_url, sort_order, category_id, ordering_mode, ordering_archetype')
       .eq('business_id', bid)
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -72,9 +72,9 @@ export default async function SpecificMenuPage({ params }: Props) {
 
   // ── Modifier groups (ordering only) ──
   type ModifierOption = { id: string; name: string; priceCents: number; displayOrder: number | null }
-  type ModifierGroup  = { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; options: ModifierOption[] }
+  type ModifierGroup  = { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; archetypeSlot: string | null; options: ModifierOption[] }
   type RawPmg = { product_id: string; display_order: number | null; override_required: boolean | null; override_min: number | null; override_max: number | null; group_id: string }
-  type RawGrp = { id: string; name: string; min_selections: number | null; max_selections: number | null; is_required: boolean | null; display_order: number | null }
+  type RawGrp = { id: string; name: string; min_selections: number | null; max_selections: number | null; is_required: boolean | null; display_order: number | null; archetype_slot: string | null }
   type RawMod = { id: string; name: string; price_cents: number | null; display_order: number | null; group_id: string }
   const productModifiers: Record<string, ModifierGroup[]> = {}
 
@@ -89,7 +89,7 @@ export default async function SpecificMenuPage({ params }: Props) {
       if (pmgRows.length > 0) {
         const groupIds = [...new Set(pmgRows.map(r => r.group_id))]
         const [grpRes, modRes] = await Promise.all([
-          supabaseAdmin.from('pos_modifier_groups').select('id, name, min_selections, max_selections, is_required, display_order').in('id', groupIds),
+          supabaseAdmin.from('pos_modifier_groups').select('id, name, min_selections, max_selections, is_required, display_order, archetype_slot').in('id', groupIds),
           supabaseAdmin.from('pos_modifiers').select('id, name, price_cents, display_order, group_id').in('group_id', groupIds).eq('is_active', true).order('display_order', { ascending: true, nullsFirst: false }),
         ])
         const grpMap: Record<string, RawGrp> = {}
@@ -117,6 +117,7 @@ export default async function SpecificMenuPage({ params }: Props) {
                 isRequired: r.override_required !== null ? r.override_required : (g.is_required ?? false),
                 minSelections: r.override_min !== null ? r.override_min : (g.min_selections ?? 0),
                 maxSelections: r.override_max !== null ? r.override_max : (g.max_selections ?? 1),
+                archetypeSlot: g.archetype_slot ?? null,
                 options: opts,
               } as ModifierGroup
             })
@@ -152,8 +153,8 @@ export default async function SpecificMenuPage({ params }: Props) {
     }
   }
 
-  type CatRow = { id: string; name: string; color: string | null }
-  type ProdRow = { id: string; name: string; description: string | null; price: number; image_url: string | null; sort_order: number | null; category_id: string | null }
+  type CatRow = { id: string; name: string; color: string | null; ordering_archetype: string | null }
+  type ProdRow = { id: string; name: string; description: string | null; price: number; image_url: string | null; sort_order: number | null; category_id: string | null; ordering_mode: string | null; ordering_archetype: string | null }
   const rawCats: CatRow[] = (catsRes.data ?? []) as CatRow[]
   const so = (menuConfig.section_order as string[] | null) ?? null
   const orderedCats: CatRow[] = so && so.length > 0

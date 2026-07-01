@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { TEMPLATES, FONTS, BGS, deriveTheme } from '@/lib/menu/menu-theme'
 import type { Theme } from '@/lib/menu/menu-theme'
+import { resolveArchetype } from '@/lib/ordering/resolveArchetype'
+import { ArchetypeRenderer } from '@/components/ordering/archetypes/ArchetypeRenderer'
 
 // ── Google Font URL params (public-page-only — builder uses whatever is already loaded) ──
 
@@ -26,14 +28,15 @@ const RED = '#ef4444'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface Category { id: string; name: string; color: string | null }
+interface Category { id: string; name: string; color: string | null; ordering_archetype: string | null }
 interface Product {
   id: string; name: string; description: string | null; price: number
   image_url: string | null; sort_order: number | null; category_id: string | null
+  ordering_mode: string | null; ordering_archetype: string | null
 }
 interface CartItem { product: Product; qty: number; unit_price: number; modifiers: { id: string; name: string; priceCents: number }[] }
 interface ModifierOption { id: string; name: string; priceCents: number; displayOrder: number | null }
-interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; options: ModifierOption[] }
+interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; archetypeSlot: string | null; options: ModifierOption[] }
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
 
 interface Props {
@@ -222,6 +225,10 @@ export default function MenuClient({
 
   // ── Modal modifier state ──
   const modGroups: ModifierGroup[] = productModal ? (productModifiers?.[productModal.id] ?? []) : []
+  const modalCat = productModal && productModal.category_id
+    ? cats.find(c => c.id === productModal.category_id) ?? null
+    : null
+  const resolvedArchetype = productModal ? resolveArchetype(productModal, modalCat) : 'generic' as const
   const liveTotal = modGroups.reduce((sum, g) => {
     let s = sum
     for (const mid of modalMods[g.id] ?? []) {
@@ -539,36 +546,14 @@ export default function MenuClient({
             <div style={{ padding: '20px 20px 32px' }}>
               <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 6px', color: theme.ink, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{productModal.name}</h2>
               {productModal.description && <p style={{ fontSize: 13, color: theme.muted, margin: '0 0 16px', lineHeight: 1.55 }}>{productModal.description}</p>}
-              {/* Modifier groups */}
-              {modGroups.map(grp => {
-                const sel = modalMods[grp.id] ?? []
-                const atMax = sel.length >= grp.maxSelections
-                return (
-                  <div key={grp.id} style={{ marginBottom: 18 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: theme.ink }}>{grp.name}</span>
-                      {grp.isRequired && <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 4, padding: '1px 5px' }}>Required</span>}
-                      {grp.maxSelections > 1 && <span style={{ fontSize: 10, color: theme.muted }}>{'up to ' + grp.maxSelections}</span>}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {grp.options.map(opt => {
-                        const isSel = sel.includes(opt.id)
-                        const isDisabled = !isSel && atMax
-                        return (
-                          <button key={opt.id} onClick={() => { if (!isDisabled) toggleMod(grp.id, opt.id, grp.maxSelections) }}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 10, border: '1.5px solid ' + (isSel ? theme.accent : theme.line), background: isSel ? theme.accent + '18' : theme.bg, cursor: isDisabled ? 'default' : 'pointer', opacity: isDisabled ? 0.45 : 1, textAlign: 'left' as const }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <div style={{ width: 16, height: 16, borderRadius: grp.maxSelections === 1 ? '50%' : 3, border: '2px solid ' + (isSel ? theme.accent : theme.line), background: isSel ? theme.accent : 'transparent', flexShrink: 0 }} />
-                              <span style={{ fontSize: 14, color: theme.ink, fontWeight: isSel ? 700 : 400 }}>{opt.name}</span>
-                            </div>
-                            {opt.priceCents > 0 && <span style={{ fontSize: 13, color: theme.accent, fontWeight: 600 }}>{'+ ' + fmtPrice(opt.priceCents / 100)}</span>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
+              {/* Modifier groups — visual style determined by resolved archetype */}
+              <ArchetypeRenderer
+                resolvedArchetype={resolvedArchetype}
+                modifierGroups={modGroups}
+                selectedMods={modalMods}
+                onToggleMod={toggleMod}
+                theme={theme}
+              />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <span style={{ fontSize: 22, fontWeight: 800, color: theme.accent, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{fmtPrice(productModal.price)}</span>
               </div>
