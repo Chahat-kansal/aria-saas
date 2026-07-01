@@ -79,7 +79,8 @@ async function _PATCH(req: NextRequest, { params }: Params) {
       'kds_station', 'is_gluten_free', 'is_vegan', 'is_vegetarian', 'is_weight_based',
       'price_per_kg', 'schedule_level', 'requires_script', 'is_schedule_drug',
       'brand', 'notes', 'allergens', 'is_age_restricted', 'gst_exempt',
-      'shelf_capacity', 'qty_backroom', 'reorder_point', 'reorder_qty']
+      'shelf_capacity', 'qty_backroom', 'reorder_point', 'reorder_qty',
+      'ordering_mode', 'ordering_archetype']
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
     for (const k of allowed) if (k in body) payload[k] = body[k]
     const { data, error } = await supabase.from('pos_products').update(payload).eq('id', id).eq('business_id', bid).select().single()

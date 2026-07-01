@@ -19,7 +19,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
 
   const body = await req.json()
-  const allowed = ['name', 'display_name', 'selection_type', 'is_required', 'min_selections', 'max_selections', 'allow_quantity', 'color', 'step_number', 'display_order']
+  const allowed = ['name', 'display_name', 'selection_type', 'is_required', 'min_selections', 'max_selections', 'allow_quantity', 'color', 'step_number', 'display_order', 'archetype_slot']
   const update: Record<string, unknown> = {}
   for (const k of allowed) if (k in body) update[k] = body[k]
 
