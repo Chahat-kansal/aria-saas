@@ -546,7 +546,7 @@ export default function MenuClient({
                 return (
                   <div key={grp.id} style={{ marginBottom: 18 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: theme.muted }}>{grp.name}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: theme.ink }}>{grp.name}</span>
                       {grp.isRequired && <span style={{ fontSize: 10, fontWeight: 700, color: theme.accent, border: '1px solid ' + theme.accent, borderRadius: 4, padding: '1px 5px' }}>Required</span>}
                       {grp.maxSelections > 1 && <span style={{ fontSize: 10, color: theme.muted }}>{'up to ' + grp.maxSelections}</span>}
                     </div>
@@ -561,7 +561,7 @@ export default function MenuClient({
                               <div style={{ width: 16, height: 16, borderRadius: grp.maxSelections === 1 ? '50%' : 3, border: '2px solid ' + (isSel ? theme.accent : theme.line), background: isSel ? theme.accent : 'transparent', flexShrink: 0 }} />
                               <span style={{ fontSize: 14, color: theme.ink, fontWeight: isSel ? 700 : 400 }}>{opt.name}</span>
                             </div>
-                            {opt.priceCents > 0 && <span style={{ fontSize: 13, color: isSel ? theme.accent : theme.muted, fontWeight: 600 }}>{'+ ' + fmtPrice(opt.priceCents / 100)}</span>}
+                            {opt.priceCents > 0 && <span style={{ fontSize: 13, color: theme.accent, fontWeight: 600 }}>{'+ ' + fmtPrice(opt.priceCents / 100)}</span>}
                           </button>
                         )
                       })}
