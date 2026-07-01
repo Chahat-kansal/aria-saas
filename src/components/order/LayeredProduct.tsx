@@ -14,6 +14,7 @@ const SPRING = { type: 'spring' as const, stiffness: 260, damping: 22, mass: 0.9
 
 export function LayeredProduct({ layers, size = 277, baseOffset = 28 }: Props) {
   const containerH = size + (MAX_LAYERS - 1) * baseOffset
+  const plateW = Math.round(size * 0.88)
 
   return (
     <div
@@ -24,6 +25,23 @@ export function LayeredProduct({ layers, size = 277, baseOffset = 28 }: Props) {
         flexShrink: 0,
       }}
     >
+      {/* Soft plate surface — sits under bun-bottom at bottom baseline */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: -10,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: plateW,
+          height: 26,
+          borderRadius: '50%',
+          background: 'radial-gradient(ellipse at center top, #ffffff 30%, #ece8de 100%)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.07)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
       <AnimatePresence>
         {layers.map((key, i) => (
           <motion.img
@@ -44,6 +62,7 @@ export function LayeredProduct({ layers, size = 277, baseOffset = 28 }: Props) {
               left: 0,
               pointerEvents: 'none',
               userSelect: 'none',
+              zIndex: i + 1,
             }}
           />
         ))}
