@@ -1,0 +1,22 @@
+{
+  "spirits-a": {
+    "glb": "/menu/_lib/models/spirits-a.glb",
+    "category": "spirits"
+  },
+  "spirits-b": {
+    "glb": "/menu/_lib/models/spirits-b.glb",
+    "category": "spirits"
+  },
+  "can": {
+    "glb": "/menu/_lib/models/can.glb",
+    "category": "can"
+  },
+  "beer": {
+    "glb": "/menu/_lib/models/beer.glb",
+    "category": "beer"
+  },
+  "wine": {
+    "glb": "/menu/_lib/models/wine.glb",
+    "category": "wine"
+  }
+}
