@@ -85,8 +85,6 @@ export default async function MenuPage({ params }: Props) {
       .from('pos_categories')
       .select('id, name, color, ordering_archetype')
       .eq('business_id', bid)
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('name'),
     supabaseAdmin
       .from('pos_products')
