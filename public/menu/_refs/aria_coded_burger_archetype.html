@@ -1,0 +1,114 @@
+<h2 class="sr-only">A burger built entirely from coded layers: tapping an ingredient lifts the top bun, drops the ingredient onto the stack, and closes the bun while the price updates.</h2>
+<style>
+  .bg-wrap{max-width:340px;margin:0 auto;font-family:'Outfit',system-ui,sans-serif;text-align:center}
+  .stage{position:relative;height:240px;margin:4px auto 0;width:220px}
+  .layer{position:absolute;left:50%;transform:translateX(-50%);transition:top .45s cubic-bezier(.34,1.4,.5,1),opacity .3s}
+  .ing{transition:transform .42s cubic-bezier(.34,1.6,.5,1),opacity .35s;transform-origin:center}
+  .ing.hidden{opacity:0;transform:translateY(-60px) scale(.6) rotate(-8deg)}
+  .chip{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;user-select:none}
+  .swatch{width:54px;height:54px;border-radius:14px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;transition:border-color .15s,transform .12s;background:var(--surface-2)}
+  .chip.on .swatch{border-color:#BA7517;transform:translateY(-2px)}
+  .chip:active .swatch{transform:scale(.92)}
+  .clbl{font-size:11px;color:var(--text-secondary)}
+  .cpr{font-size:10px;color:#BA7517;font-weight:500}
+</style>
+<div class="bg-wrap">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:0 6px 2px">
+    <div style="text-align:left">
+      <div style="font-family:'Cormorant',Georgia,serif;font-style:italic;font-size:24px;color:var(--text-primary)">Classic burger</div>
+      <div id="stackName" style="font-size:11px;color:var(--text-secondary)">beef · cheese</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:10px;color:var(--text-secondary);letter-spacing:.05em">TOTAL</div>
+      <div id="total" style="font-family:'Cormorant',Georgia,serif;font-style:italic;font-size:28px;font-weight:500;color:var(--text-primary);line-height:.9">$14.00</div>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg class="layer" id="topbun" width="200" height="74" viewBox="0 0 200 74" style="top:0;z-index:40">
+      <ellipse cx="100" cy="60" rx="92" ry="13" fill="#d98a3d"/>
+      <path d="M8 60 C8 18 192 18 192 60 Z" fill="#e8a44f"/>
+      <path d="M8 60 C8 20 192 20 192 60" fill="#f0b566"/>
+      <circle cx="70" cy="38" r="2.5" fill="#fff" opacity=".75"/>
+      <circle cx="100" cy="32" r="2.5" fill="#fff" opacity=".75"/>
+      <circle cx="130" cy="38" r="2.5" fill="#fff" opacity=".75"/>
+      <circle cx="85" cy="46" r="2.5" fill="#fff" opacity=".75"/>
+      <circle cx="115" cy="46" r="2.5" fill="#fff" opacity=".75"/>
+    </svg>
+
+    <svg class="layer ing" id="l-tomato" width="200" height="22" viewBox="0 0 200 22" style="top:118px;z-index:30">
+      <path d="M14 11 C14 2 186 2 186 11 C186 20 14 20 14 11 Z" fill="#e24b4a"/>
+      <ellipse cx="100" cy="9" rx="78" ry="4" fill="#f0726f" opacity=".6"/>
+    </svg>
+
+    <svg class="layer ing" id="l-lettuce" width="210" height="20" viewBox="0 0 210 20" style="top:112px;z-index:31">
+      <path d="M6 10 Q18 0 30 10 Q42 0 54 10 Q66 0 78 10 Q90 0 102 10 Q114 0 126 10 Q138 0 150 10 Q162 0 174 10 Q186 0 198 10 Q204 14 198 18 L8 18 Q2 14 6 10Z" fill="#7fb84a"/>
+    </svg>
+
+    <svg class="layer ing" id="l-onion" width="190" height="16" viewBox="0 0 190 16" style="top:110px;z-index:32">
+      <path d="M12 8 C12 1 178 1 178 8 C178 15 12 15 12 8Z" fill="#c9a9d6"/>
+      <path d="M12 8 C12 4 178 4 178 8" fill="none" stroke="#a87fc0" stroke-width="1.5"/>
+    </svg>
+
+    <svg class="layer" id="cheese" width="196" height="26" viewBox="0 0 196 26" style="top:104px;z-index:33">
+      <path d="M10 4 L186 4 L176 12 C150 22 46 22 20 12 Z" fill="#f6c343"/>
+      <path d="M30 16 l-8 8 M60 18 l-7 7 M150 16 l8 8 M120 18 l7 7" stroke="#e8a91f" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+
+    <svg class="layer" id="patty" width="200" height="30" viewBox="0 0 200 30" style="top:108px;z-index:20">
+      <ellipse cx="100" cy="15" rx="94" ry="13" fill="#6b3f २b"/>
+      <ellipse cx="100" cy="14" rx="94" ry="13" fill="#7a4a30"/>
+      <ellipse cx="100" cy="12" rx="90" ry="10" fill="#8a5638"/>
+    </svg>
+
+    <svg class="layer" id="botbun" width="190" height="34" viewBox="0 0 190 34" style="top:150px;z-index:10">
+      <path d="M6 6 C6 0 184 0 184 6 L176 22 C150 32 40 32 14 22 Z" fill="#e8a44f"/>
+      <path d="M6 6 C6 2 184 2 184 6" fill="#f0b566"/>
+    </svg>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">
+    <div class="chip" data-k="tomato" data-p="1.5"><div class="swatch"><svg width="30" height="14" viewBox="0 0 200 22"><path d="M14 11 C14 2 186 2 186 11 C186 20 14 20 14 11Z" fill="#e24b4a"/></svg></div><div class="clbl">Tomato</div><div class="cpr">+$1.50</div></div>
+    <div class="chip" data-k="lettuce" data-p="1"><div class="swatch"><svg width="32" height="12" viewBox="0 0 210 20"><path d="M6 10 Q18 0 30 10 Q42 0 54 10 Q66 0 78 10 Q90 0 102 10 Q114 0 126 10 Q138 0 150 10 Q162 0 174 10 Q186 0 198 10 Q204 14 198 18 L8 18 Q2 14 6 10Z" fill="#7fb84a"/></svg></div><div class="clbl">Lettuce</div><div class="cpr">+$1.00</div></div>
+    <div class="chip" data-k="onion" data-p="1"><div class="swatch"><svg width="30" height="12" viewBox="0 0 190 16"><path d="M12 8 C12 1 178 1 178 8 C178 15 12 15 12 8Z" fill="#c9a9d6"/></svg></div><div class="clbl">Onion</div><div class="cpr">+$1.00</div></div>
+  </div>
+
+  <div style="font-size:11px;color:var(--text-secondary);margin-top:12px">tap an ingredient — the bun lifts and it drops in</div>
+</div>
+<script>
+(function(){
+  var BASE=14, names={tomato:'tomato',lettuce:'lettuce',onion:'onion'};
+  var sel={tomato:false,lettuce:false,onion:false};
+  var topRest=0, topLift=-46;
+  var topbun=document.getElementById('topbun');
+  function money(n){return '$'+n.toFixed(2);}
+  function anyOpen(){return false;}
+  function render(animateBun){
+    var t=BASE, picks=['beef','cheese'];
+    Object.keys(sel).forEach(function(k){
+      var el=document.getElementById('l-'+k);
+      if(sel[k]){el.classList.remove('hidden');picks.push(names[k]);}
+      else el.classList.add('hidden');
+      var chip=document.querySelector('.chip[data-k="'+k+'"]');
+      chip.classList.toggle('on',sel[k]);
+    });
+    Object.keys(sel).forEach(function(k){
+      var chip=document.querySelector('.chip[data-k="'+k+'"]');
+      t+=sel[k]?parseFloat(chip.dataset.p):0;
+    });
+    document.getElementById('total').textContent=money(t);
+    document.getElementById('stackName').textContent=picks.join(' · ');
+  }
+  function tap(k){
+    topbun.style.top=topLift+'px';
+    setTimeout(function(){ sel[k]=!sel[k]; render(true); },220);
+    setTimeout(function(){ topbun.style.top=topRest+'px'; },480);
+  }
+  document.querySelectorAll('.chip').forEach(function(c){
+    c.addEventListener('click',function(){tap(c.dataset.k);});
+  });
+  ['tomato','lettuce','onion'].forEach(function(k){document.getElementById('l-'+k).classList.add('hidden');});
+  render(false);
+})();
+</script>

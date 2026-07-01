@@ -1,0 +1,28 @@
+{
+  "ingredients": {
+    "bun-top": "/menu/_lib/ingredients/bun-top.png",
+    "bun-bottom": "/menu/_lib/ingredients/bun-bottom.png",
+    "patty": "/menu/_lib/ingredients/patty.png",
+    "cheese": "/menu/_lib/ingredients/cheese.png",
+    "tomato": "/menu/_lib/ingredients/tomato.png",
+    "lettuce": "/menu/_lib/ingredients/lettuce.png",
+    "bacon": "/menu/_lib/ingredients/bacon.png",
+    "onion": "/menu/_lib/ingredients/onion.png",
+    "pickle": "/menu/_lib/ingredients/pickle.png",
+    "sauce": "/menu/_lib/ingredients/sauce.png"
+  },
+  "sip-ff5055": {
+    "flat-white": {
+      "hero": "/menu/sip-ff5055/flat-white.png"
+    },
+    "croissant": {
+      "hero": "/menu/sip-ff5055/croissant.png"
+    },
+    "orange-juice": {
+      "hero": "/menu/sip-ff5055/orange-juice.png"
+    },
+    "signature-stack": {
+      "spin": "/menu/sip-ff5055/signature-stack.mp4"
+    }
+  }
+}

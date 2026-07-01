@@ -1,0 +1,156 @@
+<h2 class="sr-only">Two ordering interactions: scroll a bottle that spins and changes label, and a plate with floating food you swipe between; tapping either opens the modifier sheet.</h2>
+<style>
+  .wrap{max-width:360px;margin:0 auto;font-family:var(--font-sans)}
+  .seg{display:flex;gap:6px;margin-bottom:12px}
+  .seg button{flex:1;border:0.5px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius);padding:9px;font-size:12px;color:var(--text-secondary);cursor:pointer;font-family:inherit}
+  .seg button.on{background:#2D5240;color:#fff;border-color:#2D5240}
+  .panel{display:none}
+  .panel.on{display:block}
+  .stagewrap{background:var(--surface-1);border-radius:12px;padding:16px;position:relative;overflow:hidden}
+  .scrolltrack{height:150px;overflow-y:scroll;position:relative;scroll-snap-type:y mandatory}
+  .scrolltrack::-webkit-scrollbar{display:none}
+  .snap{height:150px;scroll-snap-align:start}
+  .fixedstage{position:absolute;top:0;left:0;right:0;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .swipestage{height:170px;display:flex;align-items:center;justify-content:center;position:relative;touch-action:pan-y}
+  .plate{position:absolute;bottom:14px;width:150px;height:26px;border-radius:50%;background:var(--border-strong);opacity:.5}
+  .food{transition:transform .35s cubic-bezier(.34,1.5,.5,1),opacity .3s}
+  .food.out-l{transform:translateX(-120px) rotate(-12deg);opacity:0}
+  .food.out-r{transform:translateX(120px) rotate(12deg);opacity:0}
+  .navbtn{border:0.5px solid var(--border-strong);background:var(--surface-2);width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--text-secondary);display:flex;align-items:center;justify-content:center}
+  .nm{font-family:var(--font-voice);font-style:italic;font-size:20px;color:var(--text-primary);text-align:center}
+  .pr{font-size:13px;color:#BA7517;text-align:center;font-weight:500}
+  .hint{font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px}
+  .sheet{background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:14px;margin-top:12px}
+  .grp{margin-bottom:10px}
+  .glabel{font-size:11px;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+  .opt{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);margin-bottom:5px;cursor:pointer;font-size:13px;color:var(--text-primary)}
+  .opt.on{border-color:#BA7517;background:var(--bg-warning)}
+  .opt .rp{font-size:12px;color:#BA7517}
+  .addbtn{width:100%;background:#2D5240;color:#fff;border:none;border-radius:var(--radius);padding:13px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;margin-top:6px}
+</style>
+<div class="wrap">
+  <div class="seg">
+    <button id="tb-drink" class="on" onclick="tab('drink')">Drinks · scroll</button>
+    <button id="tb-food" onclick="tab('food')">Food · swipe</button>
+  </div>
+
+  <div class="panel on" id="p-drink">
+    <div class="stagewrap">
+      <div class="fixedstage">
+        <svg id="bottle" width="60" height="120" viewBox="0 0 60 120" style="transition:transform .1s">
+          <rect x="24" y="4" width="12" height="20" rx="2" fill="#3a5a40"/>
+          <path d="M24 24 Q24 34 20 40 L20 108 Q20 116 30 116 Q40 116 40 108 L40 40 Q36 34 36 24 Z" fill="#4a6b50"/>
+          <rect x="21" y="60" width="18" height="34" rx="2" fill="#f3ecda"/>
+          <text id="blabel" x="30" y="80" text-anchor="middle" font-family="var(--font-voice)" font-style="italic" font-size="7" fill="#5a4a2a">Shiraz</text>
+          <rect x="26" y="1" width="8" height="5" rx="1" fill="#c9a24a"/>
+        </svg>
+      </div>
+      <div class="scrolltrack" id="track">
+        <div class="snap"></div><div class="snap"></div><div class="snap"></div><div class="snap"></div>
+      </div>
+    </div>
+    <div class="nm" id="dname" style="margin-top:10px">Shiraz</div>
+    <div class="pr" id="dprice">A$32.00</div>
+    <div class="hint"><i class="ti ti-arrows-vertical" style="font-size:12px;vertical-align:-2px"></i> scroll the bottle · tap to customise</div>
+    <button class="addbtn" onclick="openSheet('drink')" style="margin-top:12px">Customise <span id="dn2">Shiraz</span></button>
+  </div>
+
+  <div class="panel" id="p-food">
+    <div class="stagewrap">
+      <div class="swipestage" id="swipe">
+        <div class="plate"></div>
+        <svg id="food" class="food" width="120" height="110" viewBox="0 0 120 110">
+          <g id="food-burger">
+            <ellipse cx="60" cy="88" rx="42" ry="9" fill="#d98a3d"/>
+            <path d="M20 88 C20 60 100 60 100 88 Z" fill="#f0b566"/>
+            <rect x="22" y="72" width="76" height="7" rx="3" fill="#e24b4a"/>
+            <path d="M20 66 q10 -8 20 0 q10 -8 20 0 q10 -8 20 0 q10 -8 20 0 v6 h-80 z" fill="#7fb84a"/>
+            <ellipse cx="60" cy="60" rx="40" ry="9" fill="#8a5638"/>
+            <path d="M22 44 C22 20 98 20 98 44 Z" fill="#f0b566"/>
+            <circle cx="45" cy="34" r="1.6" fill="#fff"/><circle cx="60" cy="30" r="1.6" fill="#fff"/><circle cx="75" cy="34" r="1.6" fill="#fff"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+      <button class="navbtn" onclick="swipeFood(-1)"><i class="ti ti-chevron-left"></i></button>
+      <div><div class="nm" id="fname">Classic Burger</div><div class="pr" id="fprice">A$14.00</div></div>
+      <button class="navbtn" onclick="swipeFood(1)"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div class="hint"><i class="ti ti-arrows-horizontal" style="font-size:12px;vertical-align:-2px"></i> swipe for next dish · tap to customise</div>
+    <button class="addbtn" onclick="openSheet('food')" style="margin-top:12px">Customise <span id="fn2">Classic Burger</span></button>
+  </div>
+
+  <div id="sheetHost"></div>
+</div>
+<script>
+(function(){
+  var drinks=[{n:'Shiraz',p:32},{n:'Pinot Noir',p:38},{n:'Chardonnay',p:29},{n:'Prosecco',p:26}];
+  var foods=[{n:'Classic Burger',p:14},{n:'Loaded Fries',p:11},{n:'Chicken Bowl',p:15}];
+  var di=0, fi=0;
+  window.tab=function(t){
+    document.getElementById('p-drink').classList.toggle('on',t==='drink');
+    document.getElementById('p-food').classList.toggle('on',t==='food');
+    document.getElementById('tb-drink').classList.toggle('on',t==='drink');
+    document.getElementById('tb-food').classList.toggle('on',t==='food');
+    document.getElementById('sheetHost').innerHTML='';
+  };
+  var track=document.getElementById('track'), bottle=document.getElementById('bottle');
+  track.addEventListener('scroll',function(){
+    var max=track.scrollHeight-track.clientHeight;
+    var prog=max>0?track.scrollTop/max:0;
+    bottle.style.transform='rotateY('+(prog*720)+'deg) rotate('+(prog*8-4)+'deg)';
+    var idx=Math.min(drinks.length-1,Math.round(prog*(drinks.length-1)));
+    if(idx!==di){di=idx;var d=drinks[di];
+      document.getElementById('blabel').textContent=d.n;
+      document.getElementById('dname').textContent=d.n;
+      document.getElementById('dprice').textContent='A$'+d.p.toFixed(2);
+      document.getElementById('dn2').textContent=d.n;
+    }
+  });
+  var food=document.getElementById('food');
+  window.swipeFood=function(dir){
+    food.classList.add(dir>0?'out-l':'out-r');
+    setTimeout(function(){
+      fi=(fi+dir+foods.length)%foods.length;var f=foods[fi];
+      document.getElementById('fname').textContent=f.n;
+      document.getElementById('fprice').textContent='A$'+f.p.toFixed(2);
+      document.getElementById('fn2').textContent=f.n;
+      food.classList.remove('out-l','out-r');
+      food.classList.add(dir>0?'out-r':'out-l');
+      requestAnimationFrame(function(){requestAnimationFrame(function(){food.classList.remove('out-l','out-r');});});
+    },300);
+  };
+  var sx=0;
+  var sw=document.getElementById('swipe');
+  sw.addEventListener('touchstart',function(e){sx=e.touches[0].clientX;});
+  sw.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>40)swipeFood(dx<0?1:-1);});
+  window.openSheet=function(kind){
+    var item=kind==='drink'?drinks[di]:foods[fi];
+    var groups=kind==='drink'
+      ? [{l:'Size',req:true,o:[['Standard',0],['Magnum',18]]},{l:'Chill',req:false,o:[['Room temp',0],['Chilled',0]]}]
+      : [{l:'Size',req:true,o:[['Single',0],['Double',4]]},{l:'Extras',req:false,o:[['Bacon',2],['Extra cheese',1.5],['Avocado',2.5]]}];
+    var h='<div class="sheet"><div class="nm" style="text-align:left;margin-bottom:2px">'+item.n+'</div><div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">tap options — price updates live</div>';
+    groups.forEach(function(g,gi){
+      h+='<div class="grp"><div class="glabel">'+g.l+(g.req?' · required':'')+'</div>';
+      g.o.forEach(function(o,oi){
+        h+='<div class="opt" data-g="'+gi+'" data-o="'+oi+'" data-p="'+o[1]+'" data-req="'+(g.req?1:0)+'" onclick="pick(this)"><span>'+o[0]+'</span>'+(o[1]>0?'<span class="rp">+A$'+o[1].toFixed(2)+'</span>':'<span style="font-size:12px;color:var(--text-muted)">included</span>')+'</div>';
+      });
+      h+='</div>';
+    });
+    h+='<button class="addbtn" id="addb">Add to order · A$'+item.p.toFixed(2)+'</button></div>';
+    document.getElementById('sheetHost').innerHTML=h;
+    window._base=item.p;window._sel={};
+    document.getElementById('sheetHost').scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+  window.pick=function(el){
+    var g=el.dataset.g;
+    document.querySelectorAll('.opt[data-g="'+g+'"]').forEach(function(x){if(x!==el)x.classList.remove('on');});
+    el.classList.toggle('on');
+    var t=window._base;
+    window._sel={};
+    document.querySelectorAll('.opt.on').forEach(function(x){window._sel[x.dataset.g]=1;t+=parseFloat(x.dataset.p);});
+    document.getElementById('addb').textContent='Add to order · A$'+t.toFixed(2);
+  };
+})();
+</script>
