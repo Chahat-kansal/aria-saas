@@ -116,39 +116,45 @@ export async function middleware(request: NextRequest) {
 
     if (!isAlwaysAllowed && pathname.startsWith('/dashboard')) {
       const supabase = makeSupabase()
-      const { data: biz } = await supabase
-        .from('businesses')
-        .select('id')
+      const { data: activeBizRow } = await supabase
+        .from('user_active_business')
+        .select('business_id')
         .eq('user_id', user.id)
-        .eq('is_active', true)
-        .limit(1)
         .maybeSingle()
 
-      if (biz?.id) {
-        const { data: sub } = await supabase
-          .from('business_subscriptions')
-          .select('status, trial_ends_at')
-          .eq('business_id', biz.id)
-          .maybeSingle()
+      const selectedBizId: string | null = (activeBizRow as { business_id?: string } | null)?.business_id ?? null
+      const { data: biz } = selectedBizId
+        ? await supabase.from('businesses')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .eq('id', selectedBizId)
+            .eq('is_active', true)
+            .maybeSingle()
+        : await supabase.from('businesses')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .limit(1)
+            .maybeSingle()
 
+      if (biz) {
         const now = new Date()
-        const trialEnd = sub?.trial_ends_at ? new Date(sub.trial_ends_at) : null
-        const trialExpired = sub?.status === 'trialing' && trialEnd && trialEnd < now
-        const noSub = !sub || (sub.status !== 'active' && sub.status !== 'trialing')
-        const isExpired = trialExpired || noSub
+        const planOverridden = !!(biz as { plan_override_by?: string | null }).plan_override_by
+        const status = (((biz as { subscription_status?: string | null }).subscription_status) ?? '').toLowerCase().trim()
+        const isActive = status === 'active'
+        const isTrialing = status === 'trial' || status === 'trialing'
+        const rawTrialEnd = (biz as { trial_ends_at?: string | null }).trial_ends_at
+        const trialEnd = rawTrialEnd ? new Date(rawTrialEnd) : null
+        const trialExpired = isTrialing && !!trialEnd && trialEnd < now
+        const isExpired = !planOverridden && !isActive && !(isTrialing && !trialExpired)
 
-        // Days remaining in trial (for warning banner)
         const daysLeft = trialEnd && !trialExpired
           ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000)
           : null
 
         if (isExpired) {
-          // Pass a header so the dashboard page renders a frozen/upgrade banner
-          // instead of redirecting — owner keeps access to their data
           response.headers.set('x-trial-expired', '1')
-          response.headers.set('x-subscription-status', sub?.status ?? 'none')
+          response.headers.set('x-subscription-status', status)
         } else if (daysLeft !== null && daysLeft <= 3) {
-          // Pass warning header so dashboard shows 3-day countdown banner
           response.headers.set('x-trial-days-left', String(daysLeft))
         }
       }
@@ -166,33 +172,44 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await makeSupabase().auth.getUser()
     if (user) {
       const supabase = makeSupabase()
-      const { data: biz } = await supabase
-        .from('businesses')
-        .select('id')
+      const { data: activeBizRow } = await supabase
+        .from('user_active_business')
+        .select('business_id')
         .eq('user_id', user.id)
-        .eq('is_active', true)
-        .limit(1)
         .maybeSingle()
 
-      if (biz?.id) {
-        const { data: sub } = await supabase
-          .from('business_subscriptions')
-          .select('status, trial_ends_at')
-          .eq('business_id', biz.id)
-          .maybeSingle()
+      const selectedBizId: string | null = (activeBizRow as { business_id?: string } | null)?.business_id ?? null
+      const { data: biz } = selectedBizId
+        ? await supabase.from('businesses')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .eq('id', selectedBizId)
+            .eq('is_active', true)
+            .maybeSingle()
+        : await supabase.from('businesses')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .limit(1)
+            .maybeSingle()
 
-        const trialExpired = sub?.status === 'trialing' &&
-          sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
-        const noSub = !sub || (sub.status !== 'active' && sub.status !== 'trialing')
+      if (biz) {
+        const now = new Date()
+        const planOverridden = !!(biz as { plan_override_by?: string | null }).plan_override_by
+        const status = (((biz as { subscription_status?: string | null }).subscription_status) ?? '').toLowerCase().trim()
+        const isActive = status === 'active'
+        const isTrialing = status === 'trial' || status === 'trialing'
+        const rawTrialEnd = (biz as { trial_ends_at?: string | null }).trial_ends_at
+        const trialEnd = rawTrialEnd ? new Date(rawTrialEnd) : null
+        const trialExpired = isTrialing && !!trialEnd && trialEnd < now
+        const isExpiredOrNoSub = !planOverridden && !isActive && !(isTrialing && !trialExpired)
 
-        if (trialExpired || noSub) {
+        if (isExpiredOrNoSub) {
           if (isPOSSaleAPI) {
             return applySecurityHeaders(NextResponse.json(
               { error: 'Trial expired. Upgrade your plan to continue taking payments.', trial_expired: true },
               { status: 402 }
             ))
           }
-          // POS terminal — redirect to billing
           return applySecurityHeaders(
             NextResponse.redirect(new URL('/billing?reason=trial_expired', request.url))
           )
