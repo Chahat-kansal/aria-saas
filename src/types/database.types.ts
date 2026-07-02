@@ -4135,6 +4135,7 @@ export type Database = {
           industry_subtype: string | null
           internal_notes: string | null
           is_active: boolean | null
+          is_internal: boolean
           lat: number | null
           legal_name: string | null
           lng: number | null
@@ -4254,6 +4255,7 @@ export type Database = {
           industry?: string | null
           industry_subtype?: string | null
           internal_notes?: string | null
+          is_internal?: boolean
           is_active?: boolean | null
           lat?: number | null
           legal_name?: string | null
@@ -4373,6 +4375,7 @@ export type Database = {
           id?: string
           industry?: string | null
           industry_subtype?: string | null
+          is_internal?: boolean
           internal_notes?: string | null
           is_active?: boolean | null
           lat?: number | null

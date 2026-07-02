@@ -125,12 +125,12 @@ export async function middleware(request: NextRequest) {
       const selectedBizId: string | null = (activeBizRow as { business_id?: string } | null)?.business_id ?? null
       const { data: biz } = selectedBizId
         ? await supabase.from('businesses')
-            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by, is_internal')
             .eq('id', selectedBizId)
             .eq('is_active', true)
             .maybeSingle()
         : await supabase.from('businesses')
-            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by, is_internal')
             .eq('user_id', user.id)
             .eq('is_active', true)
             .limit(1)
@@ -138,6 +138,7 @@ export async function middleware(request: NextRequest) {
 
       if (biz) {
         const now = new Date()
+        const isInternal = !!(biz as { is_internal?: boolean | null }).is_internal
         const planOverridden = !!(biz as { plan_override_by?: string | null }).plan_override_by
         const status = (((biz as { subscription_status?: string | null }).subscription_status) ?? '').toLowerCase().trim()
         const isActive = status === 'active'
@@ -145,7 +146,7 @@ export async function middleware(request: NextRequest) {
         const rawTrialEnd = (biz as { trial_ends_at?: string | null }).trial_ends_at
         const trialEnd = rawTrialEnd ? new Date(rawTrialEnd) : null
         const trialExpired = isTrialing && !!trialEnd && trialEnd < now
-        const isExpired = !planOverridden && !isActive && !(isTrialing && !trialExpired)
+        const isExpired = !isInternal && !planOverridden && !isActive && !(isTrialing && !trialExpired)
 
         const daysLeft = trialEnd && !trialExpired
           ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000)
@@ -181,12 +182,12 @@ export async function middleware(request: NextRequest) {
       const selectedBizId: string | null = (activeBizRow as { business_id?: string } | null)?.business_id ?? null
       const { data: biz } = selectedBizId
         ? await supabase.from('businesses')
-            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by, is_internal')
             .eq('id', selectedBizId)
             .eq('is_active', true)
             .maybeSingle()
         : await supabase.from('businesses')
-            .select('id, plan, subscription_status, trial_ends_at, plan_override_by')
+            .select('id, plan, subscription_status, trial_ends_at, plan_override_by, is_internal')
             .eq('user_id', user.id)
             .eq('is_active', true)
             .limit(1)
@@ -194,6 +195,7 @@ export async function middleware(request: NextRequest) {
 
       if (biz) {
         const now = new Date()
+        const isInternal = !!(biz as { is_internal?: boolean | null }).is_internal
         const planOverridden = !!(biz as { plan_override_by?: string | null }).plan_override_by
         const status = (((biz as { subscription_status?: string | null }).subscription_status) ?? '').toLowerCase().trim()
         const isActive = status === 'active'
@@ -201,7 +203,7 @@ export async function middleware(request: NextRequest) {
         const rawTrialEnd = (biz as { trial_ends_at?: string | null }).trial_ends_at
         const trialEnd = rawTrialEnd ? new Date(rawTrialEnd) : null
         const trialExpired = isTrialing && !!trialEnd && trialEnd < now
-        const isExpiredOrNoSub = !planOverridden && !isActive && !(isTrialing && !trialExpired)
+        const isExpiredOrNoSub = !isInternal && !planOverridden && !isActive && !(isTrialing && !trialExpired)
 
         if (isExpiredOrNoSub) {
           if (isPOSSaleAPI) {
