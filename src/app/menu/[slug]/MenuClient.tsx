@@ -6,6 +6,7 @@ import { resolveArchetype } from '@/lib/ordering/resolveArchetype'
 import { ArchetypeRenderer } from '@/components/ordering/archetypes/ArchetypeRenderer'
 import { resolveRenderMode } from '@/components/order/productMode'
 import { ProductCustomiser, type BuildConfig } from '@/components/order/ProductCustomiser'
+import { StripePaymentModal } from '@/components/order/StripePaymentModal'
 
 // ── Pipel ordering design system tokens ──────────────────────────────────────
 
@@ -185,6 +186,7 @@ export default function MenuClient({
   const [orderDone,     setOrderDone]     = useState<{ order_number: string; estimated_ready_minutes: number; total: number } | null>(null)
   const [checkoutForm,  setCheckoutForm]  = useState({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' })
   const [checkoutError, setCheckoutError] = useState('')
+  const [stripeModal,   setStripeModal]   = useState<{ clientSecret: string; publishableKey: string; orderNumber: string; total: number } | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [modalMods, setModalMods] = useState<Record<string, string[]>>({})
   const [dietaryFilter, setDietaryFilter] = useState<Set<string>>(new Set())
@@ -316,8 +318,23 @@ export default function MenuClient({
       }),
     }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
     if (res.error) { setCheckoutError(res.error); setOrdering(false); return }
+
+    // Card payment — show Stripe modal to collect card details
+    if (res.stripe_client_secret) {
+      setStripeModal({ clientSecret: res.stripe_client_secret, publishableKey: res.stripe_publishable_key, orderNumber: res.order_number, total: cartTotal })
+      setOrdering(false)
+      return
+    }
+
     setOrderDone({ order_number: res.order_number, estimated_ready_minutes: res.estimated_ready_minutes, total: cartTotal })
     setCart([]); setShowCart(false); setShowCheckout(false); setOrdering(false)
+  }
+
+  function handleStripeSuccess() {
+    const orderNumber = stripeModal?.orderNumber ?? ''
+    setStripeModal(null)
+    setOrderDone({ order_number: orderNumber, estimated_ready_minutes: 15, total: cartTotal })
+    setCart([]); setShowCart(false); setShowCheckout(false)
   }
 
   function copyLink() {
@@ -926,15 +943,17 @@ export default function MenuClient({
 
             {/* Payment */}
             <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Payment</p>
+              <p style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>Payment</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {[
-                  { value: 'pay_on_pickup', label: '💵 Pay on pickup / delivery' },
-                  { value: 'pay_online',    label: '💳 Pay now (card)' },
-                ].map(({ value, label }) => (
+                  { value: 'pay_on_pickup', label: '💵 Pay on pickup / delivery', sub: null },
+                  { value: 'pay_online',    label: '💳 Pay now by card', sub: 'Secured by Stripe — your card details are encrypted' },
+                  { value: 'pay_payid',     label: '🏦 PayID / bank transfer', sub: 'Bank transfer details provided after ordering · Staff confirm when payment arrives' },
+                ].map(({ value, label, sub }) => (
                   <button key={value} onClick={() => setCheckoutForm(f => ({ ...f, payment_method: value }))}
-                    style={{ padding: '12px 16px', borderRadius: 14, border: '2px solid ' + (checkoutForm.payment_method === value ? LIME : BORDER), background: checkoutForm.payment_method === value ? LIME + '18' : WHITE, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: INK, textAlign: 'left', fontFamily: SANS }}>
-                    {label}
+                    style={{ padding: '12px 16px', borderRadius: 14, border: '2px solid ' + (checkoutForm.payment_method === value ? LIME : BORDER), background: checkoutForm.payment_method === value ? LIME + '18' : WHITE, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: INK, textAlign: 'left' as const, fontFamily: SANS }}>
+                    <span style={{ display: 'block' }}>{label}</span>
+                    {sub && <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: MUTED, marginTop: 2 }}>{sub}</span>}
                   </button>
                 ))}
               </div>
@@ -957,6 +976,18 @@ export default function MenuClient({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Stripe payment modal — shown after place-order for card payments */}
+      {stripeModal && (
+        <StripePaymentModal
+          clientSecret={stripeModal.clientSecret}
+          publishableKey={stripeModal.publishableKey}
+          orderNumber={stripeModal.orderNumber}
+          total={stripeModal.total}
+          onSuccess={handleStripeSuccess}
+          onClose={() => setStripeModal(null)}
+        />
       )}
 
       {/* QR / SHARE MODAL */}

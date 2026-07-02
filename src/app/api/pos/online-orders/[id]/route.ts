@@ -144,9 +144,22 @@ async function _PATCH(req: Request, { params }: Params) {
       try {
         const { data: ord } = await supabaseAdmin
           .from('pos_online_orders')
-          .select('order_number, items, sale_id, outlet_id')
+          .select('order_number, items, sale_id, outlet_id, stripe_payment_intent_id, stripe_payment_status')
           .eq('id', fireOrderId)
           .maybeSingle()
+
+        // Gate: card payments must be confirmed before KDS fires
+        const stripePI = (ord as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id
+        const stripeStatus = (ord as { stripe_payment_status?: string | null } | null)?.stripe_payment_status
+        if (stripePI && stripeStatus !== 'succeeded') {
+          void supabaseAdmin.from('activity_log').insert({
+            business_id: fireBid, action_type: 'kds_fire_blocked_unpaid',
+            description: '[online-orders] KDS fire blocked — payment not confirmed for order ' + ((ord as { order_number?: string } | null)?.order_number ?? ''),
+            metadata: { order_id: fireOrderId, stripe_pi: stripePI, stripe_status: stripeStatus },
+            created_at: new Date().toISOString(),
+          })
+          return
+        }
 
         const items = (ord?.items ?? []) as Array<{
           product_id?: string; product_name?: string; quantity?: number;

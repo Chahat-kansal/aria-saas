@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
+import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { waitUntil } from '@vercel/functions'
@@ -147,8 +148,47 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     })
   }
 
-  // 4. Background: loyalty earn — fires after response is sent
-  if (earnCustomerId && earnSaleId) {
+  // 4. Card payments — create Stripe PaymentIntent, return client_secret to frontend.
+  //    Loyalty earn is deferred to the stripe-orders webhook (runs only after payment confirmed).
+  const isCardPayment = (body.payment_method ?? '').startsWith('pay_online')
+  let stripeClientSecret: string | null = null
+
+  if (isCardPayment) {
+    try {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
+      const pi = await stripe.paymentIntents.create({
+        amount: Math.round(subtotal * 100),
+        currency: 'aud',
+        metadata: {
+          kind: 'online_order',
+          order_id: orderId,
+          order_number: orderNumber,
+          business_id: bid,
+          sale_id: earnSaleId ?? '',
+          customer_id: earnCustomerId ?? '',
+        },
+        automatic_payment_methods: { enabled: true },
+      })
+      stripeClientSecret = pi.client_secret
+      await sb.from('pos_online_orders').update({
+        stripe_payment_intent_id: pi.id,
+        stripe_payment_status: pi.status,
+        updated_at: new Date().toISOString(),
+      }).eq('id', orderId)
+    } catch (e) {
+      void sb.from('activity_log').insert({
+        business_id: bid,
+        action_type: 'stripe_pi_error',
+        description: '[place-order] PaymentIntent create failed: ' + (e as Error).message,
+        metadata: { order_id: orderId, error: (e as Error).message },
+        created_at: new Date().toISOString(),
+      })
+      return NextResponse.json({ error: 'Payment setup failed. Please try again.' }, { status: 500 })
+    }
+  }
+
+  // 5. Background: loyalty earn — skip for card payments; webhook handles after confirmation.
+  if (earnCustomerId && earnSaleId && !isCardPayment) {
     const finalCustomerId = earnCustomerId
     const finalSaleId = earnSaleId
     waitUntil((async () => {
@@ -172,5 +212,9 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     order_number: (order as { order_number: string }).order_number,
     total: subtotal,
     estimated_ready_minutes: 15,
+    ...(stripeClientSecret ? {
+      stripe_client_secret: stripeClientSecret,
+      stripe_publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+    } : {}),
   })
 }
