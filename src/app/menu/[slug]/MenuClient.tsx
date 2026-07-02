@@ -254,7 +254,7 @@ export default function MenuClient({
       <div style={{ width: 64, height: 64, borderRadius: '50%', background: theme.accent + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, margin: '0 auto 20px' }}>✓</div>
       <h1 style={{ fontSize: 24, fontWeight: 800, color: theme.ink, margin: '0 0 8px', fontFamily: theme.fontCss, fontStyle: 'italic' }}>Order placed!</h1>
       <p style={{ color: theme.muted, fontSize: 14, margin: '0 0 24px' }}>We have received your order and will have it ready soon.</p>
-      <div style={{ background: theme.card, borderRadius: 18, padding: 24, marginBottom: 24, boxShadow: '0 2px 16px rgba(0,0,0,0.12)', maxWidth: 320, width: '100%' }}>
+      <div style={{ background: theme.card, borderRadius: 18, padding: 24, marginBottom: 16, boxShadow: '0 2px 16px rgba(0,0,0,0.12)', maxWidth: 320, width: '100%' }}>
         <p style={{ fontSize: 11, color: theme.muted, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Order number</p>
         <p style={{ fontSize: 30, fontWeight: 800, color: theme.ink, margin: '0 0 20px', letterSpacing: 2, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{orderDone.order_number}</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid ' + theme.line, paddingTop: 16 }}>
@@ -268,6 +268,12 @@ export default function MenuClient({
           </div>
         </div>
       </div>
+      <a
+        href={'/menu/' + _slug + '/order/' + orderDone.order_number}
+        style={{ display: 'block', width: '100%', maxWidth: 320, padding: '12px 0', borderRadius: 14, border: '1.5px solid ' + theme.accent, background: 'transparent', color: theme.accent, fontSize: 14, fontWeight: 700, textDecoration: 'none', marginBottom: 12, textAlign: 'center', fontFamily: theme.fontCss }}
+      >
+        Track your order →
+      </a>
       <button
         onClick={() => { setOrderDone(null); setCheckoutForm({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' }) }}
         style={{ padding: '14px 36px', borderRadius: 14, border: 'none', background: theme.accent, color: theme.bg, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: theme.fontCss }}

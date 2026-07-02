@@ -23,8 +23,10 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     customer_name: string
     customer_phone?: string
     customer_email?: string
-    items: Array<{ product_id: string; product_name: string; quantity: number; unit_price: number }>
+    items: Array<{ product_id: string; product_name: string; quantity: number; unit_price: number; modifiers?: { id: string; name: string; price_cents: number }[]; config?: { mode: string; layers: string[]; added: unknown[]; removed: unknown[] } }>
     notes?: string
+    special_instructions?: string
+    payment_method?: string
     pickup_time?: string
     fulfillment_type?: string
     source?: string
@@ -50,7 +52,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     items: body.items,
     subtotal,
     total: subtotal,
-    notes: body.notes ?? null,
+    notes: body.notes ?? body.special_instructions ?? null,
     pickup_time: body.pickup_time ? new Date(body.pickup_time).toISOString() : null,
     fulfillment_type: body.fulfillment_type ?? 'pickup',
     source: body.source ?? 'online',
@@ -169,5 +171,6 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     order_id: orderId,
     order_number: (order as { order_number: string }).order_number,
     total: subtotal,
+    estimated_ready_minutes: 15,
   })
 }

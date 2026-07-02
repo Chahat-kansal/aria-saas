@@ -24,7 +24,7 @@ async function _GET(req: Request) {
   const limit  = parseInt(searchParams.get('limit') ?? '50')
 
   let q = supabase.from('pos_online_orders')
-    .select('id, order_number, customer_name, customer_phone, customer_email, status, total, notes, source, pickup_time, created_at, updated_at')
+    .select('id, order_number, customer_name, customer_phone, customer_email, status, total, notes, source, pickup_time, created_at, updated_at, items, customer_id, estimated_ready_at, fulfillment_type')
     .eq('business_id', bid)
     .order('created_at', { ascending: false })
     .limit(limit)
