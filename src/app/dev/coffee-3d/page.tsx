@@ -165,8 +165,8 @@ export default function Coffee3dPreviewPage() {
         foam={resolved.foam}
         ice={resolved.ice}
         size={320}
-        clipsEnabled={false}
-        clipPath="/menu/_lib/clips/caramel-pour.webm"
+        clipsEnabled={true}
+        clipPath="/menu/_lib/clips/caramel-pour.webm.mp4"
       />
 
       {/* ── Debug readout ────────────────────────────────────────────────── */}
@@ -193,8 +193,8 @@ export default function Coffee3dPreviewPage() {
         <div style={{ marginTop: 8, color: '#888' }}>
           smoothie vessel: fallback (cup-hot-takeaway.glb) — smoothie.glb pending 3D scan
         </div>
-        <div style={{ color: '#888' }}>
-          clips: disabled — caramel-pour.webm pending asset placement in /menu/_lib/clips/
+        <div style={{ color: '#d9f54e' }}>
+          clips: ENABLED — caramel-pour.webm.mp4 present, plays on fill-level increase
         </div>
       </div>
 
@@ -209,7 +209,7 @@ export default function Coffee3dPreviewPage() {
           { path: '/menu/_lib/models/cup-iced-takeaway.glb', status: 'present' },
           { path: '/menu/_lib/models/glass-iced-dinein.glb', status: 'present' },
           { path: '/menu/_lib/models/smoothie.glb',          status: 'MISSING — pending scan' },
-          { path: '/menu/_lib/clips/caramel-pour.webm',      status: 'MISSING — clip not yet placed' },
+          { path: '/menu/_lib/clips/caramel-pour.webm.mp4',   status: 'present' },
         ].map(({ path, status }) => (
           <div
             key={path}
