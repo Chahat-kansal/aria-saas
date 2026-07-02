@@ -154,7 +154,11 @@ export default function OrderTrackingClient({
           if (newEta !== undefined) setEta(newEta ?? null)
         }
       )
-      .subscribe()
+      .subscribe((status: string, err?: Error) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[Realtime] order-track subscription:', status, err)
+        }
+      })
 
     channelRef.current = ch
     return () => { supabase.removeChannel(ch) }
