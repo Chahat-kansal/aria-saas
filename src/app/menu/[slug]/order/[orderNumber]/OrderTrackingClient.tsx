@@ -35,6 +35,14 @@ function isCancelled(status: string) {
   return status === 'cancelled' || status === 'rejected'
 }
 
+// ── Monotonic rank — status can only advance, never revert ────────────────────
+// Stale poll responses arriving after a Realtime push are silently dropped.
+const STATUS_RANK: Record<string, number> = {
+  pending: 0, accepted: 1, confirmed: 1,
+  preparing: 2, ready: 3, completed: 4,
+  cancelled: 99, rejected: 99,
+}
+
 // ── ETA countdown ─────────────────────────────────────────────────────────────
 
 function useCountdown(estimatedReadyAt: string | null) {
@@ -108,8 +116,12 @@ export default function OrderTrackingClient({
   const [completedAt, setCompletedAt] = useState<string | null>(initialStatus === 'completed' ? initialPickedUpAt : null)
 
   // doneRef: true once we hit a terminal state — shared across both effects
-  const doneRef = useRef(initialStatus === 'completed' || isCancelled(initialStatus))
+  const doneRef   = useRef(initialStatus === 'completed' || isCancelled(initialStatus))
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  // rankRef: highest STATUS_RANK seen — prevents stale poll from reverting Realtime state
+  const rankRef   = useRef(STATUS_RANK[initialStatus] ?? 0)
+  // loggedRef: one-time diagnostic — confirms REPLICA IDENTITY FULL delivers all columns
+  const loggedRef = useRef(false)
 
   const currentStep = statusToStep(status)
   const cancelled   = isCancelled(status)
@@ -143,6 +155,13 @@ export default function OrderTrackingClient({
         (payload: { new: Record<string, unknown> }) => {
           const newStatus = payload.new.status as string | undefined
           if (!newStatus) return
+          if (!loggedRef.current) {
+            console.log('[RT] payload.new.status:', newStatus, 'keys:', Object.keys(payload.new))
+            loggedRef.current = true
+          }
+          const newRank = STATUS_RANK[newStatus] ?? -1
+          if (newRank < rankRef.current) return  // stale Realtime payload — discard
+          rankRef.current = newRank
           setStatus(newStatus)
           if (newStatus === 'completed') {
             const pua = payload.new.picked_up_at as string | null
@@ -180,15 +199,19 @@ export default function OrderTrackingClient({
         if (!res.ok || doneRef.current) return
         const d = await res.json() as { status?: string; estimated_ready_at?: string | null; picked_up_at?: string | null }
         if (d.status) {
-          setStatus(d.status)
-          if (d.status === 'completed') {
-            if (d.picked_up_at) setCompletedAt(d.picked_up_at)
-            doneRef.current = true
-            clearInterval(tid)
-          }
-          if (isCancelled(d.status)) {
-            doneRef.current = true
-            clearInterval(tid)
+          const newRank = STATUS_RANK[d.status] ?? -1
+          if (newRank >= rankRef.current) {
+            rankRef.current = newRank
+            setStatus(d.status)
+            if (d.status === 'completed') {
+              if (d.picked_up_at) setCompletedAt(d.picked_up_at)
+              doneRef.current = true
+              clearInterval(tid)
+            }
+            if (isCancelled(d.status)) {
+              doneRef.current = true
+              clearInterval(tid)
+            }
           }
         }
         if (d.estimated_ready_at !== undefined) setEta(d.estimated_ready_at ?? null)
