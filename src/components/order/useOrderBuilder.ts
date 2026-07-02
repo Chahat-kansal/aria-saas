@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { composeBurger, type IngredientKey } from './ingredients'
 
-// TEMP — replaced by real price_cents in ORD-3D-5
+// Fallback prices — overridden by real pos_modifier_group_options.price_cents ÷ 100 via props
 export const TOPPING_PRICES: Partial<Record<IngredientKey, number>> = {
   cheese: 0.80,
   bacon:  1.50,
@@ -19,12 +19,20 @@ export const OPTIONAL_TOPPINGS: IngredientKey[] = [
   'cheese', 'bacon', 'tomato', 'lettuce', 'onion', 'pickle', 'sauce',
 ]
 
-export function useOrderBuilder() {
+// modifierPrices: real prices from pos_modifier_group_options.price_cents ÷ 100
+// basePrice: the product's base price in dollars
+// Both fall back to TOPPING_PRICES / BASE_PRICE when not provided (standalone use)
+export function useOrderBuilder(
+  modifierPrices?: Partial<Record<IngredientKey, number>>,
+  basePrice?: number,
+) {
+  const prices = modifierPrices ?? TOPPING_PRICES
+  const base   = basePrice ?? BASE_PRICE
   const [active, setActive] = useState<IngredientKey[]>([])
 
   const layers = composeBurger(active)
   const total  = Number(
-    (BASE_PRICE + active.reduce((s, k) => s + (TOPPING_PRICES[k] ?? 0), 0)).toFixed(2)
+    (base + active.reduce((s, k) => s + (prices[k] ?? 0), 0)).toFixed(2)
   )
   const points = Math.floor(total)
 

@@ -3,9 +3,10 @@
 interface Props {
   total: number
   points: number
+  onClick?: () => void
 }
 
-export function PriceBar({ total, points }: Props) {
+export function PriceBar({ total, points, onClick }: Props) {
   const displayTotal = (Number(total) || 0).toFixed(2)
 
   return (
@@ -25,6 +26,7 @@ export function PriceBar({ total, points }: Props) {
     >
       {/* CTA button */}
       <button
+        onClick={onClick}
         style={{
           width: '100%',
           padding: '14px 20px',
@@ -36,7 +38,7 @@ export function PriceBar({ total, points }: Props) {
           fontSize: 16,
           fontWeight: 700,
           letterSpacing: '-0.01em',
-          cursor: 'default',
+          cursor: onClick ? 'pointer' : 'default',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           boxShadow: '0 8px 32px rgba(217,245,78,0.30), 0 2px 8px rgba(0,0,0,0.12)',

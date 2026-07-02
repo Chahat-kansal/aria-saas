@@ -7,16 +7,17 @@ interface TileProps {
   id: IngredientKey
   isActive: boolean
   onTap: () => void
+  toppingPrices?: Partial<Record<IngredientKey, number>>
 }
 
-function DraggableTile({ id, isActive, onTap }: TileProps) {
+function DraggableTile({ id, isActive, onTap, toppingPrices }: TileProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
 
   const tx = transform ? transform.x : 0
   const ty = transform ? transform.y : 0
   const transformStr = 'translate3d(' + tx + 'px,' + ty + 'px,0)'
 
-  const delta = TOPPING_PRICES[id]
+  const delta = (toppingPrices ?? TOPPING_PRICES)[id]
   const deltaStr = delta !== undefined ? ('+$' + delta.toFixed(2)) : ''
 
   return (
@@ -119,9 +120,10 @@ function DraggableTile({ id, isActive, onTap }: TileProps) {
 interface TrayProps {
   active: IngredientKey[]
   toggleTopping: (k: IngredientKey) => void
+  toppingPrices?: Partial<Record<IngredientKey, number>>
 }
 
-export function IngredientTray({ active, toggleTopping }: TrayProps) {
+export function IngredientTray({ active, toggleTopping, toppingPrices }: TrayProps) {
   const activeSet = new Set(active)
 
   return (
@@ -142,6 +144,7 @@ export function IngredientTray({ active, toggleTopping }: TrayProps) {
           id={id}
           isActive={activeSet.has(id)}
           onTap={() => toggleTopping(id)}
+          toppingPrices={toppingPrices}
         />
       ))}
     </div>

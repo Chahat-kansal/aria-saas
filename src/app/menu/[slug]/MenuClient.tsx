@@ -5,6 +5,8 @@ import { TEMPLATES, FONTS, BGS, deriveTheme } from '@/lib/menu/menu-theme'
 import type { Theme } from '@/lib/menu/menu-theme'
 import { resolveArchetype } from '@/lib/ordering/resolveArchetype'
 import { ArchetypeRenderer } from '@/components/ordering/archetypes/ArchetypeRenderer'
+import { resolveRenderMode } from '@/components/order/productMode'
+import { ProductCustomiser, type BuildConfig } from '@/components/order/ProductCustomiser'
 
 // ── Google Font URL params (public-page-only — builder uses whatever is already loaded) ──
 
@@ -34,7 +36,7 @@ interface Product {
   image_url: string | null; sort_order: number | null; category_id: string | null
   ordering_mode: string | null; ordering_archetype: string | null
 }
-interface CartItem { product: Product; qty: number; unit_price: number; modifiers: { id: string; name: string; priceCents: number }[] }
+interface CartItem { product: Product; qty: number; unit_price: number; modifiers: { id: string; name: string; priceCents: number }[]; config?: { mode: 'build'; layers: string[] } }
 interface ModifierOption { id: string; name: string; priceCents: number; displayOrder: number | null }
 interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; archetypeSlot: string | null; options: ModifierOption[] }
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
@@ -211,6 +213,7 @@ export default function MenuClient({
           product_id: i.product.id, product_name: i.product.name,
           quantity: i.qty, unit_price: i.unit_price,
           modifiers: i.modifiers.map(m => ({ id: m.id, name: m.name, price_cents: m.priceCents })),
+          ...(i.config ? { config: i.config } : {}),
         })),
       }),
     }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
@@ -534,8 +537,36 @@ export default function MenuClient({
         </div>
       )}
 
-      {/* PRODUCT DETAIL MODAL */}
-      {productModal && (
+      {/* PRODUCT DETAIL MODAL — BUILD MODE (full-screen overlay for burger builder) */}
+      {productModal && resolveRenderMode(productModal) === 'build' && (
+        <div style={{ position: 'fixed', inset: 0, background: theme.bg, zIndex: 200, overflowY: 'auto' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid ' + theme.line, position: 'sticky', top: 0, background: theme.bg, zIndex: 10 }}>
+            <button onClick={() => setProductModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: theme.muted, lineHeight: 1, padding: '0 4px' }}>←</button>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink, fontFamily: theme.fontCss, fontStyle: 'italic' }}>{productModal.name}</div>
+              <div style={{ fontSize: 12, color: theme.muted }}>{fmtPrice(Number(productModal.price))} base · build your own</div>
+            </div>
+          </div>
+          <ProductCustomiser
+            modifierGroups={productModifiers?.[productModal.id] ?? []}
+            productPrice={Number(productModal.price)}
+            onAddToOrder={(cfg: BuildConfig) => {
+              setCart(c => [...c, {
+                product: productModal,
+                qty: 1,
+                unit_price: cfg.total,
+                modifiers: cfg.modifiers,
+                config: { mode: 'build', layers: cfg.layers as string[] },
+              }])
+              setProductModal(null)
+            }}
+          />
+        </div>
+      )}
+
+      {/* PRODUCT DETAIL MODAL — STANDARD MODE */}
+      {productModal && resolveRenderMode(productModal) !== 'build' && (
         <div onClick={() => setProductModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: theme.card, borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80dvh', overflowY: 'auto', maxWidth: 540, margin: '0 auto' }}>
             {productModal.image_url ? (

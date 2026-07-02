@@ -14,10 +14,22 @@ import {
 import { LayeredProduct } from './LayeredProduct'
 import { IngredientTray } from './IngredientTray'
 import { PriceBar } from './PriceBar'
-import { useOrderBuilder } from './useOrderBuilder'
+import { useOrderBuilder, OPTIONAL_TOPPINGS } from './useOrderBuilder'
 import { INGREDIENT_PATHS, type IngredientKey } from './ingredients'
 
 const DROP_ZONE_ID = 'burger-drop-zone'
+
+interface ModifierOption { id: string; name: string; priceCents: number }
+interface ModifierGroup { id: string; name: string; options: ModifierOption[] }
+
+export interface BuildConfig {
+  mode: 'build'
+  layers: IngredientKey[]
+  modifiers: { id: string; name: string; priceCents: number }[]
+  basePrice: number
+  extrasCents: number
+  total: number
+}
 
 function BurgerDropZone({
   layers,
@@ -97,8 +109,39 @@ function DropZoneWrapper({
   )
 }
 
-export function ProductCustomiser({ size = 220 }: { size?: number }) {
-  const { active, layers, total, points, addTopping, toggleTopping } = useOrderBuilder()
+interface Props {
+  size?: number
+  modifierGroups?: ModifierGroup[]
+  productPrice?: number
+  onAddToOrder?: (config: BuildConfig) => void
+}
+
+export function ProductCustomiser({ size = 220, modifierGroups, productPrice, onAddToOrder }: Props) {
+  // Map each IngredientKey to the real DB modifier option (name-matched, case-insensitive).
+  // e.g. 'cheese' matches "Extra Cheese" (priceCents=150), 'bacon' matches "Bacon" (250¢), etc.
+  const ingredientToOption: Partial<Record<IngredientKey, ModifierOption>> = {}
+  for (const group of modifierGroups ?? []) {
+    for (const opt of group.options) {
+      const nameLow = opt.name.toLowerCase()
+      for (const key of OPTIONAL_TOPPINGS) {
+        if (!ingredientToOption[key] && nameLow.includes(key)) {
+          ingredientToOption[key] = opt
+        }
+      }
+    }
+  }
+
+  const resolvedPrices: Partial<Record<IngredientKey, number>> = {}
+  for (const key of OPTIONAL_TOPPINGS) {
+    const opt = ingredientToOption[key]
+    if (opt) resolvedPrices[key] = opt.priceCents / 100
+  }
+  const hasMappedPrices = Object.keys(resolvedPrices).length > 0
+
+  const { active, layers, total, points, addTopping, toggleTopping } = useOrderBuilder(
+    hasMappedPrices ? resolvedPrices : undefined,
+    productPrice,
+  )
   const [draggingId, setDraggingId] = useState<IngredientKey | null>(null)
 
   const sensors = useSensors(
@@ -115,6 +158,24 @@ export function ProductCustomiser({ size = 220 }: { size?: number }) {
       addTopping(draggingId)
     }
     setDraggingId(null)
+  }
+
+  function handleAddToOrder() {
+    const selectedModifiers = active
+      .map(key => ingredientToOption[key])
+      .filter((opt): opt is ModifierOption => opt !== undefined)
+      .map(opt => ({ id: opt.id, name: opt.name, priceCents: opt.priceCents }))
+
+    const extrasCents = selectedModifiers.reduce((s, m) => s + m.priceCents, 0)
+
+    onAddToOrder?.({
+      mode: 'build',
+      layers,
+      modifiers: selectedModifiers,
+      basePrice: productPrice ?? 0,
+      extrasCents,
+      total,
+    })
   }
 
   return (
@@ -135,11 +196,19 @@ export function ProductCustomiser({ size = 220 }: { size?: number }) {
         {/* Burger stack with drop zone */}
         <DropZoneWrapper layers={layers} onDrop={addTopping} size={size} />
 
-        {/* Tray */}
-        <IngredientTray active={active} toggleTopping={toggleTopping} />
+        {/* Tray — shows real DB prices when modifierGroups are passed */}
+        <IngredientTray
+          active={active}
+          toggleTopping={toggleTopping}
+          toppingPrices={hasMappedPrices ? resolvedPrices : undefined}
+        />
 
-        {/* Live price bar */}
-        <PriceBar total={total} points={points} />
+        {/* Live price bar — onClick wired when onAddToOrder is provided */}
+        <PriceBar
+          total={total}
+          points={points}
+          onClick={onAddToOrder ? handleAddToOrder : undefined}
+        />
       </div>
 
       {/* Floating drag ghost */}
