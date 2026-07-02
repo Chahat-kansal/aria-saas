@@ -144,7 +144,7 @@ async function _PATCH(req: Request, { params }: Params) {
       try {
         const { data: ord } = await supabaseAdmin
           .from('pos_online_orders')
-          .select('order_number, items, sale_id, outlet_id, stripe_payment_intent_id, stripe_payment_status')
+          .select('order_number, items, sale_id, outlet_id, stripe_payment_intent_id, stripe_payment_status, notes, special_instructions')
           .eq('id', fireOrderId)
           .maybeSingle()
 
@@ -189,6 +189,17 @@ async function _PATCH(req: Request, { params }: Params) {
         const now = new Date().toISOString()
         const orderNum = (ord?.order_number as string | null) ?? ''
         const saleId = (ord?.sale_id as string | null) ?? null
+        const orderNotes = (ord as { notes?: string | null; special_instructions?: string | null } | null)?.notes
+          ?? (ord as { notes?: string | null; special_instructions?: string | null } | null)?.special_instructions
+          ?? null
+
+        // Idempotency guard — bail if a KDS row already exists for this sale
+        if (saleId) {
+          const { data: existingKds } = await supabaseAdmin
+            .from('pos_kds_orders').select('id')
+            .eq('sale_id', saleId).eq('business_id', fireBid).maybeSingle()
+          if (existingKds) return
+        }
 
         // Write one pos_kds_orders row (all items in JSONB) — same table + shape as in-store POS
         const kdsItems = items.map(item => {
@@ -201,6 +212,7 @@ async function _PATCH(req: Request, { params }: Params) {
           for (const r of removed) modLines.push('NO ' + r.name.toUpperCase())
           for (const a of added) modLines.push('+' + a.name)
           for (const m of mods) modLines.push(m.name)
+          if (item.note) modLines.push('NOTE: ' + item.note)
           return {
             name: pName,
             qty: item.quantity ?? 1,
@@ -216,7 +228,7 @@ async function _PATCH(req: Request, { params }: Params) {
           items: kdsItems,
           status: 'new',
           priority: 1,
-          notes: null,
+          notes: orderNotes,
           created_at: now,
         })
       } catch (kdsErr) {
