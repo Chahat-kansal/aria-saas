@@ -73,13 +73,19 @@ export default function TicketCard({ ticket, show_modifiers, show_allergens, onB
 
       {show_modifiers && ticket.modifiers_summary && (
         <div className="bg-black/20 rounded px-2 py-1" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {ticket.modifiers_summary.split('\n').map((line, i) => (
-            <span key={i} style={{
-              fontSize: 13,
-              fontWeight: line.startsWith('NO ') ? 800 : 400,
-              color: line.startsWith('NO ') ? '#f87171' : 'var(--text-primary, #E8EDE7)',
-            }}>{line}</span>
-          ))}
+          {ticket.modifiers_summary.split('\n').map((line, i) => {
+            const isRemoval = line.startsWith('NO ')
+            const isDietary = line.startsWith('⚠')
+            return (
+              <span key={i} style={{
+                fontSize: 13,
+                fontWeight: isRemoval || isDietary ? 800 : 400,
+                color: isRemoval ? '#f87171' : isDietary ? '#fb923c' : 'var(--text-primary, #E8EDE7)',
+                textTransform: isDietary ? 'uppercase' as const : 'none' as const,
+                letterSpacing: isDietary ? '0.04em' : 0,
+              }}>{line}</span>
+            )
+          })}
         </div>
       )}
 

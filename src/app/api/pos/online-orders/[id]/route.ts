@@ -171,12 +171,21 @@ async function _PATCH(req: Request, { params }: Params) {
 
         const productIds = [...new Set(items.map(i => i.product_id).filter((id): id is string => !!id))]
         const stationMap: Record<string, string> = {}
+        const dietaryMap: Record<string, string[]> = {}
         if (productIds.length > 0) {
           const { data: prods } = await supabaseAdmin
             .from('pos_products')
-            .select('id, kds_station')
+            .select('id, kds_station, is_gluten_free, is_vegan, is_vegetarian')
             .in('id', productIds)
-          for (const p of (prods ?? [])) stationMap[(p as { id: string; kds_station: string | null }).id] = (p as { id: string; kds_station: string | null }).kds_station ?? 'barista'
+          for (const p of (prods ?? [])) {
+            const prod = p as { id: string; kds_station: string | null; is_gluten_free: boolean | null; is_vegan: boolean | null; is_vegetarian: boolean | null }
+            stationMap[prod.id] = prod.kds_station ?? 'barista'
+            const tags: string[] = []
+            if (prod.is_gluten_free) tags.push('⚠ GLUTEN FREE')
+            if (prod.is_vegan) tags.push('⚠ VEGAN')
+            else if (prod.is_vegetarian) tags.push('⚠ VEGETARIAN')
+            if (tags.length) dietaryMap[prod.id] = tags
+          }
         }
 
         const now = new Date().toISOString()
@@ -191,6 +200,8 @@ async function _PATCH(req: Request, { params }: Params) {
           const mods = item.modifiers ?? []
 
           const lines: string[] = ['[' + pName + ']']
+          // Dietary warnings immediately after product name — most critical prep info
+          for (const d of (dietaryMap[item.product_id ?? ''] ?? [])) lines.push(d)
           for (const r of removed) lines.push('NO ' + r.name.toUpperCase())
           for (const a of added) lines.push('+' + a.name)
           for (const m of mods) lines.push(m.name)
