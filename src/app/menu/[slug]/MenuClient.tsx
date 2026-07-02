@@ -611,7 +611,10 @@ export default function MenuClient({
       </div>
 
       {/* FOOTER */}
-      <div style={{ textAlign: 'center', fontSize: 11, color: MUTED, padding: '8px 0 24px', letterSpacing: '0.04em' }}>Powered by Aria</div>
+      <div style={{ textAlign: 'center', fontSize: 11, color: MUTED, padding: '8px 0 4px', letterSpacing: '0.04em' }}>Powered by Aria</div>
+      <div style={{ textAlign: 'center', fontSize: 10, color: MUTED, padding: '0 24px 24px', lineHeight: 1.4, fontFamily: SANS, opacity: 0.7 }}>
+        Dietary info set by the venue — check with staff for severe allergies.
+      </div>
 
       {/* BOTTOM NAV */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: WHITE, borderTop: '1px solid ' + BORDER, paddingTop: 8, paddingBottom: 'max(8px, env(safe-area-inset-bottom))', display: 'flex', zIndex: 150, boxShadow: '0 -4px 20px rgba(0,0,0,0.06)' }}>
@@ -688,6 +691,11 @@ export default function MenuClient({
               </h2>
               {/* Dietary badges on modal */}
               <DietaryBadges product={productModal} />
+              {(productModal.is_gluten_free || productModal.is_vegan || productModal.is_vegetarian) && (
+                <p style={{ fontSize: 10, color: MUTED, margin: '4px 0 0', lineHeight: 1.4, fontFamily: SANS }}>
+                  Dietary info set by the venue — check with staff for severe allergies.
+                </p>
+              )}
               {productModal.description && (
                 <p style={{ fontSize: 14, fontStyle: 'italic', fontFamily: SERIF, color: MUTED, margin: '10px 0 16px', lineHeight: 1.65 }}>
                   {productModal.description}
