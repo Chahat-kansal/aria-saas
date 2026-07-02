@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { sendSMS } from '@/lib/clicksend'
+import { notifyReady } from '@/lib/notify-ready'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
@@ -71,42 +71,21 @@ async function _PATCH(req: Request, { params }: Params) {
     const snap = currentOrder
     waitUntil((async () => {
       try {
-        const { data: biz } = await supabaseAdmin
-          .from('businesses').select('name, slug').eq('id', businessId).maybeSingle()
-        const bizName = (biz?.name as string | null) ?? 'the café'
-        const bizSlug = (biz?.slug as string | null) ?? ''
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
-        const trackingUrl = appUrl + '/menu/' + bizSlug + '/order/' + (snap.order_number ?? '')
-        const firstName = (snap.customer_name ?? '').split(' ')[0] || 'there'
-        const orderNum = snap.order_number ?? ''
-
-        // READY → SMS (transactional; email fallback on send failure)
-        if (newStatus === 'ready' && snap.customer_phone) {
-          const smsBody = 'Hi ' + firstName + ', your order ' + orderNum + ' at ' + bizName + ' is ready for collection! Track: ' + trackingUrl
-          const smsResult = await sendSMS(snap.customer_phone, smsBody, {
-            category: 'transactional',
-            businessId,
-            customerId: (snap.customer_id as string | null) ?? undefined,
-          })
-          if (!smsResult.ok && smsResult.error !== 'no_consent' && smsResult.error !== 'suppressed' && snap.customer_email) {
-            const resendKey = process.env.RESEND_API_KEY
-            if (resendKey) {
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  from: 'Aria <orders@ariaos.site>',
-                  to: [snap.customer_email],
-                  subject: 'Your order ' + orderNum + ' is ready! 🎉',
-                  html: '<p>Hi ' + firstName + ',</p><p>Your order <strong>' + orderNum + '</strong> at <strong>' + bizName + '</strong> is ready for collection!</p><p><a href="' + trackingUrl + '">Track your order &rarr;</a></p>',
-                }),
-              }).catch(() => null)
-            }
-          }
+        // READY → shared notifyReady (SMS → email fallback, phone/email validated)
+        if (newStatus === 'ready') {
+          await notifyReady(orderId, snap, businessId, '[online-orders/[id]]')
         }
 
         // ACCEPTED → email receipt with tracking link
         if ((newStatus === 'accepted' || newStatus === 'confirmed') && snap.customer_email) {
+          const { data: biz } = await supabaseAdmin
+            .from('businesses').select('name, slug').eq('id', businessId).maybeSingle()
+          const bizName = (biz?.name as string | null) ?? 'the café'
+          const bizSlug = (biz?.slug as string | null) ?? ''
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
+          const trackingUrl = appUrl + '/menu/' + bizSlug + '/order/' + (snap.order_number ?? '')
+          const firstName = (snap.customer_name ?? '').split(' ')[0] || 'there'
+          const orderNum = snap.order_number ?? ''
           const resendKey = process.env.RESEND_API_KEY
           if (resendKey) {
             await fetch('https://api.resend.com/emails', {

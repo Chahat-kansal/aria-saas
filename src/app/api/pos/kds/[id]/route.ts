@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
-import { sendSMS } from '@/lib/clicksend'
+import { notifyReady } from '@/lib/notify-ready'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -93,34 +93,7 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
             const rNow = new Date().toISOString()
             await supabaseAdmin.from('pos_online_orders')
               .update({ status: 'ready', ready_at: rNow, updated_at: rNow }).eq('id', ord.id)
-            const { data: biz } = await supabaseAdmin.from('businesses').select('name, slug').eq('id', businessId).maybeSingle()
-            const bizName = (biz?.name as string | null) ?? 'the café'
-            const bizSlug = (biz?.slug as string | null) ?? ''
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
-            const trackingUrl = appUrl + '/menu/' + bizSlug + '/order/' + (ord.order_number ?? '')
-            const firstName = (ord.customer_name ?? '').split(' ')[0] || 'there'
-            const orderNum = ord.order_number ?? ''
-            if (ord.customer_phone) {
-              await sendSMS(
-                ord.customer_phone,
-                'Hi ' + firstName + ', your order ' + orderNum + ' at ' + bizName + ' is ready for collection! Track: ' + trackingUrl,
-                { category: 'transactional', businessId, customerId: ord.customer_id ?? undefined }
-              )
-            } else if (ord.customer_email) {
-              const resendKey = process.env.RESEND_API_KEY
-              if (resendKey) {
-                await fetch('https://api.resend.com/emails', {
-                  method: 'POST',
-                  headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    from: 'Aria <orders@ariaos.site>',
-                    to: [ord.customer_email],
-                    subject: 'Your order ' + orderNum + ' is ready! 🎉',
-                    html: '<p>Hi ' + firstName + ',</p><p>Your order <strong>' + orderNum + '</strong> at <strong>' + bizName + '</strong> is ready for collection!</p><p><a href="' + trackingUrl + '">Track your order &rarr;</a></p>',
-                  }),
-                }).catch(() => null)
-              }
-            }
+            await notifyReady(ord.id, ord, businessId, '[kds/[id]]')
           } catch (e) {
             void supabaseAdmin.from('activity_log').insert({
               business_id: businessId, action_type: 'kds_online_sync_error',
