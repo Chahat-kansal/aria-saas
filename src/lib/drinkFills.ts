@@ -9,7 +9,7 @@ export type VesselKey =
   | 'cup-hot-takeaway'
   | 'glass-iced-dinein'
   | 'cup-iced-takeaway'
-  | 'smoothie'  // falls back to cup-hot-takeaway until smoothie.glb is scanned
+  | 'smoothie'
 
 export type OrderType = 'dine-in' | 'takeaway'
 
@@ -87,13 +87,12 @@ function blendHex(base: string, tint: string, amount: number): string {
   return '#' + nr.toString(16).padStart(2, '0') + ng.toString(16).padStart(2, '0') + nb.toString(16).padStart(2, '0')
 }
 
-// GLB vessel paths (smoothie falls back to takeaway cup until smoothie.glb lands)
 const VESSEL_PATH: Record<VesselKey, string> = {
   'cup-hot-dinein':    '/menu/_lib/models/cup-hot-dinein.glb',
   'cup-hot-takeaway':  '/menu/_lib/models/cup-hot-takeaway.glb',
   'glass-iced-dinein': '/menu/_lib/models/glass-iced-dinein.glb',
   'cup-iced-takeaway': '/menu/_lib/models/cup-iced-takeaway.glb',
-  'smoothie':          '/menu/_lib/models/cup-hot-takeaway.glb',  // fallback: smoothie.glb pending scan
+  'smoothie':          '/menu/_lib/models/smoothie.glb',
 }
 
 export interface ModifierFlags {
