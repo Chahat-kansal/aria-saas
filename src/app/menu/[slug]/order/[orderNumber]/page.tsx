@@ -15,7 +15,7 @@ export default async function OrderTrackingPage({ params }: Props) {
 
   const { data: order } = await supabaseAdmin
     .from('pos_online_orders')
-    .select('id, status, order_number, customer_name, total, estimated_ready_at, created_at, items, fulfillment_type, notes, updated_at')
+    .select('id, status, order_number, customer_name, total, estimated_ready_at, created_at, items, fulfillment_type, notes, updated_at, picked_up_at')
     .eq('order_number', orderNumber)
     .eq('business_id', bid)
     .maybeSingle()
@@ -42,7 +42,7 @@ export default async function OrderTrackingPage({ params }: Props) {
       notes={(order.notes as string | null) ?? null}
       businessName={(biz?.name as string | null) ?? ''}
       slug={slug}
-      initialUpdatedAt={(order.updated_at as string | null) ?? null}
+      initialPickedUpAt={(order.picked_up_at as string | null) ?? null}
     />
   )
 }

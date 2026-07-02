@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { supabase } from '@/lib/supabase'
 
 // ── Pipel design tokens ───────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ interface Props {
   notes: string | null
   businessName: string
   slug: string
-  initialUpdatedAt: string | null
+  initialPickedUpAt: string | null
 }
 
 // ── Food emoji helper ─────────────────────────────────────────────────────────
@@ -99,12 +100,16 @@ function itemEmoji(name?: string): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function OrderTrackingClient({
-  initialStatus, orderNumber, customerName, total,
-  estimatedReadyAt: initialEta, items, fulfillmentType, notes, businessName, slug, initialUpdatedAt,
+  orderId, initialStatus, orderNumber, customerName, total,
+  estimatedReadyAt: initialEta, items, fulfillmentType, notes, businessName, slug, initialPickedUpAt,
 }: Props) {
   const [status, setStatus] = useState(initialStatus)
   const [eta, setEta] = useState(initialEta)
-  const [completedAt, setCompletedAt] = useState<string | null>(initialStatus === 'completed' ? initialUpdatedAt : null)
+  const [completedAt, setCompletedAt] = useState<string | null>(initialStatus === 'completed' ? initialPickedUpAt : null)
+
+  // doneRef: true once we hit a terminal state — shared across both effects
+  const doneRef = useRef(initialStatus === 'completed' || isCancelled(initialStatus))
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const currentStep = statusToStep(status)
   const cancelled   = isCancelled(status)
@@ -125,29 +130,70 @@ export default function OrderTrackingClient({
     }
   }, [])
 
-  // Poll for live status — fires immediately on mount, then every 5s; stops on terminal state
+  // Supabase Realtime — instant push on pos_online_orders UPDATE for this order
   useEffect(() => {
-    let live = true
+    if (doneRef.current) return
+    if (channelRef.current) supabase.removeChannel(channelRef.current)
+
+    const ch = supabase
+      .channel('order-track:' + orderId)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pos_online_orders', filter: 'id=eq.' + orderId },
+        (payload: { new: Record<string, unknown> }) => {
+          const newStatus = payload.new.status as string | undefined
+          if (!newStatus) return
+          setStatus(newStatus)
+          if (newStatus === 'completed') {
+            const pua = payload.new.picked_up_at as string | null
+            if (pua) setCompletedAt(pua)
+            doneRef.current = true
+          }
+          if (isCancelled(newStatus)) doneRef.current = true
+          const newEta = payload.new.estimated_ready_at as string | null | undefined
+          if (newEta !== undefined) setEta(newEta ?? null)
+        }
+      )
+      .subscribe()
+
+    channelRef.current = ch
+    return () => { supabase.removeChannel(ch) }
+  }, [orderId])
+
+  // Fallback poll every 10 s — catches updates if Realtime is unavailable (e.g. RLS blocks anon)
+  // Also fires immediately on mount for instant first-load accuracy
+  useEffect(() => {
+    if (doneRef.current) return
     let tid: ReturnType<typeof setInterval>
+
     async function poll() {
+      if (doneRef.current) { clearInterval(tid); return }
       try {
-        const res = await fetch('/api/public/order-track/' + orderNumber + '?slug=' + encodeURIComponent(slug))
-        if (!res.ok || !live) return
-        const d = await res.json() as { status?: string; estimated_ready_at?: string | null; updated_at?: string | null }
+        const res = await fetch(
+          '/api/public/order-track/' + orderNumber + '?slug=' + encodeURIComponent(slug),
+          { cache: 'no-store' }
+        )
+        if (!res.ok || doneRef.current) return
+        const d = await res.json() as { status?: string; estimated_ready_at?: string | null; picked_up_at?: string | null }
         if (d.status) {
           setStatus(d.status)
-          if (d.status === 'completed' && d.updated_at) setCompletedAt(d.updated_at)
-          if (d.status === 'completed' || d.status === 'cancelled' || d.status === 'rejected') {
-            live = false
+          if (d.status === 'completed') {
+            if (d.picked_up_at) setCompletedAt(d.picked_up_at)
+            doneRef.current = true
+            clearInterval(tid)
+          }
+          if (isCancelled(d.status)) {
+            doneRef.current = true
             clearInterval(tid)
           }
         }
         if (d.estimated_ready_at !== undefined) setEta(d.estimated_ready_at ?? null)
       } catch (_) {}
     }
-    poll()                         // immediate — don't wait 5 s for first read
-    tid = setInterval(poll, 5000)
-    return () => { live = false; clearInterval(tid) }
+
+    poll()                          // immediate — no 10 s blind spot on mount
+    tid = setInterval(poll, 10000)
+    return () => { clearInterval(tid) }
   }, [orderNumber, slug])
 
   const castItems = items as TrackItem[]

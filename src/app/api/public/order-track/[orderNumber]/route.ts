@@ -17,7 +17,7 @@ export async function GET(req: Request, { params }: Params) {
 
   const { data: order } = await supabaseAdmin
     .from('pos_online_orders')
-    .select('status, estimated_ready_at, updated_at, order_number, total, fulfillment_type')
+    .select('status, estimated_ready_at, updated_at, picked_up_at, order_number, total, fulfillment_type')
     .eq('order_number', orderNumber)
     .eq('business_id', bid)
     .maybeSingle()
@@ -28,6 +28,7 @@ export async function GET(req: Request, { params }: Params) {
     status: order.status,
     estimated_ready_at: order.estimated_ready_at,
     updated_at: order.updated_at,
+    picked_up_at: order.picked_up_at,
     order_number: order.order_number,
     total: order.total,
     fulfillment_type: order.fulfillment_type,
