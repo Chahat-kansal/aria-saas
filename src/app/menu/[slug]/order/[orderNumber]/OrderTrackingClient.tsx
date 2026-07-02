@@ -1,15 +1,26 @@
 'use client'
 import { useState, useEffect } from 'react'
 
+// ── Pipel design tokens ───────────────────────────────────────────────────────
+
+const CANVAS = '#fafafa'
+const WHITE  = '#ffffff'
+const INK    = '#0a0a0a'
+const LIME   = '#d9f54e'
+const MUTED  = '#6b7280'
+const BORDER = '#e5e7eb'
+const SANS   = "'Outfit', 'Inter', system-ui, sans-serif"
+const SERIF  = "'Cormorant', 'Georgia', serif"
+
 // ── Status → timeline step mapping ───────────────────────────────────────────
 
 type StepKey = 'received' | 'preparing' | 'ready' | 'enjoy'
 
-const STEPS: Array<{ key: StepKey; label: string; icon: string }> = [
-  { key: 'received',  label: 'Order received',  icon: '📋' },
-  { key: 'preparing', label: 'Preparing',        icon: '👨‍🍳' },
-  { key: 'ready',     label: 'Ready!',           icon: '🎉' },
-  { key: 'enjoy',     label: 'Enjoy',            icon: '😊' },
+const STEPS: Array<{ key: StepKey; label: string; sublabel?: string }> = [
+  { key: 'received',  label: 'Order received'   },
+  { key: 'preparing', label: 'Preparing'         },
+  { key: 'ready',     label: 'Ready for pickup'  },
+  { key: 'enjoy',     label: 'Enjoy'             },
 ]
 
 function statusToStep(status: string): number {
@@ -67,13 +78,24 @@ interface Props {
   slug: string
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Food emoji helper ─────────────────────────────────────────────────────────
 
-const LIME   = '#d9f54e'
-const FOREST = '#0e1a0f'
-const CARD   = '#182019'
-const MUTED  = '#7a9b7c'
-const WHITE  = '#f0f5f0'
+function itemEmoji(name?: string): string {
+  if (!name) return '🍽️'
+  const n = name.toLowerCase()
+  if (n.includes('burger') || n.includes('stack') || n.includes('beef') || n.includes('patty')) return '🍔'
+  if (n.includes('coffee') || n.includes('latte') || n.includes('flat') || n.includes('cappuccino') || n.includes('espresso')) return '☕'
+  if (n.includes('cake') || n.includes('sweet') || n.includes('dessert')) return '🍰'
+  if (n.includes('salad') || n.includes('bowl')) return '🥗'
+  if (n.includes('pizza')) return '🍕'
+  if (n.includes('pasta') || n.includes('noodle')) return '🍝'
+  if (n.includes('juice') || n.includes('smoothie') || n.includes('shake')) return '🥤'
+  if (n.includes('croissant') || n.includes('pastry') || n.includes('bread')) return '🥐'
+  if (n.includes('chicken')) return '🍗'
+  return '🍽️'
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function OrderTrackingClient({
   initialStatus, orderNumber, customerName, total,
@@ -83,101 +105,173 @@ export default function OrderTrackingClient({
   const [eta, setEta] = useState(initialEta)
 
   const currentStep = statusToStep(status)
-  const cancelled = isCancelled(status)
-  const secsLeft  = useCountdown(eta)
+  const cancelled   = isCancelled(status)
+  const secsLeft    = useCountdown(eta)
+
+  // Load Outfit + Cormorant fonts
+  useEffect(() => {
+    for (const [id, q] of [
+      ['Outfit',    'Outfit:wght@400;600;700;800;900'],
+      ['Cormorant', 'Cormorant:ital,wght@1,400;1,700;1,900'],
+    ]) {
+      const href = 'https://fonts.googleapis.com/css2?family=' + q + '&display=swap'
+      if (!document.querySelector('link[href="' + href + '"]')) {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'; link.href = href
+        document.head.appendChild(link)
+      }
+    }
+  }, [])
 
   // 5-second poll for live status updates
   useEffect(() => {
-    let cancelled = false
+    let live = true
     async function poll() {
       try {
         const res = await fetch('/api/public/order-track/' + orderNumber + '?slug=' + encodeURIComponent(slug))
-        if (!res.ok) return
+        if (!res.ok || !live) return
         const d = await res.json() as { status?: string; estimated_ready_at?: string | null }
-        if (!cancelled) {
-          if (d.status) setStatus(d.status)
-          if (d.estimated_ready_at !== undefined) setEta(d.estimated_ready_at ?? null)
-        }
+        if (d.status) setStatus(d.status)
+        if (d.estimated_ready_at !== undefined) setEta(d.estimated_ready_at ?? null)
       } catch (_) {}
     }
     const id = setInterval(poll, 5000)
-    return () => { cancelled = true; clearInterval(id) }
+    return () => { live = false; clearInterval(id) }
   }, [orderNumber, slug])
 
   const castItems = items as TrackItem[]
+  const firstItemName = castItems[0]?.product_name ?? ''
+  const heroEmoji = itemEmoji(firstItemName)
 
   function fmtEta() {
+    if (status === 'ready' || status === 'completed') return null
     if (secsLeft === null) return '~15 min'
-    if (secsLeft <= 0) return 'any moment now'
+    if (secsLeft <= 0) return 'any moment'
     const m = Math.floor(secsLeft / 60)
     const s = secsLeft % 60
     return m > 0 ? m + ' min ' + s + 's' : s + 's'
   }
 
+  function fmtTime(iso: string) {
+    return new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })
+  }
+
+  const etaStr = fmtEta()
+  const loyaltyPoints = Math.round(total)
+
   return (
-    <div style={{ minHeight: '100dvh', background: FOREST, color: WHITE, fontFamily: 'Inter, sans-serif', paddingBottom: 40 }}>
+    <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: SANS, paddingBottom: 40 }}>
+
+      {/* Pulse keyframes injected once */}
+      <style>{`
+        @keyframes pipel-pulse {
+          0%,100% { box-shadow: 0 0 0 0 rgba(217,245,78,0.7); }
+          50%      { box-shadow: 0 0 0 10px rgba(217,245,78,0); }
+        }
+        .pipel-pulse { animation: pipel-pulse 1.6s ease-in-out infinite; }
+      `}</style>
 
       {/* Header */}
-      <div style={{ padding: '28px 20px 20px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{businessName}</div>
-        <div style={{ fontSize: 28, fontWeight: 900, color: LIME, fontFamily: 'Fraunces, serif', fontStyle: 'italic', letterSpacing: '-0.01em' }}>{orderNumber}</div>
-        <div style={{ fontSize: 13, color: MUTED, marginTop: 4 }}>{'for ' + customerName + ' · ' + (fulfillmentType === 'delivery' ? 'Delivery' : 'Pickup')}</div>
+      <div style={{ padding: '32px 20px 0', textAlign: 'center' }}>
+        <div style={{ fontSize: 13, color: MUTED, fontWeight: 500, marginBottom: 8 }}>
+          {'Order ' + orderNumber + ' · ' + businessName}
+        </div>
+
+        {cancelled ? (
+          <div style={{ margin: '16px 20px', padding: '24px 20px', borderRadius: 20, background: 'rgba(239,68,68,0.06)', border: '1.5px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>✗</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#ef4444', marginBottom: 4 }}>Order {status}</div>
+            <div style={{ fontSize: 13, color: MUTED }}>Please contact the venue if you have questions.</div>
+          </div>
+        ) : status === 'ready' || status === 'completed' ? (
+          <div>
+            <div style={{ fontSize: 42, fontWeight: 900, lineHeight: 1.1, marginBottom: 4 }}>
+              <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 700 }}>Ready </span>
+              <span style={{ fontFamily: SANS, fontWeight: 800 }}>to pick up!</span>
+            </div>
+            <div style={{ fontSize: 14, color: MUTED, marginTop: 4 }}>
+              {fulfillmentType === 'delivery' ? 'Your delivery is on its way' : 'Head to the counter'}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 42, fontWeight: 900, lineHeight: 1.1, marginBottom: 0 }}>
+              <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 700 }}>Ready </span>
+              <span style={{ fontFamily: SANS, fontWeight: 500 }}>in </span>
+              <span style={{ color: LIME, fontFamily: SANS, fontWeight: 800 }}>{etaStr}</span>
+            </div>
+            <div style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>
+              {'for ' + customerName + ' · ' + (fulfillmentType === 'delivery' ? 'Delivery' : 'Pickup')}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Cancelled state */}
-      {cancelled && (
-        <div style={{ margin: '32px 20px', padding: '24px 20px', borderRadius: 16, background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)', textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 10 }}>✗</div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#ef4444', marginBottom: 6 }}>Order {status}</div>
-          <div style={{ fontSize: 13, color: MUTED }}>Please contact the venue if you have questions.</div>
-        </div>
-      )}
-
-      {/* ETA countdown */}
-      {!cancelled && status !== 'completed' && (
-        <div style={{ margin: '24px 20px 0', padding: '20px', borderRadius: 16, background: CARD, textAlign: 'center', border: '1px solid rgba(217,245,78,0.12)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-            {status === 'ready' ? 'Ready now!' : 'Estimated wait'}
+      {/* Floating product hero */}
+      {!cancelled && (
+        <div style={{ textAlign: 'center', padding: '24px 20px 8px' }}>
+          <div style={{ fontSize: 88, lineHeight: 1, filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.12))' }}>
+            {heroEmoji}
           </div>
-          {status === 'ready' ? (
-            <div style={{ fontSize: 36, fontWeight: 900, color: LIME }}>🎉</div>
-          ) : (
-            <div style={{ fontSize: 36, fontWeight: 900, color: LIME, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>{fmtEta()}</div>
-          )}
         </div>
       )}
 
       {/* Vertical timeline */}
       {!cancelled && (
-        <div style={{ margin: '28px 20px 0', padding: '24px 20px', borderRadius: 16, background: CARD }}>
+        <div style={{ margin: '16px 20px 0', background: WHITE, borderRadius: 24, boxShadow: '0 8px 28px rgba(0,0,0,.06)', padding: '24px 20px' }}>
           {STEPS.map((step, i) => {
-            const stepNum = i + 1
-            const done    = currentStep > stepNum
-            const active  = currentStep === stepNum
+            const stepNum  = i + 1
+            const done     = currentStep > stepNum
+            const active   = currentStep === stepNum
             const upcoming = currentStep < stepNum
+
+            let timeLabel = ''
+            if (done && i === 0) timeLabel = fmtTime(initialEta ? new Date(new Date(initialEta).getTime() - 15 * 60000).toISOString() : new Date().toISOString())
+            else if (active) timeLabel = 'Now'
+            else if (!upcoming && i === 2 && eta) timeLabel = 'Approx. ' + fmtTime(eta)
+
             return (
-              <div key={step.key} style={{ display: 'flex', gap: 16, paddingBottom: i < STEPS.length - 1 ? 24 : 0, position: 'relative' }}>
+              <div key={step.key} style={{ display: 'flex', gap: 16, paddingBottom: i < STEPS.length - 1 ? 28 : 0, position: 'relative' }}>
                 {/* Connector line */}
                 {i < STEPS.length - 1 && (
-                  <div style={{ position: 'absolute', left: 15, top: 32, width: 2, height: 24, background: done ? LIME : 'rgba(255,255,255,0.08)' }} />
+                  <div style={{
+                    position: 'absolute', left: 15, top: 32, width: 2,
+                    height: 28,
+                    background: done ? LIME : BORDER,
+                  }} />
                 )}
+
                 {/* Dot */}
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                  background: done ? LIME : active ? LIME + '22' : 'transparent',
-                  border: '2px solid ' + (done || active ? LIME : 'rgba(255,255,255,0.12)'),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14,
-                }}>
-                  {done ? '✓' : upcoming ? '' : step.icon}
+                <div
+                  className={active ? 'pipel-pulse' : undefined}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                    background: done ? LIME : WHITE,
+                    border: '2px solid ' + (done ? LIME : active ? LIME : BORDER),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, color: done ? INK : MUTED,
+                    fontWeight: 800,
+                  }}
+                >
+                  {done ? '✓' : active ? (
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: LIME }} />
+                  ) : null}
                 </div>
-                {/* Label */}
+
+                {/* Label + time */}
                 <div style={{ paddingTop: 4 }}>
-                  <div style={{ fontSize: 15, fontWeight: active ? 800 : done ? 700 : 500, color: done || active ? WHITE : MUTED }}>
+                  <div style={{
+                    fontSize: 16,
+                    fontWeight: active ? 800 : done ? 700 : 500,
+                    color: done || active ? INK : MUTED,
+                    fontFamily: SANS,
+                  }}>
                     {step.label}
                   </div>
-                  {active && (
-                    <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>in progress</div>
+                  {timeLabel && (
+                    <div style={{ fontSize: 12, color: active ? LIME : MUTED, marginTop: 2, fontWeight: active ? 600 : 400 }}>
+                      {timeLabel}
+                    </div>
                   )}
                 </div>
               </div>
@@ -188,48 +282,87 @@ export default function OrderTrackingClient({
 
       {/* Order summary */}
       {castItems.length > 0 && (
-        <div style={{ margin: '16px 20px 0', padding: '20px', borderRadius: 16, background: CARD }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Order summary</div>
+        <div style={{ margin: '12px 20px 0', background: WHITE, borderRadius: 24, boxShadow: '0 8px 28px rgba(0,0,0,.06)', padding: '20px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
+            Order summary
+          </div>
           {castItems.map((item, idx) => (
-            <div key={idx} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: idx < castItems.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+            <div key={idx} style={{ marginBottom: 12, paddingBottom: idx < castItems.length - 1 ? 12 : 0, borderBottom: idx < castItems.length - 1 ? '1px solid ' + BORDER : 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: WHITE }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: INK }}>
                   {item.quantity && item.quantity > 1 ? item.quantity + ' × ' : ''}{item.product_name ?? 'Item'}
                 </div>
-                <div style={{ fontSize: 13, color: LIME, fontWeight: 700, whiteSpace: 'nowrap', marginLeft: 12 }}>
-                  {'A$' + ((Number(item.unit_price ?? 0) * (item.quantity ?? 1)).toFixed(2))}
+                <div style={{ fontSize: 14, fontWeight: 800, color: INK, whiteSpace: 'nowrap', marginLeft: 12 }}>
+                  {'$' + (Number(item.unit_price ?? 0) * (item.quantity ?? 1)).toFixed(2)}
                 </div>
               </div>
               {item.config?.removed && item.config.removed.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                   {item.config.removed.map((r, ri) => (
-                    <span key={ri} style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6, padding: '2px 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span key={ri} style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, padding: '2px 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       {'NO ' + r.name.toUpperCase()}
                     </span>
                   ))}
                 </div>
               )}
               {item.modifiers && item.modifiers.length > 0 && (
-                <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{item.modifiers.map(m => m.name).join(', ')}</div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>{item.modifiers.map(m => m.name).join(', ')}</div>
               )}
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: WHITE }}>Total</span>
-            <span style={{ fontSize: 16, fontWeight: 900, color: LIME, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>{'A$' + total.toFixed(2)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid ' + BORDER, marginTop: 4 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total</span>
+            <span style={{ fontSize: 17, fontWeight: 900, color: INK, fontFamily: SANS }}>${total.toFixed(2)}</span>
           </div>
         </div>
       )}
 
       {/* Notes */}
       {notes && (
-        <div style={{ margin: '12px 20px 0', padding: '14px 16px', borderRadius: 12, background: CARD, fontSize: 12, color: MUTED }}>
-          <span style={{ fontWeight: 700, color: WHITE }}>Note: </span>{notes}
+        <div style={{ margin: '12px 20px 0', background: WHITE, borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,.04)', padding: '14px 16px', fontSize: 13, color: MUTED }}>
+          <span style={{ fontWeight: 700, color: INK }}>Note: </span>{notes}
         </div>
       )}
 
+      {/* Made fresh by card */}
+      <div style={{ margin: '12px 20px 0', background: WHITE, borderRadius: 24, boxShadow: '0 8px 28px rgba(0,0,0,.06)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ fontSize: 42, lineHeight: 1, flexShrink: 0 }}>👨‍🍳</div>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: SANS }}>Made fresh</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: SANS }}>{'by ' + businessName}</div>
+        </div>
+      </div>
+
+      {/* Loyalty pill */}
+      <div style={{ margin: '12px 20px 0', background: LIME, borderRadius: 9999, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <span style={{ fontSize: 16 }}>🏅</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: SANS }}>
+          {"You'll earn " + loyaltyPoints + ' loyalty points on pickup'}
+        </span>
+      </div>
+
+      {/* View receipt outlined pill */}
+      <div style={{ margin: '12px 20px 0' }}>
+        <a
+          href={'/menu/' + slug}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '14px 20px', borderRadius: 9999,
+            border: '1.5px solid ' + BORDER,
+            background: WHITE,
+            color: INK, fontSize: 15, fontWeight: 700,
+            textDecoration: 'none', fontFamily: SANS,
+            boxShadow: '0 4px 16px rgba(0,0,0,.04)',
+          }}
+        >
+          View receipt
+        </a>
+      </div>
+
       {/* Powered by */}
-      <div style={{ textAlign: 'center', fontSize: 11, color: MUTED + '88', marginTop: 32, letterSpacing: '0.05em' }}>Powered by Aria</div>
+      <div style={{ textAlign: 'center', fontSize: 11, color: MUTED, marginTop: 32, letterSpacing: '0.05em' }}>
+        Powered by Aria
+      </div>
     </div>
   )
 }

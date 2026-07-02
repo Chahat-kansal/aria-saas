@@ -133,7 +133,7 @@ function ProteinPills({ group, proteinMap, activeProtein, onSelect }: ProteinPil
   )
 }
 
-// ── Drop zone wrapper ─────────────────────────────────────────────────────────
+// ── Drop zone wrapper with Pipel pedestal disc ────────────────────────────────
 
 function DropZoneWrapper({ layers, size }: { layers: IngredientKey[]; size: number }) {
   const { setNodeRef, isOver } = useDroppable({ id: DROP_ZONE_ID })
@@ -141,24 +141,36 @@ function DropZoneWrapper({ layers, size }: { layers: IngredientKey[]; size: numb
     <div
       ref={setNodeRef}
       style={{
-        position: 'relative', display: 'inline-block',
-        borderRadius: 20, padding: 16,
-        background: isOver ? 'rgba(217,245,78,0.10)' : 'transparent',
+        position: 'relative', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', padding: '16px 24px 0',
+        background: isOver ? 'rgba(217,245,78,0.06)' : 'transparent',
+        borderRadius: 28,
         outline: isOver ? '2px dashed #d9f54e' : '2px dashed transparent',
-        transition: 'background 0.15s',
+        transition: 'all 0.15s',
       }}
     >
       <LayeredProduct layers={layers} size={size} />
+
+      {/* Pedestal disc */}
+      <div style={{
+        width: size * 0.72, height: 18, borderRadius: '50%',
+        background: '#ffffff',
+        boxShadow: isOver
+          ? '0 0 0 6px rgba(217,245,78,0.25), 0 8px 28px rgba(0,0,0,0.10)'
+          : '0 8px 24px rgba(0,0,0,0.12)',
+        marginTop: -6,
+        transition: 'box-shadow 0.2s',
+      }} />
+
       {isOver && (
         <div style={{
-          position: 'absolute', inset: 0, display: 'flex',
-          alignItems: 'flex-end', justifyContent: 'center',
-          paddingBottom: 8, pointerEvents: 'none',
+          position: 'absolute', bottom: 12, left: '50%',
+          transform: 'translateX(-50%)', pointerEvents: 'none',
         }}>
           <span style={{
-            background: '#d9f54e', color: '#2f3a06',
-            fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700,
-            borderRadius: 20, padding: '4px 12px',
+            background: '#d9f54e', color: '#0a0a0a',
+            fontFamily: "'Outfit', Inter, sans-serif", fontSize: 12, fontWeight: 700,
+            borderRadius: 9999, padding: '4px 14px', whiteSpace: 'nowrap',
           }}>Drop to add</span>
         </div>
       )}
@@ -354,6 +366,13 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
 
         {/* Burger visual with drop zone */}
         <DropZoneWrapper layers={layers} size={size} />
+
+        {/* Drag to build heading */}
+        <div style={{ width: '100%', maxWidth: 480, padding: '18px 16px 4px', textAlign: 'left' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#6b7280', fontFamily: "'Outfit', Inter, sans-serif" }}>
+            Drag to build
+          </div>
+        </div>
 
         {/* Toppings tray */}
         <IngredientTray
