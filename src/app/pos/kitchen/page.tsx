@@ -257,9 +257,22 @@ export default function KitchenPage() {
                       #{order.ticket_number ?? '—'}
                     </span>
                     {order.table_label && (
-                      <span style={{ marginLeft: 8, fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
-                        {order.table_label}
-                      </span>
+                      order.table_label.endsWith(' ONLINE')
+                        ? (
+                          <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
+                              {order.table_label.replace(' ONLINE', '')}
+                            </span>
+                            <span style={{ fontSize: 9, fontWeight: 800, background: '#3b82f6', color: '#fff', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.04em' }}>
+                              ONLINE
+                            </span>
+                          </span>
+                        )
+                        : (
+                          <span style={{ marginLeft: 8, fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
+                            {order.table_label}
+                          </span>
+                        )
                     )}
                   </div>
                   <div style={{ textAlign: 'right' }}>

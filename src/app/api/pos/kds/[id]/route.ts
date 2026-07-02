@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { waitUntil } from '@vercel/functions'
+import { sendSMS } from '@/lib/clicksend'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -71,9 +73,66 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
     .update(ordersUpdate)
     .eq('id', id)
     .eq('business_id', bid)
-    .select('id')
+    .select('id, sale_id')
 
-  if (!e1 && d1 && d1.length > 0) return NextResponse.json({ ok: true })
+  if (!e1 && d1 && d1.length > 0) {
+    // Sync pos_online_orders + notify customer when kitchen marks order ready
+    if (status === 'ready') {
+      const updRow = d1[0] as { id: string; sale_id: string | null }
+      if (updRow.sale_id) {
+        const salId = updRow.sale_id
+        const businessId = bid
+        waitUntil((async () => {
+          try {
+            const { data: onlineOrd } = await supabaseAdmin
+              .from('pos_online_orders')
+              .select('id, status, customer_name, customer_phone, customer_email, order_number, customer_id')
+              .eq('sale_id', salId).eq('business_id', businessId).maybeSingle()
+            const ord = onlineOrd as { id: string; status: string | null; customer_name: string | null; customer_phone: string | null; customer_email: string | null; order_number: string | null; customer_id: string | null } | null
+            if (!ord || ord.status === 'ready' || ord.status === 'completed') return
+            const rNow = new Date().toISOString()
+            await supabaseAdmin.from('pos_online_orders')
+              .update({ status: 'ready', ready_at: rNow, updated_at: rNow }).eq('id', ord.id)
+            const { data: biz } = await supabaseAdmin.from('businesses').select('name, slug').eq('id', businessId).maybeSingle()
+            const bizName = (biz?.name as string | null) ?? 'the café'
+            const bizSlug = (biz?.slug as string | null) ?? ''
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
+            const trackingUrl = appUrl + '/menu/' + bizSlug + '/order/' + (ord.order_number ?? '')
+            const firstName = (ord.customer_name ?? '').split(' ')[0] || 'there'
+            const orderNum = ord.order_number ?? ''
+            if (ord.customer_phone) {
+              await sendSMS(
+                ord.customer_phone,
+                'Hi ' + firstName + ', your order ' + orderNum + ' at ' + bizName + ' is ready for collection! Track: ' + trackingUrl,
+                { category: 'transactional', businessId, customerId: ord.customer_id ?? undefined }
+              )
+            } else if (ord.customer_email) {
+              const resendKey = process.env.RESEND_API_KEY
+              if (resendKey) {
+                await fetch('https://api.resend.com/emails', {
+                  method: 'POST',
+                  headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    from: 'Aria <orders@ariaos.site>',
+                    to: [ord.customer_email],
+                    subject: 'Your order ' + orderNum + ' is ready! 🎉',
+                    html: '<p>Hi ' + firstName + ',</p><p>Your order <strong>' + orderNum + '</strong> at <strong>' + bizName + '</strong> is ready for collection!</p><p><a href="' + trackingUrl + '">Track your order &rarr;</a></p>',
+                  }),
+                }).catch(() => null)
+              }
+            }
+          } catch (e) {
+            void supabaseAdmin.from('activity_log').insert({
+              business_id: businessId, action_type: 'kds_online_sync_error',
+              description: '[kds/[id]] online order sync failed: ' + (e as Error).message,
+              metadata: { kds_order_id: id, sale_id: salId }, created_at: new Date().toISOString(),
+            })
+          }
+        })())
+      }
+    }
+    return NextResponse.json({ ok: true })
+  }
 
   // pos_kds_tickets does have updated_at
   const updates: Record<string, unknown> = { status, updated_at: now }

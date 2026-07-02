@@ -170,16 +170,14 @@ async function _PATCH(req: Request, { params }: Params) {
         if (!items.length) return
 
         const productIds = [...new Set(items.map(i => i.product_id).filter((id): id is string => !!id))]
-        const stationMap: Record<string, string> = {}
         const dietaryMap: Record<string, string[]> = {}
         if (productIds.length > 0) {
           const { data: prods } = await supabaseAdmin
             .from('pos_products')
-            .select('id, kds_station, is_gluten_free, is_vegan, is_vegetarian')
+            .select('id, is_gluten_free, is_vegan, is_vegetarian')
             .in('id', productIds)
           for (const p of (prods ?? [])) {
-            const prod = p as { id: string; kds_station: string | null; is_gluten_free: boolean | null; is_vegan: boolean | null; is_vegetarian: boolean | null }
-            stationMap[prod.id] = prod.kds_station ?? 'barista'
+            const prod = p as { id: string; is_gluten_free: boolean | null; is_vegan: boolean | null; is_vegetarian: boolean | null }
             const tags: string[] = []
             if (prod.is_gluten_free) tags.push('⚠ GLUTEN FREE')
             if (prod.is_vegan) tags.push('⚠ VEGAN')
@@ -191,39 +189,36 @@ async function _PATCH(req: Request, { params }: Params) {
         const now = new Date().toISOString()
         const orderNum = (ord?.order_number as string | null) ?? ''
         const saleId = (ord?.sale_id as string | null) ?? null
-        const outletId = (ord?.outlet_id as string | null) ?? null
 
-        const tickets = items.map(item => {
+        // Write one pos_kds_orders row (all items in JSONB) — same table + shape as in-store POS
+        const kdsItems = items.map(item => {
           const pName = item.product_name ?? 'Item'
           const removed = item.config?.removed ?? []
           const added = item.config?.added ?? []
           const mods = item.modifiers ?? []
-
-          const lines: string[] = ['[' + pName + ']']
-          // Dietary warnings immediately after product name — most critical prep info
-          for (const d of (dietaryMap[item.product_id ?? ''] ?? [])) lines.push(d)
-          for (const r of removed) lines.push('NO ' + r.name.toUpperCase())
-          for (const a of added) lines.push('+' + a.name)
-          for (const m of mods) lines.push(m.name)
-          const modSummary = lines.length > 1 ? lines.join('\n') : lines[0]
-
+          const modLines: string[] = []
+          for (const d of (dietaryMap[item.product_id ?? ''] ?? [])) modLines.push(d)
+          for (const r of removed) modLines.push('NO ' + r.name.toUpperCase())
+          for (const a of added) modLines.push('+' + a.name)
+          for (const m of mods) modLines.push(m.name)
           return {
-            business_id: fireBid,
-            outlet_id: outletId,
-            sale_id: saleId,
-            station: stationMap[item.product_id ?? ''] ?? 'barista',
-            quantity: item.quantity ?? 1,
-            table_label: '#' + orderNum + ' ONLINE',
-            modifiers_summary: modSummary,
-            notes: item.note ?? null,
-            status: 'fired',
-            fired_at: now,
-            created_at: now,
-            updated_at: now,
+            name: pName,
+            qty: item.quantity ?? 1,
+            modifiers: modLines,
+            ...(item.note ? { special_instructions: item.note } : {}),
           }
         })
 
-        await supabaseAdmin.from('pos_kds_tickets').insert(tickets)
+        await supabaseAdmin.from('pos_kds_orders').insert({
+          business_id: fireBid,
+          sale_id: saleId,
+          table_number: '#' + orderNum + ' ONLINE',
+          items: kdsItems,
+          status: 'new',
+          priority: 1,
+          notes: null,
+          created_at: now,
+        })
       } catch (kdsErr) {
         void supabaseAdmin.from('activity_log').insert({
           business_id: fireBid,
