@@ -320,14 +320,15 @@ export default function KitchenPage() {
                     <button
                       onClick={() => advanceStatus(order)}
                       disabled={isUpdating}
-                      aria-label={action.label + ' order #' + (order.ticket_number ?? order.id)}
+                      aria-label={(order.status === 'ready' && order.table_label?.endsWith(' ONLINE') ? 'Mark picked up' : action.label) + ' order #' + (order.ticket_number ?? order.id)}
                       style={{
                         flex: 1, minHeight: 44, padding: '0', borderRadius: 8, border: 'none',
-                        background: action.color, color: '#fff',
+                        background: order.status === 'ready' && order.table_label?.endsWith(' ONLINE') ? '#059669' : action.color,
+                        color: '#fff',
                         fontWeight: 800, fontSize: 14, cursor: isUpdating ? 'wait' : 'pointer',
                         opacity: isUpdating ? 0.6 : 1,
                       }}>
-                      {isUpdating ? '…' : action.label}
+                      {isUpdating ? '…' : (order.status === 'ready' && order.table_label?.endsWith(' ONLINE') ? 'Picked up ✓' : action.label)}
                     </button>
                   )}
                   <button

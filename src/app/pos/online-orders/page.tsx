@@ -54,7 +54,7 @@ function nextStatuses(status: string): { label: string; status: string; danger?:
     case 'accepted':
     case 'confirmed': return [{ label: 'Start Preparing', status: 'preparing' }, { label: 'Reject', status: 'rejected', danger: true }]
     case 'preparing': return [{ label: 'Mark Ready', status: 'ready' }]
-    case 'ready':     return [{ label: 'Completed', status: 'completed' }]
+    case 'ready':     return [{ label: 'Mark picked up ✓', status: 'completed' }]
     default:          return []
   }
 }

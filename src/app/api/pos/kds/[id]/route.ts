@@ -131,6 +131,59 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
         })())
       }
     }
+    // Sync pos_online_orders to 'preparing' when kitchen starts cooking
+    if (status === 'in_progress') {
+      const inPrRow = d1[0] as { id: string; sale_id: string | null }
+      if (inPrRow.sale_id) {
+        const salId = inPrRow.sale_id
+        const businessId = bid
+        waitUntil((async () => {
+          try {
+            const { data: onlineOrd } = await supabaseAdmin
+              .from('pos_online_orders').select('id, status')
+              .eq('sale_id', salId).eq('business_id', businessId).maybeSingle()
+            const ord = onlineOrd as { id: string; status: string | null } | null
+            if (!ord || ord.status === 'preparing' || ord.status === 'ready' || ord.status === 'completed') return
+            await supabaseAdmin.from('pos_online_orders')
+              .update({ status: 'preparing', updated_at: new Date().toISOString() }).eq('id', ord.id)
+          } catch (e) {
+            void supabaseAdmin.from('activity_log').insert({
+              business_id: businessId, action_type: 'kds_online_sync_error',
+              description: '[kds/[id]] preparing sync failed: ' + (e as Error).message,
+              metadata: { kds_order_id: id }, created_at: new Date().toISOString(),
+            })
+          }
+        })())
+      }
+    }
+
+    // Sync pos_online_orders to 'completed' + set picked_up_at when kitchen delivers
+    if (status === 'delivered') {
+      const delRow = d1[0] as { id: string; sale_id: string | null }
+      if (delRow.sale_id) {
+        const salId = delRow.sale_id
+        const businessId = bid
+        waitUntil((async () => {
+          try {
+            const { data: onlineOrd } = await supabaseAdmin
+              .from('pos_online_orders').select('id, status')
+              .eq('sale_id', salId).eq('business_id', businessId).maybeSingle()
+            const ord = onlineOrd as { id: string; status: string | null } | null
+            if (!ord || ord.status === 'completed') return
+            const dNow = new Date().toISOString()
+            await supabaseAdmin.from('pos_online_orders')
+              .update({ status: 'completed', picked_up_at: dNow, updated_at: dNow }).eq('id', ord.id)
+          } catch (e) {
+            void supabaseAdmin.from('activity_log').insert({
+              business_id: businessId, action_type: 'kds_online_sync_error',
+              description: '[kds/[id]] delivered sync failed: ' + (e as Error).message,
+              metadata: { kds_order_id: id }, created_at: new Date().toISOString(),
+            })
+          }
+        })())
+      }
+    }
+
     return NextResponse.json({ ok: true })
   }
 

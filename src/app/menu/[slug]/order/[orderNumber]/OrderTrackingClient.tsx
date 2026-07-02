@@ -20,11 +20,11 @@ const STEPS: Array<{ key: StepKey; label: string; sublabel?: string }> = [
   { key: 'received',  label: 'Order received'   },
   { key: 'preparing', label: 'Preparing'         },
   { key: 'ready',     label: 'Ready for pickup'  },
-  { key: 'enjoy',     label: 'Enjoy'             },
+  { key: 'enjoy',     label: 'Picked up ✓'       },
 ]
 
 function statusToStep(status: string): number {
-  if (status === 'completed') return 4
+  if (status === 'completed') return 5
   if (status === 'ready')     return 3
   if (status === 'preparing') return 2
   return 1  // pending / accepted / confirmed
@@ -76,6 +76,7 @@ interface Props {
   notes: string | null
   businessName: string
   slug: string
+  initialUpdatedAt: string | null
 }
 
 // ── Food emoji helper ─────────────────────────────────────────────────────────
@@ -99,10 +100,11 @@ function itemEmoji(name?: string): string {
 
 export default function OrderTrackingClient({
   initialStatus, orderNumber, customerName, total,
-  estimatedReadyAt: initialEta, items, fulfillmentType, notes, businessName, slug,
+  estimatedReadyAt: initialEta, items, fulfillmentType, notes, businessName, slug, initialUpdatedAt,
 }: Props) {
   const [status, setStatus] = useState(initialStatus)
   const [eta, setEta] = useState(initialEta)
+  const [completedAt, setCompletedAt] = useState<string | null>(initialStatus === 'completed' ? initialUpdatedAt : null)
 
   const currentStep = statusToStep(status)
   const cancelled   = isCancelled(status)
@@ -131,9 +133,10 @@ export default function OrderTrackingClient({
       try {
         const res = await fetch('/api/public/order-track/' + orderNumber + '?slug=' + encodeURIComponent(slug))
         if (!res.ok || !live) return
-        const d = await res.json() as { status?: string; estimated_ready_at?: string | null }
+        const d = await res.json() as { status?: string; estimated_ready_at?: string | null; updated_at?: string | null }
         if (d.status) {
           setStatus(d.status)
+          if (d.status === 'completed' && d.updated_at) setCompletedAt(d.updated_at)
           if (d.status === 'completed' || d.status === 'cancelled' || d.status === 'rejected') {
             live = false
             clearInterval(tid)
@@ -191,7 +194,17 @@ export default function OrderTrackingClient({
             <div style={{ fontSize: 20, fontWeight: 800, color: '#ef4444', marginBottom: 4 }}>Order {status}</div>
             <div style={{ fontSize: 13, color: MUTED }}>Please contact the venue if you have questions.</div>
           </div>
-        ) : status === 'ready' || status === 'completed' ? (
+        ) : status === 'completed' ? (
+          <div>
+            <div style={{ fontSize: 42, fontWeight: 900, lineHeight: 1.1, marginBottom: 4 }}>
+              <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 700 }}>Enjoy! </span>
+              <span style={{ fontSize: 32 }}>🎉</span>
+            </div>
+            <div style={{ fontSize: 14, color: MUTED, marginTop: 4 }}>
+              {completedAt ? 'Picked up at ' + fmtTime(completedAt) : 'Order complete'}
+            </div>
+          </div>
+        ) : status === 'ready' ? (
           <div>
             <div style={{ fontSize: 42, fontWeight: 900, lineHeight: 1.1, marginBottom: 4 }}>
               <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 700 }}>Ready </span>
