@@ -110,7 +110,7 @@ export default function OrderTrackingClient({
 
   // Load Outfit + Cormorant fonts
   useEffect(() => {
-    for (const [id, q] of [
+    for (const [, q] of [
       ['Outfit',    'Outfit:wght@400;600;700;800;900'],
       ['Cormorant', 'Cormorant:ital,wght@1,400;1,700;1,900'],
     ]) {
@@ -123,20 +123,28 @@ export default function OrderTrackingClient({
     }
   }, [])
 
-  // 5-second poll for live status updates
+  // Poll for live status — fires immediately on mount, then every 5s; stops on terminal state
   useEffect(() => {
     let live = true
+    let tid: ReturnType<typeof setInterval>
     async function poll() {
       try {
         const res = await fetch('/api/public/order-track/' + orderNumber + '?slug=' + encodeURIComponent(slug))
         if (!res.ok || !live) return
         const d = await res.json() as { status?: string; estimated_ready_at?: string | null }
-        if (d.status) setStatus(d.status)
+        if (d.status) {
+          setStatus(d.status)
+          if (d.status === 'completed' || d.status === 'cancelled' || d.status === 'rejected') {
+            live = false
+            clearInterval(tid)
+          }
+        }
         if (d.estimated_ready_at !== undefined) setEta(d.estimated_ready_at ?? null)
       } catch (_) {}
     }
-    const id = setInterval(poll, 5000)
-    return () => { live = false; clearInterval(id) }
+    poll()                         // immediate — don't wait 5 s for first read
+    tid = setInterval(poll, 5000)
+    return () => { live = false; clearInterval(tid) }
   }, [orderNumber, slug])
 
   const castItems = items as TrackItem[]
