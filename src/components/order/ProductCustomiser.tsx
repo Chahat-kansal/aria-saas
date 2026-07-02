@@ -388,7 +388,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
         />
 
         {/* Note input */}
-        <div style={{ width: '100%', maxWidth: 480, padding: '8px 16px 80px' }}>
+        <div style={{ width: '100%', maxWidth: 480, padding: '8px 16px 80px', boxSizing: 'border-box' as const }}>
           <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontFamily: "'Outfit', Inter, sans-serif" }}>
             Add a note
           </label>

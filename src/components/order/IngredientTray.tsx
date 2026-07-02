@@ -46,6 +46,7 @@ function DraggableTile({ id, isDefaultActive, extraQty, modInfo, onTap, onQtyCha
         background: isActive ? '#f7fde0' : '#ffffff',
         cursor: 'grab',
         userSelect: 'none',
+        touchAction: 'none',
         position: 'relative',
         width: 80,
         flexShrink: 0,

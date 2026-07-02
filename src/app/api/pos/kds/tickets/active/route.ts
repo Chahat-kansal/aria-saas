@@ -24,7 +24,7 @@ async function _GET(req: Request) {
   const cutoff = new Date(Date.now() - 4 * 3600_000).toISOString()
 
   let q = supabase.from('pos_kds_tickets')
-    .select('*')
+    .select('*, pos_sale_items!pos_kds_tickets_sale_item_id_fkey(product_name)')
     .eq('business_id', bid)
     .in('status', ['fired', 'in_progress'])
     .gte('fired_at', cutoff)
@@ -35,7 +35,25 @@ async function _GET(req: Request) {
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ tickets: data ?? [] })
+
+  const tickets = (data ?? []).map((t: Record<string, unknown>) => {
+    const joined = (t.pos_sale_items as { product_name: string } | null)?.product_name ?? null
+    let product_name: string | null = joined
+    let modifiers_summary: string | null = t.modifiers_summary as string | null
+
+    // Online tickets embed product name as [Name] first line in modifiers_summary
+    if (!product_name && modifiers_summary) {
+      const m = modifiers_summary.match(/^\[(.+?)\](?:\n|$)/)
+      if (m) {
+        product_name = m[1]
+        modifiers_summary = modifiers_summary.slice(m[0].length).trim() || null
+      }
+    }
+
+    return { ...t, pos_sale_items: undefined, product_name, modifiers_summary }
+  })
+
+  return NextResponse.json({ tickets })
 }
 
 export const GET = withErrorCapture('pos/kds/tickets/active', _GET)

@@ -133,6 +133,85 @@ async function _PATCH(req: Request, { params }: Params) {
     })())
   }
 
+  // ── KDS fire — non-blocking, on first accept/confirm only ──
+  if (
+    (newStatus === 'accepted' || newStatus === 'confirmed') &&
+    prevStatus !== 'accepted' && prevStatus !== 'confirmed'
+  ) {
+    const fireOrderId = id
+    const fireBid = bid
+    waitUntil((async () => {
+      try {
+        const { data: ord } = await supabaseAdmin
+          .from('pos_online_orders')
+          .select('order_number, items, sale_id, outlet_id')
+          .eq('id', fireOrderId)
+          .maybeSingle()
+
+        const items = (ord?.items ?? []) as Array<{
+          product_id?: string; product_name?: string; quantity?: number;
+          modifiers?: Array<{ name: string }>;
+          config?: { removed?: Array<{ name: string }>; added?: Array<{ name: string; priceCents?: number }> };
+          note?: string
+        }>
+        if (!items.length) return
+
+        const productIds = [...new Set(items.map(i => i.product_id).filter((id): id is string => !!id))]
+        const stationMap: Record<string, string> = {}
+        if (productIds.length > 0) {
+          const { data: prods } = await supabaseAdmin
+            .from('pos_products')
+            .select('id, kds_station')
+            .in('id', productIds)
+          for (const p of (prods ?? [])) stationMap[(p as { id: string; kds_station: string | null }).id] = (p as { id: string; kds_station: string | null }).kds_station ?? 'barista'
+        }
+
+        const now = new Date().toISOString()
+        const orderNum = (ord?.order_number as string | null) ?? ''
+        const saleId = (ord?.sale_id as string | null) ?? null
+        const outletId = (ord?.outlet_id as string | null) ?? null
+
+        const tickets = items.map(item => {
+          const pName = item.product_name ?? 'Item'
+          const removed = item.config?.removed ?? []
+          const added = item.config?.added ?? []
+          const mods = item.modifiers ?? []
+
+          const lines: string[] = ['[' + pName + ']']
+          for (const r of removed) lines.push('NO ' + r.name.toUpperCase())
+          for (const a of added) lines.push('+' + a.name)
+          for (const m of mods) lines.push(m.name)
+          const modSummary = lines.length > 1 ? lines.join('\n') : lines[0]
+
+          return {
+            business_id: fireBid,
+            outlet_id: outletId,
+            sale_id: saleId,
+            station: stationMap[item.product_id ?? ''] ?? 'barista',
+            quantity: item.quantity ?? 1,
+            table_label: '#' + orderNum + ' ONLINE',
+            modifiers_summary: modSummary,
+            notes: item.note ?? null,
+            status: 'fired',
+            fired_at: now,
+            created_at: now,
+            updated_at: now,
+          }
+        })
+
+        await supabaseAdmin.from('pos_kds_tickets').insert(tickets)
+      } catch (kdsErr) {
+        void supabaseAdmin.from('activity_log').insert({
+          business_id: fireBid,
+          action_type: 'online_kds_fire_error',
+          description: '[online-orders] KDS fire failed: ' + (kdsErr as Error).message,
+          metadata: { order_id: fireOrderId },
+          created_at: new Date().toISOString(),
+        })
+      }
+    })())
+  }
+
   return NextResponse.json({ ok: true })
 }
 

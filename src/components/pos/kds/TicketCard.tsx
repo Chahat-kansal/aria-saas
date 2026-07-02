@@ -57,19 +57,36 @@ export default function TicketCard({ ticket, show_modifiers, show_allergens, onB
       </div>
 
       <div className="text-xs text-[var(--text-secondary,#A8B5A8)] flex flex-wrap gap-2">
-        {ticket.table_label && <span>{ticket.table_label}</span>}
+        {ticket.table_label && (
+          ticket.table_label.endsWith(' ONLINE')
+            ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>{ticket.table_label.replace(' ONLINE', '')}</span>
+                <span style={{ fontSize: 9, fontWeight: 800, background: '#3b82f6', color: '#fff', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.04em' }}>ONLINE</span>
+              </span>
+            )
+            : <span>{ticket.table_label}</span>
+        )}
         {ticket.seat_number != null && <span>Seat {ticket.seat_number}</span>}
         {ticket.course != null && <span>Course {ticket.course}</span>}
       </div>
 
       {show_modifiers && ticket.modifiers_summary && (
-        <div className="text-sm text-[var(--text-primary,#E8EDE7)] bg-black/20 rounded px-2 py-1">
-          {ticket.modifiers_summary}
+        <div className="bg-black/20 rounded px-2 py-1" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {ticket.modifiers_summary.split('\n').map((line, i) => (
+            <span key={i} style={{
+              fontSize: 13,
+              fontWeight: line.startsWith('NO ') ? 800 : 400,
+              color: line.startsWith('NO ') ? '#f87171' : 'var(--text-primary, #E8EDE7)',
+            }}>{line}</span>
+          ))}
         </div>
       )}
 
       {ticket.notes && (
-        <div className="text-sm italic text-[var(--text-secondary,#A8B5A8)]">Note: {ticket.notes}</div>
+        <div style={{ fontSize: 13, fontStyle: 'italic', fontWeight: 600, color: '#fbbf24', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+          <span>📝</span><span>{ticket.notes}</span>
+        </div>
       )}
 
       {show_allergens && Array.isArray(ticket.allergens) && (ticket.allergens as string[]).length > 0 && (
