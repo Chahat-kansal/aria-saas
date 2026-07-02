@@ -8,6 +8,7 @@ interface OrderItem {
   product_name?: string
   quantity?: number
   unit_price?: number
+  note?: string
   modifiers?: { id: string; name: string; price_cents: number }[]
   config?: {
     mode?: string
@@ -152,6 +153,12 @@ function OrderCard({ order, onAdvance }: { order: OnlineOrder; onAdvance: (id: s
               <BuildSummary item={item} />
               {item.modifiers && item.modifiers.length > 0 && (
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 3 }}>{item.modifiers.map(m => m.name).join(', ')}</div>
+              )}
+              {item.note && (
+                <div style={{ marginTop: 4, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                  <span style={{ fontSize: 11 }}>📝</span>
+                  <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 700, fontStyle: 'italic', lineHeight: 1.4 }}>{item.note}</span>
+                </div>
               )}
             </div>
           ))}

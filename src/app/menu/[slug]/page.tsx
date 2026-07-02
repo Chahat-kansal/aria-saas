@@ -88,7 +88,7 @@ export default async function MenuPage({ params }: Props) {
       .order('name'),
     supabaseAdmin
       .from('pos_products')
-      .select('id, name, description, price, image_url, sort_order, category_id, ordering_mode, ordering_archetype')
+      .select('id, name, description, price, image_url, sort_order, category_id, ordering_mode, ordering_archetype, is_gluten_free, is_vegan, is_vegetarian')
       .eq('business_id', bid)
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -121,7 +121,7 @@ export default async function MenuPage({ params }: Props) {
 
   // Sort categories by the resolved config's section_order (server-side, no client fetch needed)
   type CatRow = { id: string; name: string; color: string | null; ordering_archetype: string | null }
-  type ProdRow = { id: string; name: string; description: string | null; price: number; image_url: string | null; sort_order: number | null; category_id: string | null; ordering_mode: string | null; ordering_archetype: string | null }
+  type ProdRow = { id: string; name: string; description: string | null; price: number; image_url: string | null; sort_order: number | null; category_id: string | null; ordering_mode: string | null; ordering_archetype: string | null; is_gluten_free: boolean | null; is_vegan: boolean | null; is_vegetarian: boolean | null }
   const rawCats: CatRow[] = (catsRes.data ?? []) as CatRow[]
   const so = (menuConfig?.section_order as string[] | null) ?? null
   const orderedCats: CatRow[] = so && so.length > 0

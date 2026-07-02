@@ -88,11 +88,13 @@ interface Product {
   id: string; name: string; description: string | null; price: number
   image_url: string | null; sort_order: number | null; category_id: string | null
   ordering_mode: string | null; ordering_archetype: string | null
+  is_gluten_free: boolean | null; is_vegan: boolean | null; is_vegetarian: boolean | null
 }
 interface CartItem {
   product: Product; qty: number; unit_price: number
   modifiers: { id: string; name: string; priceCents: number }[]
   config?: { mode: 'build'; layers: string[]; added: { id: string; name: string; priceCents: number }[]; removed: { name: string }[] }
+  note?: string
 }
 interface ModifierOption { id: string; name: string; priceCents: number; isDefault: boolean; allowQuantity: boolean; maxQuantity: number; displayOrder: number | null }
 interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; allowQuantity: boolean; selectionType: string; archetypeSlot: string | null; options: ModifierOption[] }
@@ -185,6 +187,8 @@ export default function MenuClient({
   const [checkoutError, setCheckoutError] = useState('')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [modalMods, setModalMods] = useState<Record<string, string[]>>({})
+  const [dietaryFilter, setDietaryFilter] = useState<Set<string>>(new Set())
+  const [productNote, setProductNote] = useState('')
 
   useEffect(() => {
     if (!showQr || qrDataUrl) return
@@ -192,7 +196,7 @@ export default function MenuClient({
       .then(url => setQrDataUrl(url)).catch(() => null)
   }, [showQr, qrDataUrl, menuUrl])
 
-  useEffect(() => { setModalMods({}) }, [productModal])
+  useEffect(() => { setModalMods({}); setProductNote('') }, [productModal])
 
   const catIds    = new Set(cats.map(c => c.id))
   const products  = rawProducts
@@ -213,11 +217,25 @@ export default function MenuClient({
   const cartCount   = cart.reduce((s, i) => s + i.qty, 0)
   const cartTotal   = cart.reduce((s, i) => s + i.unit_price * i.qty, 0)
 
-  // Search filter — applies across all categories
+  // Search + dietary filter — applies across all categories
   const searchLow = searchQuery.toLowerCase().trim()
+  function matchesDietary(p: Product) {
+    if (dietaryFilter.has('GF') && !p.is_gluten_free) return false
+    if (dietaryFilter.has('V')  && !p.is_vegetarian) return false
+    if (dietaryFilter.has('VG') && !p.is_vegan) return false
+    return true
+  }
   function matchesSearch(p: Product) {
+    if (!matchesDietary(p)) return false
     if (!searchLow) return true
     return p.name.toLowerCase().includes(searchLow) || (p.description ?? '').toLowerCase().includes(searchLow)
+  }
+  function toggleDietary(tag: string) {
+    setDietaryFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag); else next.add(tag)
+      return next
+    })
   }
 
   function addToCart(p: Product) {
@@ -240,7 +258,7 @@ export default function MenuClient({
     })
   }
 
-  function addToCartWithMods(p: Product, groups: ModifierGroup[]) {
+  function addToCartWithMods(p: Product, groups: ModifierGroup[], note?: string) {
     const mods: CartItem['modifiers'] = []
     let extraCents = 0
     for (const g of groups) {
@@ -250,12 +268,14 @@ export default function MenuClient({
       }
     }
     const unitPrice = (Number(p.price) || 0) + extraCents / 100
+    const trimNote = note?.trim() || undefined
     setCart(c => {
-      if (mods.length > 0) return [...c, { product: p, qty: 1, unit_price: unitPrice, modifiers: mods }]
-      const idx = c.findIndex(i => i.product.id === p.id && i.modifiers.length === 0)
+      if (mods.length > 0 || trimNote) return [...c, { product: p, qty: 1, unit_price: unitPrice, modifiers: mods, note: trimNote }]
+      const idx = c.findIndex(i => i.product.id === p.id && i.modifiers.length === 0 && !i.note)
       if (idx >= 0) { const n = [...c]; n[idx] = { ...n[idx], qty: n[idx].qty + 1 }; return n }
       return [...c, { product: p, qty: 1, unit_price: unitPrice, modifiers: [] }]
     })
+    setProductNote('')
   }
 
   function changeQty(idx: number, delta: number) {
@@ -291,6 +311,7 @@ export default function MenuClient({
           quantity: i.qty, unit_price: i.unit_price,
           modifiers: i.modifiers.map(m => ({ id: m.id, name: m.name, price_cents: m.priceCents })),
           ...(i.config ? { config: i.config } : {}),
+          ...(i.note ? { note: i.note } : {}),
         })),
       }),
     }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
@@ -419,9 +440,32 @@ export default function MenuClient({
         </div>
       </div>
 
-      {/* STICKY CATEGORY PILLS */}
+      {/* STICKY CATEGORY PILLS + DIETARY FILTERS */}
       {cats.length > 0 && (
         <div style={{ position: 'sticky', top: 0, zIndex: 100, background: CANVAS, paddingBottom: 2, borderBottom: '1px solid ' + BORDER }}>
+          {/* Dietary filter chips */}
+          <div style={{ display: 'flex', gap: 6, padding: '8px 20px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {(['GF', 'V', 'VG'] as const).map(tag => {
+              const active = dietaryFilter.has(tag)
+              const label = tag === 'GF' ? 'Gluten Free' : tag === 'V' ? 'Vegetarian' : 'Vegan'
+              return (
+                <button
+                  key={tag}
+                  onClick={() => toggleDietary(tag)}
+                  style={{
+                    flexShrink: 0, padding: '5px 14px', borderRadius: 9999,
+                    border: '1.5px solid ' + (active ? INK : BORDER),
+                    background: active ? INK : WHITE,
+                    color: active ? WHITE : MUTED,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: SANS, whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
           <div style={{ overflowX: 'auto', scrollbarWidth: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px' }}>
             {cats.map(c => (
               <button
@@ -506,8 +550,9 @@ export default function MenuClient({
                   <div style={{ fontSize: 18, fontWeight: 800, color: INK, fontFamily: SANS, lineHeight: 1.2, marginBottom: 4 }}>
                     {(() => { const [a, b] = splitNameAccent(heroProduct.name); return (<>{a}<span style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 700 }}>{b}</span></>) })()}
                   </div>
+                  <DietaryBadges product={heroProduct} />
                   {showDesc && heroProduct.description && (
-                    <div style={{ fontSize: 12, color: MUTED, marginBottom: 10, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+                    <div style={{ fontSize: 12, color: MUTED, marginBottom: 8, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', fontStyle: 'italic', fontFamily: SERIF }}>
                       {heroProduct.description}
                     </div>
                   )}
@@ -638,11 +683,13 @@ export default function MenuClient({
             </div>
 
             <div style={{ padding: '20px 20px 0' }}>
-              <h2 style={{ fontSize: 26, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: SANS, lineHeight: 1.2 }}>
+              <h2 style={{ fontSize: 26, fontWeight: 800, color: INK, margin: '0 0 6px', fontFamily: SANS, lineHeight: 1.2 }}>
                 {(() => { const [a, b] = splitNameAccent(productModal.name); return (<>{a}<span style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 700 }}>{b}</span></>) })()}
               </h2>
+              {/* Dietary badges on modal */}
+              <DietaryBadges product={productModal} />
               {productModal.description && (
-                <p style={{ fontSize: 14, fontStyle: 'italic', fontFamily: SERIF, color: MUTED, margin: '0 0 16px', lineHeight: 1.65 }}>
+                <p style={{ fontSize: 14, fontStyle: 'italic', fontFamily: SERIF, color: MUTED, margin: '10px 0 16px', lineHeight: 1.65 }}>
                   {productModal.description}
                 </p>
               )}
@@ -665,6 +712,27 @@ export default function MenuClient({
                 </div>
               )}
 
+              {/* Note input */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, display: 'block', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontFamily: SANS }}>
+                  Add a note <span style={{ fontWeight: 400, textTransform: 'none' as const }}>(optional)</span>
+                </label>
+                <textarea
+                  value={productNote}
+                  onChange={e => setProductNote(e.target.value.slice(0, 200))}
+                  placeholder="E.g. extra hot, no sugar, oat milk..."
+                  maxLength={200}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: 14, boxSizing: 'border-box' as const,
+                    border: '1.5px solid ' + BORDER, fontSize: 14, color: INK, background: WHITE,
+                    fontFamily: SANS, outline: 'none', resize: 'none' as const, minHeight: 56, lineHeight: 1.5,
+                  }}
+                />
+                {productNote.length > 0 && (
+                  <div style={{ fontSize: 11, color: MUTED, textAlign: 'right', marginTop: 3 }}>{productNote.length}/200</div>
+                )}
+              </div>
+
               {modalError && <p style={{ fontSize: 12, color: MUTED, marginBottom: 8, lineHeight: 1.4 }}>{modalError}</p>}
             </div>
 
@@ -679,7 +747,7 @@ export default function MenuClient({
                   {'Earns ' + Math.round(liveTotal) + ' loyalty points'}
                 </div>
                 <button
-                  onClick={() => { if (!modalError) { addToCartWithMods(productModal, modGroups); setProductModal(null) } }}
+                  onClick={() => { if (!modalError) { addToCartWithMods(productModal, modGroups, productNote); setProductModal(null) } }}
                   disabled={!!modalError}
                   style={{
                     width: '100%', padding: '15px 0', borderRadius: 9999, border: 'none',
@@ -733,6 +801,12 @@ export default function MenuClient({
                             {'NO ' + r.name.toUpperCase()}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {item.note && (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 4 }}>
+                        <span style={{ fontSize: 11, lineHeight: 1.4 }}>📝</span>
+                        <span style={{ fontSize: 11, color: MUTED, fontStyle: 'italic', lineHeight: 1.4, flex: 1 }}>{item.note}</span>
                       </div>
                     )}
                     <div style={{ fontSize: 15, fontWeight: 800, color: INK, marginTop: 4, fontFamily: SANS }}>{fmtPrice(item.unit_price * item.qty)}</div>
@@ -908,6 +982,28 @@ export default function MenuClient({
   )
 }
 
+// ── Dietary badges ────────────────────────────────────────────────────────────
+
+function DietaryBadges({ product, small }: { product: Product; small?: boolean }) {
+  const badges: string[] = []
+  if (product.is_gluten_free) badges.push('GF')
+  if (product.is_vegan) badges.push('VG')
+  else if (product.is_vegetarian) badges.push('V')
+  if (badges.length === 0) return null
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: small ? 3 : 6 }}>
+      {badges.map(b => (
+        <span key={b} style={{
+          fontSize: small ? 9 : 10, fontWeight: 700, color: '#374151',
+          border: '1px solid #d1d5db', background: WHITE,
+          borderRadius: 9999, padding: small ? '1px 5px' : '2px 7px',
+          letterSpacing: '0.04em', fontFamily: SANS,
+        }}>{b}</span>
+      ))}
+    </div>
+  )
+}
+
 // ── Product card (2-col grid) ─────────────────────────────────────────────────
 
 function ProductCard({
@@ -938,11 +1034,12 @@ function ProductCard({
               {badge}
             </span>
           )}
-          <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: SANS, lineHeight: 1.3 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: SANS, lineHeight: 1.3, marginBottom: 2 }}>
             {a}<span style={{ fontFamily: SERIF, fontStyle: 'italic' }}>{b}</span>
           </div>
+          <DietaryBadges product={p} small />
           {showDesc && p.description && (
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 3, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 2, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', fontStyle: 'italic', fontFamily: SERIF }}>
               {p.description}
             </div>
           )}

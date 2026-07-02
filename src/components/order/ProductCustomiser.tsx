@@ -52,6 +52,7 @@ export interface BuildConfig {
   basePrice: number
   extrasCents: number
   total: number
+  note?: string
 }
 
 // ── Name → IngredientKey helpers ──────────────────────────────────────────────
@@ -258,6 +259,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
   } = useOrderBuilder({ defaultKeys, modifierMap, basePrice: productPrice, initialProtein })
 
   const [draggingId, setDraggingId] = useState<IngredientKey | null>(null)
+  const [buildNote, setBuildNote] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -320,6 +322,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
       basePrice: productPrice ?? 0,
       extrasCents,
       total,
+      note: buildNote.trim() || undefined,
     })
   }
 
@@ -383,6 +386,27 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
           onTap={handleTap}
           onQtyChange={handleQtyChange}
         />
+
+        {/* Note input */}
+        <div style={{ width: '100%', maxWidth: 480, padding: '8px 16px 80px' }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontFamily: "'Outfit', Inter, sans-serif" }}>
+            Add a note
+          </label>
+          <textarea
+            value={buildNote}
+            onChange={e => setBuildNote(e.target.value.slice(0, 200))}
+            placeholder="E.g. extra hot, no salt..."
+            maxLength={200}
+            style={{
+              width: '100%', padding: '10px 14px', borderRadius: 14, boxSizing: 'border-box' as const,
+              border: '1.5px solid #e5e7eb', fontSize: 14, color: '#0a0a0a', background: '#ffffff',
+              fontFamily: "'Outfit', Inter, sans-serif", outline: 'none', resize: 'none' as const, minHeight: 60, lineHeight: 1.5,
+            }}
+          />
+          {buildNote.length > 0 && (
+            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'right', marginTop: 3 }}>{buildNote.length}/200</div>
+          )}
+        </div>
 
         {/* Fixed price bar */}
         <PriceBar

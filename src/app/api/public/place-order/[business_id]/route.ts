@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     customer_name: string
     customer_phone?: string
     customer_email?: string
-    items: Array<{ product_id: string; product_name: string; quantity: number; unit_price: number; modifiers?: { id: string; name: string; price_cents: number }[]; config?: { mode: string; layers: string[]; added: unknown[]; removed: unknown[] } }>
+    items: Array<{ product_id: string; product_name: string; quantity: number; unit_price: number; modifiers?: { id: string; name: string; price_cents: number }[]; config?: { mode: string; layers: string[]; added: unknown[]; removed: unknown[] }; note?: string }>
     notes?: string
     special_instructions?: string
     payment_method?: string
