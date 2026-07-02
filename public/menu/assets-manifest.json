@@ -3,6 +3,8 @@
     "bun-top": "/menu/_lib/ingredients/bun-top.png",
     "bun-bottom": "/menu/_lib/ingredients/bun-bottom.png",
     "patty": "/menu/_lib/ingredients/patty.png",
+    "patty-chicken": "/menu/_lib/ingredients/patty-chicken.png",
+    "patty-veg": "/menu/_lib/ingredients/patty-veg.png",
     "cheese": "/menu/_lib/ingredients/cheese.png",
     "tomato": "/menu/_lib/ingredients/tomato.png",
     "lettuce": "/menu/_lib/ingredients/lettuce.png",

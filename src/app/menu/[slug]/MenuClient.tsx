@@ -36,9 +36,9 @@ interface Product {
   image_url: string | null; sort_order: number | null; category_id: string | null
   ordering_mode: string | null; ordering_archetype: string | null
 }
-interface CartItem { product: Product; qty: number; unit_price: number; modifiers: { id: string; name: string; priceCents: number }[]; config?: { mode: 'build'; layers: string[] } }
-interface ModifierOption { id: string; name: string; priceCents: number; displayOrder: number | null }
-interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; archetypeSlot: string | null; options: ModifierOption[] }
+interface CartItem { product: Product; qty: number; unit_price: number; modifiers: { id: string; name: string; priceCents: number }[]; config?: { mode: 'build'; layers: string[]; added: { id: string; name: string; priceCents: number }[]; removed: { name: string }[] } }
+interface ModifierOption { id: string; name: string; priceCents: number; isDefault: boolean; allowQuantity: boolean; maxQuantity: number; displayOrder: number | null }
+interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; allowQuantity: boolean; selectionType: string; archetypeSlot: string | null; options: ModifierOption[] }
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
 
 interface Props {
@@ -557,7 +557,7 @@ export default function MenuClient({
                 qty: 1,
                 unit_price: cfg.total,
                 modifiers: cfg.modifiers,
-                config: { mode: 'build', layers: cfg.layers as string[] },
+                config: { mode: 'build', layers: cfg.layers as string[], added: cfg.added, removed: cfg.removed },
               }])
               setProductModal(null)
             }}

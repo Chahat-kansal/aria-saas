@@ -22,7 +22,7 @@ export default function LayeredPreviewPage() {
     })
   }
 
-  const layers = composeBurger([...active])
+  const layers = composeBurger({ defaults: [...active] })
 
   return (
     <div

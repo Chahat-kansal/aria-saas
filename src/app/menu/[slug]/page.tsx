@@ -136,11 +136,11 @@ export default async function MenuPage({ params }: Props) {
   const orderingEnabled = (onlineRes.data?.enabled === true) && (onlineRes.data?.accept_orders === true)
 
   // ── Modifier groups (ordering only — skip when gate is off to avoid extra queries) ──
-  type ModifierOption = { id: string; name: string; priceCents: number; displayOrder: number | null }
-  type ModifierGroup  = { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; archetypeSlot: string | null; options: ModifierOption[] }
+  type ModifierOption = { id: string; name: string; priceCents: number; isDefault: boolean; allowQuantity: boolean; maxQuantity: number; displayOrder: number | null }
+  type ModifierGroup  = { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number; allowQuantity: boolean; selectionType: string; archetypeSlot: string | null; options: ModifierOption[] }
   type RawPmg = { product_id: string; display_order: number | null; override_required: boolean | null; override_min: number | null; override_max: number | null; group_id: string }
-  type RawGrp = { id: string; name: string; min_selections: number | null; max_selections: number | null; is_required: boolean | null; display_order: number | null; archetype_slot: string | null }
-  type RawMod = { id: string; name: string; price_cents: number | null; display_order: number | null; group_id: string }
+  type RawGrp = { id: string; name: string; min_selections: number | null; max_selections: number | null; is_required: boolean | null; display_order: number | null; archetype_slot: string | null; allow_quantity: boolean | null; selection_type: string | null }
+  type RawMod = { id: string; name: string; price_cents: number | null; display_order: number | null; group_id: string; is_default: boolean | null; allow_quantity: boolean | null; max_quantity: number | null }
   const productModifiers: Record<string, ModifierGroup[]> = {}
 
   if (orderingEnabled) {
@@ -154,8 +154,8 @@ export default async function MenuPage({ params }: Props) {
       if (pmgRows.length > 0) {
         const groupIds = [...new Set(pmgRows.map(r => r.group_id))]
         const [grpRes, modRes] = await Promise.all([
-          supabaseAdmin.from('pos_modifier_groups').select('id, name, min_selections, max_selections, is_required, display_order, archetype_slot').in('id', groupIds),
-          supabaseAdmin.from('pos_modifiers').select('id, name, price_cents, display_order, group_id').in('group_id', groupIds).eq('is_active', true).order('display_order', { ascending: true, nullsFirst: false }),
+          supabaseAdmin.from('pos_modifier_groups').select('id, name, min_selections, max_selections, is_required, display_order, archetype_slot, allow_quantity, selection_type').in('id', groupIds),
+          supabaseAdmin.from('pos_modifiers').select('id, name, price_cents, display_order, group_id, is_default, allow_quantity, max_quantity').in('group_id', groupIds).eq('is_active', true).order('display_order', { ascending: true, nullsFirst: false }),
         ])
         const grpMap: Record<string, RawGrp> = {}
         ;(grpRes.data ?? []).forEach(g => { grpMap[(g as RawGrp).id] = g as RawGrp })
@@ -163,7 +163,7 @@ export default async function MenuPage({ params }: Props) {
         ;(modRes.data ?? []).forEach(m => {
           const rm = m as RawMod
           if (!modsByGrp[rm.group_id]) modsByGrp[rm.group_id] = []
-          modsByGrp[rm.group_id].push({ id: rm.id, name: rm.name, priceCents: rm.price_cents ?? 0, displayOrder: rm.display_order ?? null })
+          modsByGrp[rm.group_id].push({ id: rm.id, name: rm.name, priceCents: rm.price_cents ?? 0, isDefault: rm.is_default ?? false, allowQuantity: rm.allow_quantity ?? false, maxQuantity: rm.max_quantity ?? 1, displayOrder: rm.display_order ?? null })
         })
         const byProd: Record<string, RawPmg[]> = {}
         pmgRows.forEach(r => { if (!byProd[r.product_id]) byProd[r.product_id] = []; byProd[r.product_id].push(r) })
@@ -182,6 +182,8 @@ export default async function MenuPage({ params }: Props) {
                 isRequired: r.override_required !== null ? r.override_required : (g.is_required ?? false),
                 minSelections: r.override_min !== null ? r.override_min : (g.min_selections ?? 0),
                 maxSelections: r.override_max !== null ? r.override_max : (g.max_selections ?? 1),
+                allowQuantity: g.allow_quantity ?? false,
+                selectionType: g.selection_type ?? 'multi_select',
                 archetypeSlot: g.archetype_slot ?? null,
                 options: opts,
               } as ModifierGroup
