@@ -165,6 +165,7 @@ export default function Coffee3dPreviewPage() {
         foam={resolved.foam}
         ice={resolved.ice}
         size={320}
+        isTransparent={resolved.isTransparent}
         clipsEnabled={resolved.vesselFamily === 'iced'}
         clipPath="/menu/_lib/clips/caramel-pour.webm"
         clipPathMov="/menu/_lib/clips/caramel-pour.mov"
@@ -196,6 +197,9 @@ export default function Coffee3dPreviewPage() {
         </div>
         <div style={{ color: '#888' }}>
           vessel family: {resolved.vesselFamily}
+        </div>
+        <div style={{ color: '#888' }}>
+          isTransparent: {String(resolved.isTransparent)} — fill mode: {resolved.isTransparent ? 'column (glass)' : 'disc (opaque cup)'}
         </div>
         <div style={{ color: resolved.vesselFamily === 'iced' ? '#d9f54e' : '#888' }}>
           clips: {resolved.vesselFamily === 'iced' ? 'ENABLED — iced family (toggle syrup to test)' : 'off — hot/smoothie vessels (no clip until hot-cup asset exists)'}

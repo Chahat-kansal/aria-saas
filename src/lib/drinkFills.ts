@@ -66,6 +66,7 @@ export interface ResolvedVessel {
   foam: boolean
   ice: boolean
   vesselFamily: VesselFamily
+  isTransparent: boolean
 }
 
 // Modifiers that lighten the fill color (milk, oat milk)
@@ -106,6 +107,16 @@ const VESSEL_FAMILY: Record<VesselKey, VesselFamily> = {
   'smoothie':          'smoothie',
 }
 
+// true = render liquid as a column inside clear glass walls
+// false = render liquid as a top disc only (ceramic/paper cup — walls are opaque)
+const VESSEL_TRANSPARENT: Record<VesselKey, boolean> = {
+  'cup-hot-dinein':    false,
+  'cup-hot-takeaway':  false,
+  'glass-iced-dinein': true,
+  'cup-iced-takeaway': false,
+  'smoothie':          true,
+}
+
 export interface ModifierFlags {
   milk?: boolean      // dairy/oat/soy — lightens fill
   extraMilk?: boolean // double-lightens
@@ -137,6 +148,7 @@ export function resolveVessel(
     foam: def.foam,
     ice: def.ice,
     vesselFamily: VESSEL_FAMILY[vesselKey],
+    isTransparent: VESSEL_TRANSPARENT[vesselKey],
   }
 }
 

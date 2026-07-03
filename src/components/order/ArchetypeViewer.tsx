@@ -16,6 +16,7 @@ export interface ArchetypeViewerProps {
   clipsEnabled?: boolean
   clipPath?: string    // VP9-alpha .webm — e.g. '/menu/_lib/clips/caramel-pour.webm'
   clipPathMov?: string // HEVC-alpha .mov Safari fallback
+  isTransparent?: boolean // true=column inside clear glass; false=top disc for opaque ceramic/paper
 }
 
 // ── Internals — shared across animation loop + effects ────────────────────────
@@ -33,6 +34,7 @@ interface ThreeState {
   vesselBottom: number
   maxLiquidHeight: number
   innerRadius: number
+  isTransparentVessel: boolean
   isDragging: boolean
   lastX: number
   lastY: number
@@ -98,6 +100,7 @@ export function ArchetypeViewer({
   clipsEnabled = false,
   clipPath,
   clipPathMov,
+  isTransparent = false,
 }: ArchetypeViewerProps) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const videoRef   = useRef<HTMLVideoElement>(null)
@@ -112,6 +115,7 @@ export function ArchetypeViewer({
     model: null, liquidMesh: null, foamMesh: null, iceMeshes: [],
     currentFill: 0, targetFill: 0,
     vesselBottom: 0, maxLiquidHeight: 1, innerRadius: 0.15,
+    isTransparentVessel: false,
     isDragging: false, lastX: 0, lastY: 0, rafId: 0,
   })
 
@@ -172,16 +176,27 @@ export function ArchetypeViewer({
       if (s.liquidMesh && Math.abs(s.targetFill - s.currentFill) > 0.001) {
         s.currentFill += (s.targetFill - s.currentFill) * 0.06
         const h = s.maxLiquidHeight * s.currentFill
-        s.liquidMesh.scale.y = Math.max(h, 0.0001)
-        s.liquidMesh.position.y = s.vesselBottom + h / 2
-        s.liquidMesh.visible = s.currentFill > 0.01
 
-        // Foam follows top of liquid
-        if (s.foamMesh) {
-          s.foamMesh.position.y = s.vesselBottom + h + 0.01
-          s.foamMesh.visible = foam && s.currentFill > 0.1
+        if (s.isTransparentVessel) {
+          // Column mode (clear glass/smoothie): scale cylinder height, rise from floor
+          s.liquidMesh.scale.y = Math.max(h, 0.0001)
+          s.liquidMesh.position.y = s.vesselBottom + h / 2
+          s.liquidMesh.visible = s.currentFill > 0.01
+          if (s.foamMesh) {
+            s.foamMesh.position.y = s.vesselBottom + h + 0.01
+            s.foamMesh.visible = foam && s.currentFill > 0.1
+          }
+        } else {
+          // Disc mode (opaque ceramic/paper cup): flat circle rises to coffee surface
+          s.liquidMesh.position.y = s.vesselBottom + h
+          s.liquidMesh.visible = s.currentFill > 0.01
+          if (s.foamMesh) {
+            s.foamMesh.position.y = s.vesselBottom + h + 0.008
+            s.foamMesh.visible = foam && s.currentFill > 0.1
+          }
         }
-        // Ice floats near top of fill
+
+        // Ice floats near top of fill (visible through clear vessel or cup opening)
         if (s.iceMeshes.length > 0) {
           const topY = s.vesselBottom + h - 0.04
           s.iceMeshes.forEach((cube, i) => {
@@ -296,34 +311,57 @@ export function ArchetypeViewer({
 
         // Vessel interior geometry estimates
         const vesselH = sz.y
-        s.vesselBottom  = -vesselH * 0.44        // inside floor of vessel
-        s.maxLiquidHeight = vesselH * 0.70        // fill height to near rim
-        s.innerRadius   = Math.min(sz.x, sz.z) * 0.30
+        s.vesselBottom        = -vesselH * 0.44
+        s.maxLiquidHeight     = vesselH * 0.70
+        s.isTransparentVessel = isTransparent
 
-        // ── Liquid mesh (CylinderGeometry height=1, scaled via scale.y) ────────
-        const liqGeo = new THREE.CylinderGeometry(s.innerRadius, s.innerRadius * 0.92, 1, 36, 1, false)
         const liqMat = makeLiquidMaterial(fillColor)
-        const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
-        liquidMesh.scale.y = 0.0001
-        liquidMesh.position.y = s.vesselBottom
-        liquidMesh.visible = false
-        liquidMesh.renderOrder = 1
-        s.scene.add(liquidMesh)
-        s.liquidMesh = liquidMesh
 
-        // ── Foam disc ──────────────────────────────────────────────────────────
-        const foamGeo = new THREE.CylinderGeometry(s.innerRadius * 1.02, s.innerRadius * 0.98, 0.04, 36)
-        const foamMat = new THREE.MeshStandardMaterial({
-          color: new THREE.Color(0.96, 0.92, 0.86),
-          roughness: 0.9, metalness: 0.0,
-          transparent: true, opacity: 0.92,
-        })
-        const foamMesh = new THREE.Mesh(foamGeo, foamMat)
-        foamMesh.position.y = s.vesselBottom
-        foamMesh.visible = false
-        foamMesh.renderOrder = 2
-        s.scene.add(foamMesh)
-        s.foamMesh = foamMesh
+        if (isTransparent) {
+          // ── Column liquid (clear glass / smoothie) ──────────────────────────
+          // Radius inset ~10 % from outer bounds to stay inside glass walls.
+          // Use sz.z (depth) as the width reference — handles don't inflate it.
+          s.innerRadius = Math.min(sz.x, sz.z) * 0.27
+          const liqGeo = new THREE.CylinderGeometry(s.innerRadius, s.innerRadius * 0.92, 1, 36, 1, false)
+          const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
+          liquidMesh.scale.y = 0.0001
+          liquidMesh.position.y = s.vesselBottom
+          liquidMesh.visible = false
+          liquidMesh.renderOrder = 1
+          s.scene.add(liquidMesh)
+          s.liquidMesh = liquidMesh
+
+          const foamGeo = new THREE.CylinderGeometry(s.innerRadius * 0.96, s.innerRadius * 0.96, 0.04, 36)
+          const foamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.96, 0.92, 0.86), roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.92 })
+          const foamMesh = new THREE.Mesh(foamGeo, foamMat)
+          foamMesh.position.y = s.vesselBottom
+          foamMesh.visible = false
+          foamMesh.renderOrder = 2
+          s.scene.add(foamMesh)
+          s.foamMesh = foamMesh
+        } else {
+          // ── Disc liquid (opaque ceramic / paper cup) ────────────────────────
+          // Flat circle at the coffee surface — no side walls, never bleeds through.
+          // Conservative radius: sz.z avoids handle inflation on mugs.
+          s.innerRadius = Math.min(sz.x, sz.z) * 0.24
+          const liqGeo = new THREE.CylinderGeometry(s.innerRadius, s.innerRadius, 0.012, 36, 1, false)
+          const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
+          liquidMesh.position.y = s.vesselBottom   // animation loop moves it up
+          liquidMesh.visible = false
+          liquidMesh.renderOrder = 1
+          s.scene.add(liquidMesh)
+          s.liquidMesh = liquidMesh
+
+          // Crema / foam ring sits just above the coffee disc
+          const foamGeo = new THREE.CylinderGeometry(s.innerRadius * 0.96, s.innerRadius * 0.96, 0.016, 36)
+          const foamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.96, 0.92, 0.86), roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.92 })
+          const foamMesh = new THREE.Mesh(foamGeo, foamMat)
+          foamMesh.position.y = s.vesselBottom
+          foamMesh.visible = false
+          foamMesh.renderOrder = 2
+          s.scene.add(foamMesh)
+          s.foamMesh = foamMesh
+        }
 
         // ── Ice cubes ──────────────────────────────────────────────────────────
         if (ice) {
@@ -361,7 +399,7 @@ export function ArchetypeViewer({
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelPath, ice, foam])
+  }, [modelPath, ice, foam, isTransparent])
 
   // ── Effect 3: react to fillColor / fillLevel changes ─────────────────────────
   useEffect(() => {
