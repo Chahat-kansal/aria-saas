@@ -11,6 +11,8 @@ export type VesselKey =
   | 'cup-iced-takeaway'
   | 'smoothie'
 
+export type VesselFamily = 'hot' | 'iced' | 'smoothie'
+
 export type OrderType = 'dine-in' | 'takeaway'
 
 export type DrinkType =
@@ -63,6 +65,7 @@ export interface ResolvedVessel {
   fillLevel: number
   foam: boolean
   ice: boolean
+  vesselFamily: VesselFamily
 }
 
 // Modifiers that lighten the fill color (milk, oat milk)
@@ -95,6 +98,14 @@ const VESSEL_PATH: Record<VesselKey, string> = {
   'smoothie':          '/menu/_lib/models/smoothie.glb',
 }
 
+const VESSEL_FAMILY: Record<VesselKey, VesselFamily> = {
+  'cup-hot-dinein':    'hot',
+  'cup-hot-takeaway':  'hot',
+  'glass-iced-dinein': 'iced',
+  'cup-iced-takeaway': 'iced',
+  'smoothie':          'smoothie',
+}
+
 export interface ModifierFlags {
   milk?: boolean      // dairy/oat/soy — lightens fill
   extraMilk?: boolean // double-lightens
@@ -125,6 +136,7 @@ export function resolveVessel(
     fillLevel: def.fillLevel,
     foam: def.foam,
     ice: def.ice,
+    vesselFamily: VESSEL_FAMILY[vesselKey],
   }
 }
 

@@ -165,7 +165,9 @@ export default function Coffee3dPreviewPage() {
         foam={resolved.foam}
         ice={resolved.ice}
         size={320}
-        clipsEnabled={false}
+        clipsEnabled={resolved.vesselFamily === 'iced'}
+        clipPath="/menu/_lib/clips/caramel-pour.webm"
+        clipPathMov="/menu/_lib/clips/caramel-pour.mov"
       />
 
       {/* ── Debug readout ────────────────────────────────────────────────── */}
@@ -193,7 +195,10 @@ export default function Coffee3dPreviewPage() {
           smoothie vessel: smoothie.glb (325 KB draco+webp, Y-up confirmed)
         </div>
         <div style={{ color: '#888' }}>
-          clips: off (caramel-pour.webm.mp4 present — enable clipsEnabled to test)
+          vessel family: {resolved.vesselFamily}
+        </div>
+        <div style={{ color: resolved.vesselFamily === 'iced' ? '#d9f54e' : '#888' }}>
+          clips: {resolved.vesselFamily === 'iced' ? 'ENABLED — iced family (toggle syrup to test)' : 'off — hot/smoothie vessels (no clip until hot-cup asset exists)'}
         </div>
       </div>
 
@@ -208,7 +213,8 @@ export default function Coffee3dPreviewPage() {
           { path: '/menu/_lib/models/cup-iced-takeaway.glb', status: 'present' },
           { path: '/menu/_lib/models/glass-iced-dinein.glb', status: 'present' },
           { path: '/menu/_lib/models/smoothie.glb',          status: 'present' },
-          { path: '/menu/_lib/clips/caramel-pour.webm.mp4',   status: 'present' },
+          { path: '/menu/_lib/clips/caramel-pour.webm',     status: 'MISSING — drop VP9-alpha webm here' },
+          { path: '/menu/_lib/clips/caramel-pour.mov',      status: 'MISSING — drop HEVC-alpha mov here' },
         ].map(({ path, status }) => (
           <div
             key={path}

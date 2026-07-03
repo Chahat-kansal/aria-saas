@@ -14,7 +14,8 @@ export interface ArchetypeViewerProps {
   ice?: boolean
   size?: number        // canvas width+height px (square)
   clipsEnabled?: boolean
-  clipPath?: string    // e.g. '/menu/_lib/clips/caramel-pour.webm'
+  clipPath?: string    // VP9-alpha .webm — e.g. '/menu/_lib/clips/caramel-pour.webm'
+  clipPathMov?: string // HEVC-alpha .mov Safari fallback
 }
 
 // ── Internals — shared across animation loop + effects ────────────────────────
@@ -96,10 +97,13 @@ export function ArchetypeViewer({
   size = 320,
   clipsEnabled = false,
   clipPath,
+  clipPathMov,
 }: ArchetypeViewerProps) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const videoRef   = useRef<HTMLVideoElement>(null)
-  const prevFillRef = useRef(0)
+  // Clip trigger: fire only on modifier-driven fillColor changes, not on mount or drink swap
+  const prevFillColorRef = useRef(fillColor)
+  const modelChangedRef  = useRef(false)
   const [badgeVisible, setBadgeVisible] = useState(true)
   const [clipPlaying, setClipPlaying] = useState(false)
 
@@ -241,6 +245,9 @@ export function ArchetypeViewer({
     const s = S.current
     if (!s.scene) return
 
+    // Signal Effect 3 that this fillColor change comes from a drink/model swap
+    modelChangedRef.current = true
+
     // Teardown previous model + fill meshes
     function disposeObj(obj: THREE.Object3D | null) {
       if (!obj) return
@@ -360,13 +367,19 @@ export function ArchetypeViewer({
   useEffect(() => {
     const s = S.current
 
-    // Pour clip: trigger on fill level increase
-    if (clipsEnabled && fillLevel > prevFillRef.current && videoRef.current) {
-      setClipPlaying(true)
+    // Pour clip: fire ONLY when a modifier changes fillColor on the same vessel.
+    // Skip: initial mount (prevFillColorRef starts equal to fillColor) and
+    // drink/vessel swaps (modelChangedRef set true by Effect 2).
+    const colorChanged     = fillColor !== prevFillColorRef.current
+    const fromModelChange  = modelChangedRef.current
+    modelChangedRef.current   = false
+    prevFillColorRef.current  = fillColor
+
+    if (clipsEnabled && colorChanged && !fromModelChange && videoRef.current) {
       videoRef.current.currentTime = 0
       videoRef.current.play().catch(() => null)
+      setClipPlaying(true)
     }
-    prevFillRef.current = fillLevel
 
     s.targetFill = fillLevel
     if (s.liquidMesh) updateLiquidColor(s.liquidMesh, fillColor)
@@ -396,13 +409,15 @@ export function ArchetypeViewer({
         style={{ display: 'block', cursor: 'grab', width: '100%', height: '100%' }}
       />
 
-      {/* Pour clip overlay */}
-      {clipsEnabled && clipPath && (
+      {/* Pour clip overlay — VP9-alpha WebM composites without black box.
+          Show element whenever clipsEnabled so videoRef is always mounted;
+          visibility controlled by opacity. */}
+      {clipsEnabled && (clipPath || clipPathMov) && (
         <video
           ref={videoRef}
-          src={clipPath}
           muted
           playsInline
+          preload="auto"
           onEnded={() => setClipPlaying(false)}
           style={{
             position: 'absolute',
@@ -412,8 +427,12 @@ export function ArchetypeViewer({
             pointerEvents: 'none',
             opacity: clipPlaying ? 1 : 0,
             transition: 'opacity 0.3s ease',
+            background: 'transparent',
           }}
-        />
+        >
+          {clipPath && <source src={clipPath} type="video/webm; codecs=vp9" />}
+          {clipPathMov && <source src={clipPathMov} type="video/mp4; codecs=hvc1" />}
+        </video>
       )}
 
       {/* "360° drag to rotate" badge */}
