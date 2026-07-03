@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+import { buildProceduralVessel } from '@/components/order/ProceduralVessel'
+import type { VesselKey } from '@/lib/drinkFills'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +19,8 @@ export interface ArchetypeViewerProps {
   clipPath?: string    // VP9-alpha .webm — e.g. '/menu/_lib/clips/caramel-pour.webm'
   clipPathMov?: string // HEVC-alpha .mov Safari fallback
   isTransparent?: boolean // true=column inside clear glass; false=top disc for opaque ceramic/paper
+  sourceType?: 'glb' | 'procedural' // default 'glb'; 'procedural' skips GLB load entirely
+  vesselKey?: VesselKey              // required when sourceType==='procedural'
 }
 
 // ── Internals — shared across animation loop + effects ────────────────────────
@@ -88,6 +92,81 @@ function updateLiquidColor(mesh: THREE.Mesh, fillColor: string) {
   mat.uniforms.uBottomColor.value.set(base.x * 0.5, base.y * 0.5, base.z * 0.5)
 }
 
+// ── Fill mesh factory — shared by GLB and procedural paths ───────────────────
+// Creates liquid, foam, and ice meshes and adds them to the scene.
+// Dimensions come from s.innerRadius / s.vesselBottom / s.maxLiquidHeight
+// (set by the caller before invoking this).
+function buildFillMeshes(
+  s: ThreeState,
+  fillColor: string,
+  transparent: boolean,
+  ice: boolean,
+): void {
+  if (!s.scene) return
+  const r   = s.innerRadius
+  const liqMat = makeLiquidMaterial(fillColor)
+
+  if (transparent) {
+    const liqGeo = new THREE.CylinderGeometry(r, r * 0.92, 1, 36, 1, false)
+    const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
+    liquidMesh.scale.y = 0.0001
+    liquidMesh.position.y = s.vesselBottom
+    liquidMesh.visible = false
+    liquidMesh.renderOrder = 1
+    s.scene.add(liquidMesh)
+    s.liquidMesh = liquidMesh
+
+    const foamGeo = new THREE.CylinderGeometry(r * 0.96, r * 0.96, 0.04, 36)
+    const foamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.96, 0.92, 0.86), roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.92 })
+    const foamMesh = new THREE.Mesh(foamGeo, foamMat)
+    foamMesh.position.y = s.vesselBottom
+    foamMesh.visible = false
+    foamMesh.renderOrder = 2
+    s.scene.add(foamMesh)
+    s.foamMesh = foamMesh
+  } else {
+    const liqGeo = new THREE.CylinderGeometry(r, r, 0.012, 36, 1, false)
+    const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
+    liquidMesh.position.y = s.vesselBottom
+    liquidMesh.visible = false
+    liquidMesh.renderOrder = 1
+    s.scene.add(liquidMesh)
+    s.liquidMesh = liquidMesh
+
+    const foamGeo = new THREE.CylinderGeometry(r * 0.96, r * 0.96, 0.016, 36)
+    const foamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.96, 0.92, 0.86), roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.92 })
+    const foamMesh = new THREE.Mesh(foamGeo, foamMat)
+    foamMesh.position.y = s.vesselBottom
+    foamMesh.visible = false
+    foamMesh.renderOrder = 2
+    s.scene.add(foamMesh)
+    s.foamMesh = foamMesh
+  }
+
+  if (ice) {
+    const iceGeo = new THREE.BoxGeometry(r * 0.45, r * 0.42, r * 0.45)
+    const iceMat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(0.88, 0.96, 1.0),
+      transparent: true, opacity: 0.52,
+      roughness: 0.04, metalness: 0.0,
+      transmission: 0.45, ior: 1.31,
+    })
+    const OFFSETS: Array<[number, number]> = [
+      [0, 0], [r * 0.5, r * 0.3], [-r * 0.45, r * 0.1],
+      [r * 0.15, -r * 0.5], [-r * 0.2, -r * 0.35],
+    ]
+    s.iceMeshes = OFFSETS.map(([ox, oz], i) => {
+      const cube = new THREE.Mesh(iceGeo, iceMat)
+      cube.position.set(ox, s.vesselBottom + s.maxLiquidHeight * 0.72, oz)
+      cube.rotation.set(0.2 * i, 0.6 * i, 0.3 * i)
+      cube.visible = false
+      cube.renderOrder = 3
+      s.scene!.add(cube)
+      return cube
+    })
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function ArchetypeViewer({
@@ -101,6 +180,8 @@ export function ArchetypeViewer({
   clipPath,
   clipPathMov,
   isTransparent = false,
+  sourceType = 'glb',
+  vesselKey,
 }: ArchetypeViewerProps) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const videoRef   = useRef<HTMLVideoElement>(null)
@@ -128,11 +209,14 @@ export function ArchetypeViewer({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(size, size)
     renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.1
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     s.renderer = renderer
 
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0xfafafa)
     s.scene = scene
 
     const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 50)
@@ -255,7 +339,7 @@ export function ArchetypeViewer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size])
 
-  // ── Effect 2: load/reload GLB when modelPath or foam/ice changes ─────────────
+  // ── Effect 2: build vessel (procedural) or load GLB when key props change ─────
   useEffect(() => {
     const s = S.current
     if (!s.scene) return
@@ -283,6 +367,27 @@ export function ArchetypeViewer({
     s.model = null; s.liquidMesh = null; s.foamMesh = null; s.iceMeshes = []
     s.currentFill = 0; s.targetFill = fillLevel
 
+    if (sourceType === 'procedural' && vesselKey) {
+      // ── Procedural path — build geometry synchronously ────────────────────
+      const result = buildProceduralVessel(vesselKey)
+      result.group.traverse(child => {
+        const m = child as THREE.Mesh
+        if (m.isMesh) { m.castShadow = true; m.receiveShadow = true }
+      })
+      // Tilt vessel ~8° toward camera so interior (coffee surface / liquid) is visible
+      result.group.rotation.x = -0.14
+      s.scene.add(result.group)
+      s.model                = result.group
+      s.isTransparentVessel  = result.isTransparent
+      s.innerRadius          = result.innerRadius
+      s.vesselBottom         = result.vesselBottom
+      s.maxLiquidHeight      = result.innerHeight
+      buildFillMeshes(s, fillColor, result.isTransparent, ice)
+      s.targetFill = fillLevel
+      return
+    }
+
+    // ── GLB path — async load ─────────────────────────────────────────────────
     const dracoLoader = new DRACOLoader()
     dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/')
     const loader = new GLTFLoader()
@@ -301,99 +406,26 @@ export function ArchetypeViewer({
           if (m.isMesh) { m.castShadow = true; m.receiveShadow = true }
         })
 
-        // Center model at origin
-        const box = new THREE.Box3().setFromObject(model)
+        const box    = new THREE.Box3().setFromObject(model)
         const center = box.getCenter(new THREE.Vector3())
-        const sz = box.getSize(new THREE.Vector3())
+        const sz     = box.getSize(new THREE.Vector3())
         model.position.set(-center.x, -center.y + sz.y * 0.05, -center.z)
         s.scene.add(model)
         s.model = model
 
-        // Vessel interior geometry estimates
-        const vesselH = sz.y
+        const vesselH         = sz.y
         s.vesselBottom        = -vesselH * 0.44
-        s.maxLiquidHeight     = vesselH * 0.70
         s.isTransparentVessel = isTransparent
 
-        const liqMat = makeLiquidMaterial(fillColor)
-
         if (isTransparent) {
-          // ── Column liquid (clear glass / smoothie) ──────────────────────────
-          // Radius inset ~10 % from outer bounds to stay inside glass walls.
-          // Use sz.z (depth) as the width reference — handles don't inflate it.
-          s.innerRadius = Math.min(sz.x, sz.z) * 0.27
-          const liqGeo = new THREE.CylinderGeometry(s.innerRadius, s.innerRadius * 0.92, 1, 36, 1, false)
-          const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
-          liquidMesh.scale.y = 0.0001
-          liquidMesh.position.y = s.vesselBottom
-          liquidMesh.visible = false
-          liquidMesh.renderOrder = 1
-          s.scene.add(liquidMesh)
-          s.liquidMesh = liquidMesh
-
-          const foamGeo = new THREE.CylinderGeometry(s.innerRadius * 0.96, s.innerRadius * 0.96, 0.04, 36)
-          const foamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.96, 0.92, 0.86), roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.92 })
-          const foamMesh = new THREE.Mesh(foamGeo, foamMat)
-          foamMesh.position.y = s.vesselBottom
-          foamMesh.visible = false
-          foamMesh.renderOrder = 2
-          s.scene.add(foamMesh)
-          s.foamMesh = foamMesh
+          s.innerRadius     = Math.min(sz.x, sz.z) * 0.27
+          s.maxLiquidHeight = vesselH * 0.70
         } else {
-          // ── Disc liquid (opaque ceramic / paper cup) ────────────────────────
-          // Flat circle at the coffee surface — no side walls, never bleeds through.
-          // Conservative radius: sz.z avoids handle inflation on mugs.
-          // maxLiquidHeight override: reach near the cup rim so disc is visible
-          // through the opening at the camera angle (0.70 default stops 30% short).
-          s.innerRadius = Math.min(sz.x, sz.z) * 0.24
+          s.innerRadius     = Math.min(sz.x, sz.z) * 0.24
           s.maxLiquidHeight = vesselH * 0.93
-          const liqGeo = new THREE.CylinderGeometry(s.innerRadius, s.innerRadius, 0.012, 36, 1, false)
-          const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
-          liquidMesh.position.y = s.vesselBottom   // animation loop moves it up
-          liquidMesh.visible = false
-          liquidMesh.renderOrder = 1
-          s.scene.add(liquidMesh)
-          s.liquidMesh = liquidMesh
-
-          // Crema / foam ring sits just above the coffee disc
-          const foamGeo = new THREE.CylinderGeometry(s.innerRadius * 0.96, s.innerRadius * 0.96, 0.016, 36)
-          const foamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.96, 0.92, 0.86), roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.92 })
-          const foamMesh = new THREE.Mesh(foamGeo, foamMat)
-          foamMesh.position.y = s.vesselBottom
-          foamMesh.visible = false
-          foamMesh.renderOrder = 2
-          s.scene.add(foamMesh)
-          s.foamMesh = foamMesh
         }
 
-        // ── Ice cubes ──────────────────────────────────────────────────────────
-        if (ice) {
-          const iceGeo = new THREE.BoxGeometry(s.innerRadius * 0.45, s.innerRadius * 0.42, s.innerRadius * 0.45)
-          const iceMat = new THREE.MeshPhysicalMaterial({
-            color: new THREE.Color(0.88, 0.96, 1.0),
-            transparent: true, opacity: 0.52,
-            roughness: 0.04, metalness: 0.0,
-            transmission: 0.45, ior: 1.31,
-          })
-          const OFFSETS: Array<[number, number]> = [
-            [0, 0], [s.innerRadius * 0.5, s.innerRadius * 0.3],
-            [-s.innerRadius * 0.45, s.innerRadius * 0.1],
-            [s.innerRadius * 0.15, -s.innerRadius * 0.5],
-            [-s.innerRadius * 0.2, -s.innerRadius * 0.35],
-          ]
-          const cubes = OFFSETS.map(([ox, oz], i) => {
-            const cube = new THREE.Mesh(iceGeo, iceMat)
-            cube.position.set(ox, s.vesselBottom + s.maxLiquidHeight * 0.72, oz)
-            cube.rotation.set(0.2 * i, 0.6 * i, 0.3 * i)
-            cube.visible = false
-            cube.renderOrder = 3
-            s.scene!.add(cube)
-            return cube
-          })
-          s.iceMeshes = cubes
-        }
-
-        // Kick off fill animation
+        buildFillMeshes(s, fillColor, isTransparent, ice)
         s.targetFill = fillLevel
       },
       undefined,
@@ -402,7 +434,7 @@ export function ArchetypeViewer({
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelPath, ice, foam, isTransparent])
+  }, [modelPath, vesselKey, sourceType, ice, foam, isTransparent])
 
   // ── Effect 3: react to fillColor / fillLevel changes ─────────────────────────
   useEffect(() => {

@@ -61,12 +61,23 @@ export const DRINK_FILLS: Record<DrinkType, DrinkFill> = {
 
 export interface ResolvedVessel {
   modelPath: string
+  sourceType: 'glb' | 'procedural'
+  vesselKey: VesselKey
   fillColor: string
   fillLevel: number
   foam: boolean
   ice: boolean
   vesselFamily: VesselFamily
   isTransparent: boolean
+}
+
+// All coffee vessels use procedural geometry (no GLB file needed)
+const VESSEL_SOURCE_TYPE: Record<VesselKey, 'glb' | 'procedural'> = {
+  'cup-hot-dinein':    'procedural',
+  'cup-hot-takeaway':  'procedural',
+  'glass-iced-dinein': 'procedural',
+  'cup-iced-takeaway': 'procedural',
+  'smoothie':          'procedural',
 }
 
 // Modifiers that lighten the fill color (milk, oat milk)
@@ -142,12 +153,14 @@ export function resolveVessel(
   if (mods?.hazelnutSyrup) color = blendHex(color, '#8B5020', 0.15)
 
   return {
-    modelPath: VESSEL_PATH[vesselKey],
-    fillColor: color,
-    fillLevel: def.fillLevel,
-    foam: def.foam,
-    ice: def.ice,
-    vesselFamily: VESSEL_FAMILY[vesselKey],
+    modelPath:  VESSEL_PATH[vesselKey],
+    sourceType: VESSEL_SOURCE_TYPE[vesselKey],
+    vesselKey,
+    fillColor:  color,
+    fillLevel:  def.fillLevel,
+    foam:       def.foam,
+    ice:        def.ice,
+    vesselFamily:  VESSEL_FAMILY[vesselKey],
     isTransparent: VESSEL_TRANSPARENT[vesselKey],
   }
 }

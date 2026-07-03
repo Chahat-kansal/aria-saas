@@ -158,8 +158,10 @@ export default function Coffee3dPreviewPage() {
 
       {/* ── 3D Viewer ────────────────────────────────────────────────────── */}
       <ArchetypeViewer
-        key={resolved.modelPath}
+        key={resolved.vesselKey + resolved.sourceType}
         modelPath={resolved.modelPath}
+        sourceType={resolved.sourceType}
+        vesselKey={resolved.vesselKey}
         fillColor={resolved.fillColor}
         fillLevel={resolved.fillLevel}
         foam={resolved.foam}
@@ -187,7 +189,7 @@ export default function Coffee3dPreviewPage() {
       >
         <div>drink: {drink}</div>
         <div>orderType: {orderType}</div>
-        <div>modelPath: {resolved.modelPath}</div>
+        <div>sourceType: {resolved.sourceType} — vesselKey: {resolved.vesselKey}</div>
         <div>fillColor: {resolved.fillColor}</div>
         <div>fillLevel: {resolved.fillLevel}</div>
         <div>foam: {String(resolved.foam)}</div>
