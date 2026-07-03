@@ -61,8 +61,6 @@ export const DRINK_FILLS: Record<DrinkType, DrinkFill> = {
 
 export interface ResolvedVessel {
   modelPath: string
-  sourceType: 'glb' | 'procedural'
-  vesselKey: VesselKey
   fillColor: string
   fillLevel: number
   foam: boolean
@@ -71,13 +69,37 @@ export interface ResolvedVessel {
   isTransparent: boolean
 }
 
-// All coffee vessels use procedural geometry (no GLB file needed)
-const VESSEL_SOURCE_TYPE: Record<VesselKey, 'glb' | 'procedural'> = {
-  'cup-hot-dinein':    'procedural',
-  'cup-hot-takeaway':  'procedural',
-  'glass-iced-dinein': 'procedural',
-  'cup-iced-takeaway': 'procedural',
-  'smoothie':          'procedural',
+// Coffee drink → GLB slug mapping (one file per real scan)
+// null = no scan yet → caller falls back to hero image
+export const COFFEE_SLUG: Record<DrinkType, string | null> = {
+  'flat-white':     'flat-white',
+  'latte':          null,
+  'cappuccino':     null,
+  'mocha':          null,
+  'long-black':     null,
+  'hot-choc':       null,
+  'chai':           null,
+  'matcha':         null,
+  'iced-coffee':    null,
+  'iced-latte':     null,
+  'iced-choc':      null,
+  'juice-orange':   null,
+  'juice-apple':    null,
+  'smoothie-berry': null,
+  'smoothie-mango': null,
+}
+
+const HOT_DRINKS: DrinkType[] = [
+  'latte', 'cappuccino', 'mocha', 'long-black', 'hot-choc', 'chai', 'matcha',
+]
+
+// Returns the GLB slug to load, or null for iced/juice/smoothie (no scan yet).
+// Hot drinks without their own scan fall back to flat-white.
+export function resolveCoffeeSlug(drink: DrinkType): string | null {
+  const slug = COFFEE_SLUG[drink]
+  if (slug) return slug
+  if (HOT_DRINKS.includes(drink)) return 'flat-white'
+  return null
 }
 
 // Modifiers that lighten the fill color (milk, oat milk)
@@ -153,13 +175,11 @@ export function resolveVessel(
   if (mods?.hazelnutSyrup) color = blendHex(color, '#8B5020', 0.15)
 
   return {
-    modelPath:  VESSEL_PATH[vesselKey],
-    sourceType: VESSEL_SOURCE_TYPE[vesselKey],
-    vesselKey,
-    fillColor:  color,
-    fillLevel:  def.fillLevel,
-    foam:       def.foam,
-    ice:        def.ice,
+    modelPath:     VESSEL_PATH[vesselKey],
+    fillColor:     color,
+    fillLevel:     def.fillLevel,
+    foam:          def.foam,
+    ice:           def.ice,
     vesselFamily:  VESSEL_FAMILY[vesselKey],
     isTransparent: VESSEL_TRANSPARENT[vesselKey],
   }

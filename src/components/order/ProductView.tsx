@@ -2,6 +2,8 @@
 import { resolveRenderMode, type RenderModeProduct } from './productMode'
 import { ProductHero } from './ProductHero'
 import { ProductCustomiser } from './ProductCustomiser'
+import { CoffeeViewer } from './CoffeeViewer'
+import { resolveCoffeeSlug, type DrinkType } from '@/lib/drinkFills'
 
 interface Props {
   product: RenderModeProduct
@@ -13,18 +15,29 @@ interface Props {
   alt?: string
   /** Pixel size for hero or customiser burger stack */
   size?: number
+  /** Scale for coffee GLB: 0.9=Regular, 1.0=Large */
+  sizeScale?: number
 }
 
 /**
  * Single switch MenuClient will call in ORD-3D-5.
  * 'build'    → ProductCustomiser (drag-to-build tray + price bar)
+ * 'coffee'   → CoffeeViewer (filled-drink GLB, size=scale)
  * 'standard' → ProductHero (floating image or spin-video)
  */
-export function ProductView({ product, imageSrc, videoSrc, name, alt, size }: Props) {
+export function ProductView({ product, imageSrc, videoSrc, name, alt, size, sizeScale = 1.0 }: Props) {
   const mode = resolveRenderMode(product)
 
   if (mode === 'build') {
     return <ProductCustomiser size={size} />
+  }
+
+  if (mode === 'coffee') {
+    const slug = resolveCoffeeSlug(product.ordering_archetype as DrinkType)
+    if (slug) {
+      return <CoffeeViewer slug={slug} sizeScale={sizeScale} size={size ?? 320} />
+    }
+    // No GLB scan yet for this drink — fall through to hero image
   }
 
   return (

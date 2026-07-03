@@ -1,14 +1,8 @@
 'use client'
-// DEV ONLY — 3D vessel + liquid fill preview. Remove or gate before launch.
+// DEV ONLY — 3D filled-drink viewer (COFFEE-3D-FILLED). Remove or gate before launch.
 import { useState } from 'react'
-import { ArchetypeViewer } from '@/components/order/ArchetypeViewer'
-import {
-  resolveVessel,
-  DRINK_LABELS,
-  type DrinkType,
-  type OrderType,
-  type ModifierFlags,
-} from '@/lib/drinkFills'
+import { CoffeeViewer } from '@/components/order/CoffeeViewer'
+import { resolveCoffeeSlug, DRINK_LABELS, type DrinkType } from '@/lib/drinkFills'
 
 const ALL_DRINKS = Object.keys(DRINK_LABELS) as DrinkType[]
 
@@ -19,24 +13,15 @@ const INK  = '#0a0a0a'
 const MUTED = '#6b7280'
 const BORDER = '#e5e7eb'
 
+type SizeLabel = 'Regular' | 'Large'
+const SIZE_SCALE: Record<SizeLabel, number> = { Regular: 0.9, Large: 1.0 }
+
 export default function Coffee3dPreviewPage() {
   const [drink, setDrink] = useState<DrinkType>('flat-white')
-  const [orderType, setOrderType] = useState<OrderType>('dine-in')
-  const [mods, setMods] = useState<ModifierFlags>({})
+  const [sizeLabel, setSizeLabel] = useState<SizeLabel>('Regular')
 
-  const resolved = resolveVessel(drink, orderType, mods)
-
-  function toggleMod(key: keyof ModifierFlags) {
-    setMods(prev => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  const MOD_LABELS: Array<{ key: keyof ModifierFlags; label: string }> = [
-    { key: 'milk',          label: 'Milk' },
-    { key: 'extraMilk',     label: 'Extra Milk' },
-    { key: 'caramelSyrup',  label: 'Caramel Syrup' },
-    { key: 'vanillaSyrup',  label: 'Vanilla Syrup' },
-    { key: 'hazelnutSyrup', label: 'Hazelnut Syrup' },
-  ]
+  const slug = resolveCoffeeSlug(drink)
+  const sizeScale = SIZE_SCALE[sizeLabel]
 
   return (
     <div
@@ -53,17 +38,16 @@ export default function Coffee3dPreviewPage() {
     >
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6 }}>
-          DEV PREVIEW — ORD-3D-COFFEE
+          DEV PREVIEW — COFFEE-3D-FILLED
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: INK, margin: 0, letterSpacing: '-0.02em' }}>
-          Vessel + Liquid Fill
+          Filled-Drink GLB Viewer
         </h1>
       </div>
 
       {/* ── Controls ─────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 520 }}>
 
-        {/* Drink selector */}
         <div>
           <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 6 }}>
             Drink type
@@ -91,18 +75,17 @@ export default function Coffee3dPreviewPage() {
           </select>
         </div>
 
-        {/* Order type toggle */}
         <div>
           <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 6 }}>
-            Order type
+            Size
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
-            {(['dine-in', 'takeaway'] as OrderType[]).map(t => {
-              const on = orderType === t
+            {(['Regular', 'Large'] as SizeLabel[]).map(s => {
+              const on = sizeLabel === s
               return (
                 <button
-                  key={t}
-                  onClick={() => setOrderType(t)}
+                  key={s}
+                  onClick={() => setSizeLabel(s)}
                   style={{
                     flex: 1,
                     padding: '9px 0',
@@ -114,41 +97,9 @@ export default function Coffee3dPreviewPage() {
                     fontWeight: 700,
                     fontFamily: SANS,
                     cursor: 'pointer',
-                    textTransform: 'capitalize',
                   }}
                 >
-                  {t}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Modifier chips */}
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 6 }}>
-            Modifiers
-          </label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {MOD_LABELS.map(({ key, label }) => {
-              const on = !!mods[key]
-              return (
-                <button
-                  key={key}
-                  onClick={() => toggleMod(key)}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: 20,
-                    border: '2px solid ' + (on ? LIME : BORDER),
-                    background: on ? LIME : '#ffffff',
-                    color: INK,
-                    fontSize: 13,
-                    fontWeight: on ? 700 : 500,
-                    fontFamily: SANS,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {label}
+                  {s}
                 </button>
               )
             })}
@@ -157,21 +108,28 @@ export default function Coffee3dPreviewPage() {
       </div>
 
       {/* ── 3D Viewer ────────────────────────────────────────────────────── */}
-      <ArchetypeViewer
-        key={resolved.vesselKey + resolved.sourceType}
-        modelPath={resolved.modelPath}
-        sourceType={resolved.sourceType}
-        vesselKey={resolved.vesselKey}
-        fillColor={resolved.fillColor}
-        fillLevel={resolved.fillLevel}
-        foam={resolved.foam}
-        ice={resolved.ice}
-        size={320}
-        isTransparent={resolved.isTransparent}
-        clipsEnabled={resolved.vesselFamily === 'iced'}
-        clipPath="/menu/_lib/clips/caramel-pour.webm"
-        clipPathMov="/menu/_lib/clips/caramel-pour.mov"
-      />
+      {slug ? (
+        <CoffeeViewer key={slug} slug={slug} sizeScale={sizeScale} size={320} />
+      ) : (
+        <div
+          style={{
+            width: 320,
+            height: 320,
+            borderRadius: 24,
+            background: '#f3f4f6',
+            border: '2px dashed ' + BORDER,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          <div style={{ fontSize: 32 }}>📷</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: MUTED }}>No GLB scan yet</div>
+          <div style={{ fontSize: 11, color: MUTED }}>Hero image fallback</div>
+        </div>
+      )}
 
       {/* ── Debug readout ────────────────────────────────────────────────── */}
       <div
@@ -184,43 +142,31 @@ export default function Coffee3dPreviewPage() {
           fontFamily: MONO,
           fontSize: 12,
           color: LIME,
-          lineHeight: 1.7,
+          lineHeight: 1.8,
         }}
       >
         <div>drink: {drink}</div>
-        <div>orderType: {orderType}</div>
-        <div>sourceType: {resolved.sourceType} — vesselKey: {resolved.vesselKey}</div>
-        <div>fillColor: {resolved.fillColor}</div>
-        <div>fillLevel: {resolved.fillLevel}</div>
-        <div>foam: {String(resolved.foam)}</div>
-        <div>ice: {String(resolved.ice)}</div>
+        <div>slug: {slug ?? 'null (no scan — hero image fallback)'}</div>
+        <div>sizeScale: {sizeScale} ({sizeLabel})</div>
+        <div>glb path: {slug ? '/menu/_lib/models/coffee/' + slug + '.glb' : '—'}</div>
         <div style={{ marginTop: 8, color: '#888' }}>
-          smoothie vessel: smoothie.glb (325 KB draco+webp, Y-up confirmed)
+          Available GLBs: flat-white.glb (225 KB draco+webp, Y-up confirmed)
         </div>
         <div style={{ color: '#888' }}>
-          vessel family: {resolved.vesselFamily}
-        </div>
-        <div style={{ color: '#888' }}>
-          isTransparent: {String(resolved.isTransparent)} — fill mode: {resolved.isTransparent ? 'column (glass)' : 'disc (opaque cup)'}
-        </div>
-        <div style={{ color: resolved.vesselFamily === 'iced' ? '#d9f54e' : '#888' }}>
-          clips: {resolved.vesselFamily === 'iced' ? 'ENABLED — iced family (toggle syrup to test)' : 'off — hot/smoothie vessels (no clip until hot-cup asset exists)'}
+          Hot drink fallback → flat-white | Iced/smoothie → hero image
         </div>
       </div>
 
       {/* ── Asset status ─────────────────────────────────────────────────── */}
       <div style={{ width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
-          Asset status
+          Coffee GLB assets
         </div>
         {[
-          { path: '/menu/_lib/models/cup-hot-dinein.glb',    status: 'present' },
-          { path: '/menu/_lib/models/cup-hot-takeaway.glb',  status: 'present' },
-          { path: '/menu/_lib/models/cup-iced-takeaway.glb', status: 'present' },
-          { path: '/menu/_lib/models/glass-iced-dinein.glb', status: 'present' },
-          { path: '/menu/_lib/models/smoothie.glb',          status: 'present' },
-          { path: '/menu/_lib/clips/caramel-pour.webm',     status: 'MISSING — drop VP9-alpha webm here' },
-          { path: '/menu/_lib/clips/caramel-pour.mov',      status: 'MISSING — drop HEVC-alpha mov here' },
+          { path: '/menu/_lib/models/coffee/flat-white.glb', status: 'present' },
+          { path: '/menu/_lib/models/coffee/latte.glb', status: 'awaiting scan' },
+          { path: '/menu/_lib/models/coffee/iced-latte.glb', status: 'awaiting scan' },
+          { path: '/menu/_lib/models/coffee/smoothie-berry.glb', status: 'awaiting scan' },
         ].map(({ path, status }) => (
           <div
             key={path}
@@ -229,13 +175,13 @@ export default function Coffee3dPreviewPage() {
               justifyContent: 'space-between',
               fontSize: 12,
               fontFamily: MONO,
-              color: status === 'present' ? '#22c55e' : '#ef4444',
+              color: status === 'present' ? '#22c55e' : '#f59e0b',
               padding: '4px 0',
               borderBottom: '1px solid ' + BORDER,
             }}
           >
             <span style={{ color: MUTED }}>{path}</span>
-            <span>{status === 'present' ? '✓' : '✗ ' + status.replace('present', '')}</span>
+            <span>{status === 'present' ? '✓' : '○ ' + status}</span>
           </div>
         ))}
       </div>

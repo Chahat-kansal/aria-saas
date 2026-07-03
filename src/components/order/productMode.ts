@@ -10,7 +10,7 @@
  * Until then, every product resolves to 'standard'.
  */
 
-export type ProductRenderMode = 'standard' | 'build'
+export type ProductRenderMode = 'standard' | 'build' | 'coffee'
 
 export interface RenderModeProduct {
   /** Existing column — may carry 'inherit' | 'exclude' | 'override' today.
@@ -22,9 +22,15 @@ export interface RenderModeProduct {
 
 export function resolveRenderMode(product: RenderModeProduct): ProductRenderMode {
   // Primary signal: ordering_mode === 'build'
-  // ORD-3D-5 sets this on the pos_products row for build-your-own items.
   if (product.ordering_mode === 'build') return 'build'
 
-  // Fallback: all other ordering_mode values and all archetypes → standard hero
+  // ordering_archetype holding a coffee drink type → filled GLB viewer
+  const COFFEE_DRINK_TYPES = new Set([
+    'flat-white', 'latte', 'cappuccino', 'mocha', 'long-black',
+    'hot-choc', 'chai', 'matcha', 'iced-coffee', 'iced-latte',
+    'iced-choc', 'juice-orange', 'juice-apple', 'smoothie-berry', 'smoothie-mango',
+  ])
+  if (product.ordering_archetype && COFFEE_DRINK_TYPES.has(product.ordering_archetype)) return 'coffee'
+
   return 'standard'
 }
