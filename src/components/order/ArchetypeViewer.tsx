@@ -343,7 +343,10 @@ export function ArchetypeViewer({
           // ── Disc liquid (opaque ceramic / paper cup) ────────────────────────
           // Flat circle at the coffee surface — no side walls, never bleeds through.
           // Conservative radius: sz.z avoids handle inflation on mugs.
+          // maxLiquidHeight override: reach near the cup rim so disc is visible
+          // through the opening at the camera angle (0.70 default stops 30% short).
           s.innerRadius = Math.min(sz.x, sz.z) * 0.24
+          s.maxLiquidHeight = vesselH * 0.93
           const liqGeo = new THREE.CylinderGeometry(s.innerRadius, s.innerRadius, 0.012, 36, 1, false)
           const liquidMesh = new THREE.Mesh(liqGeo, liqMat)
           liquidMesh.position.y = s.vesselBottom   // animation loop moves it up
