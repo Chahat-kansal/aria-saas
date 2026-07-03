@@ -2,8 +2,8 @@
 import { resolveRenderMode, type RenderModeProduct } from './productMode'
 import { ProductHero } from './ProductHero'
 import { ProductCustomiser } from './ProductCustomiser'
-import { CoffeeViewer } from './CoffeeViewer'
-import { resolveCoffeeSlug, type DrinkType } from '@/lib/drinkFills'
+import { Spin360Viewer } from './Spin360Viewer'
+import { resolveCoffeeSpin, type DrinkType } from '@/lib/drinkFills'
 
 interface Props {
   product: RenderModeProduct
@@ -15,14 +15,14 @@ interface Props {
   alt?: string
   /** Pixel size for hero or customiser burger stack */
   size?: number
-  /** Scale for coffee GLB: 0.9=Regular, 1.0=Large */
+  /** Scale for coffee spin: 0.9=Regular, 1.0=Large */
   sizeScale?: number
 }
 
 /**
  * Single switch MenuClient will call in ORD-3D-5.
  * 'build'    → ProductCustomiser (drag-to-build tray + price bar)
- * 'coffee'   → CoffeeViewer (filled-drink GLB, size=scale)
+ * 'coffee'   → Spin360Viewer (360° photoreal frames, size=scale)
  * 'standard' → ProductHero (floating image or spin-video)
  */
 export function ProductView({ product, imageSrc, videoSrc, name, alt, size, sizeScale = 1.0 }: Props) {
@@ -33,11 +33,11 @@ export function ProductView({ product, imageSrc, videoSrc, name, alt, size, size
   }
 
   if (mode === 'coffee') {
-    const slug = resolveCoffeeSlug(product.ordering_archetype as DrinkType)
-    if (slug) {
-      return <CoffeeViewer slug={slug} sizeScale={sizeScale} size={size ?? 320} />
+    const spinSlug = resolveCoffeeSpin(product.ordering_archetype as DrinkType)
+    if (spinSlug) {
+      return <Spin360Viewer slug={spinSlug} sizeScale={sizeScale} size={size ?? 320} />
     }
-    // No GLB scan yet for this drink — fall through to hero image
+    // No spin set yet for this drink → fall through to hero image
   }
 
   return (

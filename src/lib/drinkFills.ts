@@ -102,6 +102,24 @@ export function resolveCoffeeSlug(drink: DrinkType): string | null {
   return null
 }
 
+// ── 360° spin frame sets ─────────────────────────────────────────────────────
+// Each entry maps a DrinkType to a spin folder under /menu/_lib/spin/<slug>/
+// null = no spin yet → ProductView falls back to hero image
+
+const ICED_DRINKS: DrinkType[] = ['iced-coffee', 'iced-choc', 'juice-orange', 'juice-apple']
+
+export function resolveCoffeeSpin(drink: DrinkType): string | null {
+  // Drinks with their own spin set
+  if (drink === 'flat-white') return 'flat-white'
+  if (drink === 'iced-latte') return 'iced-latte'
+  // Hot drink fallback → flat-white spin
+  if (HOT_DRINKS.includes(drink)) return 'flat-white'
+  // Iced/juice fallback → iced-latte spin
+  if (ICED_DRINKS.includes(drink)) return 'iced-latte'
+  // Smoothies: no spin yet → hero image
+  return null
+}
+
 // Modifiers that lighten the fill color (milk, oat milk)
 const MILK_LIGHTENING = 0.28  // fraction toward white
 

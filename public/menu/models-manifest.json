@@ -18,9 +18,5 @@
   "wine": {
     "glb": "/menu/_lib/models/wine.glb",
     "category": "wine"
-  },
-  "flat-white": {
-    "glb": "/menu/_lib/models/coffee/flat-white.glb",
-    "category": "coffee"
   }
 }
