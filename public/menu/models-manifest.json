@@ -19,6 +19,22 @@
     "glb": "/menu/_lib/models/wine.glb",
     "category": "wine"
   },
+  "cup-hot-dinein": {
+    "glb": "/menu/_lib/models/cup-hot-dinein.glb",
+    "category": "coffee"
+  },
+  "cup-hot-takeaway": {
+    "glb": "/menu/_lib/models/cup-hot-takeaway.glb",
+    "category": "coffee"
+  },
+  "glass-iced-dinein": {
+    "glb": "/menu/_lib/models/glass-iced-dinein.glb",
+    "category": "coffee"
+  },
+  "cup-iced-takeaway": {
+    "glb": "/menu/_lib/models/cup-iced-takeaway.glb",
+    "category": "coffee"
+  },
   "smoothie": {
     "glb": "/menu/_lib/models/smoothie.glb",
     "category": "smoothie"
