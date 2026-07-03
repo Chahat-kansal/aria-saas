@@ -3,10 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 const TOTAL = 24
 const SENSITIVITY = TOTAL / 280  // full rotation ≈ 280px drag
-const AUTO_FPS = 8
-const AUTO_INTERVAL = 1000 / AUTO_FPS
 const DAMPING = 0.82
-const RESUME_MS = 2500
 
 export interface Spin360ViewerProps {
   slug: string        // folder under /menu/_lib/spin/<slug>/000.webp…023.webp
@@ -25,7 +22,6 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
   const isDraggingRef = useRef(false)
   const lastXRef = useRef(0)
   const velRef = useRef(0)            // frames/px momentum
-  const lastDragAtRef = useRef(0)
   const sizeScaleRef = useRef(sizeScale)
   const sizeRef = useRef(size)
   const rafRef = useRef(0)
@@ -59,29 +55,19 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let lastAuto = 0
-
     function draw(now: number) {
       rafRef.current = requestAnimationFrame(draw)
 
       const s = sizeRef.current
       const sc = sizeScaleRef.current
-      const sinceDrag = now - lastDragAtRef.current
 
-      // Advance frame
-      if (!isDraggingRef.current) {
-        if (Math.abs(velRef.current) > 0.04) {
-          velRef.current *= DAMPING
-          frameRef.current = ((frameRef.current - velRef.current) % TOTAL + TOTAL) % TOTAL
-        } else if (sinceDrag > RESUME_MS) {
-          if (now - lastAuto >= AUTO_INTERVAL) {
-            frameRef.current = (frameRef.current + 1) % TOTAL
-            lastAuto = now
-          }
-        }
+      // Decay momentum to stop — no auto-advance, never moves without user input
+      if (!isDraggingRef.current && Math.abs(velRef.current) > 0.04) {
+        velRef.current *= DAMPING
+        frameRef.current = ((frameRef.current - velRef.current) % TOTAL + TOTAL) % TOTAL
       }
 
-      // Render
+      // Render current frame
       const idx = Math.round(frameRef.current) % TOTAL
       const img = imagesRef.current[idx]
       if (!img || !img.complete || !img.naturalWidth) return
@@ -111,11 +97,9 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
       frameRef.current = ((frameRef.current - delta) % TOTAL + TOTAL) % TOTAL
       velRef.current = delta
       lastXRef.current = e.clientX
-      lastDragAtRef.current = performance.now()
     }
     function onUp() {
       isDraggingRef.current = false
-      lastDragAtRef.current = performance.now()
     }
 
     canvas.addEventListener('pointerdown', onDown)
@@ -217,7 +201,7 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
             whiteSpace: 'nowrap',
           }}
         >
-          Drag to rotate
+          360° drag
         </div>
       )}
     </div>
