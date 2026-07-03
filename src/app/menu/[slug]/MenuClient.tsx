@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { TEMPLATES, deriveTheme } from '@/lib/menu/menu-theme'
 import { resolveArchetype } from '@/lib/ordering/resolveArchetype'
 import { ArchetypeRenderer } from '@/components/ordering/archetypes/ArchetypeRenderer'
-import { resolveRenderMode } from '@/components/order/productMode'
+import { resolveRenderMode, COFFEE_DRINK_TYPES } from '@/components/order/productMode'
 import { ProductCustomiser, type BuildConfig } from '@/components/order/ProductCustomiser'
 import { StripePaymentModal } from '@/components/order/StripePaymentModal'
 
@@ -201,16 +201,19 @@ export default function MenuClient({
   useEffect(() => { setModalMods({}); setProductNote('') }, [productModal])
 
   const catIds    = new Set(cats.map(c => c.id))
+  const sipHero = (archetype: string | null) =>
+    archetype && COFFEE_DRINK_TYPES.has(archetype) ? '/menu/sip-ff5055/' + archetype + '.webp' : null
+
   const products  = rawProducts
     .filter(p => !(itemOverrides?.[p.id]?.hidden))
     .map(p => {
       const ov = itemOverrides?.[p.id]
-      if (!ov) return p
+      const baseImg = ov?.photo_url !== undefined ? ov.photo_url : p.image_url
       return {
         ...p,
-        description: ov.desc !== undefined ? ov.desc : p.description,
-        image_url:   ov.photo_url !== undefined ? ov.photo_url : p.image_url,
-        price:       ov.price_override !== undefined ? ov.price_override : p.price,
+        description: ov?.desc !== undefined ? ov.desc : p.description,
+        image_url:   baseImg ?? sipHero(p.ordering_archetype),
+        price:       ov?.price_override !== undefined ? ov.price_override : p.price,
       }
     })
 

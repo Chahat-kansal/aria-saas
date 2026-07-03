@@ -69,57 +69,6 @@ export interface ResolvedVessel {
   isTransparent: boolean
 }
 
-// Coffee drink → GLB slug mapping (one file per real scan)
-// null = no scan yet → caller falls back to hero image
-export const COFFEE_SLUG: Record<DrinkType, string | null> = {
-  'flat-white':     'flat-white',
-  'latte':          null,
-  'cappuccino':     null,
-  'mocha':          null,
-  'long-black':     null,
-  'hot-choc':       null,
-  'chai':           null,
-  'matcha':         null,
-  'iced-coffee':    null,
-  'iced-latte':     null,
-  'iced-choc':      null,
-  'juice-orange':   null,
-  'juice-apple':    null,
-  'smoothie-berry': null,
-  'smoothie-mango': null,
-}
-
-const HOT_DRINKS: DrinkType[] = [
-  'latte', 'cappuccino', 'mocha', 'long-black', 'hot-choc', 'chai', 'matcha',
-]
-
-// Returns the GLB slug to load, or null for iced/juice/smoothie (no scan yet).
-// Hot drinks without their own scan fall back to flat-white.
-export function resolveCoffeeSlug(drink: DrinkType): string | null {
-  const slug = COFFEE_SLUG[drink]
-  if (slug) return slug
-  if (HOT_DRINKS.includes(drink)) return 'flat-white'
-  return null
-}
-
-// ── 360° spin frame sets ─────────────────────────────────────────────────────
-// Each entry maps a DrinkType to a spin folder under /menu/_lib/spin/<slug>/
-// null = no spin yet → ProductView falls back to hero image
-
-const ICED_DRINKS: DrinkType[] = ['iced-coffee', 'iced-choc', 'juice-orange', 'juice-apple']
-
-export function resolveCoffeeSpin(drink: DrinkType): string | null {
-  // Drinks with their own spin set
-  if (drink === 'flat-white') return 'flat-white'
-  if (drink === 'iced-latte') return 'iced-latte'
-  // Hot drink fallback → flat-white spin
-  if (HOT_DRINKS.includes(drink)) return 'flat-white'
-  // Iced/juice fallback → iced-latte spin
-  if (ICED_DRINKS.includes(drink)) return 'iced-latte'
-  // Smoothies: no spin yet → hero image
-  return null
-}
-
 // Modifiers that lighten the fill color (milk, oat milk)
 const MILK_LIGHTENING = 0.28  // fraction toward white
 
