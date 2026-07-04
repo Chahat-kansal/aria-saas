@@ -69,6 +69,37 @@ export interface ResolvedVessel {
   isTransparent: boolean
 }
 
+// Maps ordering_archetype → spin folder under /menu/_lib/spin/<slug>/
+// Returns null when no spin set → ProductView falls through to hero image
+export function resolveCoffeeSpin(archetype: string): string | null {
+  switch (archetype) {
+    case 'flat-white': case 'latte': case 'cappuccino': case 'mocha':
+    case 'chai': case 'dirty-chai': case 'matcha': case 'turmeric-latte':
+    case 'macchiato': case 'long-macchiato': case 'long-black':
+      return 'flat-white'
+    case 'espresso':
+      return 'espresso'
+    case 'iced-latte': case 'iced-mocha': case 'iced-choc': case 'iced-coffee':
+      return 'iced-latte'
+    case 'hot-choc':
+      return null  // no spin MP4 available — falls back to hero image
+    case 'chai-tea':
+      return 'chai-tea'
+    case 'cold-brew':
+      return 'cold-brew'
+    case 'choc-milkshake': case 'caramel-milkshake': case 'vanilla-milkshake':
+      return 'milkshake'
+    case 'acai': case 'avocado': case 'banana': case 'berry':
+    case 'choc-smoothie': case 'green-smoothie': case 'mango-smoothie':
+    case 'smoothie-berry': case 'smoothie-mango':
+      return 'smoothie'
+    case 'juice-apple': case 'juice-orange':
+      return 'juice'
+    default:
+      return null
+  }
+}
+
 // Modifiers that lighten the fill color (milk, oat milk)
 const MILK_LIGHTENING = 0.28  // fraction toward white
 
