@@ -19,8 +19,9 @@ type MenuCfg = {
   background_id: string
   is_published: boolean
 }
-type Category = { id: string; name: string; color: string | null }
-type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; category_id: string | null; sort_order: number | null }
+type Category = { id: string; name: string; color: string | null; is_active?: boolean; sort_order?: number; ordering_archetype?: string | null }
+type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; image_thumb_url?: string | null; image_source?: string | null; category_id: string | null; sort_order: number | null; display_order?: number | null; is_active?: boolean; show_online?: boolean; ordering_mode?: string; ordering_archetype?: string | null; builder_type?: string | null; kds_station?: string; prep_time_seconds?: number | null; allergens?: string[]; is_gluten_free?: boolean; is_vegan?: boolean; is_vegetarian?: boolean; notes?: string | null; tags?: string[] }
+type Outlet = { id: string; name: string }
 
 export const metadata = { title: 'Menu Builder — Aria' }
 
@@ -49,7 +50,7 @@ export default async function MenuBuilderPage() {
   }
   if (!bid) redirect('/pos/setup/welcome')
 
-  const [bizRes, configsRes, catsRes, productsRes, hoursRes] = await Promise.all([
+  const [bizRes, configsRes, catsRes, productsRes, hoursRes, outletsRes] = await Promise.all([
     supabaseAdmin.from('businesses').select('name, slug, logo_url, suburb, city').eq('id', bid).maybeSingle(),
     supabaseAdmin
       .from('menu_configs')
@@ -57,9 +58,10 @@ export default async function MenuBuilderPage() {
       .eq('business_id', bid)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true }),
-    supabaseAdmin.from('pos_categories').select('id, name, color').eq('business_id', bid).eq('is_active', true).order('sort_order', { ascending: true }),
-    supabaseAdmin.from('pos_products').select('id, name, description, price, image_url, category_id, sort_order').eq('business_id', bid).eq('is_active', true).is('deleted_at', null).order('sort_order', { ascending: true }),
+    supabaseAdmin.from('pos_categories').select('id, name, color, is_active, sort_order, ordering_archetype').eq('business_id', bid).order('sort_order', { ascending: true }),
+    supabaseAdmin.from('pos_products').select('id, name, description, price, image_url, image_thumb_url, image_source, category_id, sort_order, display_order, is_active, show_online, ordering_mode, ordering_archetype, builder_type, kds_station, prep_time_seconds, allergens, is_gluten_free, is_vegan, is_vegetarian, notes, tags').eq('business_id', bid).is('deleted_at', null).order('sort_order', { ascending: true }),
     supabaseAdmin.from('business_hours').select('day_of_week, open_time, close_time, is_closed').eq('business_id', bid),
+    supabaseAdmin.from('pos_outlets').select('id, name').eq('business_id', bid).eq('is_active', true),
   ])
 
   const biz = bizRes.data
@@ -129,7 +131,7 @@ export default async function MenuBuilderPage() {
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;1,400;1,700&family=Space+Grotesk:wght@400;600;700&family=Cormorant:ital,wght@0,400;1,400;1,700&family=Playfair+Display:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;1,400;1,700&family=Space+Grotesk:wght@400;600;700&family=Cormorant:ital,wght@0,400;1,400;1,700&family=Playfair+Display:wght@400;700&family=Outfit:wght@400;500;600;700&display=swap"
       />
       <MenuBuilderClient
         businessId={bid}
@@ -140,6 +142,7 @@ export default async function MenuBuilderPage() {
         initialConfigs={safeConfigs}
         initialCats={(catsRes.data ?? []) as Category[]}
         initialProducts={(productsRes.data ?? []) as Product[]}
+        initialOutlets={(outletsRes.data ?? []) as Outlet[]}
         locationSubtitle={locationSubtitle}
         isOpenNow={isOpenNow}
         closesAt={closesAt}

@@ -20,6 +20,13 @@ const nextConfig = {
         'onnxruntime-node$': false,
       }
     }
+    // Preserve ESM import.meta semantics for packages like @imgly/background-removal
+    // that ship .mjs bundles using import.meta (which Terser rejects in non-module mode)
+    config.module.rules.push({
+      test: /\.mjs$/,
+      include: /node_modules/,
+      type: 'javascript/esm',
+    })
     return config
   },
   generateBuildId: async () => {

@@ -3,6 +3,10 @@ import { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { TEMPLATES, FONTS, BGS, deriveTheme as sharedDeriveTheme } from '@/lib/menu/menu-theme'
 import type { Theme } from '@/lib/menu/menu-theme'
+import ProductsTab from './tabs/ProductsTab'
+import ModifiersTab from './tabs/ModifiersTab'
+import CategoriesTab from './tabs/CategoriesTab'
+import SettingsTab from './tabs/SettingsTab'
 
 // ── Builder-only picker metadata (css comes from shared BGS/FONTS maps above) ──
 
@@ -56,8 +60,9 @@ type MenuCfg = {
   background_id: string
   is_published: boolean
 }
-type Category = { id: string; name: string; color: string | null }
-type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; category_id: string | null; sort_order: number | null }
+type Category = { id: string; name: string; color: string | null; is_active?: boolean; sort_order?: number; ordering_archetype?: string | null }
+type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; image_thumb_url?: string | null; image_source?: string | null; category_id: string | null; sort_order: number | null; display_order?: number | null; is_active?: boolean; show_online?: boolean; ordering_mode?: string; ordering_archetype?: string | null; builder_type?: string | null; kds_station?: string; prep_time_seconds?: number | null; allergens?: string[]; is_gluten_free?: boolean; is_vegan?: boolean; is_vegetarian?: boolean; notes?: string | null; tags?: string[] }
+type Outlet = { id: string; name: string }
 type ExtractedItem = { _id: string; name: string; price: number; category: string; description: string; removed: boolean }
 
 interface Props {
@@ -69,6 +74,7 @@ interface Props {
   initialConfigs: MenuCfg[]
   initialCats: Category[]
   initialProducts: Product[]
+  initialOutlets: Outlet[]
   locationSubtitle?: string | null
   isOpenNow?: boolean
   closesAt?: string | null
@@ -556,7 +562,7 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export default function MenuBuilderClient({ businessId: _bid, slug, businessName, logoUrl: _logoUrl, menuUrl, initialConfigs, initialCats, initialProducts, locationSubtitle, isOpenNow, closesAt }: Props) {
+export default function MenuBuilderClient({ businessId, slug: _slug, businessName, logoUrl: _logoUrl, menuUrl, initialConfigs, initialCats, initialProducts, initialOutlets, locationSubtitle, isOpenNow, closesAt }: Props) {
   const defaultConfigs = initialConfigs.length > 0 ? initialConfigs : [{
     id: undefined, menu_key: 'main', menu_label: 'Main Menu', is_default: true,
     active_from: null, active_to: null, days_of_week: null,
@@ -586,6 +592,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
   const importFileRef = useRef<HTMLInputElement | null>(null)
   const router = useRouter()
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [activeTab, setActiveTab] = useState<'design' | 'products' | 'modifiers' | 'categories' | 'settings'>('design')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 1000)
@@ -828,14 +835,23 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
 
   const theme = deriveTheme(cfg)
 
-  let orderedCats = initialCats
+  const activeCats = initialCats.filter(c => c.is_active !== false)
+  let orderedCats = activeCats
   if (cfg.section_order.length > 0) {
     const pos: Record<string, number> = {}
     cfg.section_order.forEach((id, i) => { pos[id] = i })
-    orderedCats = [...initialCats].sort((a, b) => (pos[a.id] ?? 9999) - (pos[b.id] ?? 9999) || a.name.localeCompare(b.name))
+    orderedCats = [...activeCats].sort((a, b) => (pos[a.id] ?? 9999) - (pos[b.id] ?? 9999) || a.name.localeCompare(b.name))
   }
 
   const C = { bg: '#f4f4f5', card: '#fff', border: '#e4e4e7', ink: '#18181b', muted: '#71717a', accent: '#2D5240' }
+
+  const MGMT_TABS: { id: 'design' | 'products' | 'modifiers' | 'categories' | 'settings'; label: string }[] = [
+    { id: 'design', label: 'Design' },
+    { id: 'products', label: 'Products' },
+    { id: 'modifiers', label: 'Modifiers' },
+    { id: 'categories', label: 'Categories' },
+    { id: 'settings', label: 'Settings' },
+  ]
 
   // ── Design panel content ───────────────────────────────────────────────
 
@@ -1055,6 +1071,17 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
         </button>
       </div>
 
+      {/* Management tab bar */}
+      <div style={{ height: 40, display: 'flex', alignItems: 'stretch', background: C.card, borderBottom: '1px solid ' + C.border, flexShrink: 0, zIndex: 15 }}>
+        {MGMT_TABS.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '0 16px', border: 'none', background: 'transparent', borderBottom: '2px solid ' + (activeTab === tab.id ? '#d9f54e' : 'transparent'), color: activeTab === tab.id ? C.ink : C.muted, fontSize: 12, fontWeight: activeTab === tab.id ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0, transition: 'color 0.15s' }}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'design' && (<>
+
       {/* Multi-menu switcher bar */}
       <div style={{ height: 40, display: 'flex', alignItems: 'center', gap: 0, background: C.card, borderBottom: '1px solid ' + C.border, flexShrink: 0, overflowX: 'auto' as const, paddingLeft: 8, zIndex: 15 }}>
         {configs.map(m => {
@@ -1106,7 +1133,7 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
                 <div style={{ width: 80, height: 6, borderRadius: 3, background: '#333' }} />
               </div>
               <div style={{ height: 580, overflowY: 'auto' as const, overflowX: 'hidden' as const }}>
-                <MiniMenu cats={initialCats} products={initialProducts} cfg={cfg} businessName={businessName} theme={theme} locationSubtitle={locationSubtitle} isOpenNow={isOpenNow} closesAt={closesAt} />
+                <MiniMenu cats={activeCats} products={initialProducts} cfg={cfg} businessName={businessName} theme={theme} locationSubtitle={locationSubtitle} isOpenNow={isOpenNow} closesAt={closesAt} />
               </div>
             </div>
           )}
@@ -1194,6 +1221,18 @@ export default function MenuBuilderClient({ businessId: _bid, slug, businessName
             )}
             {sheetContent !== 'items' && sheetContent !== 'editor' && <div style={{ padding: '10px 0' }}>{renderDesignPanelContent(sheetContent)}</div>}
           </div>
+        </div>
+      )}
+
+      </>)}
+
+      {/* Management tabs content */}
+      {activeTab !== 'design' && (
+        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={[]} initialCategories={[]} initialOutlets={initialOutlets} />}
+          {activeTab === 'modifiers' && <ModifiersTab businessId={businessId} />}
+          {activeTab === 'categories' && <CategoriesTab businessId={businessId} />}
+          {activeTab === 'settings' && <SettingsTab businessId={businessId} />}
         </div>
       )}
 
