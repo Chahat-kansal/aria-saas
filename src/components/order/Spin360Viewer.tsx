@@ -17,15 +17,17 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
   const [loadedCount, setLoadedCount] = useState(0)
   const [hintVisible, setHintVisible] = useState(true)
 
-  const imagesRef = useRef<HTMLImageElement[]>([])
-  const frameRef = useRef(0)
+  const imagesRef    = useRef<HTMLImageElement[]>([])
+  const frameRef     = useRef(0)
   const isDraggingRef = useRef(false)
-  const lastXRef = useRef(0)
-  const velRef = useRef(0)
+  const lastXRef     = useRef(0)
+  const velRef       = useRef(0)
   const sizeScaleRef = useRef(sizeScale)
-  const sizeRef = useRef(size)
-  const bgModeRef = useRef(bgMode)
-  const rafRef = useRef(0)
+  const sizeRef      = useRef(size)
+  const bgModeRef    = useRef(bgMode)
+  const rafRef       = useRef(0)
+  // Cover-crop rect detected from first frame for grey mode (vessel bounds, bars excluded)
+  const coverCropRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null)
 
   useEffect(() => { sizeScaleRef.current = sizeScale }, [sizeScale])
   useEffect(() => { sizeRef.current = size }, [size])
@@ -34,6 +36,7 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
   // Preload 24 frames on slug change
   useEffect(() => {
     imagesRef.current = []
+    coverCropRef.current = null  // reset cover-crop for new slug
     setLoadedCount(0)
     setHintVisible(true)
     frameRef.current = 0
@@ -46,6 +49,84 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
     }
   }, [slug])
 
+  // After all grey-mode frames load: detect vessel bounds in frame 000 and compute cover-crop.
+  // Baked frames have grey bars (ffmpeg pad artifact) whose compressed grey ≠ CSS #c8c8c4.
+  // We find the vessel's pixel extents, take the square center crop, store in coverCropRef.
+  useEffect(() => {
+    if (bgMode !== 'grey') return
+    if (loadedCount < TOTAL) return
+    if (coverCropRef.current) return  // already computed for this slug
+
+    const img = imagesRef.current[0]
+    if (!img?.naturalWidth || !img?.naturalHeight) return
+
+    const iW = img.naturalWidth
+    const iH = img.naturalHeight
+
+    const tmp = document.createElement('canvas')
+    tmp.width = iW
+    tmp.height = iH
+    const tc = tmp.getContext('2d', { willReadFrequently: true })
+    if (!tc) return
+    tc.drawImage(img, 0, 0)
+    const { data } = tc.getImageData(0, 0, iW, iH)
+
+    // Sample the baked bar colour from the far-left column (guaranteed bar region)
+    const midY = Math.floor(iH / 2)
+    const si   = (midY * iW + 2) * 4
+    const bR   = data[si], bG = data[si + 1], bB = data[si + 2]
+    const THRESH = 12
+
+    const colourDiff = (idx: number) =>
+      Math.abs(data[idx] - bR) + Math.abs(data[idx + 1] - bG) + Math.abs(data[idx + 2] - bB)
+
+    // Scan from left to find first non-bar column
+    let left = 0, found = false
+    for (let x = 0; x < iW && !found; x++) {
+      for (let y = 0; y < iH; y += 8) {
+        if (colourDiff((y * iW + x) * 4) > THRESH) { left = x; found = true; break }
+      }
+    }
+
+    // Scan from right to find last non-bar column
+    let right = iW - 1; found = false
+    for (let x = iW - 1; x >= 0 && !found; x--) {
+      for (let y = 0; y < iH; y += 8) {
+        if (colourDiff((y * iW + x) * 4) > THRESH) { right = x; found = true; break }
+      }
+    }
+
+    // Scan from top to find first non-bar row (using vessel x range for efficiency)
+    let top = 0; found = false
+    for (let y = 0; y < iH && !found; y++) {
+      for (let x = left; x <= right; x += 8) {
+        if (colourDiff((y * iW + x) * 4) > THRESH) { top = y; found = true; break }
+      }
+    }
+
+    // Scan from bottom to find last non-bar row
+    let bottom = iH - 1; found = false
+    for (let y = iH - 1; y >= 0 && !found; y--) {
+      for (let x = left; x <= right; x += 8) {
+        if (colourDiff((y * iW + x) * 4) > THRESH) { bottom = y; found = true; break }
+      }
+    }
+
+    // Build a square cover-crop centered on the vessel (crops bars from all sides)
+    const vW = right - left + 1
+    const vH = bottom - top + 1
+    const sq = Math.min(vW, vH)
+    const cx = (left + right) / 2
+    const cy = (top + bottom) / 2
+
+    coverCropRef.current = {
+      sx: Math.max(0, cx - sq / 2),
+      sy: Math.max(0, cy - sq / 2),
+      sw: sq,
+      sh: sq,
+    }
+  }, [loadedCount, bgMode])
+
   // Animation loop + pointer drag
   useEffect(() => {
     const canvas = canvasRef.current
@@ -55,7 +136,7 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
 
     function draw() {
       rafRef.current = requestAnimationFrame(draw)
-      const s = sizeRef.current
+      const s  = sizeRef.current
       const sc = sizeScaleRef.current
 
       // Decay momentum only — no auto-advance, at rest = frozen on frame 000
@@ -71,12 +152,18 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
       ctx!.clearRect(0, 0, s, s)
 
       if (bgModeRef.current === 'grey') {
-        // Baked grey-bg frame: fill canvas with exact #c8c8c4 then draw edge-to-edge.
-        // No offset, no sizeScale — eliminates the inner-rectangle artefact caused by
-        // clearRect transparency or WebP compression drift at the frame boundary.
+        // Fill with CSS grey first (shows briefly before crop is computed)
         ctx!.fillStyle = '#c8c8c4'
         ctx!.fillRect(0, 0, s, s)
-        ctx!.drawImage(img, 0, 0, s, s)
+
+        const crop = coverCropRef.current
+        if (crop) {
+          // Cover: draw only the vessel region (bars excluded) scaled to fill canvas edge-to-edge
+          ctx!.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, s, s)
+        } else {
+          // Fallback before crop is detected (first few frames after load)
+          ctx!.drawImage(img, 0, 0, s, s)
+        }
       } else {
         // Transparent rembg vessel: #fafafa fill + soft contact shadow + sizeScale draw
         ctx!.fillStyle = '#fafafa'
@@ -109,30 +196,30 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
     }
     function onMove(e: PointerEvent) {
       if (!isDraggingRef.current) return
-      const dx = e.clientX - lastXRef.current
+      const dx    = e.clientX - lastXRef.current
       const delta = dx * SENSITIVITY
       frameRef.current = ((frameRef.current - delta) % TOTAL + TOTAL) % TOTAL
-      velRef.current = delta
+      velRef.current   = delta
       lastXRef.current = e.clientX
     }
     function onUp() { isDraggingRef.current = false }
 
-    canvas.addEventListener('pointerdown', onDown)
-    canvas.addEventListener('pointermove', onMove)
-    canvas.addEventListener('pointerup', onUp)
+    canvas.addEventListener('pointerdown',  onDown)
+    canvas.addEventListener('pointermove',  onMove)
+    canvas.addEventListener('pointerup',    onUp)
     canvas.addEventListener('pointerleave', onUp)
 
     return () => {
       cancelAnimationFrame(rafRef.current)
-      canvas.removeEventListener('pointerdown', onDown)
-      canvas.removeEventListener('pointermove', onMove)
-      canvas.removeEventListener('pointerup', onUp)
+      canvas.removeEventListener('pointerdown',  onDown)
+      canvas.removeEventListener('pointermove',  onMove)
+      canvas.removeEventListener('pointerup',    onUp)
       canvas.removeEventListener('pointerleave', onUp)
     }
   }, [])
 
   const allLoaded = loadedCount >= TOTAL
-  const cardBg = bgMode === 'grey' ? '#c8c8c4' : '#fafafa'
+  const cardBg    = bgMode === 'grey' ? '#c8c8c4' : '#fafafa'
 
   return (
     <div
