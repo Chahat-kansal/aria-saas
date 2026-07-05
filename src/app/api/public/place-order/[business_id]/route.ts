@@ -73,33 +73,61 @@ export async function POST(req: Request, { params }: { params: { business_id: st
   let earnSaleId: string | null = null
 
   try {
-    // 1. Find or create pos_customers by phone → email → create
-    const rawPhone = body.customer_phone ?? null
+    // 1. Find or create pos_customers — always use canonical (normalised) phone.
+    //    One real person = one customer. Lookup by normPhone first; raw-phone fallback
+    //    handles existing rows that were stored before normalisation was enforced.
+    const rawPhone = body.customer_phone?.trim() ?? null
+    const normPhone = rawPhone ? normalisePhone(rawPhone) : null
     const rawEmail = body.customer_email ? body.customer_email.trim().toLowerCase() : null
 
     let customerId: string | null = null
-    if (rawPhone) {
-      const { data: byPhone } = await sb.from('pos_customers')
-        .select('id').eq('business_id', bid).eq('phone', rawPhone).maybeSingle()
-      customerId = (byPhone as { id: string } | null)?.id ?? null
+    if (normPhone) {
+      // Primary: normalised form (all new rows stored this way)
+      const { data: byNorm } = await sb.from('pos_customers')
+        .select('id').eq('business_id', bid).eq('phone', normPhone)
+        .order('created_at', { ascending: true }).limit(1)
+      customerId = (byNorm as { id: string }[] | null)?.[0]?.id ?? null
+
+      // Fallback: raw form (transition — old rows may have been stored un-normalised)
+      if (!customerId && normPhone !== rawPhone) {
+        const { data: byRaw } = await sb.from('pos_customers')
+          .select('id').eq('business_id', bid).eq('phone', rawPhone!)
+          .order('created_at', { ascending: true }).limit(1)
+        customerId = (byRaw as { id: string }[] | null)?.[0]?.id ?? null
+        // Normalise phone in-place so future lookups find the canonical form
+        if (customerId) {
+          await sb.from('pos_customers').update({ phone: normPhone }).eq('id', customerId)
+        }
+      }
     }
     if (!customerId && rawEmail) {
       const { data: byEmail } = await sb.from('pos_customers')
-        .select('id').eq('business_id', bid).ilike('email', rawEmail).maybeSingle()
-      customerId = (byEmail as { id: string } | null)?.id ?? null
+        .select('id').eq('business_id', bid).ilike('email', rawEmail)
+        .order('created_at', { ascending: true }).limit(1)
+      customerId = (byEmail as { id: string }[] | null)?.[0]?.id ?? null
     }
     if (!customerId) {
-      const { data: created } = await sb.from('pos_customers').insert({
+      const { data: created, error: createErr } = await sb.from('pos_customers').insert({
         business_id: bid,
         name: body.customer_name.trim().slice(0, 80),
-        phone: rawPhone,
+        phone: normPhone,
         email: rawEmail,
         source: 'online_order',
         points_balance: 0,
         stamps_count: 0,
         loyalty_points: 0,
       }).select('id').single()
-      customerId = (created as { id: string } | null)?.id ?? null
+      // Concurrent insert race — re-fetch the winner
+      if (createErr && /duplicate|unique/i.test(createErr.message)) {
+        if (normPhone) {
+          const { data } = await sb.from('pos_customers')
+            .select('id').eq('business_id', bid).eq('phone', normPhone)
+            .order('created_at', { ascending: true }).limit(1)
+          customerId = (data as { id: string }[] | null)?.[0]?.id ?? null
+        }
+      } else {
+        customerId = (created as { id: string } | null)?.id ?? null
+      }
     }
 
     if (customerId) {
@@ -107,8 +135,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
 
       // 1b. Find/create global loyalty_identity + stamp loyalty_identity_id on pos_customers.
       //     Runs on every online order so the identity link is always populated.
-      if (rawPhone || rawEmail) {
-        const normPhone = rawPhone ? normalisePhone(rawPhone) : null
+      if (normPhone || rawEmail) {
         let identityId: string | null = null
 
         if (normPhone) {
@@ -142,7 +169,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
         if (identityId) {
           await linkOrCreateMembership(
             identityId, bid,
-            { phone: rawPhone, email: rawEmail },
+            { phone: normPhone, email: rawEmail },
             body.customer_name.trim(),
           )
         }
@@ -163,7 +190,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
           status: 'completed',
           idempotency_key: orderNumber,
           customer_name: body.customer_name,
-          customer_phone: rawPhone,
+          customer_phone: normPhone,
           notes: body.notes ?? null,
           pickup_time: body.pickup_time ? new Date(body.pickup_time).toISOString() : null,
         }).select('id').single()
