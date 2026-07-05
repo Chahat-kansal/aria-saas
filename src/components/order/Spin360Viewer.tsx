@@ -70,8 +70,15 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
 
       ctx!.clearRect(0, 0, s, s)
 
-      if (bgModeRef.current !== 'grey') {
-        // Opaque vessel on transparent bg — fill #fafafa + soft contact shadow
+      if (bgModeRef.current === 'grey') {
+        // Baked grey-bg frame: fill canvas with exact #c8c8c4 then draw edge-to-edge.
+        // No offset, no sizeScale — eliminates the inner-rectangle artefact caused by
+        // clearRect transparency or WebP compression drift at the frame boundary.
+        ctx!.fillStyle = '#c8c8c4'
+        ctx!.fillRect(0, 0, s, s)
+        ctx!.drawImage(img, 0, 0, s, s)
+      } else {
+        // Transparent rembg vessel: #fafafa fill + soft contact shadow + sizeScale draw
         ctx!.fillStyle = '#fafafa'
         ctx!.fillRect(0, 0, s, s)
 
@@ -84,12 +91,11 @@ export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, s
         ctx!.fill()
         ctx!.restore()
         ctx!.filter = 'none'
-      }
-      // grey mode: frame IS the background — draw directly onto cleared canvas
 
-      const dw = s * sc
-      const dh = s * sc
-      ctx!.drawImage(img, (s - dw) / 2, (s - dh) / 2, dw, dh)
+        const dw = s * sc
+        const dh = s * sc
+        ctx!.drawImage(img, (s - dw) / 2, (s - dh) / 2, dw, dh)
+      }
     }
 
     rafRef.current = requestAnimationFrame(draw)
