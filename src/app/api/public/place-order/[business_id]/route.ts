@@ -7,6 +7,8 @@ import { createClient } from '@supabase/supabase-js'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { waitUntil } from '@vercel/functions'
 import { earnOnSale } from '@/lib/loyalty/earnOnSale'
+import { linkOrCreateMembership } from '@/lib/loyalty/membership'
+import { normalisePhone } from '@/lib/clicksend'
 
 function adminClient() {
   return createClient(
@@ -102,6 +104,49 @@ export async function POST(req: Request, { params }: { params: { business_id: st
 
     if (customerId) {
       earnCustomerId = customerId
+
+      // 1b. Find/create global loyalty_identity + stamp loyalty_identity_id on pos_customers.
+      //     Runs on every online order so the identity link is always populated.
+      if (rawPhone || rawEmail) {
+        const normPhone = rawPhone ? normalisePhone(rawPhone) : null
+        let identityId: string | null = null
+
+        if (normPhone) {
+          const { data: idByPhone } = await sb.from('loyalty_identity')
+            .select('id').eq('phone', normPhone).maybeSingle()
+          identityId = (idByPhone as { id: string } | null)?.id ?? null
+        }
+        if (!identityId && rawEmail) {
+          const { data: idByEmail } = await sb.from('loyalty_identity')
+            .select('id').ilike('email', rawEmail).maybeSingle()
+          identityId = (idByEmail as { id: string } | null)?.id ?? null
+        }
+        if (!identityId) {
+          const { data: newId, error: idErr } = await sb.from('loyalty_identity')
+            .insert({ phone: normPhone, email: rawEmail })
+            .select('id').single()
+          if (idErr && /duplicate|unique/i.test(idErr.message)) {
+            // Concurrent insert race — re-fetch whichever row won the unique constraint
+            if (normPhone) {
+              const { data } = await sb.from('loyalty_identity').select('id').eq('phone', normPhone).maybeSingle()
+              identityId = (data as { id: string } | null)?.id ?? null
+            }
+            if (!identityId && rawEmail) {
+              const { data } = await sb.from('loyalty_identity').select('id').ilike('email', rawEmail).maybeSingle()
+              identityId = (data as { id: string } | null)?.id ?? null
+            }
+          } else {
+            identityId = (newId as { id: string } | null)?.id ?? null
+          }
+        }
+        if (identityId) {
+          await linkOrCreateMembership(
+            identityId, bid,
+            { phone: rawPhone, email: rawEmail },
+            body.customer_name.trim(),
+          )
+        }
+      }
 
       // 2. Idempotency: reuse existing sale if this order_number was already processed
       const { data: existingSale } = await sb.from('pos_sales')
