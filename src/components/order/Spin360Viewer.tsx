@@ -6,12 +6,13 @@ const SENSITIVITY = TOTAL / 280  // full rotation ≈ 280px drag
 const DAMPING = 0.82
 
 export interface Spin360ViewerProps {
-  slug: string        // folder under /menu/_lib/spin/<slug>/000.webp…023.webp
-  sizeScale?: number  // 0.9 = Regular, 1.0 = Large (scales drawn image on canvas)
-  size?: number       // canvas side px (default 320)
+  slug: string
+  bgMode?: 'transparent' | 'grey'  // transparent = rembg'd vessel on #fafafa; grey = baked #c8c8c4 bg
+  sizeScale?: number                // 0.9 = Regular, 1.0 = Large
+  size?: number                     // canvas side px (default 320)
 }
 
-export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360ViewerProps) {
+export function Spin360Viewer({ slug, bgMode = 'transparent', sizeScale = 1.0, size = 320 }: Spin360ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [loadedCount, setLoadedCount] = useState(0)
   const [hintVisible, setHintVisible] = useState(true)
@@ -23,10 +24,12 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
   const velRef = useRef(0)
   const sizeScaleRef = useRef(sizeScale)
   const sizeRef = useRef(size)
+  const bgModeRef = useRef(bgMode)
   const rafRef = useRef(0)
 
   useEffect(() => { sizeScaleRef.current = sizeScale }, [sizeScale])
   useEffect(() => { sizeRef.current = size }, [size])
+  useEffect(() => { bgModeRef.current = bgMode }, [bgMode])
 
   // Preload 24 frames on slug change
   useEffect(() => {
@@ -55,7 +58,7 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
       const s = sizeRef.current
       const sc = sizeScaleRef.current
 
-      // Decay momentum to stop — no auto-advance, never moves without user input
+      // Decay momentum only — no auto-advance, at rest = frozen on frame 000
       if (!isDraggingRef.current && Math.abs(velRef.current) > 0.04) {
         velRef.current *= DAMPING
         frameRef.current = ((frameRef.current - velRef.current) % TOTAL + TOTAL) % TOTAL
@@ -67,23 +70,22 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
 
       ctx!.clearRect(0, 0, s, s)
 
-      // Soft radial backdrop — gives transparent glass/lid/straw an edge to refract against
-      const grad = ctx!.createRadialGradient(s / 2, s * 0.48, 0, s / 2, s * 0.48, s * 0.65)
-      grad.addColorStop(0, '#efefec')
-      grad.addColorStop(1, '#e4e4df')
-      ctx!.fillStyle = grad
-      ctx!.fillRect(0, 0, s, s)
+      if (bgModeRef.current !== 'grey') {
+        // Opaque vessel on transparent bg — fill #fafafa + soft contact shadow
+        ctx!.fillStyle = '#fafafa'
+        ctx!.fillRect(0, 0, s, s)
 
-      // Soft contact shadow ellipse — ground plane under the vessel
-      ctx!.save()
-      ctx!.globalAlpha = 0.22
-      ctx!.filter = 'blur(14px)'
-      ctx!.beginPath()
-      ctx!.ellipse(s / 2, s * 0.875, s * 0.26, s * 0.045, 0, 0, Math.PI * 2)
-      ctx!.fillStyle = '#1a1a1a'
-      ctx!.fill()
-      ctx!.restore()
-      ctx!.filter = 'none'
+        ctx!.save()
+        ctx!.globalAlpha = 0.18
+        ctx!.filter = 'blur(12px)'
+        ctx!.beginPath()
+        ctx!.ellipse(s / 2, s * 0.875, s * 0.26, s * 0.045, 0, 0, Math.PI * 2)
+        ctx!.fillStyle = '#1a1a1a'
+        ctx!.fill()
+        ctx!.restore()
+        ctx!.filter = 'none'
+      }
+      // grey mode: frame IS the background — draw directly onto cleared canvas
 
       const dw = s * sc
       const dh = s * sc
@@ -124,6 +126,7 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
   }, [])
 
   const allLoaded = loadedCount >= TOTAL
+  const cardBg = bgMode === 'grey' ? '#c8c8c4' : '#fafafa'
 
   return (
     <div
@@ -132,7 +135,7 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
         width: size,
         height: size,
         borderRadius: 24,
-        background: '#efefec',
+        background: cardBg,
         boxShadow: '0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)',
         overflow: 'hidden',
         userSelect: 'none',

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Spin360Viewer } from '@/components/order/Spin360Viewer'
-import { resolveCoffeeSpin } from '@/lib/drinkFills'
+import { resolveCoffeeSpin, resolveCoffeeBgMode } from '@/lib/drinkFills'
 
 // All 29 archetypes + their display names grouped by spin slug
 const DRINK_ROWS: { archetype: string; label: string; spin: string }[] = [
@@ -19,7 +19,7 @@ const DRINK_ROWS: { archetype: string; label: string; spin: string }[] = [
   { archetype: 'iced-latte',     label: 'Iced Latte',       spin: 'iced-latte' },
   { archetype: 'iced-mocha',     label: 'Iced Mocha',       spin: 'iced-latte' },
   { archetype: 'iced-choc',      label: 'Iced Chocolate',   spin: 'iced-latte' },
-  { archetype: 'hot-choc',       label: 'Hot Chocolate',    spin: '(none — hero fallback)' },
+  { archetype: 'hot-choc',       label: 'Hot Chocolate',    spin: 'hot-choc' },
   { archetype: 'chai-tea',       label: 'Chai Tea',         spin: 'chai-tea'   },
   { archetype: 'cold-brew',      label: 'Cold Brew',        spin: 'cold-brew'  },
   { archetype: 'choc-milkshake',    label: 'Chocolate Milkshake', spin: 'milkshake' },
@@ -49,7 +49,7 @@ export default function Coffee360DevPage() {
         /dev/coffee-360
       </h1>
       <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 32px' }}>
-        COFFEE-360-BATCH — 29 drinks, 8 spin slugs
+        COFFEE-SPIN-FINAL — 29 drinks, 9 spin slugs (3 opaque #fafafa · 6 grey #c8c8c4)
       </p>
 
       <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -121,7 +121,7 @@ export default function Coffee360DevPage() {
         {/* Viewer */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           {spinSlug ? (
-            <Spin360Viewer key={spinSlug + sizeScale} slug={spinSlug} sizeScale={sizeScale} size={320} />
+            <Spin360Viewer key={spinSlug + sizeScale} slug={spinSlug} bgMode={resolveCoffeeBgMode(spinSlug)} sizeScale={sizeScale} size={320} />
           ) : (
             <div style={{ width: 320, height: 320, borderRadius: 24, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 48 }}>🖼️</span>

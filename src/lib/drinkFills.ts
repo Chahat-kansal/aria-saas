@@ -82,7 +82,7 @@ export function resolveCoffeeSpin(archetype: string): string | null {
     case 'iced-latte': case 'iced-mocha': case 'iced-choc': case 'iced-coffee':
       return 'iced-latte'
     case 'hot-choc':
-      return null  // no spin MP4 available — falls back to hero image
+      return 'hot-choc'
     case 'chai-tea':
       return 'chai-tea'
     case 'cold-brew':
@@ -98,6 +98,13 @@ export function resolveCoffeeSpin(archetype: string): string | null {
     default:
       return null
   }
+}
+
+// Slugs rendered on baked grey bg (#c8c8c4) — no rembg applied, glass visible
+const GREY_BG_SLUGS = new Set(['iced-latte', 'cold-brew', 'milkshake', 'juice', 'smoothie', 'chai-tea'])
+
+export function resolveCoffeeBgMode(slug: string): 'transparent' | 'grey' {
+  return GREY_BG_SLUGS.has(slug) ? 'grey' : 'transparent'
 }
 
 // Modifiers that lighten the fill color (milk, oat milk)

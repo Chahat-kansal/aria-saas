@@ -3,7 +3,7 @@ import { resolveRenderMode, type RenderModeProduct } from './productMode'
 import { ProductHero } from './ProductHero'
 import { ProductCustomiser } from './ProductCustomiser'
 import { Spin360Viewer } from './Spin360Viewer'
-import { resolveCoffeeSpin } from '@/lib/drinkFills'
+import { resolveCoffeeSpin, resolveCoffeeBgMode } from '@/lib/drinkFills'
 
 interface Props {
   product: RenderModeProduct
@@ -30,7 +30,7 @@ export function ProductView({ product, imageSrc, videoSrc, name, alt, size, size
   if (mode === 'coffee') {
     const spinSlug = resolveCoffeeSpin(product.ordering_archetype ?? '')
     if (spinSlug) {
-      return <Spin360Viewer slug={spinSlug} sizeScale={sizeScale} size={size ?? 320} />
+      return <Spin360Viewer slug={spinSlug} bgMode={resolveCoffeeBgMode(spinSlug)} sizeScale={sizeScale} size={size ?? 320} />
     }
     // no spin yet for this archetype → fall through to hero
   }
