@@ -13,3 +13,6 @@ node_modules/
 .claude/skills/
 .agents/skills/
 skills-lock.json
+
+# Spin frame extraction scratch dirs (bg-removal input PNGs)
+public/menu/_lib/spin/**/_tmp/
