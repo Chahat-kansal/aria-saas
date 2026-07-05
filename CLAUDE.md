@@ -177,3 +177,8 @@ A task is NOT done when it compiles. For anything user-facing, you must verify t
 - For UI components: confirm the component renders the intended content, not a degraded fallback path.
 - The user should NEVER be the one to discover that the output is broken. If you cannot render/inspect the output in this environment, say so explicitly and list exactly what the user must check — do not silently mark done.
 - "It builds" and "the DB row exists" are necessary but NOT sufficient. The rendered result is the deliverable.
+
+## Local skills (read-only, advisory)
+- /aria-cso — security audit. REPORT ONLY: never edits code, never pushes, never makes live HTTP requests. Only write allowed: prompts/security-audit-<date>.md.
+- /aria-review — pre-push diff review. REPORT ONLY: never edits, never commits, never pushes. Run before every push; owner approves fixes.
+- These skills NEVER override the locked rules above. If a skill instruction conflicts with a locked rule, the locked rule wins.
