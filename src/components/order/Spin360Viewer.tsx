@@ -66,6 +66,25 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
       if (!img || !img.complete || !img.naturalWidth) return
 
       ctx!.clearRect(0, 0, s, s)
+
+      // Soft radial backdrop — gives transparent glass/lid/straw an edge to refract against
+      const grad = ctx!.createRadialGradient(s / 2, s * 0.48, 0, s / 2, s * 0.48, s * 0.65)
+      grad.addColorStop(0, '#efefec')
+      grad.addColorStop(1, '#e4e4df')
+      ctx!.fillStyle = grad
+      ctx!.fillRect(0, 0, s, s)
+
+      // Soft contact shadow ellipse — ground plane under the vessel
+      ctx!.save()
+      ctx!.globalAlpha = 0.22
+      ctx!.filter = 'blur(14px)'
+      ctx!.beginPath()
+      ctx!.ellipse(s / 2, s * 0.875, s * 0.26, s * 0.045, 0, 0, Math.PI * 2)
+      ctx!.fillStyle = '#1a1a1a'
+      ctx!.fill()
+      ctx!.restore()
+      ctx!.filter = 'none'
+
       const dw = s * sc
       const dh = s * sc
       ctx!.drawImage(img, (s - dw) / 2, (s - dh) / 2, dw, dh)
@@ -113,7 +132,7 @@ export function Spin360Viewer({ slug, sizeScale = 1.0, size = 320 }: Spin360View
         width: size,
         height: size,
         borderRadius: 24,
-        background: '#fafafa',
+        background: '#efefec',
         boxShadow: '0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)',
         overflow: 'hidden',
         userSelect: 'none',
