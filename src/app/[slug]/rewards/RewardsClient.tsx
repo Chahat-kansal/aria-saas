@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { CxTabBar } from '../CxTabBar'
 
-const BG = '#fafafa'
+const BG = '#f3efe4'
 const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
@@ -32,120 +32,152 @@ interface Challenge {
   expires_at: string | null
 }
 
+interface EarnTxn {
+  id: string
+  type: string
+  points_delta: number
+  created_at: string
+}
+
 interface CxData {
   found: boolean
   customer_id?: string
   name?: string
   points_balance?: number
   loyalty_tier?: string | null
-  wallet_balance?: number
+  visit_count?: number
   challenges?: Challenge[]
-  recent_txns?: unknown[]
+  recent_txns?: EarnTxn[]
 }
 
-// Ring: lime fill on light grey track — readable on #fafafa
-function PointsRing({ pts, threshold }: { pts: number; threshold: number | null }) {
-  const R = 72
-  const C = 2 * Math.PI * R
-  const pct = threshold && threshold > 0 ? Math.min(1, pts / threshold) : (pts > 0 ? 0.25 : 0.03)
-  const fill = pct * C
+// Horseshoe arc progress ring — opens at bottom
+function PointsArc({ pts, threshold }: { pts: number; threshold: number | null }) {
+  const R = 88
+  const cx = 110
+  const cy = 110
+  // Arc from 210deg to 330deg (clockwise) = 300deg sweep
+  const startAngle = 210
+  const sweepDeg = 300
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const pct = threshold && threshold > 0 ? Math.min(1, pts / threshold) : (pts > 0 ? 0.2 : 0.02)
+
+  function polarToXY(angleDeg: number) {
+    const a = toRad(angleDeg)
+    return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }
+  }
+
+  const s = polarToXY(startAngle)
+  const e = polarToXY(startAngle + sweepDeg)
+  const fEnd = polarToXY(startAngle + sweepDeg * pct)
+
+  const trackD = 'M ' + s.x.toFixed(2) + ' ' + s.y.toFixed(2) + ' A ' + R + ' ' + R + ' 0 1 1 ' + e.x.toFixed(2) + ' ' + e.y.toFixed(2)
+  const fillD = pct > 0.01
+    ? ('M ' + s.x.toFixed(2) + ' ' + s.y.toFixed(2) + ' A ' + R + ' ' + R + ' 0 ' + (sweepDeg * pct > 180 ? '1' : '0') + ' 1 ' + fEnd.x.toFixed(2) + ' ' + fEnd.y.toFixed(2))
+    : ''
+
   return (
-    <svg width={180} height={180} viewBox="0 0 180 180" aria-hidden="true" style={{ display: 'block' }}>
-      <circle cx={90} cy={90} r={R} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={10}/>
-      {fill > 0 && (
-        <circle
-          cx={90} cy={90} r={R} fill="none"
-          stroke={ACCENT} strokeWidth={10}
-          strokeLinecap="round"
-          strokeDasharray={String(fill.toFixed(2)) + ' ' + String((C - fill).toFixed(2))}
-          transform="rotate(-90 90 90)"
-        />
+    <svg width={220} height={145} viewBox={'0 0 220 145'} style={{ display: 'block', overflow: 'visible' }}>
+      <path d={trackD} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={10} strokeLinecap="round" />
+      {fillD && (
+        <path d={fillD} fill="none" stroke={ACCENT} strokeWidth={10} strokeLinecap="round" />
       )}
     </svg>
   )
 }
 
-function RewardCard({ rule, pts }: { rule: RewardRule; pts: number }) {
+function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: string }) {
   const cost = Number(rule.threshold_value ?? 0)
-  const canRedeem = pts >= cost
+  const canRedeem = cost > 0 && pts >= cost
+  const locked = cost > 0 && pts < cost
   const need = cost - pts
+  const redeemUrl = '/' + slug + '/loyalty/redeem?rule=' + rule.id
 
   return (
     <div style={{
-      borderRadius: 20, background: '#fff', overflow: 'hidden',
-      boxShadow: '0 3px 16px rgba(0,0,0,0.08)',
-      opacity: canRedeem ? 1 : 0.7,
+      display: 'flex', borderRadius: 20, background: '#fff', overflow: 'hidden',
+      boxShadow: '0 2px 16px rgba(0,0,0,0.09)',
+      opacity: locked ? 0.72 : 1,
       border: canRedeem ? ('2px solid ' + ACCENT) : '2px solid transparent',
+      marginBottom: 14,
     }}>
+      {/* Product image — left 42% */}
       <div style={{
-        width: '100%', height: 140,
-        background: rule.image_url ? ('url(' + rule.image_url + ') center/cover no-repeat #efefef') : '#f3f4f6',
+        width: '42%', flexShrink: 0, minHeight: 160, position: 'relative',
+        background: rule.image_url
+          ? ('url(' + rule.image_url + ') center/cover no-repeat #f3f4f6')
+          : '#f3f4f6',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 36, position: 'relative',
+        fontSize: 36,
       }}>
         {!rule.image_url && '☕'}
-        {!canRedeem && (
+        {locked && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 26, color: '#fff', opacity: 0.85 }}>🔒</span>
+            <span style={{ fontSize: 32 }}>🔒</span>
           </div>
         )}
       </div>
-      <div style={{ padding: '12px 14px 14px' }}>
-        <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 16, fontWeight: 600, margin: '0 0 4px', color: INK }}>
-          {rule.name}
-        </p>
-        {rule.description && (
-          <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: '0 0 10px', lineHeight: 1.4 }}>
-            {rule.description}
-          </p>
-        )}
-        {cost > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: INK }}>
-              {cost} pts
-            </span>
-            {canRedeem ? (
-              <span style={{ background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '5px 14px', fontFamily: FB, fontSize: 12, fontWeight: 700 }}>
-                Redeem
-              </span>
-            ) : (
-              <span style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED }}>
-                {need} more pts
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
-function ChallengeBar({ challenge }: { challenge: Challenge }) {
-  const pct = challenge.target_count > 0 ? Math.min(1, challenge.progress / challenge.target_count) : 0
-  return (
-    <div style={{ background: '#fff', borderRadius: 18, padding: '14px 16px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, margin: '0 0 2px', color: INK }}>{challenge.title}</p>
-          {challenge.description && (
-            <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>{challenge.description}</p>
+      {/* Text — right 58% */}
+      <div style={{ flex: 1, padding: '16px 16px 16px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div>
+          <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, margin: '0 0 3px', color: INK, lineHeight: 1.2 }}>
+            {rule.name}
+            <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 400, color: INK_MUTED, marginLeft: 5 }}>
+              {'(' + cost + 'pts)'}
+            </span>
+          </p>
+          {rule.description && (
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 13, color: INK_MUTED, margin: '0 0 12px', lineHeight: 1.4 }}>
+              {rule.description}
+            </p>
           )}
         </div>
-        <span style={{ fontFamily: FB, fontSize: 12, color: ACCENT_TEXT, background: ACCENT + '33', borderRadius: 100, padding: '3px 10px', marginLeft: 8, whiteSpace: 'nowrap', fontWeight: 600 }}>
-          +{challenge.reward_points} pts
-        </span>
+        {canRedeem ? (
+          <a
+            href={redeemUrl}
+            style={{
+              display: 'block', textAlign: 'center',
+              background: ACCENT, color: ACCENT_TEXT,
+              borderRadius: 100, padding: '9px 0',
+              fontFamily: FB, fontSize: 13, fontWeight: 700, textDecoration: 'none',
+            }}
+          >
+            Redeem
+          </a>
+        ) : locked ? (
+          <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
+            {need} more pts needed
+          </p>
+        ) : null}
       </div>
-      <div style={{ height: 6, background: '#efefef', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-        <div style={{ height: '100%', width: (pct * 100).toFixed(1) + '%', background: ACCENT, borderRadius: 3, transition: 'width 0.6s ease' }} />
-      </div>
-      <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, margin: 0 }}>
-        {challenge.progress} / {challenge.target_count}
-      </p>
     </div>
   )
 }
 
-export function RewardsClient({ slug, bizName, logoUrl, rewardRules }: {
+function VisitBar({ visits, target }: { visits: number; target: number }) {
+  const pct = target > 0 ? Math.min(1, visits / target) : 0
+  return (
+    <div style={{ background: '#fff', borderRadius: 20, padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, color: INK }}>
+          {'Visit ' + target + 'x this month – ' + visits + '/' + target}
+        </span>
+        <span style={{
+          fontFamily: FB, fontSize: 12, fontWeight: 700,
+          background: ACCENT, color: ACCENT_TEXT,
+          borderRadius: 100, padding: '3px 10px',
+        }}>
+          {'✓ ' + visits + '/' + target}
+        </span>
+      </div>
+      <div style={{ height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: (pct * 100).toFixed(1) + '%', background: ACCENT, borderRadius: 4, transition: 'width 0.6s ease' }} />
+      </div>
+    </div>
+  )
+}
+
+export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }: {
   slug: string
   bizName: string
   logoUrl: string | null
@@ -176,124 +208,125 @@ export function RewardsClient({ slug, bizName, logoUrl, rewardRules }: {
   }, [slug])
 
   const pts = cx?.points_balance ?? 0
-  const tier = cx?.loyalty_tier ?? 'Member'
-  const firstName = cx?.name?.split(' ')[0] ?? null
-  const challenges = (cx?.challenges ?? []) as Challenge[]
-  const topThreshold = rewardRules.length > 0 ? (rewardRules[rewardRules.length - 1].threshold_value ?? null) : null
+  const rawTier = cx?.loyalty_tier ?? 'Member'
+  const visitCount = cx?.visit_count ?? 0
+  const recentTxns = (cx?.recent_txns ?? []) as EarnTxn[]
+
+  // Visits this month — count earn txns in current calendar month
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const visitsThisMonth = recentTxns.filter(t =>
+    t.type === 'earn' && new Date(t.created_at) >= monthStart
+  ).length
+  const visitTarget = 5
+
+  // Tier display: "Gold tier — N pts to next reward"
+  const sortedRules = [...rewardRules].sort((a, b) => (a.threshold_value ?? 0) - (b.threshold_value ?? 0))
+  const topThreshold = sortedRules.length > 0 ? (sortedRules[sortedRules.length - 1].threshold_value ?? null) : null
+  const nextThreshold = sortedRules.find(r => (r.threshold_value ?? 0) > pts)?.threshold_value ?? null
+  const ptsToNext = nextThreshold !== null ? (nextThreshold - pts) : 0
+
+  const tierLabel = rawTier === 'gold' || rawTier === 'Gold' ? 'Gold' : rawTier === 'silver' || rawTier === 'Silver' ? 'Silver' : 'Member'
 
   return (
     <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
-      <style>{`*, *::before, *::after { box-sizing: border-box }`}</style>
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box }
+        @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+      `}</style>
 
-      {/* ── Header — LIGHT, ink text ── */}
+      {/* ── Header — lime glow section ── */}
       <div style={{
-        background: BG,
-        paddingTop: 56, paddingBottom: 28, paddingLeft: 20, paddingRight: 20,
-        borderBottom: '1px solid rgba(0,0,0,0.07)',
-        textAlign: 'center',
+        background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(217,245,78,0.38) 0%, transparent 70%), ' + BG,
+        paddingTop: 56, paddingBottom: 0, textAlign: 'center',
+        position: 'relative',
       }}>
-        <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 34, color: INK, margin: '0 0 2px', fontWeight: 400, letterSpacing: '-0.01em' }}>
+        <h1 style={{
+          fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 400,
+          color: INK, margin: '0 0 6px', letterSpacing: '-0.02em', lineHeight: 1,
+        }}>
           Rewards
         </h1>
-        {firstName && (
-          <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: '0 0 20px' }}>
-            {'Hey, ' + firstName + '!'}
+
+        {/* Tier subtitle */}
+        {loaded && cx && (
+          <p style={{ fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, margin: '0 0 20px', fontWeight: 600 }}>
+            {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
           </p>
         )}
-        {!firstName && <div style={{ height: 20 }} />}
+        {(!loaded || !cx) && <div style={{ height: 28 }} />}
 
-        {/* Points ring — lime fill on light track */}
-        <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
-          <PointsRing pts={pts} threshold={topThreshold} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
-            <div style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 48, fontWeight: 600, color: INK, lineHeight: 1 }}>
-              {pts}
-            </div>
-            <div style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
-              points
-            </div>
-          </div>
+        {/* Big pts */}
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <p style={{
+            fontFamily: FB, fontSize: 76, fontWeight: 800, color: INK,
+            margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
+          }}>
+            {pts.toLocaleString()}
+          </p>
+          <p style={{ fontFamily: FB, fontSize: 18, color: INK_MUTED, margin: '2px 0 0', fontWeight: 500 }}>
+            pts
+          </p>
         </div>
 
-        {/* Tier badge */}
-        <div>
-          <span style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '5px 18px', fontFamily: FB, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {tier}
-          </span>
+        {/* Arc ring below pts — horseshoe shape */}
+        <div style={{ marginTop: -8, display: 'flex', justifyContent: 'center' }}>
+          <PointsArc pts={pts} threshold={topThreshold} />
         </div>
-
-        {/* Progress text */}
-        {topThreshold && pts < topThreshold && (
-          <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, marginTop: 10, marginBottom: 0 }}>
-            {topThreshold - pts} pts to next reward
-          </p>
-        )}
-        {topThreshold && pts >= topThreshold && (
-          <p style={{ fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, background: ACCENT + '33', display: 'inline-block', borderRadius: 100, padding: '4px 14px', marginTop: 10, marginBottom: 0, fontWeight: 600 }}>
-            🎉 Reward ready to redeem!
-          </p>
-        )}
       </div>
 
-      {/* Not logged in prompt */}
-      {loaded && !cx && (
-        <div style={{ margin: '24px 18px', padding: '20px', background: '#fff', borderRadius: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', textAlign: 'center' }}>
-          <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 14px', color: INK }}>
-            Check your points
-          </p>
-          <a href={'/' + slug} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '10px 24px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
-            Sign in on Home
-          </a>
-        </div>
-      )}
+      {/* ── Body — cream ── */}
+      <div style={{ padding: '4px 18px 0' }}>
 
-      {/* ── Reward catalog ── */}
-      <div style={{ padding: '24px 18px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
-          <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: 0, color: INK }}>
-            Prize shelf
-          </h2>
-          <span style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED }}>
-            {rewardRules.length} {rewardRules.length === 1 ? 'reward' : 'rewards'}
-          </span>
-        </div>
-
-        {rewardRules.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            {rewardRules.map(r => (
-              <RewardCard key={r.id} rule={r} pts={pts} />
-            ))}
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '36px 0', background: '#fff', borderRadius: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>🎁</div>
-            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 8px', color: INK }}>
-              Rewards coming soon
+        {/* Not logged in prompt */}
+        {loaded && !cx && (
+          <div style={{ marginBottom: 20, padding: '20px', background: '#fff', borderRadius: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 14px', color: INK }}>
+              Check your points
             </p>
-            <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>
-              {bizName} is setting up their loyalty catalog
-            </p>
+            <a href={'/' + slug} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '10px 24px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+              Sign in on Home
+            </a>
           </div>
         )}
-      </div>
 
-      {/* ── Challenges ── */}
-      {challenges.length > 0 && (
-        <div style={{ padding: '24px 18px 0' }}>
-          <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: '0 0 14px', color: INK }}>
-            Challenges
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {challenges.map(c => (
-              <ChallengeBar key={c.id} challenge={c} />
-            ))}
+        {/* Prize shelf */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+            <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 28, fontWeight: 600, margin: 0, color: INK }}>
+              Prize shelf
+            </h2>
+            <span style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED }}>
+              {rewardRules.length} {rewardRules.length === 1 ? 'reward' : 'rewards'}
+            </span>
           </div>
-        </div>
-      )}
 
-      {/* ── Earn CTA — dark accent card (intentional design element) ── */}
-      <div style={{ padding: '24px 18px 0' }}>
-        <div style={{ background: CARD_DARK, borderRadius: 20, padding: '20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          {rewardRules.length > 0 ? (
+            <div>
+              {rewardRules.map(r => (
+                <RewardCard key={r.id} rule={r} pts={pts} slug={slug} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '36px 0', background: '#fff', borderRadius: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: 14 }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🎁</div>
+              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 8px', color: INK }}>
+                Rewards coming soon
+              </p>
+              <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>
+                {bizName} is setting up their loyalty catalog
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Visit progress */}
+        {loaded && (cx || visitCount > 0) && (
+          <VisitBar visits={cx ? visitsThisMonth : 0} target={visitTarget} />
+        )}
+
+        {/* Earn CTA — dark accent card */}
+        <div style={{ background: CARD_DARK, borderRadius: 20, padding: '20px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
           <div style={{ fontSize: 32 }}>☕</div>
           <div style={{ flex: 1 }}>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: '#fff', margin: '0 0 4px', fontWeight: 600 }}>

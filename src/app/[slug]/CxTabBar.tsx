@@ -21,10 +21,14 @@ function IconFork({ color = 'currentColor' }: { color?: string }) {
   )
 }
 
-function IconStar({ color = 'currentColor' }: { color?: string }) {
+function IconGift({ color = 'currentColor' }: { color?: string }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill={color} style={{ display: 'block' }}>
-      <path d="M10 2l2.4 4.9L18 7.6l-4 3.9.9 5.5L10 14.4l-4.9 2.6.9-5.5-4-3.9 5.6-.7z"/>
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <rect x="2" y="8" width="16" height="10" rx="1.5"/>
+      <path d="M2 8h16"/>
+      <line x1="10" y1="8" x2="10" y2="18"/>
+      <path d="M10 8C10 8 8 5 6 5s-2 2-2 3"/>
+      <path d="M10 8c0 0 2-3 4-3s2 2 2 3"/>
     </svg>
   )
 }
@@ -41,7 +45,12 @@ function IconCard({ color = 'currentColor' }: { color?: string }) {
 
 export type CxActiveTab = 'home' | 'menu' | 'rewards' | 'wallet'
 
-export function CxTabBar({ slug, active, cartCount = 0 }: { slug: string; active: CxActiveTab; cartCount?: number }) {
+export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
+  slug: string
+  active: CxActiveTab
+  cartCount?: number
+  dark?: boolean
+}) {
   const tabs = [
     { key: 'home' as const,    label: 'Home',    href: '/' + slug },
     { key: 'menu' as const,    label: 'Menu',    href: '/' + slug + '/menu' },
@@ -49,19 +58,24 @@ export function CxTabBar({ slug, active, cartCount = 0 }: { slug: string; active
     { key: 'wallet' as const,  label: 'Wallet',  href: '/' + slug + '/wallet' },
   ]
 
+  const bgColor = dark ? 'rgba(20,19,15,0.92)' : 'rgba(250,250,250,0.94)'
+  const inactiveColor = dark ? 'rgba(255,255,255,0.38)' : '#aaa'
+
   return (
     <nav style={{
       position: 'fixed', bottom: 12, left: 12, right: 12, zIndex: 1000,
       height: 68, borderRadius: 22,
       backdropFilter: 'blur(20px) saturate(200%)',
       WebkitBackdropFilter: 'blur(20px) saturate(200%)',
-      background: 'rgba(250,250,250,0.94)',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.16), 0 1px 0 rgba(255,255,255,0.7) inset',
+      background: bgColor,
+      boxShadow: dark
+        ? '0 8px 32px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.06) inset'
+        : '0 8px 32px rgba(0,0,0,0.16), 0 1px 0 rgba(255,255,255,0.7) inset',
       display: 'flex', alignItems: 'stretch', padding: '0 6px',
     }}>
       {tabs.map(t => {
         const on = active === t.key
-        const iconColor = on ? ACCENT_TEXT : '#aaa'
+        const iconColor = on ? ACCENT_TEXT : inactiveColor
         return (
           <a
             key={t.key}
@@ -76,9 +90,9 @@ export function CxTabBar({ slug, active, cartCount = 0 }: { slug: string; active
           >
             {t.key === 'home'    && <IconHome color={iconColor} />}
             {t.key === 'menu'    && <IconFork color={iconColor} />}
-            {t.key === 'rewards' && <IconStar color={iconColor} />}
+            {t.key === 'rewards' && <IconGift color={iconColor} />}
             {t.key === 'wallet'  && <IconCard color={iconColor} />}
-            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? ACCENT_TEXT : '#aaa', letterSpacing: '0.01em' }}>
+            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? ACCENT_TEXT : inactiveColor, letterSpacing: '0.01em' }}>
               {t.label}
             </span>
             {t.key === 'menu' && cartCount > 0 && (

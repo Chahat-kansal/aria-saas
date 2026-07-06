@@ -20,10 +20,10 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   type CustomerRow = {
     id: string; name: string; points_balance: number | null; loyalty_tier: string | null
     visit_count: number | null; stamps_count: number | null; total_spent: string | null
-    last_visit_at: string | null
+    last_visit_at: string | null; loyalty_identity_id: string | null
   }
 
-  const COLS = 'id, name, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at'
+  const COLS = 'id, name, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id'
 
   let customer: CustomerRow | null = null
   const { data: byNorm } = await supabaseAdmin
@@ -53,7 +53,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   if (!customer) return NextResponse.json({ found: false })
 
   // Parallel fetch of all supplemental data
-  const [walletRes, challengesRes, txnsRes, usualRes, identityRes, preloadRes] = await Promise.all([
+  const [walletRes, challengesRes, txnsRes, usualRes, preloadRes] = await Promise.all([
     supabaseAdmin
       .from('loyalty_preload_accounts')
       .select('balance, currency')
@@ -83,12 +83,6 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(1)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('loyalty_identity')
-      .select('id')
-      .eq('business_id', bid)
-      .eq('customer_id', customer.id)
       .maybeSingle(),
     supabaseAdmin
       .from('loyalty_preload_ledger')
@@ -126,7 +120,6 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   const walletData = walletRes.data as { balance?: number | null; currency?: string | null } | null
   const walletBalance = Number(walletData?.balance ?? 0)
   const walletCurrency = walletData?.currency ?? 'AUD'
-  const loyaltyIdentityId = (identityRes.data as { id?: string | null } | null)?.id ?? null
 
   return NextResponse.json({
     found: true,
@@ -138,7 +131,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     stamps_count: Number(customer.stamps_count) || 0,
     total_spent: (Number(customer.total_spent) || 0).toFixed(2),
     last_visit_at: customer.last_visit_at ?? null,
-    loyalty_identity_id: loyaltyIdentityId,
+    loyalty_identity_id: customer.loyalty_identity_id ?? null,
     wallet_balance: walletBalance,
     wallet_currency: walletCurrency,
     challenges: (challengesRes.data ?? []) as unknown[],
