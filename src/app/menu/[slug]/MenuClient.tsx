@@ -678,6 +678,7 @@ export default function MenuClient({
             modifierGroups={productModifiers?.[productModal.id] ?? []}
             productPrice={Number(productModal.price)}
             archetype={productModal.ordering_archetype ?? undefined}
+            imageUrl={productModal.image_url ?? undefined}
             onAddToOrder={(cfg: BuildConfig) => {
               setCart(c => [...c, {
                 product: productModal, qty: 1, unit_price: cfg.total,

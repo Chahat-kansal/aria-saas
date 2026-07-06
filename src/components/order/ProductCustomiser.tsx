@@ -19,8 +19,10 @@ import {
   ALL_PROTEINS, INGREDIENT_PATHS, OPTIONAL_TOPPINGS, FOOD_LIBRARIES,
   nameToFoodKey, type IngredientKey,
 } from './ingredients'
+import { ProductHero } from './ProductHero'
 
 const DROP_ZONE_ID = 'burger-drop-zone'
+const FOOD_HERO_ARCHETYPES: readonly string[] = ['salad', 'bowl', 'wrap', 'toastie', 'sandwich']
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -195,9 +197,10 @@ interface Props {
   onAddToOrder?: (config: BuildConfig) => void
   layout?: 'stack' | 'bowl' | 'scatter'
   archetype?: string
+  imageUrl?: string
 }
 
-export function ProductCustomiser({ size = 220, modifierGroups = [], productPrice, onAddToOrder, layout, archetype }: Props) {
+export function ProductCustomiser({ size = 220, modifierGroups = [], productPrice, onAddToOrder, layout, archetype, imageUrl }: Props) {
 
   // Resolve food library if archetype is set
   const foodLib = archetype ? (FOOD_LIBRARIES[archetype] ?? null) : null
@@ -205,6 +208,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
   const isFoodBuild = foodLib !== null
   const trayLibrary: IngredientKey[] = isFoodBuild ? foodLib!.items : OPTIONAL_TOPPINGS
   const baseKey: IngredientKey | undefined = isFoodBuild ? foodLib!.base : undefined
+  const isHeroMode = isFoodBuild && archetype != null && FOOD_HERO_ARCHETYPES.includes(archetype)
 
   // Name-to-key resolver: food-aware
   function resolveIngredientKey(name: string): IngredientKey | null {
@@ -292,6 +296,33 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
     baseLayer: baseKey,
   })
 
+  // Hero mode state — hooks must be called unconditionally (before any early return)
+  const initEitherOrSel: Record<string, string> = {}
+  for (const g of pillGroups) {
+    const def = g.options.find(o => o.isDefault)
+    initEitherOrSel[g.id] = def?.id ?? (g.options[0]?.id ?? '')
+  }
+  const [eitherOrSel, setEitherOrSel] = useState<Record<string, string>>(initEitherOrSel)
+  const [heroRemovedDefaults, setHeroRemovedDefaults] = useState<Set<string>>(new Set<string>())
+  const [heroExtras, setHeroExtras] = useState<Record<string, number>>({})
+
+  let heroEitherOrCents = 0
+  for (const g of pillGroups) {
+    const selId = eitherOrSel[g.id]
+    if (selId) {
+      const opt = g.options.find(o => o.id === selId)
+      if (opt) heroEitherOrCents += opt.priceCents
+    }
+  }
+  let heroExtrasCents = 0
+  for (const g of trayGroups) {
+    for (const opt of g.options) {
+      if (!opt.isDefault) heroExtrasCents += (heroExtras[opt.id] ?? 0) * opt.priceCents
+    }
+  }
+  const heroTotal = Number(((productPrice ?? 0) + (heroEitherOrCents + heroExtrasCents) / 100).toFixed(2))
+  const heroPoints = Math.floor(heroTotal)
+
   const [draggingId, setDraggingId] = useState<IngredientKey | null>(null)
   const [buildNote, setBuildNote] = useState('')
 
@@ -357,6 +388,225 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
       total,
       note: buildNote.trim() || undefined,
     })
+  }
+
+  function handleHeroAddToOrder() {
+    const addedItems: { id: string; name: string; priceCents: number }[] = []
+    const removedItems: { name: string }[] = []
+    for (const g of pillGroups) {
+      const selId = eitherOrSel[g.id]
+      if (selId) {
+        const opt = g.options.find(o => o.id === selId)
+        if (opt) addedItems.push({ id: opt.id, name: opt.name, priceCents: opt.priceCents })
+      }
+    }
+    for (const g of trayGroups) {
+      for (const opt of g.options) {
+        if (opt.isDefault && heroRemovedDefaults.has(opt.id)) {
+          removedItems.push({ name: opt.name })
+        } else if (!opt.isDefault) {
+          const qty = heroExtras[opt.id] ?? 0
+          for (let i = 0; i < qty; i++) {
+            addedItems.push({ id: opt.id, name: opt.name, priceCents: opt.priceCents })
+          }
+        }
+      }
+    }
+    onAddToOrder?.({
+      mode: 'build',
+      layers: [],
+      added: addedItems,
+      removed: removedItems,
+      modifiers: addedItems,
+      basePrice: productPrice ?? 0,
+      extrasCents: heroEitherOrCents + heroExtrasCents,
+      total: heroTotal,
+      note: buildNote.trim() || undefined,
+    })
+  }
+
+  // ── Hero mode render (salad / bowl / wrap / toastie / sandwich) ──────────────
+  if (isHeroMode) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, width: '100%' }}>
+
+        {/* Hero image */}
+        <div style={{ padding: '24px 16px 8px', display: 'flex', justifyContent: 'center' }}>
+          {imageUrl
+            ? <ProductHero imageSrc={imageUrl} name="" alt="product" size={220} />
+            : <div style={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>🥗</div>
+          }
+        </div>
+
+        {/* Modifier groups */}
+        <div style={{ width: '100%', paddingBottom: 80 }}>
+
+          {/* Either-or pill groups */}
+          {pillGroups.map(group => (
+            <div key={group.id} style={{ padding: '12px 16px 0', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box' as const }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.07em', color: '#6b7280', marginBottom: 8, fontFamily: "'Outfit', Inter, sans-serif" }}>
+                {group.name}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                {group.options.map(opt => {
+                  const isActive = eitherOrSel[group.id] === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => setEitherOrSel(prev => ({ ...prev, [group.id]: opt.id }))}
+                      style={{
+                        padding: '8px 16px', borderRadius: 20,
+                        border: '2px solid ' + (isActive ? '#d9f54e' : '#e5e7eb'),
+                        background: isActive ? '#f7fde0' : '#fff',
+                        cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                        fontSize: 13, fontWeight: 600,
+                        color: isActive ? '#2f3a06' : '#374151',
+                        boxShadow: isActive ? '0 0 0 1px #d9f54e, 0 2px 8px rgba(217,245,78,0.18)' : '0 1px 4px rgba(0,0,0,0.07)',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {opt.name}
+                      {opt.priceCents > 0 && (
+                        <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 4, fontWeight: 500 }}>
+                          {'+$' + (opt.priceCents / 100).toFixed(2)}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Customise heading */}
+          {trayGroups.length > 0 && (
+            <div style={{ padding: '18px 16px 4px', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box' as const }}>
+              <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#6b7280', fontFamily: "'Outfit', Inter, sans-serif" }}>
+                Customise
+              </div>
+            </div>
+          )}
+
+          {/* Tray groups: toggle list */}
+          {trayGroups.map(group => (
+            <div key={group.id} style={{ padding: '8px 16px 0', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box' as const }}>
+              {trayGroups.length > 1 && (
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 6, fontFamily: 'Inter, sans-serif' }}>
+                  {group.name}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {group.options.map(opt => {
+                  const isDefault = opt.isDefault
+                  const isRemovedDefault = isDefault && heroRemovedDefaults.has(opt.id)
+                  const extraQty = heroExtras[opt.id] ?? 0
+                  const isActive = isDefault ? !isRemovedDefault : extraQty > 0
+                  const allowQty = opt.allowQuantity || group.allowQuantity
+                  return (
+                    <div
+                      key={opt.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', borderRadius: 14,
+                        background: isActive ? '#f7fde0' : '#fafafa',
+                        border: '1.5px solid ' + (isActive ? '#d9f54e' : '#e5e7eb'),
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          if (isDefault) {
+                            setHeroRemovedDefaults(prev => {
+                              const next = new Set(prev)
+                              if (next.has(opt.id)) next.delete(opt.id); else next.add(opt.id)
+                              return next
+                            })
+                          } else {
+                            setHeroExtras(prev => ({ ...prev, [opt.id]: extraQty > 0 ? 0 : 1 }))
+                          }
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, flex: 1, textAlign: 'left' as const }}
+                      >
+                        <div style={{
+                          width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                          border: '2px solid ' + (isActive ? '#b5d600' : '#d1d5db'),
+                          background: isActive ? '#d9f54e' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {isActive && (
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <polyline points="1.5,6 5,9.5 10.5,2.5" stroke="#2f3a06" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <span style={{
+                            fontSize: 13, fontWeight: 600,
+                            color: isRemovedDefault ? '#9ca3af' : (isActive ? '#2f3a06' : '#374151'),
+                            fontFamily: 'Inter, sans-serif',
+                            textDecoration: isRemovedDefault ? 'line-through' : 'none',
+                          }}>
+                            {opt.name}
+                          </span>
+                          {isDefault && (
+                            <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 6, fontWeight: 400 }}>included</span>
+                          )}
+                          {!isDefault && opt.priceCents > 0 && (
+                            <span style={{ display: 'block', fontSize: 11, color: '#6b7280' }}>
+                              {'+$' + (opt.priceCents / 100).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      {allowQty && !isDefault && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); setHeroExtras(prev => ({ ...prev, [opt.id]: Math.max(0, (prev[opt.id] ?? 0) - 1) })) }}
+                            style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 18, color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                          >−</button>
+                          <span style={{ fontSize: 13, fontWeight: 700, minWidth: 16, textAlign: 'center' as const, color: '#111' }}>{extraQty}</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); setHeroExtras(prev => ({ ...prev, [opt.id]: (prev[opt.id] ?? 0) + 1 })) }}
+                            style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 18, color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                          >+</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Note input */}
+          <div style={{ padding: '12px 16px 0', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box' as const }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontFamily: "'Outfit', Inter, sans-serif" }}>
+              Add a note
+            </label>
+            <textarea
+              value={buildNote}
+              onChange={e => setBuildNote(e.target.value.slice(0, 200))}
+              placeholder="E.g. extra sauce, no onion..."
+              maxLength={200}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 14, boxSizing: 'border-box' as const,
+                border: '1.5px solid #e5e7eb', fontSize: 14, color: '#0a0a0a', background: '#ffffff',
+                fontFamily: "'Outfit', Inter, sans-serif", outline: 'none', resize: 'none' as const, minHeight: 60, lineHeight: 1.5,
+              }}
+            />
+            {buildNote.length > 0 && (
+              <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'right' as const, marginTop: 3 }}>{buildNote.length}/200</div>
+            )}
+          </div>
+        </div>
+
+        <PriceBar
+          total={heroTotal}
+          points={heroPoints}
+          onClick={onAddToOrder ? handleHeroAddToOrder : undefined}
+        />
+      </div>
+    )
   }
 
   const nonProteinPillGroups = pillGroups.filter(g => g !== proteinPillGroup)
