@@ -56,7 +56,6 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
   const slug = decodeURIComponent(params.slug ?? '').toLowerCase()
   if (!slug || RESERVED.has(slug)) notFound()
 
-  // Match by slug, falling back to a lowercased-name match for un-backfilled rows.
   let { data: biz } = await supabaseAdmin.from('businesses')
     .select('id, name, slug, city, suburb, community_bio, logo_url, community_verified, website, hub_visible_features, booking_link_slug, google_review_link, google_business_url')
     .eq('slug', slug).eq('is_active', true).maybeSingle()
@@ -71,9 +70,10 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
   const features: string[] = Array.isArray(biz.hub_visible_features) ? biz.hub_visible_features as string[] : ['loyalty', 'booking', 'community', 'review', 'website']
   const reviewUrl = (biz.google_review_link as string | null) || (biz.google_business_url as string | null) || null
 
-  // Fetch products + reward rule in parallel (non-blocking; empty arrays/null on failure)
   type ProdRow = { id: string; name: string; price: number; image_url: string | null; description: string | null }
-  const [productsRes, rewardRes] = await Promise.all([
+  type PostRow = { title: string | null; body: string | null; media_urls: string[] | null }
+
+  const [productsRes, rewardRes, postsRes] = await Promise.all([
     supabaseAdmin
       .from('pos_products')
       .select('id, name, price, image_url, description')
@@ -93,9 +93,31 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
       .order('threshold_value', { ascending: true })
       .limit(1)
       .maybeSingle(),
+    supabaseAdmin
+      .from('community_posts')
+      .select('title, body, media_urls')
+      .eq('business_id', biz.id as string)
+      .eq('status', 'published')
+      .not('media_urls', 'is', null)
+      .order('published_at', { ascending: false })
+      .limit(2),
   ])
+
   const products: ProdRow[] = (productsRes.data ?? []) as ProdRow[]
   const rewardThreshold: number | null = (rewardRes.data as { threshold_value?: number | null } | null)?.threshold_value ?? null
+  const posts: PostRow[] = (postsRes.data ?? []) as PostRow[]
+
+  // Hero: first published post with media
+  const heroPost = posts[0] ?? null
+  const heroImageUrl: string | null = (heroPost?.media_urls ?? [])[0] ?? null
+
+  // "What's new" card: use same post (or second post if available)
+  const newsPost = posts[0] ?? null
+  const latestPost: HubBusiness['latestPost'] = newsPost ? {
+    title: newsPost.title ?? '',
+    excerpt: (newsPost.body ?? '').slice(0, 120),
+    imageUrl: (newsPost.media_urls ?? [])[0] ?? null,
+  } : null
 
   const business: HubBusiness = {
     id: biz.id as string,
@@ -111,9 +133,11 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
     reviewUrl,
     products,
     rewardThreshold,
+    heroImageUrl,
+    latestPost,
   }
 
-  // Fire-and-forget hub visit tracking (non-blocking)
+  // Fire-and-forget hub visit tracking
   void supabaseAdmin.from('customer_hub_clicks').insert({
     business_id: biz.id,
     target: 'hub_view',
@@ -122,8 +146,6 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
     user_agent: null,
   })
 
-  // Rich LocalBusiness JSON-LD — server-rendered, visible to GPTBot/ClaudeBot/PerplexityBot
-  // Only include fields with real values — no empty/placeholder properties
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
