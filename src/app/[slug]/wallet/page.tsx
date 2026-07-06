@@ -30,6 +30,7 @@ export default async function WalletPage({ params }: { params: { slug: string } 
       bizName={(biz.name as string) ?? ''}
       logoUrl={(biz.logo_url as string | null) ?? null}
       topUpUrl={topUpUrl}
+      heroImageUrl={(biz.community_cover_url as string | null) ?? null}
     />
   )
 }

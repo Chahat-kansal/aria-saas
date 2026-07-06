@@ -57,13 +57,13 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
     { key: 'wallet' as const,  label: 'Wallet',  href: '/' + slug + '/wallet' },
   ]
 
-  const bgColor = dark ? 'rgba(20,19,15,0.92)' : 'rgba(243,239,228,0.88)'
+  const bgColor = dark ? 'rgba(20,19,15,0.92)' : 'rgba(243,239,228,0.9)'
   const inactiveColor = dark ? 'rgba(255,255,255,0.38)' : '#aaa'
 
   return (
     <nav style={{
-      position: 'fixed', bottom: 12, left: 12, right: 12, zIndex: 1000,
-      height: 68, borderRadius: 22,
+      position: 'fixed', bottom: 10, left: 12, right: 12, zIndex: 1000,
+      height: 68, borderRadius: 999,
       backdropFilter: 'blur(16px) saturate(180%)',
       WebkitBackdropFilter: 'blur(16px) saturate(180%)',
       background: bgColor,
@@ -81,24 +81,31 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
             href={t.href}
             style={{
               flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 3,
-              textDecoration: 'none', borderRadius: 16,
-              background: 'transparent',
-              boxShadow: on ? '0 -2px 12px rgba(217,245,78,0.5)' : 'none',
-              position: 'relative',
+              alignItems: 'center', justifyContent: 'center',
+              textDecoration: 'none', position: 'relative',
             }}
           >
-            {t.key === 'home'    && <IconHome color={iconColor} />}
-            {t.key === 'menu'    && <IconFork color={iconColor} />}
-            {t.key === 'rewards' && <IconGift color={iconColor} />}
-            {t.key === 'wallet'  && <IconCard color={iconColor} />}
-            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? INK : inactiveColor, letterSpacing: '0.01em' }}>
-              {t.label}
-            </span>
+            {/* Compact lime filled pill — hugs icon + label only */}
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+              padding: '5px 14px', borderRadius: 999,
+              background: on ? '#d9f54e' : 'transparent',
+              boxShadow: on ? '0 0 16px rgba(217,245,78,0.5)' : 'none',
+            }}>
+              {t.key === 'home'    && <IconHome color={iconColor} />}
+              {t.key === 'menu'    && <IconFork color={iconColor} />}
+              {t.key === 'rewards' && <IconGift color={iconColor} />}
+              {t.key === 'wallet'  && <IconCard color={iconColor} />}
+              <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? INK : inactiveColor, letterSpacing: '0.01em' }}>
+                {t.label}
+              </span>
+            </div>
+
+            {/* Cart badge — Menu tab only */}
             {t.key === 'menu' && cartCount > 0 && (
               <span style={{
-                position: 'absolute', top: 6, right: '50%',
-                transform: 'translateX(8px)',
+                position: 'absolute', top: 4, right: '50%',
+                transform: 'translateX(16px)',
                 minWidth: 16, height: 16, borderRadius: 8,
                 background: '#ef4444', color: '#fff',
                 fontFamily: FB, fontSize: 9, fontWeight: 700,

@@ -248,12 +248,13 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, topUpUrl }: {
+export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, topUpUrl, heroImageUrl }: {
   slug: string
   bizId: string
   bizName: string
   logoUrl: string | null
   topUpUrl: string
+  heroImageUrl?: string | null
 }) {
   const [cx, setCx] = useState<CxData | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -323,10 +324,20 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Loyalty card — full-width at top, image blends into cream page ── */}
-      <div style={{ paddingTop: 48 }}>
+      {/* ── Café photo strip — sits behind top of card ── */}
+      <div style={{
+        position: 'relative', height: 200,
+        background: heroImageUrl
+          ? ('url(' + heroImageUrl + ') center / cover no-repeat #1a0f0a')
+          : 'linear-gradient(160deg, #2a1a0e 0%, #111 100%)',
+      }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.65) 100%)' }} />
+      </div>
+
+      {/* ── Loyalty card — overlaps bottom of photo strip ── */}
+      <div style={{ marginTop: -80, paddingLeft: 18, paddingRight: 18, position: 'relative', zIndex: 2 }}>
         {!loaded ? (
-          <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 28, height: 28, border: '2.5px solid rgba(0,0,0,0.1)', borderTopColor: ACCENT_TEXT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
           </div>
         ) : isLoggedIn ? (
@@ -338,7 +349,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
             identityId={identityId}
           />
         ) : (
-          <div style={{ margin: '0 18px', padding: '28px 20px', background: '#fff', borderRadius: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.07)', textAlign: 'center' }}>
+          <div style={{ padding: '28px 20px', background: '#fff', borderRadius: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.07)', textAlign: 'center' }}>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, color: INK, margin: '0 0 14px' }}>
               Your loyalty card
             </p>

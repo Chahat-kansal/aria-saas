@@ -401,7 +401,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
   const walletBal = (cx?.wallet_balance ?? 0).toFixed(2)
 
   const heroBg = b.heroImageUrl
-    ? ('url(' + b.heroImageUrl + ') center/cover no-repeat #1a0f0a')
+    ? ('url(' + b.heroImageUrl + ') center bottom / contain no-repeat #1a0f0a')
     : 'radial-gradient(ellipse at 30% 60%, #3d2415 0%, #1a0f0a 100%)'
 
   const onPhoneSuccess = (customer: CxCustomer) => { setCx(customer); setPhase('ready'); setShowPhone(false) }
