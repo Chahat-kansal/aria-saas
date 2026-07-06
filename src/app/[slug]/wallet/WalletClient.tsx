@@ -182,19 +182,17 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
 
 // ── Transaction row ───────────────────────────────────────────────────────────
 
-function TxnRow({ date, label, itemName, pts, amount, kind }: {
+function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
   date: string
   label: string
   itemName: string | null
   pts: number | null
   amount: number | null
   kind: 'earn' | 'redeem' | 'preload'
+  bizName: string
 }) {
   const d = new Date(date)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
   const timeStr = d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })
-  const dateStr = isToday ? ('Today at ' + timeStr) : (d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) + ' at ' + timeStr)
 
   const iconBg = kind === 'redeem' ? '#e5e7eb' : (ACCENT + 'cc')
   const iconColor = kind === 'redeem' ? INK_MUTED : ACCENT_TEXT
@@ -227,7 +225,7 @@ function TxnRow({ date, label, itemName, pts, amount, kind }: {
           )}
         </p>
         <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 12, color: INK_MUTED, margin: 0 }}>
-          {dateStr}
+          {bizName + ' at ' + timeStr}
         </p>
       </div>
 
@@ -424,6 +422,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
                   pts={t.pts}
                   amount={t.amount}
                   kind={t.kind}
+                  bizName={bizName}
                 />
               ))}
             </div>

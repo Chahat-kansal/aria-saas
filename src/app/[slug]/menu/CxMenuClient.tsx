@@ -5,8 +5,7 @@ import { CxTabBar } from '../CxTabBar'
 const BG = '#14130f'
 const INK = '#ffffff'
 const INK_MUTED = 'rgba(255,255,255,0.5)'
-const CARD = 'rgba(255,255,255,0.07)'
-const CARD_BORDER = 'rgba(255,255,255,0.09)'
+const CARD = '#1c1c1a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
@@ -58,8 +57,8 @@ function ProductRow({ product, slug }: { product: CxProduct; slug: string }) {
       href={orderUrl}
       style={{
         display: 'flex', gap: 14, alignItems: 'center',
-        padding: '12px 14px', borderRadius: 16,
-        background: CARD, border: '1px solid ' + CARD_BORDER,
+        padding: '12px 14px', borderRadius: 18,
+        background: CARD,
         textDecoration: 'none', marginBottom: 10,
       }}
     >
@@ -91,7 +90,7 @@ function ProductRow({ product, slug }: { product: CxProduct; slug: string }) {
         </p>
       </div>
       <div style={{
-        flexShrink: 0, width: 36, height: 36, borderRadius: 10,
+        flexShrink: 0, width: 36, height: 36, borderRadius: 12,
         background: ACCENT, color: ACCENT_TEXT,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 22, fontWeight: 700, lineHeight: 1,

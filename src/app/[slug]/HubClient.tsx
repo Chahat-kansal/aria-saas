@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { CxTabBar } from './CxTabBar'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const BG = '#fafafa'
+const BG = '#f3efe4'
 const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
@@ -184,37 +184,43 @@ function PhoneEntry({ slug, bizId, onSuccess, onCancel }: {
 
 function UsualStrip({ usual, slug }: { usual: UsualProduct; slug: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 18px 0', marginBottom: 20 }}>
+    <div style={{ padding: '18px 18px 0', marginBottom: 20 }}>
       <div style={{
-        width: 64, height: 64, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
-        background: usual.image_url ? ('url(' + usual.image_url + ') center/cover no-repeat #efefef') : '#efefef',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+        display: 'flex', alignItems: 'center', gap: 14,
+        background: '#fff', borderRadius: 20, padding: '14px 14px',
+        boxShadow: '0 2px 16px rgba(0,0,0,0.08)',
       }}>
-        {!usual.image_url && '☕'}
+        <div style={{
+          width: 72, height: 72, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
+          background: usual.image_url ? ('url(' + usual.image_url + ') center/cover no-repeat #efefef') : '#efefef',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+        }}>
+          {!usual.image_url && '☕'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK_MUTED, margin: '0 0 2px', fontWeight: 500 }}>
+            Your usual,
+          </p>
+          <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {usual.name}
+          </p>
+        </div>
+        <a
+          href={'/menu/' + slug}
+          style={{
+            flexShrink: 0, background: ACCENT, color: ACCENT_TEXT,
+            borderRadius: 14, padding: '10px 14px',
+            fontFamily: FB, fontSize: 13, fontWeight: 700,
+            textDecoration: 'none', textAlign: 'center',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+          }}
+        >
+          <span>Reorder</span>
+          <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 500, opacity: 0.8 }}>
+            {'$' + usual.price.toFixed(2)}
+          </span>
+        </a>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, margin: '0 0 2px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          Your usual
-        </p>
-        <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: INK, margin: '0 0 1px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {usual.name}
-        </p>
-        <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: 0 }}>
-          {'$' + usual.price.toFixed(2)}
-        </p>
-      </div>
-      <a
-        href={'/menu/' + slug}
-        style={{
-          flexShrink: 0, background: ACCENT, color: ACCENT_TEXT,
-          borderRadius: 100, padding: '9px 16px',
-          fontFamily: FB, fontSize: 13, fontWeight: 700,
-          textDecoration: 'none', whiteSpace: 'nowrap',
-          display: 'flex', alignItems: 'center', gap: 5,
-        }}
-      >
-        Reorder
-      </a>
     </div>
   )
 }
@@ -406,8 +412,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         .-webkit-line-clamp { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden }
       `}</style>
 
-      {/* ── HERO ── full-bleed, ~50vh ─────────────────────────────────── */}
-      <div style={{ position: 'relative', height: '50vh', minHeight: 320, background: heroBg }}>
+      {/* ── HERO ── full-bleed, ~55vh ─────────────────────────────────── */}
+      <div style={{ position: 'relative', height: '55vh', minHeight: 360, background: heroBg }}>
 
         {/* Gradient overlay: dark at top (for header readability) + dark at bottom (for text) */}
         <div style={{

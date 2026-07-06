@@ -256,22 +256,26 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         )}
         {(!loaded || !cx) && <div style={{ height: 28 }} />}
 
-        {/* Big pts */}
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-          <p style={{
-            fontFamily: FB, fontSize: 76, fontWeight: 800, color: INK,
-            margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
+        {/* Points ring composite — pts text overlaid inside horseshoe arc */}
+        <div style={{ position: 'relative', width: 220, height: 200, margin: '0 auto' }}>
+          {/* Arc SVG — sits behind text, ring center at (110,110) in SVG = ~y:110 in container */}
+          <div style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+            <PointsArc pts={pts} threshold={topThreshold} />
+          </div>
+          {/* Pts text — positioned so it sits inside the ring opening */}
+          <div style={{
+            position: 'absolute', top: 20, left: 0, right: 0, textAlign: 'center', zIndex: 1,
           }}>
-            {pts.toLocaleString()}
-          </p>
-          <p style={{ fontFamily: FB, fontSize: 18, color: INK_MUTED, margin: '2px 0 0', fontWeight: 500 }}>
-            pts
-          </p>
-        </div>
-
-        {/* Arc ring below pts — horseshoe shape */}
-        <div style={{ marginTop: -8, display: 'flex', justifyContent: 'center' }}>
-          <PointsArc pts={pts} threshold={topThreshold} />
+            <p style={{
+              fontFamily: FB, fontSize: 72, fontWeight: 800, color: INK,
+              margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
+            }}>
+              {pts.toLocaleString()}
+            </p>
+            <p style={{ fontFamily: FB, fontSize: 16, color: INK_MUTED, margin: '4px 0 0', fontWeight: 500 }}>
+              pts
+            </p>
+          </div>
         </div>
       </div>
 
