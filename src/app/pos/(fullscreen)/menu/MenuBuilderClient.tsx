@@ -491,8 +491,8 @@ function ScheduleSection({ cfg, onUpdate }: {
 
 // ── Item editor ────────────────────────────────────────────────────────────
 
-function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBusy }: {
-  product: Product; override: ItemOverride; onUpdate: (p: Partial<ItemOverride>) => void; onClose: () => void; onUploadPhoto: (file: File) => void; imgBusy: boolean
+function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBusy, onArchetypeChange }: {
+  product: Product; override: ItemOverride; onUpdate: (p: Partial<ItemOverride>) => void; onClose: () => void; onUploadPhoto: (file: File) => void; imgBusy: boolean; onArchetypeChange?: (productId: string, archetype: string | null) => void
 }) {
   const isHidden = override.hidden ?? false
   const fileRef = useRef<HTMLInputElement>(null)
@@ -509,6 +509,7 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ordering_archetype: val || null }),
       })
+      onArchetypeChange?.(product.id, val || null)
     } finally {
       setArchetypeBusy(false)
     }
@@ -635,6 +636,18 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTab, setActiveTab] = useState<'design' | 'products' | 'modifiers' | 'categories' | 'settings'>('design')
   const [catTabFilter, setCatTabFilter] = useState<string | null>(null)
+  // Shared live data — both Design and Products tabs read from here
+  const [sharedProducts, setSharedProducts] = useState<Product[]>(initialProducts)
+  const [sharedCats, setSharedCats] = useState<Category[]>(initialCats)
+
+  const handleProductsUpdate = useCallback((prods: Product[], cats: Category[]) => {
+    if (prods.length > 0) setSharedProducts(prods)
+    if (cats.length > 0) setSharedCats(cats)
+  }, [])
+
+  const handleArchetypeChange = useCallback((id: string, arch: string | null) => {
+    setSharedProducts(prev => prev.map(p => p.id === id ? { ...p, ordering_archetype: arch } : p))
+  }, [])
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 1000)
@@ -831,9 +844,9 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
   async function handleApproveImport() {
     setImportStep('creating')
     const active = importItems.filter(it => !it.removed && it.name.trim().length > 0 && it.price > 0)
-    const catMap = new Map<string, string>(initialCats.map(c => [c.name.toLowerCase(), c.id]))
-    const existingKeys = new Set(initialProducts.map(p => p.name.trim().toLowerCase() + '|' + (p.category_id ?? '')))
-    let created = 0, skipped = 0, nextSort = initialProducts.length
+    const catMap = new Map<string, string>(sharedCats.map(c => [c.name.toLowerCase(), c.id]))
+    const existingKeys = new Set(sharedProducts.map(p => p.name.trim().toLowerCase() + '|' + (p.category_id ?? '')))
+    let created = 0, skipped = 0, nextSort = sharedProducts.length
     for (const item of active) {
       const catKey = item.category.trim().toLowerCase()
       if (!catMap.has(catKey)) {
@@ -877,7 +890,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
 
   const theme = deriveTheme(cfg)
 
-  const activeCats = initialCats.filter(c => c.is_active !== false)
+  const activeCats = sharedCats.filter(c => c.is_active !== false)
   let orderedCats = activeCats
   if (cfg.section_order.length > 0) {
     const pos: Record<string, number> = {}
@@ -968,7 +981,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
     )
   }
 
-  const selectedProduct = selectedItemId ? initialProducts.find(p => p.id === selectedItemId) ?? null : null
+  const selectedProduct = selectedItemId ? sharedProducts.find(p => p.id === selectedItemId) ?? null : null
   const selectedOverride = selectedItemId ? (cfg.item_overrides[selectedItemId] ?? {}) : {}
 
   function renderRightPanel() {
@@ -982,6 +995,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
             onClose={closeItemEditor}
             onUploadPhoto={f => { void uploadItemPhoto(selectedItemId!, f) }}
             imgBusy={imgBusy}
+            onArchetypeChange={handleArchetypeChange}
           />
         </div>
       )
@@ -992,7 +1006,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
 
   function renderItemsPanel() {
     const knownCatIds = new Set(orderedCats.map(c => c.id))
-    const uncatProds = initialProducts.filter(p => !p.category_id || !knownCatIds.has(p.category_id))
+    const uncatProds = sharedProducts.filter(p => !p.category_id || !knownCatIds.has(p.category_id))
     return (
       <div style={{ flex: 1, overflowY: 'auto' as const }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: C.card, zIndex: 5 }}>
@@ -1000,14 +1014,14 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
             <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Menu items</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block', marginRight: 4 }} />
-              Live from your POS · {initialProducts.length} products
+              Live from your POS · {sharedProducts.length} products
             </div>
           </div>
           <button onClick={() => importFileRef.current?.click()} title="Upload a photo of your existing menu — AI extracts items for review" style={{ padding: '5px 9px', borderRadius: 7, border: '1.5px solid ' + C.border, background: C.card, color: C.ink, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}>⬆ Import</button>
           <input ref={importFileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { void handleImportFile(f) } e.target.value = '' }} />
         </div>
         {orderedCats.map(cat => {
-          const catProds = initialProducts.filter(p => p.category_id === cat.id)
+          const catProds = sharedProducts.filter(p => p.category_id === cat.id)
           if (catProds.length === 0) return null
           const visCount = catProds.filter(p => !cfg.item_overrides[p.id]?.hidden).length
           return (
@@ -1175,7 +1189,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
                 <div style={{ width: 80, height: 6, borderRadius: 3, background: '#333' }} />
               </div>
               <div style={{ height: 580, overflowY: 'auto' as const, overflowX: 'hidden' as const }}>
-                <MiniMenu cats={activeCats} products={initialProducts} cfg={cfg} businessName={businessName} theme={theme} locationSubtitle={locationSubtitle} isOpenNow={isOpenNow} closesAt={closesAt} />
+                <MiniMenu cats={activeCats} products={sharedProducts} cfg={cfg} businessName={businessName} theme={theme} locationSubtitle={locationSubtitle} isOpenNow={isOpenNow} closesAt={closesAt} />
               </div>
             </div>
           )}
@@ -1188,7 +1202,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
                 <div style={{ width: 28, height: 2, background: theme.accent, margin: '8px auto' }} />
               </div>
               {orderedCats.map(cat => {
-                const cp = initialProducts.filter(p => p.category_id === cat.id && !cfg.item_overrides[p.id]?.hidden)
+                const cp = sharedProducts.filter(p => p.category_id === cat.id && !cfg.item_overrides[p.id]?.hidden)
                 if (cp.length === 0) return null
                 return (
                   <div key={cat.id} style={{ marginBottom: 12 }}>
@@ -1205,7 +1219,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
               })}
               {(() => {
                 const a4CatIds = new Set(orderedCats.map(c => c.id))
-                const a4Uncat = initialProducts.filter(p => (!p.category_id || !a4CatIds.has(p.category_id)) && !cfg.item_overrides[p.id]?.hidden)
+                const a4Uncat = sharedProducts.filter(p => (!p.category_id || !a4CatIds.has(p.category_id)) && !cfg.item_overrides[p.id]?.hidden)
                 if (a4Uncat.length === 0) return null
                 return (
                   <div style={{ marginBottom: 12 }}>
@@ -1257,7 +1271,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
             {sheetContent === 'items' && <div style={{ padding: '10px 0' }}><div style={{ fontSize: 14, fontWeight: 700, padding: '0 14px 10px', color: C.ink }}>Menu items</div>{renderItemsPanel()}</div>}
             {sheetContent === 'editor' && selectedProduct && (
               <div style={{ padding: 14 }}>
-                <ItemEditor product={selectedProduct} override={selectedOverride} onUpdate={partial => updateItemOv(selectedItemId!, partial)} onClose={closeItemEditor} onUploadPhoto={f => { void uploadItemPhoto(selectedItemId!, f) }} imgBusy={imgBusy} />
+                <ItemEditor product={selectedProduct} override={selectedOverride} onUpdate={partial => updateItemOv(selectedItemId!, partial)} onClose={closeItemEditor} onUploadPhoto={f => { void uploadItemPhoto(selectedItemId!, f) }} imgBusy={imgBusy} onArchetypeChange={handleArchetypeChange} />
                 <button onClick={closeItemEditor} style={{ width: '100%', marginTop: 12, padding: 13, borderRadius: 12, border: 'none', background: C.ink, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Done</button>
               </div>
             )}
@@ -1271,7 +1285,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
       {/* Management tabs content */}
       {activeTab !== 'design' && (
         <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={initialProducts} initialCategories={initialCats} initialOutlets={initialOutlets} initialCategoryFilter={catTabFilter} />}
+          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={sharedProducts} initialCategories={sharedCats} initialOutlets={initialOutlets} initialCategoryFilter={catTabFilter} onProductsUpdate={handleProductsUpdate} />}
           {activeTab === 'modifiers' && <ModifiersTab businessId={businessId} />}
           {activeTab === 'categories' && <CategoriesTab businessId={businessId} onFilterProducts={id => { setCatTabFilter(id); setActiveTab('products') }} />}
           {activeTab === 'settings' && <SettingsTab businessId={businessId} />}

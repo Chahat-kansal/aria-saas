@@ -15,7 +15,7 @@ type Product = {
   image_url: string | null; image_thumb_url: string | null; image_source: string | null;
   sort_order: number; notes: string | null; tags: string[];
 }
-type Category = { id: string; name: string; color: string | null; is_active: boolean }
+type Category = { id: string; name: string; color: string | null; is_active: boolean; sort_order: number; ordering_archetype: string | null }
 type Outlet = { id: string; name: string }
 
 interface ProductsTabProps {
@@ -25,6 +25,7 @@ interface ProductsTabProps {
   initialOutlets: Outlet[]
   onRefresh?: () => void
   initialCategoryFilter?: string | null
+  onProductsUpdate?: (products: Product[], categories: Category[]) => void
 }
 
 // ── Style constants ────────────────────────────────────────────────────────
@@ -300,6 +301,7 @@ export default function ProductsTab({
   initialOutlets,
   onRefresh,
   initialCategoryFilter,
+  onProductsUpdate,
 }: ProductsTabProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<Category[]>(initialCategories)
@@ -325,7 +327,8 @@ export default function ProductsTab({
     if (json.categories) setCategories(json.categories)
     if (json.outlets) setOutlets(json.outlets)
     onRefresh?.()
-  }, [onRefresh])
+    if (json.products) onProductsUpdate?.(json.products, json.categories ?? [])
+  }, [onRefresh, onProductsUpdate])
 
   // Auto-fetch on mount — initialProducts may be empty from parent
   useEffect(() => { void reload() }, [reload])
