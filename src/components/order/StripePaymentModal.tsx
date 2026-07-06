@@ -46,6 +46,14 @@ function PayForm({ onSuccess, onClose, orderNumber, total }: {
           style={{ background: WHITE, border: '1.5px solid ' + BORDER, borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 18, color: INK, lineHeight: 1, flexShrink: 0 }}
         >×</button>
       </div>
+      {/* PayID preferred — 0% surcharge, instant AU bank transfer. Surfaces automatically
+          in the PaymentElement when the Stripe account has PayID enabled (Dashboard →
+          Settings → Payment methods). If it does not appear, the card fallback below works.
+          GROUNDING-TEETH: PayID is live only after the Stripe account enables it; card is
+          always live. Pre-Oct-2026 AU surcharge ban: enabling PayID now saves ~1.5% per order. */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#2D5240', textAlign: 'center' as const, padding: '6px 12px', background: '#f0f7f2', borderRadius: 8, marginBottom: 4 }}>
+        PayID preferred · 0% surcharge · instant confirmation
+      </div>
       <PaymentElement />
       {err && <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>{err}</p>}
       <button

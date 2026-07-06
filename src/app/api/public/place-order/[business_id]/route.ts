@@ -4,6 +4,9 @@ export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+
+// Module-level Stripe client (PRELOAD) — mirrors stripe-orders webhook pattern
+const stripeOrders = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { waitUntil } from '@vercel/functions'
 import { earnOnSale } from '@/lib/loyalty/earnOnSale'
@@ -227,8 +230,8 @@ export async function POST(req: Request, { params }: { params: { business_id: st
 
   if (isCardPayment) {
     try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
-      const pi = await stripe.paymentIntents.create({
+      // idempotencyKey = orderNumber: same order retried → same PI returned, no double-charge
+      const pi = await stripeOrders.paymentIntents.create({
         amount: Math.round(subtotal * 100),
         currency: 'aud',
         metadata: {
@@ -240,7 +243,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
           customer_id: earnCustomerId ?? '',
         },
         automatic_payment_methods: { enabled: true },
-      })
+      }, { idempotencyKey: orderNumber })
       stripeClientSecret = pi.client_secret
       await sb.from('pos_online_orders').update({
         stripe_payment_intent_id: pi.id,
