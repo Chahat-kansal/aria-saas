@@ -7,6 +7,8 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
 import { fireKdsForOrder } from '@/lib/online-orders/fireKdsForOrder'
 import { earnOnSale } from '@/lib/loyalty/earnOnSale'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -49,14 +51,45 @@ async function _PATCH(req: Request, { params }: Params) {
   // On accept, optionally create a POS sale and link it (idempotent).
   if ((body.status === 'accepted' || body.status === 'confirmed') && body.create_sale) {
     const { data: ord } = await supabase.from('pos_online_orders')
-      .select('order_number, total, sale_id, fulfillment_type').eq('id', id).eq('business_id', bid).maybeSingle()
+      .select('order_number, total, sale_id, fulfillment_type, items, outlet_id').eq('id', id).eq('business_id', bid).maybeSingle()
     if (ord && !ord.sale_id) {
       const { data: sale } = await supabase.from('pos_sales').insert({
         business_id: bid, sale_number: String(ord.order_number ?? 'ONL'), payment_method: 'other',
         total_amount: Number(ord.total ?? 0), subtotal: Number(ord.total ?? 0), tax_amount: 0, discount_amount: 0,
         status: 'completed', notes: 'Online order ' + ord.order_number + ' (' + (ord.fulfillment_type ?? 'pickup') + ')',
       }).select('id').single()
-      if (sale?.id) allowed.sale_id = sale.id
+      if (sale?.id) {
+        allowed.sale_id = sale.id
+        // Insert sale items + adjust outlet stock + record movements (idempotent via sale_id guard)
+        type OrdItem = { product_id?: string; product_name?: string; quantity?: number; price?: number }
+        const rawItems = ((ord.items ?? []) as OrdItem[]).filter(i => i.product_id && Number(i.quantity) > 0)
+        if (rawItems.length > 0) {
+          await supabaseAdmin.from('pos_sale_items').insert(rawItems.map(i => ({
+            sale_id: sale.id,
+            business_id: bid,
+            product_id: i.product_id,
+            product_name: i.product_name ?? '',
+            quantity: Number(i.quantity),
+            unit_price: Number(i.price ?? 0),
+            line_total: Number(i.price ?? 0) * Number(i.quantity),
+            discount_percent: 0,
+            tax_rate: 0,
+            modifiers: [],
+          }))).then(() => {}, e => console.error('[online-orders] sale_items insert failed:', (e as Error).message))
+          const outletId = await resolveOutletId(supabaseAdmin, bid, (ord.outlet_id as string | null) ?? null)
+          const movementLines: SaleMovementLine[] = []
+          for (const item of rawItems) {
+            const newStock = await adjustOutletStock(supabaseAdmin, {
+              businessId: bid, outletId, productId: item.product_id as string,
+              delta: -Math.abs(Number(item.quantity)),
+            })
+            movementLines.push({ itemId: item.product_id as string, quantitySold: Number(item.quantity), newStock })
+          }
+          await recordSaleMovements(supabaseAdmin, {
+            businessId: bid, saleId: sale.id, saleNumber: ord.order_number, lines: movementLines,
+          })
+        }
+      }
     }
   }
 
@@ -170,6 +203,41 @@ async function _PATCH(req: Request, { params }: Params) {
             business_id: earnBid,
             action_type: 'online_earn_error',
             description: '[online-orders] earnOnSale on pickup failed: ' + (e as Error).message,
+            metadata: { order_id: earnOrderId, sale_id: earnSaleId },
+            created_at: new Date().toISOString(),
+          })
+        }
+      })())
+    }
+    // Fallback: record stock movements on pickup if accept path didn't already (handles pre-fix orders; no-op if already recorded)
+    if (earnSaleId) {
+      waitUntil((async () => {
+        try {
+          const { data: existingMov } = await supabaseAdmin
+            .from('stock_movements').select('id').eq('sale_id', earnSaleId).limit(1).maybeSingle()
+          if (!existingMov) {
+            const { data: fullOrd } = await supabaseAdmin.from('pos_online_orders')
+              .select('items, outlet_id, order_number').eq('id', earnOrderId).maybeSingle()
+            type FallbackItem = { product_id?: string; quantity?: number }
+            const rawFallback = ((fullOrd?.items ?? []) as FallbackItem[])
+              .filter(i => i.product_id && Number(i.quantity) > 0)
+            if (rawFallback.length > 0) {
+              const fallbackOutletId = await resolveOutletId(supabaseAdmin, earnBid, (fullOrd?.outlet_id as string | null) ?? null)
+              const fallbackLines: SaleMovementLine[] = []
+              for (const item of rawFallback) {
+                const newStock = await adjustOutletStock(supabaseAdmin, {
+                  businessId: earnBid, outletId: fallbackOutletId, productId: item.product_id as string,
+                  delta: -Math.abs(Number(item.quantity)),
+                })
+                fallbackLines.push({ itemId: item.product_id as string, quantitySold: Number(item.quantity), newStock })
+              }
+              await recordSaleMovements(supabaseAdmin, { businessId: earnBid, saleId: earnSaleId, saleNumber: null, lines: fallbackLines })
+            }
+          }
+        } catch (e) {
+          void supabaseAdmin.from('activity_log').insert({
+            business_id: earnBid, action_type: 'online_movement_fallback_error',
+            description: '[online-orders] completed-path movement fallback failed: ' + (e as Error).message,
             metadata: { order_id: earnOrderId, sale_id: earnSaleId },
             created_at: new Date().toISOString(),
           })
