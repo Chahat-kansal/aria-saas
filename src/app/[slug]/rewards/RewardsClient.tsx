@@ -89,7 +89,6 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
   const cost = Number(rule.threshold_value ?? 0)
   const canRedeem = cost > 0 && pts >= cost
   const locked = cost > 0 && pts < cost
-  const need = cost - pts
   const redeemUrl = '/' + slug + '/loyalty/redeem?rule=' + rule.id
 
   return (
@@ -148,9 +147,15 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
             Redeem
           </a>
         ) : locked ? (
-          <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
-            {need} more pts needed
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={INK_MUTED} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <rect x="2.5" y="6" width="9" height="6.5" rx="1.5"/>
+              <path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6"/>
+            </svg>
+            <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
+              Locked
+            </p>
+          </div>
         ) : null}
       </div>
     </div>
@@ -258,8 +263,8 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
 
         {/* Tier subtitle */}
         {loaded && cx && (
-          <div style={{ margin: '0 0 20px', display: 'inline-flex', alignItems: 'center' }}>
-            <span style={{ fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, fontWeight: 700, background: ACCENT, borderRadius: 100, padding: '4px 14px', display: 'inline-block' }}>
+          <div style={{ margin: '0 0 20px' }}>
+            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, color: INK_MUTED }}>
               {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
             </span>
           </div>

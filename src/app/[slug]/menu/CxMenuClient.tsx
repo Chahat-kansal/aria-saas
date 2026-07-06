@@ -156,52 +156,49 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
             Menu
           </h1>
 
-          {/* Search pill */}
+          {/* Combined search + scan pill */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 7,
+            display: 'flex', alignItems: 'center', gap: 0,
             border: '1.5px solid ' + ACCENT,
-            borderRadius: 100, padding: '7px 12px',
+            borderRadius: 100,
             background: searchOpen ? 'rgba(217,245,78,0.12)' : 'transparent',
-            cursor: 'pointer',
             boxShadow: '0 0 16px rgba(217,245,78,0.4)',
-          }}
-            onClick={() => setSearchOpen(s => !s)}
-          >
-            <IconSearch />
-            {searchOpen && (
-              <input
-                autoFocus
-                className="cx-search-input"
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search"
-                onClick={e => e.stopPropagation()}
-                style={{
-                  background: 'none', border: 'none', outline: 'none',
-                  fontFamily: FB, fontSize: 13, color: ACCENT,
-                  width: 72, padding: 0,
-                }}
-              />
-            )}
-            {searchOpen && search && (
-              <button
-                onClick={e => { e.stopPropagation(); setSearch('') }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: ACCENT, fontSize: 13, fontWeight: 700, lineHeight: 1 }}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Scan pill */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1.5px solid ' + ACCENT, borderRadius: 100, padding: '7px 12px',
-            cursor: 'pointer',
-            boxShadow: '0 0 16px rgba(217,245,78,0.4)',
+            overflow: 'hidden',
           }}>
-            <IconScan />
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', cursor: 'pointer' }}
+              onClick={() => setSearchOpen(s => !s)}
+            >
+              <IconSearch />
+              {searchOpen && (
+                <input
+                  autoFocus
+                  className="cx-search-input"
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search"
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    background: 'none', border: 'none', outline: 'none',
+                    fontFamily: FB, fontSize: 13, color: ACCENT,
+                    width: 72, padding: 0,
+                  }}
+                />
+              )}
+              {searchOpen && search && (
+                <button
+                  onClick={e => { e.stopPropagation(); setSearch('') }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: ACCENT, fontSize: 13, fontWeight: 700, lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <div style={{ width: 1, height: 18, background: 'rgba(217,245,78,0.35)', flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '7px 12px', cursor: 'pointer' }}>
+              <IconScan />
+            </div>
           </div>
         </div>
 

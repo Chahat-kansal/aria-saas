@@ -205,7 +205,7 @@ function UsualStrip({ usual, slug }: { usual: UsualProduct; slug: string }) {
             {usual.name}
           </p>
           <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
-            ready in ~5 min
+            ready in ~4 min?
           </p>
         </div>
         <a
@@ -281,9 +281,6 @@ function WhatsNewCard({ post, slug }: { post: HubBusiness['latestPost']; slug: s
   if (!post) return null
   return (
     <div style={{ padding: '0 18px', marginBottom: 22 }}>
-      <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, fontWeight: 600, margin: '0 0 12px', color: INK }}>
-        What&apos;s new
-      </h2>
       <a
         href={'/community/businesses/' + slug}
         style={{ display: 'flex', gap: 14, background: CARD_DARK, borderRadius: 20, overflow: 'hidden', textDecoration: 'none', alignItems: 'center', padding: 16 }}
@@ -296,7 +293,7 @@ function WhatsNewCard({ post, slug }: { post: HubBusiness['latestPost']; slug: s
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: '#fff', margin: '0 0 6px', fontWeight: 600, lineHeight: 1.2 }}>
-            {post.title}
+            {"What’s new — " + post.title}
           </p>
           {post.excerpt && (
             <p style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.55)', margin: '0 0 10px', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
@@ -434,11 +431,12 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           {/* Left: logo circle + wordmark */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+              width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
               background: b.logoUrl ? ('url(' + b.logoUrl + ') center/cover') : 'rgba(255,255,255,0.2)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
-              border: '1.5px solid rgba(255,255,255,0.35)',
+              border: '2px solid rgba(255,255,255,0.4)',
+              boxShadow: '0 2px 16px rgba(0,0,0,0.35)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: FB, fontSize: 16, fontWeight: 800, color: '#fff',
             }}>
