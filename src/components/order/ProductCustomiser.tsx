@@ -22,7 +22,7 @@ import {
 import { ProductHero } from './ProductHero'
 
 const DROP_ZONE_ID = 'burger-drop-zone'
-const FOOD_HERO_ARCHETYPES: readonly string[] = ['salad', 'bowl', 'wrap', 'toastie', 'sandwich']
+const FOOD_HERO_ARCHETYPES: readonly string[] = ['salad', 'bowl', 'wrap']
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
