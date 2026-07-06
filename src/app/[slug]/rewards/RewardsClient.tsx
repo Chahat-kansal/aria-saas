@@ -266,23 +266,27 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         )}
         {(!loaded || !cx) && <div style={{ height: 28 }} />}
 
-        {/* Points ring composite — pts text overlaid inside horseshoe arc */}
+        {/* Points ring composite — arc behind lime card */}
         <div style={{ position: 'relative', width: 220, height: 200, margin: '0 auto' }}>
-          {/* Arc SVG — sits behind text, ring center at (110,110) in SVG = ~y:110 in container */}
-          <div style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+          {/* Arc SVG — behind card */}
+          <div style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}>
             <PointsArc pts={pts} threshold={topThreshold} />
           </div>
-          {/* Pts text — positioned so it sits inside the ring opening */}
+          {/* Pts inside lime rounded-rect card — in front of arc */}
           <div style={{
-            position: 'absolute', top: 20, left: 0, right: 0, textAlign: 'center', zIndex: 1,
+            position: 'absolute', top: 28, left: 28, right: 28, bottom: 10, zIndex: 1,
+            background: 'rgba(217,245,78,0.18)',
+            borderRadius: 24,
+            boxShadow: '0 0 24px rgba(217,245,78,0.4)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           }}>
             <p style={{
-              fontFamily: FB, fontSize: 72, fontWeight: 800, color: INK,
+              fontFamily: FB, fontSize: 64, fontWeight: 800, color: INK,
               margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
             }}>
               {pts.toLocaleString()}
             </p>
-            <p style={{ fontFamily: FB, fontSize: 16, color: INK_MUTED, margin: '4px 0 0', fontWeight: 500 }}>
+            <p style={{ fontFamily: FB, fontSize: 15, color: INK_MUTED, margin: '4px 0 0', fontWeight: 500 }}>
               pts
             </p>
           </div>

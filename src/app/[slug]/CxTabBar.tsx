@@ -1,7 +1,6 @@
 'use client'
 
-const ACCENT = '#d9f54e'
-const ACCENT_TEXT = '#2f3a06'
+const INK = '#0a0a0a'
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 
 function IconHome({ color = 'currentColor' }: { color?: string }) {
@@ -75,7 +74,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
     }}>
       {tabs.map(t => {
         const on = active === t.key
-        const iconColor = on ? ACCENT_TEXT : inactiveColor
+        const iconColor = on ? INK : inactiveColor
         return (
           <a
             key={t.key}
@@ -84,8 +83,8 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
               flex: 1, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: 3,
               textDecoration: 'none', borderRadius: 16,
-              background: on ? ACCENT : 'transparent',
-              boxShadow: on ? 'inset 0 0 12px rgba(217,245,78,0.4)' : 'none',
+              background: 'transparent',
+              boxShadow: on ? '0 -2px 12px rgba(217,245,78,0.5)' : 'none',
               position: 'relative',
             }}
           >
@@ -93,7 +92,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
             {t.key === 'menu'    && <IconFork color={iconColor} />}
             {t.key === 'rewards' && <IconGift color={iconColor} />}
             {t.key === 'wallet'  && <IconCard color={iconColor} />}
-            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? ACCENT_TEXT : inactiveColor, letterSpacing: '0.01em' }}>
+            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? INK : inactiveColor, letterSpacing: '0.01em' }}>
               {t.label}
             </span>
             {t.key === 'menu' && cartCount > 0 && (

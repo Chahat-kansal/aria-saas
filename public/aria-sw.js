@@ -41,7 +41,8 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       caches.match(req).then(cached => {
         const net = fetch(req).then(res => {
-          caches.open(CACHE).then(c => c.put(req, res.clone()))
+          const copy = res.clone()
+          caches.open(CACHE).then(c => c.put(req, copy))
           return res
         })
         return cached || net
@@ -53,7 +54,7 @@ self.addEventListener('fetch', e => {
   // Everything else: network-first, fall back to cache only when offline
   e.respondWith(
     fetch(req)
-      .then(res => { caches.open(CACHE).then(c => c.put(req, res.clone())); return res })
+      .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res })
       .catch(() => caches.match(req).then(r => r || caches.match('/offline')))
   )
 })

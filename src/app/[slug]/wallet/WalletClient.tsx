@@ -125,10 +125,10 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
     : tier === 'silver' || tier === 'Silver' ? 'Silver' : 'Member'
 
   return (
-    <div style={{ position: 'relative', width: '100%', maxWidth: 380, margin: '0 auto', userSelect: 'none' }}>
+    <div style={{ position: 'relative', width: '100%', maxWidth: 380, margin: '0 auto', userSelect: 'none', overflow: 'hidden' }}>
       {/* Photoreal card background — tilt, chip, gold edge, shadow all IN the image */}
       <img
-        src="/menu/_ingest/cx/loyalty-card-bg.png"
+        src="/menu/_lib/cx/loyalty-card-bg.png"
         alt=""
         draggable={false}
         style={{ width: '100%', display: 'block', pointerEvents: 'none' }}
