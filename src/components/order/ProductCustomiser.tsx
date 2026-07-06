@@ -15,7 +15,10 @@ import { LayeredProduct } from './LayeredProduct'
 import { IngredientTray } from './IngredientTray'
 import { PriceBar } from './PriceBar'
 import { useOrderBuilder, type ModifierInfo } from './useOrderBuilder'
-import { ALL_PROTEINS, INGREDIENT_PATHS, OPTIONAL_TOPPINGS, type IngredientKey } from './ingredients'
+import {
+  ALL_PROTEINS, INGREDIENT_PATHS, OPTIONAL_TOPPINGS, FOOD_LIBRARIES,
+  nameToFoodKey, type IngredientKey,
+} from './ingredients'
 
 const DROP_ZONE_ID = 'burger-drop-zone'
 
@@ -65,7 +68,7 @@ function nameToProteinKey(name: string): IngredientKey | null {
   return null
 }
 
-function nameToIngredientKey(name: string): IngredientKey | null {
+function nameToBurgerKey(name: string): IngredientKey | null {
   const low = name.toLowerCase()
   for (const key of OPTIONAL_TOPPINGS) {
     if (low.includes(key)) return key
@@ -77,7 +80,7 @@ function nameToIngredientKey(name: string): IngredientKey | null {
 
 interface ProteinPillsProps {
   group: ModifierGroup
-  proteinMap: Map<string, IngredientKey>   // optionId → IngredientKey
+  proteinMap: Map<string, IngredientKey>
   activeProtein: IngredientKey
   onSelect: (key: IngredientKey, optId: string) => void
 }
@@ -134,9 +137,13 @@ function ProteinPills({ group, proteinMap, activeProtein, onSelect }: ProteinPil
   )
 }
 
-// ── Drop zone wrapper with Pipel pedestal disc ────────────────────────────────
+// ── Drop zone wrapper ─────────────────────────────────────────────────────────
 
-function DropZoneWrapper({ layers, size }: { layers: IngredientKey[]; size: number }) {
+function DropZoneWrapper({ layers, size, layout }: {
+  layers: IngredientKey[]
+  size: number
+  layout: 'stack' | 'bowl' | 'scatter'
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: DROP_ZONE_ID })
   return (
     <div
@@ -150,7 +157,7 @@ function DropZoneWrapper({ layers, size }: { layers: IngredientKey[]; size: numb
         transition: 'all 0.15s',
       }}
     >
-      <LayeredProduct layers={layers} size={size} />
+      <LayeredProduct layers={layers} size={size} layout={layout} />
 
       {/* Pedestal disc */}
       <div style={{
@@ -186,9 +193,24 @@ interface Props {
   modifierGroups?: ModifierGroup[]
   productPrice?: number
   onAddToOrder?: (config: BuildConfig) => void
+  layout?: 'stack' | 'bowl' | 'scatter'
+  archetype?: string
 }
 
-export function ProductCustomiser({ size = 220, modifierGroups = [], productPrice, onAddToOrder }: Props) {
+export function ProductCustomiser({ size = 220, modifierGroups = [], productPrice, onAddToOrder, layout, archetype }: Props) {
+
+  // Resolve food library if archetype is set
+  const foodLib = archetype ? (FOOD_LIBRARIES[archetype] ?? null) : null
+  const effectiveLayout: 'stack' | 'bowl' | 'scatter' = layout ?? foodLib?.layout ?? 'stack'
+  const isFoodBuild = foodLib !== null
+  const trayLibrary: IngredientKey[] = isFoodBuild ? foodLib!.items : OPTIONAL_TOPPINGS
+  const baseKey: IngredientKey | undefined = isFoodBuild ? foodLib!.base : undefined
+
+  // Name-to-key resolver: food-aware
+  function resolveIngredientKey(name: string): IngredientKey | null {
+    if (isFoodBuild) return nameToFoodKey(name, trayLibrary)
+    return nameToBurgerKey(name)
+  }
 
   // Classify groups: either-or pills (required, min=max=1) vs add-many trays
   const pillGroups = modifierGroups.filter(g =>
@@ -204,7 +226,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
 
   for (const group of trayGroups) {
     for (const opt of group.options) {
-      const key = nameToIngredientKey(opt.name)
+      const key = resolveIngredientKey(opt.name)
       if (key && !modifierMap[key]) {
         modifierMap[key] = {
           id: opt.id, name: opt.name, priceCents: opt.priceCents,
@@ -217,17 +239,21 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
   }
 
   // Derive default ingredient keys from is_default=true options in tray groups
-  const defaultKeys: IngredientKey[] = []
+  const derivedDefaults: IngredientKey[] = []
   for (const group of trayGroups) {
     for (const opt of group.options) {
       if (!opt.isDefault) continue
-      const key = nameToIngredientKey(opt.name)
-      if (key && !defaultKeys.includes(key)) defaultKeys.push(key)
+      const key = resolveIngredientKey(opt.name)
+      if (key && !derivedDefaults.includes(key)) derivedDefaults.push(key)
     }
   }
+  // Fall back to library defaults when no modifier groups provide defaults
+  const defaultKeys: IngredientKey[] = derivedDefaults.length > 0
+    ? derivedDefaults
+    : (isFoodBuild ? foodLib!.defaults : [])
 
-  // Protein pill group mapping: optionId → IngredientKey
-  const proteinPillGroup = pillGroups.find(g =>
+  // Protein pill group mapping (burger mode only): optionId → IngredientKey
+  const proteinPillGroup = isFoodBuild ? null : pillGroups.find(g =>
     g.archetypeSlot === 'protein' ||
     g.options.some(o => nameToProteinKey(o.name) !== null),
   )
@@ -256,7 +282,15 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
     protein, removed, extras, layers, total, points,
     toggleDefault, setExtraQty, swapProtein,
     addTopping,
-  } = useOrderBuilder({ defaultKeys, modifierMap, basePrice: productPrice, initialProtein })
+  } = useOrderBuilder({
+    defaultKeys,
+    modifierMap,
+    basePrice: productPrice,
+    initialProtein,
+    mode: isFoodBuild ? 'food' : 'burger',
+    library: isFoodBuild ? trayLibrary : undefined,
+    baseLayer: baseKey,
+  })
 
   const [draggingId, setDraggingId] = useState<IngredientKey | null>(null)
   const [buildNote, setBuildNote] = useState('')
@@ -291,9 +325,9 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
   }
 
   function handleAddToOrder() {
-    // Collect added extras (all extra-unit additions, repeated per qty)
+    const orderItems = isFoodBuild ? trayLibrary : OPTIONAL_TOPPINGS
     const added: { id: string; name: string; priceCents: number }[] = []
-    for (const key of OPTIONAL_TOPPINGS) {
+    for (const key of orderItems) {
       const qty = extras[key] ?? 0
       if (qty > 0) {
         const info = modifierMap[key]
@@ -305,7 +339,6 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
       }
     }
 
-    // Collect removed defaults (free removals for kitchen ticket)
     const removedItems: { name: string }[] = Array.from(removed).map(key => {
       const info = optionsByKey[key]
       return { name: info?.name ?? key }
@@ -332,7 +365,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, width: '100%' }}>
 
-        {/* Protein swap pills */}
+        {/* Protein swap pills (burger mode only) */}
         {proteinPillGroup && (
           <ProteinPills
             group={proteinPillGroup}
@@ -342,7 +375,7 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
           />
         )}
 
-        {/* Other required-single-choice groups (e.g. size) — rendered as pills too */}
+        {/* Other required-single-choice groups (e.g. size) */}
         {nonProteinPillGroups.map(group => (
           <div key={group.id} style={{ padding: '8px 16px 0', maxWidth: 480, margin: '0 auto', width: '100%' }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#6b7280', marginBottom: 6 }}>
@@ -367,13 +400,13 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
           </div>
         ))}
 
-        {/* Burger visual with drop zone */}
-        <DropZoneWrapper layers={layers} size={size} />
+        {/* Visual with drop zone */}
+        <DropZoneWrapper layers={layers} size={size} layout={effectiveLayout} />
 
         {/* Drag to build heading */}
         <div style={{ width: '100%', maxWidth: 480, padding: '18px 16px 4px', textAlign: 'left' }}>
           <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#6b7280', fontFamily: "'Outfit', Inter, sans-serif" }}>
-            Drag to build
+            {isFoodBuild ? 'Tap to customise' : 'Drag to build'}
           </div>
         </div>
 
@@ -385,6 +418,8 @@ export function ProductCustomiser({ size = 220, modifierGroups = [], productPric
           modifierMap={modifierMap}
           onTap={handleTap}
           onQtyChange={handleQtyChange}
+          library={isFoodBuild ? trayLibrary : undefined}
+          baseKey={baseKey}
         />
 
         {/* Note input */}

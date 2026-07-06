@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { INGREDIENT_PATHS, type IngredientKey } from './ingredients'
 
 const LAYER_RISE: Record<IngredientKey, number> = {
+  // Burger
   'bun-bottom':    20,
   'patty':         22,
   'patty-chicken': 22,
@@ -15,6 +16,55 @@ const LAYER_RISE: Record<IngredientKey, number> = {
   'pickle':         6,
   'sauce':          4,
   'bun-top':        0,
+  // Brekky bowl (bowl layout — rise values unused, set to 8)
+  'brekky-acai':          8,
+  'brekky-banana':        8,
+  'brekky-bircher':       8,
+  'brekky-chia-seeds':    8,
+  'brekky-granola':       8,
+  'brekky-honey':         8,
+  'brekky-mixed-berries': 8,
+  'brekky-strawberries':  8,
+  'brekky-yoghurt':       8,
+  // Cooked breakfast (scatter layout — rise values unused, set to 8)
+  'ckd-bacon':         8,
+  'ckd-baked-beans':   8,
+  'ckd-fried-eggs':    8,
+  'ckd-grilled-tomato':8,
+  'ckd-hash-brown':    8,
+  'ckd-mushrooms':     8,
+  'ckd-poached-egg':   8,
+  'ckd-sausage':       8,
+  'ckd-toast':         8,
+  // Salad (bowl layout — rise values unused, set to 8)
+  'salad-caesar-dressing':  8,
+  'salad-cherry-tomatoes':  8,
+  'salad-chicken':          8,
+  'salad-croutons':         8,
+  'salad-cucumber':         8,
+  'salad-feta':             8,
+  'salad-lettuce':          8,
+  'salad-olives':           8,
+  'salad-parmesan':         8,
+  // Toastie (stack layout — actual rise values for visual stacking)
+  'tst-toast':        18,
+  'tst-ham':          10,
+  'tst-cheese':        8,
+  'tst-tomato':       10,
+  'tst-egg':          12,
+  'tst-avocado':      10,
+  'tst-baby-spinach':  8,
+  'tst-spinach':       8,
+  'tst-mushrooms':    10,
+  // Wrap (stack layout — actual rise values)
+  'wrap-wrap':           18,
+  'wrap-chicken':        10,
+  'wrap-falafel':        12,
+  'wrap-hummus':          6,
+  'wrap-red-onion':       8,
+  'wrap-shredded-lettuce':8,
+  'wrap-tomato':          8,
+  'wrap-tzatziki':        6,
 }
 
 const SPRING = { type: 'spring' as const, stiffness: 260, damping: 22, mass: 0.9 }

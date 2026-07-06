@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { composeBurger, OPTIONAL_TOPPINGS, type IngredientKey } from './ingredients'
+import { composeBurger, composeFoodLayers, OPTIONAL_TOPPINGS, type IngredientKey } from './ingredients'
 
 export const BASE_PRICE = 8.90
 
@@ -20,12 +20,15 @@ export interface ModifierInfo {
 }
 
 /**
- * Core customiser state machine.
+ * Core customiser state machine — supports burger and food-build modes.
  *
- * defaultKeys  — ingredients pre-included by the café (is_default=true in DB)
- * modifierMap  — live DB prices/qty caps per ingredient key
- * basePrice    — product base price in dollars
- * initialProtein — which patty variant is selected on open
+ * defaultKeys   — ingredients pre-included by the café (is_default=true in DB)
+ * modifierMap   — live DB prices/qty caps per ingredient key
+ * basePrice     — product base price in dollars
+ * initialProtein — which patty variant is selected on open (burger mode only)
+ * mode          — 'burger' (default) or 'food' (uses baseLayer + library)
+ * library       — full tray catalog for food mode
+ * baseLayer     — always-present base ingredient (food mode only)
  *
  * PRICING RULE: removing a default = $0. Adding extras = +priceCents each unit.
  */
@@ -34,23 +37,41 @@ export function useOrderBuilder(opts: {
   modifierMap?: Partial<Record<IngredientKey, ModifierInfo>>
   basePrice?: number
   initialProtein?: IngredientKey
+  mode?: 'burger' | 'food'
+  library?: IngredientKey[]
+  baseLayer?: IngredientKey
 } = {}) {
   const {
     defaultKeys = [],
     modifierMap = {},
     basePrice = BASE_PRICE,
     initialProtein = 'patty',
+    mode = 'burger',
+    library,
+    baseLayer,
   } = opts
+
+  const isFoodMode = mode === 'food' && baseLayer !== undefined
+  const priceItems = isFoodMode ? (library ?? []) : OPTIONAL_TOPPINGS
 
   const [removed, setRemoved] = useState<ReadonlySet<IngredientKey>>(new Set())
   const [extras, setExtras] = useState<Partial<Record<IngredientKey, number>>>({})
   const [protein, setProteinState] = useState<IngredientKey>(initialProtein)
 
-  const layers = composeBurger({ protein, defaults: defaultKeys, removed, extras })
+  const defaultSet = new Set(defaultKeys)
+
+  const activeToppings: IngredientKey[] = [
+    ...defaultKeys.filter(k => !removed.has(k)),
+    ...priceItems.filter(k => !defaultSet.has(k) && (extras[k] ?? 0) > 0),
+  ]
+
+  const layers: IngredientKey[] = isFoodMode
+    ? composeFoodLayers(baseLayer!, activeToppings)
+    : composeBurger({ protein, defaults: defaultKeys, removed, extras })
 
   // Price: base + Σ(extra_qty × priceCents/100)
   const total = Number(
-    (basePrice + OPTIONAL_TOPPINGS.reduce((sum, key) => {
+    (basePrice + priceItems.reduce((sum, key) => {
       const qty = extras[key] ?? 0
       const cents = modifierMap[key]?.priceCents ?? (TOPPING_PRICES[key] ?? 0) * 100
       return sum + qty * cents / 100
@@ -58,13 +79,14 @@ export function useOrderBuilder(opts: {
   )
   const points = Math.floor(total)
 
-  // Flat active list for display (defaults-kept + extras>0)
-  const defaultSet = new Set(defaultKeys)
-  const active: IngredientKey[] = [
-    protein,
-    ...defaultKeys.filter(k => !removed.has(k)),
-    ...OPTIONAL_TOPPINGS.filter(k => !defaultSet.has(k) && (extras[k] ?? 0) > 0),
-  ]
+  // Flat active list for display
+  const active: IngredientKey[] = isFoodMode
+    ? [baseLayer!, ...activeToppings]
+    : [
+        protein,
+        ...defaultKeys.filter(k => !removed.has(k)),
+        ...OPTIONAL_TOPPINGS.filter(k => !defaultSet.has(k) && (extras[k] ?? 0) > 0),
+      ]
 
   // Toggle a default on/off (free — does not change price)
   function toggleDefault(key: IngredientKey) {
@@ -81,7 +103,7 @@ export function useOrderBuilder(opts: {
     setExtras(prev => ({ ...prev, [key]: Math.max(0, Math.min(max, qty)) }))
   }
 
-  // Swap protein pill (crossfade handled by AnimatePresence key change)
+  // Swap protein pill (burger mode only)
   function swapProtein(key: IngredientKey) {
     setProteinState(key)
   }

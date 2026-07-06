@@ -46,3 +46,24 @@ export function resolveArchetype(
   // Rule 3: inherit → product-level first, then category, then 'generic'
   return safe(product.ordering_archetype ?? category?.ordering_archetype)
 }
+
+// ── Build layout resolver ──────────────────────────────────────────────────────
+
+const BUILD_LAYOUT_MAP: Record<string, 'stack' | 'bowl' | 'scatter'> = {
+  salad:     'bowl',
+  bowl:      'bowl',
+  brekky:    'bowl',
+  toastie:   'stack',
+  sandwich:  'stack',
+  roll:      'stack',
+  wrap:      'stack',
+  breakfast: 'scatter',
+}
+
+/**
+ * Given a food-build archetype string, return the correct LayeredProduct layout.
+ * Defaults to 'stack' for unknown archetypes.
+ */
+export function resolveBuildLayout(archetype: string): 'stack' | 'bowl' | 'scatter' {
+  return BUILD_LAYOUT_MAP[archetype.toLowerCase()] ?? 'stack'
+}

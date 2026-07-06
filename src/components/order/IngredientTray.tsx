@@ -145,17 +145,20 @@ interface TrayProps {
   modifierMap: Partial<Record<IngredientKey, ModifierInfo>>
   onTap: (key: IngredientKey) => void
   onQtyChange: (key: IngredientKey, delta: number) => void
+  library?: IngredientKey[]    // item catalog; defaults to OPTIONAL_TOPPINGS
+  baseKey?: IngredientKey      // always-present base — excluded from tray display
 }
 
-export function IngredientTray({ defaultKeys, removed, extras, modifierMap, onTap, onQtyChange }: TrayProps) {
+export function IngredientTray({ defaultKeys, removed, extras, modifierMap, onTap, onQtyChange, library, baseKey }: TrayProps) {
   const defaultSet = new Set(defaultKeys)
+  const displayItems = (library ?? OPTIONAL_TOPPINGS).filter(id => id !== baseKey)
 
   return (
     <div style={{
       display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center',
       padding: '16px 16px 100px', maxWidth: 480, margin: '0 auto',
     }}>
-      {OPTIONAL_TOPPINGS.map(id => (
+      {displayItems.map(id => (
         <DraggableTile
           key={id}
           id={id}
