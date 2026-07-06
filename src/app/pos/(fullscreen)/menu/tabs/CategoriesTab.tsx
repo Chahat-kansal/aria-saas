@@ -15,6 +15,7 @@ type Category = {
 type Props = {
   businessId: string
   initialCategories?: Category[]
+  onFilterProducts?: (categoryId: string) => void
 }
 
 const COLOR_PRESETS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#0ea5e9', '#f97316', '#0a0a0a']
@@ -294,7 +295,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 }
 
-export default function CategoriesTab({ businessId, initialCategories }: Props) {
+export default function CategoriesTab({ businessId, initialCategories, onFilterProducts }: Props) {
   const [categories, setCategories] = useState<Category[]>(
     (initialCategories ?? []).slice().sort((a, b) => a.sort_order - b.sort_order)
   )
@@ -591,6 +592,21 @@ export default function CategoriesTab({ businessId, initialCategories }: Props) 
 
               {/* Actions */}
               <div style={styles.actions}>
+                {/* View products in this category */}
+                {onFilterProducts && (
+                  <>
+                    <button
+                      style={{ ...styles.iconBtnAccent, fontSize: '13px' }}
+                      title={'View products in ' + cat.name}
+                      onClick={() => onFilterProducts(cat.id)}
+                      type="button"
+                    >
+                      →
+                    </button>
+                    <div style={styles.divider} />
+                  </>
+                )}
+
                 {/* Visibility toggle */}
                 <button
                   style={styles.iconBtn}

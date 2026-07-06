@@ -31,6 +31,17 @@ const BG_ITEMS = [
 
 const ACCENTS = ['#BA7517','#16a34a','#d9f54e','#7FB897','#E24B4A','#0a0a0a','#C9A37A','#e8a87c','#6C5CE7','#1d9bf0']
 const BADGE_OPTS = ['Best seller','New','Vegan','Caffeine-free','Fresh batch','GF']
+const ORDERING_ARCHETYPES = [
+  { value: '',            label: 'Standard (no special render)' },
+  { value: 'coffee-spin', label: 'coffee-spin — Spin360 animation' },
+  { value: 'bottle',      label: 'bottle — Bottle viewer' },
+  { value: 'salad',       label: 'salad — Build-your-own salad' },
+  { value: 'toastie',     label: 'toastie — Build-your-own toastie' },
+  { value: 'wrap',        label: 'wrap — Build-your-own wrap' },
+  { value: 'bowl',        label: 'bowl — Build-your-own bowl' },
+  { value: 'breakfast',   label: 'breakfast — Build-your-own breakfast' },
+  { value: 'hero-photo',  label: 'hero-photo — Full-bleed hero photo' },
+]
 const LOGOS = ['☕','🌿','✦','S','🫐','◆']
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
@@ -486,6 +497,22 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
   const isHidden = override.hidden ?? false
   const fileRef = useRef<HTMLInputElement>(null)
   const curBadge = override.badge ?? ''
+  const [archetypeVal, setArchetypeVal] = useState(product.ordering_archetype ?? '')
+  const [archetypeBusy, setArchetypeBusy] = useState(false)
+
+  async function saveArchetype(val: string) {
+    setArchetypeBusy(true)
+    setArchetypeVal(val)
+    try {
+      await fetch('/api/pos/menu/products/' + product.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordering_archetype: val || null }),
+      })
+    } finally {
+      setArchetypeBusy(false)
+    }
+  }
 
   function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -544,7 +571,7 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
           )}
         </div>
       </div>
-      <div>
+      <div style={{ marginBottom: 10 }}>
         <label style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', display: 'block', marginBottom: 6 }}>Badge</label>
         <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 5 }}>
           {[...BADGE_OPTS, 'None'].map(b => {
@@ -555,6 +582,20 @@ function ItemEditor({ product, override, onUpdate, onClose, onUploadPhoto, imgBu
             )
           })}
         </div>
+      </div>
+      <div>
+        <label style={{ fontSize: 10.5, fontWeight: 600, color: '#71717a', display: 'block', marginBottom: 4 }}>Render type</label>
+        <select
+          value={archetypeVal}
+          disabled={archetypeBusy}
+          onChange={e => { void saveArchetype(e.target.value) }}
+          style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e4e4e7', fontSize: 12, color: '#18181b', background: archetypeBusy ? '#f4f4f5' : '#fff', outline: 'none', cursor: archetypeBusy ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+        >
+          {ORDERING_ARCHETYPES.map(a => (
+            <option key={a.value} value={a.value}>{a.label}</option>
+          ))}
+        </select>
+        {archetypeBusy && <span style={{ fontSize: 10, color: '#71717a', display: 'block', marginTop: 3 }}>Saving…</span>}
       </div>
     </div>
   )
@@ -593,6 +634,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
   const router = useRouter()
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTab, setActiveTab] = useState<'design' | 'products' | 'modifiers' | 'categories' | 'settings'>('design')
+  const [catTabFilter, setCatTabFilter] = useState<string | null>(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 1000)
@@ -1229,9 +1271,9 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
       {/* Management tabs content */}
       {activeTab !== 'design' && (
         <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={[]} initialCategories={[]} initialOutlets={initialOutlets} />}
+          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={[]} initialCategories={[]} initialOutlets={initialOutlets} initialCategoryFilter={catTabFilter} />}
           {activeTab === 'modifiers' && <ModifiersTab businessId={businessId} />}
-          {activeTab === 'categories' && <CategoriesTab businessId={businessId} />}
+          {activeTab === 'categories' && <CategoriesTab businessId={businessId} onFilterProducts={id => { setCatTabFilter(id); setActiveTab('products') }} />}
           {activeTab === 'settings' && <SettingsTab businessId={businessId} />}
         </div>
       )}

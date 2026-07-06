@@ -24,6 +24,7 @@ interface ProductsTabProps {
   initialCategories: Category[]
   initialOutlets: Outlet[]
   onRefresh?: () => void
+  initialCategoryFilter?: string | null
 }
 
 // ── Style constants ────────────────────────────────────────────────────────
@@ -298,12 +299,13 @@ export default function ProductsTab({
   initialCategories,
   initialOutlets,
   onRefresh,
+  initialCategoryFilter,
 }: ProductsTabProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<Category[]>(initialCategories)
   const [outlets, setOutlets] = useState<Outlet[]>(initialOutlets)
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(initialCategoryFilter ?? null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [showNewForm, setShowNewForm] = useState(false)
 
@@ -311,6 +313,8 @@ export default function ProductsTab({
   useEffect(() => { setProducts(initialProducts) }, [initialProducts])
   useEffect(() => { setCategories(initialCategories) }, [initialCategories])
   useEffect(() => { setOutlets(initialOutlets) }, [initialOutlets])
+  // Sync category filter when parent triggers cross-tab navigation
+  useEffect(() => { if (initialCategoryFilter) setCategoryFilter(initialCategoryFilter) }, [initialCategoryFilter])
 
   // ── Data reload ──────────────────────────────────────────────────────────
 
@@ -322,6 +326,9 @@ export default function ProductsTab({
     if (json.outlets) setOutlets(json.outlets)
     onRefresh?.()
   }, [onRefresh])
+
+  // Auto-fetch on mount — initialProducts may be empty from parent
+  useEffect(() => { void reload() }, [reload])
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
