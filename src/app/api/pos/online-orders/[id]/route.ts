@@ -5,6 +5,7 @@ import { notifyReady } from '@/lib/notify-ready'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
+import { fireKdsForOrder } from '@/lib/online-orders/fireKdsForOrder'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -113,6 +114,7 @@ async function _PATCH(req: Request, { params }: Params) {
   }
 
   // ── KDS fire — non-blocking, on first accept/confirm only ──
+  // Webhook auto-accepts paid orders; for pay_on_pickup this path runs when owner taps accept.
   if (
     (newStatus === 'accepted' || newStatus === 'confirmed') &&
     prevStatus !== 'accepted' && prevStatus !== 'confirmed'
@@ -121,95 +123,24 @@ async function _PATCH(req: Request, { params }: Params) {
     const fireBid = bid
     waitUntil((async () => {
       try {
-        const { data: ord } = await supabaseAdmin
+        // Gate: card payments must be confirmed before KDS fires (pay_on_pickup skips gate)
+        const { data: stripeOrd } = await supabaseAdmin
           .from('pos_online_orders')
-          .select('order_number, items, sale_id, outlet_id, stripe_payment_intent_id, stripe_payment_status, notes, special_instructions')
+          .select('stripe_payment_intent_id, stripe_payment_status, order_number')
           .eq('id', fireOrderId)
           .maybeSingle()
-
-        // Gate: card payments must be confirmed before KDS fires
-        const stripePI = (ord as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id
-        const stripeStatus = (ord as { stripe_payment_status?: string | null } | null)?.stripe_payment_status
+        const stripePI = (stripeOrd as { stripe_payment_intent_id?: string | null } | null)?.stripe_payment_intent_id
+        const stripeStatus = (stripeOrd as { stripe_payment_status?: string | null } | null)?.stripe_payment_status
         if (stripePI && stripeStatus !== 'succeeded') {
           void supabaseAdmin.from('activity_log').insert({
             business_id: fireBid, action_type: 'kds_fire_blocked_unpaid',
-            description: '[online-orders] KDS fire blocked — payment not confirmed for order ' + ((ord as { order_number?: string } | null)?.order_number ?? ''),
+            description: '[online-orders] KDS fire blocked — payment not confirmed for order ' + ((stripeOrd as { order_number?: string } | null)?.order_number ?? ''),
             metadata: { order_id: fireOrderId, stripe_pi: stripePI, stripe_status: stripeStatus },
             created_at: new Date().toISOString(),
           })
           return
         }
-
-        const items = (ord?.items ?? []) as Array<{
-          product_id?: string; product_name?: string; quantity?: number;
-          modifiers?: Array<{ name: string }>;
-          config?: { removed?: Array<{ name: string }>; added?: Array<{ name: string; priceCents?: number }> };
-          note?: string
-        }>
-        if (!items.length) return
-
-        const productIds = [...new Set(items.map(i => i.product_id).filter((id): id is string => !!id))]
-        const dietaryMap: Record<string, string[]> = {}
-        if (productIds.length > 0) {
-          const { data: prods } = await supabaseAdmin
-            .from('pos_products')
-            .select('id, is_gluten_free, is_vegan, is_vegetarian')
-            .in('id', productIds)
-          for (const p of (prods ?? [])) {
-            const prod = p as { id: string; is_gluten_free: boolean | null; is_vegan: boolean | null; is_vegetarian: boolean | null }
-            const tags: string[] = []
-            if (prod.is_gluten_free) tags.push('⚠ GLUTEN FREE')
-            if (prod.is_vegan) tags.push('⚠ VEGAN')
-            else if (prod.is_vegetarian) tags.push('⚠ VEGETARIAN')
-            if (tags.length) dietaryMap[prod.id] = tags
-          }
-        }
-
-        const now = new Date().toISOString()
-        const orderNum = (ord?.order_number as string | null) ?? ''
-        const saleId = (ord?.sale_id as string | null) ?? null
-        const orderNotes = (ord as { notes?: string | null; special_instructions?: string | null } | null)?.notes
-          ?? (ord as { notes?: string | null; special_instructions?: string | null } | null)?.special_instructions
-          ?? null
-
-        // Idempotency guard — bail if a KDS row already exists for this sale
-        if (saleId) {
-          const { data: existingKds } = await supabaseAdmin
-            .from('pos_kds_orders').select('id')
-            .eq('sale_id', saleId).eq('business_id', fireBid).maybeSingle()
-          if (existingKds) return
-        }
-
-        // Write one pos_kds_orders row (all items in JSONB) — same table + shape as in-store POS
-        const kdsItems = items.map(item => {
-          const pName = item.product_name ?? 'Item'
-          const removed = item.config?.removed ?? []
-          const added = item.config?.added ?? []
-          const mods = item.modifiers ?? []
-          const modLines: string[] = []
-          for (const d of (dietaryMap[item.product_id ?? ''] ?? [])) modLines.push(d)
-          for (const r of removed) modLines.push('NO ' + r.name.toUpperCase())
-          for (const a of added) modLines.push('+' + a.name)
-          for (const m of mods) modLines.push(m.name)
-          if (item.note) modLines.push('NOTE: ' + item.note)
-          return {
-            name: pName,
-            qty: item.quantity ?? 1,
-            modifiers: modLines,
-            ...(item.note ? { special_instructions: item.note } : {}),
-          }
-        })
-
-        await supabaseAdmin.from('pos_kds_orders').insert({
-          business_id: fireBid,
-          sale_id: saleId,
-          table_number: '#' + orderNum + ' ONLINE',
-          items: kdsItems,
-          status: 'new',
-          priority: 1,
-          notes: orderNotes,
-          created_at: now,
-        })
+        await fireKdsForOrder(fireOrderId, fireBid)
       } catch (kdsErr) {
         void supabaseAdmin.from('activity_log').insert({
           business_id: fireBid,
