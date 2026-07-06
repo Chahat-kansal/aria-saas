@@ -71,8 +71,8 @@ type MenuCfg = {
   background_id: string
   is_published: boolean
 }
-type Category = { id: string; name: string; color: string | null; is_active?: boolean; sort_order?: number; ordering_archetype?: string | null }
-type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; image_thumb_url?: string | null; image_source?: string | null; category_id: string | null; sort_order: number | null; display_order?: number | null; is_active?: boolean; show_online?: boolean; ordering_mode?: string; ordering_archetype?: string | null; builder_type?: string | null; kds_station?: string; prep_time_seconds?: number | null; allergens?: string[]; is_gluten_free?: boolean; is_vegan?: boolean; is_vegetarian?: boolean; notes?: string | null; tags?: string[] }
+type Category = { id: string; name: string; color: string | null; is_active: boolean; sort_order: number; ordering_archetype: string | null }
+type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; image_thumb_url: string | null; image_source: string | null; category_id: string | null; sort_order: number; display_order?: number | null; is_active: boolean; show_online: boolean; ordering_mode: string; ordering_archetype: string | null; builder_type: string | null; kds_station: string; prep_time_seconds: number | null; allergens: string[]; is_gluten_free: boolean; is_vegan: boolean; is_vegetarian: boolean; notes: string | null; tags: string[] }
 type Outlet = { id: string; name: string }
 type ExtractedItem = { _id: string; name: string; price: number; category: string; description: string; removed: boolean }
 
@@ -1116,7 +1116,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
       {/* Management tab bar */}
       <div style={{ height: 40, display: 'flex', alignItems: 'stretch', background: C.card, borderBottom: '1px solid ' + C.border, flexShrink: 0, zIndex: 15 }}>
         {MGMT_TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '0 16px', border: 'none', background: 'transparent', borderBottom: '2px solid ' + (activeTab === tab.id ? '#d9f54e' : 'transparent'), color: activeTab === tab.id ? C.ink : C.muted, fontSize: 12, fontWeight: activeTab === tab.id ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0, transition: 'color 0.15s' }}>
+          <button key={tab.id} onClick={() => { setActiveTab(tab.id); if (tab.id === 'products') setCatTabFilter(null) }} style={{ padding: '0 16px', border: 'none', background: 'transparent', borderBottom: '2px solid ' + (activeTab === tab.id ? '#d9f54e' : 'transparent'), color: activeTab === tab.id ? C.ink : C.muted, fontSize: 12, fontWeight: activeTab === tab.id ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0, transition: 'color 0.15s' }}>
             {tab.label}
           </button>
         ))}
@@ -1271,7 +1271,7 @@ export default function MenuBuilderClient({ businessId, slug: _slug, businessNam
       {/* Management tabs content */}
       {activeTab !== 'design' && (
         <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={[]} initialCategories={[]} initialOutlets={initialOutlets} initialCategoryFilter={catTabFilter} />}
+          {activeTab === 'products' && <ProductsTab businessId={businessId} initialProducts={initialProducts} initialCategories={initialCats} initialOutlets={initialOutlets} initialCategoryFilter={catTabFilter} />}
           {activeTab === 'modifiers' && <ModifiersTab businessId={businessId} />}
           {activeTab === 'categories' && <CategoriesTab businessId={businessId} onFilterProducts={id => { setCatTabFilter(id); setActiveTab('products') }} />}
           {activeTab === 'settings' && <SettingsTab businessId={businessId} />}

@@ -19,8 +19,8 @@ type MenuCfg = {
   background_id: string
   is_published: boolean
 }
-type Category = { id: string; name: string; color: string | null; is_active?: boolean; sort_order?: number; ordering_archetype?: string | null }
-type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; image_thumb_url?: string | null; image_source?: string | null; category_id: string | null; sort_order: number | null; display_order?: number | null; is_active?: boolean; show_online?: boolean; ordering_mode?: string; ordering_archetype?: string | null; builder_type?: string | null; kds_station?: string; prep_time_seconds?: number | null; allergens?: string[]; is_gluten_free?: boolean; is_vegan?: boolean; is_vegetarian?: boolean; notes?: string | null; tags?: string[] }
+type Category = { id: string; name: string; color: string | null; is_active: boolean; sort_order: number; ordering_archetype: string | null }
+type Product = { id: string; name: string; description: string | null; price: number; image_url: string | null; image_thumb_url: string | null; image_source: string | null; category_id: string | null; sort_order: number; display_order?: number | null; is_active: boolean; show_online: boolean; ordering_mode: string; ordering_archetype: string | null; builder_type: string | null; kds_station: string; prep_time_seconds: number | null; allergens: string[]; is_gluten_free: boolean; is_vegan: boolean; is_vegetarian: boolean; notes: string | null; tags: string[] }
 type Outlet = { id: string; name: string }
 
 export const metadata = { title: 'Menu Builder — Aria' }
