@@ -71,6 +71,32 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
   const features: string[] = Array.isArray(biz.hub_visible_features) ? biz.hub_visible_features as string[] : ['loyalty', 'booking', 'community', 'review', 'website']
   const reviewUrl = (biz.google_review_link as string | null) || (biz.google_business_url as string | null) || null
 
+  // Fetch products + reward rule in parallel (non-blocking; empty arrays/null on failure)
+  type ProdRow = { id: string; name: string; price: number; image_url: string | null; description: string | null }
+  const [productsRes, rewardRes] = await Promise.all([
+    supabaseAdmin
+      .from('pos_products')
+      .select('id, name, price, image_url, description')
+      .eq('business_id', biz.id as string)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('featured', { ascending: false, nullsFirst: false })
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('name')
+      .limit(6),
+    supabaseAdmin
+      .from('loyalty_reward_rules')
+      .select('threshold_value')
+      .eq('business_id', biz.id as string)
+      .eq('is_active', true)
+      .not('threshold_value', 'is', null)
+      .order('threshold_value', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ])
+  const products: ProdRow[] = (productsRes.data ?? []) as ProdRow[]
+  const rewardThreshold: number | null = (rewardRes.data as { threshold_value?: number | null } | null)?.threshold_value ?? null
+
   const business: HubBusiness = {
     id: biz.id as string,
     name: (biz.name as string) ?? 'Our shop',
@@ -83,6 +109,8 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
     bookingSlug: (biz.booking_link_slug as string | null) ?? null,
     website: (biz.website as string | null) ?? null,
     reviewUrl,
+    products,
+    rewardThreshold,
   }
 
   // Fire-and-forget hub visit tracking (non-blocking)
