@@ -9,7 +9,6 @@ import { createClient } from '@supabase/supabase-js'
 const stripeOrders = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { waitUntil } from '@vercel/functions'
-import { earnOnSale } from '@/lib/loyalty/earnOnSale'
 import { linkOrCreateMembership } from '@/lib/loyalty/membership'
 import { normalisePhone } from '@/lib/clicksend'
 
@@ -262,24 +261,8 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     }
   }
 
-  // 5. Background: loyalty earn — skip for card payments; webhook handles after confirmation.
-  if (earnCustomerId && earnSaleId && !isCardPayment) {
-    const finalCustomerId = earnCustomerId
-    const finalSaleId = earnSaleId
-    waitUntil((async () => {
-      try {
-        await earnOnSale({ businessId: bid, customerId: finalCustomerId, saleId: finalSaleId, totalAmount: subtotal })
-      } catch (e) {
-        void sb.from('activity_log').insert({
-          business_id: bid,
-          action_type: 'online_order_earn_error',
-          description: '[place-order] earnOnSale failed: ' + (e as Error).message,
-          metadata: { sale_id: finalSaleId, customer_id: finalCustomerId, error: (e as Error).message },
-          created_at: new Date().toISOString(),
-        })
-      }
-    })())
-  }
+  // Loyalty earn fires on pickup (status → completed), not at order time.
+  // See: online-orders/[id]/route.ts on newStatus='completed'.
 
   return NextResponse.json({
     ok: true,

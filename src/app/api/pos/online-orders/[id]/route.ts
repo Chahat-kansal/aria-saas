@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
 import { fireKdsForOrder } from '@/lib/online-orders/fireKdsForOrder'
+import { earnOnSale } from '@/lib/loyalty/earnOnSale'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -30,7 +31,7 @@ async function _PATCH(req: Request, { params }: Params) {
   // Read current state BEFORE update — for dedup guard and notification payload.
   const { data: currentOrder } = await supabaseAdmin
     .from('pos_online_orders')
-    .select('status, customer_name, customer_phone, customer_email, order_number, customer_id')
+    .select('status, customer_name, customer_phone, customer_email, order_number, customer_id, sale_id, total')
     .eq('id', id).eq('business_id', bid).maybeSingle()
 
   const allowed: Record<string, unknown> = { updated_at: now }
@@ -151,6 +152,30 @@ async function _PATCH(req: Request, { params }: Params) {
         })
       }
     })())
+  }
+
+  // ── Loyalty earn — fires once on pickup (status → completed), idempotent via earnOnSale ──
+  if (newStatus === 'completed' && prevStatus !== 'completed') {
+    const earnOrderId = id
+    const earnBid = bid
+    const earnSaleId = (currentOrder as { sale_id?: string | null } | null)?.sale_id ?? null
+    const earnCustomerId = (currentOrder as { customer_id?: string | null } | null)?.customer_id ?? null
+    const earnTotal = Number((currentOrder as { total?: string | null } | null)?.total ?? 0)
+    if (earnSaleId && earnCustomerId) {
+      waitUntil((async () => {
+        try {
+          await earnOnSale({ businessId: earnBid, customerId: earnCustomerId, saleId: earnSaleId, totalAmount: earnTotal })
+        } catch (e) {
+          void supabaseAdmin.from('activity_log').insert({
+            business_id: earnBid,
+            action_type: 'online_earn_error',
+            description: '[online-orders] earnOnSale on pickup failed: ' + (e as Error).message,
+            metadata: { order_id: earnOrderId, sale_id: earnSaleId },
+            created_at: new Date().toISOString(),
+          })
+        }
+      })())
+    }
   }
 
   return NextResponse.json({ ok: true })

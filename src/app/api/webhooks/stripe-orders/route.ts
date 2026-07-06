@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { earnOnSale } from '@/lib/loyalty/earnOnSale'
 import { waitUntil } from '@vercel/functions'
 import { fireKdsForOrder } from '@/lib/online-orders/fireKdsForOrder'
 
@@ -54,8 +53,6 @@ export async function POST(req: Request) {
 
   const orderId = meta.order_id
   const businessId = meta.business_id
-  const saleId = meta.sale_id || null
-  const customerId = meta.customer_id || null
   const now = new Date().toISOString()
 
   if (!orderId || !businessId) return NextResponse.json({ ok: true })
@@ -89,13 +86,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'DB update failed' }, { status: 500 })
   }
 
-  // KDS fire + earnOnSale — non-blocking via waitUntil so Stripe sees 200 within 30 s.
-  // Separate try/catch blocks: KDS failure does not prevent earnOnSale from running.
+  // KDS fire — non-blocking via waitUntil so Stripe sees 200 within 30 s.
+  // Loyalty earn fires on pickup (status → completed) via online-orders/[id] PATCH.
   const bid = businessId
-  const sid = saleId
-  const cid = customerId
   const eid = event.id
-  const totalDollars = pi.amount / 100
 
   waitUntil((async () => {
     try {
@@ -108,20 +102,6 @@ export async function POST(req: Request) {
         metadata: { order_id: orderId, stripe_event_id: eid, pi_id: pi.id },
         created_at: now,
       })
-    }
-
-    if (sid && cid) {
-      try {
-        await earnOnSale({ businessId: bid, customerId: cid, saleId: sid, totalAmount: totalDollars })
-      } catch (earnErr) {
-        void supabaseAdmin.from('activity_log').insert({
-          business_id: bid,
-          action_type: 'stripe_webhook_earn_error',
-          description: '[stripe-orders] earnOnSale failed: ' + (earnErr as Error).message,
-          metadata: { order_id: orderId, sale_id: sid, stripe_event_id: eid, pi_id: pi.id },
-          created_at: now,
-        })
-      }
     }
   })())
 
