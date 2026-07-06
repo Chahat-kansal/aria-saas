@@ -39,7 +39,7 @@ interface CxData {
   preload_txns?: PreloadTxn[]
 }
 
-// ── Barcode visual (CSS stripes from UUID chars) ──────────────────────────────
+// ── Barcode visual — white stripes on dark card ───────────────────────────────
 
 function BarcodeVisual({ code }: { code: string }) {
   const hex = (code.replace(/-/g, '') + code.replace(/-/g, '')).slice(0, 48)
@@ -50,16 +50,13 @@ function BarcodeVisual({ code }: { code: string }) {
   return (
     <div style={{ display: 'flex', height: 44, width: '100%', borderRadius: 4, overflow: 'hidden' }}>
       {bars.map((b, i) => (
-        <div
-          key={i}
-          style={{ flex: b.w, height: '100%', background: b.isBar ? 'rgba(255,255,255,0.9)' : 'transparent' }}
-        />
+        <div key={i} style={{ flex: b.w, height: '100%', background: b.isBar ? 'rgba(255,255,255,0.88)' : 'transparent' }} />
       ))}
     </div>
   )
 }
 
-// ── Loyalty card (dark, floating, slightly tilted) ────────────────────────────
+// ── Loyalty card — stays DARK (it is a physical card) ────────────────────────
 
 function LoyaltyCard({ bizName, logoUrl, name, pts, tier, walletBal, identityId }: {
   bizName: string
@@ -71,26 +68,18 @@ function LoyaltyCard({ bizName, logoUrl, name, pts, tier, walletBal, identityId 
   identityId: string | null
 }) {
   return (
-    <div style={{
-      margin: '0 auto',
-      maxWidth: 340,
-      transform: 'perspective(800px) rotateX(4deg) rotateY(-6deg)',
-      transformOrigin: 'center center',
-    }}>
+    <div style={{ margin: '0 auto', maxWidth: 340, transform: 'perspective(800px) rotateX(4deg) rotateY(-6deg)', transformOrigin: 'center center' }}>
       <div style={{
         borderRadius: 24,
         background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
         padding: '24px 24px 20px',
-        boxShadow: '0 28px 56px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
-        position: 'relative',
-        overflow: 'hidden',
-        minHeight: 192,
+        boxShadow: '0 28px 56px rgba(0,0,0,0.32), 0 4px 12px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)',
+        position: 'relative', overflow: 'hidden', minHeight: 192,
       }}>
-        {/* Ambient glow */}
         <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(217,245,78,0.1) 0%, transparent 70%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: -30, left: -20, width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle, rgba(100,100,255,0.07) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-        {/* Top row: wordmark + logo */}
+        {/* Top: wordmark + logo */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, color: '#fff', fontWeight: 600, letterSpacing: '-0.01em' }}>
@@ -115,17 +104,11 @@ function LoyaltyCard({ bizName, logoUrl, name, pts, tier, walletBal, identityId 
             {name ?? 'Member'}
           </p>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
-              {pts} pts
-            </span>
+            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{pts} pts</span>
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>·</span>
-            <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
-              {tier}
-            </span>
+            <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{tier}</span>
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>·</span>
-            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
-              {'$' + walletBal.toFixed(2)}
-            </span>
+            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{'$' + walletBal.toFixed(2)}</span>
           </div>
         </div>
 
@@ -147,7 +130,7 @@ function LoyaltyCard({ bizName, logoUrl, name, pts, tier, walletBal, identityId 
   )
 }
 
-// ── Transaction row ───────────────────────────────────────────────────────────
+// ── Transaction row — light surface ──────────────────────────────────────────
 
 function TxnRow({ date, label, pts, amount, isPos }: { date: string; label: string; pts: number | null; amount: number | null; isPos: boolean }) {
   const d = new Date(date)
@@ -157,7 +140,7 @@ function TxnRow({ date, label, pts, amount, isPos }: { date: string; label: stri
       <div style={{
         width: 36, height: 36, borderRadius: 12, flexShrink: 0,
         background: isPos ? '#ecfdf5' : '#fef9ec',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: INK,
       }}>
         {isPos ? '↑' : '↓'}
       </div>
@@ -225,7 +208,6 @@ export function WalletClient({ slug, bizId, bizName, logoUrl, topUpUrl }: {
   const earnTxns: EarnTxn[] = (cx?.recent_txns ?? []) as EarnTxn[]
   const preloadTxns: PreloadTxn[] = (cx?.preload_txns ?? []) as PreloadTxn[]
 
-  // Merge + sort all transactions
   type MergedTxn = { id: string; date: string; label: string; pts: number | null; amount: number | null; isPos: boolean }
   const allTxns: MergedTxn[] = [
     ...earnTxns.map(t => ({
@@ -247,33 +229,28 @@ export function WalletClient({ slug, bizId, bizName, logoUrl, topUpUrl }: {
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#111', fontFamily: FB, color: INK, paddingBottom: 100 }}>
-      <style>{`*, *::before, *::after { box-sizing: border-box }`}</style>
+    <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box }
+        @keyframes cx-spin { to { transform: rotate(360deg) } }
+      `}</style>
 
-      {/* Dark top section */}
-      <div style={{ background: '#111', paddingTop: 56, paddingBottom: 36, paddingLeft: 18, paddingRight: 18 }}>
-        <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 30, color: '#fff', margin: '0 0 28px', fontWeight: 400, textAlign: 'center' }}>
+      {/* ── Header — LIGHT ── */}
+      <div style={{ paddingTop: 56, paddingBottom: 32, paddingLeft: 18, paddingRight: 18, textAlign: 'center' }}>
+        <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 32, color: INK, margin: '0 0 28px', fontWeight: 400 }}>
           Wallet
         </h1>
 
-        {/* Loyalty card */}
+        {/* Loyalty card floating on light page */}
         {!loaded ? (
           <div style={{ height: 192, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 28, height: 28, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: ACCENT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
+            <div style={{ width: 28, height: 28, border: '2.5px solid rgba(0,0,0,0.1)', borderTopColor: ACCENT_TEXT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
           </div>
         ) : isLoggedIn ? (
-          <LoyaltyCard
-            bizName={bizName}
-            logoUrl={logoUrl}
-            name={name}
-            pts={pts}
-            tier={tier}
-            walletBal={walletBal}
-            identityId={identityId}
-          />
+          <LoyaltyCard bizName={bizName} logoUrl={logoUrl} name={name} pts={pts} tier={tier} walletBal={walletBal} identityId={identityId} />
         ) : (
-          <div style={{ textAlign: 'center', padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: 24 }}>
-            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, color: '#fff', margin: '0 0 14px' }}>
+          <div style={{ textAlign: 'center', padding: '28px 20px', background: '#fff', borderRadius: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.07)' }}>
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, color: INK, margin: '0 0 14px' }}>
               Your loyalty card
             </p>
             <a href={'/' + slug} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '10px 24px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
@@ -282,52 +259,48 @@ export function WalletClient({ slug, bizId, bizName, logoUrl, topUpUrl }: {
           </div>
         )}
 
-        {/* Wallet pills */}
+        {/* Apple/Google Wallet pills — light style */}
         {isLoggedIn && (
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 100, padding: '8px 18px', border: '1px solid rgba(255,255,255,0.12)' }}>
-              <span style={{ fontSize: 13, color: '#fff' }}>🍎</span>
-              <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>Apple Wallet</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fff', borderRadius: 100, padding: '8px 18px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+              <span style={{ fontSize: 14 }}>🍎</span>
+              <span style={{ fontFamily: FB, fontSize: 12, color: INK, fontWeight: 500 }}>Apple Wallet</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 100, padding: '8px 18px', border: '1px solid rgba(255,255,255,0.12)' }}>
-              <span style={{ fontSize: 13, color: '#fff' }}>🤖</span>
-              <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>Google Wallet</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fff', borderRadius: 100, padding: '8px 18px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+              <span style={{ fontSize: 14 }}>🤖</span>
+              <span style={{ fontFamily: FB, fontSize: 12, color: INK, fontWeight: 500 }}>Google Wallet</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Light bottom sheet */}
-      <div style={{ borderRadius: '24px 24px 0 0', background: BG, minHeight: '50vh', padding: '24px 18px 0' }}>
+      {/* ── Balance + transactions — light surface ── */}
+      <div style={{ padding: '0 18px' }}>
 
-        {/* Top-up + balance row */}
+        {/* Balance card + top-up */}
         {isLoggedIn && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, background: '#fff', borderRadius: 20, padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, background: '#fff', borderRadius: 20, padding: '16px 18px', boxShadow: '0 2px 14px rgba(0,0,0,0.07)' }}>
             <div>
               <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Wallet balance
               </p>
-              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 28, color: INK, margin: 0, fontWeight: 600 }}>
+              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 30, color: INK, margin: 0, fontWeight: 600 }}>
                 {'$' + walletBal.toFixed(2)}
               </p>
             </div>
-            <a
-              href={topUpUrl}
-              style={{ background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '11px 20px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
+            <a href={topUpUrl} style={{ background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '11px 22px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
               + Top up
             </a>
           </div>
         )}
 
         {/* Transaction history */}
-        <div>
-          <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, fontWeight: 600, margin: '0 0 4px', color: INK }}>
+        <div style={{ background: '#fff', borderRadius: 20, padding: '16px 18px', boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
+          <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, fontWeight: 600, margin: '0 0 8px', color: INK }}>
             History
           </h2>
-
           {!loaded ? (
-            <div style={{ padding: '32px 0', textAlign: 'center', color: INK_MUTED, fontFamily: FB, fontSize: 14 }}>
+            <div style={{ padding: '24px 0', textAlign: 'center', color: INK_MUTED, fontFamily: FB, fontSize: 14 }}>
               Loading...
             </div>
           ) : allTxns.length > 0 ? (
@@ -337,7 +310,7 @@ export function WalletClient({ slug, bizId, bizName, logoUrl, topUpUrl }: {
               ))}
             </div>
           ) : (
-            <div style={{ padding: '32px 0', textAlign: 'center' }}>
+            <div style={{ padding: '28px 0', textAlign: 'center' }}>
               <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: INK_MUTED, margin: '0 0 6px' }}>
                 No transactions yet
               </p>
@@ -349,7 +322,6 @@ export function WalletClient({ slug, bizId, bizName, logoUrl, topUpUrl }: {
         </div>
       </div>
 
-      <style>{`@keyframes cx-spin { to { transform: rotate(360deg) } }`}</style>
       <CxTabBar slug={slug} active="wallet" />
     </div>
   )

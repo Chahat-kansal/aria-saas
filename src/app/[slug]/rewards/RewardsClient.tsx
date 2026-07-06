@@ -43,6 +43,7 @@ interface CxData {
   recent_txns?: unknown[]
 }
 
+// Ring: lime fill on light grey track — readable on #fafafa
 function PointsRing({ pts, threshold }: { pts: number; threshold: number | null }) {
   const R = 72
   const C = 2 * Math.PI * R
@@ -50,7 +51,7 @@ function PointsRing({ pts, threshold }: { pts: number; threshold: number | null 
   const fill = pct * C
   return (
     <svg width={180} height={180} viewBox="0 0 180 180" aria-hidden="true" style={{ display: 'block' }}>
-      <circle cx={90} cy={90} r={R} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={10}/>
+      <circle cx={90} cy={90} r={R} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={10}/>
       {fill > 0 && (
         <circle
           cx={90} cy={90} r={R} fill="none"
@@ -73,7 +74,7 @@ function RewardCard({ rule, pts }: { rule: RewardRule; pts: number }) {
     <div style={{
       borderRadius: 20, background: '#fff', overflow: 'hidden',
       boxShadow: '0 3px 16px rgba(0,0,0,0.08)',
-      opacity: canRedeem ? 1 : 0.72,
+      opacity: canRedeem ? 1 : 0.7,
       border: canRedeem ? ('2px solid ' + ACCENT) : '2px solid transparent',
     }}>
       <div style={{
@@ -84,11 +85,8 @@ function RewardCard({ rule, pts }: { rule: RewardRule; pts: number }) {
       }}>
         {!rule.image_url && '☕'}
         {!canRedeem && (
-          <div style={{
-            position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.28)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ fontSize: 28, color: '#fff', opacity: 0.8 }}>🔒</span>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 26, color: '#fff', opacity: 0.85 }}>🔒</span>
           </div>
         )}
       </div>
@@ -137,7 +135,7 @@ function ChallengeBar({ challenge }: { challenge: Challenge }) {
           +{challenge.reward_points} pts
         </span>
       </div>
-      <div style={{ height: 6, background: '#f0f0f0', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+      <div style={{ height: 6, background: '#efefef', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
         <div style={{ height: '100%', width: (pct * 100).toFixed(1) + '%', background: ACCENT, borderRadius: 3, transition: 'width 0.6s ease' }} />
       </div>
       <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, margin: 0 }}>
@@ -187,55 +185,54 @@ export function RewardsClient({ slug, bizName, logoUrl, rewardRules }: {
     <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`*, *::before, *::after { box-sizing: border-box }`}</style>
 
-      {/* Header */}
+      {/* ── Header — LIGHT, ink text ── */}
       <div style={{
-        background: CARD_DARK,
-        paddingTop: 56, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
-        borderRadius: '0 0 28px 28px',
-        marginBottom: 0,
+        background: BG,
+        paddingTop: 56, paddingBottom: 28, paddingLeft: 20, paddingRight: 20,
+        borderBottom: '1px solid rgba(0,0,0,0.07)',
+        textAlign: 'center',
       }}>
-        <div style={{ padding: '0 20px 28px', textAlign: 'center' }}>
-          <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 32, color: '#fff', margin: '0 0 4px', fontWeight: 400, letterSpacing: '-0.01em' }}>
-            Rewards
-          </h1>
-          {firstName && (
-            <p style={{ fontFamily: FB, fontSize: 14, color: 'rgba(255,255,255,0.55)', margin: '0 0 24px' }}>
-              {'Hey, ' + firstName + '!'}
-            </p>
-          )}
+        <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 34, color: INK, margin: '0 0 2px', fontWeight: 400, letterSpacing: '-0.01em' }}>
+          Rewards
+        </h1>
+        {firstName && (
+          <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: '0 0 20px' }}>
+            {'Hey, ' + firstName + '!'}
+          </p>
+        )}
+        {!firstName && <div style={{ height: 20 }} />}
 
-          {/* Big points ring */}
-          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
-            <PointsRing pts={pts} threshold={topThreshold} />
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
-              <div style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 48, fontWeight: 600, color: '#fff', lineHeight: 1 }}>
-                {pts}
-              </div>
-              <div style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
-                points
-              </div>
+        {/* Points ring — lime fill on light track */}
+        <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
+          <PointsRing pts={pts} threshold={topThreshold} />
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
+            <div style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 48, fontWeight: 600, color: INK, lineHeight: 1 }}>
+              {pts}
+            </div>
+            <div style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
+              points
             </div>
           </div>
-
-          {/* Tier badge */}
-          <div>
-            <span style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '5px 18px', fontFamily: FB, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              {tier}
-            </span>
-          </div>
-
-          {/* Progress text */}
-          {topThreshold && pts < topThreshold && (
-            <p style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: 10, marginBottom: 0 }}>
-              {topThreshold - pts} pts to next reward
-            </p>
-          )}
-          {topThreshold && pts >= topThreshold && (
-            <p style={{ fontFamily: FB, fontSize: 13, color: ACCENT, marginTop: 10, marginBottom: 0, fontWeight: 600 }}>
-              🎉 Reward ready to redeem!
-            </p>
-          )}
         </div>
+
+        {/* Tier badge */}
+        <div>
+          <span style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '5px 18px', fontFamily: FB, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            {tier}
+          </span>
+        </div>
+
+        {/* Progress text */}
+        {topThreshold && pts < topThreshold && (
+          <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, marginTop: 10, marginBottom: 0 }}>
+            {topThreshold - pts} pts to next reward
+          </p>
+        )}
+        {topThreshold && pts >= topThreshold && (
+          <p style={{ fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, background: ACCENT + '33', display: 'inline-block', borderRadius: 100, padding: '4px 14px', marginTop: 10, marginBottom: 0, fontWeight: 600 }}>
+            🎉 Reward ready to redeem!
+          </p>
+        )}
       </div>
 
       {/* Not logged in prompt */}
@@ -250,7 +247,7 @@ export function RewardsClient({ slug, bizName, logoUrl, rewardRules }: {
         </div>
       )}
 
-      {/* Reward catalog */}
+      {/* ── Reward catalog ── */}
       <div style={{ padding: '24px 18px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
           <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: 0, color: INK }}>
@@ -280,7 +277,7 @@ export function RewardsClient({ slug, bizName, logoUrl, rewardRules }: {
         )}
       </div>
 
-      {/* Challenges */}
+      {/* ── Challenges ── */}
       {challenges.length > 0 && (
         <div style={{ padding: '24px 18px 0' }}>
           <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: '0 0 14px', color: INK }}>
@@ -294,7 +291,7 @@ export function RewardsClient({ slug, bizName, logoUrl, rewardRules }: {
         </div>
       )}
 
-      {/* Earn CTA */}
+      {/* ── Earn CTA — dark accent card (intentional design element) ── */}
       <div style={{ padding: '24px 18px 0' }}>
         <div style={{ background: CARD_DARK, borderRadius: 20, padding: '20px', display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ fontSize: 32 }}>☕</div>
