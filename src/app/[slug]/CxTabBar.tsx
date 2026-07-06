@@ -58,15 +58,15 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
     { key: 'wallet' as const,  label: 'Wallet',  href: '/' + slug + '/wallet' },
   ]
 
-  const bgColor = dark ? 'rgba(20,19,15,0.92)' : 'rgba(250,250,250,0.94)'
+  const bgColor = dark ? 'rgba(20,19,15,0.92)' : 'rgba(243,239,228,0.88)'
   const inactiveColor = dark ? 'rgba(255,255,255,0.38)' : '#aaa'
 
   return (
     <nav style={{
       position: 'fixed', bottom: 12, left: 12, right: 12, zIndex: 1000,
       height: 68, borderRadius: 22,
-      backdropFilter: 'blur(20px) saturate(200%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(200%)',
+      backdropFilter: 'blur(16px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(16px) saturate(180%)',
       background: bgColor,
       boxShadow: dark
         ? '0 8px 32px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.06) inset'
@@ -85,6 +85,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
               alignItems: 'center', justifyContent: 'center', gap: 3,
               textDecoration: 'none', borderRadius: 16,
               background: on ? ACCENT : 'transparent',
+              boxShadow: on ? 'inset 0 0 12px rgba(217,245,78,0.4)' : 'none',
               position: 'relative',
             }}
           >

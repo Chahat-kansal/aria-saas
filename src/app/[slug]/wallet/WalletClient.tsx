@@ -201,7 +201,7 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 13,
       padding: '12px 0',
-      borderBottom: '1px solid rgba(0,0,0,0.05)',
+      borderBottom: '1px solid rgba(217,245,78,0.2)',
     }}>
       {/* Icon */}
       <div style={{
@@ -393,7 +393,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
               background: ACCENT, color: ACCENT_TEXT,
               borderRadius: 100, padding: '16px 0', marginBottom: 24,
               fontFamily: FB, fontSize: 17, fontWeight: 700, textDecoration: 'none',
-              boxShadow: '0 4px 18px rgba(217,245,78,0.45)',
+              boxShadow: '0 0 24px 4px rgba(217,245,78,0.55), 0 4px 18px rgba(217,245,78,0.45), inset 0 1px 0 rgba(255,255,255,0.35)',
             }}
           >
             Top up
@@ -403,7 +403,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
 
       {/* ── Transaction history ── */}
       <div style={{ padding: '0 18px' }}>
-        <div style={{ background: '#fff', borderRadius: 22, padding: '18px 18px 4px', boxShadow: '0 3px 18px rgba(0,0,0,0.08)' }}>
+        <div style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRadius: 22, padding: '18px 18px 4px', boxShadow: '0 3px 18px rgba(0,0,0,0.08)' }}>
           <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: '0 0 4px', color: INK }}>
             History
           </h2>

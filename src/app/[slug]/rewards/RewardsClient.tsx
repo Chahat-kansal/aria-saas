@@ -76,8 +76,8 @@ function PointsArc({ pts, threshold }: { pts: number; threshold: number | null }
     : ''
 
   return (
-    <svg width={220} height={145} viewBox={'0 0 220 145'} style={{ display: 'block', overflow: 'visible' }}>
-      <path d={trackD} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={10} strokeLinecap="round" />
+    <svg width={220} height={145} viewBox={'0 0 220 145'} style={{ display: 'block', overflow: 'visible', filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.6))' }}>
+      <path d={trackD} fill="none" stroke="#e6e2d7" strokeWidth={10} strokeLinecap="round" />
       {fillD && (
         <path d={fillD} fill="none" stroke={ACCENT} strokeWidth={10} strokeLinecap="round" />
       )}
@@ -95,7 +95,9 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
   return (
     <div style={{
       display: 'flex', borderRadius: 20, background: '#fff', overflow: 'hidden',
-      boxShadow: '0 2px 16px rgba(0,0,0,0.09)',
+      boxShadow: canRedeem
+        ? ('0 2px 16px rgba(0,0,0,0.09), 0 0 20px 2px rgba(217,245,78,0.5)')
+        : '0 2px 16px rgba(0,0,0,0.09)',
       opacity: locked ? 0.72 : 1,
       border: canRedeem ? ('2px solid ' + ACCENT) : '2px solid transparent',
       marginBottom: 14,
@@ -140,6 +142,7 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
               background: ACCENT, color: ACCENT_TEXT,
               borderRadius: 100, padding: '9px 0',
               fontFamily: FB, fontSize: 13, fontWeight: 700, textDecoration: 'none',
+              boxShadow: '0 0 20px 2px rgba(217,245,78,0.5), inset 0 1px 0 rgba(255,255,255,0.35)',
             }}
           >
             Redeem
@@ -160,15 +163,20 @@ function VisitBar({ visits, target }: { visits: number; target: number }) {
     <div style={{ background: '#fff', borderRadius: 20, padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, color: INK }}>
-          {'Visit ' + target + 'x this month – ' + visits + '/' + target}
+          {'Visit ' + target + 'x this month'}
         </span>
-        <span style={{
-          fontFamily: FB, fontSize: 12, fontWeight: 700,
-          background: ACCENT, color: ACCENT_TEXT,
-          borderRadius: 100, padding: '3px 10px',
-        }}>
-          {'✓ ' + visits + '/' + target}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED }}>{visits + '/' + target}</span>
+          <div style={{
+            width: 24, height: 24, borderRadius: '50%',
+            background: visits >= target ? ACCENT : 'rgba(0,0,0,0.08)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, color: visits >= target ? ACCENT_TEXT : INK_MUTED, fontWeight: 700,
+            boxShadow: visits >= target ? '0 0 12px rgba(217,245,78,0.5)' : 'none',
+          }}>
+            ✓
+          </div>
+        </div>
       </div>
       <div style={{ height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: (pct * 100).toFixed(1) + '%', background: ACCENT, borderRadius: 4, transition: 'width 0.6s ease' }} />
@@ -250,9 +258,11 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
 
         {/* Tier subtitle */}
         {loaded && cx && (
-          <p style={{ fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, margin: '0 0 20px', fontWeight: 600 }}>
-            {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
-          </p>
+          <div style={{ margin: '0 0 20px', display: 'inline-flex', alignItems: 'center' }}>
+            <span style={{ fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, fontWeight: 700, background: ACCENT, borderRadius: 100, padding: '4px 14px', display: 'inline-block' }}>
+              {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
+            </span>
+          </div>
         )}
         {(!loaded || !cx) && <div style={{ height: 28 }} />}
 

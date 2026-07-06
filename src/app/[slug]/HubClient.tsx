@@ -201,8 +201,11 @@ function UsualStrip({ usual, slug }: { usual: UsualProduct; slug: string }) {
           <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK_MUTED, margin: '0 0 2px', fontWeight: 500 }}>
             Your usual,
           </p>
-          <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {usual.name}
+          </p>
+          <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
+            ready in ~5 min
           </p>
         </div>
         <a
@@ -213,6 +216,7 @@ function UsualStrip({ usual, slug }: { usual: UsualProduct; slug: string }) {
             fontFamily: FB, fontSize: 13, fontWeight: 700,
             textDecoration: 'none', textAlign: 'center',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+            boxShadow: '0 0 18px 4px rgba(217,245,78,0.5), inset 0 1px 0 rgba(255,255,255,0.35)',
           }}
         >
           <span>Reorder</span>
@@ -299,7 +303,7 @@ function WhatsNewCard({ post, slug }: { post: HubBusiness['latestPost']; slug: s
               {post.excerpt}
             </p>
           )}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '5px 12px', fontFamily: FB, fontSize: 11, fontWeight: 700 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '5px 12px', fontFamily: FB, fontSize: 11, fontWeight: 700, boxShadow: '0 0 12px rgba(217,245,78,0.4)' }}>
             View →
           </span>
         </div>
@@ -456,7 +460,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
                 background: ACCENT, color: ACCENT_TEXT, border: 'none', borderRadius: 100,
                 padding: '8px 14px', fontFamily: FB, fontSize: 13, fontWeight: 700,
                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                boxShadow: '0 2px 10px rgba(217,245,78,0.35)',
+                boxShadow: '0 0 20px 4px rgba(217,245,78,0.55), 0 2px 10px rgba(217,245,78,0.35)',
               }}
             >
               <IconScan size={13} />
@@ -482,22 +486,24 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           {greeting && (
             <p style={{
               fontFamily: FD, fontStyle: 'italic',
-              fontSize: phase === 'ready' && firstName ? 36 : 32,
+              fontSize: 42,
               color: '#fff', margin: '0 0 12px', fontWeight: 400, lineHeight: 1.1,
               textShadow: '0 2px 16px rgba(0,0,0,0.5)',
             }}>
-              {greeting}{firstName ? ', ' + firstName : ''}
+              {greeting}{firstName ? ',' : ''}
+              {firstName && <span style={{ display: 'block' }}>{firstName}</span>}
             </p>
           )}
 
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              backdropFilter: 'blur(14px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(14px) saturate(180%)',
-              background: 'rgba(255,255,255,0.16)',
-              border: '1px solid rgba(255,255,255,0.26)',
+              backdropFilter: 'blur(12px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+              background: 'rgba(255,255,255,0.18)',
+              border: '1px solid rgba(255,255,255,0.25)',
               borderRadius: 100, padding: '8px 16px',
+              boxShadow: '0 0 16px rgba(217,245,78,0.25)',
             }}>
               <span style={{ fontFamily: FB, fontSize: 13, color: '#fff', fontWeight: 700 }}>{pts} pts</span>
               <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>·</span>

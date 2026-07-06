@@ -94,7 +94,7 @@ function ProductRow({ product, slug }: { product: CxProduct; slug: string }) {
         background: ACCENT, color: ACCENT_TEXT,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 22, fontWeight: 700, lineHeight: 1,
-        boxShadow: '0 2px 10px rgba(217,245,78,0.45)',
+        boxShadow: '0 0 20px 4px rgba(217,245,78,0.55), 0 2px 10px rgba(217,245,78,0.35), inset 0 1px 0 rgba(255,255,255,0.3)',
       }}>
         +
       </div>
@@ -142,7 +142,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
           {/* Logo circle */}
           <div style={{
-            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+            width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
             background: logoUrl ? ('url(' + logoUrl + ') center/cover') : 'rgba(255,255,255,0.1)',
             border: '1px solid rgba(255,255,255,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -152,7 +152,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
           </div>
 
           {/* Menu heading */}
-          <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 28, fontWeight: 600, margin: 0, color: INK, flex: 1, letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 42, fontWeight: 600, margin: 0, color: INK, flex: 1, letterSpacing: '-0.01em' }}>
             Menu
           </h1>
 
@@ -163,6 +163,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
             borderRadius: 100, padding: '7px 12px',
             background: searchOpen ? 'rgba(217,245,78,0.12)' : 'transparent',
             cursor: 'pointer',
+            boxShadow: '0 0 16px rgba(217,245,78,0.4)',
           }}
             onClick={() => setSearchOpen(s => !s)}
           >
@@ -198,6 +199,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             border: '1.5px solid ' + ACCENT, borderRadius: 100, padding: '7px 12px',
             cursor: 'pointer',
+            boxShadow: '0 0 16px rgba(217,245,78,0.4)',
           }}>
             <IconScan />
           </div>
@@ -246,7 +248,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
           style={{
             display: 'block', margin: '16px 18px 0', borderRadius: 20,
             overflow: 'hidden', textDecoration: 'none', position: 'relative',
-            height: 220, boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+            height: 260, boxShadow: '0 0 24px 2px rgba(217,245,78,0.35), 0 4px 24px rgba(0,0,0,0.4)',
           }}
         >
           <div style={{
