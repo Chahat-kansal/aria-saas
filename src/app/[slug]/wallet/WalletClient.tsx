@@ -259,7 +259,7 @@ function TxnRow({ date, label, itemName, kind, bizName }: {
               </span>
             )}
           </p>
-          <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 12, color: INK_MUTED, margin: 0 }}>
+          <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
             {bizName + ' at ' + timeStr}
           </p>
         </div>
