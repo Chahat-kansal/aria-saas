@@ -54,8 +54,12 @@ function LoyaltyBarcode({ value }: { value: string }) {
     ref.current.setAttribute('preserveAspectRatio', 'none')
   }, [value])
   return (
-    <div className="bg-white rounded-md px-4 py-2 w-[88%] mx-auto flex justify-center">
-      <svg ref={ref} className="w-full h-11" />
+    <div style={{
+      width: '100%', background: '#ffffff',
+      height: 56, padding: '8px 16px',
+      display: 'flex', alignItems: 'center',
+    }}>
+      <svg ref={ref} style={{ width: '100%', height: 40, display: 'block' }} />
     </div>
   )
 }
@@ -144,7 +148,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
       <div style={{
         background: '#14130f',
         borderRadius: 20,
-        transform: 'rotate(-3deg)',
+        transform: 'rotate(-7deg)',
+        border: '1px solid rgba(201,163,122,0.32)',
         boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
         overflow: 'hidden',
         userSelect: 'none',
@@ -186,20 +191,18 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
             <span style={{
               fontFamily: FB, fontSize: 14, fontWeight: 700,
               color: tierColor,
-              textDecoration: 'underline', textDecorationColor: tierColor, textUnderlineOffset: '3px',
+              textDecoration: 'underline', textDecorationColor: ACCENT, textUnderlineOffset: '3px',
             }}>
               {tierLabel}
             </span>
           </div>
         </div>
 
-        {/* ── Barcode strip ── */}
-        <div style={{ paddingBottom: 16 }}>
-          {identityId
-            ? <LoyaltyBarcode value={identityId} />
-            : <div style={{ width: '88%', height: 60, background: 'rgba(255,255,255,0.08)', borderRadius: 6, margin: '0 auto' }} />
-          }
-        </div>
+        {/* ── Barcode strip — full width, flush to card bottom ── */}
+        {identityId
+          ? <LoyaltyBarcode value={identityId} />
+          : <div style={{ width: '100%', height: 56, background: 'rgba(255,255,255,0.08)' }} />
+        }
       </div>
     </div>
   )

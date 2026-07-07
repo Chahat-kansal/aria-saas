@@ -149,7 +149,7 @@ function MoreOverlay({ slug, onClose }: { slug: string; onClose: () => void }) {
       <div style={{
         position: 'fixed', bottom: 88, left: '50%',
         transform: 'translateX(-50%)',
-        width: 'min(358px, calc(100vw - 32px))',
+        width: 'calc(100vw - 32px)', maxWidth: '28rem',
         zIndex: 999,
         background: 'rgba(243,239,228,0.97)',
         backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
@@ -211,7 +211,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
       <nav style={{
         position: 'fixed', bottom: 12, zIndex: 1000,
         left: '50%', transform: 'translateX(-50%)',
-        width: 'min(358px, calc(100vw - 32px))',
+        width: 'calc(100vw - 32px)', maxWidth: '28rem',
         height: 64, borderRadius: 32,
         backdropFilter: 'blur(16px) saturate(180%)',
         WebkitBackdropFilter: 'blur(16px) saturate(180%)',
