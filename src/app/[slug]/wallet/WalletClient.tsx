@@ -112,22 +112,7 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── EMV chip SVG ─────────────────────────────────────────────────────────────
-
-function ChipSVG() {
-  return (
-    <svg width="36" height="28" viewBox="0 0 36 28" fill="none" style={{ display: 'block' }}>
-      <rect x="0.5" y="0.5" width="35" height="27" rx="3.5" fill="#c8a542" stroke="#9a7a2a" strokeWidth="0.5"/>
-      <line x1="0.5" y1="9" x2="35.5" y2="9" stroke="#9a7a2a" strokeWidth="0.5"/>
-      <line x1="0.5" y1="19" x2="35.5" y2="19" stroke="#9a7a2a" strokeWidth="0.5"/>
-      <line x1="12" y1="0.5" x2="12" y2="27.5" stroke="#9a7a2a" strokeWidth="0.5"/>
-      <line x1="24" y1="0.5" x2="24" y2="27.5" stroke="#9a7a2a" strokeWidth="0.5"/>
-      <rect x="12" y="9" width="12" height="10" fill="rgba(0,0,0,0.12)"/>
-    </svg>
-  )
-}
-
-// ── Flat CSS loyalty card — dark + gold edge + chip + white barcode strip ─────
+// ── PNG loyalty card — loyalty-card-bg.png (flat front-on) + text overlays ───
 
 function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
   bizName: string
@@ -140,66 +125,74 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
     : tier === 'silver' || tier === 'Silver' ? 'Silver' : 'Member'
 
   return (
-    <div style={{ padding: '0 2px' }}>
-      <div style={{ transform: 'rotate(-5deg)', transformOrigin: 'center center' }}>
+    <div style={{ padding: '0 4px' }}>
+      {/* -8° tilt matches ref */}
+      <div style={{ transform: 'rotate(-8deg)', transformOrigin: 'center center' }}>
+        {/* Container crops the ~7% white padding from the PNG via overflow:hidden */}
         <div style={{
-          background: 'linear-gradient(145deg, #1f1d1b 0%, #141210 60%, #111 100%)',
-          borderRadius: 22,
-          border: '1.5px solid rgba(180,145,60,0.5)',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
-          padding: '24px 22px 0',
           position: 'relative',
+          borderRadius: 22,
           overflow: 'hidden',
+          aspectRatio: '1.586',
+          boxShadow: '0 28px 64px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.35)',
           userSelect: 'none',
         }}>
+          {/* Card PNG — backgroundSize 114% auto crops ~7% white on each horizontal side;
+              backgroundPosition center splits the vertical overflow equally, also cropping
+              the ~8% top/bottom white padding */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: 'url(/menu/_lib/cx/loyalty-card-bg.png)',
+            backgroundSize: '114% auto',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }} />
 
-          {/* EMV chip — top right */}
-          <div style={{ position: 'absolute', top: 20, right: 20 }}>
-            <ChipSVG />
+          {/* Business name — top left, before chip */}
+          <div style={{ position: 'absolute', top: '14%', left: '6%', right: '36%', zIndex: 1 }}>
+            <span style={{
+              fontFamily: FD, fontStyle: 'italic',
+              fontSize: 22, fontWeight: 500, color: '#fff',
+              textShadow: '0 1px 6px rgba(0,0,0,0.5)',
+              display: 'block', lineHeight: 1.1,
+            }}>
+              {bizName}
+            </span>
           </div>
-
-          {/* Business name */}
-          <span style={{
-            display: 'block', fontFamily: FD, fontStyle: 'italic',
-            fontSize: 23, fontWeight: 500, color: '#fff', lineHeight: 1.1,
-            textShadow: '0 1px 8px rgba(0,0,0,0.5)',
-          }}>
-            {bizName}
-          </span>
 
           {/* Customer name */}
-          <span style={{
-            display: 'block', fontFamily: FB, fontSize: 15, fontWeight: 400,
-            color: 'rgba(255,255,255,0.85)', marginTop: 10,
-          }}>
-            {name ?? 'Member'}
-          </span>
-
-          {/* Balance + tier */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', marginTop: 18 }}>
-            <span style={{ fontFamily: FB, fontSize: 30, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-              {'$' + walletBal.toFixed(2)}
-            </span>
-            <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
-              balance ·
-            </span>
-            <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, color: ACCENT }}>
-              {tierLabel}
+          <div style={{ position: 'absolute', top: '33%', left: '6%', zIndex: 1 }}>
+            <span style={{ fontFamily: FB, fontSize: 15, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>
+              {name ?? 'Member'}
             </span>
           </div>
 
-          {/* White magnetic stripe + barcode — full width, flush to card edges */}
-          <div style={{
-            marginTop: 20, marginLeft: -22, marginRight: -22,
-            background: '#fff', height: 56,
-            display: 'flex', alignItems: 'center',
-            padding: '0 18px', overflow: 'hidden',
-          }}>
-            {identityId
-              ? <BarcodeVisual code={identityId} />
-              : <div style={{ flex: 1, height: '55%', background: 'rgba(0,0,0,0.12)', borderRadius: 2 }} />
-            }
+          {/* Balance + tier — above the white strip */}
+          <div style={{ position: 'absolute', top: '48%', left: '6%', zIndex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'nowrap' }}>
+              <span style={{ fontFamily: FB, fontSize: 26, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+                {'$' + walletBal.toFixed(2)}
+              </span>
+              <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                balance ·
+              </span>
+              <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 700, color: ACCENT }}>
+                {tierLabel}
+              </span>
+            </div>
           </div>
+
+          {/* Barcode inside the PNG's white strip */}
+          {identityId && (
+            <div style={{
+              position: 'absolute',
+              top: '63%', left: '5%', right: '5%', height: '13%',
+              display: 'flex', alignItems: 'center',
+              zIndex: 1,
+            }}>
+              <BarcodeVisual code={identityId} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -274,7 +267,7 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, topUpUrl, heroImageUrl }: {
+export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, topUpUrl, heroImageUrl: _heroImageUrl }: {
   slug: string
   bizId: string
   bizName: string
@@ -350,14 +343,12 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Café photo strip — sits behind top of card ── */}
+      {/* ── Blurred café photo strip — matches wallet ref ── */}
       <div style={{
         position: 'relative', height: 200,
-        background: heroImageUrl
-          ? ('url(' + heroImageUrl + ') center / cover no-repeat, linear-gradient(160deg, #2a1a0e 0%, #111 100%)')
-          : 'linear-gradient(160deg, #2a1a0e 0%, #111 100%)',
+        background: 'url(/menu/_lib/cx/wallet-bg.png) center / cover no-repeat, linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
       }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.65) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)' }} />
       </div>
 
       {/* ── Loyalty card — overlaps bottom of photo strip ── */}
