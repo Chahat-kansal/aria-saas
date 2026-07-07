@@ -413,8 +413,9 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
   const onPhoneCancel = () => setShowPhone(false)
 
   return (
-    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, overflowX: 'hidden' }}>
+    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK }}>
       <style>{`
+        body { background: #f3efe4 }
         @keyframes cx-spin { to { transform: rotate(360deg) } }
         .cx-hscroll::-webkit-scrollbar { display: none }
         *, *::before, *::after { box-sizing: border-box }

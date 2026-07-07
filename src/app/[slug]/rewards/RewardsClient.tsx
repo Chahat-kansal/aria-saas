@@ -207,8 +207,9 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
   const tierLabel = rawTier === 'gold' || rawTier === 'Gold' ? 'Gold' : rawTier === 'silver' || rawTier === 'Silver' ? 'Silver' : 'Member'
 
   return (
-    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`
+        body { background: #f3efe4 }
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
       `}</style>
@@ -243,7 +244,7 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         {/* Points card — pale translucent lime, ring arc SVG, zIndex:1 behind tier pill */}
         <div style={{
           margin: '0 auto 32px',
-          width: 340,
+          width: 'min(340px, calc(100% - 36px))',
           borderRadius: 28,
           background: 'rgba(217,245,78,0.12)',
           padding: '32px 24px 28px',

@@ -128,11 +128,11 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center' }}>
-      {/* 320×202 — standard card ratio 1.586:1, straight (no tilt) */}
+      {/* fluid width, aspect-ratio preserves 1.586:1 ratio */}
       <div style={{
         position: 'relative',
-        width: 320,
-        height: 202,
+        width: 'min(320px, 100%)',
+        aspectRatio: '320 / 202',
         borderRadius: 18,
         overflow: 'hidden',
         backgroundImage: 'url(/cx/loyalty-card-bg.png)',
@@ -202,11 +202,11 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
           </div>
         </div>
 
-        {/* ── White barcode strip — clipped flush to card bottom ── */}
+        {/* ── Barcode strip — transparent overlay on card PNG's built-in white strip ── */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
           height: 54,
-          background: '#fff',
+          background: 'transparent',
           display: 'flex', alignItems: 'center',
           padding: '0 16px',
           overflow: 'hidden',
@@ -357,8 +357,9 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12)
 
   return (
-    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`
+        body { background: #f3efe4 }
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>

@@ -124,8 +124,9 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
   const showFeatured = !activeCat && !search && !!featured
 
   return (
-    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`
+        body { background: #14130f }
         *, *::before, *::after { box-sizing: border-box }
         .cx-cat-scroll::-webkit-scrollbar { display: none }
         .cx-search-input::placeholder { color: rgba(217,245,78,0.5) }
