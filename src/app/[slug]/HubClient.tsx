@@ -412,11 +412,11 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         .-webkit-line-clamp { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden }
       `}</style>
 
-      {/* ── HERO ── 480px fixed, rounded bottom, above cream sheet ─── */}
-      <div style={{ position: 'relative', height: 480, zIndex: 2, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
+      {/* ── HERO ── 480px fixed, square bottom, sheet overlaps from below ─── */}
+      <div style={{ position: 'relative', height: 480, zIndex: 1 }}>
 
-        {/* bg + gradient clipped to rounded corners */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, background: heroBg }}>
+        {/* bg + gradient — full bleed, no radius */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: heroBg }}>
           <div style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
             background: 'linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, transparent 38%, transparent 48%, rgba(0,0,0,0.72) 100%)',
@@ -490,8 +490,13 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           </div>
         )}
 
-        {/* ── Status pill — centered, center at hero/sheet seam ── */}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 10 }}>
+      </div>
+
+      {/* ── Content sheet — rounds up over square hero bottom, pill straddles its curved top ── */}
+      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -24, position: 'relative', zIndex: 2, paddingBottom: 100 }}>
+
+        {/* ── Status pill — anchored to sheet curved top, translateY(-50%) straddles edge ── */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 10 }}>
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -501,7 +506,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
               border: '1px solid rgba(255,255,255,0.35)',
               borderRadius: 100, padding: '9px 20px',
               boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
-              transform: 'translateY(50%)',
+              transform: 'translateY(-50%)',
             }}>
               <span style={{ fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 700 }}>{pts + ' pts'}</span>
               <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>·</span>
@@ -520,22 +525,18 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
                 borderRadius: 100, padding: '9px 20px',
                 fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600,
                 cursor: 'pointer',
-                transform: 'translateY(50%)',
+                transform: 'translateY(-50%)',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
               }}
             >
               Check your rewards
             </button>
           ) : phase === 'loading' ? (
-            <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite', transform: 'translateY(50%)' }} />
+            <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite', transform: 'translateY(-50%)' }} />
           ) : null}
         </div>
-      </div>
 
-      {/* ── Content sheet — cream sheet overlaps hero, pill straddles seam ── */}
-      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -24, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
-
-        {/* Spacer: clears the straddling pill (pill half ~18px + gap + sheet overlap) */}
+        {/* Spacer: clears the straddling pill (~19px above seam + breathing room) */}
         <div style={{ height: 52 }} />
 
         {/* Phone entry panel */}
