@@ -146,7 +146,7 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
             Redeem
           </a>
         ) : locked ? (
-          <div style={{ position: 'absolute', bottom: 12, right: 12 }}>
+          <div style={{ position: 'absolute', top: '50%', right: 14, transform: 'translateY(-50%)' }}>
             <PadlockIcon />
           </div>
         ) : null}
@@ -265,7 +265,7 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
 
       {/* ── HEADER — lime radial gradient, progress ring hero ── */}
       <div style={{
-        background: 'radial-gradient(ellipse 90% 52% at 50% 80%, rgba(217,245,78,0.48) 0%, rgba(217,245,78,0.18) 45%, transparent 70%), ' + BG,
+        background: 'radial-gradient(ellipse 90% 65% at 50% 50%, rgba(217,245,78,0.5) 0%, rgba(217,245,78,0.2) 50%, transparent 75%), ' + BG,
         paddingTop: 56,
         paddingBottom: 24,
         textAlign: 'center',
@@ -331,7 +331,7 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <span style={{
-                fontFamily: FB, fontSize: 52, fontWeight: 800,
+                fontFamily: FB, fontSize: 68, fontWeight: 800,
                 color: INK, letterSpacing: '-0.03em', lineHeight: 1,
               }}>
                 {pts.toLocaleString() + ' pts'}
