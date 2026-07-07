@@ -3,14 +3,18 @@
 import { useState } from 'react'
 import { CxTabBar } from '../CxTabBar'
 
-const BG = '#fafafa'
+const BG = '#f3efe4'
 const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
 const INK_MUTED = '#6b7280'
-const CARD_BG = '#fff'
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
+
+const GLASS_BG = 'rgba(255,255,255,0.65)'
+const GLASS_BORDER = '1px solid rgba(0,0,0,0.05)'
+const GLASS_SHADOW = '0 2px 12px rgba(0,0,0,0.06)'
+const GLASS_BLUR = 'blur(12px)'
 
 type Outlet = {
   id: string
@@ -80,7 +84,8 @@ export function LocationsClient({ slug, bizName, outlets }: {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 'calc(96px + env(safe-area-inset-bottom))', maxWidth: '28rem', margin: '0 auto' }}>
+      <style>{'*, *::before, *::after { box-sizing: border-box }'}</style>
       {/* Header */}
       <div style={{ padding: '52px 20px 20px' }}>
         <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 30, margin: '0 0 4px' }}>
@@ -106,9 +111,12 @@ export function LocationsClient({ slug, bizName, outlets }: {
             <div
               key={outlet.id}
               style={{
-                background: CARD_BG, borderRadius: 20, marginBottom: 12,
-                border: isActive ? ('2px solid ' + ACCENT) : '2px solid transparent',
-                boxShadow: isActive ? ('0 0 0 1px ' + ACCENT + ', 0 4px 20px rgba(0,0,0,0.06)') : '0 2px 12px rgba(0,0,0,0.06)',
+                background: GLASS_BG,
+                backdropFilter: GLASS_BLUR,
+                WebkitBackdropFilter: GLASS_BLUR,
+                borderRadius: 20, marginBottom: 12,
+                border: isActive ? ('2px solid ' + ACCENT) : GLASS_BORDER,
+                boxShadow: isActive ? ('0 0 0 1px ' + ACCENT + ', 0 4px 20px rgba(0,0,0,0.06)') : GLASS_SHADOW,
                 padding: '18px 20px',
                 transition: 'border 0.15s',
               }}
@@ -129,9 +137,19 @@ export function LocationsClient({ slug, bizName, outlets }: {
                     )}
                   </div>
                   {outlet.address && (
-                    <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '0 0 6px', lineHeight: 1.4 }}>
-                      {outlet.address}
-                    </p>
+                    <>
+                      <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '0 0 4px', lineHeight: 1.4 }}>
+                        {outlet.address}
+                      </p>
+                      <a
+                        href={'https://maps.google.com/?q=' + encodeURIComponent(outlet.address)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ display: 'inline-block', fontFamily: FB, fontSize: 12, color: ACCENT_TEXT, fontWeight: 700, textDecoration: 'none', marginBottom: 6 }}
+                      >
+                        Open in Maps ↗
+                      </a>
+                    </>
                   )}
                   <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: 0 }}>
                     {hoursLabel}

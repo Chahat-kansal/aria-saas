@@ -18,12 +18,13 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   try { phone = normalisePhone(raw) } catch { /* keep raw */ }
 
   type CustomerRow = {
-    id: string; name: string; points_balance: number | null; loyalty_tier: string | null
+    id: string; name: string; email: string | null; phone: string | null; created_at: string | null
+    points_balance: number | null; loyalty_tier: string | null
     visit_count: number | null; stamps_count: number | null; total_spent: string | null
     last_visit_at: string | null; loyalty_identity_id: string | null
   }
 
-  const COLS = 'id, name, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id'
+  const COLS = 'id, name, email, phone, created_at, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id'
 
   let customer: CustomerRow | null = null
   const { data: byNorm } = await supabaseAdmin
@@ -131,6 +132,9 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     stamps_count: Number(customer.stamps_count) || 0,
     total_spent: (Number(customer.total_spent) || 0).toFixed(2),
     last_visit_at: customer.last_visit_at ?? null,
+    email: customer.email ?? null,
+    phone: customer.phone ?? null,
+    member_since: customer.created_at ?? null,
     loyalty_identity_id: customer.loyalty_identity_id ?? null,
     wallet_balance: walletBalance,
     wallet_currency: walletCurrency,
@@ -139,4 +143,59 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     preload_txns: (preloadRes.data ?? []) as unknown[],
     usual_product: usualProduct,
   })
+}
+
+export async function PATCH(req: Request, { params }: { params: { slug: string } }) {
+  const bid = await resolveBusinessId(supabaseAdmin, params.slug)
+  if (!bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  let body: { customer_id?: string; phone?: string; name?: string; email?: string } = {}
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }) }
+
+  const { customer_id, phone: rawPhone } = body
+  if (!customer_id || !rawPhone) return NextResponse.json({ error: 'customer_id and phone required' }, { status: 400 })
+
+  let phone = rawPhone.trim()
+  try { phone = normalisePhone(phone) } catch { /* keep raw */ }
+
+  // Verify caller: customer must exist under this business with matching phone
+  const { data: byCid } = await supabaseAdmin
+    .from('pos_customers')
+    .select('id, phone')
+    .eq('id', customer_id)
+    .eq('business_id', bid)
+    .is('deleted_at', null)
+    .maybeSingle()
+  if (!byCid) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+
+  const storedPhone = (byCid as { phone?: string | null }).phone ?? ''
+  if (storedPhone && storedPhone !== phone && storedPhone !== rawPhone.trim()) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  }
+
+  const patch: Record<string, string | null> = {}
+  if (body.name !== undefined) {
+    const name = body.name.trim()
+    if (name.length < 2) return NextResponse.json({ error: 'Name must be at least 2 characters' }, { status: 400 })
+    if (name.length > 80) return NextResponse.json({ error: 'Name too long' }, { status: 400 })
+    patch.name = name
+  }
+  if (body.email !== undefined) {
+    const email = body.email.trim().toLowerCase()
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
+    }
+    patch.email = email || null
+  }
+
+  if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true })
+
+  const { error: updateErr } = await supabaseAdmin
+    .from('pos_customers')
+    .update(patch)
+    .eq('id', customer_id)
+    .eq('business_id', bid)
+  if (updateErr) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+
+  return NextResponse.json({ ok: true })
 }
