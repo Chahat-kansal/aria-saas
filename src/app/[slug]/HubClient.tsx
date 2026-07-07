@@ -423,13 +423,15 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
       `}</style>
 
       {/* ── HERO ── 460px fixed, rounded bottom, above cream sheet ─── */}
-      <div style={{ position: 'relative', height: 460, background: heroBg, zIndex: 2, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
+      <div style={{ position: 'relative', height: 460, zIndex: 2, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
 
-        {/* Gradient overlay: dark at top (for header readability) + dark at bottom (for text) */}
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, transparent 38%, transparent 48%, rgba(0,0,0,0.72) 100%)',
-        }} />
+        {/* bg + gradient in overflow:hidden clip so rounded corners are clean */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, background: heroBg }}>
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, transparent 38%, transparent 48%, rgba(0,0,0,0.72) 100%)',
+          }} />
+        </div>
 
         {/* ── Header row ── overlaid on hero ────────────────────────── */}
         <div style={{
@@ -499,8 +501,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           </div>
         )}
 
-        {/* ── Status pill — bottom:-6 straddles hero/sheet seam (center at y=448) ── */}
-        <div style={{ position: 'absolute', bottom: -6, left: 0, right: 0, padding: '0 20px', zIndex: 10 }}>
+        {/* ── Status pill — centered, center at hero/sheet seam ── */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 10 }}>
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -510,6 +512,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
               border: '1px solid rgba(255,255,255,0.25)',
               borderRadius: 100, padding: '8px 16px',
               boxShadow: '0 0 16px rgba(217,245,78,0.25)',
+              transform: 'translateY(50%)',
             }}>
               <span style={{ fontFamily: FB, fontSize: 13, color: '#fff', fontWeight: 700 }}>{pts} pts</span>
               <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>·</span>
@@ -528,12 +531,13 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
                 borderRadius: 100, padding: '8px 16px',
                 fontFamily: FB, fontSize: 13, color: '#fff', fontWeight: 500,
                 cursor: 'pointer',
+                transform: 'translateY(50%)',
               }}
             >
               Check your rewards
             </button>
           ) : phase === 'loading' ? (
-            <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
+            <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite', transform: 'translateY(50%)' }} />
           ) : null}
         </div>
       </div>

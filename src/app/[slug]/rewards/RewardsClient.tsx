@@ -241,39 +241,37 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         )}
         {(!loaded || !cx) && <div style={{ height: 16 }} />}
 
-        {/* Points card — pale translucent lime, ring arc SVG, zIndex:1 behind tier pill */}
+        {/* Points card — pale translucent lime, ring arc SVG, fully contained */}
         <div style={{
           margin: '0 auto 32px',
           width: 'min(340px, calc(100% - 36px))',
+          height: 200,
           borderRadius: 28,
           background: 'rgba(217,245,78,0.12)',
-          padding: '32px 24px 28px',
           position: 'relative',
           zIndex: 1,
           overflow: 'hidden',
           boxShadow: '0 0 28px rgba(217,245,78,0.22), 0 2px 16px rgba(0,0,0,0.04)',
-          textAlign: 'center',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          minHeight: 160,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {/* Ring arc — partial progress circle, lime stroke:4, behind text */}
+          {/* Ring arc — r=88, cx=170, cy=100 in 340×200 viewBox → 10px margin all sides, fully within */}
           <svg
-            viewBox="0 0 340 160"
+            viewBox="0 0 340 200"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
             aria-hidden="true"
           >
             <circle
               cx="170"
-              cy="95"
-              r="108"
+              cy="100"
+              r="88"
               fill="none"
               stroke={ACCENT}
               strokeWidth="4"
-              strokeOpacity="0.55"
+              strokeOpacity="0.6"
               strokeLinecap="round"
-              strokeDasharray={String(Math.round(2 * Math.PI * 108 * 0.82)) + ' ' + String(Math.round(2 * Math.PI * 108 * 0.18))}
-              strokeDashoffset={String(Math.round(2 * Math.PI * 108 * 0.09))}
-              transform="rotate(-90 170 95)"
+              strokeDasharray="453 100"
+              strokeDashoffset="503"
+              transform="rotate(-90 170 100)"
             />
           </svg>
           {/* Points — "{N} pts" single 52px bold line */}
