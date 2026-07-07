@@ -214,14 +214,21 @@ function UsualStrip({ usual, slug }: { usual: UsualProduct; slug: string }) {
             flexShrink: 0, background: ACCENT, color: ACCENT_TEXT,
             borderRadius: 14, padding: '10px 14px',
             fontFamily: FB, fontSize: 13, fontWeight: 700,
-            textDecoration: 'none', textAlign: 'center',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+            textDecoration: 'none',
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8,
             boxShadow: '0 0 18px 4px rgba(217,245,78,0.5), inset 0 1px 0 rgba(255,255,255,0.35)',
           }}
         >
-          <span>Reorder</span>
-          <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 500, opacity: 0.8 }}>
-            {'$' + usual.price.toFixed(2)}
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ display: 'block', flexShrink: 0 }}>
+            <path d="M15 7h1a3 3 0 010 6h-1"/>
+            <path d="M2 7h13v7a3 3 0 01-3 3H5a3 3 0 01-3-3V7z"/>
+            <path d="M5.5 1v2M8.5 1v2M11.5 1v2"/>
+          </svg>
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <span>Reorder</span>
+            <span style={{ fontFamily: FB, fontSize: 11, fontWeight: 500, opacity: 0.75 }}>
+              {'$' + usual.price.toFixed(2)}
+            </span>
           </span>
         </a>
       </div>
@@ -251,20 +258,20 @@ function ProductScroll({ products, slug }: { products: HubBusiness['products']; 
           <a
             key={p.id}
             href={'/menu/' + slug}
-            style={{ flexShrink: 0, width: 140, borderRadius: 20, background: '#fff', overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,0.07)', textDecoration: 'none', color: INK, display: 'block' }}
+            style={{ flexShrink: 0, width: 120, borderRadius: 16, background: '#fff', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textDecoration: 'none', color: INK, display: 'block' }}
           >
             <div style={{
-              width: 140, height: 110,
+              width: 120, height: 96,
               background: p.image_url ? ('url(' + p.image_url + ') center/cover no-repeat #efefef') : '#efefef',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#ccc',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#ccc',
             }}>
               {!p.image_url && '☕'}
             </div>
-            <div style={{ padding: '10px 12px 12px' }}>
-              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, fontWeight: 600, margin: '0 0 3px', color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ padding: '8px 10px 10px' }}>
+              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, fontWeight: 600, margin: '0 0 2px', color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {p.name}
               </p>
-              <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: 0 }}>
+              <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
                 {'$' + (Number(p.price) || 0).toFixed(2)}
               </p>
             </div>
@@ -398,7 +405,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
   const walletBal = (cx?.wallet_balance ?? 0).toFixed(2)
 
   const heroBg = b.heroImageUrl
-    ? ('url(' + b.heroImageUrl + ') center bottom / contain no-repeat #1a0f0a')
+    ? ('url(' + b.heroImageUrl + ') center / cover no-repeat #1a0f0a')
     : 'radial-gradient(ellipse at 30% 60%, #3d2415 0%, #1a0f0a 100%)'
 
   const onPhoneSuccess = (customer: CxCustomer) => { setCx(customer); setPhase('ready'); setShowPhone(false) }
@@ -466,15 +473,14 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
             </button>
             <div style={{
               width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-              background: phase === 'ready' ? ACCENT : 'rgba(255,255,255,0.18)',
+              background: 'rgba(255,255,255,0.18)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               border: '1.5px solid rgba(255,255,255,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: FB, fontSize: 14, fontWeight: 800,
-              color: phase === 'ready' ? ACCENT_TEXT : '#fff',
+              color: '#fff',
             }}>
-              {phase === 'ready' && firstName ? firstName[0].toUpperCase() : <IconPerson size={16} />}
+              <IconPerson size={16} />
             </div>
           </div>
         </div>

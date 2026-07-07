@@ -140,15 +140,21 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
       }}>
         {/* Logo + Menu heading + search/scan pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          {/* Logo circle */}
-          <div style={{
-            width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-            background: logoUrl ? ('url(' + logoUrl + ') center/cover') : 'rgba(255,255,255,0.1)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: FB, fontSize: 14, fontWeight: 700, color: INK,
-          }}>
-            {!logoUrl && bizName[0]}
+          {/* Logo circle + biz name stacked */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: logoUrl ? ('url(' + logoUrl + ') center/cover') : 'rgba(255,255,255,0.1)',
+              border: '1.5px solid rgba(255,255,255,0.2)',
+              boxShadow: '0 0 0 2px rgba(255,255,255,0.07)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: FB, fontSize: 14, fontWeight: 700, color: INK,
+            }}>
+              {!logoUrl && bizName[0]}
+            </div>
+            <p style={{ fontFamily: FB, fontSize: 9, fontWeight: 600, color: INK_MUTED, margin: 0, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 52, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {bizName}
+            </p>
           </div>
 
           {/* Menu heading */}

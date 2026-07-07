@@ -172,6 +172,7 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
         <div style={{
           position: 'absolute', top: '60%', left: '7%', right: '7%', height: '11%',
           display: 'flex', alignItems: 'center', pointerEvents: 'none',
+          overflow: 'hidden',
         }}>
           <BarcodeVisual code={identityId} />
         </div>
