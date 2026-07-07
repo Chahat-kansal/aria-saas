@@ -421,8 +421,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         .-webkit-line-clamp { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden }
       `}</style>
 
-      {/* ── HERO ── 460px fixed ─────────────────────────────────── */}
-      <div style={{ position: 'relative', height: 460, background: heroBg }}>
+      {/* ── HERO ── 460px fixed, rounded bottom, above cream sheet ─── */}
+      <div style={{ position: 'relative', height: 460, background: heroBg, zIndex: 2, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
 
         {/* Gradient overlay: dark at top (for header readability) + dark at bottom (for text) */}
         <div style={{
@@ -441,10 +441,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
             <div style={{
               width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
               background: b.logoUrl ? ('url(' + b.logoUrl + ') center/cover') : 'rgba(255,255,255,0.2)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              border: '2px solid rgba(255,255,255,0.4)',
-              boxShadow: '0 2px 16px rgba(0,0,0,0.35)',
+              boxShadow: '0 0 14px rgba(217,245,78,0.4), 0 2px 10px rgba(0,0,0,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: FB, fontSize: 16, fontWeight: 800, color: '#fff',
             }}>
@@ -501,8 +498,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           </div>
         )}
 
-        {/* ── Status pill — fixed at top 400 ──────────────────────── */}
-        <div style={{ position: 'absolute', top: 400, left: 0, right: 0, padding: '0 20px' }}>
+        {/* ── Status pill — bottom:-6 straddles hero/sheet seam (center at y=448) ── */}
+        <div style={{ position: 'absolute', bottom: -6, left: 0, right: 0, padding: '0 20px', zIndex: 10 }}>
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -540,8 +537,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         </div>
       </div>
 
-      {/* ── Content sheet — cream sheet starts at ~448 ──────────────────── */}
-      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -12, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
+      {/* ── Content sheet — starts just below hero, behind straddling pill ── */}
+      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -28, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
 
         {/* Pull-to-visible handle */}
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4 }}>

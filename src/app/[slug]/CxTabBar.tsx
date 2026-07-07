@@ -81,7 +81,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
     }}>
       {tabs.map(t => {
         const on = active === t.key
-        const iconColor = on ? INK : inactiveColor
+        const iconColor = on ? ACCENT : inactiveColor
         return (
           <a
             key={t.key}
@@ -92,10 +92,11 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
               textDecoration: 'none', position: 'relative', gap: 2,
             }}
           >
+            {/* Soft lime halo — no solid fill, just glow */}
             <div style={{
               width: 46, height: 46, borderRadius: '50%',
-              background: on ? ACCENT : 'transparent',
-              boxShadow: on ? '0 0 16px rgba(217,245,78,0.5)' : 'none',
+              background: on ? 'rgba(217,245,78,0.14)' : 'transparent',
+              boxShadow: on ? '0 0 14px rgba(217,245,78,0.45)' : 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               {t.key === 'home'    && <IconHome color={iconColor} />}
@@ -103,7 +104,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
               {t.key === 'rewards' && <IconGift color={iconColor} />}
               {t.key === 'wallet'  && <IconCard color={iconColor} />}
             </div>
-            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? INK : inactiveColor, letterSpacing: '0.01em' }}>
+            <span style={{ fontFamily: FB, fontSize: 10, fontWeight: on ? 700 : 400, color: on ? ACCENT : inactiveColor, letterSpacing: '0.01em' }}>
               {t.label}
             </span>
 

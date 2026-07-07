@@ -222,15 +222,15 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
           Rewards
         </h1>
 
-        {/* Tier subtitle — frosted glass pill */}
+        {/* Tier subtitle pill — overlaps top edge of points card (zIndex:3, marginBottom:-18) */}
         {loaded && cx && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: -18, position: 'relative', zIndex: 3 }}>
             <div style={{
               display: 'inline-flex', alignItems: 'center',
-              background: 'rgba(255,255,255,0.65)',
+              background: 'rgba(255,255,255,0.72)',
               backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
               borderRadius: 100, padding: '8px 20px',
-              boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.09)',
             }}>
               <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: ACCENT_TEXT }}>
                 {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
@@ -238,46 +238,50 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
             </div>
           </div>
         )}
-        {(!loaded || !cx) && <div style={{ height: 28 }} />}
+        {(!loaded || !cx) && <div style={{ height: 16 }} />}
 
-        {/* Points card — 340×150 pale lime, centered — matches ref */}
+        {/* Points card — pale translucent lime, ring arc SVG, zIndex:1 behind tier pill */}
         <div style={{
           margin: '0 auto 32px',
           width: 340,
-          height: 150,
           borderRadius: 28,
-          background: 'linear-gradient(135deg, #eaf7a8 0%, #dbef7e 100%)',
-          padding: '20px 24px 24px',
+          background: 'rgba(217,245,78,0.12)',
+          padding: '32px 24px 28px',
           position: 'relative',
+          zIndex: 1,
           overflow: 'hidden',
-          boxShadow: '0 4px 20px rgba(180,210,0,0.28), inset 0 1px 0 rgba(255,255,255,0.6)',
+          boxShadow: '0 0 28px rgba(217,245,78,0.22), 0 2px 16px rgba(0,0,0,0.04)',
           textAlign: 'center',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          minHeight: 160,
         }}>
-          {/* Decorative ring — faint arc behind pts number */}
-          <div style={{
-            position: 'absolute', bottom: -60, left: '50%',
-            transform: 'translateX(-50%)',
-            width: 180, height: 180,
-            borderRadius: '50%',
-            border: '8px solid rgba(255,255,255,0.35)',
-            pointerEvents: 'none',
-          }} />
-          {/* Number */}
+          {/* Ring arc — partial progress circle, lime stroke:4, behind text */}
+          <svg
+            viewBox="0 0 340 160"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+            aria-hidden="true"
+          >
+            <circle
+              cx="170"
+              cy="95"
+              r="108"
+              fill="none"
+              stroke={ACCENT}
+              strokeWidth="4"
+              strokeOpacity="0.55"
+              strokeLinecap="round"
+              strokeDasharray={String(Math.round(2 * Math.PI * 108 * 0.82)) + ' ' + String(Math.round(2 * Math.PI * 108 * 0.18))}
+              strokeDashoffset={String(Math.round(2 * Math.PI * 108 * 0.09))}
+              transform="rotate(-90 170 95)"
+            />
+          </svg>
+          {/* Points — "{N} pts" single 52px bold line */}
           <p style={{
-            fontFamily: FB, fontWeight: 700, fontSize: 56, color: INK,
+            fontFamily: FB, fontWeight: 700, fontSize: 52, color: INK,
             margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
             position: 'relative', zIndex: 1,
           }}>
-            {pts.toLocaleString()}
-          </p>
-          {/* pts label */}
-          <p style={{
-            fontFamily: FB, fontSize: 24, fontWeight: 600, color: 'rgba(0,0,0,0.4)',
-            margin: '2px 0 0', lineHeight: 1,
-            position: 'relative', zIndex: 1,
-          }}>
-            pts
+            {pts.toLocaleString() + ' pts'}
           </p>
         </div>
       </div>
