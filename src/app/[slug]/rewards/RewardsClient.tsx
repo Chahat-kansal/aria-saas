@@ -50,40 +50,6 @@ interface CxData {
   recent_txns?: EarnTxn[]
 }
 
-// Horseshoe arc progress ring — opens at bottom
-function PointsArc({ pts, threshold }: { pts: number; threshold: number | null }) {
-  const R = 88
-  const cx = 110
-  const cy = 110
-  // Arc from 210deg to 330deg (clockwise) = 300deg sweep
-  const startAngle = 210
-  const sweepDeg = 300
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const pct = threshold && threshold > 0 ? Math.min(1, pts / threshold) : (pts > 0 ? 0.2 : 0.02)
-
-  function polarToXY(angleDeg: number) {
-    const a = toRad(angleDeg)
-    return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }
-  }
-
-  const s = polarToXY(startAngle)
-  const e = polarToXY(startAngle + sweepDeg)
-  const fEnd = polarToXY(startAngle + sweepDeg * pct)
-
-  const trackD = 'M ' + s.x.toFixed(2) + ' ' + s.y.toFixed(2) + ' A ' + R + ' ' + R + ' 0 1 1 ' + e.x.toFixed(2) + ' ' + e.y.toFixed(2)
-  const fillD = pct > 0.01
-    ? ('M ' + s.x.toFixed(2) + ' ' + s.y.toFixed(2) + ' A ' + R + ' ' + R + ' 0 ' + (sweepDeg * pct > 180 ? '1' : '0') + ' 1 ' + fEnd.x.toFixed(2) + ' ' + fEnd.y.toFixed(2))
-    : ''
-
-  return (
-    <svg width={220} height={145} viewBox={'0 0 220 145'} style={{ display: 'block', overflow: 'visible', filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.6))' }}>
-      <path d={trackD} fill="none" stroke="#e6e2d7" strokeWidth={10} strokeLinecap="round" />
-      {fillD && (
-        <path d={fillD} fill="none" stroke={ACCENT} strokeWidth={10} strokeLinecap="round" />
-      )}
-    </svg>
-  )
-}
 
 function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: string }) {
   const cost = Number(rule.threshold_value ?? 0)
@@ -235,7 +201,6 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
 
   // Tier display: "Gold tier — N pts to next reward"
   const sortedRules = [...rewardRules].sort((a, b) => (a.threshold_value ?? 0) - (b.threshold_value ?? 0))
-  const topThreshold = sortedRules.length > 0 ? (sortedRules[sortedRules.length - 1].threshold_value ?? null) : null
   const nextThreshold = sortedRules.find(r => (r.threshold_value ?? 0) > pts)?.threshold_value ?? null
   const ptsToNext = nextThreshold !== null ? (nextThreshold - pts) : 0
 
@@ -248,53 +213,66 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
       `}</style>
 
-      {/* ── Header — lime glow section ── */}
-      <div style={{
-        background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(217,245,78,0.38) 0%, transparent 70%), ' + BG,
-        paddingTop: 56, paddingBottom: 0, textAlign: 'center',
-        position: 'relative',
-      }}>
+      {/* ── Header ── */}
+      <div style={{ background: BG, paddingTop: 56, paddingBottom: 0, textAlign: 'center' }}>
         <h1 style={{
           fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 400,
-          color: INK, margin: '0 0 6px', letterSpacing: '-0.02em', lineHeight: 1,
+          color: INK, margin: '0 0 14px', letterSpacing: '-0.02em', lineHeight: 1,
         }}>
           Rewards
         </h1>
 
-        {/* Tier subtitle */}
+        {/* Tier subtitle — frosted glass pill */}
         {loaded && cx && (
-          <div style={{ margin: '0 0 20px' }}>
-            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, color: INK_MUTED }}>
-              {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center',
+              background: 'rgba(255,255,255,0.65)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              borderRadius: 100, padding: '8px 20px',
+              boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+            }}>
+              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: ACCENT_TEXT }}>
+                {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
+              </span>
+            </div>
           </div>
         )}
         {(!loaded || !cx) && <div style={{ height: 28 }} />}
 
-        {/* Points ring composite — arc behind lime card */}
-        <div style={{ position: 'relative', width: 220, height: 200, margin: '0 auto' }}>
-          {/* Arc SVG — behind card */}
-          <div style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}>
-            <PointsArc pts={pts} threshold={topThreshold} />
-          </div>
-          {/* Pts inside lime rounded-rect card — in front of arc */}
+        {/* Large filled lime points card — per ref */}
+        <div style={{
+          margin: '0 18px 28px',
+          borderRadius: 32,
+          background: 'radial-gradient(ellipse 110% 90% at 50% 115%, #a8c800 0%, #c2dc00 20%, #d9f54e 55%, #eafa80 100%)',
+          padding: '36px 24px 32px',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: '0 4px 32px rgba(190,220,0,0.45), inset 0 1px 0 rgba(255,255,255,0.5)',
+          textAlign: 'center',
+        }}>
+          {/* Decorative ring arc — large circle centered at bottom, partially visible */}
           <div style={{
-            position: 'absolute', top: 28, left: 28, right: 28, bottom: 10, zIndex: 1,
-            background: 'rgba(217,245,78,0.18)',
-            borderRadius: 24,
-            boxShadow: '0 0 24px rgba(217,245,78,0.4)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            position: 'absolute', bottom: -90, left: '50%',
+            transform: 'translateX(-50%)',
+            width: 290, height: 290,
+            borderRadius: '50%',
+            border: '14px solid rgba(255,255,255,0.38)',
+            pointerEvents: 'none',
+          }} />
+          <p style={{
+            fontFamily: FB, fontWeight: 900, fontSize: 88, color: INK,
+            margin: 0, lineHeight: 1, letterSpacing: '-0.04em',
+            position: 'relative', zIndex: 1,
           }}>
-            <p style={{
-              fontFamily: FB, fontSize: 64, fontWeight: 800, color: INK,
-              margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
-            }}>
-              {pts.toLocaleString()}
-            </p>
-            <p style={{ fontFamily: FB, fontSize: 15, color: INK_MUTED, margin: '4px 0 0', fontWeight: 500 }}>
-              pts
-            </p>
-          </div>
+            {pts.toLocaleString()}
+          </p>
+          <p style={{
+            fontFamily: FB, fontSize: 22, fontWeight: 700, color: 'rgba(0,0,0,0.5)',
+            margin: '4px 0 0', position: 'relative', zIndex: 1,
+          }}>
+            pts
+          </p>
         </div>
       </div>
 

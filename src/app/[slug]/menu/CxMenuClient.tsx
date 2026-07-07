@@ -140,10 +140,10 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
       }}>
         {/* Logo + Menu heading + search/scan pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          {/* Logo circle + biz name stacked */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+          {/* Logo circle + biz name — row */}
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <div style={{
-              width: 38, height: 38, borderRadius: '50%',
+              width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
               background: logoUrl ? ('url(' + logoUrl + ') center/cover') : 'rgba(255,255,255,0.1)',
               border: '1.5px solid rgba(255,255,255,0.2)',
               boxShadow: '0 0 0 2px rgba(255,255,255,0.07)',
@@ -152,7 +152,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
             }}>
               {!logoUrl && bizName[0]}
             </div>
-            <p style={{ fontFamily: FB, fontSize: 9, fontWeight: 600, color: INK_MUTED, margin: 0, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 52, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontFamily: FB, fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.6)', margin: 0, letterSpacing: '0.04em', maxWidth: 58, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {bizName}
             </p>
           </div>

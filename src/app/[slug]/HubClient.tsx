@@ -404,9 +404,10 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
   const tier = cx?.loyalty_tier ?? 'Member'
   const walletBal = (cx?.wallet_balance ?? 0).toFixed(2)
 
+  const warmGrad = 'radial-gradient(ellipse at 40% 65%, #6b3a1f 0%, #3d1f0a 55%, #1e0f04 100%)'
   const heroBg = b.heroImageUrl
-    ? ('url(' + b.heroImageUrl + ') center / cover no-repeat #1a0f0a')
-    : 'radial-gradient(ellipse at 30% 60%, #3d2415 0%, #1a0f0a 100%)'
+    ? ('url(' + b.heroImageUrl + ') center / cover no-repeat, ' + warmGrad)
+    : warmGrad
 
   const onPhoneSuccess = (customer: CxCustomer) => { setCx(customer); setPhase('ready'); setShowPhone(false) }
   const onPhoneCancel = () => setShowPhone(false)
