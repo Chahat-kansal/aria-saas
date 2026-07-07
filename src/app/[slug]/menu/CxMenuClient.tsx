@@ -61,7 +61,8 @@ function ProductRow({ product, slug, onAddCart }: {
   slug: string
   onAddCart: (id: string) => void
 }) {
-  const orderUrl = '/menu/' + slug + '?item=' + product.id
+  void onAddCart // navigated to item detail instead; prop kept for badge compat
+  const itemUrl = '/' + slug + '/item/' + product.id
 
   return (
     <div style={{
@@ -69,9 +70,9 @@ function ProductRow({ product, slug, onAddCart }: {
       padding: 14, borderRadius: 20,
       background: CARD, marginBottom: 10,
     }}>
-      {/* Photo — taps to ordering page */}
+      {/* Photo — taps to item detail */}
       <a
-        href={orderUrl}
+        href={itemUrl}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: 88, height: 88, borderRadius: 14, flexShrink: 0, overflow: 'hidden',
@@ -120,10 +121,7 @@ function ProductRow({ product, slug, onAddCart }: {
           </p>
           <button
             onClick={() => {
-              onAddCart(product.id)
-              if (typeof window !== 'undefined') {
-                window.location.href = orderUrl
-              }
+              window.location.href = itemUrl
             }}
             style={{
               width: 40, height: 40, borderRadius: 12, flexShrink: 0,
