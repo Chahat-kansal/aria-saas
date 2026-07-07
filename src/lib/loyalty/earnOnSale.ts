@@ -102,6 +102,20 @@ export async function earnOnSale({
         customer_id: customerId, points: earnedPoints,
       })
     }
+
+    // 4b. CX in-app notification — non-blocking; failure must not disrupt earn flow.
+    try {
+      await supabaseAdmin.from('cx_notifications').insert({
+        business_id: businessId,
+        customer_id: customerId,
+        type: 'loyalty',
+        title: stampsMode ? 'Stamp earned' : ('+' + earnedPoints + ' pts earned'),
+        body: stampsMode
+          ? 'You earned a stamp on your visit!'
+          : ('You earned ' + earnedPoints + ' points on your $' + safeAmount.toFixed(2) + ' visit.'),
+        action_url: null,
+      })
+    } catch { /* non-blocking */ }
   }
 
   // 5. Customer stats — always fire; not gated on earn amount.

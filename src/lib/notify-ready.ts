@@ -46,6 +46,18 @@ export async function notifyReady(
   context: string,
 ): Promise<void> {
   try {
+    // CX in-app feed — always fires when customer is known; not gated on phone/email
+    if (snap.customer_id) {
+      await supabaseAdmin.from('cx_notifications').insert({
+        business_id: businessId,
+        customer_id: snap.customer_id,
+        type: 'order',
+        title: 'Ready for pickup',
+        body: 'Your order ' + (snap.order_number ?? '') + ' is ready! Come collect it.',
+        action_url: null,
+      })
+    }
+
     const phone = snap.customer_phone
     const email = snap.customer_email
     const phoneOk = isValidPhone(phone)

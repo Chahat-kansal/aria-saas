@@ -107,8 +107,34 @@ async function _PATCH(req: Request, { params }: Params) {
     waitUntil((async () => {
       try {
         // READY → shared notifyReady (SMS → email fallback, phone/email validated)
+        // notifyReady also inserts cx_notifications type='order' "Ready for pickup"
         if (newStatus === 'ready') {
           await notifyReady(orderId, snap, businessId, '[online-orders/[id]]')
+        }
+
+        // cx in-app notifications — accepted and completed transitions
+        const cxCustId = snap.customer_id ?? null
+        if (cxCustId) {
+          if (newStatus === 'accepted' || newStatus === 'confirmed') {
+            await supabaseAdmin.from('cx_notifications').insert({
+              business_id: businessId,
+              customer_id: cxCustId,
+              type: 'order',
+              title: 'Order confirmed',
+              body: 'Your order ' + (snap.order_number ?? '') + ' is being prepared.',
+              action_url: null,
+            })
+          }
+          if (newStatus === 'completed') {
+            await supabaseAdmin.from('cx_notifications').insert({
+              business_id: businessId,
+              customer_id: cxCustId,
+              type: 'order',
+              title: 'Picked up',
+              body: 'Order ' + (snap.order_number ?? '') + ' complete — thanks for your visit!',
+              action_url: null,
+            })
+          }
         }
 
         // ACCEPTED → email receipt with tracking link
