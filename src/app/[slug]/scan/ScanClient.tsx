@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import JsBarcode from 'jsbarcode'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#0a0a0a'
@@ -20,34 +21,25 @@ type MeData = {
   loyalty_tier?: string | null
 }
 
-function drawBarcode(canvas: HTMLCanvasElement, code: string) {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  const W = canvas.width
-  const H = canvas.height
-  ctx.clearRect(0, 0, W, H)
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0, 0, W, H)
-
-  const hex = (code.replace(/-/g, '') + code.replace(/-/g, '')).slice(0, 80)
-  const totalBars = hex.length * 4
-  const barW = W / totalBars
-
-  ctx.fillStyle = '#0a0a0a'
-  hex.split('').forEach((c, i) => {
-    const val = parseInt(c, 16)
-    const x = i * 4 * barW
-    const h1 = H * (0.6 + (val % 3) * 0.13)
-    const h2 = H * (0.4 + (val % 5) * 0.1)
-    const h3 = H * (0.7 + ((val + 2) % 4) * 0.08)
-    ctx.fillRect(x, H - h1, barW * 0.7, h1)
-    if (val % 3 !== 1) ctx.fillRect(x + barW * 1.2, H - h2, barW * 0.5, h2)
-    if (val > 7)       ctx.fillRect(x + barW * 2.2, H - h3, barW * 0.8, h3)
-    if (val > 12)      ctx.fillRect(x + barW * 3.2, H - H * 0.5, barW * 0.4, H * 0.5)
-  })
+function BrightnessIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+      style={{ display: 'block', flexShrink: 0 }}>
+      <circle cx="8" cy="8" r="3" />
+      <line x1="8" y1="1" x2="8" y2="2.5" />
+      <line x1="8" y1="13.5" x2="8" y2="15" />
+      <line x1="1" y1="8" x2="2.5" y2="8" />
+      <line x1="13.5" y1="8" x2="15" y2="8" />
+      <line x1="3.05" y1="3.05" x2="4.11" y2="4.11" />
+      <line x1="11.89" y1="11.89" x2="12.95" y2="12.95" />
+      <line x1="12.95" y1="3.05" x2="11.89" y2="4.11" />
+      <line x1="4.11" y1="11.89" x2="3.05" y2="12.95" />
+    </svg>
+  )
 }
 
-export function ScanClient({ slug, bizId, bizName, logoUrl }: {
+export function ScanClient({ slug, bizName, logoUrl }: {
   slug: string
   bizId: string
   bizName: string
@@ -80,17 +72,34 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
   }, [slug])
 
   useEffect(() => {
-    if (!me?.loyalty_identity_id || !canvasRef.current) return
-    drawBarcode(canvasRef.current, me.loyalty_identity_id)
+    const code = me?.loyalty_identity_id
+    if (!code || !canvasRef.current) return
+    try {
+      JsBarcode(canvasRef.current, code, {
+        format: 'CODE128',
+        width: 2.2,
+        height: 110,
+        displayValue: false,
+        background: '#ffffff',
+        lineColor: '#0a0a0a',
+        margin: 0,
+      })
+    } catch {
+      // fallback: white canvas if ID not CODE128-encodable
+      const ctx = canvasRef.current.getContext('2d')
+      if (ctx) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height) }
+    }
   }, [me?.loyalty_identity_id])
 
   const identityId = me?.loyalty_identity_id ?? ''
-  const shortId = identityId ? identityId.slice(0, 8).toUpperCase() : ''
+  const displayCode = identityId ? identityId.replace(/-/g, '').toUpperCase().slice(0, 16) : ''
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, color: INK, fontFamily: FB, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100dvh', background: BG, color: INK, fontFamily: FB, display: 'flex', flexDirection: 'column', maxWidth: '28rem', margin: '0 auto' }}>
+      <style>{'*, *::before, *::after { box-sizing: border-box }'}</style>
+
       {/* Header */}
-      <div style={{ padding: '52px 24px 24px', textAlign: 'center' }}>
+      <div style={{ padding: '52px 24px 20px', textAlign: 'center' }}>
         {logoUrl && (
           <div style={{
             width: 52, height: 52, borderRadius: '50%', margin: '0 auto 12px',
@@ -98,7 +107,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
             border: '2px solid rgba(255,255,255,0.12)',
           }} />
         )}
-        <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, margin: 0, color: INK }}>
+        <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, margin: 0, color: INK }}>
           {bizName}
         </p>
         <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0 0' }}>
@@ -107,7 +116,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
       </div>
 
       {/* Barcode card */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px 100px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px calc(100px + env(safe-area-inset-bottom))' }}>
         {loading ? (
           <div style={{ color: INK_MUTED, fontFamily: FB, fontSize: 14 }}>Loading…</div>
         ) : !me?.found ? (
@@ -123,52 +132,69 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
             </a>
           </div>
         ) : (
-          <div style={{
-            width: '100%', maxWidth: 340,
-            background: '#fff', borderRadius: 20,
-            padding: '24px 20px 20px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-          }}>
-            {/* Barcode */}
-            <canvas
-              ref={canvasRef}
-              width={600}
-              height={160}
-              style={{ width: '100%', height: 100, display: 'block', borderRadius: 8 }}
-            />
-
-            {/* ID below barcode */}
+          <>
+            {/* Brightness hint */}
             <div style={{
-              marginTop: 12, background: '#f5f5f5', borderRadius: 8,
-              padding: '10px 16px', textAlign: 'center',
+              display: 'flex', alignItems: 'center', gap: 6,
+              color: INK_MUTED, fontFamily: FB, fontSize: 12,
+              marginBottom: 16,
             }}>
-              <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, letterSpacing: '0.15em', color: '#0a0a0a' }}>
-                {shortId}
-              </span>
+              <BrightnessIcon />
+              <span>Set brightness to maximum before scanning</span>
             </div>
 
-            {/* Points */}
-            {me?.points_balance !== undefined && (
-              <div style={{ marginTop: 16, textAlign: 'center' }}>
-                <p style={{ fontFamily: FB, fontSize: 13, color: '#6b7280', margin: '0 0 2px' }}>
-                  Points balance
-                </p>
-                <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 28, color: '#0a0a0a', margin: 0 }}>
-                  {me.points_balance.toLocaleString()} pts
-                </p>
-                {me.loyalty_tier && (
-                  <span style={{
-                    display: 'inline-block', marginTop: 6,
-                    background: ACCENT, color: ACCENT_TEXT,
-                    fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
-                    fontFamily: FB, textTransform: 'uppercase', letterSpacing: '0.05em',
-                  }}>
-                    {me.loyalty_tier}
-                  </span>
-                )}
+            {/* Card */}
+            <div style={{
+              width: '100%', maxWidth: 340,
+              background: '#fff', borderRadius: 24,
+              padding: '24px 20px 20px',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
+            }}>
+              {/* CODE128 barcode */}
+              <div style={{ borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                <canvas
+                  ref={canvasRef}
+                  style={{ width: '100%', display: 'block' }}
+                />
               </div>
-            )}
-          </div>
+
+              {/* Machine-readable code */}
+              <div style={{
+                marginTop: 14, background: '#f5f5f5', borderRadius: 10,
+                padding: '10px 16px', textAlign: 'center',
+              }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, letterSpacing: '0.12em', color: '#0a0a0a' }}>
+                  {displayCode}
+                </span>
+              </div>
+
+              {/* Points + tier */}
+              {me?.points_balance !== undefined && (
+                <div style={{ marginTop: 16, textAlign: 'center' }}>
+                  <p style={{ fontFamily: FB, fontSize: 12, color: '#6b7280', margin: '0 0 2px' }}>
+                    Points balance
+                  </p>
+                  <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 30, color: '#0a0a0a', margin: 0, fontWeight: 700, lineHeight: 1.1 }}>
+                    {(me.points_balance ?? 0).toLocaleString()} pts
+                  </p>
+                  {me.loyalty_tier && (
+                    <span style={{
+                      display: 'inline-block', marginTop: 8,
+                      background: ACCENT, color: ACCENT_TEXT,
+                      fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 999,
+                      fontFamily: FB, textTransform: 'uppercase', letterSpacing: '0.05em',
+                    }}>
+                      {me.loyalty_tier}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, marginTop: 16, textAlign: 'center' }}>
+              Show this to staff at the counter
+            </p>
+          </>
         )}
       </div>
 
