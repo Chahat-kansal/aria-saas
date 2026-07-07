@@ -16,11 +16,10 @@ function IconHome({ color = 'currentColor' }: { color?: string }) {
   )
 }
 
-function IconFork({ color = 'currentColor' }: { color?: string }) {
+function IconMenu({ color = 'currentColor' }: { color?: string }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" style={{ display: 'block' }}>
-      <path d="M7 2v4a2 2 0 01-2 2 2 2 0 01-2-2V2M5 8v10"/>
-      <path d="M14 2c0 0 2 2 2 5s-2 3-2 3v8"/>
+      <path d="M3 5h14M3 10h14M3 15h14"/>
     </svg>
   )
 }
@@ -241,7 +240,7 @@ export function CxTabBar({ slug, active, cartCount = 0, dark = false }: {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {t.key === 'home'    && <IconHome color={iconColor} />}
-                {t.key === 'menu'    && <IconFork color={iconColor} />}
+                {t.key === 'menu'    && <IconMenu color={iconColor} />}
                 {t.key === 'rewards' && <IconGift color={iconColor} />}
                 {t.key === 'wallet'  && <IconCard color={iconColor} />}
               </div>
