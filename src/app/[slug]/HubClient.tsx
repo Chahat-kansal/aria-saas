@@ -412,8 +412,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         .-webkit-line-clamp { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden }
       `}</style>
 
-      {/* ── HERO ── 480px fixed, square bottom, sheet overlaps from below ─── */}
-      <div style={{ position: 'relative', height: 480, zIndex: 1 }}>
+      {/* ── HERO ── 45vh responsive, square bottom, sheet overlaps from below ─── */}
+      <div style={{ position: 'relative', height: '45vh', maxHeight: 420, minHeight: 340, zIndex: 1 }}>
 
         {/* bg + gradient — full bleed, no radius */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: heroBg }}>
@@ -477,7 +477,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
 
         {/* ── Greeting — lower third of hero ─────────────────────── */}
         {greeting && (
-          <div style={{ position: 'absolute', top: 316, left: 0, right: 0, padding: '0 20px' }}>
+          <div style={{ position: 'absolute', bottom: 64, left: 0, right: 0, padding: '0 20px' }}>
             <p style={{
               fontFamily: FD, fontStyle: 'italic',
               fontSize: 46,
