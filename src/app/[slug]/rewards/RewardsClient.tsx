@@ -49,7 +49,7 @@ interface CxData {
   recent_txns?: EarnTxn[]
 }
 
-// ── Frosted glass padlock — SVG icon, not emoji ────────────────────────────
+// ── Frosted glass padlock ──────────────────────────────────────────────────────
 function PadlockIcon() {
   return (
     <div style={{
@@ -71,7 +71,7 @@ function PadlockIcon() {
   )
 }
 
-// ── Reward card — real product photo left, content right ───────────────────
+// ── Reward card — glass surface ────────────────────────────────────────────────
 function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: string }) {
   const cost = Number(rule.threshold_value ?? 0)
   const canRedeem = cost > 0 && pts >= cost
@@ -82,14 +82,16 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
     <div style={{
       display: 'flex',
       borderRadius: 20,
-      background: '#fff',
+      background: 'rgba(255,255,255,0.65)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
       overflow: 'hidden',
       boxShadow: canRedeem
-        ? '0 2px 16px rgba(0,0,0,0.09), 0 0 20px 2px rgba(217,245,78,0.5)'
-        : '0 2px 14px rgba(0,0,0,0.07)',
+        ? '0 4px 24px rgba(0,0,0,0.05), 0 0 20px 2px rgba(217,245,78,0.5)'
+        : '0 4px 24px rgba(0,0,0,0.05)',
       filter: locked ? 'grayscale(0.6)' : 'none',
       opacity: locked ? 0.82 : 1,
-      border: canRedeem ? ('2px solid ' + ACCENT) : '2px solid transparent',
+      border: canRedeem ? ('2px solid ' + ACCENT) : '1px solid rgba(0,0,0,0.05)',
       marginBottom: 14,
     }}>
       {/* Product image — left 40%, fills height */}
@@ -155,16 +157,21 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
   )
 }
 
-// ── Challenge / visit bar ──────────────────────────────────────────────────
+// ── Challenge / visit bar — glass surface ─────────────────────────────────────
 function VisitBar({ visits, target, label }: { visits: number; target: number; label?: string }) {
   const pct = target > 0 ? Math.min(1, visits / target) : 0
   const done = visits >= target
   const title = label ?? ('Visit ' + target + 'x this month – ' + visits + '/' + target)
   return (
     <div style={{
-      background: '#fff', borderRadius: 20,
+      background: 'rgba(255,255,255,0.65)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderRadius: 20,
       padding: '16px 18px',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.07)', marginBottom: 14,
+      border: '1px solid rgba(0,0,0,0.05)',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.05)',
+      marginBottom: 14,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, color: INK, flex: 1 }}>
@@ -193,7 +200,8 @@ function VisitBar({ visits, target, label }: { visits: number; target: number; l
       </div>
       <div style={{ height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
         <div style={{
-          height: '100%', width: (pct * 100).toFixed(1) + '%',
+          height: '100%',
+          width: (pct * 100).toFixed(1) + '%',
           background: ACCENT, borderRadius: 4, transition: 'width 0.6s ease',
         }} />
       </div>
@@ -201,7 +209,7 @@ function VisitBar({ visits, target, label }: { visits: number; target: number; l
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }: {
   slug: string
   bizName: string
@@ -256,105 +264,161 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
   const activeChallenge = challenges.find(c => c.status === 'active') ?? null
 
   return (
-    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK }}>
+    <div style={{
+      width: '100%', maxWidth: '28rem', margin: '0 auto',
+      minHeight: '100dvh',
+      // cream base + subtle white sheen at top
+      background: 'radial-gradient(ellipse 130% 30% at 50% 0%, rgba(255,255,255,0.44) 0%, transparent 55%), ' + BG,
+      fontFamily: FB, color: INK,
+    }}>
       <style>{`
         body { background: #f3efe4 }
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
       `}</style>
 
-      {/* ── HEADER — lime radial gradient, progress ring hero ── */}
-      <div style={{
-        background: 'radial-gradient(ellipse 90% 65% at 50% 50%, rgba(217,245,78,0.5) 0%, rgba(217,245,78,0.2) 50%, transparent 75%), ' + BG,
-        paddingTop: 56,
-        paddingBottom: 24,
+      {/* ── "Rewards" title — floats above glass card ── */}
+      <h1 style={{
+        fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 400,
+        color: INK, margin: 0, letterSpacing: '-0.01em', lineHeight: 1.05,
         textAlign: 'center',
+        paddingTop: 56, paddingBottom: 0,
       }}>
-        {/* "Rewards" headline */}
-        <h1 style={{
-          fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 400,
-          color: INK, margin: '0 0 12px', letterSpacing: '-0.01em', lineHeight: 1.05,
-        }}>
-          Rewards
-        </h1>
+        Rewards
+      </h1>
 
-        {/* Tier pill — glass, shows when logged in */}
-        {loaded && cx ? (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+      {/* ── GLASS HERO CARD ── tier pill + pts + ring arc ── */}
+      <div style={{
+        position: 'relative',
+        margin: '24px 20px 24px',
+        height: 280,
+        borderRadius: 28,
+        overflow: 'hidden',
+        background: 'rgba(255,255,255,0.42)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: '1px solid rgba(255,255,255,0.55)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.06)',
+      }}>
+        {/* lime radial glow — concentrated behind ring at bottom */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse 90% 65% at 50% 95%, rgba(217,245,78,0.52) 0%, transparent 65%)',
+        }} />
+
+        {/* tier pill — straddles card's top edge */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          display: 'flex', justifyContent: 'center',
+          zIndex: 10,
+        }}>
+          {loaded && cx ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center',
-              background: 'rgba(255,255,255,0.6)',
+              background: 'rgba(255,255,255,0.72)',
               backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-              borderRadius: 100, padding: '8px 20px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-              border: '1px solid rgba(255,255,255,0.7)',
+              borderRadius: 100, padding: '9px 20px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+              border: '1px solid rgba(255,255,255,0.8)',
+              transform: 'translateY(-50%)',
             }}>
               <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: ACCENT_TEXT, fontWeight: 600 }}>
                 {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
               </span>
             </div>
-          </div>
-        ) : (
-          <div style={{ height: 40 }} />
-        )}
-
-        {/* Progress ring + pts text */}
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{ position: 'relative', width: 260, height: 260 }}>
-            <svg
-              width="260" height="260" viewBox="0 0 260 260"
-              style={{ position: 'absolute', inset: 0, display: 'block' }}
-              aria-hidden="true"
-            >
-              {/* Track */}
-              <circle
-                cx="130" cy="130" r={R}
-                fill="none"
-                stroke="rgba(0,0,0,0.10)"
-                strokeWidth="6"
-              />
-              {/* Progress arc — from 12 o'clock clockwise */}
-              <circle
-                cx="130" cy="130" r={R}
-                fill="none"
-                stroke={ACCENT}
-                strokeWidth="6"
-                strokeLinecap="round"
-                strokeDasharray={ringDash}
-                transform="rotate(-90 130 130)"
-                style={{ filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.85))' }}
-              />
-            </svg>
-            {/* Centered pts label */}
+          ) : (loaded && !cx) ? (
             <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              display: 'inline-flex', alignItems: 'center',
+              background: 'rgba(255,255,255,0.72)',
+              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+              borderRadius: 100, padding: '9px 20px',
+              border: '1px solid rgba(255,255,255,0.8)',
+              transform: 'translateY(-50%)',
             }}>
-              <span style={{
-                fontFamily: FB, fontSize: 68, fontWeight: 800,
-                color: INK, letterSpacing: '-0.03em', lineHeight: 1,
-              }}>
-                {pts.toLocaleString() + ' pts'}
+              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK_MUTED }}>
+                Sign in to see your tier
               </span>
             </div>
-          </div>
+          ) : null}
+        </div>
+
+        {/* pts label — centered in upper portion of card */}
+        <div style={{
+          position: 'absolute',
+          top: 60, bottom: 130,
+          left: 0, right: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 2,
+        }}>
+          <span style={{
+            fontFamily: FB, fontSize: 68, fontWeight: 800,
+            color: INK, letterSpacing: '-0.03em', lineHeight: 1,
+          }}>
+            {pts.toLocaleString() + ' pts'}
+          </span>
+        </div>
+
+        {/* ring arc — bottom: -150 so only top arc is visible, center is clipped */}
+        <div style={{
+          position: 'absolute',
+          bottom: -150,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1,
+        }}>
+          <svg
+            width="260" height="260" viewBox="0 0 260 260"
+            style={{ display: 'block' }}
+            aria-hidden="true"
+          >
+            {/* track */}
+            <circle
+              cx="130" cy="130" r={R}
+              fill="none"
+              stroke="rgba(0,0,0,0.10)"
+              strokeWidth="6"
+            />
+            {/* progress arc — 12 o'clock clockwise */}
+            <circle
+              cx="130" cy="130" r={R}
+              fill="none"
+              stroke={ACCENT}
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={ringDash}
+              transform="rotate(-90 130 130)"
+              style={{ filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.85))' }}
+            />
+          </svg>
         </div>
       </div>
 
-      {/* ── BODY — reward cards + challenge bar ── */}
+      {/* ── BODY — glass cards ── */}
       <div style={{
-        paddingTop: 8,
         paddingLeft: 16,
         paddingRight: 16,
         paddingBottom: 'calc(80px + env(safe-area-inset-bottom) + 24px)',
       }}>
-        {/* Not logged in prompt */}
+        {/* Not-logged-in prompt */}
         {loaded && !cx && (
-          <div style={{ marginBottom: 20, padding: '20px', background: '#fff', borderRadius: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+          <div style={{
+            marginBottom: 14,
+            padding: 20,
+            background: 'rgba(255,255,255,0.65)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            borderRadius: 20,
+            border: '1px solid rgba(0,0,0,0.05)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.05)',
+            textAlign: 'center',
+          }}>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 14px', color: INK }}>
               Check your points
             </p>
-            <a href={'/' + slug} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '10px 24px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+            <a href={'/' + slug} style={{
+              display: 'inline-block', background: ACCENT, color: ACCENT_TEXT,
+              borderRadius: 100, padding: '10px 24px',
+              fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none',
+            }}>
               Sign in on Home
             </a>
           </div>
@@ -366,7 +430,15 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
             <RewardCard key={r.id} rule={r} pts={pts} slug={slug} />
           ))
         ) : (
-          <div style={{ textAlign: 'center', padding: '36px 0', background: '#fff', borderRadius: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: 14 }}>
+          <div style={{
+            textAlign: 'center', padding: '36px 0',
+            background: 'rgba(255,255,255,0.65)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            borderRadius: 20,
+            border: '1px solid rgba(0,0,0,0.05)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.05)',
+            marginBottom: 14,
+          }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🎁</div>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 8px', color: INK }}>
               Rewards coming soon
@@ -377,7 +449,7 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
           </div>
         )}
 
-        {/* Challenge bar — challenges data first, fallback to inferred visit count */}
+        {/* Challenge bar */}
         {activeChallenge ? (
           <VisitBar
             visits={activeChallenge.progress}
