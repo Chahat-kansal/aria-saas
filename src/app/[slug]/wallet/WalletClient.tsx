@@ -39,19 +39,29 @@ interface CxData {
   preload_txns?: PreloadTxn[]
 }
 
-// ── Barcode visual — variable-width black bars ────────────────────────────────
+// ── Barcode visual — Code-128 style: single row, uniform 40px bars, white panel ──
 
 function BarcodeVisual({ code }: { code: string }) {
-  const hex = (code.replace(/-/g, '') + code.replace(/-/g, '')).slice(0, 52)
-  const bars = hex.split('').map((c, i) => ({
-    w: (parseInt(c, 16) % 3) + 1,
-    isBar: i % 2 === 0,
-  }))
+  const raw = code.replace(/-/g, '')
+  const src = raw + raw  // 64 hex chars for fine bar density
+  const bars: { w: number; dark: boolean }[] = []
+  let dark = true
+  for (let i = 0; i < src.length; i++) {
+    bars.push({ w: (parseInt(src[i], 16) % 3) + 1, dark })
+    dark = !dark
+  }
   return (
-    <div style={{ display: 'flex', height: '100%', width: '100%', overflow: 'hidden' }}>
-      {bars.map((b, i) => (
-        <div key={i} style={{ flex: b.w, height: '100%', background: b.isBar ? 'rgba(0,0,0,0.82)' : 'transparent' }} />
-      ))}
+    <div style={{
+      width: '85%', height: 48, borderRadius: 6,
+      background: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '0 12px', overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', height: 40, alignItems: 'stretch', overflow: 'hidden' }}>
+        {bars.map((b, i) => (
+          <div key={i} style={{ width: (b.w * 2) + 'px', height: '100%', background: b.dark ? '#000' : '#fff', flexShrink: 0 }} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -202,18 +212,17 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
           </div>
         </div>
 
-        {/* ── Barcode strip — transparent overlay on card PNG's built-in white strip ── */}
+        {/* ── Barcode strip — white panel centered, single Code-128 row ── */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
           height: 54,
           background: 'transparent',
-          display: 'flex', alignItems: 'center',
-          padding: '0 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden',
         }}>
           {identityId
             ? <BarcodeVisual code={identityId} />
-            : <div style={{ flex: 1, height: '55%', background: 'rgba(0,0,0,0.08)', borderRadius: 2 }} />
+            : <div style={{ width: '85%', height: '55%', background: 'rgba(255,255,255,0.6)', borderRadius: 4 }} />
           }
         </div>
       </div>
@@ -233,7 +242,7 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
   bizName: string
 }) {
   const d = new Date(date)
-  const timeStr = d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const timeStr = d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Melbourne' })
 
   const iconBg = kind === 'redeem' ? '#e5e7eb' : (ACCENT + 'cc')
   const iconColor = kind === 'redeem' ? INK_MUTED : ACCENT_TEXT
@@ -271,7 +280,7 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
 
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         {pts !== null && (
-          <p style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: pts > 0 ? '#059669' : '#dc2626', margin: 0 }}>
+          <p style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: pts > 0 ? ACCENT_TEXT : '#dc2626', margin: 0 }}>
             {pts > 0 ? '+' : ''}{pts} pts
           </p>
         )}
@@ -338,7 +347,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
       return {
         id: t.id,
         date: t.created_at,
-        label: isEarn ? ('Earned +' + t.points_delta) : ('Redeemed ' + t.points_delta),
+        label: isEarn ? 'Earned' : 'Redeemed',
         itemName: t.reward_redeemed ?? null,
         pts: t.points_delta,
         amount: null,
@@ -357,7 +366,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12)
 
   return (
-    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 'calc(80px + env(safe-area-inset-bottom) + 16px)' }}>
       <style>{`
         body { background: #f3efe4 }
         *, *::before, *::after { box-sizing: border-box }
