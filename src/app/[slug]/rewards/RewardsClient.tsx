@@ -213,8 +213,8 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
       `}</style>
 
-      {/* ── Header ── */}
-      <div style={{ background: BG, paddingTop: 56, paddingBottom: 0, textAlign: 'center' }}>
+      {/* ── Header — lime wash matches ref ── */}
+      <div style={{ background: 'linear-gradient(to bottom, #f3efe4 0%, #f0f9d2 100%)', paddingTop: 56, paddingBottom: 0, textAlign: 'center' }}>
         <h1 style={{
           fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 400,
           color: INK, margin: '0 0 14px', letterSpacing: '-0.02em', lineHeight: 1,
@@ -240,26 +240,28 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         )}
         {(!loaded || !cx) && <div style={{ height: 28 }} />}
 
-        {/* Large filled lime points card — per ref */}
+        {/* Points card — centered, not full-width, cream shows left+right — matches ref */}
         <div style={{
-          margin: '0 18px 28px',
-          borderRadius: 32,
+          margin: '0 auto 32px',
+          width: 'min(360px, 88%)',
+          borderRadius: 28,
           background: 'radial-gradient(ellipse 110% 90% at 50% 115%, #a8c800 0%, #c2dc00 20%, #d9f54e 55%, #eafa80 100%)',
-          padding: '36px 24px 32px',
+          padding: '40px 24px 44px',
           position: 'relative',
           overflow: 'hidden',
-          boxShadow: '0 4px 32px rgba(190,220,0,0.45), inset 0 1px 0 rgba(255,255,255,0.5)',
+          boxShadow: '0 4px 28px rgba(190,220,0,0.5), 0 0 52px rgba(217,245,78,0.28), inset 0 1px 0 rgba(255,255,255,0.55)',
           textAlign: 'center',
         }}>
-          {/* Decorative ring arc — large circle centered at bottom, partially visible */}
+          {/* Decorative ring — large circle centered at bottom, top arc peeks through */}
           <div style={{
-            position: 'absolute', bottom: -90, left: '50%',
+            position: 'absolute', bottom: -88, left: '50%',
             transform: 'translateX(-50%)',
-            width: 290, height: 290,
+            width: 260, height: 260,
             borderRadius: '50%',
-            border: '14px solid rgba(255,255,255,0.38)',
+            border: '12px solid rgba(255,255,255,0.42)',
             pointerEvents: 'none',
           }} />
+          {/* Number */}
           <p style={{
             fontFamily: FB, fontWeight: 900, fontSize: 88, color: INK,
             margin: 0, lineHeight: 1, letterSpacing: '-0.04em',
@@ -267,9 +269,11 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
           }}>
             {pts.toLocaleString()}
           </p>
+          {/* pts label */}
           <p style={{
-            fontFamily: FB, fontSize: 22, fontWeight: 700, color: 'rgba(0,0,0,0.5)',
-            margin: '4px 0 0', position: 'relative', zIndex: 1,
+            fontFamily: FB, fontSize: 36, fontWeight: 800, color: 'rgba(0,0,0,0.45)',
+            margin: '2px 0 0', lineHeight: 1,
+            position: 'relative', zIndex: 1,
           }}>
             pts
           </p>
