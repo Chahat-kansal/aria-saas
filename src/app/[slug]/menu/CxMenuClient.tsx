@@ -124,7 +124,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
   const showFeatured = !activeCat && !search && !!featured
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`
         *, *::before, *::after { box-sizing: border-box }
         .cx-cat-scroll::-webkit-scrollbar { display: none }
@@ -251,7 +251,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
           style={{
             display: 'block', margin: '16px 18px 0', borderRadius: 20,
             overflow: 'hidden', textDecoration: 'none', position: 'relative',
-            height: 260, boxShadow: '0 0 24px 2px rgba(217,245,78,0.35), 0 4px 24px rgba(0,0,0,0.4)',
+            height: 200, boxShadow: '0 0 24px 2px rgba(217,245,78,0.35), 0 4px 24px rgba(0,0,0,0.4)',
           }}
         >
           <div style={{

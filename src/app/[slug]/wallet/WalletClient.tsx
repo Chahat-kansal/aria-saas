@@ -141,9 +141,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
     : tier === 'silver' || tier === 'Silver' ? 'Silver' : 'Member'
 
   return (
-    <div style={{ padding: '0 8px' }}>
-      {/* -8° tilt matches ref */}
-      <div style={{ transform: 'rotate(-8deg)', transformOrigin: 'center center' }}>
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: 320, transform: 'rotate(-7deg)', transformOrigin: 'center center' }}>
         <div style={{
           background: '#14130f',
           borderRadius: 22,
@@ -356,24 +355,24 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12)
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Café photo strip — rounded bottom corners, card overlaps it ── */}
+      {/* ── Café photo strip — 220px, fades to cream at bottom ── */}
       <div style={{
-        position: 'relative', height: 240,
+        position: 'relative', height: 220,
         borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
         overflow: 'hidden',
         background: 'url(/menu/_lib/cx/wallet-bg.png) center / cover no-repeat, linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
       }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.58) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.1) 45%, rgba(243,239,228,0.96) 100%)' }} />
       </div>
 
       {/* ── Card — overlaps lower portion of photo strip ── */}
-      <div style={{ marginTop: -110, paddingLeft: 18, paddingRight: 18, position: 'relative', zIndex: 2 }}>
+      <div style={{ marginTop: -100, paddingLeft: 18, paddingRight: 18, position: 'relative', zIndex: 2 }}>
         {!loaded ? (
           <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 28, height: 28, border: '2.5px solid rgba(0,0,0,0.1)', borderTopColor: ACCENT_TEXT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />

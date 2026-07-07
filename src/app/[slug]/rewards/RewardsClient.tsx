@@ -207,7 +207,7 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
   const tierLabel = rawTier === 'gold' || rawTier === 'Gold' ? 'Gold' : rawTier === 'silver' || rawTier === 'Silver' ? 'Silver' : 'Member'
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
       <style>{`
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
@@ -240,38 +240,40 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
         )}
         {(!loaded || !cx) && <div style={{ height: 28 }} />}
 
-        {/* Points card — centered, not full-width, cream shows left+right — matches ref */}
+        {/* Points card — 340×150 pale lime, centered — matches ref */}
         <div style={{
           margin: '0 auto 32px',
-          width: 'min(360px, 88%)',
+          width: 340,
+          height: 150,
           borderRadius: 28,
-          background: 'radial-gradient(ellipse 110% 90% at 50% 115%, #a8c800 0%, #c2dc00 20%, #d9f54e 55%, #eafa80 100%)',
-          padding: '40px 24px 44px',
+          background: 'linear-gradient(135deg, #eaf7a8 0%, #dbef7e 100%)',
+          padding: '20px 24px 24px',
           position: 'relative',
           overflow: 'hidden',
-          boxShadow: '0 4px 28px rgba(190,220,0,0.5), 0 0 52px rgba(217,245,78,0.28), inset 0 1px 0 rgba(255,255,255,0.55)',
+          boxShadow: '0 4px 20px rgba(180,210,0,0.28), inset 0 1px 0 rgba(255,255,255,0.6)',
           textAlign: 'center',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         }}>
-          {/* Decorative ring — large circle centered at bottom, top arc peeks through */}
+          {/* Decorative ring — faint arc behind pts number */}
           <div style={{
-            position: 'absolute', bottom: -88, left: '50%',
+            position: 'absolute', bottom: -60, left: '50%',
             transform: 'translateX(-50%)',
-            width: 260, height: 260,
+            width: 180, height: 180,
             borderRadius: '50%',
-            border: '12px solid rgba(255,255,255,0.42)',
+            border: '8px solid rgba(255,255,255,0.35)',
             pointerEvents: 'none',
           }} />
           {/* Number */}
           <p style={{
-            fontFamily: FB, fontWeight: 900, fontSize: 88, color: INK,
-            margin: 0, lineHeight: 1, letterSpacing: '-0.04em',
+            fontFamily: FB, fontWeight: 700, fontSize: 56, color: INK,
+            margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
             position: 'relative', zIndex: 1,
           }}>
             {pts.toLocaleString()}
           </p>
           {/* pts label */}
           <p style={{
-            fontFamily: FB, fontSize: 36, fontWeight: 800, color: 'rgba(0,0,0,0.45)',
+            fontFamily: FB, fontSize: 24, fontWeight: 600, color: 'rgba(0,0,0,0.4)',
             margin: '2px 0 0', lineHeight: 1,
             position: 'relative', zIndex: 1,
           }}>

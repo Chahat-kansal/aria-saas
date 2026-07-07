@@ -413,7 +413,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
   const onPhoneCancel = () => setShowPhone(false)
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: FB, color: INK }}>
+    <div style={{ maxWidth: 390, margin: '0 auto', minHeight: 844, background: BG, fontFamily: FB, color: INK, overflowX: 'hidden' }}>
       <style>{`
         @keyframes cx-spin { to { transform: rotate(360deg) } }
         .cx-hscroll::-webkit-scrollbar { display: none }
@@ -421,8 +421,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         .-webkit-line-clamp { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden }
       `}</style>
 
-      {/* ── HERO ── full-bleed, ~55vh ─────────────────────────────────── */}
-      <div style={{ position: 'relative', height: '55vh', minHeight: 360, background: heroBg }}>
+      {/* ── HERO ── 460px fixed ─────────────────────────────────── */}
+      <div style={{ position: 'relative', height: 460, background: heroBg }}>
 
         {/* Gradient overlay: dark at top (for header readability) + dark at bottom (for text) */}
         <div style={{
@@ -486,20 +486,23 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           </div>
         </div>
 
-        {/* ── Bottom of hero: greeting + status pill ─────────────────── */}
-        <div style={{ position: 'absolute', bottom: 36, left: 0, right: 0, padding: '0 20px' }}>
-          {greeting && (
+        {/* ── Greeting — fixed at top 300 ─────────────────────────── */}
+        {greeting && (
+          <div style={{ position: 'absolute', top: 300, left: 0, right: 0, padding: '0 20px' }}>
             <p style={{
               fontFamily: FD, fontStyle: 'italic',
-              fontSize: 42,
-              color: '#fff', margin: '0 0 12px', fontWeight: 400, lineHeight: 1.1,
+              fontSize: 34,
+              color: '#fff', margin: 0, fontWeight: 400, lineHeight: 1.15,
               textShadow: '0 2px 16px rgba(0,0,0,0.5)',
             }}>
               {greeting}{firstName ? ',' : ''}
               {firstName && <span style={{ display: 'block' }}>{firstName}</span>}
             </p>
-          )}
+          </div>
+        )}
 
+        {/* ── Status pill — fixed at top 400 ──────────────────────── */}
+        <div style={{ position: 'absolute', top: 400, left: 0, right: 0, padding: '0 20px' }}>
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -537,8 +540,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         </div>
       </div>
 
-      {/* ── Content sheet — overlaps hero ────────────────────────────────── */}
-      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -24, position: 'relative', zIndex: 1, minHeight: '60vh', paddingBottom: 100 }}>
+      {/* ── Content sheet — cream sheet starts at ~448 ──────────────────── */}
+      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -12, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
 
         {/* Pull-to-visible handle */}
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4 }}>
