@@ -89,18 +89,6 @@ async function track(businessId: string, target: string) {
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 
-function IconScan({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ display: 'block' }}>
-      <rect x="1" y="1" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="11" y="1" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="1" y="11" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="11" y="11" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M6.5 3.5h3M3.5 6.5v3M12.5 6.5v3M6.5 12.5h3M8 8h0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  )
-}
-
 function IconPerson({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" style={{ display: 'block' }}>
@@ -260,10 +248,10 @@ function ProductScroll({ products, slug }: { products: HubBusiness['products']; 
           <a
             key={p.id}
             href={'/menu/' + slug}
-            style={{ flexShrink: 0, width: 140, borderRadius: 16, background: '#fff', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textDecoration: 'none', color: INK, display: 'block' }}
+            style={{ flexShrink: 0, width: 160, borderRadius: 16, background: '#fff', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textDecoration: 'none', color: INK, display: 'block' }}
           >
             <div style={{
-              width: 140, height: 120,
+              width: 160, height: 150,
               background: p.image_url ? ('url(' + p.image_url + ') center/cover no-repeat #efefef') : '#efefef',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#ccc',
             }}>
@@ -425,10 +413,10 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
       `}</style>
 
       {/* ── HERO ── 480px fixed, rounded bottom, above cream sheet ─── */}
-      <div style={{ position: 'relative', height: 480, zIndex: 2, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
+      <div style={{ position: 'relative', height: 480, zIndex: 2, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
 
         {/* bg + gradient clipped to rounded corners */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, background: heroBg }}>
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, background: heroBg }}>
           <div style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
             background: 'linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, transparent 38%, transparent 48%, rgba(0,0,0,0.72) 100%)',
@@ -471,7 +459,6 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
                 boxShadow: '0 0 20px 4px rgba(217,245,78,0.55), 0 2px 10px rgba(217,245,78,0.35)',
               }}
             >
-              <IconScan size={13} />
               Scan
             </button>
             <div style={{
@@ -508,9 +495,9 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              backdropFilter: 'blur(16px) saturate(200%)',
-              WebkitBackdropFilter: 'blur(16px) saturate(200%)',
-              background: 'rgba(255,255,255,0.28)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              background: 'rgba(255,255,255,0.30)',
               border: '1px solid rgba(255,255,255,0.35)',
               borderRadius: 100, padding: '9px 20px',
               boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
@@ -526,9 +513,9 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
             <button
               onClick={() => setShowPhone(true)}
               style={{
-                background: 'rgba(255,255,255,0.28)',
-                backdropFilter: 'blur(16px) saturate(200%)',
-                WebkitBackdropFilter: 'blur(16px) saturate(200%)',
+                background: 'rgba(255,255,255,0.30)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
                 border: '1px solid rgba(255,255,255,0.35)',
                 borderRadius: 100, padding: '9px 20px',
                 fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600,
@@ -546,7 +533,7 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
       </div>
 
       {/* ── Content sheet — cream sheet overlaps hero, pill straddles seam ── */}
-      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -28, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
+      <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -24, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
 
         {/* Spacer: clears the straddling pill (pill half ~18px + gap + sheet overlap) */}
         <div style={{ height: 52 }} />
