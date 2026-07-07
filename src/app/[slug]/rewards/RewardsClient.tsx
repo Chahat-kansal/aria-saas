@@ -7,7 +7,6 @@ const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
 const INK_MUTED = '#6b7280'
-const CARD_DARK = '#111111'
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 
@@ -50,7 +49,29 @@ interface CxData {
   recent_txns?: EarnTxn[]
 }
 
+// ── Frosted glass padlock — SVG icon, not emoji ────────────────────────────
+function PadlockIcon() {
+  return (
+    <div style={{
+      width: 44, height: 44, borderRadius: '50%',
+      background: 'rgba(255,255,255,0.68)',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+      flexShrink: 0,
+    }}>
+      <svg width="20" height="22" viewBox="0 0 20 22" fill="none" style={{ display: 'block' }}>
+        <rect x="2" y="10" width="16" height="11" rx="3"
+          fill="rgba(100,100,100,0.15)" stroke={INK_MUTED} strokeWidth="1.4" />
+        <path d="M6 10V7a4 4 0 0 1 8 0v3"
+          stroke={INK_MUTED} strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="10" cy="15.5" r="1.5" fill={INK_MUTED} />
+      </svg>
+    </div>
+  )
+}
 
+// ── Reward card — real product photo left, content right ───────────────────
 function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: string }) {
   const cost = Number(rule.threshold_value ?? 0)
   const canRedeem = cost > 0 && pts >= cost
@@ -59,68 +80,77 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
 
   return (
     <div style={{
-      display: 'flex', borderRadius: 20, background: '#fff', overflow: 'hidden',
+      display: 'flex',
+      borderRadius: 20,
+      background: '#fff',
+      overflow: 'hidden',
       boxShadow: canRedeem
-        ? ('0 2px 16px rgba(0,0,0,0.09), 0 0 20px 2px rgba(217,245,78,0.5)')
-        : '0 2px 16px rgba(0,0,0,0.09)',
-      opacity: locked ? 0.72 : 1,
+        ? '0 2px 16px rgba(0,0,0,0.09), 0 0 20px 2px rgba(217,245,78,0.5)'
+        : '0 2px 14px rgba(0,0,0,0.07)',
+      filter: locked ? 'grayscale(0.6)' : 'none',
+      opacity: locked ? 0.82 : 1,
       border: canRedeem ? ('2px solid ' + ACCENT) : '2px solid transparent',
       marginBottom: 14,
     }}>
-      {/* Product image — left 42% */}
+      {/* Product image — left 40%, fills height */}
       <div style={{
-        width: '42%', flexShrink: 0, minHeight: 160, position: 'relative',
+        width: '40%', flexShrink: 0, minHeight: 155,
         background: rule.image_url
-          ? ('url(' + rule.image_url + ') center/cover no-repeat #f3f4f6')
-          : '#f3f4f6',
+          ? ('url(' + rule.image_url + ') center/cover no-repeat #e8e4dc')
+          : '#e8e4dc',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 36,
       }}>
-        {!rule.image_url && '☕'}
-        {locked && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 32 }}>🔒</span>
-          </div>
+        {!rule.image_url && (
+          <span style={{ fontSize: 36 }}>☕</span>
         )}
       </div>
 
-      {/* Text — right 58% */}
-      <div style={{ flex: 1, padding: '16px 16px 16px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      {/* Text content — right 60% */}
+      <div style={{
+        flex: 1, padding: '16px 14px',
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'space-between',
+        position: 'relative',
+        minHeight: 155,
+      }}>
         <div>
-          <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, margin: '0 0 3px', color: INK, lineHeight: 1.2 }}>
+          <p style={{
+            fontFamily: FB, fontSize: 15, fontWeight: 700,
+            margin: '0 0 2px', color: INK, lineHeight: 1.25,
+          }}>
             {rule.name}
-            <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 400, color: INK_MUTED, marginLeft: 5 }}>
+            <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 400, color: INK_MUTED, marginLeft: 6 }}>
               {'(' + cost + 'pts)'}
             </span>
           </p>
+          {locked && (
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 13, color: INK_MUTED, margin: '2px 0 4px' }}>
+              Locked
+            </p>
+          )}
           {rule.description && (
-            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 13, color: INK_MUTED, margin: '0 0 12px', lineHeight: 1.4 }}>
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 13, color: INK_MUTED, margin: '4px 0 0', lineHeight: 1.45 }}>
               {rule.description}
             </p>
           )}
         </div>
+
         {canRedeem ? (
           <a
             href={redeemUrl}
             style={{
-              display: 'block', textAlign: 'center',
+              display: 'block', textAlign: 'center', marginTop: 12,
               background: ACCENT, color: ACCENT_TEXT,
-              borderRadius: 100, padding: '9px 0',
-              fontFamily: FB, fontSize: 13, fontWeight: 700, textDecoration: 'none',
-              boxShadow: '0 0 20px 2px rgba(217,245,78,0.5), inset 0 1px 0 rgba(255,255,255,0.35)',
+              borderRadius: 100, padding: '10px 0',
+              fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none',
+              boxShadow: '0 0 16px rgba(217,245,78,0.5), inset 0 1px 0 rgba(255,255,255,0.35)',
             }}
           >
             Redeem
           </a>
         ) : locked ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={INK_MUTED} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <rect x="2.5" y="6" width="9" height="6.5" rx="1.5"/>
-              <path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6"/>
-            </svg>
-            <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
-              Locked
-            </p>
+          <div style={{ position: 'absolute', bottom: 12, right: 12 }}>
+            <PadlockIcon />
           </div>
         ) : null}
       </div>
@@ -128,34 +158,53 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
   )
 }
 
-function VisitBar({ visits, target }: { visits: number; target: number }) {
+// ── Challenge / visit bar ──────────────────────────────────────────────────
+function VisitBar({ visits, target, label }: { visits: number; target: number; label?: string }) {
   const pct = target > 0 ? Math.min(1, visits / target) : 0
+  const done = visits >= target
+  const title = label ?? ('Visit ' + target + 'x this month – ' + visits + '/' + target)
   return (
-    <div style={{ background: '#fff', borderRadius: 20, padding: '16px 18px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, color: INK }}>
-          {'Visit ' + target + 'x this month'}
+    <div style={{
+      background: '#fff', borderRadius: 20,
+      padding: '16px 18px',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.07)', marginBottom: 14,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, color: INK, flex: 1 }}>
+          {title}
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED }}>{visits + '/' + target}</span>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%',
-            background: visits >= target ? ACCENT : 'rgba(0,0,0,0.08)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, color: visits >= target ? ACCENT_TEXT : INK_MUTED, fontWeight: 700,
-            boxShadow: visits >= target ? '0 0 12px rgba(217,245,78,0.5)' : 'none',
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3,
+          background: done ? ACCENT : 'rgba(0,0,0,0.09)',
+          borderRadius: 100, padding: '4px 10px',
+          boxShadow: done ? '0 0 10px rgba(217,245,78,0.5)' : 'none',
+          flexShrink: 0, marginLeft: 10,
+        }}>
+          {done && (
+            <svg width="12" height="10" viewBox="0 0 12 10" fill="none"
+              stroke={ACCENT_TEXT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 5 4.5 8.5 11 1" />
+            </svg>
+          )}
+          <span style={{
+            fontFamily: FB, fontSize: 12, fontWeight: 700, lineHeight: 1,
+            color: done ? ACCENT_TEXT : INK_MUTED,
           }}>
-            ✓
-          </div>
+            {visits + '/' + target}
+          </span>
         </div>
       </div>
       <div style={{ height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: (pct * 100).toFixed(1) + '%', background: ACCENT, borderRadius: 4, transition: 'width 0.6s ease' }} />
+        <div style={{
+          height: '100%', width: (pct * 100).toFixed(1) + '%',
+          background: ACCENT, borderRadius: 4, transition: 'width 0.6s ease',
+        }} />
       </div>
     </div>
   )
 }
 
+// ── Main component ─────────────────────────────────────────────────────────
 export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }: {
   slug: string
   bizName: string
@@ -190,104 +239,126 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
   const rawTier = cx?.loyalty_tier ?? 'Member'
   const visitCount = cx?.visit_count ?? 0
   const recentTxns = (cx?.recent_txns ?? []) as EarnTxn[]
+  const challenges = (cx?.challenges ?? []) as Challenge[]
 
-  // Visits this month — count earn txns in current calendar month
+  // Next reward threshold → ring progress
+  const sortedRules = [...rewardRules].sort((a, b) => (a.threshold_value ?? 0) - (b.threshold_value ?? 0))
+  const nextThreshold = sortedRules.find(r => (r.threshold_value ?? 0) > pts)?.threshold_value ?? null
+  const ptsToNext = nextThreshold !== null ? Math.max(0, nextThreshold - pts) : 0
+  const ringPct = nextThreshold !== null ? Math.min(1, pts / nextThreshold) : 1
+
+  // Ring SVG math — r=110 in 260×260 viewBox
+  const R = 110
+  const circumference = 2 * Math.PI * R
+  const dashLen = (ringPct * circumference).toFixed(1)
+  const dashGap = ((1 - ringPct) * circumference).toFixed(1)
+  const ringDash = dashLen + ' ' + dashGap
+
+  const tierLabel = rawTier === 'gold' || rawTier === 'Gold' ? 'Gold'
+    : rawTier === 'silver' || rawTier === 'Silver' ? 'Silver'
+    : 'Member'
+
+  // Visit bar — prefer challenge data, fallback to inferred txn count
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const visitsThisMonth = recentTxns.filter(t =>
     t.type === 'earn' && new Date(t.created_at) >= monthStart
   ).length
   const visitTarget = 5
-
-  // Tier display: "Gold tier — N pts to next reward"
-  const sortedRules = [...rewardRules].sort((a, b) => (a.threshold_value ?? 0) - (b.threshold_value ?? 0))
-  const nextThreshold = sortedRules.find(r => (r.threshold_value ?? 0) > pts)?.threshold_value ?? null
-  const ptsToNext = nextThreshold !== null ? (nextThreshold - pts) : 0
-
-  const tierLabel = rawTier === 'gold' || rawTier === 'Gold' ? 'Gold' : rawTier === 'silver' || rawTier === 'Silver' ? 'Silver' : 'Member'
+  const activeChallenge = challenges.find(c => c.status === 'active') ?? null
 
   return (
-    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, paddingBottom: 100 }}>
+    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK }}>
       <style>{`
         body { background: #f3efe4 }
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
       `}</style>
 
-      {/* ── Header — lime wash matches ref ── */}
-      <div style={{ background: 'linear-gradient(to bottom, #f3efe4 0%, #f0f9d2 100%)', paddingTop: 56, paddingBottom: 0, textAlign: 'center' }}>
+      {/* ── HEADER — lime radial gradient, progress ring hero ── */}
+      <div style={{
+        background: 'radial-gradient(ellipse 90% 52% at 50% 80%, rgba(217,245,78,0.48) 0%, rgba(217,245,78,0.18) 45%, transparent 70%), ' + BG,
+        paddingTop: 56,
+        paddingBottom: 24,
+        textAlign: 'center',
+      }}>
+        {/* "Rewards" headline */}
         <h1 style={{
           fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 400,
-          color: INK, margin: '0 0 14px', letterSpacing: '-0.02em', lineHeight: 1,
+          color: INK, margin: '0 0 12px', letterSpacing: '-0.01em', lineHeight: 1.05,
         }}>
           Rewards
         </h1>
 
-        {/* Tier subtitle pill — overlaps top edge of points card (zIndex:3, marginBottom:-18) */}
-        {loaded && cx && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: -18, position: 'relative', zIndex: 3 }}>
+        {/* Tier pill — glass, shows when logged in */}
+        {loaded && cx ? (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
             <div style={{
               display: 'inline-flex', alignItems: 'center',
-              background: 'rgba(255,255,255,0.72)',
-              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              background: 'rgba(255,255,255,0.6)',
+              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
               borderRadius: 100, padding: '8px 20px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.09)',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+              border: '1px solid rgba(255,255,255,0.7)',
             }}>
-              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: ACCENT_TEXT }}>
+              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: ACCENT_TEXT, fontWeight: 600 }}>
                 {'↗ ' + tierLabel + ' tier' + (ptsToNext > 0 ? ' — ' + ptsToNext + ' pts to next reward' : ' — all rewards unlocked!')}
               </span>
             </div>
           </div>
+        ) : (
+          <div style={{ height: 40 }} />
         )}
-        {(!loaded || !cx) && <div style={{ height: 16 }} />}
 
-        {/* Points card — pale translucent lime, ring arc SVG, fully contained */}
-        <div style={{
-          margin: '0 auto 32px',
-          width: 'min(340px, calc(100% - 36px))',
-          height: 200,
-          borderRadius: 28,
-          background: 'rgba(217,245,78,0.12)',
-          position: 'relative',
-          zIndex: 1,
-          overflow: 'hidden',
-          boxShadow: '0 0 28px rgba(217,245,78,0.22), 0 2px 16px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {/* Ring arc — r=88, cx=170, cy=100 in 340×200 viewBox → 10px margin all sides, fully within */}
-          <svg
-            viewBox="0 0 340 200"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-            aria-hidden="true"
-          >
-            <circle
-              cx="170"
-              cy="100"
-              r="88"
-              fill="none"
-              stroke={ACCENT}
-              strokeWidth="4"
-              strokeOpacity="0.6"
-              strokeLinecap="round"
-              strokeDasharray="453 100"
-              strokeDashoffset="503"
-              transform="rotate(-90 170 100)"
-            />
-          </svg>
-          {/* Points — "{N} pts" single 52px bold line */}
-          <p style={{
-            fontFamily: FB, fontWeight: 700, fontSize: 52, color: INK,
-            margin: 0, lineHeight: 1, letterSpacing: '-0.03em',
-            position: 'relative', zIndex: 1,
-          }}>
-            {pts.toLocaleString() + ' pts'}
-          </p>
+        {/* Progress ring + pts text */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: 260, height: 260 }}>
+            <svg
+              width="260" height="260" viewBox="0 0 260 260"
+              style={{ position: 'absolute', inset: 0, display: 'block' }}
+              aria-hidden="true"
+            >
+              {/* Track */}
+              <circle
+                cx="130" cy="130" r={R}
+                fill="none"
+                stroke="rgba(0,0,0,0.10)"
+                strokeWidth="9"
+              />
+              {/* Progress arc — from 12 o'clock clockwise */}
+              <circle
+                cx="130" cy="130" r={R}
+                fill="none"
+                stroke={ACCENT}
+                strokeWidth="9"
+                strokeLinecap="round"
+                strokeDasharray={ringDash}
+                transform="rotate(-90 130 130)"
+              />
+            </svg>
+            {/* Centered pts label */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{
+                fontFamily: FB, fontSize: 52, fontWeight: 800,
+                color: INK, letterSpacing: '-0.03em', lineHeight: 1,
+              }}>
+                {pts.toLocaleString() + ' pts'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ── Body — cream ── */}
-      <div style={{ padding: '4px 18px 0' }}>
-
+      {/* ── BODY — reward cards + challenge bar ── */}
+      <div style={{
+        paddingTop: 8,
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingBottom: 'calc(80px + env(safe-area-inset-bottom) + 24px)',
+      }}>
         {/* Not logged in prompt */}
         {loaded && !cx && (
           <div style={{ marginBottom: 20, padding: '20px', background: '#fff', borderRadius: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', textAlign: 'center' }}>
@@ -300,56 +371,33 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
           </div>
         )}
 
-        {/* Prize shelf */}
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-            <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 28, fontWeight: 600, margin: 0, color: INK }}>
-              Prize shelf
-            </h2>
-            <span style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED }}>
-              {rewardRules.length} {rewardRules.length === 1 ? 'reward' : 'rewards'}
-            </span>
+        {/* Reward cards */}
+        {rewardRules.length > 0 ? (
+          rewardRules.map(r => (
+            <RewardCard key={r.id} rule={r} pts={pts} slug={slug} />
+          ))
+        ) : (
+          <div style={{ textAlign: 'center', padding: '36px 0', background: '#fff', borderRadius: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🎁</div>
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 8px', color: INK }}>
+              Rewards coming soon
+            </p>
+            <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>
+              {bizName + ' is setting up their loyalty catalog'}
+            </p>
           </div>
-
-          {rewardRules.length > 0 ? (
-            <div>
-              {rewardRules.map(r => (
-                <RewardCard key={r.id} rule={r} pts={pts} slug={slug} />
-              ))}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '36px 0', background: '#fff', borderRadius: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: 14 }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>🎁</div>
-              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 8px', color: INK }}>
-                Rewards coming soon
-              </p>
-              <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>
-                {bizName} is setting up their loyalty catalog
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Visit progress */}
-        {loaded && (cx || visitCount > 0) && (
-          <VisitBar visits={cx ? visitsThisMonth : 0} target={visitTarget} />
         )}
 
-        {/* Earn CTA — dark accent card */}
-        <div style={{ background: CARD_DARK, borderRadius: 20, padding: '20px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-          <div style={{ fontSize: 32 }}>☕</div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: '#fff', margin: '0 0 4px', fontWeight: 600 }}>
-              Earn more points
-            </p>
-            <p style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.55)', margin: 0 }}>
-              Every purchase earns loyalty points
-            </p>
-          </div>
-          <a href={'/menu/' + slug} style={{ flexShrink: 0, background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '9px 16px', fontFamily: FB, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
-            Order
-          </a>
-        </div>
+        {/* Challenge bar — challenges data first, fallback to inferred visit count */}
+        {activeChallenge ? (
+          <VisitBar
+            visits={activeChallenge.progress}
+            target={activeChallenge.target_count}
+            label={activeChallenge.title}
+          />
+        ) : loaded && (cx || visitCount > 0) ? (
+          <VisitBar visits={cx ? visitsThisMonth : 0} target={visitTarget} />
+        ) : null}
       </div>
 
       <CxTabBar slug={slug} active="rewards" />
