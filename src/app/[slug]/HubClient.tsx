@@ -8,7 +8,7 @@ const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
 const INK_MUTED = '#6b7280'
-const CARD_DARK = '#111111'
+const CARD_DARK = '#14130f'
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 
@@ -198,15 +198,17 @@ function UsualStrip({ usual, slug }: { usual: UsualProduct; slug: string }) {
           {!usual.image_url && '☕'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK_MUTED, margin: '0 0 2px', fontWeight: 500 }}>
+          <p style={{ fontFamily: FB, fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 1px', lineHeight: 1.2 }}>
             Your usual,
           </p>
-          <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {usual.name}
+          <p style={{ fontFamily: FB, fontSize: 16, fontWeight: 700, color: INK, margin: 0, lineHeight: 1.2 }}>
+            ready in 4 min?
           </p>
-          <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
-            ready in ~4 min?
-          </p>
+          {usual.name && (
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 12, color: INK_MUTED, margin: '4px 0 0' }}>
+              {usual.name}
+            </p>
+          )}
         </div>
         <a
           href={'/menu/' + slug}
@@ -258,20 +260,20 @@ function ProductScroll({ products, slug }: { products: HubBusiness['products']; 
           <a
             key={p.id}
             href={'/menu/' + slug}
-            style={{ flexShrink: 0, width: 120, borderRadius: 16, background: '#fff', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textDecoration: 'none', color: INK, display: 'block' }}
+            style={{ flexShrink: 0, width: 140, borderRadius: 16, background: '#fff', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textDecoration: 'none', color: INK, display: 'block' }}
           >
             <div style={{
-              width: 120, height: 96,
+              width: 140, height: 120,
               background: p.image_url ? ('url(' + p.image_url + ') center/cover no-repeat #efefef') : '#efefef',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#ccc',
             }}>
               {!p.image_url && '☕'}
             </div>
-            <div style={{ padding: '8px 10px 10px' }}>
-              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, fontWeight: 600, margin: '0 0 2px', color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ padding: '9px 10px 11px' }}>
+              <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, fontWeight: 600, margin: '0 0 3px', color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {p.name}
               </p>
-              <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0 }}>
+              <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>
                 {'$' + (Number(p.price) || 0).toFixed(2)}
               </p>
             </div>
@@ -422,10 +424,10 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         .-webkit-line-clamp { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden }
       `}</style>
 
-      {/* ── HERO ── 460px fixed, rounded bottom, above cream sheet ─── */}
-      <div style={{ position: 'relative', height: 460, zIndex: 2, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
+      {/* ── HERO ── 480px fixed, rounded bottom, above cream sheet ─── */}
+      <div style={{ position: 'relative', height: 480, zIndex: 2, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
 
-        {/* bg + gradient in overflow:hidden clip so rounded corners are clean */}
+        {/* bg + gradient clipped to rounded corners */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, background: heroBg }}>
           <div style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -486,16 +488,16 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           </div>
         </div>
 
-        {/* ── Greeting — fixed at top 300 ─────────────────────────── */}
+        {/* ── Greeting — lower third of hero ─────────────────────── */}
         {greeting && (
-          <div style={{ position: 'absolute', top: 300, left: 0, right: 0, padding: '0 20px' }}>
+          <div style={{ position: 'absolute', top: 316, left: 0, right: 0, padding: '0 20px' }}>
             <p style={{
               fontFamily: FD, fontStyle: 'italic',
-              fontSize: 34,
-              color: '#fff', margin: 0, fontWeight: 400, lineHeight: 1.15,
-              textShadow: '0 2px 16px rgba(0,0,0,0.5)',
+              fontSize: 46,
+              color: '#fff', margin: 0, fontWeight: 400, lineHeight: 1.1,
+              textShadow: '0 2px 20px rgba(0,0,0,0.55)',
             }}>
-              {greeting}{firstName ? ',' : ''}
+              {greeting + (firstName ? ',' : '')}
               {firstName && <span style={{ display: 'block' }}>{firstName}</span>}
             </p>
           </div>
@@ -506,32 +508,33 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
           {phase === 'ready' ? (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              backdropFilter: 'blur(12px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(12px) saturate(180%)',
-              background: 'rgba(255,255,255,0.18)',
-              border: '1px solid rgba(255,255,255,0.25)',
-              borderRadius: 100, padding: '8px 16px',
-              boxShadow: '0 0 16px rgba(217,245,78,0.25)',
+              backdropFilter: 'blur(16px) saturate(200%)',
+              WebkitBackdropFilter: 'blur(16px) saturate(200%)',
+              background: 'rgba(255,255,255,0.28)',
+              border: '1px solid rgba(255,255,255,0.35)',
+              borderRadius: 100, padding: '9px 20px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
               transform: 'translateY(50%)',
             }}>
-              <span style={{ fontFamily: FB, fontSize: 13, color: '#fff', fontWeight: 700 }}>{pts} pts</span>
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>·</span>
-              <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{tier}</span>
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>·</span>
-              <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{'$' + walletBal}</span>
+              <span style={{ fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 700 }}>{pts + ' pts'}</span>
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>·</span>
+              <span style={{ fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600 }}>{tier}</span>
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>·</span>
+              <span style={{ fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600 }}>{'$' + walletBal}</span>
             </div>
           ) : phase === 'guest' ? (
             <button
               onClick={() => setShowPhone(true)}
               style={{
-                background: 'rgba(255,255,255,0.16)',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-                border: '1px solid rgba(255,255,255,0.26)',
-                borderRadius: 100, padding: '8px 16px',
-                fontFamily: FB, fontSize: 13, color: '#fff', fontWeight: 500,
+                background: 'rgba(255,255,255,0.28)',
+                backdropFilter: 'blur(16px) saturate(200%)',
+                WebkitBackdropFilter: 'blur(16px) saturate(200%)',
+                border: '1px solid rgba(255,255,255,0.35)',
+                borderRadius: 100, padding: '9px 20px',
+                fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600,
                 cursor: 'pointer',
                 transform: 'translateY(50%)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
               }}
             >
               Check your rewards
@@ -542,13 +545,11 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
         </div>
       </div>
 
-      {/* ── Content sheet — starts just below hero, behind straddling pill ── */}
+      {/* ── Content sheet — cream sheet overlaps hero, pill straddles seam ── */}
       <div style={{ borderRadius: '24px 24px 0 0', background: BG, marginTop: -28, position: 'relative', zIndex: 1, paddingBottom: 100 }}>
 
-        {/* Pull-to-visible handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4 }}>
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(0,0,0,0.12)' }} />
-        </div>
+        {/* Spacer: clears the straddling pill (pill half ~18px + gap + sheet overlap) */}
+        <div style={{ height: 52 }} />
 
         {/* Phone entry panel */}
         {showPhone && (
