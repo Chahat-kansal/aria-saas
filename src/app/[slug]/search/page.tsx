@@ -6,14 +6,12 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { SearchClient } from './SearchClient'
 
-type Product = {
+export type SearchProduct = {
   id: string
   name: string
   description: string | null
   price: number
   image_url: string | null
-  category: string | null
-  is_available: boolean | null
 }
 
 export default async function SearchPage({ params }: { params: { slug: string } }) {
@@ -23,18 +21,19 @@ export default async function SearchPage({ params }: { params: { slug: string } 
   const bid = await resolveBusinessId(supabaseAdmin, slug)
   if (!bid) notFound()
 
-  const { data: products } = await supabaseAdmin
+  const { data: products, error } = await supabaseAdmin
     .from('pos_products')
-    .select('id, name, description, price, image_url, category, is_available')
+    .select('id, name, description, price, image_url')
     .eq('business_id', bid)
-    .order('category', { ascending: true })
     .order('name', { ascending: true })
     .limit(500)
+
+  if (error) console.error('[search] pos_products query error:', error.message)
 
   return (
     <SearchClient
       slug={slug}
-      products={(products ?? []) as Product[]}
+      products={(products ?? []) as SearchProduct[]}
     />
   )
 }
