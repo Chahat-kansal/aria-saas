@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#14130f'
@@ -28,80 +28,121 @@ export interface CxProduct {
   sort_order: number | null
 }
 
+// ── Header icons — lime outline ────────────────────────────────────────────
 function IconSearch() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={ACCENT} strokeWidth="1.5" strokeLinecap="round" style={{ display: 'block', flexShrink: 0 }}>
-      <circle cx="7" cy="7" r="4.5"/>
-      <path d="M10.5 10.5L14 14"/>
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+      stroke={ACCENT} strokeWidth="1.6" strokeLinecap="round"
+      style={{ display: 'block', flexShrink: 0 }}>
+      <circle cx="8" cy="8" r="5" />
+      <path d="M12 12L16 16" />
     </svg>
   )
 }
 
 function IconScan() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={ACCENT} strokeWidth="1.5" strokeLinecap="round" style={{ display: 'block', flexShrink: 0 }}>
-      <rect x="2" y="2" width="4" height="4" rx="0.5"/>
-      <rect x="10" y="2" width="4" height="4" rx="0.5"/>
-      <rect x="2" y="10" width="4" height="4" rx="0.5"/>
-      <line x1="10" y1="10" x2="14" y2="10"/>
-      <line x1="14" y1="10" x2="14" y2="14"/>
-      <line x1="10" y1="13" x2="12" y2="13"/>
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+      stroke={ACCENT} strokeWidth="1.6" strokeLinecap="round"
+      style={{ display: 'block', flexShrink: 0 }}>
+      <rect x="2" y="2" width="5" height="5" rx="1" />
+      <rect x="11" y="2" width="5" height="5" rx="1" />
+      <rect x="2" y="11" width="5" height="5" rx="1" />
+      <line x1="11" y1="11" x2="16" y2="11" />
+      <line x1="16" y1="11" x2="16" y2="16" />
+      <line x1="11" y1="14.5" x2="13.5" y2="14.5" />
     </svg>
   )
 }
 
-function ProductRow({ product, slug }: { product: CxProduct; slug: string }) {
-  const orderUrl = '/menu/' + slug + (product.id ? '?item=' + product.id : '')
+// ── Product list card ───────────────────────────────────────────────────────
+function ProductRow({ product, slug, onAddCart }: {
+  product: CxProduct
+  slug: string
+  onAddCart: (id: string) => void
+}) {
+  const orderUrl = '/menu/' + slug + '?item=' + product.id
+
   return (
-    <a
-      href={orderUrl}
-      style={{
-        display: 'flex', gap: 14, alignItems: 'center',
-        padding: '12px 14px', borderRadius: 18,
-        background: CARD,
-        textDecoration: 'none', marginBottom: 10,
-      }}
-    >
-      <div style={{
-        width: 76, height: 76, borderRadius: 14, flexShrink: 0, overflow: 'hidden',
-        background: product.image_url
-          ? ('url(' + product.image_url + ') center/cover no-repeat #222')
-          : '#222',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22, color: 'rgba(255,255,255,0.3)',
-      }}>
+    <div style={{
+      display: 'flex', gap: 14,
+      padding: 14, borderRadius: 20,
+      background: CARD, marginBottom: 10,
+    }}>
+      {/* Photo — taps to ordering page */}
+      <a
+        href={orderUrl}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 88, height: 88, borderRadius: 14, flexShrink: 0, overflow: 'hidden',
+          background: product.image_url
+            ? ('url(' + product.image_url + ') center/cover no-repeat #222')
+            : '#222',
+          fontSize: 22, color: 'rgba(255,255,255,0.3)',
+          textDecoration: 'none',
+        }}
+      >
         {!product.image_url && '☕'}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, margin: '0 0 3px', color: INK, lineHeight: 1.2 }}>
-          {product.name}
-        </p>
-        {product.description && (
-          <p style={{
-            fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: '0 0 6px', lineHeight: 1.4,
-            overflow: 'hidden', display: '-webkit-box',
-            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-          }}>
-            {product.description}
-          </p>
-        )}
-        <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK, margin: 0 }}>
-          {'$' + (Number(product.price) || 0).toFixed(2)}
-        </p>
-      </div>
+      </a>
+
+      {/* Text column — name, desc, then price + add row */}
       <div style={{
-        flexShrink: 0, width: 36, height: 36, borderRadius: 12,
-        background: ACCENT, color: ACCENT_TEXT,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22, fontWeight: 700, lineHeight: 1,
-        boxShadow: '0 0 20px 4px rgba(217,245,78,0.55), 0 2px 10px rgba(217,245,78,0.35), inset 0 1px 0 rgba(255,255,255,0.3)',
+        flex: 1, minWidth: 0,
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'space-between',
       }}>
-        +
+        <div>
+          <p style={{
+            fontFamily: FB, fontSize: 15, fontWeight: 700,
+            margin: '0 0 4px', color: INK, lineHeight: 1.2,
+          }}>
+            {product.name}
+          </p>
+          {product.description && (
+            <p style={{
+              fontFamily: FB, fontSize: 12, color: INK_MUTED,
+              margin: 0, lineHeight: 1.4,
+              overflow: 'hidden', display: '-webkit-box',
+              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            }}>
+              {product.description}
+            </p>
+          )}
+        </div>
+
+        {/* Price + lime "+" add button */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', marginTop: 10,
+        }}>
+          <p style={{ fontFamily: FB, fontSize: 16, fontWeight: 700, color: INK, margin: 0 }}>
+            {'$' + (Number(product.price) || 0).toFixed(2)}
+          </p>
+          <button
+            onClick={() => {
+              onAddCart(product.id)
+              if (typeof window !== 'undefined') {
+                window.location.href = orderUrl
+              }
+            }}
+            style={{
+              width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+              background: ACCENT, color: ACCENT_TEXT,
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 24, fontWeight: 700, lineHeight: 1,
+              boxShadow: '0 0 16px 3px rgba(217,245,78,0.5), 0 2px 8px rgba(217,245,78,0.3)',
+            }}
+          >
+            +
+          </button>
+        </div>
       </div>
-    </a>
+    </div>
   )
 }
 
+// ── Main component ─────────────────────────────────────────────────────────
 export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
   slug: string
   bizName: string
@@ -112,6 +153,24 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
   const [search, setSearch] = useState('')
   const [activeCat, setActiveCat] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
+
+  // Persist cart count across navigation
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('aria_cart_' + slug)
+      if (saved) setCartCount(parseInt(saved, 10) || 0)
+    } catch { /* no localStorage */ }
+  }, [slug])
+
+  const addToCart = (productId: string) => {
+    void productId
+    setCartCount(c => {
+      const n = c + 1
+      try { localStorage.setItem('aria_cart_' + slug, String(n)) } catch { /* ok */ }
+      return n
+    })
+  }
 
   const featured = products.find(p => p.featured)
   const filteredProducts = products.filter(p => {
@@ -132,16 +191,16 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
         .cx-search-input::placeholder { color: rgba(217,245,78,0.5) }
       `}</style>
 
-      {/* ── Sticky header — dark ── */}
+      {/* ── Sticky header — dark surface ── */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 50,
         background: BG,
         paddingTop: 52, paddingBottom: 14, paddingLeft: 18, paddingRight: 18,
         borderBottom: '1px solid rgba(255,255,255,0.07)',
       }}>
-        {/* Logo + Menu heading + search/scan pills */}
+        {/* Logo row + "Menu" title + search/scan pill */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          {/* Logo circle + biz name — row */}
+          {/* Logo circle + biz name */}
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <div style={{
               width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
@@ -153,17 +212,24 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
             }}>
               {!logoUrl && bizName[0]}
             </div>
-            <p style={{ fontFamily: FB, fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.6)', margin: 0, letterSpacing: '0.04em', maxWidth: 58, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{
+              fontFamily: FB, fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.6)',
+              margin: 0, letterSpacing: '0.04em',
+              maxWidth: 58, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
               {bizName}
             </p>
           </div>
 
-          {/* Menu heading */}
-          <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 42, fontWeight: 600, margin: 0, color: INK, flex: 1, letterSpacing: '-0.01em' }}>
+          {/* "Menu" Cormorant italic */}
+          <h1 style={{
+            fontFamily: FD, fontStyle: 'italic', fontSize: 42, fontWeight: 600,
+            margin: 0, color: INK, flex: 1, letterSpacing: '-0.01em',
+          }}>
             Menu
           </h1>
 
-          {/* Combined search + scan pill */}
+          {/* Search + Scan pill — lime outline */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 0,
             border: '1.5px solid ' + ACCENT,
@@ -173,7 +239,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
             overflow: 'hidden',
           }}>
             <div
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 13px', cursor: 'pointer' }}
               onClick={() => setSearchOpen(s => !s)}
             >
               <IconSearch />
@@ -203,13 +269,13 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
               )}
             </div>
             <div style={{ width: 1, height: 18, background: 'rgba(217,245,78,0.35)', flexShrink: 0 }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '7px 12px', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 13px', cursor: 'pointer' }}>
               <IconScan />
             </div>
           </div>
         </div>
 
-        {/* Category tabs — active = white text + lime underline */}
+        {/* Category tabs — active = white + lime underline */}
         {categories.length > 0 && (
           <div className="cx-cat-scroll" style={{ display: 'flex', gap: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
             <button
@@ -245,44 +311,58 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
         )}
       </div>
 
-      {/* ── Featured hero card ── */}
+      {/* ── Featured hero card — tall image + name/price overlay + desc below ── */}
       {showFeatured && featured && (
-        <a
-          href={'/menu/' + slug}
-          style={{
-            display: 'block', margin: '16px 18px 0', borderRadius: 20,
-            overflow: 'hidden', textDecoration: 'none', position: 'relative',
-            height: 200, boxShadow: '0 0 24px 2px rgba(217,245,78,0.35), 0 4px 24px rgba(0,0,0,0.4)',
-          }}
-        >
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: featured.image_url
-              ? ('url(' + featured.image_url + ') center/cover no-repeat #1a1814')
-              : '#1a1814',
-          }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)' }} />
-          <div style={{ position: 'absolute', bottom: 16, left: 18, right: 18 }}>
-            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 30, color: '#fff', margin: '0 0 4px', fontWeight: 600, lineHeight: 1.1 }}>
-              {featured.name}
-            </p>
-            <p style={{ fontFamily: FB, fontSize: 18, fontWeight: 700, color: '#fff', margin: '0 0 5px' }}>
-              {'$' + (Number(featured.price) || 0).toFixed(2)}
-            </p>
-            {featured.description && (
-              <p style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.72)', margin: 0, lineHeight: 1.4 }}>
-                {featured.description.slice(0, 90)}{featured.description.length > 90 ? '…' : ''}
+        <>
+          <a
+            href={'/menu/' + slug}
+            style={{
+              display: 'block', margin: '16px 18px 0', borderRadius: 20,
+              overflow: 'hidden', textDecoration: 'none', position: 'relative',
+              height: 240,
+              boxShadow: '0 0 24px 2px rgba(217,245,78,0.35), 0 4px 24px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: featured.image_url
+                ? ('url(' + featured.image_url + ') center/cover no-repeat #1a1814')
+                : '#1a1814',
+            }} />
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.3) 55%, transparent 100%)',
+            }} />
+            <div style={{ position: 'absolute', bottom: 18, left: 18 }}>
+              <p style={{
+                fontFamily: FD, fontStyle: 'italic', fontSize: 34,
+                color: '#fff', margin: '0 0 4px', fontWeight: 600, lineHeight: 1.1,
+              }}>
+                {featured.name}
               </p>
-            )}
-          </div>
-        </a>
+              <p style={{ fontFamily: FB, fontSize: 18, fontWeight: 700, color: '#fff', margin: 0 }}>
+                {'$' + (Number(featured.price) || 0).toFixed(2)}
+              </p>
+            </div>
+          </a>
+
+          {/* Description on dark surface below the card */}
+          {featured.description && (
+            <p style={{
+              fontFamily: FB, fontSize: 13, color: INK_MUTED,
+              margin: '12px 18px 0', lineHeight: 1.5, padding: 0,
+            }}>
+              {featured.description}
+            </p>
+          )}
+        </>
       )}
 
       {/* ── Product list ── */}
       <div style={{ padding: '14px 18px 0' }}>
         {filteredProducts.length > 0 ? (
           filteredProducts.map(p => (
-            <ProductRow key={p.id} product={p} slug={slug} />
+            <ProductRow key={p.id} product={p} slug={slug} onAddCart={addToCart} />
           ))
         ) : (
           <div style={{ textAlign: 'center', padding: '48px 0', color: INK_MUTED }}>
@@ -293,7 +373,7 @@ export function CxMenuClient({ slug, bizName, logoUrl, categories, products }: {
         )}
       </div>
 
-      <CxTabBar slug={slug} active="menu" dark />
+      <CxTabBar slug={slug} active="menu" dark cartCount={cartCount} />
     </div>
   )
 }
