@@ -100,9 +100,6 @@ function RewardCard({ rule, pts, slug }: { rule: RewardRule; pts: number; slug: 
           : '#e8e4dc',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {!rule.image_url && (
-          <span style={{ fontSize: 36 }}>☕</span>
-        )}
       </div>
 
       {/* Text content — right 60% */}
@@ -237,8 +234,6 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
 
   const pts = cx?.points_balance ?? 0
   const rawTier = cx?.loyalty_tier ?? 'Member'
-  const visitCount = cx?.visit_count ?? 0
-  const recentTxns = (cx?.recent_txns ?? []) as EarnTxn[]
   const challenges = (cx?.challenges ?? []) as Challenge[]
 
   // Next reward threshold → ring progress
@@ -258,13 +253,6 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
     : rawTier === 'silver' || rawTier === 'Silver' ? 'Silver'
     : 'Member'
 
-  // Visit bar — prefer challenge data, fallback to inferred txn count
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const visitsThisMonth = recentTxns.filter(t =>
-    t.type === 'earn' && new Date(t.created_at) >= monthStart
-  ).length
-  const visitTarget = 5
   const activeChallenge = challenges.find(c => c.status === 'active') ?? null
 
   return (
@@ -323,17 +311,18 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
                 cx="130" cy="130" r={R}
                 fill="none"
                 stroke="rgba(0,0,0,0.10)"
-                strokeWidth="9"
+                strokeWidth="6"
               />
               {/* Progress arc — from 12 o'clock clockwise */}
               <circle
                 cx="130" cy="130" r={R}
                 fill="none"
                 stroke={ACCENT}
-                strokeWidth="9"
+                strokeWidth="6"
                 strokeLinecap="round"
                 strokeDasharray={ringDash}
                 transform="rotate(-90 130 130)"
+                style={{ filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.85))' }}
               />
             </svg>
             {/* Centered pts label */}
@@ -395,8 +384,6 @@ export function RewardsClient({ slug, bizName, logoUrl: _logoUrl, rewardRules }:
             target={activeChallenge.target_count}
             label={activeChallenge.title}
           />
-        ) : loaded && (cx || visitCount > 0) ? (
-          <VisitBar visits={cx ? visitsThisMonth : 0} target={visitTarget} />
         ) : null}
       </div>
 
