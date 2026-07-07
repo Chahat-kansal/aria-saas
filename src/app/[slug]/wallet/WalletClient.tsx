@@ -39,7 +39,7 @@ interface CxData {
   preload_txns?: PreloadTxn[]
 }
 
-// ── Barcode — black bars on white (sits on card's white magnetic stripe) ──────
+// ── Barcode visual — variable-width black bars on white strip ─────────────────
 
 function BarcodeVisual({ code }: { code: string }) {
   const hex = (code.replace(/-/g, '') + code.replace(/-/g, '')).slice(0, 52)
@@ -56,7 +56,23 @@ function BarcodeVisual({ code }: { code: string }) {
   )
 }
 
-// ── Apple / Google logos ──────────────────────────────────────────────────────
+// ── Lime EMV chip — matches ref (lime brand chip, not gold) ───────────────────
+
+function ChipSVG() {
+  return (
+    <svg width="40" height="32" viewBox="0 0 40 32" fill="none" style={{ display: 'block' }}>
+      <rect x="0.5" y="0.5" width="39" height="31" rx="3.5" fill="#182400" stroke={ACCENT} strokeWidth="1"/>
+      <line x1="0.5" y1="10.5" x2="39.5" y2="10.5" stroke={ACCENT} strokeWidth="0.8"/>
+      <line x1="0.5" y1="21.5" x2="39.5" y2="21.5" stroke={ACCENT} strokeWidth="0.8"/>
+      <line x1="13.5" y1="0.5" x2="13.5" y2="31.5" stroke={ACCENT} strokeWidth="0.8"/>
+      <line x1="26.5" y1="0.5" x2="26.5" y2="31.5" stroke={ACCENT} strokeWidth="0.8"/>
+      <rect x="13.5" y="10.5" width="13" height="11" rx="1" fill={ACCENT} fillOpacity="0.18"/>
+      <rect x="17" y="13.5" width="6" height="5" rx="0.5" fill={ACCENT} fillOpacity="0.55"/>
+    </svg>
+  )
+}
+
+// ── Apple / Google wallet logos ───────────────────────────────────────────────
 
 function IconApple() {
   return (
@@ -112,7 +128,7 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── PNG loyalty card — loyalty-card-bg.png (flat front-on) + text overlays ───
+// ── Flat CSS loyalty card — #14130f, gold border, lime chip, white strip ──────
 
 function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
   bizName: string
@@ -125,74 +141,76 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
     : tier === 'silver' || tier === 'Silver' ? 'Silver' : 'Member'
 
   return (
-    <div style={{ padding: '0 4px' }}>
+    <div style={{ padding: '0 8px' }}>
       {/* -8° tilt matches ref */}
       <div style={{ transform: 'rotate(-8deg)', transformOrigin: 'center center' }}>
-        {/* Container crops the ~7% white padding from the PNG via overflow:hidden */}
         <div style={{
-          position: 'relative',
+          background: '#14130f',
           borderRadius: 22,
+          border: '1.5px solid rgba(200,162,48,0.6)',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.65), 0 8px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
+          position: 'relative',
           overflow: 'hidden',
-          aspectRatio: '1.586',
-          boxShadow: '0 28px 64px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.35)',
           userSelect: 'none',
         }}>
-          {/* Card PNG — backgroundSize 114% auto crops ~7% white on each horizontal side;
-              backgroundPosition center splits the vertical overflow equally, also cropping
-              the ~8% top/bottom white padding */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            backgroundImage: 'url(/menu/_lib/cx/loyalty-card-bg.png)',
-            backgroundSize: '114% auto',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }} />
 
-          {/* Business name — top left, before chip */}
-          <div style={{ position: 'absolute', top: '14%', left: '6%', right: '36%', zIndex: 1 }}>
+          {/* Lime chip — absolutely positioned at mid-right of card face */}
+          <div style={{ position: 'absolute', top: '38%', right: 20, zIndex: 1 }}>
+            <ChipSVG />
+          </div>
+
+          {/* Text area — right padding leaves room for chip */}
+          <div style={{ padding: '24px 80px 20px 22px' }}>
+
+            {/* Business name — Cormorant italic, warm white */}
             <span style={{
-              fontFamily: FD, fontStyle: 'italic',
-              fontSize: 22, fontWeight: 500, color: '#fff',
-              textShadow: '0 1px 6px rgba(0,0,0,0.5)',
-              display: 'block', lineHeight: 1.1,
+              display: 'block',
+              fontFamily: FD, fontStyle: 'italic', fontSize: 26, fontWeight: 500,
+              color: 'rgba(255,248,232,0.97)', lineHeight: 1.1,
+              textShadow: '0 1px 8px rgba(0,0,0,0.45)',
+              marginBottom: 8,
             }}>
               {bizName}
             </span>
-          </div>
 
-          {/* Customer name */}
-          <div style={{ position: 'absolute', top: '33%', left: '6%', zIndex: 1 }}>
-            <span style={{ fontFamily: FB, fontSize: 15, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>
+            {/* Customer name */}
+            <span style={{
+              display: 'block',
+              fontFamily: FB, fontSize: 16, fontWeight: 500,
+              color: 'rgba(255,255,255,0.88)',
+              marginBottom: 16,
+            }}>
               {name ?? 'Member'}
             </span>
-          </div>
 
-          {/* Balance + tier — above the white strip */}
-          <div style={{ position: 'absolute', top: '48%', left: '6%', zIndex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'nowrap' }}>
-              <span style={{ fontFamily: FB, fontSize: 26, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+            {/* Balance + tier — "$X.XX balance · Gold" */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'nowrap' }}>
+              <span style={{ fontFamily: FB, fontSize: 30, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
                 {'$' + walletBal.toFixed(2)}
               </span>
-              <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+              <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
                 balance ·
               </span>
-              <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 700, color: ACCENT }}>
+              <span style={{
+                fontFamily: FB, fontSize: 14, fontWeight: 700, color: ACCENT,
+                textDecoration: 'underline', textDecorationColor: ACCENT, textUnderlineOffset: '3px',
+              }}>
                 {tierLabel}
               </span>
             </div>
           </div>
 
-          {/* Barcode inside the PNG's white strip */}
-          {identityId && (
-            <div style={{
-              position: 'absolute',
-              top: '63%', left: '5%', right: '5%', height: '13%',
-              display: 'flex', alignItems: 'center',
-              zIndex: 1,
-            }}>
-              <BarcodeVisual code={identityId} />
-            </div>
-          )}
+          {/* White barcode strip — full width, flush to card bottom */}
+          <div style={{
+            background: '#fff', height: 60,
+            display: 'flex', alignItems: 'center',
+            padding: '0 18px', overflow: 'hidden',
+          }}>
+            {identityId
+              ? <BarcodeVisual code={identityId} />
+              : <div style={{ flex: 1, height: '55%', background: 'rgba(0,0,0,0.08)', borderRadius: 2 }} />
+            }
+          </div>
         </div>
       </div>
     </div>
@@ -219,26 +237,27 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 13,
-      padding: '12px 0',
-      borderBottom: '1px solid rgba(217,245,78,0.2)',
+      padding: '13px 0',
+      borderBottom: '1px solid rgba(217,245,78,0.22)',
     }}>
-      {/* Icon */}
+      {/* Square-rounded lime icon */}
       <div style={{
-        width: 42, height: 42, borderRadius: 13, flexShrink: 0,
+        width: 44, height: 44, borderRadius: 14, flexShrink: 0,
         background: iconBg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: kind !== 'redeem' ? ('0 0 12px rgba(217,245,78,0.35)') : 'none',
       }}>
         {kind === 'earn' && <IconCup color={iconColor} />}
         {kind === 'redeem' && <IconGift color={iconColor} />}
         {kind === 'preload' && <IconDollar color={iconColor} />}
       </div>
 
-      {/* Label */}
+      {/* Label + subtitle */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, margin: '0 0 1px', color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, margin: '0 0 2px', color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {label}
           {itemName && (
-            <span style={{ fontFamily: FD, fontStyle: 'italic', fontWeight: 400, marginLeft: 5 }}>
+            <span style={{ fontFamily: FD, fontStyle: 'italic', fontWeight: 400, marginLeft: 4 }}>
               {' · ' + itemName}
             </span>
           )}
@@ -251,12 +270,12 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
       {/* Amount */}
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         {pts !== null && (
-          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, color: pts > 0 ? '#059669' : '#dc2626', margin: 0 }}>
+          <p style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: pts > 0 ? '#059669' : '#dc2626', margin: 0 }}>
             {pts > 0 ? '+' : ''}{pts} pts
           </p>
         )}
         {amount !== null && (
-          <p style={{ fontFamily: FB, fontSize: 13, fontWeight: 600, color: amount > 0 ? '#059669' : INK_MUTED, margin: 0 }}>
+          <p style={{ fontFamily: FB, fontSize: 12, fontWeight: 600, color: amount > 0 ? '#059669' : INK_MUTED, margin: 0 }}>
             {amount > 0 ? '+' : ''}{'$' + Math.abs(amount).toFixed(2)}
           </p>
         )}
@@ -343,16 +362,18 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Blurred café photo strip — matches wallet ref ── */}
+      {/* ── Café photo strip — rounded bottom corners, card overlaps it ── */}
       <div style={{
-        position: 'relative', height: 200,
+        position: 'relative', height: 240,
+        borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+        overflow: 'hidden',
         background: 'url(/menu/_lib/cx/wallet-bg.png) center / cover no-repeat, linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
       }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.58) 100%)' }} />
       </div>
 
-      {/* ── Loyalty card — overlaps bottom of photo strip ── */}
-      <div style={{ marginTop: -80, paddingLeft: 18, paddingRight: 18, position: 'relative', zIndex: 2 }}>
+      {/* ── Card — overlaps lower portion of photo strip ── */}
+      <div style={{ marginTop: -110, paddingLeft: 18, paddingRight: 18, position: 'relative', zIndex: 2 }}>
         {!loaded ? (
           <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 28, height: 28, border: '2.5px solid rgba(0,0,0,0.1)', borderTopColor: ACCENT_TEXT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
@@ -379,41 +400,43 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
 
       {/* ── Wallet actions ── */}
       {isLoggedIn && (
-        <div style={{ padding: '20px 18px 0' }}>
+        <div style={{ padding: '22px 18px 0' }}>
 
-          {/* Apple + Google Wallet — black pill buttons */}
+          {/* Apple + Google Wallet — black rounded-full pills */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <a
               href={'/api/public/wallet-pass/' + slug}
               style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                background: '#000', borderRadius: 100, padding: '13px 10px',
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                background: '#111', borderRadius: 100, padding: '14px 12px',
                 textDecoration: 'none',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
               }}
             >
               <IconApple />
               <div>
-                <p style={{ fontFamily: FB, fontSize: 9, color: 'rgba(255,255,255,0.65)', margin: 0, lineHeight: 1, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Add to</p>
-                <p style={{ fontFamily: FB, fontSize: 13, color: '#fff', margin: 0, fontWeight: 700, lineHeight: 1.2 }}>Apple Wallet</p>
+                <p style={{ fontFamily: FB, fontSize: 9, color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Add to</p>
+                <p style={{ fontFamily: FB, fontSize: 13, color: '#fff', margin: 0, fontWeight: 700, lineHeight: 1.3 }}>Apple Wallet</p>
               </div>
             </a>
             <a
               href={'/api/public/google-pass/' + slug}
               style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                background: '#000', borderRadius: 100, padding: '13px 10px',
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                background: '#111', borderRadius: 100, padding: '14px 12px',
                 textDecoration: 'none',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
               }}
             >
               <IconGoogle />
               <div>
-                <p style={{ fontFamily: FB, fontSize: 9, color: 'rgba(255,255,255,0.65)', margin: 0, lineHeight: 1, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Add to</p>
-                <p style={{ fontFamily: FB, fontSize: 13, color: '#fff', margin: 0, fontWeight: 700, lineHeight: 1.2 }}>Google Wallet</p>
+                <p style={{ fontFamily: FB, fontSize: 9, color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Add to</p>
+                <p style={{ fontFamily: FB, fontSize: 13, color: '#fff', margin: 0, fontWeight: 700, lineHeight: 1.3 }}>Google Wallet</p>
               </div>
             </a>
           </div>
 
-          {/* Lime Top-up — full width */}
+          {/* Lime Top up — full width */}
           <a
             href={topUpUrl}
             style={{
@@ -421,7 +444,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
               background: ACCENT, color: ACCENT_TEXT,
               borderRadius: 100, padding: '16px 0', marginBottom: 24,
               fontFamily: FB, fontSize: 17, fontWeight: 700, textDecoration: 'none',
-              boxShadow: '0 0 24px 4px rgba(217,245,78,0.55), 0 4px 18px rgba(217,245,78,0.45), inset 0 1px 0 rgba(255,255,255,0.35)',
+              boxShadow: '0 0 28px 4px rgba(217,245,78,0.5), 0 4px 18px rgba(217,245,78,0.4), inset 0 1px 0 rgba(255,255,255,0.35)',
             }}
           >
             Top up
@@ -431,13 +454,19 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
 
       {/* ── Transaction history ── */}
       <div style={{ padding: '0 18px' }}>
-        <div style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRadius: 22, padding: '18px 18px 4px', boxShadow: '0 3px 18px rgba(0,0,0,0.08)' }}>
+        <div style={{
+          background: 'rgba(255,255,255,0.82)',
+          backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+          borderRadius: 22,
+          padding: '18px 18px 4px',
+          boxShadow: '0 3px 20px rgba(0,0,0,0.07)',
+        }}>
           <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, fontWeight: 600, margin: '0 0 4px', color: INK }}>
             History
           </h2>
           {!loaded ? (
             <div style={{ padding: '24px 0', textAlign: 'center', color: INK_MUTED, fontFamily: FB, fontSize: 14 }}>
-              Loading...
+              Loading…
             </div>
           ) : allTxns.length > 0 ? (
             <div>
