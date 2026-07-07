@@ -39,7 +39,7 @@ interface CxData {
   preload_txns?: PreloadTxn[]
 }
 
-// ── Barcode visual — variable-width black bars on white strip ─────────────────
+// ── Barcode visual — variable-width black bars ────────────────────────────────
 
 function BarcodeVisual({ code }: { code: string }) {
   const hex = (code.replace(/-/g, '') + code.replace(/-/g, '')).slice(0, 52)
@@ -53,22 +53,6 @@ function BarcodeVisual({ code }: { code: string }) {
         <div key={i} style={{ flex: b.w, height: '100%', background: b.isBar ? 'rgba(0,0,0,0.82)' : 'transparent' }} />
       ))}
     </div>
-  )
-}
-
-// ── Lime EMV chip — matches ref (lime brand chip, not gold) ───────────────────
-
-function ChipSVG() {
-  return (
-    <svg width="40" height="32" viewBox="0 0 40 32" fill="none" style={{ display: 'block' }}>
-      <rect x="0.5" y="0.5" width="39" height="31" rx="3.5" fill="#182400" stroke={ACCENT} strokeWidth="1"/>
-      <line x1="0.5" y1="10.5" x2="39.5" y2="10.5" stroke={ACCENT} strokeWidth="0.8"/>
-      <line x1="0.5" y1="21.5" x2="39.5" y2="21.5" stroke={ACCENT} strokeWidth="0.8"/>
-      <line x1="13.5" y1="0.5" x2="13.5" y2="31.5" stroke={ACCENT} strokeWidth="0.8"/>
-      <line x1="26.5" y1="0.5" x2="26.5" y2="31.5" stroke={ACCENT} strokeWidth="0.8"/>
-      <rect x="13.5" y="10.5" width="13" height="11" rx="1" fill={ACCENT} fillOpacity="0.18"/>
-      <rect x="17" y="13.5" width="6" height="5" rx="0.5" fill={ACCENT} fillOpacity="0.55"/>
-    </svg>
   )
 }
 
@@ -128,7 +112,9 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── Flat CSS loyalty card — #14130f, gold border, lime chip, white strip ──────
+// ── Loyalty card — PNG flat card bg, text overlay ─────────────────────────────
+// Uses /cx/loyalty-card-bg.png (straight front-on card, ~7% white padding)
+// backgroundSize: '114% auto' crops the white padding so card fills container
 
 function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
   bizName: string
@@ -142,74 +128,93 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: 320, transform: 'rotate(-7deg)', transformOrigin: 'center center' }}>
+      {/* 320×202 — standard card ratio 1.586:1, straight (no tilt) */}
+      <div style={{
+        position: 'relative',
+        width: 320,
+        height: 202,
+        borderRadius: 18,
+        overflow: 'hidden',
+        backgroundImage: 'url(/cx/loyalty-card-bg.png)',
+        backgroundSize: '114% auto',
+        backgroundPosition: 'center',
+        boxShadow: '0 20px 52px rgba(0,0,0,0.55), 0 6px 20px rgba(0,0,0,0.35)',
+        userSelect: 'none',
+      }}>
+
+        {/* ── Text overlay on card face ── */}
         <div style={{
-          background: '#14130f',
-          borderRadius: 22,
-          border: '1.5px solid rgba(200,162,48,0.6)',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.65), 0 8px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
-          position: 'relative',
-          overflow: 'hidden',
-          userSelect: 'none',
+          position: 'absolute',
+          top: 0, left: 0, right: 0,
+          bottom: 54,
+          padding: '18px 20px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
         }}>
-
-          {/* Lime chip — absolutely positioned at mid-right of card face */}
-          <div style={{ position: 'absolute', top: '38%', right: 20, zIndex: 1 }}>
-            <ChipSVG />
-          </div>
-
-          {/* Text area — right padding leaves room for chip */}
-          <div style={{ padding: '24px 80px 20px 22px' }}>
-
-            {/* Business name — Cormorant italic, warm white */}
+          {/* Top block: biz name + customer name */}
+          <div>
             <span style={{
               display: 'block',
-              fontFamily: FD, fontStyle: 'italic', fontSize: 26, fontWeight: 500,
+              fontFamily: FD, fontStyle: 'italic', fontSize: 22, fontWeight: 600,
               color: 'rgba(255,248,232,0.97)', lineHeight: 1.1,
-              textShadow: '0 1px 8px rgba(0,0,0,0.45)',
-              marginBottom: 8,
+              textShadow: '0 1px 6px rgba(0,0,0,0.55)',
+              marginBottom: 5,
             }}>
               {bizName}
             </span>
-
-            {/* Customer name */}
             <span style={{
               display: 'block',
-              fontFamily: FB, fontSize: 16, fontWeight: 500,
-              color: 'rgba(255,255,255,0.88)',
-              marginBottom: 16,
+              fontFamily: FB, fontSize: 14, fontWeight: 500,
+              color: 'rgba(255,255,255,0.82)',
+              textShadow: '0 1px 4px rgba(0,0,0,0.5)',
             }}>
               {name ?? 'Member'}
             </span>
-
-            {/* Balance + tier — "$X.XX balance · Gold" */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'nowrap' }}>
-              <span style={{ fontFamily: FB, fontSize: 30, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-                {'$' + walletBal.toFixed(2)}
-              </span>
-              <span style={{ fontFamily: FB, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-                balance ·
-              </span>
-              <span style={{
-                fontFamily: FB, fontSize: 14, fontWeight: 700, color: ACCENT,
-                textDecoration: 'underline', textDecorationColor: ACCENT, textUnderlineOffset: '3px',
-              }}>
-                {tierLabel}
-              </span>
-            </div>
           </div>
 
-          {/* White barcode strip — full width, flush to card bottom */}
-          <div style={{
-            background: '#fff', height: 60,
-            display: 'flex', alignItems: 'center',
-            padding: '0 18px', overflow: 'hidden',
-          }}>
-            {identityId
-              ? <BarcodeVisual code={identityId} />
-              : <div style={{ flex: 1, height: '55%', background: 'rgba(0,0,0,0.08)', borderRadius: 2 }} />
-            }
+          {/* Bottom block: balance + tier */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap' }}>
+            <span style={{
+              fontFamily: FB, fontSize: 26, fontWeight: 700,
+              color: '#fff', lineHeight: 1,
+              textShadow: '0 1px 6px rgba(0,0,0,0.5)',
+            }}>
+              {'$' + walletBal.toFixed(2)}
+            </span>
+            <span style={{
+              fontFamily: FB, fontSize: 12,
+              color: 'rgba(255,255,255,0.5)',
+              textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+            }}>
+              balance ·
+            </span>
+            <span style={{
+              fontFamily: FB, fontSize: 13, fontWeight: 700,
+              color: ACCENT,
+              textDecoration: 'underline',
+              textDecorationColor: ACCENT,
+              textUnderlineOffset: '3px',
+              textShadow: '0 0 10px rgba(217,245,78,0.4)',
+            }}>
+              {tierLabel}
+            </span>
           </div>
+        </div>
+
+        {/* ── White barcode strip — clipped flush to card bottom ── */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          height: 54,
+          background: '#fff',
+          display: 'flex', alignItems: 'center',
+          padding: '0 16px',
+          overflow: 'hidden',
+        }}>
+          {identityId
+            ? <BarcodeVisual code={identityId} />
+            : <div style={{ flex: 1, height: '55%', background: 'rgba(0,0,0,0.08)', borderRadius: 2 }} />
+          }
         </div>
       </div>
     </div>
@@ -239,19 +244,17 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
       padding: '13px 0',
       borderBottom: '1px solid rgba(217,245,78,0.22)',
     }}>
-      {/* Square-rounded lime icon */}
       <div style={{
         width: 44, height: 44, borderRadius: 14, flexShrink: 0,
         background: iconBg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: kind !== 'redeem' ? ('0 0 12px rgba(217,245,78,0.35)') : 'none',
+        boxShadow: kind !== 'redeem' ? '0 0 12px rgba(217,245,78,0.35)' : 'none',
       }}>
         {kind === 'earn' && <IconCup color={iconColor} />}
         {kind === 'redeem' && <IconGift color={iconColor} />}
         {kind === 'preload' && <IconDollar color={iconColor} />}
       </div>
 
-      {/* Label + subtitle */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 600, margin: '0 0 2px', color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {label}
@@ -266,7 +269,6 @@ function TxnRow({ date, label, itemName, pts, amount, kind, bizName }: {
         </p>
       </div>
 
-      {/* Amount */}
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         {pts !== null && (
           <p style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: pts > 0 ? '#059669' : '#dc2626', margin: 0 }}>
@@ -366,7 +368,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
         position: 'relative', height: 220,
         borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
         overflow: 'hidden',
-        background: 'url(/menu/_lib/cx/wallet-bg.png) center / cover no-repeat, linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
+        background: 'url(/cx/wallet-bg.png) center / cover no-repeat, linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.1) 45%, rgba(243,239,228,0.96) 100%)' }} />
       </div>
@@ -374,7 +376,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
       {/* ── Card — overlaps lower portion of photo strip ── */}
       <div style={{ marginTop: -100, paddingLeft: 18, paddingRight: 18, position: 'relative', zIndex: 2 }}>
         {!loaded ? (
-          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ height: 202, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 28, height: 28, border: '2.5px solid rgba(0,0,0,0.1)', borderTopColor: ACCENT_TEXT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
           </div>
         ) : isLoggedIn ? (
@@ -435,7 +437,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
             </a>
           </div>
 
-          {/* Lime Top up — full width */}
+          {/* Lime Top up */}
           <a
             href={topUpUrl}
             style={{
