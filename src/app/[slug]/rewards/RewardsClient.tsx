@@ -296,104 +296,94 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
         body { background: ${BG} }
       `}</style>
 
-      {/* ══ 1. HEADER GLASS CARD — flush with top, rounded bottom only ══════ */}
+      {/* ══ 1. HEADER GLASS CARD — all-corner rounded, floats mx-3 mt-2 ════════ */}
       <div style={{
-        borderRadius: '0 0 40px 40px',
+        margin: '8px 12px 0',
+        borderRadius: 32,
         background: 'linear-gradient(180deg, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.35) 100%)',
         backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
         border: '1px solid rgba(255,255,255,0.60)',
-        borderTop: 'none',
         boxShadow: '0 12px 40px rgba(0,0,0,0.08)',
-        padding: '48px 24px 64px',
+        overflow: 'hidden',
+        paddingBottom: 40,
+        minHeight: 380,
+        position: 'relative',
       }}>
 
-        {/* "Rewards" — Cormorant italic 52px, normal flow */}
+        {/* Lime wash — absolute bottom half of card */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%',
+          background: 'linear-gradient(to top, rgba(217,245,78,0.35) 0%, transparent 100%)',
+          pointerEvents: 'none', zIndex: 0,
+        }} />
+
+        {/* Oversize ring — absolute, centered-right, clipped by overflow-hidden */}
+        <svg
+          width="300" height="300" viewBox="0 0 300 300"
+          style={{
+            position: 'absolute', left: '50%', transform: 'translateX(-35%)', top: 150,
+            zIndex: 0, display: 'block', overflow: 'visible',
+          }}
+          aria-hidden="true"
+        >
+          <circle cx="150" cy="150" r={R}
+            fill="none"
+            stroke="rgba(255,255,255,0.50)"
+            strokeWidth="32"
+          />
+          <circle cx="150" cy="150" r={R}
+            fill="none"
+            stroke={ACCENT}
+            strokeWidth="32"
+            strokeLinecap="round"
+            strokeDasharray={circumference.toFixed(2)}
+            strokeDashoffset={dashOffset}
+            transform="rotate(-90 150 150)"
+            style={{ filter: 'drop-shadow(0 0 12px rgba(217,245,78,0.80))' }}
+          />
+        </svg>
+
+        {/* "Rewards" title — normal flow, z-1 */}
         <h1 style={{
-          fontFamily: FD, fontStyle: 'italic', fontSize: 52, fontWeight: 500,
+          fontFamily: FD, fontStyle: 'italic', fontSize: 48, fontWeight: 500,
           color: INK, margin: 0, textAlign: 'center', lineHeight: 1.05,
-          letterSpacing: '-0.01em',
+          paddingTop: 32,
+          position: 'relative', zIndex: 1,
         }}>
           Rewards
         </h1>
 
-        {/* Tier pill — normal flow, mx-auto, inline-flex */}
+        {/* Wide tier bar — 92% width glass bar */}
         {loaded && pillText ? (
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap',
-              background: 'rgba(255,255,255,0.60)',
-              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.70)',
-              borderRadius: 100, padding: '8px 20px',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
-            }}>
-              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK, lineHeight: 1.2 }}>
-                {pillText}
-              </span>
-            </div>
+          <div style={{
+            width: '92%', margin: '12px auto 0',
+            borderRadius: 16,
+            background: 'rgba(255,255,255,0.55)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.70)',
+            padding: '10px 0',
+            textAlign: 'center',
+            position: 'relative', zIndex: 1,
+          }}>
+            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK, lineHeight: 1.2 }}>
+              {pillText}
+            </span>
           </div>
         ) : (
-          /* placeholder height so layout doesn't jump on load */
           <div style={{ height: 40, marginTop: 12 }} />
         )}
 
-        {/* Ring block — 260×260, mx-auto, position relative, normal flow */}
-        <div style={{
-          width: 260, height: 260, margin: '24px auto 0',
-          position: 'relative',
-        }}>
-          {/* Lime radial glow — behind SVG, inset 24px */}
-          <div style={{
-            position: 'absolute',
-            top: 24, bottom: 24, left: 24, right: 24,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(217,245,78,0.35) 0%, transparent 70%)',
-            filter: 'blur(28px)',
-            zIndex: 0,
-            pointerEvents: 'none',
-          }} />
-
-          {/* Progress ring SVG */}
-          <svg
-            width="260" height="260" viewBox="0 0 260 260"
-            style={{ position: 'absolute', inset: 0, display: 'block', zIndex: 1 }}
-            aria-hidden="true"
-          >
-            {/* Track */}
-            <circle
-              cx="130" cy="130" r={R}
-              fill="none"
-              stroke="rgba(10,10,10,0.10)"
-              strokeWidth="7"
-            />
-            {/* Progress arc — rotated to start at 12 o'clock */}
-            <circle
-              cx="130" cy="130" r={R}
-              fill="none"
-              stroke={ACCENT}
-              strokeWidth="7"
-              strokeLinecap="round"
-              strokeDasharray={circumference.toFixed(2)}
-              strokeDashoffset={dashOffset}
-              transform="rotate(-90 130 130)"
-              style={{ filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.65))' }}
-            />
-          </svg>
-
-          {/* Pts number — absolute center */}
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 2,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+        {/* pts — normal flow, sits over ring's left arc */}
+        <div style={{ marginTop: 24, textAlign: 'center', position: 'relative', zIndex: 2 }}>
+          <span style={{
+            fontFamily: FB, fontSize: 56, fontWeight: 800,
+            color: INK, letterSpacing: '-0.03em', lineHeight: 1,
+            whiteSpace: 'nowrap',
           }}>
-            <span style={{
-              fontFamily: FB, fontSize: 52, fontWeight: 800,
-              color: INK, letterSpacing: '-0.03em', lineHeight: 1,
-              whiteSpace: 'nowrap',
-            }}>
-              {pts.toLocaleString() + ' pts'}
-            </span>
-          </div>
+            {pts.toLocaleString() + ' pts'}
+          </span>
         </div>
+
       </div>
       {/* END HEADER CARD */}
 
