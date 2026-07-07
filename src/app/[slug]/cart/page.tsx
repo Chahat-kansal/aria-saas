@@ -1,8 +1,17 @@
 export const runtime = 'nodejs'
-import { redirect } from 'next/navigation'
+export const dynamic = 'force-dynamic'
 
-// Cart redirects to the ordering engine (existing /menu/[slug])
+import { notFound } from 'next/navigation'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { CartClient } from './CartClient'
+
 export default async function CartPage({ params }: { params: { slug: string } }) {
   const slug = decodeURIComponent(params.slug ?? '').toLowerCase()
-  redirect('/menu/' + slug)
+  if (!slug) notFound()
+
+  const bid = await resolveBusinessId(supabaseAdmin, slug)
+  if (!bid) notFound()
+
+  return <CartClient slug={slug} />
 }
