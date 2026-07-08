@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { WalletClient } from './WalletClient'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getCxSessionServer } from '@/lib/cx/get-cx-session'
+import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
 
 export default async function WalletPage({ params }: { params: { slug: string } }) {
   const slug = decodeURIComponent(params.slug ?? '').toLowerCase()
@@ -32,20 +33,23 @@ export default async function WalletPage({ params }: { params: { slug: string } 
   let preloadTxns: Array<{ id: string; amount: number; type: string; description: string | null; created_at: string }> = []
 
   if (session) {
-    const { data: customer } = await supabaseAdmin
-      .from('pos_customers')
-      .select('id, name, loyalty_tier, loyalty_identity_id')
-      .eq('business_id', bid)
-      .eq('loyalty_identity_id', session.identity_id)
-      .is('deleted_at', null)
-      .maybeSingle()
+    const customer = await resolveCxCustomer<{
+      id: string; name: string | null; loyalty_tier: string | null; loyalty_identity_id: string | null
+    }>(session.identity_id, bid, 'id, name, loyalty_tier, loyalty_identity_id')
 
     if (customer) {
-      const cust = customer as { id: string; name: string | null; loyalty_tier: string | null; loyalty_identity_id: string | null }
-      customerId   = cust.id
-      customerName = cust.name ?? null
-      tier         = cust.loyalty_tier ?? 'Member'
-      identityId   = cust.loyalty_identity_id ?? null
+      customerId   = customer.id
+      customerName = customer.name ?? null
+      tier         = customer.loyalty_tier ?? 'Member'
+
+      // Fetch short_code from loyalty_identity for barcode — falls back to UUID if not yet set
+      const { data: identRow } = await supabaseAdmin
+        .from('loyalty_identity')
+        .select('short_code')
+        .eq('id', session.identity_id)
+        .maybeSingle()
+      const shortCode = (identRow as { short_code?: string | null } | null)?.short_code ?? null
+      identityId = shortCode ?? customer.loyalty_identity_id ?? null
 
       const [walletRes, earnRes, preloadRes] = await Promise.all([
         supabaseAdmin

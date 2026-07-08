@@ -28,7 +28,7 @@ interface PreloadTxn {
 }
 
 // ── Real CODE128 barcode via JsBarcode — ONE strip, uniform height ─────────────
-function LoyaltyBarcode({ value }: { value: string }) {
+function LoyaltyBarcode({ value }: { value: string | null }) {
   const ref = useRef<SVGSVGElement>(null)
   useEffect(() => {
     if (!ref.current || !value) return
@@ -37,16 +37,18 @@ function LoyaltyBarcode({ value }: { value: string }) {
       height: 44, width: 1.6, margin: 0,
       background: '#ffffff', lineColor: '#0a0a0a',
     })
-    // Allow SVG to scale to container without letterboxing
     ref.current.setAttribute('preserveAspectRatio', 'none')
   }, [value])
   return (
     <div style={{
       width: '100%', background: '#ffffff',
       height: 56, padding: '8px 16px',
-      display: 'flex', alignItems: 'center',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <svg ref={ref} style={{ width: '100%', height: 40, display: 'block' }} />
+      {value
+        ? <svg ref={ref} style={{ width: '100%', height: 40, display: 'block' }} />
+        : <span style={{ fontFamily: FB, fontSize: 22, color: '#9ca3af', letterSpacing: '0.2em' }}>— —</span>
+      }
     </div>
   )
 }
@@ -185,11 +187,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
           </div>
         </div>
 
-        {/* ── Barcode strip — full width, flush to card bottom ── */}
-        {identityId
-          ? <LoyaltyBarcode value={identityId} />
-          : <div style={{ width: '100%', height: 56, background: 'rgba(255,255,255,0.08)' }} />
-        }
+        {/* ── Barcode strip — always shown; "— —" placeholder when code not yet available ── */}
+        <LoyaltyBarcode value={identityId} />
       </div>
     </div>
   )
