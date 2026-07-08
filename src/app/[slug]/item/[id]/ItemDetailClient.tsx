@@ -18,9 +18,9 @@ type Product = {
   price: number
   image_url: string | null
   category: string | null
-  is_available: boolean | null
-  dietary_tags: unknown
-  allergen_info: unknown
+  is_active: boolean | null
+  tags: unknown
+  allergens: unknown
 }
 
 export type ModOption = {
@@ -81,17 +81,17 @@ export function ItemDetailClient({ slug, product, modifierGroups }: {
 
   // ── Parse dietary / allergen tags ──────────────────────────────────────────
   const dietaryTags: string[] = (() => {
-    if (!product.dietary_tags) return []
-    if (Array.isArray(product.dietary_tags)) return product.dietary_tags as string[]
+    if (!product.tags) return []
+    if (Array.isArray(product.tags)) return product.tags as string[]
     return []
   })()
 
   const allergens: string[] = (() => {
-    if (!product.allergen_info) return []
-    if (Array.isArray(product.allergen_info)) return product.allergen_info as string[]
-    if (typeof product.allergen_info === 'object') {
-      return Object.keys(product.allergen_info as Record<string, unknown>).filter(
-        k => (product.allergen_info as Record<string, boolean>)[k]
+    if (!product.allergens) return []
+    if (Array.isArray(product.allergens)) return product.allergens as string[]
+    if (typeof product.allergens === 'object') {
+      return Object.keys(product.allergens as Record<string, unknown>).filter(
+        k => (product.allergens as Record<string, boolean>)[k]
       )
     }
     return []
@@ -192,7 +192,7 @@ export function ItemDetailClient({ slug, product, modifierGroups }: {
     window.location.href = '/' + slug + '/cart'
   }
 
-  const available = product.is_available !== false
+  const available = product.is_active !== false
 
   return (
     <div style={{ minHeight: '100dvh', background: BG, fontFamily: FB, color: INK, maxWidth: '28rem', margin: '0 auto' }}>

@@ -13,9 +13,9 @@ type Product = {
   price: number
   image_url: string | null
   category: string | null
-  is_available: boolean | null
-  dietary_tags: unknown
-  allergen_info: unknown
+  is_active: boolean | null
+  tags: unknown
+  allergens: unknown
 }
 
 export type ModOption = {
@@ -70,7 +70,7 @@ export default async function ItemDetailPage({ params }: { params: { slug: strin
 
   const { data: product } = await supabaseAdmin
     .from('pos_products')
-    .select('id, name, description, price, image_url, category, is_available, dietary_tags, allergen_info')
+    .select('id, name, description, price, image_url, category, is_active, tags, allergens')
     .eq('id', id)
     .eq('business_id', bid)
     .maybeSingle()
