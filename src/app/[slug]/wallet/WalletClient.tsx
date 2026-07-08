@@ -1,6 +1,6 @@
 'use client'
 import { useRef, useEffect, useState } from 'react'
-import JsBarcode from 'jsbarcode'
+import QRCode from 'qrcode'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#f3efe4'
@@ -27,51 +27,57 @@ interface PreloadTxn {
   created_at: string
 }
 
-// ── CODE128C barcode — explicit format; try/catch renders placeholder on encode error ──
-function LoyaltyBarcode({ value, widthMod = 2.4, heightPx = 56 }: {
+// ── QR code canvas — renders the loyalty short_code as a square QR ──
+// widthMod and heightPx kept for API compat; size is the canonical QR dimension
+function LoyaltyBarcode({ value, widthMod = 2.4, heightPx = 96, size }: {
   value: string | null
   widthMod?: number
   heightPx?: number
+  size?: number
 }) {
-  const svgRef = useRef<SVGSVGElement>(null)
-  const [ready, setReady] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [encErr, setEncErr] = useState(false)
+  const px = size ?? heightPx
 
   useEffect(() => {
-    setReady(false)
     setEncErr(false)
-    if (!svgRef.current || !value) return
-    try {
-      JsBarcode(svgRef.current, value, {
-        format: 'CODE128C', displayValue: false,
-        height: heightPx, width: widthMod, margin: 10,
-        background: '#ffffff', lineColor: '#000000',
-      })
-      svgRef.current.setAttribute('preserveAspectRatio', 'none')
-      setReady(true)
-    } catch (err) {
-      console.error('[LoyaltyBarcode] CODE128C encode error for value:', value, err)
-      setEncErr(true)
-    }
-  }, [value, widthMod, heightPx])
+    if (!canvasRef.current || !value) return
+    QRCode.toCanvas(canvasRef.current, value, {
+      errorCorrectionLevel: 'M',
+      margin: 3,
+      width: px,
+      color: { dark: '#000000', light: '#ffffff' },
+    }, (err) => {
+      if (err) {
+        console.error('[LoyaltyBarcode] QR encode error:', value, err)
+        setEncErr(true)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, px])
 
-  const showPlaceholder = !value || encErr
+  if (!value || encErr) {
+    return (
+      <div style={{
+        width: px, height: px, background: '#ffffff', borderRadius: 6,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ fontFamily: FB, fontSize: 18, color: '#9ca3af', letterSpacing: '0.2em' }}>— —</span>
+      </div>
+    )
+  }
 
   return (
-    <div style={{
-      width: '100%', background: '#ffffff', minHeight: 44,
-      height: heightPx + 24, padding: '8px 16px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {showPlaceholder
-        ? <span style={{ fontFamily: FB, fontSize: 22, color: '#9ca3af', letterSpacing: '0.2em' }}>— —</span>
-        : <svg ref={svgRef} style={{ width: '100%', height: heightPx, display: ready ? 'block' : 'none' }} />
-      }
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={px}
+      height={px}
+      style={{ display: 'block', borderRadius: 6 }}
+    />
   )
 }
 
-// ── Fullscreen scan modal — the actual surface staff use to scan from screen ──
+// ── Fullscreen scan modal — enlarged QR for bright daylight / belt-and-braces ──
 function ScanModal({ value, bizName, onClose }: {
   value: string | null
   bizName: string
@@ -97,16 +103,18 @@ function ScanModal({ value, bizName, onClose }: {
       <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 26, color: INK, margin: '0 0 28px', textAlign: 'center' }}>
         {bizName}
       </p>
-      {/* stopPropagation so tapping the barcode itself doesn't dismiss the modal */}
-      <div style={{ width: '100%', maxWidth: 380 }} onClick={function (e) { e.stopPropagation() }}>
-        <LoyaltyBarcode value={value} widthMod={2.4} heightPx={96} />
+      {/* stopPropagation so tapping the QR itself doesn't dismiss the modal */}
+      <div onClick={function (e) { e.stopPropagation() }}>
+        <div style={{ background: '#ffffff', borderRadius: 12, padding: 10, boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
+          <LoyaltyBarcode value={value} size={280} />
+        </div>
       </div>
       {value && (
-        <p style={{ fontFamily: 'monospace', fontSize: 14, color: INK_MUTED, marginTop: 12, letterSpacing: '0.15em' }}>
-          {value}
+        <p style={{ fontFamily: 'monospace', fontSize: 14, color: INK_MUTED, marginTop: 16, letterSpacing: '0.15em' }}>
+          {/^\d{10}$/.test(value) ? value.slice(0, 4) + ' ' + value.slice(4) : value.slice(0, 16)}
         </p>
       )}
-      <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, marginTop: 40, textAlign: 'center' }}>
+      <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, marginTop: 32, textAlign: 'center' }}>
         Tap anywhere to close
       </p>
     </div>
@@ -180,7 +188,7 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── Loyalty Card — dark card, −7deg tilt; barcode strip counter-rotated flat ──
+// ── Loyalty Card — dark card, −7deg tilt; QR counter-rotated flat in bottom-left ──
 function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }: {
   bizName: string
   name: string | null
@@ -252,11 +260,22 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
               {tierLabel}
             </span>
           </div>
-        </div>
 
-        {/* ── Barcode strip — inset within card; overflow:hidden on parent clips to rounded bounds ── */}
-        <div style={{ margin: '0 16px 16px', borderRadius: 8, overflow: 'hidden' }}>
-          <LoyaltyBarcode value={identityId} widthMod={2.4} heightPx={56} />
+          {/* Row 4: QR code — bottom-left, counter-rotated flat ── */}
+          <div style={{ marginTop: 18, display: 'flex', alignItems: 'flex-end' }}>
+            {/* Counter-rotate +7deg to cancel the card's −7deg tilt → QR appears flat */}
+            <div style={{ transform: 'rotate(7deg)', transformOrigin: '0% 100%', display: 'inline-block' }}>
+              <div style={{
+                background: '#ffffff',
+                borderRadius: 8,
+                padding: 8,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                display: 'inline-block',
+              }}>
+                <LoyaltyBarcode value={identityId} size={96} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -504,7 +523,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
 
       <CxTabBar slug={slug} active="wallet" />
 
-      {/* ── Scan modal — fullscreen white surface staff use to scan the barcode ── */}
+      {/* ── Scan modal — large 280px QR, belt-and-braces for bright daylight ── */}
       {scanOpen && (
         <ScanModal
           value={identityId}
