@@ -71,41 +71,29 @@ export function CartClient({ slug }: { slug: string }) {
 
   const placeOrder = async () => {
     setOrderError(null)
-    let phone = ''
-    let name = 'Guest'
-    try {
-      const stored = localStorage.getItem('aria_cx_' + slug)
-      if (stored) {
-        const parsed = JSON.parse(stored) as { phone?: string; name?: string; firstName?: string }
-        phone = parsed.phone ?? ''
-        name = parsed.name ?? parsed.firstName ?? 'Guest'
-      }
-    } catch { /* ok */ }
-
-    if (!phone) {
-      window.location.replace('/' + slug + '/onboarding')
-      return
-    }
-
     setPlacing(true)
     try {
       const res = await fetch('/api/public/place-order/' + slug, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer_name: name,
-          customer_phone: phone,
+          // customer_name + customer_phone omitted — server derives from cx_session cookie
           items: items.map(i => ({
             product_id: i.product_id,
             product_name: i.product_name,
             quantity: i.quantity,
-            unit_price: Number(i.price) || 0,
-            modifiers: i.modifiers ?? [],
+            // unit_price omitted — server re-fetches from pos_products (prices are display-only client-side)
+            modifiers: (i.modifiers ?? []).map(m => ({ id: m.id, name: m.name })),
           })),
           fulfillment_type: 'pickup',
           source: 'online',
         }),
       })
+      if (res.status === 401) {
+        // No valid session — send to onboarding (same behaviour as the old phone guard)
+        window.location.replace('/' + slug + '/onboarding')
+        return
+      }
       const data = await res.json() as PlaceOrderResponse
       if (!data.ok) {
         setOrderError(data.error ?? 'Order failed. Please try again.')
