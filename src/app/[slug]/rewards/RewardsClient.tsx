@@ -130,8 +130,6 @@ function RewardCard({ rule, pts, slug, index }: {
           <p style={{
             fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: '#55554e',
             margin: '5px 0 0', lineHeight: 1.45,
-            overflow: 'hidden', display: '-webkit-box',
-            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           }}>
             {rule.description}
           </p>
@@ -297,7 +295,7 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
           {/* Ring — absolute, anchored to right edge, clips right+bottom */}
           <svg
             width="280" height="280" viewBox="0 0 280 280"
-            style={{ position: 'absolute', right: -60, top: 120, zIndex: 0, display: 'block' }}
+            style={{ position: 'absolute', right: -200, top: 120, zIndex: 0, display: 'block' }}
             aria-hidden="true"
           >
             {/* Track — white/60 */}
