@@ -159,6 +159,38 @@ no placeholders, no "coming soon" stubs shipped as if complete.
 
 ---
 
+## 🔒 RULE 10 — MIGRATION VERIFICATION (learned: CX-AUTH-1a/1b incident)
+
+**Migrations in git ≠ migrations applied to production.**
+
+Writing a `.sql` file to `supabase/migrations/` does NOT apply it. Every sprint that adds or
+alters a table must end with a live `information_schema` check via Supabase MCP or SQL Editor.
+
+**End-of-sprint verification query (run this, not "trust the file"):**
+```sql
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('new_table_a', 'new_table_b');  -- must return N rows
+
+-- For new columns:
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'target_table' AND column_name = 'new_col';
+
+-- For new indexes:
+SELECT indexname FROM pg_indexes
+WHERE tablename = 'target_table' AND indexname = 'new_idx';
+```
+
+- ❌ "File exists in supabase/migrations/" is NOT evidence the migration ran
+- ❌ Never close a migration sprint without the row count matching expected tables/cols
+- ✅ N rows returned = N objects live in prod. Fewer = apply the missing migration NOW
+
+**Incident record:** cx_otp_codes + cx_sessions (CX-AUTH-1a) and loyalty_identity.phone
+(20260622000001) were all written to git but never applied to prod. The entire CX-AUTH-1b
+sprint 500'd on every auth request as a result. Applied 2026-07-08 via Supabase MCP.
+
+---
+
 ## Design system (Aria POS)
 - Palette: deep forest green #2D5240 + sage #7FB897
 - Fraunces italic for branding/totals, Inter for body
