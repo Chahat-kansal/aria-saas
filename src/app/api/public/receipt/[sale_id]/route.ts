@@ -2,42 +2,70 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } },
-  )
+// In-memory rate limit: 20 receipt views per IP per minute.
+// TODO: replace with Upstash Redis once multi-instance rate-limiting is needed.
+const ipMap = new Map<string, { count: number; start: number }>()
+const WINDOW_MS = 60_000
+const MAX_PER_WINDOW = 20
+
+function getIp(req: Request): string {
+  return (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
 }
 
-export async function GET(_req: Request, { params }: { params: { sale_id: string } }) {
+function checkRate(ip: string): boolean {
+  const now = Date.now()
+  const entry = ipMap.get(ip)
+  if (!entry || now - entry.start > WINDOW_MS) {
+    ipMap.set(ip, { count: 1, start: now })
+    return true
+  }
+  if (entry.count >= MAX_PER_WINDOW) return false
+  entry.count++
+  return true
+}
+
+export async function GET(req: Request, { params }: { params: { sale_id: string } }) {
+  if (!checkRate(getIp(req))) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
   const { sale_id } = params
   if (!sale_id) return NextResponse.json({ error: 'sale_id required' }, { status: 400 })
 
-  const sb = adminClient()
-
-  const { data: sale } = await sb.from('pos_sales')
-    .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, business_id, pos_customers(name, email, phone)')
+  // PII policy: name only (no email/phone). Voided sales are excluded.
+  const { data: sale } = await supabaseAdmin
+    .from('pos_sales')
+    .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, business_id, pos_customers(name)')
     .eq('id', sale_id)
     .neq('status', 'voided')
     .maybeSingle()
 
   if (!sale) return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
 
+  const bid = sale.business_id as string
+
   const [itemsRes, paymentsRes, bizRes] = await Promise.all([
-    sb.from('pos_sale_items')
+    supabaseAdmin
+      .from('pos_sale_items')
       .select('product_name, quantity, unit_price, discount_percent, line_total, modifiers')
       .eq('sale_id', sale_id),
-    sb.from('pos_sale_payments')
+    supabaseAdmin
+      .from('pos_sale_payments')
       .select('method, amount_cents, reference')
       .eq('sale_id', sale_id),
-    sb.from('businesses')
+    // Business contact info for the receipt header — scoped by the sale's own business_id.
+    supabaseAdmin
+      .from('businesses')
       .select('name, abn, phone, email, address')
-      .eq('id', sale.business_id)
+      .eq('id', bid)
       .maybeSingle(),
   ])
+
+  // Strip PII to first name only — email and phone are never returned.
+  const rawName = (sale.pos_customers as { name?: string | null } | null)?.name ?? null
+  const firstName = rawName ? rawName.split(' ')[0] : null
 
   return NextResponse.json({
     sale: {
@@ -48,10 +76,14 @@ export async function GET(_req: Request, { params }: { params: { sale_id: string
       discount_amount: sale.discount_amount,
       payment_method: sale.payment_method,
       created_at: sale.created_at,
-      customer: sale.pos_customers,
+      customer: firstName ? { name: firstName } : null,
     },
     items: itemsRes.data ?? [],
-    payments: (paymentsRes.data ?? []).map((p: any) => ({ payment_method: p.method, amount: (p.amount_cents ?? 0) / 100, reference: p.reference })),
+    payments: (paymentsRes.data ?? []).map((p: { method?: string | null; amount_cents?: number | null; reference?: string | null }) => ({
+      payment_method: p.method,
+      amount: (p.amount_cents ?? 0) / 100,
+      reference: p.reference,
+    })),
     business: bizRes.data,
   })
 }

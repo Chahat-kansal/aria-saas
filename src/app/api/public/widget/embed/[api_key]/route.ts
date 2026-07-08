@@ -10,10 +10,10 @@ export async function GET(
   const apiKey = params.api_key
   if (!apiKey) return new Response('// missing api_key', { headers: { 'Content-Type': 'application/javascript' } })
 
-  // Verify api_key is valid and widget is enabled
+  // Verify api_key is valid and widget is enabled; also fetch chat_token for the emitted JS
   const { data: config } = await supabaseAdmin
     .from('widget_configs')
-    .select('bot_name, primary_color, greeting, enabled')
+    .select('bot_name, primary_color, greeting, enabled, chat_token')
     .eq('api_key', apiKey)
     .eq('enabled', true)
     .maybeSingle()
@@ -27,6 +27,7 @@ export async function GET(
   const botName = (config.bot_name ?? 'Aria').replace(/'/g, "\\'")
   const color = (config.primary_color ?? '#1D9E75').replace(/'/g, "\\'")
   const greeting = (config.greeting ?? 'Hi! How can I help you today?').replace(/'/g, "\\'")
+  const chatToken = ((config.chat_token as string | null) ?? '').replace(/'/g, "\\'")
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site'
 
   const js = `
@@ -34,7 +35,7 @@ export async function GET(
   if (window.__ariaWidget) return;
   window.__ariaWidget = true;
 
-  var API_KEY = '${apiKey}';
+  var CHAT_TOKEN = '${chatToken}';
   var BOT_NAME = '${botName}';
   var COLOR = '${color}';
   var GREETING = '${greeting}';
@@ -172,7 +173,7 @@ export async function GET(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          api_key: API_KEY,
+          chat_token: CHAT_TOKEN,
           message: text,
           conversation_id: conversationId,
           visitor_id: visitorId,
