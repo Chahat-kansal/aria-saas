@@ -65,6 +65,17 @@ export default function CustomerDetailPage() {
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
+  // Loyalty detail — fetched on demand when Loyalty tab is opened
+  interface LoyaltyDetail {
+    points_balance: number; stamps_count: number; loyalty_tier: string | null
+    loyalty_identity_id: string | null; short_code: string | null
+    preload_balance: number
+    transactions: Array<{ id: string; type: string; points_delta: number; stamps_delta: number | null; reward_redeemed: string | null; created_at: string; sale_id: string | null }>
+    loyalty_config: { program_type: string; points_per_dollar: number; stamps_to_reward: number; stamp_reward_text: string; point_value_cents: number } | null
+  }
+  const [loyaltyDetail, setLoyaltyDetail] = useState<LoyaltyDetail | null>(null);
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+
   const sendLoyaltyInvite = async (channel: 'email' | 'sms') => {
     setInviteSending(true); setInviteMsg(null);
     try {
@@ -77,6 +88,20 @@ export default function CustomerDetailPage() {
     } catch { setInviteMsg('Could not send invite.'); }
     setInviteSending(false);
   };
+
+  const loadLoyalty = useCallback(async () => {
+    if (!id || loyaltyDetail || loyaltyLoading) return;
+    setLoyaltyLoading(true);
+    try {
+      const d = await fetch('/api/pos/loyalty/customer-detail?customer_id=' + id).then(r => r.json());
+      if (!d.error) setLoyaltyDetail(d as LoyaltyDetail);
+    } catch { /* silent — loyalty data is supplemental */ }
+    setLoyaltyLoading(false);
+  }, [id, loyaltyDetail, loyaltyLoading]);
+
+  useEffect(() => {
+    if (activeTab === 'Loyalty') loadLoyalty();
+  }, [activeTab, loadLoyalty]);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -337,18 +362,116 @@ export default function CustomerDetailPage() {
 
         {/* Loyalty */}
         {activeTab === 'Loyalty' && (
-          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 24 }}>
-            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Points Balance</div>
-                <div style={{ fontSize: 36, fontWeight: 800, color: '#006AFF', fontFamily: "'JetBrains Mono',monospace" }}>{customer.loyalty_points ?? 0}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>RFM Segment</div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: segColor }}>{seg}</div>
-                {customer.rfm_score && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>Score: {customer.rfm_score}</div>}
-              </div>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {loyaltyLoading && (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading loyalty data…</div>
+            )}
+            {!loyaltyLoading && (
+              <>
+                {/* Stats grid */}
+                <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 20, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Points Balance</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: '#006AFF', fontFamily: "'JetBrains Mono',monospace" }}>
+                      {loyaltyDetail?.points_balance ?? customer.loyalty_points ?? 0}
+                    </div>
+                  </div>
+                  {loyaltyDetail?.loyalty_config && ['stamps','both'].includes(loyaltyDetail.loyalty_config.program_type) && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Stamps</div>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: C.amber, fontFamily: "'JetBrains Mono',monospace" }}>
+                        {loyaltyDetail.stamps_count}/{loyaltyDetail.loyalty_config.stamps_to_reward}
+                      </div>
+                      {loyaltyDetail.stamps_count >= loyaltyDetail.loyalty_config.stamps_to_reward && (
+                        <div style={{ fontSize: 11, color: C.green, fontWeight: 700, marginTop: 2 }}>🎁 {loyaltyDetail.loyalty_config.stamp_reward_text} ready</div>
+                      )}
+                    </div>
+                  )}
+                  {loyaltyDetail?.loyalty_tier && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Tier</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#C9A37A' }}>{loyaltyDetail.loyalty_tier}</div>
+                    </div>
+                  )}
+                  {loyaltyDetail && loyaltyDetail.preload_balance > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Store Credit</div>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: '#0EA5E9', fontFamily: "'JetBrains Mono',monospace" }}>
+                        {'$' + loyaltyDetail.preload_balance.toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>RFM</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: segColor }}>{seg}</div>
+                    {customer.rfm_score && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{customer.rfm_score}</div>}
+                  </div>
+                </div>
+
+                {/* Wallet barcode code */}
+                {loyaltyDetail?.short_code && (
+                  <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Wallet Barcode Code</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '0.15em' }}>
+                        {loyaltyDetail.short_code.slice(0, 4) + ' ' + loyaltyDetail.short_code.slice(4)}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.dim }}>CODE128C</div>
+                  </div>
+                )}
+
+                {/* Redemption + earn history */}
+                {loyaltyDetail && loyaltyDetail.transactions.length > 0 && (
+                  <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '14px 20px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 10 }}>Loyalty History</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {loyaltyDetail.transactions.map(t => {
+                        const isEarn = t.type === 'earn' || t.points_delta > 0
+                        const label = t.reward_redeemed
+                          ? ('Redeemed: ' + t.reward_redeemed)
+                          : isEarn
+                            ? ('+' + t.points_delta + ' pts earned')
+                            : (t.points_delta + ' pts redeemed')
+                        return (
+                          <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--divider)' }}>
+                            <div>
+                              <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{label}</div>
+                              <div style={{ fontSize: 10, color: C.dim }}>{new Date(t.created_at).toLocaleDateString('en-AU')}</div>
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: isEarn ? C.green : C.amber }}>
+                              {isEarn ? '+' : ''}{t.points_delta}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* No loyalty record yet */}
+                {loyaltyDetail && !loyaltyDetail.loyalty_identity_id && (
+                  <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 20, textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>This customer has not yet joined the loyalty programme.</div>
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                      {customer.email && (
+                        <button onClick={() => sendLoyaltyInvite('email')} disabled={inviteSending}
+                          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: inviteSending ? 0.6 : 1 }}>
+                          🎁 Email invite
+                        </button>
+                      )}
+                      {customer.phone && (
+                        <button onClick={() => sendLoyaltyInvite('sms')} disabled={inviteSending}
+                          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: inviteSending ? 0.6 : 1 }}>
+                          📲 SMS invite
+                        </button>
+                      )}
+                    </div>
+                    {inviteMsg && <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>{inviteMsg}</div>}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
