@@ -22,8 +22,31 @@ export default function KioskPage() {
   const [ordering, setOrdering] = useState(false)
   const [orderNum, setOrderNum] = useState('')
 
+  // Loyalty scan
+  interface KioskLoyaltyCustomer { id: string; name: string; points_balance: number; stamps_count: number; loyalty_tier: string | null }
+  const [loyaltyCode,     setLoyaltyCode]     = useState('')
+  const [loyaltyCustomer, setLoyaltyCustomer] = useState<KioskLoyaltyCustomer | null>(null)
+  const [loyaltyLoading,  setLoyaltyLoading]  = useState(false)
+  const [loyaltyError,    setLoyaltyError]    = useState<string | null>(null)
+
+  async function scanLoyaltyCode(code: string) {
+    const c = code.trim()
+    if (!c || !bizId) return
+    setLoyaltyLoading(true); setLoyaltyError(null); setLoyaltyCustomer(null)
+    const res = await fetch('/api/public/kiosk/loyalty-scan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: c, business_id: bizId }),
+    }).then(r => r.json()).catch(() => ({ found: false }))
+    if (!res.found) {
+      setLoyaltyError(res.reason === 'not_member' ? 'Not a member at this venue.' : 'Card not recognised.')
+    } else {
+      setLoyaltyCustomer(res as KioskLoyaltyCustomer)
+    }
+    setLoyaltyLoading(false)
+  }
+
   const load = useCallback(async () => {
-    const { data: outlet } = await fetch(`/api/pos/outlets`).then(r => r.json()).catch(() => ({ data: null }))
+    await fetch(`/api/pos/outlets`).then(r => r.json()).catch(() => null)
     // get bizId from outlet
     const res = await fetch(`/api/public/business/${outlet_id}`).then(r => r.json()).catch(() => ({}))
     // outlet_id IS the outlet ID so we get menu from there — actually we need business_id
@@ -60,10 +83,11 @@ export default function KioskPage() {
     const res = await fetch(`/api/public/place-order/${bizId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        customer_name: form.customer_name || (tableId ? `Table ${tableId}` : 'Kiosk'),
+        customer_name: form.customer_name || (tableId ? 'Table ' + tableId : 'Kiosk'),
         customer_phone: form.customer_phone || null,
         table_id: tableId ?? null,
         source: 'kiosk',
+        loyalty_customer_id: loyaltyCustomer?.id ?? null,
         items: cart.map(i => ({
           product_id: i.product.id, product_name: i.product.name,
           quantity: i.qty, unit_price: i.unit_price,
@@ -71,7 +95,10 @@ export default function KioskPage() {
         })),
       }),
     }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
-    if (res.ok) { setOrderNum(res.order_number); setStep('done'); setCart([]) }
+    if (res.ok) {
+      setOrderNum(res.order_number); setStep('done'); setCart([])
+      setLoyaltyCustomer(null); setLoyaltyCode(''); setLoyaltyError(null)
+    }
     setOrdering(false)
   }
 
@@ -165,6 +192,42 @@ export default function KioskPage() {
           <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 20 }}>Your details</h2>
           {!tableId && <input value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="Your name *" style={{ display: 'block', width: '100%', padding: '14px 16px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 16, marginBottom: 10, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />}
           <input value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="Phone (optional)" type="tel" style={{ display: 'block', width: '100%', padding: '14px 16px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 16, marginBottom: 20, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+
+          {/* Loyalty scan */}
+          <div style={{ marginBottom: 20, background: '#f8fafc', borderRadius: 12, padding: 16, border: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#374151' }}>Loyalty card (optional)</div>
+            {loyaltyCustomer ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0f1a26' }}>{loyaltyCustomer.name}</div>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                    {loyaltyCustomer.points_balance} pts
+                    {loyaltyCustomer.loyalty_tier ? ' · ' + loyaltyCustomer.loyalty_tier : ''}
+                  </div>
+                </div>
+                <button onClick={() => { setLoyaltyCustomer(null); setLoyaltyCode('') }}
+                  style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, padding: '0 4px' }}>×</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={loyaltyCode}
+                  onChange={e => { setLoyaltyCode(e.target.value); setLoyaltyError(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter' && loyaltyCode.trim()) { e.preventDefault(); scanLoyaltyCode(loyaltyCode) } }}
+                  placeholder="Scan or enter 10-digit loyalty code"
+                  inputMode="numeric"
+                  maxLength={10}
+                  style={{ flex: 1, padding: '12px 14px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 15, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                />
+                <button onClick={() => scanLoyaltyCode(loyaltyCode)} disabled={loyaltyLoading || !loyaltyCode.trim()}
+                  style={{ padding: '12px 16px', borderRadius: 8, border: 'none', background: '#0f1a26', color: '#fff', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: loyaltyLoading || !loyaltyCode.trim() ? 0.5 : 1 }}>
+                  {loyaltyLoading ? '…' : 'Apply'}
+                </button>
+              </div>
+            )}
+            {loyaltyError && <div style={{ fontSize: 12, color: '#ef4444', marginTop: 6, fontWeight: 600 }}>{loyaltyError}</div>}
+          </div>
+
           <div style={{ marginBottom: 20 }}>
             {cart.map((i, idx) => <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: 15 }}><span>{i.qty}× {i.product.name}</span><span>A${(i.unit_price * i.qty).toFixed(2)}</span></div>)}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontSize: 18, fontWeight: 800 }}><span>Total</span><span>A${cartTotal.toFixed(2)}</span></div>

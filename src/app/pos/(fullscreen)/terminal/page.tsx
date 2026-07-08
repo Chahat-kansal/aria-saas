@@ -93,7 +93,7 @@ interface CartItem {
   label?: string; variantLabel?: string; modifierDetails?: Modifier[]; unitPrice: number;
   variant_id?: string | null; variant_name?: string | null;
 }
-interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spent: number; points_balance?: number; stamps_count?: number; tags?: string[]; visit_count?: number; last_visit_at?: string | null; }
+interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spent: number; points_balance?: number; stamps_count?: number; preload_balance?: number; tags?: string[]; visit_count?: number; last_visit_at?: string | null; }
 interface ParkedSale { id: string; label: string | null; items: CartItem[]; total: number; customer_id: string | null; created_at: string; }
 interface RegisterSession { id: string; status: string; opening_float: number; opened_at: string; opened_by: string | null; }
 interface VariantModalState { product: Product; variantGroups: VariantGroup[]; modifiers: Modifier[]; }
@@ -153,7 +153,7 @@ function getCategoryBg(catName: string | null | undefined): string {
 }
 
 const CART_SESSION_KEY = 'aria_pos_cart_v1';
-type PayMethod = 'card' | 'cash' | 'split' | 'gift_card' | 'direct_deposit';
+type PayMethod = 'card' | 'cash' | 'split' | 'gift_card' | 'direct_deposit' | 'preload';
 
 /* ═══════════════════════════════════════════════════════════════════
    TERMINAL
@@ -1014,7 +1014,7 @@ export default function TerminalPage() {
     [cart]
   );
 
-  const loyaltyCustomer = customer && customer.loyalty_points > 0;
+  const loyaltyCustomer = customer && (customer.points_balance ?? customer.loyalty_points ?? 0) > 0;
 
   /* ─── Cart calculations ──────────────────────────────────────── */
   const cartKey    = (i: CartItem) => `${i.product.id}::${i.label ?? i.product.name}`;
@@ -1627,6 +1627,12 @@ export default function TerminalPage() {
             body: JSON.stringify({ sale_id: d.sale.id, customer_id: customerSnapshot.id, business_id: capturedBusinessId, sale_total: capturedTotal }),
           }).catch(() => {});
         }
+        // Preload (store credit) spend — deduct after sale committed so we have the sale_id
+        if (capturedPayMethod === 'preload' && customerSnapshot?.id) {
+          fetch('/api/loyalty/preload/spend', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_id: customerSnapshot.id, amount: capturedTotal, sale_id: d.sale.id }),
+          }).catch(() => {});
+        }
         // Split payments (non-blocking)
         if (capturedPayMethod === 'split') {
           Promise.all([
@@ -1943,12 +1949,13 @@ export default function TerminalPage() {
             {/* Payment method tabs */}
             <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--violet-dim)', display: 'flex', gap: 8 }}>
               {([
-                { id: 'card'           as const, label: 'Card',       icon: '💳', color: 'var(--violet)' },
-                { id: 'cash'           as const, label: 'Cash',       icon: '💵', color: 'var(--success)' },
-                { id: 'split'          as const, label: 'Split',      icon: '✂️', color: '#F59E0B' },
-                { id: 'gift_card'      as const, label: 'Gift Card',  icon: '🎁', color: 'var(--violet)' },
-                { id: 'direct_deposit' as const, label: 'Direct Dep.',icon: '🏦', color: '#F59E0B' },
-              ]).map(m => (
+                { id: 'card'           as const, label: 'Card',        icon: '💳', color: 'var(--violet)', show: true },
+                { id: 'cash'           as const, label: 'Cash',        icon: '💵', color: 'var(--success)', show: true },
+                { id: 'split'          as const, label: 'Split',       icon: '✂️', color: '#F59E0B', show: true },
+                { id: 'gift_card'      as const, label: 'Gift Card',   icon: '🎁', color: 'var(--violet)', show: true },
+                { id: 'direct_deposit' as const, label: 'Direct Dep.', icon: '🏦', color: '#F59E0B', show: true },
+                { id: 'preload'        as const, label: 'Store Credit', icon: '🏷️', color: '#0EA5E9', show: !!(customer && (customer.preload_balance ?? 0) > 0) },
+              ].filter(m => m.show)).map(m => (
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
                   style={{ flex: 1, height: 60, borderRadius: 12, border: "1.5px solid " + (payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'), background: payMethod === m.id ? (m.color) + "12" : 'var(--bg-ghost)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? "0 6px 20px " + (m.color) + "33" : 'none' }}>
                   <span style={{ fontSize: 18 }}>{m.icon}</span>
@@ -2081,6 +2088,30 @@ export default function TerminalPage() {
                 </div>
               )}
 
+              {payMethod === 'preload' && (
+                <div style={{ display:'flex', flexDirection:'column', gap:16, width:300, alignItems:'center' }}>
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:4 }}>Store Credit Balance</div>
+                    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:40, fontWeight:900, color:'#0EA5E9', letterSpacing:'-0.04em' }}>
+                      {'$' + (customer?.preload_balance ?? 0).toFixed(2)}
+                    </div>
+                    {(customer?.preload_balance ?? 0) < roundedTotal && (
+                      <div style={{ fontSize:11, color:'#EF4444', marginTop:4, fontWeight:600 }}>
+                        {'Insufficient — balance $' + (customer?.preload_balance ?? 0).toFixed(2) + ' < total $' + roundedTotal.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize:12, color:'var(--text-secondary)', textAlign:'center' }}>
+                    {'$' + Math.min(customer?.preload_balance ?? 0, roundedTotal).toFixed(2) + ' will be deducted from ' + (customer?.name ?? 'customer') + "'s store credit."}
+                  </div>
+                  <button
+                    onClick={() => processSale()}
+                    disabled={processing || !customer || (customer.preload_balance ?? 0) < roundedTotal}
+                    style={{ height:52, padding:'0 36px', borderRadius:14, border:'none', background:'linear-gradient(135deg,#0EA5E9,#0284C7)', color:'#fff', fontFamily:'inherit', fontSize:14, fontWeight:900, cursor:(processing || !customer || (customer.preload_balance ?? 0) < roundedTotal)?'not-allowed':'pointer', boxShadow:'0 5px 0 rgba(2,132,199,0.5)', transition:'all 200ms', opacity:(processing || !customer || (customer.preload_balance ?? 0) < roundedTotal)?0.4:1 }}>
+                    {processing ? 'Processing…' : 'Redeem Store Credit · A$' + roundedTotal.toFixed(2)}
+                  </button>
+                </div>
+              )}
               {payMethod === 'direct_deposit' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:16, width:300 }}>
                   <div style={{ fontSize:13, color:'var(--text-secondary)', textAlign:'center' }}>Record a direct deposit / bank transfer payment</div>
@@ -2842,7 +2873,7 @@ export default function TerminalPage() {
                   cartTotal={total}
                   onSelect={c => {
                     if (!c) { setCustomer(null); setCustomerSearch(''); return; }
-                    setCustomer({ id: c.id, name: c.name, email: c.email, phone: c.phone, loyalty_points: c.points_balance ?? 0, total_spent: c.total_spent, points_balance: c.points_balance, stamps_count: c.stamps_count, tags: c.tags, visit_count: c.visit_count, last_visit_at: c.last_visit_at });
+                    setCustomer({ id: c.id, name: c.name, email: c.email, phone: c.phone, loyalty_points: c.points_balance ?? 0, total_spent: c.total_spent, points_balance: c.points_balance, stamps_count: c.stamps_count, preload_balance: c.preload_balance ?? 0, tags: c.tags, visit_count: c.visit_count, last_visit_at: c.last_visit_at });
                   }}
                 />
               )}
@@ -3029,7 +3060,7 @@ export default function TerminalPage() {
                         </div>
                       </div>
                       {/* Loyalty earn/redeem preview — Sprint G, cafe + loyalty, additive */}
-                      {businessType === 'cafe' && loyaltyConfig && customer && (() => {
+                      {loyaltyConfig && customer && (() => {
                         const earnPts = Math.floor(roundedTotal * (loyaltyConfig.points_per_dollar ?? 1));
                         const redeemThreshold = Math.round(100 / (loyaltyConfig.point_value_cents ?? 1));
                         const canRedeem = (customer.points_balance ?? customer.loyalty_points ?? 0) >= redeemThreshold;
