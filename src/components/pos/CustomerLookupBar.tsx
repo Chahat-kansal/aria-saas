@@ -17,6 +17,23 @@ export interface LoyaltyCustomer {
   stamp_reward_ready?: boolean
 }
 
+export interface RedeemableRule {
+  id: string
+  rule_type: string
+  points_cost: number
+  label: string
+  config: Record<string, unknown>
+}
+
+export interface PendingRedemption {
+  rule_id: string | null
+  type: 'points' | 'stamp'
+  points_delta: number
+  stamps_delta: number
+  reward_redeemed: string | null
+  discount_dollars: number
+}
+
 interface LoyaltyConfig {
   program_type: string
   points_per_dollar: number
@@ -25,30 +42,52 @@ interface LoyaltyConfig {
   point_value_cents: number
 }
 
+interface HereNowEntry {
+  id: string
+  customer_id: string | null
+  name: string
+  points_balance: number
+  stamps_count: number
+  loyalty_tier: string | null
+  expires_in_seconds: number
+}
+
 interface Props {
   onSelect: (customer: LoyaltyCustomer | null) => void
   selected: LoyaltyCustomer | null
   loyaltyConfig?: LoyaltyConfig | null
   cartTotal?: number
+  outletId?: string | null
+  onRedeem?: (redemption: PendingRedemption) => void
+  pendingRedemption?: PendingRedemption | null
+  onClearRedemption?: () => void
+  onCheckinConsumed?: (checkinId: string) => void
 }
 
-// Detect keyboard-wedge scanner: 10 digits arrive in < 150 ms → auto-submit
+// Keyboard-wedge scanner: 10 digits arrive in < 150 ms → auto-submit
 const WEDGE_THRESHOLD_MS = 150
 
-export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, cartTotal = 0 }: Props) {
-  const [query,       setQuery]       = useState('')
-  const [results,     setResults]     = useState<LoyaltyCustomer[]>([])
-  const [open,        setOpen]        = useState(false)
-  const [loading,     setLoading]     = useState(false)
-  const [scanLoading, setScanLoading] = useState(false)
-  const [scanError,   setScanError]   = useState<string | null>(null)
-  const [showNewForm, setShowNewForm] = useState(false)
-  const [newForm,     setNewForm]     = useState({ name: '', phone: '', email: '' })
-  const [saving,      setSaving]      = useState(false)
-  const inputRef  = useRef<HTMLInputElement>(null)
-  const debounce  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Keyboard-wedge detection: track the timestamp of the first digit keypress
-  const wedgeStart = useRef<number | null>(null)
+export default function CustomerLookupBar({
+  onSelect, selected, loyaltyConfig, cartTotal = 0,
+  outletId, onRedeem, pendingRedemption, onClearRedemption, onCheckinConsumed,
+}: Props) {
+  const [query,        setQuery]        = useState('')
+  const [results,      setResults]      = useState<LoyaltyCustomer[]>([])
+  const [open,         setOpen]         = useState(false)
+  const [loading,      setLoading]      = useState(false)
+  const [scanLoading,  setScanLoading]  = useState(false)
+  const [scanError,    setScanError]    = useState<string | null>(null)
+  const [showNewForm,  setShowNewForm]  = useState(false)
+  const [newForm,      setNewForm]      = useState({ name: '', phone: '', email: '' })
+  const [saving,       setSaving]       = useState(false)
+  const [redeemRules,  setRedeemRules]  = useState<RedeemableRule[]>([])
+  const [hereNow,      setHereNow]      = useState<HereNowEntry[]>([])
+  const [showHereNow,  setShowHereNow]  = useState(false)
+  const inputRef   = useRef<HTMLInputElement>(null)
+  const debounce   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hereNowRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Keyboard-wedge detection
+  const wedgeStart  = useRef<number | null>(null)
   const wedgeBuffer = useRef('')
 
   const search = useCallback(async (q: string) => {
@@ -63,7 +102,6 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     setLoading(false)
   }, [])
 
-  // Resolve a short_code (10-digit numeric) OR UUID via the unified scan-lookup resolver
   const resolveCode = useCallback(async (code: string) => {
     setScanLoading(true)
     setScanError(null)
@@ -95,6 +133,7 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
         preload_balance: res.preload_balance ?? 0,
         stamp_reward_ready: res.stamp_reward_ready ?? false,
       })
+      setRedeemRules(res.redeemable_rules ?? [])
       setQuery('')
       setScanError(null)
     } catch {
@@ -108,7 +147,6 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     setScanError(null)
     setOpen(true)
 
-    // Keyboard-wedge: 10 all-digit chars → auto-resolve without search dropdown
     const isAllDigit = /^\d+$/.test(val)
     if (isAllDigit) {
       if (wedgeStart.current === null) wedgeStart.current = Date.now()
@@ -118,7 +156,6 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
         wedgeStart.current = null
         wedgeBuffer.current = ''
         if (elapsed < WEDGE_THRESHOLD_MS) {
-          // Hardware scanner — resolve immediately, skip text search
           setQuery('')
           resolveCode(val)
           return
@@ -137,7 +174,6 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     if (e.key === 'Enter') {
       const v = query.trim()
       if (/^\d{10}$/.test(v)) {
-        // Manual 10-digit entry confirmed with Enter → resolve as short_code
         setQuery('')
         resolveCode(v)
         e.preventDefault()
@@ -159,6 +195,8 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     setResults([])
     setOpen(false)
     setScanError(null)
+    setRedeemRules([])
+    if (onClearRedemption) onClearRedemption()
   }
 
   async function saveNew() {
@@ -177,18 +215,78 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     }
   }
 
-  const cfg = loyaltyConfig
-  const programType = cfg?.program_type ?? 'points'
-  const showPoints  = ['points', 'both'].includes(programType)
-  const showStamps  = ['stamps', 'both'].includes(programType)
+  // Poll "Here now" — check-ins from counter QR scans
+  const pollHereNow = useCallback(async () => {
+    try {
+      const qs = outletId ? ('?outlet_id=' + outletId) : ''
+      const res = await fetch('/api/pos/loyalty/checkins' + qs).then(r => r.json()).catch(() => ({ checkins: [] }))
+      const list = (res.checkins ?? []) as HereNowEntry[]
+      setHereNow(list)
+      if (list.length > 0 && !selected) setShowHereNow(true)
+    } catch { /* silent */ }
+  }, [outletId, selected])
 
-  const earnPreview = cfg && cartTotal > 0 && programType !== 'off'
-    ? Math.floor(cartTotal * (cfg.points_per_dollar ?? 1))
-    : 0
+  useEffect(() => {
+    pollHereNow()
+    hereNowRef.current = setInterval(pollHereNow, 20000)
+    return () => { if (hereNowRef.current) clearInterval(hereNowRef.current) }
+  }, [pollHereNow])
 
-  const stampsToNext = selected && cfg && showStamps
-    ? Math.max(0, (cfg.stamps_to_reward ?? 10) - (selected.stamps_count ?? 0))
-    : null
+  async function attachFromCheckin(entry: HereNowEntry) {
+    if (!entry.customer_id) return
+    // Consume the check-in
+    await fetch('/api/pos/loyalty/checkins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkin_id: entry.id }),
+    }).catch(() => {})
+    if (onCheckinConsumed) onCheckinConsumed(entry.id)
+    setHereNow(h => h.filter(x => x.id !== entry.id))
+    setShowHereNow(false)
+    // Resolve full customer via scan-lookup with customer_id (UUID accepted)
+    onSelect({
+      id: entry.customer_id,
+      name: entry.name,
+      phone: null,
+      email: null,
+      points_balance: entry.points_balance,
+      stamps_count: entry.stamps_count,
+      total_spent: 0,
+      visit_count: 0,
+      last_visit_at: null,
+      tags: [],
+      loyalty_tier: entry.loyalty_tier,
+      preload_balance: 0,
+      stamp_reward_ready: false,
+    })
+  }
+
+  // Redeem a reward rule chip
+  function handleRedeem(rule: RedeemableRule) {
+    if (!onRedeem || !loyaltyConfig) return
+    const discountDollars = rule.points_cost * (loyaltyConfig.point_value_cents / 100)
+    onRedeem({
+      rule_id: rule.id,
+      type: 'points',
+      points_delta: -rule.points_cost,
+      stamps_delta: 0,
+      reward_redeemed: rule.label,
+      discount_dollars: discountDollars,
+    })
+  }
+
+  // Redeem stamp reward
+  function handleStampRedeem() {
+    if (!onRedeem || !loyaltyConfig) return
+    onRedeem({
+      rule_id: null,
+      type: 'stamp',
+      points_delta: 0,
+      stamps_delta: -(loyaltyConfig.stamps_to_reward ?? 10),
+      reward_redeemed: loyaltyConfig.stamp_reward_text ?? 'Free item',
+      discount_dollars: 0,
+    })
+  }
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -201,6 +299,17 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const cfg = loyaltyConfig
+  const programType  = cfg?.program_type ?? 'points'
+  const showPoints   = ['points', 'both'].includes(programType)
+  const showStamps   = ['stamps', 'both'].includes(programType)
+  const earnPreview  = cfg && cartTotal > 0 && programType !== 'off'
+    ? Math.floor(cartTotal * (cfg.points_per_dollar ?? 1))
+    : 0
+  const stampsToNext = selected && cfg && showStamps
+    ? Math.max(0, (cfg.stamps_to_reward ?? 10) - (selected.stamps_count ?? 0))
+    : null
+
   const iS: React.CSSProperties = {
     background: 'var(--bg-base)', border: '1px solid var(--divider)', borderRadius: 8,
     padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)', outline: 'none',
@@ -209,56 +318,144 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
 
   return (
     <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--divider)', background: 'var(--bg-surface)' }}>
+      {/* ── Here Now badge (counter QR check-ins) ── */}
+      {!selected && hereNow.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#00B140', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              ● Here now ({hereNow.length})
+            </span>
+            <button
+              onClick={() => setShowHereNow(s => !s)}
+              style={{ fontSize: 10, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              {showHereNow ? 'hide' : 'show'}
+            </button>
+          </div>
+          {showHereNow && hereNow.map(entry => (
+            <button
+              key={entry.id}
+              onClick={() => void attachFromCheckin(entry)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 10px', background: 'rgba(0,177,64,0.08)',
+                border: '1px solid rgba(0,177,64,0.2)', borderRadius: 8, marginBottom: 4,
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>👋</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{entry.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                  {entry.points_balance > 0 ? entry.points_balance + ' pts · ' : ''}
+                  expires in {Math.ceil(entry.expires_in_seconds / 60)}m
+                </div>
+              </div>
+              <span style={{ fontSize: 11, color: '#00B140', fontWeight: 700 }}>Attach →</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {selected ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: '50%', background: 'rgba(139,92,246,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0,
-          }}>
-            {selected.name.charAt(0).toUpperCase()}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selected.name}
-              {selected.loyalty_tier && (
-                <span style={{ fontWeight: 400, color: '#C9A37A', marginLeft: 6, fontSize: 10 }}>{selected.loyalty_tier}</span>
-              )}
-              {selected.phone && <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>{selected.phone}</span>}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%', background: 'rgba(139,92,246,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0,
+            }}>
+              {selected.name.charAt(0).toUpperCase()}
             </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-              {cfg && programType !== 'off' && (
-                <>
-                  {showPoints && (
-                    <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 700 }}>
-                      {selected.points_balance ?? 0} pts
-                    </span>
-                  )}
-                  {showStamps && (
-                    <span style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700 }}>
-                      {selected.stamps_count ?? 0}/{cfg.stamps_to_reward} ☕
-                      {stampsToNext === 0
-                        ? ' — FREE ' + (cfg.stamp_reward_text ?? 'item') + '!'
-                        : stampsToNext === 1 ? ' — 1 more!' : ''}
-                    </span>
-                  )}
-                  {selected.stamp_reward_ready && (
-                    <span style={{ fontSize: 10, color: '#00B140', fontWeight: 700 }}>
-                      🎁 Redeem {cfg?.stamp_reward_text ?? 'free item'}
-                    </span>
-                  )}
-                  {(selected.preload_balance ?? 0) > 0 && (
-                    <span style={{ fontSize: 10, color: '#0EA5E9', fontWeight: 700 }}>
-                      {'$' + (selected.preload_balance ?? 0).toFixed(2) + ' store credit'}
-                    </span>
-                  )}
-                  {earnPreview > 0 && (
-                    <span style={{ fontSize: 10, color: '#7FB897' }}>+{earnPreview} pts this sale</span>
-                  )}
-                </>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selected.name}
+                {selected.loyalty_tier && (
+                  <span style={{ fontWeight: 400, color: '#C9A37A', marginLeft: 6, fontSize: 10 }}>{selected.loyalty_tier}</span>
+                )}
+                {selected.phone && <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>{selected.phone}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                {cfg && programType !== 'off' && (
+                  <>
+                    {showPoints && (
+                      <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 700 }}>
+                        {selected.points_balance ?? 0} pts
+                      </span>
+                    )}
+                    {showStamps && (
+                      <span style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700 }}>
+                        {selected.stamps_count ?? 0}/{cfg.stamps_to_reward} ☕
+                        {stampsToNext === 0
+                          ? ' — FREE ' + (cfg.stamp_reward_text ?? 'item') + '!'
+                          : stampsToNext === 1 ? ' — 1 more!' : ''}
+                      </span>
+                    )}
+                    {(selected.preload_balance ?? 0) > 0 && (
+                      <span style={{ fontSize: 10, color: '#0EA5E9', fontWeight: 700 }}>
+                        {'$' + (selected.preload_balance ?? 0).toFixed(2) + ' store credit'}
+                      </span>
+                    )}
+                    {earnPreview > 0 && (
+                      <span style={{ fontSize: 10, color: '#7FB897' }}>+{earnPreview} pts this sale</span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <button onClick={clear} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+          </div>
+
+          {/* ── Redeemable reward chips ── */}
+          {!pendingRedemption && (redeemRules.length > 0 || selected.stamp_reward_ready) && (
+            <div style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {selected.stamp_reward_ready && cfg && showStamps && (
+                <button
+                  onClick={handleStampRedeem}
+                  style={{
+                    padding: '4px 10px', borderRadius: 999,
+                    background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)',
+                    color: '#F59E0B', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  🎁 Redeem: {cfg.stamp_reward_text}
+                </button>
+              )}
+              {redeemRules.map(rule => (
+                <button
+                  key={rule.id}
+                  onClick={() => handleRedeem(rule)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 999,
+                    background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.35)',
+                    color: '#8B5CF6', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {'🏆 ' + rule.label + ' (−' + rule.points_cost + ' pts)'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── Active redemption chip ── */}
+          {pendingRedemption && (
+            <div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                flex: 1, padding: '4px 10px', borderRadius: 999,
+                background: 'rgba(0,177,64,0.12)', border: '1px solid rgba(0,177,64,0.35)',
+                color: '#00B140', fontSize: 11, fontWeight: 700,
+              }}>
+                ✓ {pendingRedemption.reward_redeemed ?? 'Reward'}
+                {pendingRedemption.discount_dollars > 0 ? ' (−$' + pendingRedemption.discount_dollars.toFixed(2) + ')' : ''}
+                {' · ' + Math.abs(pendingRedemption.points_delta) + ' pts on completion'}
+              </div>
+              {onClearRedemption && (
+                <button
+                  onClick={onClearRedemption}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 14, padding: '0 2px' }}
+                >×</button>
               )}
             </div>
-          </div>
-          <button onClick={clear} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+          )}
         </div>
       ) : showNewForm ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

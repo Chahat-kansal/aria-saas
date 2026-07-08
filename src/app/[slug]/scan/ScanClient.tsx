@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import JsBarcode from 'jsbarcode'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import QRCode from 'qrcode'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#0a0a0a'
@@ -22,6 +22,8 @@ type MeData = {
   loyalty_tier?: string | null
 }
 
+type ScanMode = 'show' | 'camera'
+
 function BrightnessIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
@@ -40,7 +42,7 @@ function BrightnessIcon() {
   )
 }
 
-export function ScanClient({ slug, bizName, logoUrl }: {
+export function ScanClient({ slug, bizId, bizName, logoUrl }: {
   slug: string
   bizId: string
   bizName: string
@@ -48,7 +50,13 @@ export function ScanClient({ slug, bizName, logoUrl }: {
 }) {
   const [me, setMe] = useState<MeData | null>(null)
   const [loading, setLoading] = useState(true)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [mode, setMode] = useState<ScanMode>('show')
+  const [checkinStatus, setCheckinStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
+  const [checkinMsg, setCheckinMsg] = useState('')
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const scanningRef = useRef(false)
 
   useEffect(() => {
     let phone = ''
@@ -72,33 +80,135 @@ export function ScanClient({ slug, bizName, logoUrl }: {
       .catch(() => setLoading(false))
   }, [slug])
 
-  // Barcode value: prefer 10-digit numeric short_code (CODE128C); fall back to UUID (CODE128 auto)
-  const barcodeValue = me?.short_code ?? me?.loyalty_identity_id ?? null
+  // QR code: prefer short_code (10-digit), fallback to identity UUID
+  const qrValue = me?.short_code ?? me?.loyalty_identity_id ?? null
 
   useEffect(() => {
-    if (!barcodeValue || !canvasRef.current) return
-    const isNumeric10 = /^\d{10}$/.test(barcodeValue)
-    try {
-      JsBarcode(canvasRef.current, barcodeValue, {
-        format: isNumeric10 ? 'CODE128C' : 'CODE128',
-        width: 2.4,
-        height: 110,
-        displayValue: false,
-        background: '#ffffff',
-        lineColor: '#000000',
-        margin: 10,
-      })
-    } catch (err) {
-      console.error('[ScanClient] barcode encode error:', barcodeValue, err)
-      const ctx = canvasRef.current.getContext('2d')
-      if (ctx) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height) }
-    }
-  }, [barcodeValue])
+    if (!qrValue || !qrCanvasRef.current) return
+    QRCode.toCanvas(qrCanvasRef.current, qrValue, {
+      errorCorrectionLevel: 'M',
+      margin: 3,
+      width: 240,
+      color: { dark: '#000000', light: '#ffffff' },
+    }, (err) => {
+      if (err) console.error('[ScanClient] QR error:', err)
+    })
+  }, [qrValue])
 
-  // Display code: 10-digit short_code shown as "1234 567890" or UUID fallback (first 16 hex chars)
   const displayCode = me?.short_code
     ? me.short_code.slice(0, 4) + ' ' + me.short_code.slice(4)
     : (me?.loyalty_identity_id ?? '').replace(/-/g, '').toUpperCase().slice(0, 16)
+
+  // ── Camera: stop stream ────────────────────────────────────────────────────
+  const stopCamera = useCallback(() => {
+    scanningRef.current = false
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+  }, [])
+
+  // ── Process decoded counter QR text ───────────────────────────────────────
+  const processCounterQR = useCallback(async (text: string) => {
+    let outletId: string | null = null
+    let valid = false
+
+    // Format 1: aria:checkin:v1:{business_id}:{outlet_id}
+    if (text.startsWith('aria:checkin:v1:')) {
+      const parts = text.split(':')
+      if (parts.length >= 4) {
+        const bPart = parts[3] ?? ''
+        if (bPart === bizId || bPart === '') {
+          outletId = parts[4] ?? null
+          valid = true
+        }
+      }
+    } else {
+      // Format 2: URL with ?mode=checkin&o={outlet_id}
+      try {
+        const u = new URL(text.startsWith('http') ? text : ('https://x' + text))
+        if (u.searchParams.get('mode') === 'checkin') {
+          outletId = u.searchParams.get('o')
+          valid = true
+        }
+      } catch { /* not a URL */ }
+    }
+
+    if (!valid) {
+      setCheckinStatus('error')
+      setCheckinMsg('Not a valid check-in QR. Scan the card on the counter.')
+      return
+    }
+
+    setCheckinMsg('Checking in…')
+    try {
+      const res = await fetch('/api/public/cx/' + slug + '/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outlet_id: outletId }),
+      }).then(r => r.json())
+
+      if (res.ok) {
+        setCheckinStatus('success')
+        const mins = res.expires_at
+          ? Math.max(1, Math.ceil((new Date(res.expires_at).getTime() - Date.now()) / 60000))
+          : 15
+        setCheckinMsg('You\'re checked in! Staff will see you for the next ' + mins + ' min.')
+        setTimeout(() => { setMode('show'); setCheckinStatus('idle'); setCheckinMsg('') }, 5000)
+      } else {
+        setCheckinStatus('error')
+        setCheckinMsg(res.error ?? 'Check-in failed — try again')
+      }
+    } catch {
+      setCheckinStatus('error')
+      setCheckinMsg('Network error — try again')
+    }
+  }, [bizId, slug])
+
+  // ── Start camera + ZXing QR scan loop ─────────────────────────────────────
+  const startCamera = useCallback(async () => {
+    setCheckinStatus('scanning')
+    setCheckinMsg('')
+    scanningRef.current = true
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+
+      const { BrowserQRCodeReader } = await import('@zxing/library')
+      const reader = new BrowserQRCodeReader()
+
+      const loop = async () => {
+        if (!scanningRef.current || !videoRef.current) return
+        try {
+          const result = await reader.decodeFromVideoElement(videoRef.current)
+          if (result && scanningRef.current) {
+            stopCamera()
+            await processCounterQR(result.getText())
+          }
+        } catch {
+          if (scanningRef.current) setTimeout(loop, 300)
+        }
+      }
+      loop()
+    } catch {
+      setCheckinStatus('error')
+      setCheckinMsg('Camera access denied. Allow camera permission and try again.')
+    }
+  }, [stopCamera, processCounterQR])
+
+  useEffect(() => {
+    if (mode === 'camera') {
+      startCamera()
+    } else {
+      stopCamera()
+      if (mode === 'show') { setCheckinStatus('idle'); setCheckinMsg('') }
+    }
+    return stopCamera
+  }, [mode, startCamera, stopCamera])
 
   return (
     <div style={{ minHeight: '100dvh', background: BG, color: INK, fontFamily: FB, display: 'flex', flexDirection: 'column', maxWidth: '28rem', margin: '0 auto' }}>
@@ -121,7 +231,35 @@ export function ScanClient({ slug, bizName, logoUrl }: {
         </p>
       </div>
 
-      {/* Barcode card */}
+      {/* Mode toggle — show only when logged in */}
+      {me?.found && !loading && (
+        <div style={{ display: 'flex', gap: 8, padding: '0 24px 16px', justifyContent: 'center' }}>
+          <button
+            onClick={() => setMode('show')}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 12, border: 'none',
+              background: mode === 'show' ? ACCENT : 'rgba(255,255,255,0.08)',
+              color: mode === 'show' ? ACCENT_TEXT : INK_MUTED,
+              fontFamily: FB, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Show my code
+          </button>
+          <button
+            onClick={() => setMode('camera')}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 12, border: 'none',
+              background: mode === 'camera' ? ACCENT : 'rgba(255,255,255,0.08)',
+              color: mode === 'camera' ? ACCENT_TEXT : INK_MUTED,
+              fontFamily: FB, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Scan counter QR
+          </button>
+        </div>
+      )}
+
+      {/* Content area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px calc(100px + env(safe-area-inset-bottom))' }}>
         {loading ? (
           <div style={{ color: INK_MUTED, fontFamily: FB, fontSize: 14 }}>Loading…</div>
@@ -137,44 +275,70 @@ export function ScanClient({ slug, bizName, logoUrl }: {
               Sign in
             </a>
           </div>
+        ) : mode === 'camera' ? (
+          /* ── Camera scan mode ── */
+          <div style={{ width: '100%', maxWidth: 340 }}>
+            {checkinStatus !== 'success' && (
+              <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, textAlign: 'center', marginBottom: 12 }}>
+                Point camera at the QR on the counter card
+              </p>
+            )}
+            {checkinStatus !== 'success' && (
+              <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', background: '#111', aspectRatio: '1' }}>
+                <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <div style={{ width: 180, height: 180, border: '2.5px solid ' + ACCENT, borderRadius: 16, boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }} />
+                </div>
+              </div>
+            )}
+            {checkinStatus === 'success' && (
+              <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 56, marginBottom: 16 }}>✓</div>
+                <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, color: '#00B140', margin: '0 0 10px' }}>Checked in!</p>
+                <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>{checkinMsg}</p>
+              </div>
+            )}
+            {checkinStatus === 'error' && (
+              <div style={{ marginTop: 16, padding: '14px 18px', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 14, textAlign: 'center' }}>
+                <p style={{ fontFamily: FB, fontSize: 13, color: '#EF4444', margin: '0 0 10px' }}>{checkinMsg}</p>
+                <button onClick={() => startCamera()} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.2)', color: INK, padding: '6px 16px', borderRadius: 8, fontFamily: FB, fontSize: 12, cursor: 'pointer' }}>
+                  Try again
+                </button>
+              </div>
+            )}
+            {checkinStatus !== 'success' && (
+              <button
+                onClick={() => setMode('show')}
+                style={{ marginTop: 16, width: '100%', padding: '10px 0', borderRadius: 12, background: 'rgba(255,255,255,0.08)', border: 'none', color: INK_MUTED, fontFamily: FB, fontSize: 13, cursor: 'pointer' }}
+              >
+                ← Back to my code
+              </button>
+            )}
+          </div>
         ) : (
+          /* ── Show my code mode ── */
           <>
-            {/* Brightness hint */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              color: INK_MUTED, fontFamily: FB, fontSize: 12,
-              marginBottom: 16,
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: INK_MUTED, fontFamily: FB, fontSize: 12, marginBottom: 16 }}>
               <BrightnessIcon />
               <span>Set brightness to maximum before scanning</span>
             </div>
 
-            {/* Card */}
             <div style={{
               width: '100%', maxWidth: 340,
               background: '#fff', borderRadius: 24,
               padding: '24px 20px 20px',
               boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
             }}>
-              {/* CODE128C barcode */}
-              <div style={{ borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-                <canvas
-                  ref={canvasRef}
-                  style={{ width: '100%', display: 'block' }}
-                />
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
+                <canvas ref={qrCanvasRef} style={{ display: 'block', maxWidth: '100%' }} />
               </div>
 
-              {/* Machine-readable code */}
-              <div style={{
-                marginTop: 14, background: '#f5f5f5', borderRadius: 10,
-                padding: '10px 16px', textAlign: 'center',
-              }}>
+              <div style={{ marginTop: 14, background: '#f5f5f5', borderRadius: 10, padding: '10px 16px', textAlign: 'center' }}>
                 <span style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, letterSpacing: '0.12em', color: '#0a0a0a' }}>
                   {displayCode}
                 </span>
               </div>
 
-              {/* Points + tier */}
               {me?.points_balance !== undefined && (
                 <div style={{ marginTop: 16, textAlign: 'center' }}>
                   <p style={{ fontFamily: FB, fontSize: 12, color: '#6b7280', margin: '0 0 2px' }}>

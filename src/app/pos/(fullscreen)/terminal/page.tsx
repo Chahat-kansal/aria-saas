@@ -48,7 +48,7 @@ import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 import { LiveIntelligenceBadges } from '@/components/terminal/LiveIntelligenceBadges';
 import { ProductImage } from '@/components/terminal/ProductImage';
-import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
+import CustomerLookupBar, { type LoyaltyCustomer, type PendingRedemption } from '@/components/pos/CustomerLookupBar';
 import type { DiscountBarCartItem } from '@/components/pos/DiscountBar';
 import { useScanner } from '@/lib/hardware/scanner';
 import type { AppliedDiscount } from '@/lib/pos/discount-engine';
@@ -454,9 +454,10 @@ export default function TerminalPage() {
   const [pendingOnlineOrders, setPendingOnlineOrders] = useState<Array<{ id: string; order_number: string; customer_name: string; total: number }>>([])
   const [showOnlineBell,      setShowOnlineBell]      = useState(false)
 
-  // Loyalty — Sprint G, cafe-only
+  // Loyalty — all business types with loyalty configured
   const [loyaltyConfig, setLoyaltyConfig] = useState<{ program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string } | null>(null);
   const [redeemActive,  setRedeemActive]  = useState(false);
+  const [pendingRedemption, setPendingRedemption] = useState<PendingRedemption | null>(null);
 
   // Discounts & promotions — Sprint I, cafe-only
   const [appliedDiscounts, setAppliedDiscounts] = useState<AppliedDiscount[]>([])
@@ -606,13 +607,13 @@ export default function TerminalPage() {
         setShowCafeSetup(true);
       }
 
+      // Load loyalty config for ALL business types (not just cafe)
+      fetch('/api/pos/loyalty/config').then(r => r.json()).then(d => {
+        if (d.config && d.config.program_type !== 'off') setLoyaltyConfig(d.config);
+      }).catch(() => {});
+
       // Cafe-only side effects (NON-blocking — must not prevent setLoading)
       if (prod.business_type === 'cafe') {
-        // Load loyalty config
-        fetch('/api/pos/loyalty/config').then(r => r.json()).then(d => {
-          if (d.config && d.config.program_type !== 'off') setLoyaltyConfig(d.config);
-        }).catch(() => {});
-
         // KDS BroadcastChannel listener
         try {
           kdsChannel = new BroadcastChannel('aria-kds');
@@ -1067,6 +1068,7 @@ export default function TerminalPage() {
     setDiscountMode(null); setDiscountVal('');
     setAgeVerified(false); setSuggestions([]);
     setAppliedDiscounts([]); setManualDiscountAmt(0);
+    setPendingRedemption(null);
     try { sessionStorage.removeItem(CART_SESSION_KEY); } catch (e) { console.warn('[non-fatal]', e) }
     searchRef.current?.focus();
   }
@@ -1517,6 +1519,7 @@ export default function TerminalPage() {
     const capturedBusinessName = businessName;
     const capturedCustomerDetails = customerDetails;
     const capturedSessionId = registerSession?.id ?? null;
+    const capturedPendingRedemption = pendingRedemption;
     const capturedOutletId = typeof window !== 'undefined' ? localStorage.getItem('pos_outlet_id') || null : null;
     const saleBody = JSON.stringify({
       items: cartSnapshot.map(i => ({
@@ -1625,6 +1628,19 @@ export default function TerminalPage() {
         if (customerSnapshot?.id && capturedBusinessId) {
           fetch('/api/loyalty/earn', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sale_id: d.sale.id, customer_id: customerSnapshot.id, business_id: capturedBusinessId, sale_total: capturedTotal }),
+          }).catch(() => {});
+        }
+        // Loyalty redemption — deducted ONLY after sale confirmed (void-safe: no sale_id = no deduction)
+        if (capturedPendingRedemption && customerSnapshot?.id) {
+          fetch('/api/pos/loyalty/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customer_id: customerSnapshot.id,
+              sale_id: d.sale.id,
+              type: 'redeem',
+              points_delta: capturedPendingRedemption.points_delta,
+              stamps_delta: capturedPendingRedemption.stamps_delta,
+              reward_redeemed: capturedPendingRedemption.reward_redeemed,
+            }),
           }).catch(() => {});
         }
         // Preload (store credit) spend — deduct after sale committed so we have the sale_id
@@ -2865,15 +2881,31 @@ export default function TerminalPage() {
                   <button onClick={() => { setSelectedTable(null); setCustomerDetails(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 13 }}>×</button>
                 </div>
               )}
-              {/* Customer lookup bar — Sprint G, cafe + loyalty, additive */}
-              {businessType === 'cafe' && loyaltyConfig && (
+              {/* Customer lookup bar — all business types with loyalty, additive */}
+              {loyaltyConfig && (
                 <CustomerLookupBar
                   selected={customer as LoyaltyCustomer | null}
                   loyaltyConfig={loyaltyConfig}
                   cartTotal={total}
+                  outletId={activeOutletId}
+                  pendingRedemption={pendingRedemption}
                   onSelect={c => {
-                    if (!c) { setCustomer(null); setCustomerSearch(''); return; }
+                    if (!c) { setCustomer(null); setCustomerSearch(''); setPendingRedemption(null); return; }
                     setCustomer({ id: c.id, name: c.name, email: c.email, phone: c.phone, loyalty_points: c.points_balance ?? 0, total_spent: c.total_spent, points_balance: c.points_balance, stamps_count: c.stamps_count, preload_balance: c.preload_balance ?? 0, tags: c.tags, visit_count: c.visit_count, last_visit_at: c.last_visit_at });
+                  }}
+                  onRedeem={r => {
+                    setPendingRedemption(r);
+                    if (r.discount_dollars > 0) {
+                      setAppliedDiscounts(prev => {
+                        const filtered = prev.filter(d => !d.promotion_id.startsWith('loyalty-redeem-'));
+                        const entry: AppliedDiscount = { promotion_id: 'loyalty-redeem-' + (r.rule_id ?? 'stamp'), promotion_name: r.reward_redeemed ?? 'Loyalty reward', type: 'amount_off', amount_off: r.discount_dollars, description: r.reward_redeemed ?? 'Loyalty reward', requires_code: false, stacks_with_others: true, stack_priority: 0 };
+                        return [...filtered, entry];
+                      });
+                    }
+                  }}
+                  onClearRedemption={() => {
+                    setPendingRedemption(null);
+                    setAppliedDiscounts(prev => prev.filter(d => !d.promotion_id.startsWith('loyalty-redeem-')));
                   }}
                 />
               )}

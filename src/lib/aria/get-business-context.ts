@@ -349,7 +349,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
           attachment_rate_pct: s.attachmentRate,
           attached_sales_30d: s.attachedSales30d,
           total_sales_30d: s.totalSales30d,
-          note: 'Liability = outstanding points × point_value_cents / 100. attachment_rate_pct = % of non-voided sales in last 30d with a loyalty member attached. If <20%, advise owner to promote scan-at-till. If members are inactive 30d+, suggest a winback. Never invent loyalty numbers — cite these.',
+          checkin_count_7d: s.checkinCount7d,
+          note: 'Liability = outstanding points × point_value_cents / 100. attachment_rate_pct = % of non-voided sales in last 30d with a loyalty member attached. If <20%, advise owner to promote scan-at-till. checkin_count_7d = counter-QR / camera check-ins in last 7 days. If members are inactive 30d+, suggest a winback. Never invent loyalty numbers — cite these.',
         }
       } catch { return null }
     })(),

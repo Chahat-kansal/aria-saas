@@ -9,12 +9,14 @@ export interface LoyaltyStats {
   attachmentRate: number   // % of sales in last 30d that had a customer attached (loyalty health signal)
   attachedSales30d: number
   totalSales30d: number
+  checkinCount7d: number   // counter QR / camera check-ins in last 7 days
 }
 
 // Loyalty counters for the daily briefing + weekly report. Single source so both reuse it.
 export async function getLoyaltyStats(db: SupabaseClient, businessId: string): Promise<LoyaltyStats> {
-  const since = new Date(Date.now() - 30 * 86400000).toISOString()
-  const [cfg, members, newMembers, redemptions, balances, totalSales, attachedSales] = await Promise.all([
+  const since   = new Date(Date.now() - 30 * 86400000).toISOString()
+  const since7d = new Date(Date.now() -  7 * 86400000).toISOString()
+  const [cfg, members, newMembers, redemptions, balances, totalSales, attachedSales, checkins7d] = await Promise.all([
     db.from('pos_loyalty_config').select('business_id').eq('business_id', businessId).maybeSingle(),
     db.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     db.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since),
@@ -22,6 +24,7 @@ export async function getLoyaltyStats(db: SupabaseClient, businessId: string): P
     db.from('pos_customers').select('points_balance, loyalty_points').eq('business_id', businessId).limit(2000),
     db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).neq('status', 'voided').gte('created_at', since),
     db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).neq('status', 'voided').gte('created_at', since).not('customer_id', 'is', null),
+    db.from('loyalty_checkins').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since7d),
   ])
 
   let pointsOutstanding = 0
@@ -40,6 +43,7 @@ export async function getLoyaltyStats(db: SupabaseClient, businessId: string): P
     attachmentRate,
     attachedSales30d,
     totalSales30d,
+    checkinCount7d: checkins7d.count ?? 0,
   }
 }
 
