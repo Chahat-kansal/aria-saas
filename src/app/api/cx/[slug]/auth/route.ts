@@ -111,8 +111,10 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     const smsResult = await sendSMS(phone, smsBody, { category: 'transactional', businessId: bid })
     if (!smsResult.ok) {
       // Clean up the code row so we don't leave a dangling unusable code
-      await supabaseAdmin.from('cx_otp_codes').delete().eq('phone', phone).eq('business_id', bid).eq('code_hash', codeHash)
-      return NextResponse.json({ error: 'Could not send SMS. Check your number.' }, { status: 500 })
+      const { error: delErr } = await supabaseAdmin.from('cx_otp_codes').delete().eq('phone', phone).eq('business_id', bid).eq('code_hash', codeHash)
+      if (delErr) console.error('[cx-auth/send] cleanup delete failed:', delErr.message)
+      console.error('[cx-auth/send] SMS failed to=' + phone + ' error=' + (smsResult.error ?? 'unknown'))
+      return NextResponse.json({ error: 'Could not send SMS. Check your number.', code: 'sms_failed' }, { status: 502 })
     }
 
     return NextResponse.json({ ok: true })

@@ -153,42 +153,67 @@ export async function sendSMS(to: string, body: string, opts: SendSMSOptions = {
     return { ok: false, error: 'SMS not configured' }
   }
 
-  const auth = Buffer.from(`${username}:${apiKey}`).toString('base64')
+  const auth = Buffer.from(username + ':' + apiKey).toString('base64')
+
+  // CLICKSEND_SENDER_ID env var controls the 'from' field.
+  // If unset, we omit 'from' entirely so ClickSend uses the account's default shared AU number.
+  // A hardcoded alphanumeric like "AriaOS" will be accepted by the ClickSend API (response_code
+  // SUCCESS, message_id assigned) but silently dropped at the carrier if it is not registered —
+  // which is exactly the symptom of OTP rows persisting while SMS never arrives.
+  const senderId: string | undefined = process.env.CLICKSEND_SENDER_ID || undefined
+  const messagePayload: Record<string, string> = {
+    source: 'aria_os',
+    body: finalBody,
+    to: phone,
+  }
+  if (senderId) messagePayload.from = senderId
 
   try {
     const res = await fetch('https://rest.clicksend.com/v3/sms/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${auth}`,
+        Authorization: 'Basic ' + auth,
       },
       signal: AbortSignal.timeout(10_000),
-      body: JSON.stringify({
-        messages: [{
-          source: 'aria_os',
-          from: 'AriaOS',  // alphanumeric sender — shows as "AriaOS" on recipient phone
-          body: finalBody,
-          to: phone,
-        }],
-      }),
+      body: JSON.stringify({ messages: [messagePayload] }),
     })
 
     const data = await res.json() as {
-      data?: { messages?: Array<{ message_id: string; status: string }> }
+      data?: { messages?: Array<{ message_id: string; status: string; status_code?: string }> }
       response_code?: string
+      response_msg?: string
     }
 
+    // Envelope-level check: ClickSend must report SUCCESS at the API level.
     if (!res.ok || data.response_code !== 'SUCCESS') {
-      console.error('[clicksend] Send failed:', JSON.stringify(data))
+      console.error('[clicksend] Envelope failure to=' + phone + ' http=' + res.status + ' body=' + JSON.stringify(data))
       await logSend({
         business_id: businessId, to_number: phone, body: finalBody, category,
         consent_ok: consentOk, suppressed, clicksend_message_id: null, status: 'failed',
-        error: `ClickSend error: ${data.response_code}`,
+        error: 'ClickSend envelope error: ' + (data.response_code ?? res.status),
       })
-      return { ok: false, error: `ClickSend error: ${data.response_code}` }
+      return { ok: false, error: 'ClickSend envelope error: ' + (data.response_code ?? res.status) }
     }
 
     const msg = data.data?.messages?.[0]
+    const msgStatus = (msg?.status ?? 'UNKNOWN').toUpperCase()
+
+    // Always log the per-message status so Vercel logs show the carrier acceptance verdict.
+    // SUCCESS / QUEUED / SENT = accepted for delivery. Anything else = rejected.
+    console.log('[clicksend] message_id=' + (msg?.message_id ?? 'none') + ' status=' + msgStatus + ' to=' + phone + (senderId ? ' from=' + senderId : ' from=<account-default>'))
+
+    const ACCEPTED = new Set(['SUCCESS', 'QUEUED', 'SENT'])
+    if (!ACCEPTED.has(msgStatus)) {
+      console.error('[clicksend] Per-message rejection to=' + phone + ' status=' + msgStatus + ' full=' + JSON.stringify(data))
+      await logSend({
+        business_id: businessId, to_number: phone, body: finalBody, category,
+        consent_ok: consentOk, suppressed, clicksend_message_id: msg?.message_id ?? null, status: 'failed',
+        error: 'ClickSend message status: ' + msgStatus,
+      })
+      return { ok: false, error: 'ClickSend message status: ' + msgStatus }
+    }
+
     await logSend({
       business_id: businessId, to_number: phone, body: finalBody, category,
       consent_ok: consentOk, suppressed, clicksend_message_id: msg?.message_id ?? null, status: 'sent', error: null,
