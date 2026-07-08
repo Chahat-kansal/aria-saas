@@ -1,5 +1,4 @@
 'use client'
-import { useState, useEffect } from 'react'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#f3efe4'
@@ -38,24 +37,6 @@ interface Challenge {
   reward_points: number
   status: string
   expires_at: string | null
-}
-
-interface EarnTxn {
-  id: string
-  type: string
-  points_delta: number
-  created_at: string
-}
-
-interface CxData {
-  found: boolean
-  customer_id?: string
-  name?: string
-  points_balance?: number
-  loyalty_tier?: string | null
-  visit_count?: number
-  challenges?: Challenge[]
-  recent_txns?: EarnTxn[]
 }
 
 function PadlockIcon() {
@@ -200,39 +181,18 @@ function ChallengeCard({ ch }: { ch: Challenge }) {
   )
 }
 
-export function RewardsClient({ slug, bizName, rewardRules }: {
+export function RewardsClient({ slug, bizName, rewardRules, isSignedIn, pts, tier: rawTierProp, challenges }: {
   slug: string
   bizName: string
   logoUrl: string | null
   rewardRules: RewardRule[]
+  isSignedIn: boolean
+  pts: number
+  tier: string | null
+  customerId: string | null
+  challenges: Challenge[]
 }) {
-  const [cx, setCx] = useState<CxData | null>(null)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) {
-        const { phone } = JSON.parse(saved) as { phone?: string }
-        if (phone) {
-          fetch('/api/public/cx/' + slug + '/me', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone }),
-          })
-            .then(r => r.json())
-            .then((data: CxData) => { setCx(data.found ? data : null); setLoaded(true) })
-            .catch(() => setLoaded(true))
-          return
-        }
-      }
-    } catch { /* no localStorage */ }
-    setLoaded(true)
-  }, [slug])
-
-  const pts = cx?.points_balance ?? 0
-  const rawTier = cx?.loyalty_tier ?? 'Member'
-  const challenges = (cx?.challenges ?? []) as Challenge[]
+  const rawTier = rawTierProp ?? 'Member'
 
   const sortedRules = [...rewardRules].sort((a, b) => (a.threshold_value ?? 0) - (b.threshold_value ?? 0))
   const nextRule = sortedRules.find(r => (r.threshold_value ?? 0) > pts)
@@ -251,8 +211,7 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
   const circumference = 2 * Math.PI * R
   const dashOffset = (circumference * (1 - ringPct)).toFixed(2)
 
-  const pillText = !loaded ? ' '
-    : !cx ? 'Sign in to see your rewards'
+  const pillText = !isSignedIn ? 'Sign in to see your rewards'
     : ptsToNext > 0
       ? ('↗ ' + tierLabel + ' tier — ' + ptsToNext + ' pts to next reward')
       : ('↗ ' + tierLabel + ' tier — all rewards unlocked!')
@@ -348,7 +307,7 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
         {/* ══ 2. REWARD CARDS ══════════════════════════════════════════════ */}
         <div style={{ marginTop: 20, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {loaded && !cx && (
+          {!isSignedIn && (
             <div style={{
               padding: '20px', borderRadius: 18, textAlign: 'center',
               background: 'rgba(255,255,255,0.72)',
@@ -357,14 +316,14 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
               boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
             }}>
               <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, color: INK, margin: '0 0 14px' }}>
-                Check your points
+                Sign in to see your rewards
               </p>
-              <a href={'/' + slug} style={{
+              <a href={'/' + slug + '/onboarding'} style={{
                 display: 'inline-block', background: ACCENT, color: ACCENT_TEXT,
                 borderRadius: 100, padding: '10px 24px',
                 fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none',
               }}>
-                Sign in on Home
+                Sign in
               </a>
             </div>
           )}

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import crypto from 'crypto'
+import { cookies } from 'next/headers'
 
 const COOKIE_NAME = 'cx_session'
 
@@ -22,13 +23,20 @@ export interface CxSessionResult {
   business_id: string
 }
 
+/** For API route handlers — reads cookie from Request headers. */
 export async function getCxSession(req: Request, businessId: string): Promise<CxSessionResult | null> {
   const cookieHeader = req.headers.get('cookie') ?? ''
   const rawToken = parseCookieValue(cookieHeader, COOKIE_NAME)
   if (!rawToken) return null
-
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+  return sessionFromTokenHash(tokenHash, businessId)
+}
 
+export function clearCxSessionCookie(): string {
+  return COOKIE_NAME + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'
+}
+
+async function sessionFromTokenHash(tokenHash: string, businessId: string): Promise<CxSessionResult | null> {
   const { data, error } = await supabaseAdmin
     .from('cx_sessions')
     .select('id, loyalty_identity_id, business_id, expires_at, revoked_at, loyalty_identity(phone, email)')
@@ -42,7 +50,9 @@ export async function getCxSession(req: Request, businessId: string): Promise<Cx
   if (!data) return null
 
   const rawIdentity = data.loyalty_identity
-  const identity = (Array.isArray(rawIdentity) ? (rawIdentity as Array<{ phone: string | null; email: string | null }>)[0] : rawIdentity as { phone: string | null; email: string | null } | null) ?? null
+  const identity = (Array.isArray(rawIdentity)
+    ? (rawIdentity as Array<{ phone: string | null; email: string | null }>)[0]
+    : rawIdentity as { phone: string | null; email: string | null } | null) ?? null
   return {
     session_id: data.id as string,
     identity_id: data.loyalty_identity_id as string,
@@ -52,6 +62,10 @@ export async function getCxSession(req: Request, businessId: string): Promise<Cx
   }
 }
 
-export function clearCxSessionCookie(): string {
-  return COOKIE_NAME + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'
+/** For Server Components (page.tsx) — reads from next/headers cookies(). */
+export async function getCxSessionServer(businessId: string): Promise<CxSessionResult | null> {
+  const rawToken = cookies().get(COOKIE_NAME)?.value
+  if (!rawToken) return null
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+  return sessionFromTokenHash(tokenHash, businessId)
 }

@@ -39,7 +39,7 @@ interface UsualProduct {
   product_id: string | null
 }
 
-interface CxCustomer {
+export interface CxCustomer {
   customer_id: string
   name: string
   points_balance: number
@@ -56,7 +56,7 @@ interface CxCustomer {
   usual_product: UsualProduct | null
 }
 
-type Phase = 'init' | 'guest' | 'entry' | 'loading' | 'ready' | 'notfound'
+type Phase = 'guest' | 'ready'
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
@@ -95,76 +95,6 @@ function IconPerson({ size = 16 }: { size?: number }) {
       <circle cx="8" cy="5" r="3"/>
       <path d="M2 14c0-3.314 2.686-5 6-5s6 1.686 6 5" opacity="0.7"/>
     </svg>
-  )
-}
-
-// ── Phone entry form ──────────────────────────────────────────────────────────
-
-function PhoneEntry({ slug, bizId, onSuccess, onCancel }: {
-  slug: string
-  bizId: string
-  onSuccess: (cx: CxCustomer) => void
-  onCancel: () => void
-}) {
-  const [phone, setPhone] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState('')
-
-  const lookup = async () => {
-    const raw = phone.trim()
-    if (!raw) { setMsg('Enter your phone number'); return }
-    setLoading(true); setMsg('')
-    try {
-      const res = await fetch('/api/public/cx/' + slug + '/me', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: raw }),
-      })
-      const data = (await res.json()) as { found: boolean } & Partial<CxCustomer>
-      if (data.found) {
-        try { localStorage.setItem('aria_cx_' + slug, JSON.stringify({ phone: raw })) } catch { /* ok */ }
-        onSuccess(data as CxCustomer)
-      } else {
-        setMsg('No membership found. Try a different number or join below.')
-      }
-    } catch {
-      setMsg('Something went wrong — try again.')
-    }
-    setLoading(false)
-  }
-
-  return (
-    <div style={{ background: '#fff', borderRadius: 20, padding: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.09)' }}>
-      <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, margin: '0 0 14px', color: INK, fontWeight: 500 }}>
-        Check your rewards
-      </p>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          type="tel"
-          value={phone}
-          onChange={e => setPhone(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { void lookup() } }}
-          placeholder="Your phone number"
-          style={{ flex: 1, border: '1.5px solid ' + INK, borderRadius: 12, padding: '12px 14px', fontFamily: FB, fontSize: 15, outline: 'none', background: BG, color: INK, minWidth: 0 }}
-        />
-        <button
-          onClick={() => { void lookup() }}
-          disabled={loading}
-          style={{ background: INK, color: BG, border: 'none', borderRadius: 12, padding: '12px 18px', fontFamily: FB, fontSize: 14, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, flexShrink: 0 }}
-        >
-          {loading ? '…' : 'Go'}
-        </button>
-      </div>
-      {msg && <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '10px 0 0' }}>{msg}</p>}
-      <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <a href={'/loyalty/' + bizId} style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, textDecoration: 'underline' }}>
-          Join rewards
-        </a>
-        <button onClick={onCancel} style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-          Cancel
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -353,41 +283,16 @@ function HubLinks({ biz, onTrack }: { biz: HubBusiness; onTrack: (t: string) => 
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function HubClient({ business: b }: { business: HubBusiness }) {
-  const [phase, setPhase] = useState<Phase>('init')
-  const [cx, setCx] = useState<CxCustomer | null>(null)
+export function HubClient({ business: b, initialCustomer }: { business: HubBusiness; initialCustomer: CxCustomer | null }) {
+  const phase: Phase = initialCustomer ? 'ready' : 'guest'
+  const [cx] = useState<CxCustomer | null>(initialCustomer)
   const [greeting, setGreeting] = useState('')
-  const [showPhone, setShowPhone] = useState(false)
 
   useEffect(() => {
     const h = new Date().getHours()
     setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening')
     void track(b.id, 'hub_view')
-
-    try {
-      const saved = localStorage.getItem('aria_cx_' + b.slug)
-      if (saved) {
-        const parsed = JSON.parse(saved) as { phone?: string }
-        const phone = parsed.phone ?? ''
-        if (phone) {
-          setPhase('loading')
-          fetch('/api/public/cx/' + b.slug + '/me', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone }),
-          })
-            .then(r => r.json())
-            .then((data: { found: boolean } & Partial<CxCustomer>) => {
-              if (data.found) { setCx(data as CxCustomer); setPhase('ready') }
-              else { localStorage.removeItem('aria_cx_' + b.slug); setPhase('guest') }
-            })
-            .catch(() => setPhase('guest'))
-          return
-        }
-      }
-    } catch { /* no localStorage */ }
-    setPhase('guest')
-  }, [b.id, b.slug])
+  }, [b.id])
 
   const firstName = cx?.name?.split(' ')[0] ?? null
   const pts = cx?.points_balance ?? 0
@@ -398,9 +303,6 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
   const heroBg = b.heroImageUrl
     ? ('url(' + b.heroImageUrl + ') center / cover no-repeat, ' + warmGrad)
     : warmGrad
-
-  const onPhoneSuccess = (customer: CxCustomer) => { setCx(customer); setPhase('ready'); setShowPhone(false) }
-  const onPhoneCancel = () => setShowPhone(false)
 
   return (
     <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK }}>
@@ -448,30 +350,22 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
             </span>
           </div>
 
-          {/* Right: Scan pill + avatar */}
+          {/* Right: account avatar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <button
-              onClick={() => setShowPhone(s => !s)}
+            <a
+              href={'/' + b.slug + '/account'}
               style={{
-                background: ACCENT, color: ACCENT_TEXT, border: 'none', borderRadius: 100,
-                padding: '8px 14px', fontFamily: FB, fontSize: 13, fontWeight: 700,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                boxShadow: '0 0 20px 4px rgba(217,245,78,0.55), 0 2px 10px rgba(217,245,78,0.35)',
+                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(255,255,255,0.18)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '1.5px solid rgba(255,255,255,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', textDecoration: 'none',
               }}
             >
-              Scan
-            </button>
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-              background: 'rgba(255,255,255,0.18)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              border: '1.5px solid rgba(255,255,255,0.3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff',
-            }}>
               <IconPerson size={16} />
-            </div>
+            </a>
           </div>
         </div>
 
@@ -515,8 +409,8 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
               <span style={{ fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600 }}>{'$' + walletBal}</span>
             </div>
           ) : phase === 'guest' ? (
-            <button
-              onClick={() => setShowPhone(true)}
+            <a
+              href={'/' + b.slug + '/onboarding'}
               style={{
                 background: 'rgba(255,255,255,0.30)',
                 backdropFilter: 'blur(12px)',
@@ -524,27 +418,18 @@ export function HubClient({ business: b }: { business: HubBusiness }) {
                 border: '1px solid rgba(255,255,255,0.35)',
                 borderRadius: 100, padding: '9px 20px',
                 fontFamily: FB, fontSize: 14, color: '#fff', fontWeight: 600,
-                cursor: 'pointer',
                 transform: 'translateY(-50%)',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
+                textDecoration: 'none', display: 'inline-block',
               }}
             >
-              Check your rewards
-            </button>
-          ) : phase === 'loading' ? (
-            <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite', transform: 'translateY(-50%)' }} />
+              Sign in for rewards
+            </a>
           ) : null}
         </div>
 
         {/* Spacer: clears the straddling pill (~19px above seam + breathing room) */}
         <div style={{ height: 52 }} />
-
-        {/* Phone entry panel */}
-        {showPhone && (
-          <div style={{ padding: '12px 18px 4px' }}>
-            <PhoneEntry slug={b.slug} bizId={b.id} onSuccess={onPhoneSuccess} onCancel={onPhoneCancel} />
-          </div>
-        )}
 
         {/* Your usual strip */}
         {phase === 'ready' && cx?.usual_product && (

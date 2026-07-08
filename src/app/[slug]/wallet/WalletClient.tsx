@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import JsBarcode from 'jsbarcode'
 import { CxTabBar } from '../CxTabBar'
 
@@ -25,19 +25,6 @@ interface PreloadTxn {
   type: string
   description: string | null
   created_at: string
-}
-
-interface CxData {
-  found: boolean
-  customer_id?: string
-  name?: string
-  points_balance?: number
-  loyalty_tier?: string | null
-  loyalty_identity_id?: string | null
-  wallet_balance?: number
-  wallet_currency?: string
-  recent_txns?: EarnTxn[]
-  preload_txns?: PreloadTxn[]
 }
 
 // ── Real CODE128 barcode via JsBarcode — ONE strip, uniform height ─────────────
@@ -272,45 +259,22 @@ function TxnRow({ date, label, itemName, kind, bizName }: {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, topUpUrl, heroImageUrl }: {
+export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, tier: tierProp, walletBal, identityId, earnTxns, preloadTxns, topUpUrl }: {
   slug: string
-  bizId: string
   bizName: string
-  logoUrl: string | null
-  topUpUrl: string
   heroImageUrl?: string | null
+  isSignedIn: boolean
+  customerId: string | null
+  name: string | null
+  tier: string
+  walletBal: number
+  identityId: string | null
+  earnTxns: EarnTxn[]
+  preloadTxns: PreloadTxn[]
+  topUpUrl: string | null
 }) {
-  const [cx, setCx] = useState<CxData | null>(null)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) {
-        const { phone } = JSON.parse(saved) as { phone?: string }
-        if (phone) {
-          fetch('/api/public/cx/' + slug + '/me', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone }),
-          })
-            .then(r => r.json())
-            .then((data: CxData) => { setCx(data.found ? data : null); setLoaded(true) })
-            .catch(() => setLoaded(true))
-          return
-        }
-      }
-    } catch { /* no localStorage */ }
-    setLoaded(true)
-  }, [slug])
-
-  const isLoggedIn = cx?.found === true
-  const name = cx?.name ?? null
-  const tier = cx?.loyalty_tier ?? 'Member'
-  const walletBal = cx?.wallet_balance ?? 0
-  const identityId = cx?.loyalty_identity_id ?? null
-  const earnTxns: EarnTxn[] = (cx?.recent_txns ?? []) as EarnTxn[]
-  const preloadTxns: PreloadTxn[] = (cx?.preload_txns ?? []) as PreloadTxn[]
+  const isLoggedIn = isSignedIn
+  const tier = tierProp ?? 'Member'
 
   const heroBg = heroImageUrl
     ? ('url(' + heroImageUrl + ') center/cover no-repeat')
@@ -371,11 +335,7 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
 
       {/* ── Card — overlaps photo bottom by ~50% ── */}
       <div style={{ marginTop: -110, position: 'relative', zIndex: 2, paddingBottom: 24 }}>
-        {!loaded ? (
-          <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 28, height: 28, border: '2.5px solid rgba(0,0,0,0.1)', borderTopColor: ACCENT_TEXT, borderRadius: '50%', animation: 'cx-spin 0.75s linear infinite' }} />
-          </div>
-        ) : isLoggedIn ? (
+        {isLoggedIn ? (
           <LoyaltyCard
             bizName={bizName}
             name={name}
@@ -388,8 +348,8 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, color: INK, margin: '0 0 14px' }}>
               Your loyalty card
             </p>
-            <a href={'/' + slug} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '10px 24px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
-              Sign in on Home
+            <a href={'/' + slug + '/onboarding'} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '10px 24px', fontFamily: FB, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+              Sign in
             </a>
           </div>
         )}
@@ -430,25 +390,27 @@ export function WalletClient({ slug, bizId: _bizId, bizName, logoUrl: _logoUrl, 
             </a>
           </div>
 
-          {/* Top up — lime glow pill */}
-          <a
-            href={topUpUrl}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: ACCENT, color: ACCENT_TEXT,
-              borderRadius: 100, height: 56, marginBottom: 20,
-              fontFamily: FB, fontSize: 17, fontWeight: 700, textDecoration: 'none',
-              boxShadow: '0 0 24px rgba(217,245,78,0.5), 0 4px 16px rgba(217,245,78,0.35), inset 0 1px 0 rgba(255,255,255,0.3)',
-            }}
-          >
-            Top up
-          </a>
+          {/* Top up — lime glow pill — TOP-UP GATE: only shown when topUpUrl is provided */}
+          {topUpUrl && (
+            <a
+              href={topUpUrl}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: ACCENT, color: ACCENT_TEXT,
+                borderRadius: 100, height: 56, marginBottom: 20,
+                fontFamily: FB, fontSize: 17, fontWeight: 700, textDecoration: 'none',
+                boxShadow: '0 0 24px rgba(217,245,78,0.5), 0 4px 16px rgba(217,245,78,0.35), inset 0 1px 0 rgba(255,255,255,0.3)',
+              }}
+            >
+              Top up
+            </a>
+          )}
         </div>
       )}
 
       {/* ── Transaction history — individual glass cards ── */}
       <div style={{ padding: '0 16px', paddingBottom: 'calc(80px + env(safe-area-inset-bottom) + 24px)' }}>
-        {loaded && allTxns.length === 0 && (
+        {isLoggedIn && allTxns.length === 0 && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: INK_MUTED, margin: '0 0 6px' }}>
               No transactions yet

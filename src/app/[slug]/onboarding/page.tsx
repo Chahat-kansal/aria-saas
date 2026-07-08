@@ -1,9 +1,10 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { getCxSessionServer } from '@/lib/cx/get-cx-session'
 import { OnboardingClient } from './OnboardingClient'
 
 export default async function OnboardingPage({ params }: { params: { slug: string } }) {
@@ -12,6 +13,9 @@ export default async function OnboardingPage({ params }: { params: { slug: strin
 
   const bid = await resolveBusinessId(supabaseAdmin, slug)
   if (!bid) notFound()
+
+  const session = await getCxSessionServer(bid)
+  if (session) redirect('/' + slug)
 
   const { data: biz } = await supabaseAdmin
     .from('businesses')

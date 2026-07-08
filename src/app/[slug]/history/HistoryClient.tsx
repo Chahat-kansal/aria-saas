@@ -61,51 +61,61 @@ function formatTime(s: string) {
   })
 }
 
-export function HistoryClient({ slug }: {
+export function HistoryClient({ slug, initialCustomerId, initialPhone }: {
   slug: string
   bizId: string
   bizName: string
+  initialCustomerId: string | null
+  initialPhone: string | null
 }) {
   const [tab, setTab] = useState<'orders' | 'favourites'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
   const [favs, setFavs] = useState<Fav[]>([])
-  const [customerId, setCustomerId] = useState<string | null>(null)
+  const [customerId, setCustomerId] = useState<string | null>(initialCustomerId)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let phone = ''
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) phone = (JSON.parse(saved) as { phone?: string }).phone ?? ''
-    } catch { /* ok */ }
-
-    if (!phone) {
-      window.location.replace('/' + slug + '/onboarding')
+    if (!initialCustomerId && !initialPhone) {
+      setLoading(false)
       return
     }
 
-    Promise.all([
-      fetch('/api/public/cx/' + slug + '/orders?phone=' + encodeURIComponent(phone)).then(r => r.json()),
-      fetch('/api/public/cx/' + slug + '/me', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      }).then(r => r.json()),
-    ]).then(([ordData, meData]) => {
-      const od = ordData as { orders?: Order[]; customer_id?: string }
-      const md = meData as { customer_id?: string }
-      setOrders((od.orders ?? []) as Order[])
-      const cid = od.customer_id ?? md.customer_id ?? null
-      setCustomerId(cid)
-      setLoading(false)
-      if (cid) {
-        fetch('/api/public/cx/' + slug + '/favourites?customer_id=' + cid)
-          .then(r => r.json())
-          .then((f: { favourites?: Fav[] }) => setFavs(f.favourites ?? []))
-          .catch(() => { /* ok */ })
+    const phone = initialPhone ?? ''
+    const cid = initialCustomerId
+
+    const fetches: Promise<unknown>[] = []
+    if (phone) {
+      fetches.push(
+        fetch('/api/public/cx/' + slug + '/orders?phone=' + encodeURIComponent(phone)).then(r => r.json())
+      )
+    }
+    if (cid) {
+      fetches.push(
+        fetch('/api/public/cx/' + slug + '/favourites?customer_id=' + cid).then(r => r.json())
+      )
+    }
+
+    Promise.all(fetches).then(results => {
+      if (phone && results[0]) {
+        const od = results[0] as { orders?: Order[]; customer_id?: string }
+        setOrders((od.orders ?? []) as Order[])
+        const resolvedCid = od.customer_id ?? cid ?? null
+        setCustomerId(resolvedCid)
+        if (results[1]) {
+          setFavs(((results[1] as { favourites?: Fav[] }).favourites ?? []) as Fav[])
+        } else if (resolvedCid) {
+          fetch('/api/public/cx/' + slug + '/favourites?customer_id=' + resolvedCid)
+            .then(r => r.json())
+            .then((f: { favourites?: Fav[] }) => setFavs(f.favourites ?? []))
+            .catch(() => { /* ok */ })
+        }
+      } else if (results[0]) {
+        setFavs(((results[0] as { favourites?: Fav[] }).favourites ?? []) as Fav[])
       }
+      setLoading(false)
     }).catch(() => setLoading(false))
-  }, [slug])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const removeFav = async (favId: string, productId: string) => {
     if (!customerId) return
@@ -120,6 +130,19 @@ export function HistoryClient({ slug }: {
     return (
       <div style={{ minHeight: '100dvh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FB, color: INK_MUTED }}>
         Loading…
+      </div>
+    )
+  }
+
+  if (!initialCustomerId && !initialPhone) {
+    return (
+      <div style={{ minHeight: '100dvh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: FB, color: INK, padding: '0 24px', textAlign: 'center' }}>
+        <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 26, color: INK, margin: '0 0 8px' }}>Your history</p>
+        <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: '0 0 24px' }}>Sign in to see your orders and saved items.</p>
+        <a href={'/' + slug + '/onboarding'} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '12px 28px', fontFamily: FB, fontSize: 15, fontWeight: 700, textDecoration: 'none' }}>
+          Sign in
+        </a>
+        <CxTabBar slug={slug} active="history" />
       </div>
     )
   }

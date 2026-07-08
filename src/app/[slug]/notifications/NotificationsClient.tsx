@@ -46,19 +46,17 @@ function resolveActionUrl(notif: Notif, slug: string): string | null {
   return null
 }
 
-export function NotificationsClient({ slug, bizName }: {
+export function NotificationsClient({ slug, bizName, initialCustomerId }: {
   slug: string
   bizId: string
   bizName: string
+  initialCustomerId: string | null
 }) {
   const [notifs, setNotifs] = useState<Notif[]>([])
-  const [customerId, setCustomerId] = useState<string | null>(null)
+  const [customerId] = useState<string | null>(initialCustomerId)
   const [loading, setLoading] = useState(true)
-  // Track which IDs have been queued for mark-read (avoid repeat PATCHes)
   const readQueued = useRef<Set<string>>(new Set())
-  const customerIdRef = useRef<string | null>(null)
-
-  useEffect(() => { customerIdRef.current = customerId }, [customerId])
+  const customerIdRef = useRef<string | null>(initialCustomerId)
 
   const markRead = useCallback(async (id: string) => {
     const cid = customerIdRef.current
@@ -85,36 +83,15 @@ export function NotificationsClient({ slug, bizName }: {
   }
 
   useEffect(() => {
-    let phone = ''
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) phone = (JSON.parse(saved) as { phone?: string }).phone ?? ''
-    } catch { /* ok */ }
-
-    if (!phone) {
-      window.location.replace('/' + slug + '/onboarding')
-      return
-    }
-
-    fetch('/api/public/cx/' + slug + '/me', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone }),
-    })
+    const cid = customerIdRef.current
+    if (!cid) { setLoading(false); return }
+    fetch('/api/public/cx/' + slug + '/notifications?customer_id=' + cid)
       .then(r => r.json())
-      .then((me: { customer_id?: string }) => {
-        const cid = me.customer_id ?? null
-        setCustomerId(cid)
-        customerIdRef.current = cid
-        if (cid) {
-          return fetch('/api/public/cx/' + slug + '/notifications?customer_id=' + cid)
-            .then(r => r.json())
-            .then((d: { notifications?: Notif[] }) => setNotifs(d.notifications ?? []))
-        }
-      })
+      .then((d: { notifications?: Notif[] }) => setNotifs(d.notifications ?? []))
       .catch(() => { /* ok */ })
       .finally(() => setLoading(false))
-  }, [slug])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // IntersectionObserver: mark each unread card as read when it enters viewport
   const listRef = useRef<HTMLDivElement>(null)
@@ -146,6 +123,19 @@ export function NotificationsClient({ slug, bizName }: {
     return (
       <div style={{ minHeight: '100dvh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FB, color: INK_MUTED }}>
         Loading…
+      </div>
+    )
+  }
+
+  if (!initialCustomerId) {
+    return (
+      <div style={{ minHeight: '100dvh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: FB, color: INK, padding: '0 24px', textAlign: 'center' }}>
+        <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 26, color: INK, margin: '0 0 8px' }}>Notifications</p>
+        <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: '0 0 24px' }}>Sign in to see your updates from {bizName}.</p>
+        <a href={'/' + slug + '/onboarding'} style={{ display: 'inline-block', background: ACCENT, color: ACCENT_TEXT, borderRadius: 100, padding: '12px 28px', fontFamily: FB, fontSize: 15, fontWeight: 700, textDecoration: 'none' }}>
+          Sign in
+        </a>
+        <CxTabBar slug={slug} active="notifications" />
       </div>
     )
   }

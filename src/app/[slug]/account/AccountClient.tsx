@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#f3efe4'
@@ -15,20 +15,6 @@ const GLASS_BG = 'rgba(255,255,255,0.65)'
 const GLASS_BORDER = '1px solid rgba(0,0,0,0.05)'
 const GLASS_SHADOW = '0 2px 12px rgba(0,0,0,0.05)'
 const GLASS_BLUR = 'blur(12px)'
-
-type MeData = {
-  found: boolean
-  customer_id?: string
-  name?: string
-  email?: string | null
-  phone?: string | null
-  member_since?: string | null
-  points_balance?: number
-  loyalty_tier?: string | null
-  total_spent?: string
-  visit_count?: number
-  last_visit_at?: string | null
-}
 
 function formatPhone(p: string | null | undefined): string {
   if (!p) return '—'
@@ -104,91 +90,47 @@ function Toggle({ label, value, onToggle }: { label: string; value: boolean; onT
   )
 }
 
-export function AccountClient({ slug, bizName, logoUrl }: {
+export function AccountClient({ slug, bizName, logoUrl, customerId, name: initialName, email: initialEmail, phone, memberSince, pointsBalance, loyaltyTier, visitCount, totalSpent, lastVisitAt }: {
   slug: string
   bizId: string
   bizName: string
   logoUrl: string | null
+  customerId: string | null
+  name: string | null
+  email: string | null
+  phone: string | null
+  memberSince: string | null
+  pointsBalance: number
+  loyaltyTier: string | null
+  visitCount: number
+  totalSpent: string
+  lastVisitAt: string | null
 }) {
-  const [me, setMe] = useState<MeData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [sms, setSms] = useState(true)
-  const [email, setEmail] = useState(true)
-  const [currentPhone, setCurrentPhone] = useState('')
+  const [sms, setSms]     = useState(true)
+  const [emailNotif, setEmailNotif] = useState(true)
 
-  // Edit profile state
-  const [editing, setEditing] = useState(false)
-  const [editName, setEditName] = useState('')
-  const [editEmail, setEditEmail] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [editErr, setEditErr] = useState('')
+  const [editing, setEditing]   = useState(false)
+  const [editName, setEditName] = useState(initialName ?? '')
+  const [editEmail, setEditEmail] = useState(initialEmail ?? '')
+  const [saving, setSaving]     = useState(false)
+  const [editErr, setEditErr]   = useState('')
 
-  useEffect(() => {
-    let phone = ''
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) phone = (JSON.parse(saved) as { phone?: string }).phone ?? ''
-    } catch { /* ok */ }
-
-    if (!phone) {
-      window.location.replace('/' + slug + '/onboarding')
-      return
-    }
-    setCurrentPhone(phone)
-
-    fetch('/api/public/cx/' + slug + '/me', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone }),
-    })
-      .then(r => r.json())
-      .then((data: MeData) => {
-        setMe(data)
-        setEditName(data.name ?? '')
-        setEditEmail(data.email ?? '')
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-
-    try {
-      const prefs = localStorage.getItem('aria_cx_prefs_' + slug)
-      if (prefs) {
-        const p = JSON.parse(prefs) as { sms?: boolean; email?: boolean }
-        if (p.sms !== undefined) setSms(p.sms)
-        if (p.email !== undefined) setEmail(p.email)
-      }
-    } catch { /* ok */ }
-  }, [slug])
-
-  const savePrefs = (key: 'sms' | 'email', val: boolean) => {
-    const next = { sms, email, [key]: val }
-    try { localStorage.setItem('aria_cx_prefs_' + slug, JSON.stringify(next)) } catch { /* ok */ }
-    if (key === 'sms') setSms(val)
-    else setEmail(val)
-  }
-
-  const startEdit = () => {
-    setEditName(me?.name ?? '')
-    setEditEmail(me?.email ?? '')
-    setEditErr('')
-    setEditing(true)
-  }
-
-  const cancelEdit = () => { setEditing(false); setEditErr('') }
+  const [currentName, setCurrentName] = useState(initialName ?? '')
+  const [currentEmail, setCurrentEmail] = useState(initialEmail ?? '')
 
   const saveEdit = async () => {
-    if (!me?.customer_id || saving) return
-    setSaving(true)
-    setEditErr('')
+    if (!customerId || saving) return
+    setSaving(true); setEditErr('')
     try {
       const res = await fetch('/api/public/cx/' + slug + '/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_id: me.customer_id, phone: currentPhone, name: editName, email: editEmail }),
+        body: JSON.stringify({ customer_id: customerId, phone: phone ?? '', name: editName, email: editEmail }),
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (data.ok) {
-        setMe(prev => prev ? { ...prev, name: editName, email: editEmail || null } : prev)
+        setCurrentName(editName)
+        setCurrentEmail(editEmail)
         setEditing(false)
       } else {
         setEditErr(data.error ?? 'Update failed')
@@ -200,17 +142,15 @@ export function AccountClient({ slug, bizName, logoUrl }: {
     }
   }
 
-  const signOut = () => {
-    try { localStorage.removeItem('aria_cx_' + slug) } catch { /* ok */ }
+  const signOut = async () => {
+    try {
+      await fetch('/api/cx/' + slug + '/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+    } catch { /* ok */ }
     window.location.replace('/' + slug + '/onboarding')
-  }
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100dvh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FB, color: INK_MUTED }}>
-        Loading…
-      </div>
-    )
   }
 
   return (
@@ -225,27 +165,27 @@ export function AccountClient({ slug, bizName, logoUrl }: {
           border: '2px solid rgba(0,0,0,0.08)',
         }} />
         <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 28, margin: '0 0 8px', color: INK }}>
-          {me?.name ?? bizName}
+          {currentName || bizName}
         </h1>
-        {me?.loyalty_tier && (
+        {loyaltyTier && (
           <span style={{
             display: 'inline-block', background: ACCENT, color: ACCENT_TEXT,
             fontFamily: FB, fontSize: 11, fontWeight: 700, padding: '3px 14px',
             borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            {me.loyalty_tier}
+            {loyaltyTier}
           </span>
         )}
       </div>
 
       <div style={{ padding: '0 16px' }}>
         {/* Stats */}
-        {me?.found && (
+        {customerId && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
             {[
-              { label: 'Points', value: (me.points_balance ?? 0).toLocaleString() },
-              { label: 'Visits', value: String(me.visit_count ?? 0) },
-              { label: 'Spent', value: '$' + (me.total_spent ?? '0.00') },
+              { label: 'Points', value: pointsBalance.toLocaleString() },
+              { label: 'Visits', value: String(visitCount) },
+              { label: 'Spent', value: '$' + totalSpent },
             ].map(s => (
               <div key={s.label} style={{ background: GLASS_BG, backdropFilter: GLASS_BLUR, WebkitBackdropFilter: GLASS_BLUR, borderRadius: 14, padding: '14px 12px', textAlign: 'center', border: GLASS_BORDER, boxShadow: GLASS_SHADOW }}>
                 <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, margin: '0 0 2px', color: INK, fontWeight: 700 }}>{s.value}</p>
@@ -291,7 +231,7 @@ export function AccountClient({ slug, bizName, logoUrl }: {
                   {saving ? 'Saving…' : 'Save'}
                 </button>
                 <button
-                  onClick={cancelEdit}
+                  onClick={() => { setEditing(false); setEditErr('') }}
                   style={{ flex: 1, background: 'rgba(0,0,0,0.06)', color: INK, border: 'none', borderRadius: 10, padding: '11px', fontFamily: FB, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
                 >
                   Cancel
@@ -303,23 +243,25 @@ export function AccountClient({ slug, bizName, logoUrl }: {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                 <div>
                   <p style={{ fontFamily: FB, fontSize: 11, fontWeight: 700, color: INK_MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>Name</p>
-                  <p style={{ fontFamily: FB, fontSize: 15, color: INK, margin: 0 }}>{me?.name ?? '—'}</p>
+                  <p style={{ fontFamily: FB, fontSize: 15, color: INK, margin: 0 }}>{currentName || '—'}</p>
                 </div>
-                <button onClick={startEdit} style={{ background: ACCENT + '33', border: 'none', fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, cursor: 'pointer', fontWeight: 700, padding: '6px 12px', borderRadius: 8 }}>
-                  Edit
-                </button>
+                {customerId && (
+                  <button onClick={() => { setEditName(currentName); setEditEmail(currentEmail); setEditErr(''); setEditing(true) }} style={{ background: ACCENT + '33', border: 'none', fontFamily: FB, fontSize: 13, color: ACCENT_TEXT, cursor: 'pointer', fontWeight: 700, padding: '6px 12px', borderRadius: 8 }}>
+                    Edit
+                  </button>
+                )}
               </div>
               <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                 <p style={{ fontFamily: FB, fontSize: 11, fontWeight: 700, color: INK_MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>Email</p>
-                <p style={{ fontFamily: FB, fontSize: 15, color: me?.email ? INK : INK_MUTED, margin: 0 }}>{me?.email ?? 'Not set'}</p>
+                <p style={{ fontFamily: FB, fontSize: 15, color: currentEmail ? INK : INK_MUTED, margin: 0 }}>{currentEmail || 'Not set'}</p>
               </div>
               <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                 <p style={{ fontFamily: FB, fontSize: 11, fontWeight: 700, color: INK_MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>Mobile</p>
-                <p style={{ fontFamily: FB, fontSize: 15, color: INK, margin: 0 }}>{formatPhone(me?.phone ?? currentPhone)}</p>
+                <p style={{ fontFamily: FB, fontSize: 15, color: INK, margin: 0 }}>{formatPhone(phone)}</p>
               </div>
               <div style={{ padding: '14px 18px' }}>
                 <p style={{ fontFamily: FB, fontSize: 11, fontWeight: 700, color: INK_MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>Member since</p>
-                <p style={{ fontFamily: FB, fontSize: 15, color: INK, margin: 0 }}>{formatDate(me?.member_since)}</p>
+                <p style={{ fontFamily: FB, fontSize: 15, color: INK, margin: 0 }}>{formatDate(memberSince)}</p>
               </div>
             </>
           )}
@@ -328,7 +270,7 @@ export function AccountClient({ slug, bizName, logoUrl }: {
         {/* Activity */}
         <SectionLabel title="Activity" />
         <GlassCard>
-          <RowItem label="Last visit" value={formatDate(me?.last_visit_at)} />
+          <RowItem label="Last visit" value={formatDate(lastVisitAt)} />
           <div style={{ borderBottom: 'none' }}>
             <RowItem label="Order history" href={'/' + slug + '/history'} />
           </div>
@@ -337,9 +279,9 @@ export function AccountClient({ slug, bizName, logoUrl }: {
         {/* Notifications */}
         <SectionLabel title="Notifications" />
         <GlassCard>
-          <Toggle label="SMS updates" value={sms} onToggle={() => savePrefs('sms', !sms)} />
+          <Toggle label="SMS updates" value={sms} onToggle={() => setSms(v => !v)} />
           <div style={{ borderBottom: 'none' }}>
-            <Toggle label="Email updates" value={email} onToggle={() => savePrefs('email', !email)} />
+            <Toggle label="Email updates" value={emailNotif} onToggle={() => setEmailNotif(v => !v)} />
           </div>
         </GlassCard>
 
@@ -353,7 +295,7 @@ export function AccountClient({ slug, bizName, logoUrl }: {
 
         {/* Sign out */}
         <button
-          onClick={signOut}
+          onClick={() => void signOut()}
           style={{
             width: '100%', background: 'none', border: '1.5px solid rgba(0,0,0,0.12)',
             borderRadius: 14, padding: '14px', fontFamily: FB, fontSize: 15, color: INK,
