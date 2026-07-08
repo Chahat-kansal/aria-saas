@@ -2,20 +2,17 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
-import { normalisePhone } from '@/lib/clicksend'
+import { getCxSession } from '@/lib/cx/get-cx-session'
 
+// POST /api/public/cx/[slug]/me — session-gated customer profile lookup.
+// body.phone is accepted as a dead param for backward compat but IGNORED for identity.
+// Identity source: cx_session cookie only.
 export async function POST(req: Request, { params }: { params: { slug: string } }) {
   const bid = await resolveBusinessId(supabaseAdmin, params.slug)
   if (!bid) return NextResponse.json({ found: false }, { status: 404 })
 
-  let body: { phone?: string } = {}
-  try { body = await req.json() } catch { /* empty body ok */ }
-
-  const raw = (body.phone ?? '').trim()
-  if (!raw) return NextResponse.json({ found: false })
-
-  let phone = raw
-  try { phone = normalisePhone(raw) } catch { /* keep raw */ }
+  const session = await getCxSession(req, bid)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   type CustomerRow = {
     id: string; name: string; email: string | null; phone: string | null; created_at: string | null
@@ -26,46 +23,30 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
 
   const COLS = 'id, name, email, phone, created_at, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id'
 
-  let customer: CustomerRow | null = null
-  const { data: byNorm } = await supabaseAdmin
+  const { data: customer } = await supabaseAdmin
     .from('pos_customers')
     .select(COLS)
     .eq('business_id', bid)
-    .eq('phone', phone)
+    .eq('loyalty_identity_id', session.identity_id)
     .is('deleted_at', null)
-    .order('created_at', { ascending: true })
-    .limit(1)
     .maybeSingle()
-  customer = byNorm as CustomerRow | null
-
-  if (!customer && phone !== raw) {
-    const { data: byRaw } = await supabaseAdmin
-      .from('pos_customers')
-      .select(COLS)
-      .eq('business_id', bid)
-      .eq('phone', raw)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-    customer = byRaw as CustomerRow | null
-  }
 
   if (!customer) return NextResponse.json({ found: false })
 
-  // Parallel fetch of all supplemental data
+  const cx = customer as CustomerRow
+
   const [walletRes, challengesRes, txnsRes, usualRes, preloadRes] = await Promise.all([
     supabaseAdmin
       .from('loyalty_preload_accounts')
       .select('balance, currency')
       .eq('business_id', bid)
-      .eq('customer_id', customer.id)
+      .eq('customer_id', cx.id)
       .maybeSingle(),
     supabaseAdmin
       .from('loyalty_challenges')
       .select('id, title, description, target_count, progress, reward_points, status, expires_at')
       .eq('business_id', bid)
-      .eq('customer_id', customer.id)
+      .eq('customer_id', cx.id)
       .not('status', 'eq', 'expired')
       .order('created_at', { ascending: false })
       .limit(5),
@@ -73,14 +54,14 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       .from('pos_loyalty_transactions')
       .select('id, type, points_delta, reward_redeemed, created_at')
       .eq('business_id', bid)
-      .eq('customer_id', customer.id)
+      .eq('customer_id', cx.id)
       .order('created_at', { ascending: false })
       .limit(10),
     supabaseAdmin
       .from('pos_online_orders')
       .select('items')
       .eq('business_id', bid)
-      .eq('customer_id', customer.id)
+      .eq('customer_id', cx.id)
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -89,12 +70,11 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       .from('loyalty_preload_ledger')
       .select('id, amount, type, description, created_at')
       .eq('business_id', bid)
-      .eq('customer_id', customer.id)
+      .eq('customer_id', cx.id)
       .order('created_at', { ascending: false })
       .limit(10),
   ])
 
-  // Parse usual product from last completed order's first item
   let usualProduct = null
   const usualItems = ((usualRes.data as { items?: unknown[] } | null)?.items ?? []) as Array<{
     product_name?: string; unit_price?: number; product_id?: string; image_url?: string | null
@@ -119,25 +99,23 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   }
 
   const walletData = walletRes.data as { balance?: number | null; currency?: string | null } | null
-  const walletBalance = Number(walletData?.balance ?? 0)
-  const walletCurrency = walletData?.currency ?? 'AUD'
 
   return NextResponse.json({
     found: true,
-    customer_id: customer.id,
-    name: customer.name,
-    points_balance: Number(customer.points_balance) || 0,
-    loyalty_tier: customer.loyalty_tier ?? null,
-    visit_count: Number(customer.visit_count) || 0,
-    stamps_count: Number(customer.stamps_count) || 0,
-    total_spent: (Number(customer.total_spent) || 0).toFixed(2),
-    last_visit_at: customer.last_visit_at ?? null,
-    email: customer.email ?? null,
-    phone: customer.phone ?? null,
-    member_since: customer.created_at ?? null,
-    loyalty_identity_id: customer.loyalty_identity_id ?? null,
-    wallet_balance: walletBalance,
-    wallet_currency: walletCurrency,
+    customer_id: cx.id,
+    name: cx.name,
+    points_balance: Number(cx.points_balance) || 0,
+    loyalty_tier: cx.loyalty_tier ?? null,
+    visit_count: Number(cx.visit_count) || 0,
+    stamps_count: Number(cx.stamps_count) || 0,
+    total_spent: (Number(cx.total_spent) || 0).toFixed(2),
+    last_visit_at: cx.last_visit_at ?? null,
+    email: cx.email ?? null,
+    phone: cx.phone ?? null,
+    member_since: cx.created_at ?? null,
+    loyalty_identity_id: cx.loyalty_identity_id ?? null,
+    wallet_balance: Number(walletData?.balance ?? 0),
+    wallet_currency: walletData?.currency ?? 'AUD',
     challenges: (challengesRes.data ?? []) as unknown[],
     recent_txns: (txnsRes.data ?? []) as unknown[],
     preload_txns: (preloadRes.data ?? []) as unknown[],
@@ -145,35 +123,31 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   })
 }
 
+// PATCH /api/public/cx/[slug]/me — session-gated profile update.
+// body.customer_id and body.phone are accepted as dead params but IGNORED for identity.
 export async function PATCH(req: Request, { params }: { params: { slug: string } }) {
   const bid = await resolveBusinessId(supabaseAdmin, params.slug)
   if (!bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const session = await getCxSession(req, bid)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   let body: { customer_id?: string; phone?: string; name?: string; email?: string } = {}
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }) }
 
-  const { customer_id, phone: rawPhone } = body
-  if (!customer_id || !rawPhone) return NextResponse.json({ error: 'customer_id and phone required' }, { status: 400 })
-
-  let phone = rawPhone.trim()
-  try { phone = normalisePhone(phone) } catch { /* keep raw */ }
-
-  // Verify caller: customer must exist under this business with matching phone
-  const { data: byCid } = await supabaseAdmin
+  // customer_id + phone from body are IGNORED — customer derived from session identity
+  const { data: cust } = await supabaseAdmin
     .from('pos_customers')
-    .select('id, phone')
-    .eq('id', customer_id)
+    .select('id')
     .eq('business_id', bid)
+    .eq('loyalty_identity_id', session.identity_id)
     .is('deleted_at', null)
     .maybeSingle()
-  if (!byCid) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  if (!cust) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  const storedPhone = (byCid as { phone?: string | null }).phone ?? ''
-  if (storedPhone && storedPhone !== phone && storedPhone !== rawPhone.trim()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-  }
-
+  const customerId = (cust as { id: string }).id
   const patch: Record<string, string | null> = {}
+
   if (body.name !== undefined) {
     const name = body.name.trim()
     if (name.length < 2) return NextResponse.json({ error: 'Name must be at least 2 characters' }, { status: 400 })
@@ -193,7 +167,7 @@ export async function PATCH(req: Request, { params }: { params: { slug: string }
   const { error: updateErr } = await supabaseAdmin
     .from('pos_customers')
     .update(patch)
-    .eq('id', customer_id)
+    .eq('id', customerId)
     .eq('business_id', bid)
   if (updateErr) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
 
