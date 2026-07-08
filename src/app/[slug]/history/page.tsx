@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getCxSessionServer } from '@/lib/cx/get-cx-session'
+import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
 import { HistoryClient } from './HistoryClient'
 
 export default async function HistoryPage({ params }: { params: { slug: string } }) {
@@ -28,14 +29,8 @@ export default async function HistoryPage({ params }: { params: { slug: string }
 
   if (session) {
     phone = session.phone
-    const { data: customer } = await supabaseAdmin
-      .from('pos_customers')
-      .select('id')
-      .eq('business_id', bid)
-      .eq('loyalty_identity_id', session.identity_id)
-      .is('deleted_at', null)
-      .maybeSingle()
-    customerId = (customer as { id?: string } | null)?.id ?? null
+    const customer = await resolveCxCustomer<{ id: string }>(session.identity_id, bid, 'id')
+    customerId = customer?.id ?? null
   }
 
   return (

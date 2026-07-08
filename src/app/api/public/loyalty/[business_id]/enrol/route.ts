@@ -3,14 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
-
-// Normalise common AU mobile formats to E.164. Other formats stored as-is.
-function normPhoneSimple(raw: string): string {
-  const digits = raw.replace(/[\s\-\.]/g, '')
-  if (/^04\d{8}$/.test(digits)) return '+61' + digits.slice(1)
-  if (/^\+614\d{8}$/.test(digits)) return digits
-  return digits
-}
+import { normalisePhone } from '@/lib/clicksend'
 
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
@@ -45,11 +38,13 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Enrolment not available' }, { status: 404 })
   }
 
+  const normPhone = normalisePhone(phone)
+
   const { data: existing } = await db
     .from('pos_customers')
     .select('id')
     .eq('business_id', realId)
-    .eq('phone', phone)
+    .eq('phone', normPhone)
     .maybeSingle()
 
   if (existing) {
@@ -60,7 +55,7 @@ export async function POST(req: Request, { params }: Params) {
     business_id: realId,
     name,
     email: email || null,
-    phone,
+    phone: normPhone,
     birthday: birthday || null,
     // CONSENT-COLLECTION-1: online self-enrolment is an express opt-in act — stamp provenance.
     marketing_consent: true,
@@ -82,7 +77,7 @@ export async function POST(req: Request, { params }: Params) {
   // Best-effort: failure does not block the enrolment response.
   try {
     const identEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : ''
-    const identPhone = normPhoneSimple(phone)
+    const identPhone = normPhone
 
     let identityId: string | null = null
 

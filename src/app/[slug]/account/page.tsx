@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getCxSessionServer } from '@/lib/cx/get-cx-session'
+import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
 import { AccountClient } from './AccountClient'
 
 export default async function AccountPage({ params }: { params: { slug: string } }) {
@@ -24,28 +25,24 @@ export default async function AccountPage({ params }: { params: { slug: string }
   const session = await getCxSessionServer(bid)
   if (!session) redirect('/' + slug + '/onboarding')
 
-  const [customerRes, identityRes] = await Promise.all([
-    supabaseAdmin
-      .from('pos_customers')
-      .select('id, name, email, phone, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at')
-      .eq('business_id', bid)
-      .eq('loyalty_identity_id', session.identity_id)
-      .is('deleted_at', null)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('loyalty_identity')
-      .select('created_at')
-      .eq('id', session.identity_id)
-      .maybeSingle(),
-  ])
-
   type CustomerRow = {
     id: string; name: string | null; email: string | null; phone: string | null
     points_balance: number | null; loyalty_tier: string | null
     visit_count: number | null; stamps_count: number | null; total_spent: string | null
     last_visit_at: string | null
   }
-  const customer = customerRes.data as CustomerRow | null
+
+  const [customer, identityRes] = await Promise.all([
+    resolveCxCustomer<CustomerRow>(
+      session.identity_id, bid,
+      'id, name, email, phone, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at',
+    ),
+    supabaseAdmin
+      .from('loyalty_identity')
+      .select('created_at')
+      .eq('id', session.identity_id)
+      .maybeSingle(),
+  ])
 
   return (
     <AccountClient

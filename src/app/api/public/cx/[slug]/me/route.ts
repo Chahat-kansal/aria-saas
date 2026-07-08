@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getCxSession } from '@/lib/cx/get-cx-session'
+import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
 
 // POST /api/public/cx/[slug]/me — session-gated customer profile lookup.
 // body.phone is accepted as a dead param for backward compat but IGNORED for identity.
@@ -23,13 +24,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
 
   const COLS = 'id, name, email, phone, created_at, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id'
 
-  const { data: customer } = await supabaseAdmin
-    .from('pos_customers')
-    .select(COLS)
-    .eq('business_id', bid)
-    .eq('loyalty_identity_id', session.identity_id)
-    .is('deleted_at', null)
-    .maybeSingle()
+  const customer = await resolveCxCustomer<CustomerRow>(session.identity_id, bid, COLS)
 
   if (!customer) return NextResponse.json({ found: false })
 
@@ -136,16 +131,10 @@ export async function PATCH(req: Request, { params }: { params: { slug: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }) }
 
   // customer_id + phone from body are IGNORED — customer derived from session identity
-  const { data: cust } = await supabaseAdmin
-    .from('pos_customers')
-    .select('id')
-    .eq('business_id', bid)
-    .eq('loyalty_identity_id', session.identity_id)
-    .is('deleted_at', null)
-    .maybeSingle()
+  const cust = await resolveCxCustomer<{ id: string }>(session.identity_id, bid, 'id')
   if (!cust) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  const customerId = (cust as { id: string }).id
+  const customerId = cust.id
   const patch: Record<string, string | null> = {}
 
   if (body.name !== undefined) {
