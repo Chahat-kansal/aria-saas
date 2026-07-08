@@ -27,7 +27,7 @@ async function _POST(req: Request) {
 
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86400_000).toISOString()
   const [custQ, salesQ, bizQ] = await Promise.all([
-    supabaseAdmin.from('pos_customers').select('id,name,loyalty_points,visit_count,total_spent').eq('id', body.customer_id).maybeSingle(),
+    supabaseAdmin.from('pos_customers').select('id,name,loyalty_points,visit_count,total_spent').eq('id', body.customer_id).eq('business_id', bid).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount,created_at,pos_sale_items(quantity,unit_price,pos_products(id,name,price))').eq('business_id', bid).eq('customer_id', body.customer_id).gte('created_at', ninetyDaysAgo).neq('status', 'voided').order('created_at', { ascending: false }).limit(20),
     supabaseAdmin.from('businesses').select('display_suggestion_max_pct,name').eq('id', bid).maybeSingle(),
   ])

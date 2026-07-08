@@ -4,6 +4,7 @@ export const maxDuration = 55
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { verifyCronAuth } from '@/lib/auth/cron'
 import { checkCompetitorPrices } from '@/lib/aria/intelligence/competitor'
 import { sendDailySummaryReport } from '@/lib/aria/intelligence/email-report'
 import { checkConditionAlerts } from '@/lib/aria/intelligence/alerts'
@@ -13,11 +14,8 @@ import { exportDeliverablePdf } from '@/lib/aria/deliverable-pdf'
 import type { DeliverableKind } from '@/lib/aria/deliverables'
 
 export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET ?? ''
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = verifyCronAuth(req)
+  if (denied) return denied
 
   const now = new Date()
   // AEST = UTC+10 (ignoring DST for simplicity)

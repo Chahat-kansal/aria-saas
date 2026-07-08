@@ -30,10 +30,10 @@ async function _POST(req: Request) {
 
   let customer: { id: string; name: string; phone: string | null; email: string | null } | null = null
   if (body.customer_id) {
-    const { data } = await supabaseAdmin.from('pos_customers').select('id,name,phone,email').eq('id', body.customer_id).maybeSingle()
+    const { data } = await supabaseAdmin.from('pos_customers').select('id,name,phone,email').eq('id', body.customer_id).eq('business_id', bid).maybeSingle()
     customer = data
   } else if (body.sale_id) {
-    const { data: sale } = await supabaseAdmin.from('pos_sales').select('customer_id,pos_customers(id,name,phone,email)').eq('id', body.sale_id).maybeSingle()
+    const { data: sale } = await supabaseAdmin.from('pos_sales').select('customer_id,pos_customers(id,name,phone,email)').eq('id', body.sale_id).eq('business_id', bid).maybeSingle()
     customer = (sale as any)?.pos_customers ?? null
   }
 

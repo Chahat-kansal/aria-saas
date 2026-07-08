@@ -7,9 +7,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateDeliverable } from '@/lib/aria/deliverables'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET ?? ''
+  // Fail closed: if CRON_SECRET is unset the route is always blocked (same pattern as verifyCronAuth).
+  const cronSecret = process.env.CRON_SECRET
   const headerSecret = req.headers.get('x-cron-secret') ?? ''
-  if (cronSecret && headerSecret !== cronSecret) {
+  if (!cronSecret || headerSecret !== cronSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

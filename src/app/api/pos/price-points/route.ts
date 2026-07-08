@@ -59,10 +59,18 @@ async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBiz(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  // pos_price_points has no business_id column — verify ownership via product relationship.
+  const { data: pp } = await supabase.from('pos_price_points').select('product_id').eq('id', id).maybeSingle();
+  if (!pp) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const { data: prod } = await supabase.from('pos_products').select('id').eq('id', pp.product_id).eq('business_id', bid).maybeSingle();
+  if (!prod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await req.json();
   if (body.price && body.cost) {
@@ -78,10 +86,18 @@ async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBiz(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  // pos_price_points has no business_id column — verify ownership via product relationship.
+  const { data: pp } = await supabase.from('pos_price_points').select('product_id').eq('id', id).maybeSingle();
+  if (!pp) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const { data: prod } = await supabase.from('pos_products').select('id').eq('id', pp.product_id).eq('business_id', bid).maybeSingle();
+  if (!prod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { error } = await supabase.from('pos_price_points').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -78,11 +78,13 @@ async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   const body = await req.json();
-  const { error } = await supabase.from('pos_price_lists').update(body).eq('id', id);
+  const { error } = await supabase.from('pos_price_lists').update(body).eq('id', id).eq('business_id', bid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
@@ -91,11 +93,16 @@ async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  // Verify ownership before deleting — prevents cross-tenant cascade delete.
+  const { data: list } = await supabase.from('pos_price_lists').select('id').eq('id', id).eq('business_id', bid).maybeSingle();
+  if (!list) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   await supabase.from('pos_price_list_items').delete().eq('price_list_id', id);
-  await supabase.from('pos_price_lists').delete().eq('id', id);
+  await supabase.from('pos_price_lists').delete().eq('id', id).eq('business_id', bid);
   return NextResponse.json({ ok: true });
 }
 

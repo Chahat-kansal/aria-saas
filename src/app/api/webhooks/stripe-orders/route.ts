@@ -32,8 +32,9 @@ export async function POST(req: Request) {
   const sig = req.headers.get('stripe-signature') ?? ''
   const secret = process.env.STRIPE_WEBHOOK_SECRET_ORDERS
   if (!secret) {
-    // Not yet configured — accept silently so other webhooks on the same account are unaffected
-    return NextResponse.json({ ok: true, note: 'STRIPE_WEBHOOK_SECRET_ORDERS not set' })
+    // Fail closed: returning 200 when unset would let unsigned payloads auto-accept orders.
+    console.error('[stripe-orders] STRIPE_WEBHOOK_SECRET_ORDERS not set — rejecting all requests')
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
   }
 
   let event: Stripe.Event
