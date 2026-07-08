@@ -21,22 +21,29 @@ export interface PassData {
 }
 
 export async function buildPassData(identityId: string, businessId: string, customerId: string, memberName: string | null): Promise<PassData> {
-  const { data: biz } = await supabaseAdmin.from('businesses').select('name').eq('id', businessId).maybeSingle()
-  const { data: cust } = await supabaseAdmin.from('pos_customers').select('points_balance').eq('id', customerId).maybeSingle()
-  const { data: cfg } = await supabaseAdmin.from('pos_loyalty_config').select('point_value_cents').eq('business_id', businessId).maybeSingle()
+  const [bizRes, custRes, cfgRes, identRes] = await Promise.all([
+    supabaseAdmin.from('businesses').select('name').eq('id', businessId).maybeSingle(),
+    supabaseAdmin.from('pos_customers').select('points_balance').eq('id', customerId).maybeSingle(),
+    supabaseAdmin.from('pos_loyalty_config').select('point_value_cents').eq('business_id', businessId).maybeSingle(),
+    supabaseAdmin.from('loyalty_identity').select('short_code').eq('id', identityId).maybeSingle(),
+  ])
 
-  const points = Number(cust?.points_balance ?? 0)
-  const centsPer = Number(cfg?.point_value_cents ?? 1)
+  const points = Number(custRes.data?.points_balance ?? 0)
+  const centsPer = Number(cfgRes.data?.point_value_cents ?? 1)
   const tierCfg = await getTierConfig(businessId)
   const tier = tierForBalance(points, tierCfg)
+
+  // Prefer the 10-digit numeric short_code (CODE128C-compatible); fall back to identity UUID
+  const shortCode = (identRes.data as { short_code?: string | null } | null)?.short_code ?? null
+  const barcode = shortCode ?? identityId
 
   let preloadBalance: number | null = null
   const pre = await readPreloadConfig(businessId)
   if (pre.enabled) preloadBalance = (await getPreloadState(businessId, customerId)).balance
 
   return {
-    identity_id: identityId, business_id: businessId, business_name: (biz?.name as string) ?? 'Rewards',
-    member_name: memberName, barcode: identityId, points, dollar_value: Math.round(points * centsPer) / 100,
+    identity_id: identityId, business_id: businessId, business_name: (bizRes.data?.name as string) ?? 'Rewards',
+    member_name: memberName, barcode, points, dollar_value: Math.round(points * centsPer) / 100,
     tier, preload_balance: preloadBalance,
   }
 }
@@ -63,7 +70,7 @@ export function googleWalletSaveUrl(p: PassData): string | null {
     id: objectId, classId, state: 'ACTIVE',
     accountId: p.identity_id, accountName: p.member_name ?? 'Member',
     loyaltyPoints: { label: 'Points', balance: { string: String(p.points) } },
-    barcode: { type: 'QR_CODE', value: p.barcode, alternateText: p.barcode.slice(0, 8) },
+    barcode: { type: 'QR_CODE', value: p.barcode, alternateText: p.barcode },
     textModulesData: [
       ...(p.tier ? [{ id: 'tier', header: 'Tier', body: p.tier }] : []),
       ...(p.preload_balance != null ? [{ id: 'balance', header: 'Balance', body: `$${p.preload_balance.toFixed(2)}` }] : []),
@@ -96,7 +103,7 @@ export function buildApplePassJson(p: PassData): Record<string, unknown> {
     description: `${p.business_name} Rewards`,
     serialNumber: p.identity_id,
     backgroundColor: 'rgb(250,250,250)', foregroundColor: 'rgb(10,10,10)', labelColor: 'rgb(136,136,136)',
-    barcodes: [{ format: 'PKBARCODE_FORMAT_QR', message: p.barcode, messageEncoding: 'iso-8859-1', altText: p.barcode.slice(0, 8) }],
+    barcodes: [{ format: 'PKBarcodeFormatQR', message: p.barcode, messageEncoding: 'iso-8859-1', altText: p.barcode }],
     storeCard: {
       primaryFields: [{ key: 'points', label: 'POINTS', value: p.points }],
       secondaryFields: [

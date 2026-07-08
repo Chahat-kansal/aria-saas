@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import JsBarcode from 'jsbarcode'
 import { CxTabBar } from '../CxTabBar'
 
@@ -27,32 +27,88 @@ interface PreloadTxn {
   created_at: string
 }
 
-// ── Real CODE128 barcode via JsBarcode — ONE strip, uniform height ─────────────
-function LoyaltyBarcode({ value }: { value: string | null }) {
-  const ref = useRef<SVGSVGElement>(null)
+// ── CODE128C barcode — explicit format; try/catch renders placeholder on encode error ──
+function LoyaltyBarcode({ value, widthMod = 2.4, heightPx = 56 }: {
+  value: string | null
+  widthMod?: number
+  heightPx?: number
+}) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [ready, setReady] = useState(false)
+  const [encErr, setEncErr] = useState(false)
+
   useEffect(() => {
-    if (!ref.current || !value) return
-    // CODE128C (denser, best scannability) for 10-digit numeric short_codes.
-    // Falls back to CODE128 auto for UUID legacy values (non-digit or odd-length).
-    const allDigits = /^\d+$/.test(value)
-    const format = (allDigits && value.length % 2 === 0) ? 'CODE128C' : 'CODE128'
-    JsBarcode(ref.current, value, {
-      format, displayValue: false,
-      height: 44, width: 1.6, margin: 0,
-      background: '#ffffff', lineColor: '#0a0a0a',
-    })
-    ref.current.setAttribute('preserveAspectRatio', 'none')
-  }, [value])
+    setReady(false)
+    setEncErr(false)
+    if (!svgRef.current || !value) return
+    try {
+      JsBarcode(svgRef.current, value, {
+        format: 'CODE128C', displayValue: false,
+        height: heightPx, width: widthMod, margin: 10,
+        background: '#ffffff', lineColor: '#000000',
+      })
+      svgRef.current.setAttribute('preserveAspectRatio', 'none')
+      setReady(true)
+    } catch (err) {
+      console.error('[LoyaltyBarcode] CODE128C encode error for value:', value, err)
+      setEncErr(true)
+    }
+  }, [value, widthMod, heightPx])
+
+  const showPlaceholder = !value || encErr
+
   return (
     <div style={{
-      width: '100%', background: '#ffffff',
-      height: 56, padding: '8px 16px',
+      width: '100%', background: '#ffffff', minHeight: 44,
+      height: heightPx + 24, padding: '8px 16px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {value
-        ? <svg ref={ref} style={{ width: '100%', height: 40, display: 'block' }} />
-        : <span style={{ fontFamily: FB, fontSize: 22, color: '#9ca3af', letterSpacing: '0.2em' }}>— —</span>
+      {showPlaceholder
+        ? <span style={{ fontFamily: FB, fontSize: 22, color: '#9ca3af', letterSpacing: '0.2em' }}>— —</span>
+        : <svg ref={svgRef} style={{ width: '100%', height: heightPx, display: ready ? 'block' : 'none' }} />
       }
+    </div>
+  )
+}
+
+// ── Fullscreen scan modal — the actual surface staff use to scan from screen ──
+function ScanModal({ value, bizName, onClose }: {
+  value: string | null
+  bizName: string
+  onClose: () => void
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Scan loyalty card"
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 999999,
+        background: '#ffffff',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '32px 24px',
+      }}
+    >
+      <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '0 0 4px', textAlign: 'center' }}>
+        ☀️ Brighten your screen before scanning
+      </p>
+      <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 26, color: INK, margin: '0 0 28px', textAlign: 'center' }}>
+        {bizName}
+      </p>
+      {/* stopPropagation so tapping the barcode itself doesn't dismiss the modal */}
+      <div style={{ width: '100%', maxWidth: 380 }} onClick={function (e) { e.stopPropagation() }}>
+        <LoyaltyBarcode value={value} widthMod={2.4} heightPx={96} />
+      </div>
+      {value && (
+        <p style={{ fontFamily: 'monospace', fontSize: 14, color: INK_MUTED, marginTop: 12, letterSpacing: '0.15em' }}>
+          {value}
+        </p>
+      )}
+      <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, marginTop: 40, textAlign: 'center' }}>
+        Tap anywhere to close
+      </p>
     </div>
   )
 }
@@ -124,13 +180,14 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── Loyalty Card — CSS-built dark card, -3° tilt, CODE128 barcode ─────────────
-function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
+// ── Loyalty Card — dark card, −7deg tilt; barcode strip counter-rotated flat ──
+function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }: {
   bizName: string
   name: string | null
   tier: string
   walletBal: number
   identityId: string | null
+  onScanOpen: () => void
 }) {
   const t = tier.toLowerCase()
   const tierLabel = t === 'gold' ? 'Gold' : t === 'silver' ? 'Silver' : 'Member'
@@ -138,15 +195,21 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
 
   return (
     <div style={{ padding: '0 16px' }}>
-      <div style={{
-        background: '#14130f',
-        borderRadius: 20,
-        transform: 'rotate(-7deg)',
-        border: '1px solid rgba(201,163,122,0.32)',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
-        overflow: 'hidden',
-        userSelect: 'none',
-      }}>
+      <div
+        role="button"
+        aria-label="Tap to open scan view"
+        onClick={onScanOpen}
+        style={{
+          background: '#14130f',
+          borderRadius: 20,
+          transform: 'rotate(-7deg)',
+          border: '1px solid rgba(201,163,122,0.32)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
+          overflow: 'hidden',
+          userSelect: 'none',
+          cursor: 'pointer',
+        }}
+      >
         {/* ── Card face ── */}
         <div style={{ padding: '22px 20px 16px' }}>
           {/* Row 1: biz name + chip */}
@@ -191,8 +254,11 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId }: {
           </div>
         </div>
 
-        {/* ── Barcode strip — always shown; "— —" placeholder when code not yet available ── */}
-        <LoyaltyBarcode value={identityId} />
+        {/* ── Barcode strip: +7deg counter-rotation cancels the card's −7deg tilt ──
+            width 110% + negative margin keeps the strip edge-to-edge after rotation. ── */}
+        <div style={{ transform: 'rotate(7deg)', width: '110%', marginLeft: '-5%' }}>
+          <LoyaltyBarcode value={identityId} widthMod={2.4} heightPx={56} />
+        </div>
       </div>
     </div>
   )
@@ -278,6 +344,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
 }) {
   const isLoggedIn = isSignedIn
   const tier = tierProp ?? 'Member'
+  const [scanOpen, setScanOpen] = useState(false)
 
   const heroBg = heroImageUrl
     ? ('url(' + heroImageUrl + ') center/cover no-repeat')
@@ -323,7 +390,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Header — full-bleed café photo, no rounded corners ── */}
+      {/* ── Header — full-bleed café photo ── */}
       <div style={{
         position: 'relative',
         height: '38vh',
@@ -336,7 +403,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
         }} />
       </div>
 
-      {/* ── Card — overlaps photo bottom by ~50% ── */}
+      {/* ── Card — overlaps photo bottom by ~50%; tap opens scan modal ── */}
       <div style={{ marginTop: -110, position: 'relative', zIndex: 2, paddingBottom: 24 }}>
         {isLoggedIn ? (
           <LoyaltyCard
@@ -345,6 +412,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
             tier={tier}
             walletBal={walletBal}
             identityId={identityId}
+            onScanOpen={() => setScanOpen(true)}
           />
         ) : (
           <div style={{ margin: '0 16px', padding: '28px 20px', background: '#fff', borderRadius: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.07)', textAlign: 'center' }}>
@@ -393,7 +461,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
             </a>
           </div>
 
-          {/* Top up — lime glow pill — TOP-UP GATE: only shown when topUpUrl is provided */}
+          {/* Top up — lime glow pill — only shown when topUpUrl is provided */}
           {topUpUrl && (
             <a
               href={topUpUrl}
@@ -436,6 +504,15 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
       </div>
 
       <CxTabBar slug={slug} active="wallet" />
+
+      {/* ── Scan modal — fullscreen white surface staff use to scan the barcode ── */}
+      {scanOpen && (
+        <ScanModal
+          value={identityId}
+          bizName={bizName}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
     </div>
   )
 }
