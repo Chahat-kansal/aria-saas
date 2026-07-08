@@ -12,25 +12,44 @@ export interface LoyaltyCustomer {
   visit_count: number
   last_visit_at: string | null
   tags: string[]
+  loyalty_tier?: string | null
+  preload_balance?: number
+  stamp_reward_ready?: boolean
+}
+
+interface LoyaltyConfig {
+  program_type: string
+  points_per_dollar: number
+  stamps_to_reward: number
+  stamp_reward_text: string
+  point_value_cents: number
 }
 
 interface Props {
   onSelect: (customer: LoyaltyCustomer | null) => void
   selected: LoyaltyCustomer | null
-  loyaltyConfig?: { program_type: string; points_per_dollar: number; stamps_to_reward: number; stamp_reward_text: string } | null
+  loyaltyConfig?: LoyaltyConfig | null
   cartTotal?: number
 }
+
+// Detect keyboard-wedge scanner: 10 digits arrive in < 150 ms → auto-submit
+const WEDGE_THRESHOLD_MS = 150
 
 export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, cartTotal = 0 }: Props) {
   const [query,       setQuery]       = useState('')
   const [results,     setResults]     = useState<LoyaltyCustomer[]>([])
   const [open,        setOpen]        = useState(false)
   const [loading,     setLoading]     = useState(false)
+  const [scanLoading, setScanLoading] = useState(false)
+  const [scanError,   setScanError]   = useState<string | null>(null)
   const [showNewForm, setShowNewForm] = useState(false)
   const [newForm,     setNewForm]     = useState({ name: '', phone: '', email: '' })
   const [saving,      setSaving]      = useState(false)
   const inputRef  = useRef<HTMLInputElement>(null)
   const debounce  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Keyboard-wedge detection: track the timestamp of the first digit keypress
+  const wedgeStart = useRef<number | null>(null)
+  const wedgeBuffer = useRef('')
 
   const search = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); return }
@@ -44,11 +63,86 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     setLoading(false)
   }, [])
 
+  // Resolve a short_code (10-digit numeric) OR UUID via the unified scan-lookup resolver
+  const resolveCode = useCallback(async (code: string) => {
+    setScanLoading(true)
+    setScanError(null)
+    try {
+      const res = await fetch('/api/pos/loyalty/scan-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      }).then(r => r.json())
+
+      if (!res.found) {
+        setScanError(res.reason === 'identity_not_found' ? 'Card not recognised' : 'Not a member at this business')
+        setScanLoading(false)
+        return
+      }
+
+      onSelect({
+        id: res.customer_id,
+        name: res.name ?? 'Member',
+        phone: null,
+        email: null,
+        points_balance: res.points_balance ?? 0,
+        stamps_count: res.stamps_count ?? 0,
+        total_spent: res.total_spent ?? 0,
+        visit_count: res.visit_count ?? 0,
+        last_visit_at: null,
+        tags: [],
+        loyalty_tier: res.loyalty_tier ?? null,
+        preload_balance: res.preload_balance ?? 0,
+        stamp_reward_ready: res.stamp_reward_ready ?? false,
+      })
+      setQuery('')
+      setScanError(null)
+    } catch {
+      setScanError('Lookup failed — try again')
+    }
+    setScanLoading(false)
+  }, [onSelect])
+
   function handleChange(val: string) {
     setQuery(val)
+    setScanError(null)
     setOpen(true)
+
+    // Keyboard-wedge: 10 all-digit chars → auto-resolve without search dropdown
+    const isAllDigit = /^\d+$/.test(val)
+    if (isAllDigit) {
+      if (wedgeStart.current === null) wedgeStart.current = Date.now()
+      wedgeBuffer.current = val
+      if (val.length === 10) {
+        const elapsed = Date.now() - (wedgeStart.current ?? Date.now())
+        wedgeStart.current = null
+        wedgeBuffer.current = ''
+        if (elapsed < WEDGE_THRESHOLD_MS) {
+          // Hardware scanner — resolve immediately, skip text search
+          setQuery('')
+          resolveCode(val)
+          return
+        }
+      }
+    } else {
+      wedgeStart.current = null
+      wedgeBuffer.current = ''
+    }
+
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => search(val), 250)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      const v = query.trim()
+      if (/^\d{10}$/.test(v)) {
+        // Manual 10-digit entry confirmed with Enter → resolve as short_code
+        setQuery('')
+        resolveCode(v)
+        e.preventDefault()
+      }
+    }
   }
 
   function pick(c: LoyaltyCustomer) {
@@ -56,6 +150,7 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     setQuery('')
     setResults([])
     setOpen(false)
+    setScanError(null)
   }
 
   function clear() {
@@ -63,6 +158,7 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     setQuery('')
     setResults([])
     setOpen(false)
+    setScanError(null)
   }
 
   async function saveNew() {
@@ -81,12 +177,17 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
     }
   }
 
-  const earnPreview = loyaltyConfig && cartTotal > 0 && loyaltyConfig.program_type !== 'off'
-    ? Math.floor(cartTotal * (loyaltyConfig.points_per_dollar ?? 1))
+  const cfg = loyaltyConfig
+  const programType = cfg?.program_type ?? 'points'
+  const showPoints  = ['points', 'both'].includes(programType)
+  const showStamps  = ['stamps', 'both'].includes(programType)
+
+  const earnPreview = cfg && cartTotal > 0 && programType !== 'off'
+    ? Math.floor(cartTotal * (cfg.points_per_dollar ?? 1))
     : 0
 
-  const stampsToNext = selected && loyaltyConfig && ['stamps','both'].includes(loyaltyConfig.program_type)
-    ? Math.max(0, (loyaltyConfig.stamps_to_reward ?? 10) - (selected.stamps_count ?? 0))
+  const stampsToNext = selected && cfg && showStamps
+    ? Math.max(0, (cfg.stamps_to_reward ?? 10) - (selected.stamps_count ?? 0))
     : null
 
   useEffect(() => {
@@ -119,20 +220,35 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {selected.name}
+              {selected.loyalty_tier && (
+                <span style={{ fontWeight: 400, color: '#C9A37A', marginLeft: 6, fontSize: 10 }}>{selected.loyalty_tier}</span>
+              )}
               {selected.phone && <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>{selected.phone}</span>}
             </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-              {loyaltyConfig && loyaltyConfig.program_type !== 'off' && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+              {cfg && programType !== 'off' && (
                 <>
-                  {['points','both'].includes(loyaltyConfig.program_type) && (
+                  {showPoints && (
                     <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 700 }}>
                       {selected.points_balance ?? 0} pts
                     </span>
                   )}
-                  {['stamps','both'].includes(loyaltyConfig.program_type) && (
+                  {showStamps && (
                     <span style={{ fontSize: 10, color: '#F59E0B', fontWeight: 700 }}>
-                      {selected.stamps_count ?? 0}/{loyaltyConfig.stamps_to_reward} ☕
-                      {stampsToNext === 0 ? ' — FREE!' : stampsToNext === 1 ? ' — 1 more!' : ''}
+                      {selected.stamps_count ?? 0}/{cfg.stamps_to_reward} ☕
+                      {stampsToNext === 0
+                        ? ' — FREE ' + (cfg.stamp_reward_text ?? 'item') + '!'
+                        : stampsToNext === 1 ? ' — 1 more!' : ''}
+                    </span>
+                  )}
+                  {selected.stamp_reward_ready && (
+                    <span style={{ fontSize: 10, color: '#00B140', fontWeight: 700 }}>
+                      🎁 Redeem {cfg?.stamp_reward_text ?? 'free item'}
+                    </span>
+                  )}
+                  {(selected.preload_balance ?? 0) > 0 && (
+                    <span style={{ fontSize: 10, color: '#0EA5E9', fontWeight: 700 }}>
+                      {'$' + (selected.preload_balance ?? 0).toFixed(2) + ' store credit'}
                     </span>
                   )}
                   {earnPreview > 0 && (
@@ -168,12 +284,14 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
                 ref={inputRef}
                 value={query}
                 onChange={e => handleChange(e.target.value)}
+                onKeyDown={handleKeyDown}
                 onFocus={() => query.length >= 2 && setOpen(true)}
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="🔍 Customer phone or name…"
-                style={iS}
+                placeholder={scanLoading ? 'Looking up…' : '🔍 Name, phone or scan loyalty code…'}
+                disabled={scanLoading}
+                style={{ ...iS, opacity: scanLoading ? 0.6 : 1 }}
               />
-              {loading && (
+              {(loading || scanLoading) && (
                 <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-tertiary)' }}>…</span>
               )}
             </div>
@@ -181,6 +299,12 @@ export default function CustomerLookupBar({ onSelect, selected, loyaltyConfig, c
               + New
             </button>
           </div>
+
+          {scanError && (
+            <div style={{ marginTop: 4, fontSize: 11, color: '#EF4444', fontWeight: 600 }}>
+              {scanError}
+            </div>
+          )}
 
           {open && results.length > 0 && (
             <div style={{
