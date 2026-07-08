@@ -110,7 +110,7 @@ function RewardCard({ rule, pts, slug, index }: {
         minHeight: 150,
       }} />
       <div style={{
-        flex: 1, padding: '15px 14px 14px 14px',
+        flex: 1, minWidth: 0, padding: '15px 14px 14px 14px',
         display: 'flex', flexDirection: 'column',
         position: 'relative',
         minHeight: 150,
@@ -129,7 +129,7 @@ function RewardCard({ rule, pts, slug, index }: {
         {rule.description && (
           <p style={{
             fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: '#55554e',
-            margin: '5px 0 0', lineHeight: 1.45, flex: 1,
+            margin: '5px 0 0', lineHeight: 1.45,
             overflow: 'hidden', display: '-webkit-box',
             WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           }}>
