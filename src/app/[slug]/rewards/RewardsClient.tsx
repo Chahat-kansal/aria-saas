@@ -246,8 +246,8 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
 
   const activeChallenges = challenges.filter(c => c.status === 'active')
 
-  // Ring math — r=130 in 280×280 SVG, center 140,140
-  const R = 130
+  // Ring math — r=90 in 200×200 SVG, center 100,100
+  const R = 90
   const circumference = 2 * Math.PI * R
   const dashOffset = (circumference * (1 - ringPct)).toFixed(2)
 
@@ -272,92 +272,78 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
         color: INK,
       }}>
 
-        {/* ══ 1. HEADER GLASS CARD ════════════════════════════════════════ */}
-        <div style={{
-          margin: '8px 12px 0',
-          borderRadius: 32,
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.35) 100%)',
-          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255,255,255,0.60)',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.08)',
-          overflow: 'hidden',
-          position: 'relative',
-          paddingBottom: 64,
+        {/* ══ 1. FLOATING HEADER ══════════════════════════════════════════ */}
+
+        {/* "Rewards" */}
+        <h1 style={{
+          fontFamily: FD, fontStyle: 'italic', fontSize: 40, fontWeight: 400,
+          color: INK, margin: 0, textAlign: 'center', lineHeight: 1.1,
+          paddingTop: 32,
         }}>
+          Rewards
+        </h1>
 
-          {/* Lime wash — absolute bottom half */}
+        {/* Compact tier pill */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
           <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
-            background: 'linear-gradient(to top, rgba(217,245,78,0.28) 0%, transparent 100%)',
-            pointerEvents: 'none', zIndex: 0,
-          }} />
-
-          {/* Ring — absolute, anchored to right edge, clips right+bottom */}
-          <svg
-            width="280" height="280" viewBox="0 0 280 280"
-            style={{ position: 'absolute', right: -200, top: 120, zIndex: 0, display: 'block' }}
-            aria-hidden="true"
-          >
-            {/* Track — white/60 */}
-            <circle
-              cx="140" cy="140" r={R}
-              fill="none"
-              stroke="rgba(255,255,255,0.6)"
-              strokeWidth="10"
-            />
-            {/* Progress — lime, glow, start 12 o'clock */}
-            <circle
-              cx="140" cy="140" r={R}
-              fill="none"
-              stroke={ACCENT}
-              strokeWidth="10"
-              strokeLinecap="round"
-              strokeDasharray={circumference.toFixed(2)}
-              strokeDashoffset={dashOffset}
-              transform="rotate(-90 140 140)"
-              style={{ filter: 'drop-shadow(0 0 6px rgba(217,245,78,0.5))' }}
-            />
-          </svg>
-
-          {/* "Rewards" — Cormorant italic, z above ring */}
-          <h1 style={{
-            fontFamily: FD, fontStyle: 'italic', fontSize: 64, fontWeight: 400,
-            color: INK, margin: 0, textAlign: 'center', lineHeight: 1.05,
-            paddingTop: 44,
-            position: 'relative', zIndex: 1,
+            display: 'inline-flex', alignItems: 'center',
+            background: 'rgba(255,255,255,0.70)',
+            borderRadius: 9999,
+            padding: '8px 20px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
           }}>
-            Rewards
-          </h1>
-
-          {/* Wide glass tier bar */}
-          <div style={{
-            width: '92%', margin: '12px auto 0',
-            borderRadius: 14,
-            background: 'rgba(255,255,255,0.55)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.70)',
-            padding: '9px 20px',
-            textAlign: 'center',
-            position: 'relative', zIndex: 1,
-          }}>
-            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK, lineHeight: 1.2 }}>
+            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, color: INK, whiteSpace: 'nowrap' }}>
               {pillText}
             </span>
           </div>
+        </div>
 
-          {/* "{pts} pts" — normal flow, mt-4, z above ring, overlaps ring's left arc */}
-          <div style={{ marginTop: 16, textAlign: 'center', position: 'relative', zIndex: 1 }}>
+        {/* Ring — 200px, full circle visible, glow bleeds freely into cream bg */}
+        <div style={{ width: 200, height: 200, margin: '20px auto 0', position: 'relative' }}>
+          {/* Glow — larger than ring, bleeds beyond container edges */}
+          <div style={{
+            position: 'absolute', width: 340, height: 340,
+            top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(217,245,78,0.30) 0%, transparent 70%)',
+            filter: 'blur(40px)',
+            zIndex: 0,
+            pointerEvents: 'none',
+          }} />
+          {/* SVG ring — 200×200, R=90 center 100,100 */}
+          <svg
+            width="200" height="200" viewBox="0 0 200 200"
+            style={{ position: 'absolute', top: 0, left: 0, display: 'block', zIndex: 1 }}
+            aria-hidden="true"
+          >
+            <circle cx="100" cy="100" r={R} fill="none" stroke="rgba(10,10,10,0.12)" strokeWidth="7" />
+            <circle
+              cx="100" cy="100" r={R}
+              fill="none"
+              stroke={ACCENT}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={circumference.toFixed(2)}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 100 100)"
+            />
+          </svg>
+          {/* "{pts} pts" — absolutely centered inside ring */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 2,
+          }}>
             <span style={{
-              fontFamily: FB, fontSize: 60, fontWeight: 800,
+              fontFamily: FB, fontSize: 44, fontWeight: 800,
               color: INK, letterSpacing: '-0.03em', lineHeight: 1,
               whiteSpace: 'nowrap',
             }}>
               {pts.toLocaleString() + ' pts'}
             </span>
           </div>
-
         </div>
-        {/* END HEADER CARD */}
 
         {/* ══ 2. REWARD CARDS ══════════════════════════════════════════════ */}
         <div style={{ marginTop: 20, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
