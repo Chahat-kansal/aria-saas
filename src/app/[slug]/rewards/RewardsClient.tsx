@@ -6,6 +6,7 @@ const BG = '#f3efe4'
 const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
+const INK_MUTED = '#6b7280'
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 
@@ -58,30 +59,30 @@ interface CxData {
   recent_txns?: EarnTxn[]
 }
 
-// ── Padlock icon — frosted circle, ink outline SVG ─────────────────────────────
+// ── Padlock icon — frosted circle, SVG ink outline (not emoji) ─────────────
 function PadlockIcon() {
   return (
     <div style={{
-      width: 44, height: 44, borderRadius: '50%',
-      background: 'rgba(255,255,255,0.70)',
+      width: 40, height: 40, borderRadius: '50%',
+      background: 'rgba(255,255,255,0.72)',
       backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-      border: '1px solid rgba(255,255,255,0.70)',
+      border: '1px solid rgba(255,255,255,0.72)',
       boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       flexShrink: 0,
     }}>
-      <svg width="18" height="20" viewBox="0 0 18 20" fill="none" aria-hidden="true">
-        <rect x="2" y="9" width="14" height="10" rx="2.5"
-          fill="rgba(10,10,10,0.06)" stroke={INK} strokeWidth="1.3" />
-        <path d="M5 9V6.5a4 4 0 0 1 8 0V9"
+      <svg width="17" height="19" viewBox="0 0 17 19" fill="none" aria-hidden="true">
+        <rect x="1.5" y="8.5" width="14" height="10" rx="2.5"
+          fill="rgba(10,10,10,0.05)" stroke={INK} strokeWidth="1.3" />
+        <path d="M4.5 8.5V6A4 4 0 0 1 12.5 6v2.5"
           stroke={INK} strokeWidth="1.5" strokeLinecap="round" />
-        <circle cx="9" cy="14" r="1.5" fill={INK} />
+        <circle cx="8.5" cy="13.5" r="1.5" fill={INK} />
       </svg>
     </div>
   )
 }
 
-// ── Reward card ────────────────────────────────────────────────────────────────
+// ── Reward card ─────────────────────────────────────────────────────────────
 function RewardCard({ rule, pts, slug, index }: {
   rule: RewardRule
   pts: number
@@ -99,47 +100,47 @@ function RewardCard({ rule, pts, slug, index }: {
       display: 'flex',
       borderRadius: 18,
       overflow: 'hidden',
-      background: 'rgba(255,255,255,0.70)',
+      background: 'rgba(255,255,255,0.72)',
       backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       border: '1px solid rgba(255,255,255,0.60)',
       boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-      filter: locked ? 'grayscale(0.55)' : 'none',
-      opacity: locked ? 0.85 : 1,
+      filter: locked ? 'grayscale(0.6)' : 'none',
+      opacity: locked ? 0.80 : 1,
     }}>
-      {/* Food image — 38%, full height, object-cover */}
+      {/* Food image — 40% left column, never grey */}
       <div style={{
-        width: '38%', flexShrink: 0, alignSelf: 'stretch',
-        background: 'url(' + imgSrc + ') center/cover no-repeat',
-        minHeight: 148,
+        width: '40%', flexShrink: 0, alignSelf: 'stretch',
+        background: 'url(' + imgSrc + ') center/cover no-repeat #f0ede8',
+        minHeight: 150,
       }} />
 
-      {/* Text pane — right 62%, position relative for padlock */}
+      {/* Text pane — 60%, position relative for padlock */}
       <div style={{
-        flex: 1, padding: '16px 16px 16px 14px',
+        flex: 1, padding: '15px 14px 14px 14px',
         display: 'flex', flexDirection: 'column',
         position: 'relative',
-        minHeight: 148,
+        minHeight: 150,
       }}>
-        {/* Title + cost */}
-        <p style={{ fontFamily: FB, fontSize: 17, fontWeight: 700, color: INK, margin: '0 0 4px', lineHeight: 1.2, paddingRight: locked ? 52 : 0 }}>
+        {/* Name bold + (Npts) grey */}
+        <p style={{ fontFamily: FB, fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 3px', lineHeight: 1.2, paddingRight: locked ? 48 : 0 }}>
           {rule.name}
-          <span style={{ fontFamily: FB, fontSize: 15, fontWeight: 400, color: '#7a7a72', marginLeft: 6 }}>
+          <span style={{ fontFamily: FB, fontSize: 14, fontWeight: 400, color: INK_MUTED, marginLeft: 4 }}>
             {'(' + cost + 'pts)'}
           </span>
         </p>
 
-        {/* Locked label */}
+        {/* "Locked" italic label */}
         {locked && (
-          <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: '#8a8a82', margin: '2px 0 0' }}>
+          <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 14, color: '#8a8a82', margin: '2px 0 0' }}>
             Locked
           </p>
         )}
 
-        {/* Description */}
+        {/* Description — Cormorant italic */}
         {rule.description && (
           <p style={{
             fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: '#55554e',
-            margin: '4px 0 0', lineHeight: 1.45,
+            margin: '5px 0 0', lineHeight: 1.45, flex: 1,
             overflow: 'hidden', display: '-webkit-box',
             WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           }}>
@@ -147,23 +148,23 @@ function RewardCard({ rule, pts, slug, index }: {
           </p>
         )}
 
-        {/* Redeem button */}
+        {/* Full-width Redeem pill */}
         {canRedeem && (
           <a
             href={redeemUrl}
             style={{
-              display: 'block', textAlign: 'center', marginTop: 14,
+              display: 'block', textAlign: 'center', marginTop: 12,
               background: ACCENT, color: ACCENT_TEXT,
-              borderRadius: 100, padding: '12px 0',
-              fontFamily: FB, fontSize: 16, fontWeight: 700, textDecoration: 'none',
-              boxShadow: '0 0 20px rgba(217,245,78,0.45)',
+              borderRadius: 100, padding: '11px 0',
+              fontFamily: FB, fontSize: 15, fontWeight: 700, textDecoration: 'none',
+              boxShadow: '0 0 18px rgba(217,245,78,0.50)',
             }}
           >
             Redeem
           </a>
         )}
 
-        {/* Padlock — absolute bottom-right of text pane only */}
+        {/* Frosted padlock — absolute bottom-right of text pane, never over food */}
         {locked && (
           <div style={{ position: 'absolute', bottom: 12, right: 12 }}>
             <PadlockIcon />
@@ -174,57 +175,56 @@ function RewardCard({ rule, pts, slug, index }: {
   )
 }
 
-// ── Challenge card ─────────────────────────────────────────────────────────────
+// ── Challenge card ───────────────────────────────────────────────────────────
 function ChallengeCard({ ch }: { ch: Challenge }) {
   const pct = ch.target_count > 0 ? Math.min(1, ch.progress / ch.target_count) : 0
   const done = ch.progress >= ch.target_count
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.70)',
+      background: 'rgba(255,255,255,0.72)',
       backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       borderRadius: 18,
       border: '1px solid rgba(255,255,255,0.60)',
       boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-      padding: 16,
+      padding: '14px 16px',
     }}>
-      {/* Title row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <p style={{ fontFamily: FB, fontSize: 16, fontWeight: 700, color: INK, margin: 0, flex: 1 }}>
-          {ch.title}
+      {/* "{name} — 3/5" bold + lime check chip */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+        <p style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK, margin: 0, flex: 1, lineHeight: 1.3 }}>
+          {ch.title + ' — ' + ch.progress + '/' + ch.target_count}
         </p>
-        {/* Lime chip with optional check */}
+        {/* Lime check chip — always visible */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
           background: ACCENT, color: ACCENT_TEXT,
-          borderRadius: 100, padding: '4px 12px',
+          borderRadius: 100, padding: '4px 10px',
           flexShrink: 0,
           boxShadow: done ? '0 0 10px rgba(217,245,78,0.5)' : 'none',
         }}>
-          {done && (
-            <svg width="12" height="10" viewBox="0 0 12 10" fill="none" aria-hidden="true">
-              <polyline points="1 5 4.5 8.5 11 1"
-                stroke={ACCENT_TEXT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-          <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 700 }}>
+          <svg width="11" height="9" viewBox="0 0 11 9" fill="none" aria-hidden="true">
+            <polyline points="1 4.5 3.9 7.5 10 1"
+              stroke={ACCENT_TEXT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 700, color: ACCENT_TEXT }}>
             {ch.progress + '/' + ch.target_count}
           </span>
         </div>
       </div>
-      {/* Progress bar */}
-      <div style={{ height: 8, background: 'rgba(10,10,10,0.08)', borderRadius: 4, overflow: 'hidden', marginTop: 12 }}>
+      {/* Lime progress bar */}
+      <div style={{ height: 7, background: 'rgba(10,10,10,0.08)', borderRadius: 4, overflow: 'hidden' }}>
         <div style={{
           height: '100%', borderRadius: 4,
           background: ACCENT,
           width: (pct * 100).toFixed(1) + '%',
           transition: 'width 0.5s ease',
+          boxShadow: done ? '0 0 8px rgba(217,245,78,0.6)' : 'none',
         }} />
       </div>
     </div>
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Main component ───────────────────────────────────────────────────────────
 export function RewardsClient({ slug, bizName, rewardRules }: {
   slug: string
   bizName: string
@@ -234,7 +234,7 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
   const [cx, setCx] = useState<CxData | null>(null)
   const [loaded, setLoaded] = useState(false)
 
-  // ── DATA HOOKS (untouched) ─────────────────────────────────────────────────
+  // ── DATA HOOKS (untouched) ───────────────────────────────────────────────
   useEffect(() => {
     try {
       const saved = localStorage.getItem('aria_cx_' + slug)
@@ -270,16 +270,16 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
     : /silver/i.test(rawTier) ? 'Silver'
     : rawTier ?? 'Member'
 
-  const activeChallenge = challenges.find(c => c.status === 'active') ?? null
+  const activeChallenges = challenges.filter(c => c.status === 'active')
 
-  // ── Ring math — r=118, dashoffset technique ────────────────────────────────
-  const R = 118
+  // ── Ring math — r=120 in 260×260 container ──────────────────────────────
+  const R = 120
   const circumference = 2 * Math.PI * R
   const dashOffset = (circumference * (1 - ringPct)).toFixed(2)
 
-  // ── Tier pill label ────────────────────────────────────────────────────────
-  const pillText = !loaded ? ''
-    : !cx ? 'Sign in to see your tier'
+  // ── Tier pill text ───────────────────────────────────────────────────────
+  const pillText = !loaded ? ' '
+    : !cx ? 'Sign in to see your rewards'
     : ptsToNext > 0
       ? ('↗ ' + tierLabel + ' tier — ' + ptsToNext + ' pts to next reward')
       : ('↗ ' + tierLabel + ' tier — all rewards unlocked!')
@@ -291,12 +291,9 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
       background: 'radial-gradient(ellipse 120% 28% at 50% 0%, rgba(255,255,255,0.40) 0%, transparent 55%), ' + BG,
       fontFamily: FB, color: INK,
     }}>
-      <style>{`
-        *, *::before, *::after { box-sizing: border-box }
-        body { background: ${BG} }
-      `}</style>
+      <style>{'*, *::before, *::after { box-sizing: border-box }'}</style>
 
-      {/* ══ 1. HEADER GLASS CARD — all-corner rounded, floats mx-3 mt-2 ════════ */}
+      {/* ══ 1. HEADER GLASS CARD — h=375, ring clips at bottom ═════════════ */}
       <div style={{
         margin: '8px 12px 0',
         borderRadius: 32,
@@ -305,100 +302,104 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
         border: '1px solid rgba(255,255,255,0.60)',
         boxShadow: '0 12px 40px rgba(0,0,0,0.08)',
         overflow: 'hidden',
-        paddingBottom: 40,
-        minHeight: 380,
+        height: 375,
         position: 'relative',
       }}>
 
-        {/* Lime wash — absolute bottom half of card */}
+        {/* Lime wash — absolute bottom half */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%',
-          background: 'linear-gradient(to top, rgba(217,245,78,0.35) 0%, transparent 100%)',
+          background: 'linear-gradient(to top, rgba(217,245,78,0.30) 0%, transparent 100%)',
           pointerEvents: 'none', zIndex: 0,
         }} />
 
-        {/* Oversize ring — absolute, centered-right, clipped by overflow-hidden */}
-        <svg
-          width="300" height="300" viewBox="0 0 300 300"
-          style={{
-            position: 'absolute', left: '50%', transform: 'translateX(-35%)', top: 150,
-            zIndex: 0, display: 'block', overflow: 'visible',
-          }}
-          aria-hidden="true"
-        >
-          <circle cx="150" cy="150" r={R}
-            fill="none"
-            stroke="rgba(255,255,255,0.50)"
-            strokeWidth="32"
-          />
-          <circle cx="150" cy="150" r={R}
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="32"
-            strokeLinecap="round"
-            strokeDasharray={circumference.toFixed(2)}
-            strokeDashoffset={dashOffset}
-            transform="rotate(-90 150 150)"
-            style={{ filter: 'drop-shadow(0 0 12px rgba(217,245,78,0.80))' }}
-          />
-        </svg>
-
-        {/* "Rewards" title — normal flow, z-1 */}
+        {/* "Rewards" — Cormorant italic, large */}
         <h1 style={{
-          fontFamily: FD, fontStyle: 'italic', fontSize: 48, fontWeight: 500,
+          fontFamily: FD, fontStyle: 'italic', fontSize: 64, fontWeight: 400,
           color: INK, margin: 0, textAlign: 'center', lineHeight: 1.05,
-          paddingTop: 32,
+          paddingTop: 44,
           position: 'relative', zIndex: 1,
         }}>
           Rewards
         </h1>
 
-        {/* Wide tier bar — 92% width glass bar */}
-        {loaded && pillText ? (
+        {/* Wide glass tier bar */}
+        <div style={{
+          width: '88%', margin: '12px auto 0',
+          borderRadius: 14,
+          background: 'rgba(255,255,255,0.55)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.70)',
+          padding: '9px 20px',
+          textAlign: 'center',
+          position: 'relative', zIndex: 1,
+        }}>
+          <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK, lineHeight: 1.2 }}>
+            {pillText}
+          </span>
+        </div>
+
+        {/* ── THIN RING — 260×260, r=120, sw=6, clips at card bottom ──── */}
+        <div style={{
+          width: 260, height: 260, margin: '20px auto 0',
+          position: 'relative', zIndex: 1,
+        }}>
+          {/* SVG ring — fill-none, thin stroke */}
+          <svg
+            width="260" height="260" viewBox="0 0 260 260"
+            style={{ position: 'absolute', inset: 0, display: 'block' }}
+            aria-hidden="true"
+          >
+            {/* Track — ink/10 */}
+            <circle
+              cx="130" cy="130" r={R}
+              fill="none"
+              stroke="rgba(10,10,10,0.10)"
+              strokeWidth="6"
+            />
+            {/* Progress — lime, linecap round, glow, start 12 o'clock */}
+            <circle
+              cx="130" cy="130" r={R}
+              fill="none"
+              stroke={ACCENT}
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={circumference.toFixed(2)}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 130 130)"
+              style={{ filter: 'drop-shadow(0 0 8px rgba(217,245,78,0.85))' }}
+            />
+          </svg>
+
+          {/* "{pts} pts" centered inside ring */}
           <div style={{
-            width: '92%', margin: '12px auto 0',
-            borderRadius: 16,
-            background: 'rgba(255,255,255,0.55)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.70)',
-            padding: '10px 0',
-            textAlign: 'center',
-            position: 'relative', zIndex: 1,
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 15, color: INK, lineHeight: 1.2 }}>
-              {pillText}
+            <span style={{
+              fontFamily: FB, fontSize: 60, fontWeight: 800,
+              color: INK, letterSpacing: '-0.03em', lineHeight: 1,
+              whiteSpace: 'nowrap',
+            }}>
+              {pts.toLocaleString() + ' pts'}
             </span>
           </div>
-        ) : (
-          <div style={{ height: 40, marginTop: 12 }} />
-        )}
-
-        {/* pts — normal flow, sits over ring's left arc */}
-        <div style={{ marginTop: 24, textAlign: 'center', position: 'relative', zIndex: 2 }}>
-          <span style={{
-            fontFamily: FB, fontSize: 56, fontWeight: 800,
-            color: INK, letterSpacing: '-0.03em', lineHeight: 1,
-            whiteSpace: 'nowrap',
-          }}>
-            {pts.toLocaleString() + ' pts'}
-          </span>
         </div>
 
       </div>
       {/* END HEADER CARD */}
 
-      {/* ══ 2. REWARD CARDS — mt-6 px-4 space-y-4 ══════════════════════════ */}
-      <div style={{ marginTop: 24, padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ══ 2. REWARD CARDS ════════════════════════════════════════════════ */}
+      <div style={{ marginTop: 20, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-        {/* Not-logged-in prompt */}
+        {/* Not-signed-in prompt */}
         {loaded && !cx && (
           <div style={{
-            padding: 20, borderRadius: 18,
-            background: 'rgba(255,255,255,0.70)',
+            padding: '20px', borderRadius: 18, textAlign: 'center',
+            background: 'rgba(255,255,255,0.72)',
             backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
             border: '1px solid rgba(255,255,255,0.60)',
             boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-            textAlign: 'center',
           }}>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, color: INK, margin: '0 0 14px' }}>
               Check your points
@@ -424,7 +425,7 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
         ) : (
           <div style={{
             padding: '36px 20px', borderRadius: 18, textAlign: 'center',
-            background: 'rgba(255,255,255,0.70)',
+            background: 'rgba(255,255,255,0.72)',
             backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
             border: '1px solid rgba(255,255,255,0.60)',
             boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
@@ -433,24 +434,26 @@ export function RewardsClient({ slug, bizName, rewardRules }: {
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 20, color: INK, margin: '0 0 8px' }}>
               Rewards coming soon
             </p>
-            <p style={{ fontFamily: FB, fontSize: 14, color: '#7a7a72', margin: 0 }}>
+            <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>
               {bizName + ' is setting up their loyalty catalog'}
             </p>
           </div>
         )}
       </div>
 
-      {/* ══ 3. CHALLENGE CARD ════════════════════════════════════════════════ */}
-      {activeChallenge && (
-        <div style={{ marginTop: 16, padding: '0 16px' }}>
-          <ChallengeCard ch={activeChallenge} />
+      {/* ══ 3. CHALLENGE CARDS (all active) ═══════════════════════════════ */}
+      {activeChallenges.length > 0 && (
+        <div style={{ marginTop: 14, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {activeChallenges.map(ch => (
+            <ChallengeCard key={ch.id} ch={ch} />
+          ))}
         </div>
       )}
 
-      {/* ══ 4. BOTTOM SPACER ═════════════════════════════════════════════════ */}
-      <div style={{ height: 'calc(96px + env(safe-area-inset-bottom))' }} />
+      {/* ══ 4. BOTTOM SPACER = nav + safe-area + 24px ═════════════════════ */}
+      <div style={{ height: 'calc(96px + env(safe-area-inset-bottom) + 24px)' }} />
 
-      {/* ══ 5. TAB BAR ═══════════════════════════════════════════════════════ */}
+      {/* ══ 5. TAB BAR ════════════════════════════════════════════════════ */}
       <CxTabBar slug={slug} active="rewards" />
     </div>
   )
