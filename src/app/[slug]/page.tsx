@@ -5,6 +5,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCxSessionServer } from '@/lib/cx/get-cx-session'
+import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
 import { HubClient, type HubBusiness, type CxCustomer } from './HubClient'
 
 // Top-level route names that must never be treated as a business slug.
@@ -151,13 +152,11 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
   const session = await getCxSessionServer(biz.id as string)
   let initialCustomer: CxCustomer | null = null
   if (session) {
-    const { data: cRow } = await supabaseAdmin
-      .from('pos_customers')
-      .select('id, name, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id')
-      .eq('business_id', biz.id as string)
-      .eq('loyalty_identity_id', session.identity_id)
-      .is('deleted_at', null)
-      .maybeSingle()
+    const cRow = await resolveCxCustomer<{
+      id: string; name: string | null; points_balance: number | null; loyalty_tier: string | null
+      visit_count: number | null; stamps_count: number | null; total_spent: string | null
+      last_visit_at: string | null; loyalty_identity_id: string | null
+    }>(session.identity_id, biz.id as string, 'id, name, points_balance, loyalty_tier, visit_count, stamps_count, total_spent, last_visit_at, loyalty_identity_id')
     if (cRow) {
       const c = cRow as {
         id: string; name: string | null; points_balance: number | null; loyalty_tier: string | null
