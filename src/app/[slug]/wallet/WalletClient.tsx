@@ -188,7 +188,7 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── Loyalty Card — dark card, −7deg tilt; QR counter-rotated flat in bottom-left ──
+// ── Loyalty Card — dark card, −7deg tilt; white QR band across the bottom ──
 function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }: {
   bizName: string
   name: string | null
@@ -201,8 +201,16 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
   const tierLabel = t === 'gold' ? 'Gold' : t === 'silver' ? 'Silver' : 'Member'
   const tierColor = t === 'gold' ? '#C9A37A' : t === 'silver' ? '#A0B4C8' : ACCENT
 
+  // Format display code: 10-digit short_code → XXXX XXX XXX, UUID → first 16 hex chars
+  const displayCode = identityId
+    ? /^\d{10}$/.test(identityId)
+      ? identityId.slice(0, 4) + ' ' + identityId.slice(4, 7) + ' ' + identityId.slice(7)
+      : identityId.replace(/-/g, '').toUpperCase().slice(0, 16)
+    : '— — — — — —'
+
   return (
-    <div style={{ padding: '0 16px' }}>
+    // padding: 0 24px gives 24px clearance per side so -7deg corners stay inside max-w-md
+    <div style={{ padding: '0 24px' }}>
       <div
         role="button"
         aria-label="Tap to open scan view"
@@ -219,7 +227,7 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
         }}
       >
         {/* ── Card face ── */}
-        <div style={{ padding: '22px 20px 16px' }}>
+        <div style={{ padding: '22px 20px 18px' }}>
           {/* Row 1: biz name + chip */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
             <span style={{
@@ -236,7 +244,7 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           <span style={{
             display: 'block',
             fontFamily: FB, fontSize: 16, fontWeight: 400,
-            color: '#fff', marginBottom: 22,
+            color: '#fff', marginBottom: 18,
           }}>
             {name ?? 'Member'}
           </span>
@@ -260,21 +268,35 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
               {tierLabel}
             </span>
           </div>
+        </div>
 
-          {/* Row 4: QR code — bottom-left, counter-rotated flat ── */}
-          <div style={{ marginTop: 18, display: 'flex', alignItems: 'flex-end' }}>
-            {/* Counter-rotate +7deg to cancel the card's −7deg tilt → QR appears flat */}
-            <div style={{ transform: 'rotate(7deg)', transformOrigin: '0% 100%', display: 'inline-block' }}>
-              <div style={{
-                background: '#ffffff',
-                borderRadius: 8,
-                padding: 8,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-                display: 'inline-block',
-              }}>
-                <LoyaltyBarcode value={identityId} size={96} />
-              </div>
-            </div>
+        {/* ── QR bottom band — white strip: QR left (88px) + code + microcopy right ── */}
+        <div style={{
+          background: '#ffffff',
+          padding: '10px 14px',
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          {/* QR square */}
+          <div style={{ flexShrink: 0 }}>
+            <LoyaltyBarcode value={identityId} size={88} />
+          </div>
+
+          {/* Code + microcopy */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              fontFamily: 'monospace', fontSize: 14, fontWeight: 700,
+              color: '#4b5563', letterSpacing: '0.1em',
+              margin: '0 0 4px', lineHeight: 1.2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {displayCode}
+            </p>
+            <p style={{
+              fontFamily: FB, fontSize: 11, color: '#9ca3af',
+              margin: 0, letterSpacing: '0.01em',
+            }}>
+              Show at counter
+            </p>
           </div>
         </div>
       </div>
@@ -422,7 +444,8 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
       </div>
 
       {/* ── Card — overlaps photo bottom by ~50%; tap opens scan modal ── */}
-      <div style={{ marginTop: -110, position: 'relative', zIndex: 2, paddingBottom: 24 }}>
+      {/* overflow:hidden clips the -7deg rotated card corners at the column boundary on desktop */}
+      <div style={{ marginTop: -110, position: 'relative', zIndex: 2, paddingBottom: 24, overflow: 'hidden' }}>
         {isLoggedIn ? (
           <LoyaltyCard
             bizName={bizName}
@@ -446,7 +469,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
 
       {/* ── Wallet actions ── */}
       {isLoggedIn && (
-        <div style={{ padding: '0 16px' }}>
+        <div style={{ padding: '0 16px', paddingBottom: 'calc(92px + env(safe-area-inset-bottom))' }}>
           {/* Apple + Google pills */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <a
