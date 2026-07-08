@@ -254,9 +254,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           </div>
         </div>
 
-        {/* ── Barcode strip: +7deg counter-rotation cancels the card's −7deg tilt ──
-            width 110% + negative margin keeps the strip edge-to-edge after rotation. ── */}
-        <div style={{ transform: 'rotate(7deg)', width: '110%', marginLeft: '-5%' }}>
+        {/* ── Barcode strip — inset within card; overflow:hidden on parent clips to rounded bounds ── */}
+        <div style={{ margin: '0 16px 16px', borderRadius: 8, overflow: 'hidden' }}>
           <LoyaltyBarcode value={identityId} widthMod={2.4} heightPx={56} />
         </div>
       </div>
