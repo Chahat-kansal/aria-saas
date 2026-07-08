@@ -17,6 +17,7 @@ type MeData = {
   customer_id?: string
   name?: string
   loyalty_identity_id?: string
+  short_code?: string | null
   points_balance?: number
   loyalty_tier?: string | null
 }
@@ -71,28 +72,33 @@ export function ScanClient({ slug, bizName, logoUrl }: {
       .catch(() => setLoading(false))
   }, [slug])
 
+  // Barcode value: prefer 10-digit numeric short_code (CODE128C); fall back to UUID (CODE128 auto)
+  const barcodeValue = me?.short_code ?? me?.loyalty_identity_id ?? null
+
   useEffect(() => {
-    const code = me?.loyalty_identity_id
-    if (!code || !canvasRef.current) return
+    if (!barcodeValue || !canvasRef.current) return
+    const isNumeric10 = /^\d{10}$/.test(barcodeValue)
     try {
-      JsBarcode(canvasRef.current, code, {
-        format: 'CODE128',
-        width: 2.2,
+      JsBarcode(canvasRef.current, barcodeValue, {
+        format: isNumeric10 ? 'CODE128C' : 'CODE128',
+        width: 2.4,
         height: 110,
         displayValue: false,
         background: '#ffffff',
-        lineColor: '#0a0a0a',
-        margin: 0,
+        lineColor: '#000000',
+        margin: 10,
       })
-    } catch {
-      // fallback: white canvas if ID not CODE128-encodable
+    } catch (err) {
+      console.error('[ScanClient] barcode encode error:', barcodeValue, err)
       const ctx = canvasRef.current.getContext('2d')
       if (ctx) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height) }
     }
-  }, [me?.loyalty_identity_id])
+  }, [barcodeValue])
 
-  const identityId = me?.loyalty_identity_id ?? ''
-  const displayCode = identityId ? identityId.replace(/-/g, '').toUpperCase().slice(0, 16) : ''
+  // Display code: 10-digit short_code shown as "1234 567890" or UUID fallback (first 16 hex chars)
+  const displayCode = me?.short_code
+    ? me.short_code.slice(0, 4) + ' ' + me.short_code.slice(4)
+    : (me?.loyalty_identity_id ?? '').replace(/-/g, '').toUpperCase().slice(0, 16)
 
   return (
     <div style={{ minHeight: '100dvh', background: BG, color: INK, fontFamily: FB, display: 'flex', flexDirection: 'column', maxWidth: '28rem', margin: '0 auto' }}>
@@ -150,7 +156,7 @@ export function ScanClient({ slug, bizName, logoUrl }: {
               padding: '24px 20px 20px',
               boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
             }}>
-              {/* CODE128 barcode */}
+              {/* CODE128C barcode */}
               <div style={{ borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
                 <canvas
                   ref={canvasRef}

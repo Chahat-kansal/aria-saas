@@ -30,6 +30,14 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
 
   const cx = customer as CustomerRow
 
+  // Fetch short_code from loyalty_identity so the CX scan screen can show the numeric barcode
+  const { data: identRow } = await supabaseAdmin
+    .from('loyalty_identity')
+    .select('short_code')
+    .eq('id', session.identity_id)
+    .maybeSingle()
+  const shortCode = (identRow as { short_code?: string | null } | null)?.short_code ?? null
+
   const [walletRes, challengesRes, txnsRes, usualRes, preloadRes] = await Promise.all([
     supabaseAdmin
       .from('loyalty_preload_accounts')
@@ -109,6 +117,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     phone: cx.phone ?? null,
     member_since: cx.created_at ?? null,
     loyalty_identity_id: cx.loyalty_identity_id ?? null,
+    short_code: shortCode,
     wallet_balance: Number(walletData?.balance ?? 0),
     wallet_currency: walletData?.currency ?? 'AUD',
     challenges: (challengesRes.data ?? []) as unknown[],
