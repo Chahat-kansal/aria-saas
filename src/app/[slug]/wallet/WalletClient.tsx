@@ -32,8 +32,12 @@ function LoyaltyBarcode({ value }: { value: string | null }) {
   const ref = useRef<SVGSVGElement>(null)
   useEffect(() => {
     if (!ref.current || !value) return
+    // CODE128C (denser, best scannability) for 10-digit numeric short_codes.
+    // Falls back to CODE128 auto for UUID legacy values (non-digit or odd-length).
+    const allDigits = /^\d+$/.test(value)
+    const format = (allDigits && value.length % 2 === 0) ? 'CODE128C' : 'CODE128'
     JsBarcode(ref.current, value, {
-      format: 'CODE128', displayValue: false,
+      format, displayValue: false,
       height: 44, width: 1.6, margin: 0,
       background: '#ffffff', lineColor: '#0a0a0a',
     })
