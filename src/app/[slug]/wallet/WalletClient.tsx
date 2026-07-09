@@ -79,11 +79,17 @@ function LoyaltyBarcode({ value, widthMod = 2.4, heightPx = 96, size }: {
   )
 }
 
-// ── Full-width 1D barcode strip — CODE128, SVG-based so it scales without
-//    clipping at any viewport width. Tap opens QR modal.
-function BarcodeStrip({ value, onTap }: {
+// ── 1D CODE128 barcode, SVG-based so it scales without clipping at any
+//    viewport width. Shared by the card's mini-strip and the enlarged scan
+//    modal — same symbology/value, different size. Pure #000 on #fff and no
+//    filter/tint applied here (7-Eleven-style scannability): the caller may
+//    still sit this inside a rotated card, but nothing in this component
+//    itself blurs, tints, or transforms the bars.
+function Barcode1D({ value, heightPx, widthPercent, barWidth = 3 }: {
   value: string | null
-  onTap: () => void
+  heightPx: number
+  widthPercent: string
+  barWidth?: number
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -92,24 +98,40 @@ function BarcodeStrip({ value, onTap }: {
     try {
       JsBarcode(svgRef.current, value, {
         format: 'CODE128',
-        width: 3,
-        height: 38,
+        width: barWidth,
+        height: heightPx,
         displayValue: false,
         margin: 0,
         background: '#ffffff',
-        lineColor: '#111111',
+        lineColor: '#000000',
       })
       // parseFloat strips any 'px' suffix JsBarcode may append — raw string in viewBox is invalid
       const svg = svgRef.current
       const w = parseFloat(svg.getAttribute('width') ?? '') || 200
-      const h = parseFloat(svg.getAttribute('height') ?? '') || 38
+      const h = parseFloat(svg.getAttribute('height') ?? '') || heightPx
       svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
       svg.setAttribute('preserveAspectRatio', 'none')
       svg.removeAttribute('width')
       svg.removeAttribute('height')
     } catch { /* value may not encode cleanly — svg stays blank */ }
-  }, [value])
+  }, [value, heightPx, barWidth])
 
+  if (!value) return null
+
+  return (
+    <svg
+      ref={svgRef}
+      preserveAspectRatio="none"
+      style={{ display: 'block', width: widthPercent, height: heightPx }}
+    />
+  )
+}
+
+// ── Full-width 1D barcode strip on the card face. Tap opens the scan modal.
+function BarcodeStrip({ value, onTap }: {
+  value: string | null
+  onTap: () => void
+}) {
   if (!value) return null
 
   return (
@@ -126,21 +148,50 @@ function BarcodeStrip({ value, onTap }: {
         alignItems: 'center',
       }}
     >
-      <svg
-        ref={svgRef}
-        preserveAspectRatio="none"
-        style={{ display: 'block', width: '83%', height: 38 }}
-      />
+      {/* min 56px bar height, ~85% card width, per 7-Eleven-style scannability fix */}
+      <Barcode1D value={value} heightPx={56} widthPercent="85%" barWidth={3} />
     </div>
   )
 }
 
-// ── Fullscreen scan modal — enlarged QR for bright daylight / belt-and-braces ──
+// Wake Lock API — real, widely-supported (iOS Safari 16.4+, Android Chrome),
+// unlike a "screen brightness API" which no mainstream browser exposes to web
+// pages. Combined with the fullscreen pure-white background below (the actual
+// brightness mechanism — maximises emitted light), this stops the OS from
+// auto-dimming/sleeping the screen mid-scan. Best-effort: never throws if
+// unsupported or denied, the white background still does the real work.
+function useScreenAwakeWhileOpen(active: boolean) {
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    let lock: { release: () => Promise<void> } | null = null
+    ;(async () => {
+      try {
+        const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }
+        if (!nav.wakeLock) return
+        const sentinel = await nav.wakeLock.request('screen')
+        if (cancelled) { void sentinel.release(); return }
+        lock = sentinel
+      } catch { /* unsupported/denied — fullscreen white background still applies */ }
+    })()
+    return () => {
+      cancelled = true
+      if (lock) void lock.release()
+    }
+  }, [active])
+}
+
+// ── Fullscreen scan modal — 7-Eleven-style: large high-contrast 1D barcode as
+//    the default (reads on more scanners, including some imagers-that-look-
+//    like-lasers), QR kept as a toggle for pure-camera scanners. ──
 function ScanModal({ value, bizName, onClose }: {
   value: string | null
   bizName: string
   onClose: () => void
 }) {
+  const [mode, setMode] = useState<'1d' | 'qr'>('1d')
+  useScreenAwakeWhileOpen(true)
+
   return (
     <div
       role="dialog"
@@ -152,30 +203,61 @@ function ScanModal({ value, bizName, onClose }: {
         background: '#ffffff',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        padding: '32px 24px',
+        padding: '28px 16px',
       }}
     >
       <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '0 0 4px', textAlign: 'center' }}>
-        ☀️ Brighten your screen before scanning
+        ☀️ Screen brightened for scanning
       </p>
-      <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 26, color: INK, margin: '0 0 28px', textAlign: 'center' }}>
+      <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 24, color: INK, margin: '0 0 20px', textAlign: 'center' }}>
         {bizName}
       </p>
-      {/* stopPropagation so tapping the QR itself doesn't dismiss the modal */}
-      <div onClick={function (e) { e.stopPropagation() }}>
-        <div style={{ background: '#ffffff', borderRadius: 12, padding: 10, boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
-          <LoyaltyBarcode value={value} size={280} />
+      {/* stopPropagation so tapping the barcode/toggle itself doesn't dismiss the modal */}
+      <div onClick={function (e) { e.stopPropagation() }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {mode === '1d' ? (
+          <div style={{ width: '100%', padding: '8px 0' }}>
+            <Barcode1D value={value} heightPx={120} widthPercent="92%" barWidth={3} />
+          </div>
+        ) : (
+          <div style={{ background: '#ffffff', borderRadius: 12, padding: 10, boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
+            <LoyaltyBarcode value={value} size={240} />
+          </div>
+        )}
+
+        {value && (
+          <p style={{ fontFamily: 'monospace', fontSize: 14, color: INK_MUTED, marginTop: 14, letterSpacing: '0.15em' }}>
+            {/^\d{10}$/.test(value) ? value.slice(0, 4) + ' ' + value.slice(4) : value.slice(0, 16)}
+          </p>
+        )}
+
+        {/* Barcode / QR toggle — both symbologies encode the same short_code value */}
+        <div style={{ display: 'flex', gap: 4, marginTop: 18, background: 'rgba(0,0,0,0.05)', borderRadius: 100, padding: 4 }}>
+          <button
+            onClick={() => setMode('1d')}
+            style={{
+              padding: '6px 18px', borderRadius: 100, border: 'none', cursor: 'pointer',
+              fontFamily: FB, fontSize: 12, fontWeight: 700,
+              background: mode === '1d' ? INK : 'transparent', color: mode === '1d' ? '#ffffff' : INK_MUTED,
+            }}
+          >
+            Barcode
+          </button>
+          <button
+            onClick={() => setMode('qr')}
+            style={{
+              padding: '6px 18px', borderRadius: 100, border: 'none', cursor: 'pointer',
+              fontFamily: FB, fontSize: 12, fontWeight: 700,
+              background: mode === 'qr' ? INK : 'transparent', color: mode === 'qr' ? '#ffffff' : INK_MUTED,
+            }}
+          >
+            QR code
+          </button>
         </div>
       </div>
-      {value && (
-        <p style={{ fontFamily: 'monospace', fontSize: 14, color: INK_MUTED, marginTop: 16, letterSpacing: '0.15em' }}>
-          {/^\d{10}$/.test(value) ? value.slice(0, 4) + ' ' + value.slice(4) : value.slice(0, 16)}
-        </p>
-      )}
-      <p style={{ fontFamily: FB, fontSize: 14, color: INK, marginTop: 16, textAlign: 'center', fontWeight: 600 }}>
+      <p style={{ fontFamily: FB, fontSize: 14, color: INK, marginTop: 20, textAlign: 'center', fontWeight: 600 }}>
         Show this to the counter camera
       </p>
-      <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, marginTop: 20, textAlign: 'center' }}>
+      <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, marginTop: 16, textAlign: 'center' }}>
         Tap anywhere to close
       </p>
     </div>
