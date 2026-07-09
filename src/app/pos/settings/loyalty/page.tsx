@@ -29,8 +29,14 @@ export default function LoyaltyProgramPage() {
   useEffect(() => {
     fetch('/api/pos/settings').then(r => r.json()).then(d => {
       if (d.settings) {
-        setS({ ...DEF, ...d.settings });
+        setS(p => ({ ...p, ...d.settings }));
         setBizId(d.settings.business_id ?? null);
+      }
+    });
+    // Read program_enabled from canonical table (pos_loyalty_config), not pos_settings
+    fetch('/api/loyalty/config').then(r => r.json()).then(d => {
+      if (d.config && typeof d.config.program_enabled === 'boolean') {
+        setS(p => ({ ...p, loyalty_enabled: d.config.program_enabled }));
       }
     });
     fetch('/api/pos/outlets').then(r => r.json()).then(d => {
@@ -44,9 +50,15 @@ export default function LoyaltyProgramPage() {
 
   async function save() {
     setSaving(true);
+    // Write non-loyalty fields to pos_settings (kept for backwards compat)
     await fetch('/api/pos/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(s),
+    });
+    // Write program_enabled to pos_loyalty_config (the table earnOnSale reads)
+    await fetch('/api/loyalty/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ program_enabled: s.loyalty_enabled }),
     });
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
   }

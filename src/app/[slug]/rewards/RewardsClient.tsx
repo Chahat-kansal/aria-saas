@@ -181,7 +181,7 @@ function ChallengeCard({ ch }: { ch: Challenge }) {
   )
 }
 
-export function RewardsClient({ slug, bizName, rewardRules, isSignedIn, pts, tier: rawTierProp, challenges }: {
+export function RewardsClient({ slug, bizName, rewardRules, isSignedIn, pts, tier: rawTierProp, challenges, programEnabled = true }: {
   slug: string
   bizName: string
   logoUrl: string | null
@@ -191,6 +191,7 @@ export function RewardsClient({ slug, bizName, rewardRules, isSignedIn, pts, tie
   tier: string | null
   customerId: string | null
   challenges: Challenge[]
+  programEnabled?: boolean
 }) {
   const rawTier = rawTierProp ?? 'Member'
 
@@ -215,6 +216,30 @@ export function RewardsClient({ slug, bizName, rewardRules, isSignedIn, pts, tie
     : ptsToNext > 0
       ? ('↗ ' + tierLabel + ' tier — ' + ptsToNext + ' pts to next reward')
       : ('↗ ' + tierLabel + ' tier — all rewards unlocked!')
+
+  // Graceful state: loyalty disabled by owner
+  if (!programEnabled) {
+    return (
+      <div style={{ minHeight: '100dvh', background: BG }}>
+        <style>{'*, *::before, *::after { box-sizing: border-box }'}</style>
+        <div style={{ maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK }}>
+          <h1 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 40, fontWeight: 400, color: INK, margin: 0, textAlign: 'center', lineHeight: 1.1, paddingTop: 32 }}>
+            Rewards
+          </h1>
+          <div style={{ margin: '32px 12px 0', padding: '32px 20px', textAlign: 'center', background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.60)', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+            <p style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, color: INK, margin: '0 0 8px' }}>
+              Loyalty not active
+            </p>
+            <p style={{ fontFamily: FB, fontSize: 14, color: INK_MUTED, margin: 0 }}>
+              {bizName + ' has paused their loyalty program. Check back soon!'}
+            </p>
+          </div>
+          <div style={{ height: 'calc(96px + env(safe-area-inset-bottom) + 24px)' }} />
+          <CxTabBar slug={slug} active="rewards" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     // ── OUTER: full-viewport background, content centered ──────────────────

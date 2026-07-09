@@ -11635,6 +11635,7 @@ export type Database = {
           point_value_cents: number
           points_expiry_days: number | null
           points_per_dollar: number
+          program_enabled: boolean
           program_type: string
           public_enrol_enabled: boolean | null
           referee_bonus_points: number | null
@@ -11656,6 +11657,7 @@ export type Database = {
           point_value_cents?: number
           points_expiry_days?: number | null
           points_per_dollar?: number
+          program_enabled?: boolean
           program_type?: string
           public_enrol_enabled?: boolean | null
           referee_bonus_points?: number | null
@@ -11677,6 +11679,7 @@ export type Database = {
           point_value_cents?: number
           points_expiry_days?: number | null
           points_per_dollar?: number
+          program_enabled?: boolean
           program_type?: string
           public_enrol_enabled?: boolean | null
           referee_bonus_points?: number | null

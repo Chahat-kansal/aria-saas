@@ -247,11 +247,15 @@ function IconGift({ color = '#fff' }: { color?: string }) {
 }
 
 // ── Loyalty Card — dark card, −7deg tilt; white barcode band across bottom ──
-function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }: {
+function LoyaltyCard({ bizName, name, tier, walletBal, pointsBalance, programEnabled, preloadEnabled, pointValueCents, identityId, onScanOpen }: {
   bizName: string
   name: string | null
   tier: string
   walletBal: number
+  pointsBalance: number
+  programEnabled: boolean
+  preloadEnabled: boolean
+  pointValueCents: number
   identityId: string | null
   onScanOpen: () => void
 }) {
@@ -296,17 +300,12 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
             {name ?? 'Member'}
           </span>
 
-          {/* Row 3: balance + tier */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap' }}>
+          {/* Row 3: pts primary + tier */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap', marginBottom: 4 }}>
             <span style={{ fontFamily: FB, fontSize: 30, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-              {'$' + walletBal.toFixed(2)}
+              {programEnabled ? (pointsBalance + ' pts') : '—'}
             </span>
-            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-              balance
-            </span>
-            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-              ·
-            </span>
+            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>·</span>
             <span style={{
               fontFamily: FB, fontSize: 14, fontWeight: 700,
               color: tierColor,
@@ -315,6 +314,22 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
               {tierLabel}
             </span>
           </div>
+          {/* Subtext: program paused / pts value / preload balance */}
+          {!programEnabled && (
+            <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: 2 }}>
+              Loyalty paused
+            </span>
+          )}
+          {programEnabled && pointValueCents > 0 && pointsBalance > 0 && (
+            <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 2 }}>
+              {'≈ $' + (pointsBalance * pointValueCents / 100).toFixed(2) + ' in rewards'}
+            </span>
+          )}
+          {preloadEnabled && walletBal > 0 && (
+            <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block' }}>
+              {'$' + walletBal.toFixed(2) + ' preload balance'}
+            </span>
+          )}
         </div>
 
         {/* ── 1D barcode band — full card width, SVG, tap opens QR modal ── */}
@@ -388,7 +403,7 @@ function TxnRow({ date, label, itemName, kind, bizName }: {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, tier: tierProp, walletBal, identityId, earnTxns, preloadTxns, topUpUrl }: {
+export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, tier: tierProp, walletBal, pointsBalance, programEnabled, preloadEnabled, pointValueCents, identityId, earnTxns, preloadTxns, topUpUrl }: {
   slug: string
   bizName: string
   heroImageUrl?: string | null
@@ -397,6 +412,10 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
   name: string | null
   tier: string
   walletBal: number
+  pointsBalance: number
+  programEnabled: boolean
+  preloadEnabled: boolean
+  pointValueCents: number
   identityId: string | null
   earnTxns: EarnTxn[]
   preloadTxns: PreloadTxn[]
@@ -473,6 +492,10 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
             name={name}
             tier={tier}
             walletBal={walletBal}
+            pointsBalance={pointsBalance}
+            programEnabled={programEnabled}
+            preloadEnabled={preloadEnabled}
+            pointValueCents={pointValueCents}
             identityId={identityId}
             onScanOpen={() => setScanOpen(true)}
           />

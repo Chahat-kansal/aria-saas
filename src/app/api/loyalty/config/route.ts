@@ -46,7 +46,7 @@ async function _POST(req: Request) {
 
   const body = await req.json().catch(() => ({}))
   const SAFE = [
-    'program_type', 'points_per_dollar', 'point_value_cents', 'stamps_to_reward', 'stamp_reward_text',
+    'program_enabled', 'program_type', 'points_per_dollar', 'point_value_cents', 'stamps_to_reward', 'stamp_reward_text',
     'birthday_reward_text', 'winback_after_days', 'winback_reward_text',
     // LOY-LIFECYCLE — birthday/winback enable + reward points (texts above already existed)
     'birthday_enabled', 'birthday_reward_points', 'winback_enabled', 'winback_reward_points',

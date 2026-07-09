@@ -11,6 +11,7 @@ export interface EarnResult {
   earnedPoints: number
   earnedStamps: number
   idempotent: boolean
+  skipped?: boolean
 }
 
 /**
@@ -52,9 +53,14 @@ export async function earnOnSale({
   //    FIX 2: base earn fires even with 0 rows in loyalty_reward_rules — bonus rules are additive only.
   const { data: loyCfg } = await supabaseAdmin
     .from('pos_loyalty_config')
-    .select('program_type, points_per_dollar')
+    .select('program_enabled, program_type, points_per_dollar')
     .eq('business_id', businessId)
     .maybeSingle()
+
+  // Master gate: if the loyalty program has been disabled by the owner, skip all earn silently.
+  if (loyCfg?.program_enabled === false) {
+    return { earnedPoints: 0, earnedStamps: 0, idempotent: false, skipped: true }
+  }
 
   const stampsMode = (loyCfg?.program_type ?? 'points') === 'stamps'
   const ptsPerDollar = Number(loyCfg?.points_per_dollar ?? 1)

@@ -28,19 +28,36 @@ export default async function WalletPage({ params }: { params: { slug: string } 
   let customerName: string | null = null
   let tier: string = 'Member'
   let walletBal: number = 0
+  let pointsBalance: number = 0
+  let programEnabled: boolean = true
+  let preloadEnabled: boolean = false
+  let pointValueCents: number = 1
   let identityId: string | null = null
   let earnTxns: Array<{ id: string; type: string; points_delta: number; reward_redeemed: string | null; item_name?: string | null; created_at: string }> = []
   let preloadTxns: Array<{ id: string; amount: number; type: string; description: string | null; created_at: string }> = []
 
+  // Fetch loyalty config for the business (program state + point value)
+  const { data: loyCfg } = await supabaseAdmin
+    .from('pos_loyalty_config')
+    .select('program_enabled, preload_enabled, point_value_cents')
+    .eq('business_id', bid)
+    .maybeSingle()
+  if (loyCfg) {
+    programEnabled  = (loyCfg as { program_enabled?: boolean | null }).program_enabled ?? true
+    preloadEnabled  = !!(loyCfg as { preload_enabled?: boolean | null }).preload_enabled
+    pointValueCents = Number((loyCfg as { point_value_cents?: number | null }).point_value_cents ?? 1)
+  }
+
   if (session) {
     const customer = await resolveCxCustomer<{
-      id: string; name: string | null; loyalty_tier: string | null; loyalty_identity_id: string | null
-    }>(session.identity_id, bid, 'id, name, loyalty_tier, loyalty_identity_id')
+      id: string; name: string | null; loyalty_tier: string | null; loyalty_identity_id: string | null; points_balance: number | null
+    }>(session.identity_id, bid, 'id, name, loyalty_tier, loyalty_identity_id, points_balance')
 
     if (customer) {
-      customerId   = customer.id
-      customerName = customer.name ?? null
-      tier         = customer.loyalty_tier ?? 'Member'
+      customerId    = customer.id
+      customerName  = customer.name ?? null
+      tier          = customer.loyalty_tier ?? 'Member'
+      pointsBalance = Number(customer.points_balance ?? 0)
 
       // Fetch short_code from loyalty_identity for barcode — falls back to UUID if not yet set
       const { data: identRow } = await supabaseAdmin
@@ -113,6 +130,10 @@ export default async function WalletPage({ params }: { params: { slug: string } 
       name={customerName}
       tier={tier}
       walletBal={walletBal}
+      pointsBalance={pointsBalance}
+      programEnabled={programEnabled}
+      preloadEnabled={preloadEnabled}
+      pointValueCents={pointValueCents}
       identityId={identityId}
       earnTxns={earnTxns}
       preloadTxns={preloadTxns}

@@ -40,7 +40,7 @@ export default async function RewardsPage({ params }: { params: { slug: string }
     .maybeSingle()
   if (!biz) notFound()
 
-  const [session, rawRulesRes] = await Promise.all([
+  const [session, rawRulesRes, loyCfgRes] = await Promise.all([
     getCxSessionServer(bid),
     supabaseAdmin
       .from('loyalty_reward_rules')
@@ -49,7 +49,15 @@ export default async function RewardsPage({ params }: { params: { slug: string }
       .eq('is_active', true)
       .order('threshold_value', { ascending: true })
       .limit(12),
+    supabaseAdmin
+      .from('pos_loyalty_config')
+      .select('program_enabled')
+      .eq('business_id', bid)
+      .maybeSingle(),
   ])
+
+  const programEnabled: boolean =
+    (loyCfgRes.data as { program_enabled?: boolean | null } | null)?.program_enabled ?? true
 
   const rules: RewardRule[] = ((rawRulesRes.data ?? []) as RawRule[]).map(r => ({
     id: r.id,
@@ -101,6 +109,7 @@ export default async function RewardsPage({ params }: { params: { slug: string }
       tier={tier}
       customerId={customerId}
       challenges={challenges}
+      programEnabled={programEnabled}
     />
   )
 }
