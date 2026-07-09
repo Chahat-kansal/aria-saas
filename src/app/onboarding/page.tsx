@@ -81,6 +81,31 @@ export default function OnboardingWizard() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
+  // ABN-UNIQUE — recognize-existing check, independent of ABR verification
+  // (which needs ABN_LOOKUP_GUID configured; this is a same-database check
+  // that must work regardless).
+  const [abnDup, setAbnDup] = useState<{ duplicate: boolean; owned_by_me?: boolean; business_id?: string | null; business_name?: string | null } | null>(null);
+  const [switchingBiz, setSwitchingBiz] = useState(false);
+
+  async function checkAbnDuplicate() {
+    const clean = form.abn.replace(/\D/g, '');
+    if (clean.length !== 11) { setAbnDup(null); return; }
+    try {
+      const res = await fetch('/api/onboarding/check-abn', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ abn: clean }),
+      });
+      if (res.ok) setAbnDup(await res.json());
+    } catch { /* non-fatal — duplicate check just doesn't fire, DB constraint is the hard backstop */ }
+  }
+
+  async function goToExistingBusiness() {
+    if (!abnDup?.business_id) return;
+    setSwitchingBiz(true);
+    await fetch('/api/businesses/switch', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: abnDup.business_id }),
+    });
+    router.push('/dashboard');
+  }
 
   useEffect(() => {
     (async () => {
@@ -174,10 +199,13 @@ export default function OnboardingWizard() {
         {err && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{err}</div>}
         {idx === 0 && <Identity form={form} set={set} />}
         {idx === 1 && (
-          <ABN form={form} set={set} abnState={abnState}
+          <ABN form={form} set={set} abnState={abnState} abnDup={abnDup} switchingBiz={switchingBiz}
+            onGoToExisting={goToExistingBusiness}
             onABNBlur={() => {
               const s = form.abn.replace(/\s/g, '');
-              setAbnState(s.length === 0 ? 'empty' : validateABN(form.abn) ? 'valid' : 'invalid');
+              const valid = s.length === 0 ? 'empty' : validateABN(form.abn) ? 'valid' : 'invalid';
+              setAbnState(valid);
+              if (valid === 'valid') checkAbnDuplicate(); else setAbnDup(null);
             }}
           />
         )}
@@ -192,10 +220,15 @@ export default function OnboardingWizard() {
               Back
             </button>
           )}
-          <button onClick={goNext} disabled={saving || !isStepValid(idx, form)}
-            className={"flex-1 py-3 rounded-full font-medium text-sm transition-colors text-white " + (saving || !isStepValid(idx, form) ? 'bg-[#2D5240] opacity-50 cursor-not-allowed' : 'bg-[#2D5240] hover:bg-[#1a3328]')}>
-            {saving ? 'Saving…' : idx === STEPS.length - 1 ? 'Submit' : 'Continue'}
-          </button>
+          {(() => {
+            const blocked = saving || !isStepValid(idx, form) || (idx === 1 && !!abnDup?.duplicate);
+            return (
+              <button onClick={goNext} disabled={blocked}
+                className={"flex-1 py-3 rounded-full font-medium text-sm transition-colors text-white " + (blocked ? 'bg-[#2D5240] opacity-50 cursor-not-allowed' : 'bg-[#2D5240] hover:bg-[#1a3328]')}>
+                {saving ? 'Saving…' : idx === STEPS.length - 1 ? 'Submit' : 'Continue'}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -264,7 +297,12 @@ function Identity({ form, set }: { form: FD; set: Setter }) {
   );
 }
 
-function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnState: 'valid' | 'invalid' | 'empty'; onABNBlur: () => void }) {
+interface AbnDup { duplicate: boolean; owned_by_me?: boolean; business_id?: string | null; business_name?: string | null }
+
+function ABN({ form, set, abnState, abnDup, switchingBiz, onGoToExisting, onABNBlur }: {
+  form: FD; set: Setter; abnState: 'valid' | 'invalid' | 'empty';
+  abnDup: AbnDup | null; switchingBiz: boolean; onGoToExisting: () => void; onABNBlur: () => void;
+}) {
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ entity_name?: string; gst_registered?: boolean; active?: boolean } | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -320,6 +358,25 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
             <p className="text-xs font-semibold text-green-700 mb-0.5">✓ Verified with Australian Business Register</p>
             {verifyResult.entity_name && <p className="text-xs text-green-600">Registered name: <strong>{verifyResult.entity_name}</strong></p>}
             {verifyResult.gst_registered !== undefined && <p className="text-xs text-green-600">GST: {verifyResult.gst_registered ? '✓ Registered — prefilled below' : '✗ Not registered — prefilled below'}</p>}
+          </div>
+        )}
+        {/* ABN-UNIQUE — recognize an existing business on this ABN before any row is finalized. */}
+        {abnDup?.duplicate && abnDup.owned_by_me && (
+          <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-xs font-semibold text-amber-800 mb-1.5">
+              You already have {abnDup.business_name ?? 'a business'} set up on this ABN.
+            </p>
+            <button type="button" onClick={onGoToExisting} disabled={switchingBiz}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#2D5240] text-white disabled:opacity-50">
+              {switchingBiz ? 'Switching…' : 'Go to that business'}
+            </button>
+          </div>
+        )}
+        {abnDup?.duplicate && !abnDup.owned_by_me && (
+          <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-xs text-amber-800">
+              This ABN is already registered with Aria. If this is your business, contact support to request access.
+            </p>
           </div>
         )}
       </div>

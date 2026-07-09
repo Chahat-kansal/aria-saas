@@ -94,7 +94,15 @@ export async function POST(request: NextRequest) {
     .from('businesses')
     .update(bizUpdate)
     .eq('id', biz.id);
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  if (updateErr) {
+    // ABN-UNIQUE — server-side backstop behind the client-side check-abn call
+    // (businesses_abn_unique partial index). Friendly message, not the raw
+    // Postgres constraint-violation text.
+    if (updateErr.code === '23505' && updateErr.message.includes('businesses_abn_unique')) {
+      return NextResponse.json({ error: 'This ABN is already registered with Aria. If this is your business, contact support to request access.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
 
   await supabaseAdmin
     .from('business_onboarding')
