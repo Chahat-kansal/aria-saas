@@ -17,7 +17,7 @@ const DEF: S = {
   loyalty_welcome_bonus: 0, loyalty_birthday_bonus: 0,
 };
 
-interface Outlet { id: string; name: string }
+interface Outlet { id: string; name: string; business_id?: string }
 
 export default function LoyaltyProgramPage() {
   const [s, setS] = useState<S>(DEF);
@@ -34,7 +34,11 @@ export default function LoyaltyProgramPage() {
       }
     });
     fetch('/api/pos/outlets').then(r => r.json()).then(d => {
-      if (Array.isArray(d.outlets)) setOutlets(d.outlets);
+      if (Array.isArray(d.outlets)) {
+        setOutlets(d.outlets);
+        // bizId fallback: if pos_settings has no row, extract from first outlet
+        if (d.outlets.length > 0) setBizId((prev: string | null) => prev ?? (d.outlets[0].business_id as string));
+      }
     });
   }, []);
 

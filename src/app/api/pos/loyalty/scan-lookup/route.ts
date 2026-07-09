@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     id: r.id,
     rule_type: r.rule_type ?? 'spend_threshold',
     points_cost: Number(r.points_value ?? 0),
-    label: ((r.config as Record<string, string> | null)?.label) ?? r.rule_type ?? 'Reward',
+    label: ((r.config as Record<string, string> | null)?.name) ?? ((r.config as Record<string, string> | null)?.label) ?? r.rule_type ?? 'Reward',
     config: r.config ?? {},
   }))
 
