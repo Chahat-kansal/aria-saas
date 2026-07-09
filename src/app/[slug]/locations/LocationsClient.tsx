@@ -24,6 +24,18 @@ type Outlet = {
   is_default: boolean | null
   is_active: boolean | null
   opening_hours: unknown
+  lat: number | null
+  lng: number | null
+}
+
+// Prefer a lat/lng deep link (no embed API key needed) over a text query —
+// more accurate, and works even when the free-text address is ambiguous.
+function mapsUrlFor(outlet: Outlet): string | null {
+  if (outlet.lat != null && outlet.lng != null) {
+    return 'https://www.google.com/maps/search/?api=1&query=' + outlet.lat + ',' + outlet.lng
+  }
+  if (outlet.address) return 'https://maps.google.com/?q=' + encodeURIComponent(outlet.address)
+  return null
 }
 
 type Hours = { [day: string]: { open: string; close: string; closed?: boolean } }
@@ -141,14 +153,16 @@ export function LocationsClient({ slug, bizName, outlets }: {
                       <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '0 0 4px', lineHeight: 1.4 }}>
                         {outlet.address}
                       </p>
-                      <a
-                        href={'https://maps.google.com/?q=' + encodeURIComponent(outlet.address)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ display: 'inline-block', fontFamily: FB, fontSize: 12, color: ACCENT_TEXT, fontWeight: 700, textDecoration: 'none', marginBottom: 6 }}
-                      >
-                        Open in Maps ↗
-                      </a>
+                      {mapsUrlFor(outlet) && (
+                        <a
+                          href={mapsUrlFor(outlet)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-block', fontFamily: FB, fontSize: 12, color: ACCENT_TEXT, fontWeight: 700, textDecoration: 'none', marginBottom: 6 }}
+                        >
+                          Open in Maps ↗
+                        </a>
+                      )}
                     </>
                   )}
                   <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: 0 }}>
@@ -163,17 +177,21 @@ export function LocationsClient({ slug, bizName, outlets }: {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
-                  <button
-                    onClick={() => handleSetActive(outlet.id)}
-                    style={{
-                      background: isActive ? ACCENT : 'rgba(0,0,0,0.06)',
-                      color: isActive ? ACCENT_TEXT : INK,
-                      border: 'none', borderRadius: 12, padding: '8px 16px',
-                      fontFamily: FB, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >
-                    {isActive ? 'Active' : 'Select'}
-                  </button>
+                  {/* Part B.5 — the Select/Active switcher only makes sense with
+                      more than one location; a single location is always "it". */}
+                  {outlets.length > 1 && (
+                    <button
+                      onClick={() => handleSetActive(outlet.id)}
+                      style={{
+                        background: isActive ? ACCENT : 'rgba(0,0,0,0.06)',
+                        color: isActive ? ACCENT_TEXT : INK,
+                        border: 'none', borderRadius: 12, padding: '8px 16px',
+                        fontFamily: FB, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      {isActive ? 'Active' : 'Select'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setExpanded(isExpanded ? null : outlet.id)}
                     style={{
