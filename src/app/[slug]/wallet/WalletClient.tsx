@@ -92,7 +92,7 @@ function BarcodeStrip({ value, displayCode, onTap }: {
       JsBarcode(canvasRef.current, value, {
         format: 'CODE128',
         width: 2,
-        height: 44,
+        height: 36,
         displayValue: false,
         margin: 0,
         background: '#ffffff',
@@ -108,14 +108,20 @@ function BarcodeStrip({ value, displayCode, onTap }: {
       role="button"
       aria-label="Tap to open scan view"
       onClick={onTap}
-      style={{ background: '#ffffff', padding: '12px 16px 10px', cursor: 'pointer' }}
+      style={{
+        background: '#ffffff',
+        borderRadius: 12,
+        margin: '0 14px 14px',
+        padding: '8px 14px 6px',
+        cursor: 'pointer',
+      }}
     >
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 44 }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#6b7280', letterSpacing: '0.1em' }}>
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 36 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: '0.1em' }}>
           {displayCode}
         </span>
-        <span style={{ fontFamily: FB, fontSize: 10, color: '#9ca3af' }}>
+        <span style={{ fontFamily: FB, fontSize: 9, color: '#9ca3af' }}>
           tap to scan
         </span>
       </div>
@@ -272,7 +278,7 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
         }}
       >
         {/* ── Card face ── */}
-        <div style={{ padding: '22px 20px 10px' }}>
+        <div style={{ padding: '18px 20px 12px' }}>
           {/* Row 1: biz name + chip */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
             <span style={{
@@ -289,7 +295,7 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           <span style={{
             display: 'block',
             fontFamily: FB, fontSize: 16, fontWeight: 400,
-            color: '#fff', marginBottom: 18,
+            color: '#fff', marginBottom: 10,
           }}>
             {name ?? 'Member'}
           </span>
@@ -448,22 +454,22 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Header — full-bleed café photo ── */}
+      {/* ── Header — full-bleed café photo, fades to cream at bottom ── */}
       <div style={{
         position: 'relative',
-        height: '38vh',
+        height: '40vh',
         background: heroBg + ', linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
+        border: 'none',
       }}>
-        {/* Cream fade at bottom */}
+        {/* Solid cream fade — starts at 30%, fully opaque by 88% so no hard seam */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.08) 0%, transparent 35%, rgba(243,239,228,0.97) 100%)',
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, transparent 28%, rgba(243,239,228,1) 88%)',
         }} />
       </div>
 
-      {/* ── Card — overlaps photo bottom by ~50%; tap opens scan modal ── */}
-      {/* overflow:hidden clips the -7deg rotated card corners at the column boundary on desktop */}
-      <div style={{ marginTop: -110, position: 'relative', zIndex: 2, paddingBottom: 24, overflow: 'hidden' }}>
+      {/* ── Card — overlaps photo by ~45%; overflow:hidden clips rotated corners ── */}
+      <div style={{ marginTop: -140, position: 'relative', zIndex: 2, paddingBottom: 24, overflow: 'hidden' }}>
         {isLoggedIn ? (
           <LoyaltyCard
             bizName={bizName}
