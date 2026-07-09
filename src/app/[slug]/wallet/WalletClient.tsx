@@ -270,21 +270,23 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           </div>
         </div>
 
-        {/* ── QR bottom band — white strip: QR left (88px) + code + microcopy right ── */}
+        {/* ── QR bottom band — inset pill: QR 80px left, code + microcopy right ── */}
         <div style={{
           background: '#ffffff',
-          padding: '10px 14px',
-          display: 'flex', alignItems: 'center', gap: 14,
+          borderRadius: 10,
+          margin: '0 14px 14px',
+          padding: '10px 12px',
+          display: 'flex', alignItems: 'center', gap: 12,
         }}>
           {/* QR square */}
           <div style={{ flexShrink: 0 }}>
-            <LoyaltyBarcode value={identityId} size={88} />
+            <LoyaltyBarcode value={identityId} size={80} />
           </div>
 
           {/* Code + microcopy */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{
-              fontFamily: 'monospace', fontSize: 14, fontWeight: 700,
+              fontFamily: 'monospace', fontSize: 13, fontWeight: 700,
               color: '#4b5563', letterSpacing: '0.1em',
               margin: '0 0 4px', lineHeight: 1.2,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
