@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { SitePreviewCard } from '@/components/SitePreviewCard';
 import type { SitePreviewResult } from '@/app/api/site-preview/route';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import Papa from 'papaparse';
 
 function validateABN(raw: string): boolean {
   const digits = raw.replace(/\s/g, '');
@@ -65,7 +66,10 @@ const EMPTY: FD = {
 function isStepValid(step: number, f: FD): boolean {
   if (step === 0) return f.legal_name.trim().length > 0 && f.owner_name.trim().length > 0;
   if (step === 2) return f.business_model.length > 0 && f.industry.length > 0;
-  // Products step (4) is always skippable — products can be added/imported later.
+  // Products step (4) — this is the seed data Aria derives categories, config
+  // etc. from, so product businesses need at least 1 (manual/CSV/photo — any
+  // source). Service businesses skip products entirely (not applicable).
+  if (step === 4) return f.business_model === 'service' || f.products.length > 0;
   return true;
 }
 
@@ -446,8 +450,19 @@ function Operations({ form, set }: { form: FD; set: Setter }) {
   );
 }
 
+// Header aliases mirror /api/pos/products/import's HEADER_MAP (name/price/category only —
+// onboarding just needs the seed, not the full product schema that endpoint handles).
+const CSV_HEADER_MAP: Record<string, 'name' | 'price' | 'category'> = {
+  'name': 'name', 'product name': 'name', 'item name': 'name', 'title': 'name', 'product': 'name',
+  'price': 'price', 'rrp': 'price', 'sell price': 'price', 'selling price': 'price', 'retail price': 'price', 'unit price': 'price', 'sale price': 'price',
+  'category': 'category', 'department': 'category', 'product type': 'category', 'type': 'category',
+};
+
 function Products({ form, set }: { form: FD; set: Setter }) {
   const products = form.products;
+  const [csvError, setCsvError] = useState('');
+  const [photoState, setPhotoState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [photoError, setPhotoError] = useState('');
 
   function updateProduct(i: number, field: 'name' | 'price' | 'category', value: string) {
     const next = products.map((p, idx) => idx === i ? { ...p, [field]: value } : p);
@@ -460,6 +475,74 @@ function Products({ form, set }: { form: FD; set: Setter }) {
     set('products', products.filter((_, idx) => idx !== i));
   }
 
+  function handleCsvFile(file: File) {
+    setCsvError('');
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim(),
+      complete: result => {
+        const fields = result.meta.fields ?? [];
+        const mapping: Record<string, 'name' | 'price' | 'category'> = {};
+        for (const h of fields) {
+          const mapped = CSV_HEADER_MAP[h.toLowerCase().trim()];
+          if (mapped) mapping[h] = mapped;
+        }
+        if (!mapping || !Object.values(mapping).includes('name')) {
+          setCsvError("Couldn't find a name/price column — check your CSV has headers like Name, Price, Category.");
+          return;
+        }
+        const rows = result.data
+          .map(row => {
+            const item = { name: '', price: '', category: '' };
+            for (const [rawHeader, rawValue] of Object.entries(row)) {
+              const field = mapping[rawHeader];
+              if (field) item[field] = String(rawValue ?? '').trim();
+            }
+            return item;
+          })
+          .filter(item => item.name.length > 0);
+        if (rows.length === 0) {
+          setCsvError('No valid rows found in that CSV.');
+          return;
+        }
+        set('products', [...products, ...rows]);
+      },
+      error: () => setCsvError('Could not read that file — is it a valid CSV?'),
+    });
+  }
+
+  async function handlePhotoFile(file: File) {
+    setPhotoState('loading'); setPhotoError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/pos/menu-extract', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        setPhotoState('error');
+        setPhotoError(data.error || 'Could not read that photo — try a clearer, well-lit shot or add items manually.');
+        return;
+      }
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.length === 0) {
+        setPhotoState('error');
+        setPhotoError("Couldn't find any items in that photo — try a clearer shot or add items manually.");
+        return;
+      }
+      set('products', [
+        ...products,
+        ...items.map((it: { name: string; price: number; category: string }) => ({
+          name: it.name, price: String(it.price ?? ''), category: it.category || '',
+        })),
+      ]);
+      setPhotoState('idle');
+    } catch {
+      setPhotoState('error');
+      setPhotoError('Something went wrong reading that photo — add items manually instead.');
+    }
+  }
+
   if (form.business_model === 'service') {
     return (
       <div className="text-sm text-[rgba(0,0,0,0.5)] py-4">
@@ -470,8 +553,27 @@ function Products({ form, set }: { form: FD; set: Setter }) {
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-[rgba(0,0,0,0.4)]">
+        Add at least one product — Aria uses this to set up your categories, POS, and dashboard. Add a few now; you can always add the rest later.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[rgba(45,82,64,0.2)] text-sm text-[#2D5240] font-medium cursor-pointer hover:border-[#2D5240] transition-colors">
+          Import CSV
+          <input type="file" accept=".csv,text/csv" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ''; }} />
+        </label>
+        <label className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[rgba(45,82,64,0.2)] text-sm text-[#2D5240] font-medium cursor-pointer hover:border-[#2D5240] transition-colors">
+          {photoState === 'loading' ? 'Reading photo…' : 'Import from photo'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={photoState === 'loading'}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f); e.target.value = ''; }} />
+        </label>
+      </div>
+      {csvError && <p className="text-xs text-amber-600">{csvError}</p>}
+      {photoState === 'error' && <p className="text-xs text-amber-600">{photoError}</p>}
+
       {products.length === 0 && (
-        <p className="text-xs text-[rgba(0,0,0,0.4)]">No products yet — add a few now, or skip and add/import them later from your POS.</p>
+        <p className="text-xs text-[rgba(0,0,0,0.4)]">No products yet — add one manually, or import a CSV / menu photo above.</p>
       )}
       {products.map((p, i) => (
         <div key={i} className="p-3 border border-[rgba(45,82,64,0.15)] rounded-xl space-y-2">
@@ -488,7 +590,7 @@ function Products({ form, set }: { form: FD; set: Setter }) {
       ))}
       <button type="button" onClick={addProduct}
         className="w-full py-2.5 rounded-lg border-2 border-dashed border-[rgba(45,82,64,0.3)] text-sm text-[#2D5240] font-medium hover:border-[#2D5240] transition-colors">
-        + Add a product
+        + Add a product manually
       </button>
     </div>
   );

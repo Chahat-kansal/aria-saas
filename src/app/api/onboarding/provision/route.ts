@@ -177,6 +177,56 @@ async function runProvision(
   }
   await writeSteps(bizId, steps)
 
+  // ONBOARD-FIX-1 (addendum) — Aria derives default outlet + register + AU tax
+  // codes from the same product seed, no separate wizard steps. Non-critical:
+  // a missing outlet already falls back gracefully (CX locations page reads
+  // the business's own address when pos_outlets is empty), so a failure here
+  // must never abort onboarding the way a categories failure does.
+  if (businessModel !== 'service') {
+    try {
+      const { count: outletCount } = await supabaseAdmin
+        .from('pos_outlets').select('id', { count: 'exact', head: true }).eq('business_id', bizId)
+      if (!outletCount) {
+        const { data: biz } = await supabaseAdmin
+          .from('businesses')
+          .select('name, address, phone')
+          .eq('id', bizId)
+          .maybeSingle()
+        const { data: outlet } = await supabaseAdmin
+          .from('pos_outlets')
+          .insert({
+            business_id: bizId, name: (biz?.name as string) || bizName || 'Main location',
+            address: (biz?.address as string) ?? null, phone: (biz?.phone as string) ?? null,
+            is_default: true, is_active: true,
+          })
+          .select('id').single()
+        if (outlet) {
+          await supabaseAdmin.from('pos_registers').insert({
+            business_id: bizId, outlet_id: outlet.id, name: 'Main Register', is_active: true,
+          })
+        }
+      }
+    } catch (e) { console.error('[non-fatal] default outlet seeding failed for', bizId, e) }
+
+    try {
+      const { count: taxCount } = await supabaseAdmin
+        .from('pos_tax_codes').select('id', { count: 'exact', head: true }).eq('business_id', bizId)
+      if (!taxCount) {
+        const AU_TAX_CODES = [
+          { code: 'GST',          name: 'GST 10%',                rate: 10, category: 'standard', is_inclusive: true },
+          { code: 'GST_FREE',     name: 'GST-free',                rate: 0,  category: 'zero',     is_inclusive: true },
+          { code: 'EXPORT',       name: 'Export — Zero Rated',      rate: 0,  category: 'zero',     is_inclusive: false },
+          { code: 'INPUT_TAXED',  name: 'Input Taxed',              rate: 0,  category: 'exempt',   is_inclusive: true },
+          { code: 'WET',          name: 'Wine Equalisation Tax 29%', rate: 29, category: 'special',  is_inclusive: false },
+          { code: 'LCT',          name: 'Luxury Car Tax 33%',        rate: 33, category: 'luxury',   is_inclusive: false },
+        ]
+        await supabaseAdmin.from('pos_tax_codes').insert(
+          AU_TAX_CODES.map(t => ({ ...t, business_id: bizId, is_system: true, is_active: true }))
+        )
+      }
+    } catch (e) { console.error('[non-fatal] default tax codes seeding failed for', bizId, e) }
+  }
+
   // Step 2: trading hours — non-critical
   steps[1].status = 'running'
   await writeSteps(bizId, steps)
