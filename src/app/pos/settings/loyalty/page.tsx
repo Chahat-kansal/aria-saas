@@ -50,15 +50,16 @@ export default function LoyaltyProgramPage() {
 
   async function save() {
     setSaving(true);
-    // Write non-loyalty fields to pos_settings (kept for backwards compat)
+    // loyalty_enabled is excluded from pos_settings — pos_loyalty_config.program_enabled is the
+    // single canonical gate read by earnOnSale and all CX surfaces.
+    const { loyalty_enabled, ...posSettingsBody } = s;
     await fetch('/api/pos/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(s),
+      body: JSON.stringify(posSettingsBody),
     });
-    // Write program_enabled to pos_loyalty_config (the table earnOnSale reads)
     await fetch('/api/loyalty/config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ program_enabled: s.loyalty_enabled }),
+      body: JSON.stringify({ program_enabled: loyalty_enabled }),
     });
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
   }

@@ -39,15 +39,26 @@ export default function SettingsPage() {
   const [tab,     setTab]     = useState<'general' | 'receipt'>('general');
 
   useEffect(() => {
-    fetch('/api/pos/settings').then(r => r.json()).then(d => {
-      if (d.settings) setForm({ ...DEFAULT, ...d.settings });
+    Promise.all([
+      fetch('/api/pos/settings').then(r => r.json()),
+      fetch('/api/loyalty/config').then(r => r.json()),
+    ]).then(([sd, ld]) => {
+      const merged: Settings = { ...DEFAULT, ...(sd.settings ?? {}) };
+      // program_enabled on pos_loyalty_config is canonical; override loyalty_enabled from it
+      if (typeof (ld.config as { program_enabled?: boolean } | null)?.program_enabled === 'boolean') {
+        merged.loyalty_enabled = (ld.config as { program_enabled: boolean }).program_enabled;
+      }
+      setForm(merged);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
   async function save() {
     setSaving(true);
-    await fetch('/api/pos/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+    // loyalty_enabled excluded from pos_settings write — pos_loyalty_config.program_enabled is canonical
+    const { loyalty_enabled, ...posSettingsBody } = form;
+    await fetch('/api/pos/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(posSettingsBody) });
+    await fetch('/api/loyalty/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ program_enabled: loyalty_enabled }) });
     setSaving(false); setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   }
