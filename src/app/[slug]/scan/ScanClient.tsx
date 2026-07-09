@@ -12,7 +12,7 @@ const INK_MUTED = 'rgba(255,255,255,0.5)'
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
 
-type MeData = {
+export type MeData = {
   found: boolean
   customer_id?: string
   name?: string
@@ -42,14 +42,13 @@ function BrightnessIcon() {
   )
 }
 
-export function ScanClient({ slug, bizId, bizName, logoUrl }: {
+export function ScanClient({ slug, bizId, bizName, logoUrl, me }: {
   slug: string
   bizId: string
   bizName: string
   logoUrl: string | null
+  me: MeData
 }) {
-  const [me, setMe] = useState<MeData | null>(null)
-  const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<ScanMode>('show')
   const [checkinStatus, setCheckinStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
   const [checkinMsg, setCheckinMsg] = useState('')
@@ -59,15 +58,8 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(false)
 
-  useEffect(() => {
-    fetch('/api/public/cx/' + slug + '/me', { method: 'POST' })
-      .then(r => r.json())
-      .then((data: MeData) => { setMe(data); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [slug])
-
   // QR code: prefer short_code (10-digit), fallback to identity UUID
-  const qrValue = me?.short_code ?? me?.loyalty_identity_id ?? null
+  const qrValue = me.short_code ?? me.loyalty_identity_id ?? null
 
   useEffect(() => {
     if (!qrValue || !qrCanvasRef.current) return
@@ -81,9 +73,9 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
     })
   }, [qrValue])
 
-  const displayCode = me?.short_code
+  const displayCode = me.short_code
     ? me.short_code.slice(0, 4) + ' ' + me.short_code.slice(4)
-    : (me?.loyalty_identity_id ?? '').replace(/-/g, '').toUpperCase().slice(0, 16)
+    : (me.loyalty_identity_id ?? '').replace(/-/g, '').toUpperCase().slice(0, 16)
 
   // ── Camera: stop stream ────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -268,12 +260,12 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
           {bizName}
         </p>
         <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0 0' }}>
-          {me?.name ? ('Welcome back, ' + me.name) : 'Your loyalty card'}
+          {me.name ? ('Welcome back, ' + me.name) : 'Your loyalty card'}
         </p>
       </div>
 
       {/* Mode toggle — show only when logged in */}
-      {me?.found && !loading && (
+      {me.found && (
         <div style={{ display: 'flex', gap: 8, padding: '0 24px 16px', justifyContent: 'center' }}>
           <button
             onClick={() => setMode('show')}
@@ -302,9 +294,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
 
       {/* Content area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px calc(100px + env(safe-area-inset-bottom))' }}>
-        {loading ? (
-          <div style={{ color: INK_MUTED, fontFamily: FB, fontSize: 14 }}>Loading…</div>
-        ) : !me?.found ? (
+        {!me.found ? (
           <div style={{ textAlign: 'center' }}>
             <p style={{ color: INK_MUTED, fontFamily: FB, fontSize: 14, marginBottom: 20 }}>
               No loyalty account found.
@@ -385,7 +375,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
                 </span>
               </div>
 
-              {me?.points_balance !== undefined && (
+              {me.points_balance !== undefined && (
                 <div style={{ marginTop: 16, textAlign: 'center' }}>
                   <p style={{ fontFamily: FB, fontSize: 12, color: '#6b7280', margin: '0 0 2px' }}>
                     Points balance
