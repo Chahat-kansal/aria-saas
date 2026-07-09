@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { generateBusinessIdAndSlug } from '@/lib/slug'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -62,24 +63,36 @@ async function _POST(req: Request) {
     await supabaseAdmin.from('businesses').update({ parent_account_id: currentBiz.id }).eq('id', currentBiz.id)
   }
 
-  // Create the new sibling business
-  const { data: newBiz, error } = await supabaseAdmin
-    .from('businesses')
-    .insert({
-      user_id: user.id,
-      name,
-      city: body.city || null,
-      address: body.address || null,
-      industry: currentBiz.industry ?? 'retail',
-      plan: currentBiz.plan ?? 'starter',
-      parent_account_id: parentId,
-      is_active: true,
-      onboarding_complete: true,
-    })
-    .select('id, name, city, address, plan')
-    .single()
+  // Create the new sibling business. A business must NEVER exist without a
+  // slug — generate id+slug up front (Sip Café pattern) and retry on the
+  // rare unique-index collision.
+  let newBiz: { id: string; name: string; city: string | null; address: string | null; plan: string | null } | null = null
+  let insertErr: { message: string; code?: string } | null = null
+  for (let attempt = 0; attempt < 5 && !newBiz; attempt++) {
+    const { id, slug } = generateBusinessIdAndSlug(name)
+    const { data, error } = await supabaseAdmin
+      .from('businesses')
+      .insert({
+        id,
+        slug,
+        user_id: user.id,
+        name,
+        city: body.city || null,
+        address: body.address || null,
+        industry: currentBiz.industry ?? 'retail',
+        plan: currentBiz.plan ?? 'starter',
+        parent_account_id: parentId,
+        is_active: true,
+        onboarding_complete: true,
+      })
+      .select('id, name, city, address, plan')
+      .single()
+    if (!error) { newBiz = data; insertErr = null; break }
+    insertErr = error
+    if (error.code !== '23505') break // not a unique-violation — don't retry
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!newBiz) return NextResponse.json({ error: insertErr?.message ?? 'Failed to create business' }, { status: 500 })
   return NextResponse.json({ ok: true, business: newBiz }, { status: 201 })
 }
 

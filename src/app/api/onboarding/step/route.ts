@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { generateBusinessIdAndSlug } from '@/lib/slug';
 
 export async function POST(request: NextRequest) {
   const supabase = createServerSupabaseClient();
@@ -21,13 +22,21 @@ export async function POST(request: NextRequest) {
 
   if (!biz) {
     const name = (form.legal_name as string) || (form.trading_name as string) || 'My Business';
-    const { data: newBiz, error: bizErr } = await supabaseAdmin
-      .from('businesses')
-      .insert({ user_id: user.id, name, is_active: true })
-      .select('id')
-      .single();
-    if (bizErr) return NextResponse.json({ error: bizErr.message }, { status: 500 });
-    biz = newBiz;
+    // A business must NEVER exist without a slug — generate id+slug up front
+    // (Sip Café pattern) and retry on the rare unique-index collision.
+    let bizErr: { message: string; code?: string } | null = null;
+    for (let attempt = 0; attempt < 5 && !biz; attempt++) {
+      const { id, slug } = generateBusinessIdAndSlug(name);
+      const { data: newBiz, error } = await supabaseAdmin
+        .from('businesses')
+        .insert({ id, slug, user_id: user.id, name, is_active: true })
+        .select('id')
+        .single();
+      if (!error) { biz = newBiz; bizErr = null; break; }
+      bizErr = error;
+      if (error.code !== '23505') break; // not a unique-violation — don't retry
+    }
+    if (!biz) return NextResponse.json({ error: bizErr?.message ?? 'Failed to create business' }, { status: 500 });
   }
 
   // Merge step_data with existing
