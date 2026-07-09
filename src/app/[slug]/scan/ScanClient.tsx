@@ -60,22 +60,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
   const scanningRef = useRef(false)
 
   useEffect(() => {
-    let phone = ''
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) phone = (JSON.parse(saved) as { phone?: string }).phone ?? ''
-    } catch { /* ok */ }
-
-    if (!phone) {
-      window.location.replace('/' + slug + '/onboarding')
-      return
-    }
-
-    fetch('/api/public/cx/' + slug + '/me', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone }),
-    })
+    fetch('/api/public/cx/' + slug + '/me', { method: 'POST' })
       .then(r => r.json())
       .then((data: MeData) => { setMe(data); setLoading(false) })
       .catch(() => setLoading(false))

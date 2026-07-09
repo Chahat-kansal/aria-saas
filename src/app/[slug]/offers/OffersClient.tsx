@@ -98,30 +98,15 @@ export function OffersClient({ slug, bizName, offers: ssrOffers }: {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    let phone = ''
-    try {
-      const saved = localStorage.getItem('aria_cx_' + slug)
-      if (saved) phone = (JSON.parse(saved) as { phone?: string }).phone ?? ''
-    } catch { /* ok */ }
-
     // Fetch reward rules always (business-level, not customer-specific)
     const rulesPromise = fetch('/api/public/cx/' + slug + '/reward-rules')
       .then(r => r.json())
       .then((d: { reward_rules?: RewardRule[] }) => setRewardRules(d.reward_rules ?? []))
       .catch(() => { /* ok */ })
 
-    if (!phone) {
-      rulesPromise.finally(() => setLoaded(true))
-      return
-    }
-
-    // Fetch customer data (includes challenges) + offers in parallel
+    // Fetch customer data (cookie session auth, no phone needed) + offers in parallel
     Promise.all([
-      fetch('/api/public/cx/' + slug + '/me', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      }).then(r => r.json()),
+      fetch('/api/public/cx/' + slug + '/me', { method: 'POST' }).then(r => r.json()),
       fetch('/api/public/cx/' + slug + '/offers').then(r => r.json()),
       rulesPromise,
     ]).then(([meData, offData]) => {

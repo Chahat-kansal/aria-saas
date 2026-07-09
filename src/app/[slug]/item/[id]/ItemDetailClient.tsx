@@ -126,18 +126,10 @@ export function ItemDetailClient({ slug, product, modifierGroups }: {
 
   // ── Save to favourites ─────────────────────────────────────────────────────
   const saveFavourite = async () => {
-    let phone = ''
-    try {
-      const stored = localStorage.getItem('aria_cx_' + slug)
-      if (stored) phone = (JSON.parse(stored) as { phone?: string }).phone ?? ''
-    } catch { /* ok */ }
-    if (!phone) { window.location.replace('/' + slug + '/onboarding'); return }
     let customerId = ''
     try {
-      const me = await fetch('/api/public/cx/' + slug + '/me', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      }).then(r => r.json()) as { customer_id?: string }
+      const me = await fetch('/api/public/cx/' + slug + '/me', { method: 'POST' })
+        .then(r => r.json()) as { customer_id?: string }
       customerId = me.customer_id ?? ''
     } catch { /* ok */ }
     if (!customerId) return
