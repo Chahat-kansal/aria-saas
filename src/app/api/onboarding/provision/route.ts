@@ -5,13 +5,10 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { CAFE_CATEGORIES, CAFE_SEED_PRODUCTS } from '@/lib/pos/cafe-seed-products'
 import { seedDefaultTrainingPack } from '@/lib/training/seed-default-pack'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 type ProvStep = { step: string; label: string; status: 'pending' | 'running' | 'done' | 'failed'; error?: string }
 
@@ -30,6 +27,11 @@ const INDUSTRY_CATEGORIES: Record<string, Array<{ name: string; color: string }>
   salon:      [{ name: 'Hair', color: '#8B5CF6' }, { name: 'Nails', color: '#EC4899' }, { name: 'Treatments', color: '#7FB897' }],
   gym:        [{ name: 'Memberships', color: '#7FB897' }, { name: 'Classes', color: '#4A9EBA' }, { name: 'Products', color: '#F59E0B' }],
   tradie:     [{ name: 'Labour', color: '#7FB897' }, { name: 'Materials', color: '#4A9EBA' }, { name: 'Callouts', color: '#F59E0B' }],
+  // ONBOARD-FIX-1 (addendum, point 3) — these 4 onboarding industry values had
+  // no matching key here, silently falling to generic Products/Services.
+  liquor:      [{ name: 'Wine', color: '#7B4754' }, { name: 'Beer', color: '#D4956A' }, { name: 'Spirits', color: '#B8854A' }, { name: 'Mixers', color: '#4A9EBA' }, { name: 'Ready-to-drink', color: '#F59E0B' }],
+  convenience: [{ name: 'Snacks', color: '#F59E0B' }, { name: 'Drinks', color: '#4A9EBA' }, { name: 'Grocery', color: '#10B981' }, { name: 'Tobacco', color: '#8B5CF6' }, { name: 'Essentials', color: '#7FB897' }],
+  bakery:      [{ name: 'Bread', color: '#B8854A' }, { name: 'Cakes', color: '#EC4899' }, { name: 'Pastries', color: '#F59E0B' }, { name: 'Drinks', color: '#4A9EBA' }],
 }
 const DEFAULT_CATEGORIES = [{ name: 'Products', color: '#7FB897' }, { name: 'Services', color: '#4A9EBA' }]
 
@@ -241,7 +243,14 @@ async function runProvision(
   }
   await writeSteps(bizId, steps)
 
-  // Step 4: first aria_daily_briefing — non-critical (regenerates on next cron)
+  // Step 4: first aria_daily_briefing — ONBOARD-FIX-1 (addendum): provisioning
+  // must complete with ZERO AI calls. This used to call Anthropic synchronously
+  // here; live logs showed 6+ AI calls firing around onboarding (this one plus
+  // the dashboard's first-load cascade), all failing on "credit balance too
+  // low" and one surfacing the raw error. A deterministic welcome message
+  // ships immediately (no AI, can't fail); the real AI-generated briefing
+  // arrives async via the existing daily-briefing-submit cron, which already
+  // runs for every active business daily — no new queue infra needed.
   steps[3].status = 'running'
   await writeSteps(bizId, steps)
   try {
@@ -253,27 +262,15 @@ async function runProvision(
       .eq('briefing_date', today)
     if (!existing || existing === 0) {
       const ownerName = (stepData.owner_name as string) || 'there'
-      const challenge = (stepData.biggest_challenge as string) || ''
-      const promptCtx = `Business: ${bizName}, industry: ${industry ?? 'retail'}, owner: ${ownerName}${challenge ? ', biggest challenge: ' + challenge : ''}. Today is their first day with Aria OS.`
-      const resp = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 150,
-        messages: [{
-          role: 'user',
-          content: `Write a 2-sentence welcoming daily briefing from Aria (AI business co-owner) to the business owner. Warm, Australian, practical — no corporate speak. ${promptCtx}`,
-        }],
-      })
-      const text = resp.content[0].type === 'text'
-        ? resp.content[0].text.trim()
-        : `Welcome aboard, ${ownerName} — Aria is now live for ${bizName}. Check your dashboard for today's insights and let's get started.`
+      const text = `Welcome aboard, ${ownerName} — Aria is now live for ${bizName}. Check your dashboard for today's insights and let's get started.`
       await supabaseAdmin.from('aria_daily_briefings').upsert(
-        { business_id: bizId, briefing_date: today, content: text, generated_at: new Date().toISOString(), source: 'onboarding' },
+        { business_id: bizId, briefing_date: today, content: text, generated_at: new Date().toISOString(), source: 'onboarding_template' },
         { onConflict: 'business_id,briefing_date' }
       )
     }
     steps[3].status = 'done'
   } catch (e) {
-    const msg = (e as Error).message ?? 'Briefing generation failed'
+    const msg = (e as Error).message ?? 'Briefing seed failed'
     steps[3].status = 'failed'
     steps[3].error = msg
     console.error('[provision] briefing step failed for', bizId + ':', msg)

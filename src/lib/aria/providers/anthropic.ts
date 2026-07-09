@@ -44,6 +44,39 @@ async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T>
   throw lastErr ?? new Error('All retries failed')
 }
 
+// ONBOARD-FIX-1 (addendum) — account-wide circuit breaker for Anthropic
+// billing exhaustion. "credit balance too low" is an account-level condition,
+// not per-business, so a cached flag here short-circuits EVERY caller of this
+// shared module (ask/route.ts, ai-router.ts, model-router.ts, base-agent.ts —
+// the ~14+ call sites that funnel through callAnthropic/callAnthropicWithTools)
+// instead of each one independently discovering the same failure. Reuses
+// aria_signal_cache (no new table) so the flag survives across serverless
+// instances, not just the current warm container.
+const CREDIT_EXHAUSTED_KEY = 'anthropic:credits_exhausted'
+const CREDIT_EXHAUSTED_TTL_MIN = 10
+
+function isCreditExhaustedError(msg: string): boolean {
+  return /credit balance is too low|insufficient.*credit|billing.*hard.?limit/i.test(msg)
+}
+
+async function isCircuitOpen(): Promise<boolean> {
+  try {
+    const { data } = await supabaseAdmin.from('aria_signal_cache')
+      .select('expires_at').eq('cache_key', CREDIT_EXHAUSTED_KEY).maybeSingle()
+    return !!data && new Date(data.expires_at as string).getTime() > Date.now()
+  } catch { return false }
+}
+
+async function tripCircuit() {
+  try {
+    await supabaseAdmin.from('aria_signal_cache').upsert({
+      cache_key: CREDIT_EXHAUSTED_KEY, signal_type: 'circuit_breaker',
+      payload: { reason: 'credit_balance_too_low' },
+      expires_at: new Date(Date.now() + CREDIT_EXHAUSTED_TTL_MIN * 60_000).toISOString(),
+    }, { onConflict: 'cache_key' })
+  } catch (e) { console.error('[non-fatal]', e) }
+}
+
 export async function callAnthropic<T = Record<string, unknown>>(
   params: CallParams,
   fallback: T,
@@ -53,6 +86,12 @@ export async function callAnthropic<T = Record<string, unknown>>(
   let inputTokens = 0, outputTokens = 0, cachedReadTokens = 0, cachedWriteTokens = 0
   let raw = '', success = true, errorMessage: string | null = null
   let data: T = fallback
+
+  if (await isCircuitOpen()) {
+    return {
+      data: fallback, raw: '', cost_cents: 0, latency_ms: Date.now() - t0, success: false,
+    }
+  }
 
   try {
     const timeoutMs = params.timeoutMs ?? 30_000
@@ -89,6 +128,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
   } catch (e) {
     success = false
     errorMessage = (e as Error).message
+    if (isCreditExhaustedError(errorMessage)) void tripCircuit()
   }
 
   const latency = Date.now() - t0
@@ -160,6 +200,13 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
   let raw = '', success = true, errorMessage: string | null = null
   const toolCalls: Array<{ name: string; input: unknown; result: unknown; ms: number }> = []
   let thinkingTokensTotal = 0
+
+  if (await isCircuitOpen()) {
+    return {
+      raw: '', tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0,
+      latency_ms: Date.now() - t0, success: false, error_message: 'anthropic_credits_exhausted',
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messages: any[] = [
@@ -248,6 +295,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
   } catch (e) {
     success = false
     errorMessage = (e as Error).message
+    if (isCreditExhaustedError(errorMessage)) void tripCircuit()
   }
 
   const latency = Date.now() - t0
