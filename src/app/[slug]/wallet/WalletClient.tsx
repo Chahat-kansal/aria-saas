@@ -92,17 +92,17 @@ function BarcodeStrip({ value, onTap }: {
     try {
       JsBarcode(svgRef.current, value, {
         format: 'CODE128',
-        width: 2,
-        height: 40,
+        width: 3,
+        height: 38,
         displayValue: false,
         margin: 0,
         background: '#ffffff',
         lineColor: '#111111',
       })
-      // Remove JsBarcode's fixed px dimensions so CSS can control size via viewBox
+      // parseFloat strips any 'px' suffix JsBarcode may append — raw string in viewBox is invalid
       const svg = svgRef.current
-      const w = svg.getAttribute('width') ?? '200'
-      const h = svg.getAttribute('height') ?? '40'
+      const w = parseFloat(svg.getAttribute('width') ?? '') || 200
+      const h = parseFloat(svg.getAttribute('height') ?? '') || 38
       svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
       svg.setAttribute('preserveAspectRatio', 'none')
       svg.removeAttribute('width')
@@ -119,14 +119,17 @@ function BarcodeStrip({ value, onTap }: {
       onClick={onTap}
       style={{
         background: '#ffffff',
-        padding: '8px 0 6px',
+        padding: '8px 0',
         cursor: 'pointer',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
       }}
     >
       <svg
         ref={svgRef}
         preserveAspectRatio="none"
-        style={{ display: 'block', width: '100%', height: 42 }}
+        style={{ display: 'block', width: '83%', height: 38 }}
       />
     </div>
   )
