@@ -15,6 +15,13 @@ const AriaFloatingButton = dynamic(
   { ssr: false },
 );
 
+// SPOTLIGHT-TOUR-1 — mounted at root (not /dashboard/layout.tsx) so it works
+// across both /dashboard and /pos routes; several tour anchors live on /pos.
+const SpotlightTour = dynamic(
+  () => import('@/components/SpotlightTour').then(m => ({ default: m.SpotlightTour })),
+  { ssr: false },
+);
+
 const cormorant = Cormorant({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
@@ -100,6 +107,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </PostHogProvider>
         <PWARegister />
         <AriaFloatingButton />
+        <SpotlightTour />
       </body>
     </html>
   );

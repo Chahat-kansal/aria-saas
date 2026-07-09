@@ -75,7 +75,7 @@ export default function LoyaltyProgramPage() {
         <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Reward repeat customers with points</p>
       </div>
       <div className="space-y-4">
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-5">
+        <div data-tour="loyalty" className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-5">
           <Row label="Enable loyalty program" sub="Customers earn points on every purchase">
             <Toggle value={s.loyalty_enabled} onChange={v => setS(p => ({ ...p, loyalty_enabled: v }))} />
           </Row>

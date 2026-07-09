@@ -1,15 +1,13 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { AriaAwarenessBar } from '@/components/aria/AriaAwarenessBar';
 import { AriaCommandBar } from '@/components/aria/AriaCommandBar';
 import { showAriaBriefing } from '@/components/dashboard/DailyBriefingModal';
 import { usePathname } from 'next/navigation';
-import { SetupGuide } from '@/components/dashboard/SetupGuide';
 import TrialBanner from '@/components/dashboard/TrialBanner';
 import { trialDaysRemaining } from '@/lib/plans/resolve-plan';
-import { TourSpotlight } from '@/components/dashboard/TourSpotlight';
 import { SchedulePDFButton } from '@/components/dashboard/SchedulePDFButton';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -157,13 +155,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         {/* SS Part 4 — trial expiry nudge (self-hides unless within 3 days; never blocks) */}
         {trialEndingSoon && <TrialBanner daysLeft={trialDaysRemaining(business.trial_ends_at)} isExpired={false} />}
         <main className={`flex-1 relative overscroll-contain ${isAskAria ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          {pathname === '/dashboard' && (
-            <div className="px-6 pt-6">
-              <SetupGuide />
-            </div>
-          )}
           {children}
-          <Suspense fallback={null}><TourSpotlight /></Suspense>
         </main>
         <AriaCommandBar />
       </div>

@@ -319,7 +319,7 @@ export default function CashFlowPage() {
               {h}d
             </button>
           ))}
-          <button onClick={() => setShowExpensePanel(!showExpensePanel)}
+          <button data-tour="cash_flow" onClick={() => setShowExpensePanel(!showExpensePanel)}
             style={{ padding: '6px 12px', borderRadius: 8, border: showExpensePanel ? '1px solid rgba(34,197,94,0.4)' : '1px solid ' + C.border, background: showExpensePanel ? 'rgba(34,197,94,0.1)' : 'transparent', color: showExpensePanel ? C.green : C.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
             ⚙ Expenses
           </button>
