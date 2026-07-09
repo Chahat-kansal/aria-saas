@@ -16,7 +16,7 @@ function validateABN(raw: string): boolean {
   return sum % 89 === 0;
 }
 
-const STEPS = ['identity', 'abn', 'details', 'operations', 'goals'] as const;
+const STEPS = ['identity', 'abn', 'details', 'operations', 'products', 'goals'] as const;
 type Step = typeof STEPS[number];
 type Setter = (k: keyof FD, v: FD[keyof FD]) => void;
 
@@ -28,12 +28,13 @@ const STAFF_OPTS = ['Just me', '2–5', '6–15', '16–50', '51+'];
 const REV_OPTS = ['Under $10k', '$10k–$25k', '$25k–$50k', '$50k–$100k', '$100k–$250k', '$250k+'];
 const CHALLENGES = ['cash flow', 'staffing', 'marketing', 'stock', 'compliance', 'time', 'winning customers back', 'knowing my numbers'];
 
-const HEADINGS = ['Tell us about yourself', 'Your ABN details', 'Business location & type', 'Operations', 'Your goals'];
+const HEADINGS = ['Tell us about yourself', 'Your ABN details', 'Business location & type', 'Operations', 'Add your first products', 'Your goals'];
 const SUBHEADINGS = [
   "We'll use this to personalise your Aria experience.",
   'Skip for now — add or verify your ABN in Settings at any time.',
   'Help us set up your industry-specific dashboard.',
   'Help us understand how your business runs.',
+  'Optional — add a few to get your POS started, or skip and import/add them later.',
   'What challenges are you working to overcome?',
 ];
 
@@ -45,6 +46,7 @@ type FD = {
   business_state: string; postcode: string; year_established: string;
   staff_count: string; monthly_revenue: string; website: string; google_business_url: string;
   biggest_challenge: string[]; goals_notes: string; weekly_revenue_target: string;
+  products: { name: string; price: string; category: string }[];
 };
 
 const EMPTY: FD = {
@@ -54,11 +56,13 @@ const EMPTY: FD = {
   industry: '', industry_subtype: '', address: '', city: '', business_state: '', postcode: '', year_established: '',
   staff_count: '', monthly_revenue: '', website: '', google_business_url: '',
   biggest_challenge: [], goals_notes: '', weekly_revenue_target: '',
+  products: [],
 };
 
 function isStepValid(step: number, f: FD): boolean {
   if (step === 0) return f.legal_name.trim().length > 0 && f.owner_name.trim().length > 0;
   if (step === 2) return f.business_model.length > 0 && f.industry.length > 0;
+  // Products step (4) is always skippable — products can be added/imported later.
   return true;
 }
 
@@ -104,6 +108,7 @@ export default function OnboardingWizard() {
         setForm(prev => ({
           ...prev, ...sd,
           biggest_challenge: Array.isArray(sd.biggest_challenge) ? sd.biggest_challenge : [],
+          products: Array.isArray(sd.products) ? sd.products : [],
         }));
         if (sd.abn) setAbnState(validateABN(sd.abn) ? 'valid' : 'invalid');
       }
@@ -171,7 +176,8 @@ export default function OnboardingWizard() {
         )}
         {idx === 2 && <Details form={form} set={set} />}
         {idx === 3 && <Operations form={form} set={set} />}
-        {idx === 4 && <Goals form={form} set={set} />}
+        {idx === 4 && <Products form={form} set={set} />}
+        {idx === 5 && <Goals form={form} set={set} />}
         <div className="flex gap-3 mt-6">
           {idx > 0 && (
             <button onClick={() => setIdx(idx - 1)} disabled={saving}
@@ -181,7 +187,7 @@ export default function OnboardingWizard() {
           )}
           <button onClick={goNext} disabled={saving || !isStepValid(idx, form)}
             className={"flex-1 py-3 rounded-full font-medium text-sm transition-colors text-white " + (saving || !isStepValid(idx, form) ? 'bg-[#2D5240] opacity-50 cursor-not-allowed' : 'bg-[#2D5240] hover:bg-[#1a3328]')}>
-            {saving ? 'Saving…' : idx === 4 ? 'Submit' : 'Continue'}
+            {saving ? 'Saving…' : idx === STEPS.length - 1 ? 'Submit' : 'Continue'}
           </button>
         </div>
       </div>
@@ -189,17 +195,19 @@ export default function OnboardingWizard() {
   );
 }
 
+const TOTAL_PROGRESS_STEPS = STEPS.length + 1; // +1 for the provisioning step that follows submit
+
 function ProgressBar({ current }: { current: number }) {
   return (
     <div className="flex flex-col items-center gap-2 mb-2">
-      <p className="text-xs font-medium text-[#2D5240]">{'Step ' + current + ' of 6'}</p>
+      <p className="text-xs font-medium text-[#2D5240]">{'Step ' + current + ' of ' + TOTAL_PROGRESS_STEPS}</p>
       <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5, 6].map(s => (
+        {Array.from({ length: TOTAL_PROGRESS_STEPS }, (_, i) => i + 1).map(s => (
           <div key={s} className="flex items-center gap-1">
             <div className={"w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium transition-colors " + (s < current ? 'bg-[#7FB897] text-white' : s === current ? 'bg-[#2D5240] text-white' : 'bg-[rgba(45,82,64,0.12)] text-[rgba(45,82,64,0.4)]')}>
               {s < current ? '✓' : s}
             </div>
-            {s < 6 && <div className={"w-6 h-px " + (s < current ? 'bg-[#7FB897]' : 'bg-[rgba(45,82,64,0.15)]')} />}
+            {s < TOTAL_PROGRESS_STEPS && <div className={"w-6 h-px " + (s < current ? 'bg-[#7FB897]' : 'bg-[rgba(45,82,64,0.15)]')} />}
           </div>
         ))}
       </div>
@@ -401,6 +409,54 @@ function Operations({ form, set }: { form: FD; set: Setter }) {
         )}
       </div>
       <Field label="Google Business URL" value={form.google_business_url} onChange={v => set('google_business_url', v)} type="url" placeholder="https://g.page/..." />
+    </div>
+  );
+}
+
+function Products({ form, set }: { form: FD; set: Setter }) {
+  const products = form.products;
+
+  function updateProduct(i: number, field: 'name' | 'price' | 'category', value: string) {
+    const next = products.map((p, idx) => idx === i ? { ...p, [field]: value } : p);
+    set('products', next);
+  }
+  function addProduct() {
+    set('products', [...products, { name: '', price: '', category: '' }]);
+  }
+  function removeProduct(i: number) {
+    set('products', products.filter((_, idx) => idx !== i));
+  }
+
+  if (form.business_model === 'service') {
+    return (
+      <div className="text-sm text-[rgba(0,0,0,0.5)] py-4">
+        Not applicable for service businesses — you can add bookable services any time from your dashboard.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {products.length === 0 && (
+        <p className="text-xs text-[rgba(0,0,0,0.4)]">No products yet — add a few now, or skip and add/import them later from your POS.</p>
+      )}
+      {products.map((p, i) => (
+        <div key={i} className="p-3 border border-[rgba(45,82,64,0.15)] rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[#2D5240]">Product {i + 1}</span>
+            <button type="button" onClick={() => removeProduct(i)} className="text-xs text-[rgba(0,0,0,0.4)] hover:text-red-600">Remove</button>
+          </div>
+          <Field label="Name" value={p.name} onChange={v => updateProduct(i, 'name', v)} placeholder="e.g. Flat White" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Price ($)" value={p.price} onChange={v => updateProduct(i, 'price', v)} type="number" placeholder="5.50" />
+            <Field label="Category" value={p.category} onChange={v => updateProduct(i, 'category', v)} placeholder="e.g. Coffee" />
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={addProduct}
+        className="w-full py-2.5 rounded-lg border-2 border-dashed border-[rgba(45,82,64,0.3)] text-sm text-[#2D5240] font-medium hover:border-[#2D5240] transition-colors">
+        + Add a product
+      </button>
     </div>
   );
 }

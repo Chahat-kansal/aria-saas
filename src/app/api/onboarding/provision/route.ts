@@ -97,13 +97,13 @@ async function runProvision(
   steps[0].status = 'running'
   await writeSteps(bizId, steps)
   try {
+    const categoryMap: Record<string, string> = {}
     if (businessModel !== 'service') {
       if (industry === 'cafe') {
         const CAFE_CAT_COLORS: Record<string, string> = {
           Coffee: '#6F4E37', Tea: '#7FB897', Breakfast: '#F59E0B',
           Lunch: '#10B981', Bakery: '#EC4899', 'Cold Drinks': '#4A9EBA',
         }
-        const categoryMap: Record<string, string> = {}
         for (const catName of CAFE_CATEGORIES) {
           const { data: cat, error: catErr } = await supabaseAdmin.from('pos_categories').upsert(
             { business_id: bizId, name: catName, color: CAFE_CAT_COLORS[catName] ?? '#7FB897' },
@@ -127,14 +127,37 @@ async function runProvision(
           }
         }
       } else {
-        const cats = INDUSTRY_CATEGORIES[industry ?? ''] ?? DEFAULT_CATEGORIES
-        for (const cat of cats) {
-          const { error: catErr } = await supabaseAdmin.from('pos_categories').upsert(
+        for (const cat of (INDUSTRY_CATEGORIES[industry ?? ''] ?? DEFAULT_CATEGORIES)) {
+          const { data: catRow, error: catErr } = await supabaseAdmin.from('pos_categories').upsert(
             { business_id: bizId, name: cat.name, color: cat.color },
             { onConflict: 'business_id,name' }
-          )
+          ).select('id').single()
           if (catErr) throw new Error('Category upsert failed (' + cat.name + '): ' + catErr.message)
+          if (catRow) categoryMap[cat.name] = catRow.id as string
         }
+      }
+
+      // BUG4 fix (ONBOARD-FIX-1) — owner-entered products from the onboarding
+      // "products" step. Matched against the categories just seeded above by
+      // name; an unrecognized category the owner typed gets created ad-hoc.
+      const ownerProducts = Array.isArray(stepData.products) ? stepData.products as Array<Record<string, unknown>> : []
+      for (const p of ownerProducts) {
+        const name = String(p.name ?? '').trim()
+        const priceNum = parseFloat(String(p.price ?? ''))
+        if (!name || !Number.isFinite(priceNum) || priceNum <= 0) continue
+        const catName = String(p.category ?? '').trim() || 'Products'
+        let categoryId = categoryMap[catName]
+        if (!categoryId) {
+          const { data: newCat, error: newCatErr } = await supabaseAdmin.from('pos_categories').upsert(
+            { business_id: bizId, name: catName, color: '#7FB897' },
+            { onConflict: 'business_id,name' }
+          ).select('id').single()
+          if (!newCatErr && newCat) { categoryId = newCat.id as string; categoryMap[catName] = categoryId }
+        }
+        await supabaseAdmin.from('pos_products').insert({
+          business_id: bizId, name, category_id: categoryId ?? null,
+          price: priceNum, stock_quantity: 999, track_stock: false, is_active: true,
+        })
       }
     }
     steps[0].status = 'done'
