@@ -71,7 +71,7 @@ export default function ManageCashPage() {
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Track till float, banking, and cash drops.</p>
         </div>
         {!noTable && (
-          <button onClick={() => setAddOpen(true)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: '#2D5240', color: '#006AFF' }}>
+          <button data-tour="cash_open" onClick={() => setAddOpen(true)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: '#2D5240', color: '#006AFF' }}>
             + Record movement
           </button>
         )}

@@ -9,7 +9,7 @@ interface Analytics { total: number; avg_rating: number; response_rate: number; 
 interface Reputation { score: number|null; trend?: string; grade?: string; top_action?: string }
 interface CompResult { competitors: Array<{name: string; rating: number|null; review_count: number|null}>; analysis: {advantages: string[]; gaps: string[]; summary: string; action: string}; our_rating: number|null; our_reviews: number|null }
 interface NpsStats { score: number|null; total: number; promoters: number; passives: number; detractors: number; promoter_count: number; passive_count: number; detractor_count: number; prev_score: number|null; recent_30_promoters: number; recent_30_passives: number; recent_30_detractors: number; recent: Array<{id: string; score: number; responded_at: string}> }
-interface BizSettings { facebook_page_id: string; yelp_url: string; google_review_link: string; auto_review_requests: boolean }
+interface BizSettings { facebook_page_id: string; yelp_url: string; google_review_link: string; review_auto_request_enabled: boolean }
 
 const SC: Record<string, string> = { positive: '#22C55E', neutral: '#94A3B8', negative: '#EF4444' }
 const GC: Record<string, string> = { A: '#22C55E', B: '#22C55E', C: '#F59E0B', D: '#EF4444', F: '#EF4444' }
@@ -49,7 +49,7 @@ export default function ReviewsPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [npsData, setNpsData] = useState<NpsStats|null>(null)
   const [sendingNps, setSendingNps] = useState(false)
-  const [bizSettings, setBizSettings] = useState<BizSettings>({ facebook_page_id: '', yelp_url: '', google_review_link: '', auto_review_requests: false })
+  const [bizSettings, setBizSettings] = useState<BizSettings>({ facebook_page_id: '', yelp_url: '', google_review_link: '', review_auto_request_enabled: false })
   const [savingSettings, setSavingSettings] = useState(false)
 
   const loadReviews = useCallback(async (t = tab, p = platform) => {
@@ -78,7 +78,7 @@ export default function ReviewsPage() {
     fetch('/api/aria/reviews/reputation').then(r => r.json()).then(setReputation).catch(() => {})
     fetch('/api/aria/nps?business_id=' + business.id).then(r => r.json()).then(setNpsData).catch(() => {})
     fetch('/api/settings/business').then(r => r.json()).then(d => {
-      if (d.business) setBizSettings({ facebook_page_id: d.business.facebook_page_id ?? '', yelp_url: d.business.yelp_url ?? '', google_review_link: d.business.google_review_link ?? '', auto_review_requests: !!d.business.auto_review_requests })
+      if (d.business) setBizSettings({ facebook_page_id: d.business.facebook_page_id ?? '', yelp_url: d.business.yelp_url ?? '', google_review_link: d.business.google_review_link ?? '', review_auto_request_enabled: !!d.business.review_auto_request_enabled })
     }).catch(() => {})
   }, [business?.id])
 
@@ -442,9 +442,9 @@ export default function ReviewsPage() {
                 <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>Auto Review Requests</p>
                 <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Automatically SMS customers a review request 2h after a sale.</p>
               </div>
-              <button onClick={() => setBizSettings(p => ({ ...p, auto_review_requests: !p.auto_review_requests }))}
-                style={{ position: 'relative', width: 48, height: 26, borderRadius: 99, background: bizSettings.auto_review_requests ? '#22C55E' : 'var(--bg-elevated)', border: 'none', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: bizSettings.auto_review_requests ? 24 : 2, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+              <button onClick={() => setBizSettings(p => ({ ...p, review_auto_request_enabled: !p.review_auto_request_enabled }))}
+                style={{ position: 'relative', width: 48, height: 26, borderRadius: 99, background: bizSettings.review_auto_request_enabled ? '#22C55E' : 'var(--bg-elevated)', border: 'none', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: bizSettings.review_auto_request_enabled ? 24 : 2, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
               </button>
             </div>
             <button onClick={saveSettings} disabled={savingSettings}

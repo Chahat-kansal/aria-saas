@@ -536,7 +536,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           </Link>
         ) : (
           <>
-            <Link href="/dashboard/ask-aria"
+            <Link data-tour="ask_aria" href="/dashboard/ask-aria"
               className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
               style={{ background: 'linear-gradient(135deg,#1D9E75,#15875f)' }}>
               <span className="text-base">✦</span>

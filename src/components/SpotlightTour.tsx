@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { TOUR_STEPS, buildTourNarration, type TourData } from '@/lib/tour-steps';
+import { TOUR_STEPS, buildTourNarration, ASK_ARIA_STARTERS, ARIA_ASKS_FIRST, type TourData } from '@/lib/tour-steps';
 
 interface TourResponse {
   step: string;
@@ -11,8 +11,11 @@ interface TourResponse {
   industry: string;
   product_count: number;
   slug: string | null;
+  automations: string[];
   error?: string;
 }
+
+const MANUAL_ADVANCE_KEYS = new Set(['products', 'cx_app', 'ask_aria', 'aria_runs']);
 
 const SESSION_SNOOZE_KEY = 'aria_tour_snoozed';
 const POLL_MS = 4000;
@@ -120,6 +123,7 @@ export function SpotlightTour() {
 
   const tourData: TourData = {
     businessName: data.business_name, industry: data.industry, productCount: data.product_count, slug: data.slug,
+    automations: data.automations ?? [],
   };
   const narration = buildTourNarration(currentStepDef, tourData);
   const stepNum = TOUR_STEPS.findIndex(s => s.key === currentStepDef.key) + 1;
@@ -130,14 +134,15 @@ export function SpotlightTour() {
   // Position: anchored below the highlighted element when found, else a
   // fixed floating card (bottom-right) so the tour is always visible
   // regardless of which page the owner is currently on.
+  const cardWidth = currentStepDef.key === 'aria_runs' ? 420 : 320;
   const cardStyle: React.CSSProperties = onTargetPage
     ? {
         position: 'fixed',
         top: Math.min(window.innerHeight - 220, (rect as DOMRect).bottom + 14),
-        left: Math.max(12, Math.min(window.innerWidth - 332, (rect as DOMRect).left)),
-        width: 320,
+        left: Math.max(12, Math.min(window.innerWidth - cardWidth - 12, (rect as DOMRect).left)),
+        width: cardWidth,
       }
-    : { position: 'fixed', bottom: 24, right: 24, width: 320 };
+    : { position: 'fixed', bottom: 24, right: 24, width: cardWidth };
 
   return (
     <>
@@ -178,11 +183,60 @@ export function SpotlightTour() {
           </a>
         )}
 
+        {/* Ask Aria familiarisation — tappable starter chips, grounded in real
+            data via the existing /dashboard/ask-aria?q= auto-send. That page's
+            own backend (circuit-breaker + Gemini/OpenAI fallback) already
+            guarantees a real grounded answer even at $0 Anthropic credits. */}
+        {currentStepDef.key === 'ask_aria' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+            {ASK_ARIA_STARTERS.map(q => (
+              <button
+                key={q}
+                onClick={() => { advanceManualStep('ask_aria'); router.push('/dashboard/ask-aria?q=' + encodeURIComponent(q)); }}
+                style={{
+                  textAlign: 'left', padding: '9px 12px', borderRadius: 10,
+                  border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)',
+                  color: '#E8EDE7', fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* "What I run for you" — the co-owner pitch, grounded in actually
+            enabled automations for this business (never a marketing list). */}
+        {currentStepDef.key === 'aria_runs' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>I handle automatically</p>
+              {tourData.automations.length === 0 ? (
+                <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.4)' }}>Turn on loyalty and briefings above to see this fill in.</p>
+              ) : (
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {tourData.automations.map(a => (
+                    <li key={a} style={{ fontSize: 11.5, color: 'rgba(232,237,231,0.85)' }}>✓ {a}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, color: '#E0A458', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>I&apos;ll ask you first</p>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {ARIA_ASKS_FIRST.map(a => (
+                  <li key={a} style={{ fontSize: 11.5, color: 'rgba(232,237,231,0.85)' }}>→ {a}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          {(isInformational || !onTargetPage) && (
+          {currentStepDef.key !== 'ask_aria' && (isInformational || !onTargetPage) && (
             <button
               onClick={() => {
-                if (currentStepDef.key === 'products' || currentStepDef.key === 'cx_app') {
+                if (MANUAL_ADVANCE_KEYS.has(currentStepDef.key)) {
                   advanceManualStep(currentStepDef.key);
                 } else if (currentStepDef.href) {
                   router.push(currentStepDef.href);

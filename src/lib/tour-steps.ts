@@ -11,7 +11,22 @@ export interface TourData {
   industry: string
   productCount: number
   slug: string | null
+  /** Real enabled automations for THIS business — grounds the "what I run for you" step. */
+  automations: string[]
 }
+
+export const ASK_ARIA_STARTERS = [
+  'What were my top products this week?',
+  "How's my business doing today?",
+  'What should I focus on?',
+] as const
+
+// The propose->approve guardrail — fixed policy, not per-business config.
+export const ARIA_ASKS_FIRST = [
+  'Anything spending money (reorders, discounts, promos)',
+  'Sending bulk messages to customers',
+  'Changing prices',
+] as const
 
 export interface TourStep {
   key: string
@@ -43,12 +58,28 @@ export const TOUR_STEPS: TourStep[] = [
     ctaLabel: 'Take me to the POS',
   },
   {
+    key: 'ask_aria',
+    href: '/dashboard/ask-aria',
+    dataTourId: 'ask_aria',
+    title: 'Ask me anything about your shop',
+    narration: d => `This is the bit most owners don't expect: I actually know ${d.businessName}'s real numbers. Tap one of the questions below and see for yourself — no typing required.`,
+    ctaLabel: 'Try it',
+  },
+  {
     key: 'invite_staff',
     href: '/dashboard/staff/new',
     dataTourId: 'invite_staff',
     title: 'Add your team',
     narration: d => `Before: staff share your login, or you're the only one who can serve a customer. Aria way: give ${d.businessName}'s first team member their own POS login — I'll track their sales and hours separately from day one. Fill in the form and save.`,
     ctaLabel: 'Add a team member',
+  },
+  {
+    key: 'cash_open',
+    href: '/pos/manage-cash',
+    dataTourId: 'cash_open',
+    title: 'Set your opening cash float',
+    narration: () => `Before: your cash flow view starts at zero and doesn't match what's actually in the till. Aria way: record your opening float now — takes ten seconds, and your cash position is accurate from your very first sale.`,
+    ctaLabel: 'Record opening float',
   },
   {
     key: 'cash_flow',
@@ -87,8 +118,16 @@ export const TOUR_STEPS: TourStep[] = [
     href: '/dashboard/settings',
     dataTourId: 'connect_google',
     title: 'Connect Google Business',
-    narration: () => `Last one — link your Google Business listing and I'll start pulling in your reviews and ratings so you can see them alongside everything else, instead of checking a separate app.`,
+    narration: () => `One more — link your Google Business listing and I'll start pulling in your reviews and ratings so you can see them alongside everything else, instead of checking a separate app.`,
     ctaLabel: 'Connect Google',
+  },
+  {
+    key: 'aria_runs',
+    href: '',
+    dataTourId: null,
+    title: 'What I run for you',
+    narration: d => `Here's the deal, ${d.businessName}: I work in the background so you don't have to. Anything touching money, bulk messages, or prices — I bring it to you first. Everything else, I just handle.`,
+    ctaLabel: "Got it, let's go",
   },
 ]
 

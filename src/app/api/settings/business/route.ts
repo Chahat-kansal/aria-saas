@@ -21,7 +21,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, industry, industry_subtype, abn, city, address, business_state, postcode, country, lat, lng, place_id, formatted_address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug, weekly_revenue_target')
+    .select('id, name, industry, industry_subtype, abn, city, address, business_state, postcode, country, lat, lng, place_id, formatted_address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, review_auto_request_enabled, review_request_min_spend_cents, review_request_cooldown_days, google_review_link, booking_link_slug, slug, weekly_revenue_target')
     .eq('id', bid)
     .maybeSingle()
 
@@ -57,7 +57,10 @@ async function _PATCH(req: Request) {
   if (body.google_place_id     !== undefined) payload.google_place_id     = body.google_place_id || null
   if (body.facebook_page_id    !== undefined) payload.facebook_page_id    = body.facebook_page_id || null
   if (body.yelp_url            !== undefined) payload.yelp_url            = body.yelp_url || null
-  if (body.auto_review_requests !== undefined) payload.auto_review_requests = !!body.auto_review_requests
+  // FIELD-MISMATCH FIX — this UI toggle previously wrote auto_review_requests,
+  // but /api/reviews/auto-request (the actual sender) reads
+  // review_auto_request_enabled. The toggle had zero functional effect.
+  if (body.review_auto_request_enabled !== undefined) payload.review_auto_request_enabled = !!body.review_auto_request_enabled
   if (body.google_review_link  !== undefined) payload.google_review_link  = body.google_review_link || null
   if (body.booking_link_slug   !== undefined) {
     const s = String(body.booking_link_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
