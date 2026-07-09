@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { SitePreviewCard } from '@/components/SitePreviewCard';
 import type { SitePreviewResult } from '@/app/api/site-preview/route';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 function validateABN(raw: string): boolean {
   const digits = raw.replace(/\s/g, '');
@@ -47,6 +48,7 @@ type FD = {
   staff_count: string; monthly_revenue: string; website: string; google_business_url: string;
   biggest_challenge: string[]; goals_notes: string; weekly_revenue_target: string;
   products: { name: string; price: string; category: string }[];
+  lat: string; lng: string; place_id: string; formatted_address: string;
 };
 
 const EMPTY: FD = {
@@ -57,6 +59,7 @@ const EMPTY: FD = {
   staff_count: '', monthly_revenue: '', website: '', google_business_url: '',
   biggest_challenge: [], goals_notes: '', weekly_revenue_target: '',
   products: [],
+  lat: '', lng: '', place_id: '', formatted_address: '',
 };
 
 function isStepValid(step: number, f: FD): boolean {
@@ -324,6 +327,10 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
 
 function Details({ form, set }: { form: FD; set: Setter }) {
   const industryOptions = form.business_model === 'service' ? SERVICE_INDUSTRIES : INDUSTRIES;
+  // Manual mode when the owner opts out of autocomplete, or when editing an
+  // already-saved address that didn't come from Geoapify (no lat/lng on file).
+  const [manualAddress, setManualAddress] = useState(!!form.address && !form.lat);
+
   return (
     <div className="space-y-4">
       {/* Business model question — required first */}
@@ -351,15 +358,41 @@ function Details({ form, set }: { form: FD; set: Setter }) {
         <Sel label="Industry *" value={form.industry} onChange={v => set('industry', v)} options={industryOptions} />
       )}
       <Field label="Industry subtype" value={form.industry_subtype} onChange={v => set('industry_subtype', v)} placeholder="e.g. craft beer, Vietnamese restaurant" />
-      <Field label="Street address" value={form.address} onChange={v => set('address', v)} placeholder="123 Example St" />
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="City / Suburb" value={form.city} onChange={v => set('city', v)} placeholder="Sydney" />
-        <Sel label="State" value={form.business_state} onChange={v => set('business_state', v)} options={AU_STATES} />
+
+      <div>
+        <label className="block text-xs font-medium text-[#2D5240] mb-1">Business address</label>
+        {manualAddress ? (
+          <div className="space-y-3">
+            <Field label="Street address" value={form.address} onChange={v => set('address', v)} placeholder="123 Example St" />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="City / Suburb" value={form.city} onChange={v => set('city', v)} placeholder="Sydney" />
+              <Sel label="State" value={form.business_state} onChange={v => set('business_state', v)} options={AU_STATES} />
+            </div>
+            <Field label="Postcode" value={form.postcode} onChange={v => set('postcode', v)} placeholder="2000" />
+            <button type="button" onClick={() => setManualAddress(false)} className="text-xs text-[#2D5240] underline">
+              Use address lookup instead
+            </button>
+          </div>
+        ) : (
+          <AddressAutocomplete
+            initialValue={form.formatted_address || form.address}
+            placeholder="Start typing your street address…"
+            onManualEntry={() => setManualAddress(true)}
+            onSelect={a => {
+              set('address', a.address_line1);
+              set('city', a.suburb);
+              set('business_state', a.state);
+              set('postcode', a.postcode);
+              set('lat', a.lat !== null ? String(a.lat) : '');
+              set('lng', a.lng !== null ? String(a.lng) : '');
+              set('place_id', a.place_id ?? '');
+              set('formatted_address', a.formatted);
+            }}
+          />
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Postcode" value={form.postcode} onChange={v => set('postcode', v)} placeholder="2000" />
-        <Field label="Year established" value={form.year_established} onChange={v => set('year_established', v)} placeholder="2018" />
-      </div>
+
+      <Field label="Year established" value={form.year_established} onChange={v => set('year_established', v)} placeholder="2018" />
     </div>
   );
 }

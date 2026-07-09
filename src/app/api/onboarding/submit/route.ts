@@ -51,6 +51,12 @@ export async function POST(request: NextRequest) {
     city: form.city,
     business_state: form.business_state,
     postcode: form.postcode,
+    // ADDRESS-1 — structured lat/lng/place_id/formatted_address from Geoapify
+    // autocomplete (Part B.2). Left null when the owner used manual entry.
+    lat: form.lat ? Number(form.lat) : null,
+    lng: form.lng ? Number(form.lng) : null,
+    place_id: (form.place_id as string) || null,
+    formatted_address: (form.formatted_address as string) || null,
     year_established: form.year_established,
     staff_count: form.staff_count,
     monthly_revenue: form.monthly_revenue,
@@ -97,7 +103,7 @@ export async function POST(request: NextRequest) {
         business_id: biz.id,
         user_id: user.id,
         current_step: 'provisioning',
-        completed_steps: ['identity', 'abn', 'details', 'operations', 'goals'],
+        completed_steps: ['identity', 'abn', 'details', 'operations', 'products', 'goals'],
         provisioning_status: (!abnIsValid && !abnEmpty) ? 'blocked' : 'pending',
       },
       { onConflict: 'business_id' }

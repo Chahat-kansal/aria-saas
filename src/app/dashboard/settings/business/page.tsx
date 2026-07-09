@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
 const card: React.CSSProperties = { background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 12, padding: '20px 22px' }
 const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: 'var(--bg-input)', border: '1px solid var(--divider)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit' }
@@ -15,6 +16,8 @@ export default function BusinessHubSettingsPage() {
   const [bookingSlug, setBookingSlug] = useState('')
   const [slug, setSlug] = useState('')
   const [weeklyTarget, setWeeklyTarget] = useState('')
+  const [address, setAddress] = useState({ address: '', city: '', business_state: '', postcode: '', lat: '', lng: '', place_id: '', formatted_address: '' })
+  const [manualAddress, setManualAddress] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -28,6 +31,17 @@ export default function BusinessHubSettingsPage() {
         setBookingSlug(d.business.booking_link_slug ?? '')
         setSlug(d.business.slug ?? '')
         setWeeklyTarget(d.business.weekly_revenue_target != null && Number(d.business.weekly_revenue_target) > 0 ? String(d.business.weekly_revenue_target) : '')
+        setAddress({
+          address: d.business.address ?? '',
+          city: d.business.city ?? '',
+          business_state: d.business.business_state ?? '',
+          postcode: d.business.postcode ?? '',
+          lat: d.business.lat != null ? String(d.business.lat) : '',
+          lng: d.business.lng != null ? String(d.business.lng) : '',
+          place_id: d.business.place_id ?? '',
+          formatted_address: d.business.formatted_address ?? '',
+        })
+        setManualAddress(!!d.business.address && d.business.lat == null)
       }
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -43,7 +57,12 @@ export default function BusinessHubSettingsPage() {
     try {
       const r = await fetch('/api/settings/business', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ google_review_link: reviewLink.trim(), booking_link_slug: bookingSlug.trim() || slug, weekly_revenue_target: weeklyTarget.trim() === '' ? 0 : Number(weeklyTarget) }),
+        body: JSON.stringify({
+          google_review_link: reviewLink.trim(), booking_link_slug: bookingSlug.trim() || slug,
+          weekly_revenue_target: weeklyTarget.trim() === '' ? 0 : Number(weeklyTarget),
+          address: address.address, city: address.city, business_state: address.business_state, postcode: address.postcode,
+          lat: address.lat || null, lng: address.lng || null, place_id: address.place_id || null, formatted_address: address.formatted_address || null,
+        }),
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error ?? 'Save failed')
@@ -63,6 +82,34 @@ export default function BusinessHubSettingsPage() {
 
       {loading ? <p style={{ color: 'var(--text-tertiary)' }}>Loading…</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={card}>
+            <label style={lbl}>Business address</label>
+            {manualAddress ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input style={inp} value={address.address} onChange={e => setAddress(a => ({ ...a, address: e.target.value }))} placeholder="Street address" />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <input style={inp} value={address.city} onChange={e => setAddress(a => ({ ...a, city: e.target.value }))} placeholder="Suburb" />
+                  <input style={inp} value={address.business_state} onChange={e => setAddress(a => ({ ...a, business_state: e.target.value }))} placeholder="State" />
+                </div>
+                <input style={inp} value={address.postcode} onChange={e => setAddress(a => ({ ...a, postcode: e.target.value }))} placeholder="Postcode" />
+                <button type="button" onClick={() => setManualAddress(false)} style={{ fontSize: 12, color: 'var(--violet)', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                  Use address lookup instead
+                </button>
+              </div>
+            ) : (
+              <AddressAutocomplete
+                initialValue={address.formatted_address || address.address}
+                onManualEntry={() => setManualAddress(true)}
+                onSelect={a => setAddress({
+                  address: a.address_line1, city: a.suburb, business_state: a.state, postcode: a.postcode,
+                  lat: a.lat !== null ? String(a.lat) : '', lng: a.lng !== null ? String(a.lng) : '',
+                  place_id: a.place_id ?? '', formatted_address: a.formatted,
+                })}
+              />
+            )}
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '8px 0 0', lineHeight: 1.5 }}>Used on receipts, your customer hub locations page, and Google/SEO listings.</p>
+          </div>
+
           <div style={card}>
             <label style={lbl}>Google review link</label>
             <input style={inp} value={reviewLink} onChange={e => setReviewLink(e.target.value)} placeholder="https://g.page/r/... or https://www.google.com/maps/..." />

@@ -21,7 +21,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, industry, industry_subtype, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug, weekly_revenue_target')
+    .select('id, name, industry, industry_subtype, abn, city, address, business_state, postcode, country, lat, lng, place_id, formatted_address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug, weekly_revenue_target')
     .eq('id', bid)
     .maybeSingle()
 
@@ -44,6 +44,13 @@ async function _PATCH(req: Request) {
   if (body.abn        !== undefined) payload.abn         = body.abn
   if (body.city       !== undefined) payload.city        = body.city
   if (body.address    !== undefined) payload.address     = body.address
+  if (body.business_state !== undefined) payload.business_state = body.business_state
+  if (body.postcode   !== undefined) payload.postcode    = body.postcode
+  // ADDRESS-1 — structured lat/lng/place_id/formatted_address from Geoapify autocomplete.
+  if (body.lat        !== undefined) payload.lat         = body.lat === null || body.lat === '' ? null : Number(body.lat)
+  if (body.lng        !== undefined) payload.lng         = body.lng === null || body.lng === '' ? null : Number(body.lng)
+  if (body.place_id   !== undefined) payload.place_id    = body.place_id || null
+  if (body.formatted_address !== undefined) payload.formatted_address = body.formatted_address || null
   if (body.phone      !== undefined) payload.phone       = body.phone
   if (body.industry   !== undefined) payload.industry    = body.industry
   if (body.industry_subtype !== undefined) payload.industry_subtype = body.industry_subtype || null
