@@ -143,7 +143,10 @@ export default function BusinessesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             {businesses.map(biz => {
-              const meta = INDUSTRY_META[biz.industry ?? 'professional'] ?? INDUSTRY_META.professional;
+              // BUG2+3 fix (ONBOARD-FIX-1): onboarding's granular values (liquor,
+              // convenience, bakery, other) have no INDUSTRY_META key — default to
+              // 'retail' rather than 'professional', matching Sidebar.tsx's resolver.
+              const meta = INDUSTRY_META[biz.industry ?? 'retail'] ?? INDUSTRY_META.retail;
               const plan = PLAN_META[biz.plan] ?? PLAN_META.starter;
               const isSelecting = selecting === biz.id;
               return (

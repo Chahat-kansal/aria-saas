@@ -129,3 +129,18 @@ export type Industry = keyof typeof industryConfig;
 export const publishedIndustries = (Object.entries(industryConfig) as [Industry, typeof industryConfig[Industry]][])
   .filter(([, cfg]) => (cfg as any).published === true)
   .map(([id, cfg]) => ({ id, label: cfg.label }));
+
+// BUG2+3 fix (ONBOARD-FIX-1): onboarding's industry picker offers granular values
+// (liquor, convenience, bakery, other) that have no matching industryConfig key —
+// 'retail' itself is labelled "Retail shop (liquor, convenience, specialty)", i.e.
+// these were always meant to share the retail dashboard, not get a fallback that
+// hides POS. Unrecognized values now fall back by business_model instead of a
+// flat 'professional' default, so product/POS businesses never lose their POS tab.
+export function resolveIndustryConfig(
+  industry: string | null | undefined,
+  businessModel: string | null | undefined,
+): typeof industryConfig[Industry] {
+  const key = (industry ?? '') as Industry;
+  if (industryConfig[key]) return industryConfig[key];
+  return businessModel === 'service' ? industryConfig.professional : industryConfig.retail;
+}

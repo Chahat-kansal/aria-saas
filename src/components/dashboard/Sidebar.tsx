@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { industryConfig, type Industry } from '@/lib/industry-config';
+import { resolveIndustryConfig } from '@/lib/industry-config';
 import { supabase } from '@/lib/supabase';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { useState, useRef, useEffect } from 'react';
@@ -185,8 +185,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [health, setHealth] = useState<{ score: number; grade: string } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
-  const industry = (business.industry ?? 'professional') as Industry;
-  const config = industryConfig[industry] ?? industryConfig.professional;
+  const config = resolveIndustryConfig(business.industry, business.business_model);
 
   // Close switcher on outside click
   useEffect(() => {

@@ -21,7 +21,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug, weekly_revenue_target')
+    .select('id, name, industry, industry_subtype, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug, weekly_revenue_target')
     .eq('id', bid)
     .maybeSingle()
 
@@ -46,6 +46,7 @@ async function _PATCH(req: Request) {
   if (body.address    !== undefined) payload.address     = body.address
   if (body.phone      !== undefined) payload.phone       = body.phone
   if (body.industry   !== undefined) payload.industry    = body.industry
+  if (body.industry_subtype !== undefined) payload.industry_subtype = body.industry_subtype || null
   if (body.google_place_id     !== undefined) payload.google_place_id     = body.google_place_id || null
   if (body.facebook_page_id    !== undefined) payload.facebook_page_id    = body.facebook_page_id || null
   if (body.yelp_url            !== undefined) payload.yelp_url            = body.yelp_url || null
