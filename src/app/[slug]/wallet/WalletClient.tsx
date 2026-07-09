@@ -1,6 +1,7 @@
 'use client'
 import { useRef, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
+import JsBarcode from 'jsbarcode'
 import { CxTabBar } from '../CxTabBar'
 
 const BG = '#f3efe4'
@@ -77,6 +78,51 @@ function LoyaltyBarcode({ value, widthMod = 2.4, heightPx = 96, size }: {
   )
 }
 
+// ── Full-width 1D barcode strip — CODE128 for imager scanners; tap opens QR modal ──
+function BarcodeStrip({ value, displayCode, onTap }: {
+  value: string | null
+  displayCode: string
+  onTap: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    if (!canvasRef.current || !value) return
+    try {
+      JsBarcode(canvasRef.current, value, {
+        format: 'CODE128',
+        width: 2,
+        height: 44,
+        displayValue: false,
+        margin: 0,
+        background: '#ffffff',
+        lineColor: '#111111',
+      })
+    } catch { /* value may not encode cleanly — canvas stays blank */ }
+  }, [value])
+
+  if (!value) return null
+
+  return (
+    <div
+      role="button"
+      aria-label="Tap to open scan view"
+      onClick={onTap}
+      style={{ background: '#ffffff', padding: '12px 16px 10px', cursor: 'pointer' }}
+    >
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 44 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#6b7280', letterSpacing: '0.1em' }}>
+          {displayCode}
+        </span>
+        <span style={{ fontFamily: FB, fontSize: 10, color: '#9ca3af' }}>
+          tap to scan
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── Fullscreen scan modal — enlarged QR for bright daylight / belt-and-braces ──
 function ScanModal({ value, bizName, onClose }: {
   value: string | null
@@ -114,7 +160,10 @@ function ScanModal({ value, bizName, onClose }: {
           {/^\d{10}$/.test(value) ? value.slice(0, 4) + ' ' + value.slice(4) : value.slice(0, 16)}
         </p>
       )}
-      <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, marginTop: 32, textAlign: 'center' }}>
+      <p style={{ fontFamily: FB, fontSize: 14, color: INK, marginTop: 16, textAlign: 'center', fontWeight: 600 }}>
+        Show this to the counter camera
+      </p>
+      <p style={{ fontFamily: FB, fontSize: 11, color: INK_MUTED, marginTop: 20, textAlign: 'center' }}>
         Tap anywhere to close
       </p>
     </div>
@@ -212,9 +261,6 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
     // padding: 0 24px gives 24px clearance per side so -7deg corners stay inside max-w-md
     <div style={{ padding: '0 24px' }}>
       <div
-        role="button"
-        aria-label="Tap to open scan view"
-        onClick={onScanOpen}
         style={{
           background: '#14130f',
           borderRadius: 20,
@@ -223,11 +269,10 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
           overflow: 'hidden',
           userSelect: 'none',
-          cursor: 'pointer',
         }}
       >
         {/* ── Card face ── */}
-        <div style={{ padding: '22px 20px 18px' }}>
+        <div style={{ padding: '22px 20px 10px' }}>
           {/* Row 1: biz name + chip */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
             <span style={{
@@ -270,37 +315,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           </div>
         </div>
 
-        {/* ── QR bottom band — inset pill: QR 80px left, code + microcopy right ── */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 10,
-          margin: '0 14px 14px',
-          padding: '10px 12px',
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}>
-          {/* QR square */}
-          <div style={{ flexShrink: 0 }}>
-            <LoyaltyBarcode value={identityId} size={80} />
-          </div>
-
-          {/* Code + microcopy */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{
-              fontFamily: 'monospace', fontSize: 13, fontWeight: 700,
-              color: '#4b5563', letterSpacing: '0.1em',
-              margin: '0 0 4px', lineHeight: 1.2,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {displayCode}
-            </p>
-            <p style={{
-              fontFamily: FB, fontSize: 11, color: '#9ca3af',
-              margin: 0, letterSpacing: '0.01em',
-            }}>
-              Show at counter
-            </p>
-          </div>
-        </div>
+        {/* ── 1D barcode band — full-width, tap opens QR modal ── */}
+        <BarcodeStrip value={identityId} displayCode={displayCode} onTap={onScanOpen} />
       </div>
     </div>
   )
