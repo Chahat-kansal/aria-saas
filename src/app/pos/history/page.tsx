@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Receipt from '@/components/pos/Receipt';
-import type { ReceiptTemplate } from '@/components/pos/Receipt';
+import type { ReceiptTemplate, ReceiptSettings } from '@/components/pos/Receipt';
 import ReturnModal from '@/components/pos/ReturnModal';
 
 interface SaleItem { id: string; product_id?: string | null; product_name: string; quantity: number; returned_quantity?: number; unit_price: number; line_total: number; tax_rate: number; discount_percent: number; }
@@ -43,6 +43,7 @@ export default function HistoryPage() {
   const [payFilter, setPayFilter] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate | null>(null);
+  const [posSettings, setPosSettings] = useState<ReceiptSettings | undefined>(undefined);
   // Edit state
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState({ served_by: '', notes: '', internal_comment: '', external_notes: '' });
@@ -83,6 +84,9 @@ export default function HistoryPage() {
         const def = templates.find(t => t.is_default) ?? templates[0];
         if (def?.elements?.length) setReceiptTemplate(def);
       }
+    }).catch(() => null);
+    fetch('/api/pos/settings').then(r => r.json()).then(d => {
+      if (d?.settings) setPosSettings(d.settings);
     }).catch(() => null);
   }, []);
 
@@ -401,6 +405,7 @@ export default function HistoryPage() {
       {showReceipt && selected && (
         <Receipt
           sale={{ ...selected, served_by: selected.served_by ?? undefined, cartSnapshot: (detail?.pos_sale_items ?? []).map(i => ({ product: { name: i.product_name }, qty: i.quantity, unitPrice: i.unit_price, label: i.product_name, discount_percent: i.discount_percent })) }}
+          settings={posSettings}
           template={receiptTemplate}
           onClose={() => setShowReceipt(false)}
         />

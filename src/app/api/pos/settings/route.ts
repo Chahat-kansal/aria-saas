@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getBusinessAddress } from '@/lib/business-address'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -30,7 +31,18 @@ async function _GET() {
   if (!bid) return NextResponse.json({ settings: null });
 
   const { data } = await supabase.from('pos_settings').select('*').eq('business_id', bid).maybeSingle();
-  return NextResponse.json({ settings: data });
+
+  // ADDRESS-1 (Part B.4b) — pos_settings.business_address is a manual receipt
+  // override; when the owner never filled it in, fall back to the resolved
+  // business address rather than showing a blank receipt header (AU
+  // tax-invoice legal requirement). The manual field still wins if set.
+  const settings = data ? { ...data } : data;
+  if (settings && !settings.business_address) {
+    const addr = await getBusinessAddress(bid);
+    if (addr?.formatted) settings.business_address = addr.formatted;
+  }
+
+  return NextResponse.json({ settings });
 }
 
 async function _POST(req: Request) {

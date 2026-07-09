@@ -9,7 +9,7 @@ import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
-import type { ReceiptTemplate } from '@/components/pos/Receipt';
+import type { ReceiptTemplate, ReceiptSettings } from '@/components/pos/Receipt';
 import { printReceiptWithTemplate } from '@/lib/pos-print';
 import { printReceipt as printESCPOS } from '@/lib/pos/escpos';
 import { AriaChatMessage } from '@/components/pos/AriaChatMessage';
@@ -400,6 +400,7 @@ export default function TerminalPage() {
 
   /* ── Default receipt template (from Canva editor) ─────────────── */
   const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate | null>(null);
+  const [posSettings, setPosSettings] = useState<ReceiptSettings | undefined>(undefined);
 
   /* ── Terminal view state ────────────────────────────────────────── */
   const [terminalView,     setTerminalView]     = useState<'pos' | 'checkout' | 'confirm'>('pos');
@@ -579,7 +580,9 @@ export default function TerminalPage() {
       fetch('/api/pos/products').then(r => r.json()),
       fetch('/api/pos/park').then(r => r.json()),
       fetch('/api/pos/receipt-templates').then(r => r.json()).catch(() => ({ templates: [] })),
-    ]).then(([prod, park, tmplData]) => {
+      fetch('/api/pos/settings').then(r => r.json()).catch(() => ({ settings: null })),
+    ]).then(([prod, park, tmplData, settingsData]) => {
+      if (settingsData?.settings) setPosSettings(settingsData.settings);
       console.log('[POS perf] products:', (performance.now() - t0Prods).toFixed(2), 'ms');
       // ALWAYS run these — no early returns until after setLoading(false)
       if (prod.business_id) setBusinessId(prod.business_id);
@@ -2213,6 +2216,7 @@ export default function TerminalPage() {
               <Receipt
                 sale={showReceipt}
                 businessName={businessName}
+                settings={posSettings}
                 template={receiptTemplate}
                 onClose={() => setShowReceiptModal(false)}
                 watermark={trainingMode ? 'TRAINING' : undefined}
@@ -2855,6 +2859,7 @@ export default function TerminalPage() {
               <Receipt
                 sale={showReceipt}
                 businessName={businessName}
+                settings={posSettings}
                 template={receiptTemplate}
                 onClose={() => { setShowReceipt(null); if (window.innerWidth < 768) setMobileTab('products'); }}
                 watermark={trainingMode ? 'TRAINING' : undefined}

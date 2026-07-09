@@ -7,6 +7,7 @@ import { put } from '@vercel/blob'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getBusinessAddress } from '@/lib/business-address'
 
 function buildPdfHtml(
   biz: { name: string; abn?: string | null; address?: string | null; phone?: string | null; logo_url?: string | null },
@@ -111,10 +112,15 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
     .select('id, name, abn, address, phone, logo_url').eq('id', inv.business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // ADDRESS-1 (Part B.4b) — full formatted address (street + suburb + state +
+  // postcode), not just the street line, for a proper AU tax invoice.
+  const resolvedAddress = await getBusinessAddress(biz.id)
+  const bizWithFullAddress = { ...biz, address: resolvedAddress?.formatted || biz.address }
+
   const { data: lineItems } = await supabaseAdmin
     .from('invoice_line_items').select('*').eq('invoice_id', params.id).order('position')
 
-  const html = buildPdfHtml(biz, inv, lineItems ?? [])
+  const html = buildPdfHtml(bizWithFullAddress, inv, lineItems ?? [])
 
   const chromium = (await import('@sparticuz/chromium')).default
   const puppeteer = (await import('puppeteer-core')).default

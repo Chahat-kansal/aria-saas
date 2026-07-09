@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getBusinessAddress } from '@/lib/business-address'
 
 async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const { data: inv } = await supabaseAdmin
@@ -19,6 +20,11 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
     .eq('id', inv.business_id)
     .maybeSingle()
 
+  // ADDRESS-1 (Part B.4b) — full formatted address (street + suburb + state +
+  // postcode), not just the street line, for a proper AU tax invoice.
+  const resolvedAddress = inv.business_id ? await getBusinessAddress(inv.business_id) : null
+  const bizWithFullAddress = biz ? { ...biz, address: resolvedAddress?.formatted || biz.address } : null
+
   const { data: lines } = await supabaseAdmin
     .from('invoice_line_items')
     .select('id, description, quantity, unit_price, gst_applicable, line_total')
@@ -30,7 +36,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
     void supabaseAdmin.from('invoices').update({ viewed_at: new Date().toISOString() }).eq('id', params.id)
   }
 
-  return NextResponse.json({ invoice: inv, business: biz ?? null, lines: lines ?? [] })
+  return NextResponse.json({ invoice: inv, business: bizWithFullAddress, lines: lines ?? [] })
 }
 
 export const GET = withErrorCapture('invoices/public/[id]', _GET)
