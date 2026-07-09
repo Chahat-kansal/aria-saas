@@ -29,7 +29,7 @@ export default async function WalletPage({ params }: { params: { slug: string } 
   let tier: string = 'Member'
   let walletBal: number = 0
   let identityId: string | null = null
-  let earnTxns: Array<{ id: string; type: string; points_delta: number; reward_redeemed: string | null; created_at: string }> = []
+  let earnTxns: Array<{ id: string; type: string; points_delta: number; reward_redeemed: string | null; item_name?: string | null; created_at: string }> = []
   let preloadTxns: Array<{ id: string; amount: number; type: string; description: string | null; created_at: string }> = []
 
   if (session) {
@@ -60,7 +60,7 @@ export default async function WalletPage({ params }: { params: { slug: string } 
           .maybeSingle(),
         supabaseAdmin
           .from('pos_loyalty_transactions')
-          .select('id, type, points_delta, reward_redeemed, created_at')
+          .select('id, type, points_delta, reward_redeemed, sale_id, created_at')
           .eq('business_id', bid)
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false })
@@ -74,9 +74,29 @@ export default async function WalletPage({ params }: { params: { slug: string } 
           .limit(10),
       ])
 
-      walletBal    = Number((walletRes.data as { balance?: number | null } | null)?.balance ?? 0)
-      earnTxns     = (earnRes.data ?? []) as typeof earnTxns
-      preloadTxns  = (preloadRes.data ?? []) as typeof preloadTxns
+      walletBal   = Number((walletRes.data as { balance?: number | null } | null)?.balance ?? 0)
+      preloadTxns = (preloadRes.data ?? []) as typeof preloadTxns
+
+      // Enrich earn transactions with the top item from the linked sale
+      const rawEarn = (earnRes.data ?? []) as Array<{ id: string; type: string; points_delta: number; reward_redeemed: string | null; sale_id?: string | null; created_at: string }>
+      const saleIds = rawEarn.map(t => t.sale_id).filter((s): s is string => !!s)
+      const saleItemMap: Record<string, string> = {}
+      if (saleIds.length > 0) {
+        const { data: items } = await supabaseAdmin
+          .from('pos_sale_items')
+          .select('sale_id, product_name')
+          .in('sale_id', saleIds)
+          .order('line_total', { ascending: false })
+        for (const item of (items ?? []) as Array<{ sale_id: string | null; product_name: string | null }>) {
+          if (item.sale_id && item.product_name && !saleItemMap[item.sale_id]) {
+            saleItemMap[item.sale_id] = item.product_name
+          }
+        }
+      }
+      earnTxns = rawEarn.map(t => ({
+        ...t,
+        item_name: t.sale_id ? (saleItemMap[t.sale_id] ?? null) : null,
+      }))
     }
   }
 

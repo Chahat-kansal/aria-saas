@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import JsBarcode from 'jsbarcode'
 import { CxTabBar } from '../CxTabBar'
 
-const BG = '#f3efe4'
+const BG = '#fafafa'
 const INK = '#0a0a0a'
 const ACCENT = '#d9f54e'
 const ACCENT_TEXT = '#2f3a06'
@@ -17,6 +17,7 @@ interface EarnTxn {
   type: string
   points_delta: number
   reward_redeemed: string | null
+  item_name?: string | null
   created_at: string
 }
 
@@ -78,27 +79,35 @@ function LoyaltyBarcode({ value, widthMod = 2.4, heightPx = 96, size }: {
   )
 }
 
-// ── Full-width 1D barcode strip — CODE128 for imager scanners; tap opens QR modal ──
-function BarcodeStrip({ value, displayCode, onTap }: {
+// ── Full-width 1D barcode strip — CODE128, SVG-based so it scales without
+//    clipping at any viewport width. Tap opens QR modal.
+function BarcodeStrip({ value, onTap }: {
   value: string | null
-  displayCode: string
   onTap: () => void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
-    if (!canvasRef.current || !value) return
+    if (!svgRef.current || !value) return
     try {
-      JsBarcode(canvasRef.current, value, {
+      JsBarcode(svgRef.current, value, {
         format: 'CODE128',
         width: 2,
-        height: 36,
+        height: 40,
         displayValue: false,
         margin: 0,
         background: '#ffffff',
         lineColor: '#111111',
       })
-    } catch { /* value may not encode cleanly — canvas stays blank */ }
+      // Remove JsBarcode's fixed px dimensions so CSS can control size via viewBox
+      const svg = svgRef.current
+      const w = svg.getAttribute('width') ?? '200'
+      const h = svg.getAttribute('height') ?? '40'
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
+      svg.setAttribute('preserveAspectRatio', 'none')
+      svg.removeAttribute('width')
+      svg.removeAttribute('height')
+    } catch { /* value may not encode cleanly — svg stays blank */ }
   }, [value])
 
   if (!value) return null
@@ -110,21 +119,15 @@ function BarcodeStrip({ value, displayCode, onTap }: {
       onClick={onTap}
       style={{
         background: '#ffffff',
-        borderRadius: 12,
-        margin: '0 14px 14px',
-        padding: '8px 14px 6px',
+        padding: '8px 16px',
         cursor: 'pointer',
       }}
     >
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 36 }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: '0.1em' }}>
-          {displayCode}
-        </span>
-        <span style={{ fontFamily: FB, fontSize: 9, color: '#9ca3af' }}>
-          tap to scan
-        </span>
-      </div>
+      <svg
+        ref={svgRef}
+        preserveAspectRatio="none"
+        style={{ display: 'block', width: '100%', height: 40 }}
+      />
     </div>
   )
 }
@@ -243,7 +246,7 @@ function IconGift({ color = '#fff' }: { color?: string }) {
   )
 }
 
-// ── Loyalty Card — dark card, −7deg tilt; white QR band across the bottom ──
+// ── Loyalty Card — dark card, −7deg tilt; white barcode band across bottom ──
 function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }: {
   bizName: string
   name: string | null
@@ -256,15 +259,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
   const tierLabel = t === 'gold' ? 'Gold' : t === 'silver' ? 'Silver' : 'Member'
   const tierColor = t === 'gold' ? '#C9A37A' : t === 'silver' ? '#A0B4C8' : ACCENT
 
-  // Format display code: 10-digit short_code → XXXX XXX XXX, UUID → first 16 hex chars
-  const displayCode = identityId
-    ? /^\d{10}$/.test(identityId)
-      ? identityId.slice(0, 4) + ' ' + identityId.slice(4, 7) + ' ' + identityId.slice(7)
-      : identityId.replace(/-/g, '').toUpperCase().slice(0, 16)
-    : '— — — — — —'
-
   return (
-    // padding: 0 24px gives 24px clearance per side so -7deg corners stay inside max-w-md
+    // 24px clearance each side so −7deg corners stay inside max-w-md
     <div style={{ padding: '0 24px' }}>
       <div
         style={{
@@ -321,8 +317,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, identityId, onScanOpen }:
           </div>
         </div>
 
-        {/* ── 1D barcode band — full-width, tap opens QR modal ── */}
-        <BarcodeStrip value={identityId} displayCode={displayCode} onTap={onScanOpen} />
+        {/* ── 1D barcode band — full card width, SVG, tap opens QR modal ── */}
+        <BarcodeStrip value={identityId} onTap={onScanOpen} />
       </div>
     </div>
   )
@@ -431,7 +427,8 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
         label: isEarn
           ? ('Earned +' + t.points_delta)
           : ('Redeemed −' + Math.abs(t.points_delta)),
-        itemName: t.reward_redeemed ?? null,
+        // earn: item name from linked sale; redeem: reward label; null → omit
+        itemName: isEarn ? (t.item_name ?? null) : (t.reward_redeemed ?? null),
         kind: (isEarn ? 'earn' : 'redeem') as 'earn' | 'redeem',
       }
     }),
@@ -449,26 +446,26 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
   return (
     <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto', minHeight: '100dvh', background: BG, fontFamily: FB, color: INK }}>
       <style>{`
-        body { background: #f3efe4 }
+        body { background: #fafafa }
         *, *::before, *::after { box-sizing: border-box }
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Header — full-bleed café photo, fades to cream at bottom ── */}
+      {/* ── Header — full-bleed café photo, fades to #fafafa at bottom ── */}
       <div style={{
         position: 'relative',
-        height: '40vh',
+        height: '38vh',
         background: heroBg + ', linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
         border: 'none',
       }}>
-        {/* Solid cream fade — starts at 30%, fully opaque by 88% so no hard seam */}
+        {/* Cream fade — starts at 28%, fully opaque #fafafa by 88% */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, transparent 28%, rgba(243,239,228,1) 88%)',
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, transparent 28%, rgba(250,250,250,1) 88%)',
         }} />
       </div>
 
-      {/* ── Card — overlaps photo by ~45%; overflow:hidden clips rotated corners ── */}
+      {/* ── Card — overlaps photo by ~50%; overflow:hidden clips rotated corners ── */}
       <div style={{ marginTop: -140, position: 'relative', zIndex: 2, paddingBottom: 24, overflow: 'hidden' }}>
         {isLoggedIn ? (
           <LoyaltyCard
@@ -493,7 +490,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
 
       {/* ── Wallet actions ── */}
       {isLoggedIn && (
-        <div style={{ padding: '0 16px', paddingBottom: 'calc(92px + env(safe-area-inset-bottom))' }}>
+        <div style={{ padding: '0 16px' }}>
           {/* Apple + Google pills */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <a
@@ -526,7 +523,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
             </a>
           </div>
 
-          {/* Top up — lime glow pill — only shown when topUpUrl is provided */}
+          {/* Top up — lime glow pill — only when topUpUrl is provided */}
           {topUpUrl && (
             <a
               href={topUpUrl}
