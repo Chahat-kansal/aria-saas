@@ -33,7 +33,7 @@ async function computeAutoCompleted(businessId: string): Promise<{ keys: string[
   ] = await Promise.all([
     supabaseAdmin.from('pos_products').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_active', true),
     supabaseAdmin.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).neq('status', 'voided'),
-    supabaseAdmin.from('staff_members').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_active', true),
+    supabaseAdmin.from('staff_members').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('business_hours').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('business_expenses').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('pos_loyalty_config').select('program_enabled').eq('business_id', businessId).maybeSingle(),
