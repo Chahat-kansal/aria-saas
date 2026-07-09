@@ -119,14 +119,14 @@ function BarcodeStrip({ value, onTap }: {
       onClick={onTap}
       style={{
         background: '#ffffff',
-        padding: '8px 16px',
+        padding: '8px 0 6px',
         cursor: 'pointer',
       }}
     >
       <svg
         ref={svgRef}
         preserveAspectRatio="none"
-        style={{ display: 'block', width: '100%', height: 40 }}
+        style={{ display: 'block', width: '100%', height: 42 }}
       />
     </div>
   )
@@ -179,15 +179,31 @@ function ScanModal({ value, bizName, onClose }: {
   )
 }
 
-// ── EMV-style chip icon — lime ────────────────────────────────────────────────
+// ── EMV-style chip icon — gold/brass ─────────────────────────────────────────
 function IconChip() {
   return (
-    <svg width="46" height="35" viewBox="0 0 46 35" fill="none" style={{ flexShrink: 0 }}>
-      <rect width="46" height="35" rx="5" fill="#d9f54e" />
-      <rect x="15" y="4" width="16" height="27" rx="2" fill="none" stroke="#2f3a06" strokeWidth="1.5" />
-      <line x1="15" y1="13" x2="31" y2="13" stroke="#2f3a06" strokeWidth="1.5" />
-      <line x1="15" y1="22" x2="31" y2="22" stroke="#2f3a06" strokeWidth="1.5" />
-      <line x1="23" y1="4" x2="23" y2="31" stroke="#2f3a06" strokeWidth="1.5" />
+    <svg width="44" height="34" viewBox="0 0 44 34" fill="none" style={{ flexShrink: 0 }}>
+      <defs>
+        <linearGradient id="chipGold" x1="0" y1="0" x2="44" y2="34" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#D4A843" />
+          <stop offset="50%" stopColor="#C9A37A" />
+          <stop offset="100%" stopColor="#A07830" />
+        </linearGradient>
+      </defs>
+      <rect width="44" height="34" rx="5" fill="url(#chipGold)" />
+      {/* contact pad outline */}
+      <rect x="13" y="4" width="18" height="26" rx="2.5" fill="none" stroke="#7A5C10" strokeWidth="1.4" />
+      {/* horizontal contact lines */}
+      <line x1="13" y1="12" x2="31" y2="12" stroke="#7A5C10" strokeWidth="1.2" />
+      <line x1="13" y1="22" x2="31" y2="22" stroke="#7A5C10" strokeWidth="1.2" />
+      {/* vertical centre line */}
+      <line x1="22" y1="4" x2="22" y2="30" stroke="#7A5C10" strokeWidth="1.2" />
+      {/* left stub tabs */}
+      <line x1="0" y1="12" x2="13" y2="12" stroke="#7A5C10" strokeWidth="1.2" />
+      <line x1="0" y1="22" x2="13" y2="22" stroke="#7A5C10" strokeWidth="1.2" />
+      {/* right stub tabs */}
+      <line x1="31" y1="12" x2="44" y2="12" stroke="#7A5C10" strokeWidth="1.2" />
+      <line x1="31" y1="22" x2="44" y2="22" stroke="#7A5C10" strokeWidth="1.2" />
     </svg>
   )
 }
@@ -264,14 +280,14 @@ function LoyaltyCard({ bizName, name, tier, walletBal, pointsBalance, programEna
   const tierColor = t === 'gold' ? '#C9A37A' : t === 'silver' ? '#A0B4C8' : ACCENT
 
   return (
-    // 24px clearance each side so −7deg corners stay inside max-w-md
-    <div style={{ padding: '0 24px' }}>
+    // 28px clearance each side so −7deg corners stay inside max-w-md
+    <div style={{ padding: '0 28px' }}>
       <div
         style={{
           background: '#14130f',
           borderRadius: 20,
           transform: 'rotate(-7deg)',
-          border: '1px solid rgba(201,163,122,0.32)',
+          border: '1px solid rgba(201,163,122,0.55)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
           overflow: 'hidden',
           userSelect: 'none',
@@ -279,8 +295,8 @@ function LoyaltyCard({ bizName, name, tier, walletBal, pointsBalance, programEna
       >
         {/* ── Card face ── */}
         <div style={{ padding: '18px 20px 12px' }}>
-          {/* Row 1: biz name + chip */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+          {/* Row 1: biz name only */}
+          <div style={{ marginBottom: 6 }}>
             <span style={{
               fontFamily: FD, fontStyle: 'italic', fontSize: 26, fontWeight: 600,
               color: 'rgba(210,210,210,0.92)', lineHeight: 1.1,
@@ -288,7 +304,6 @@ function LoyaltyCard({ bizName, name, tier, walletBal, pointsBalance, programEna
             }}>
               {bizName}
             </span>
-            <IconChip />
           </div>
 
           {/* Row 2: holder name */}
@@ -300,39 +315,45 @@ function LoyaltyCard({ bizName, name, tier, walletBal, pointsBalance, programEna
             {name ?? 'Member'}
           </span>
 
-          {/* Row 3: pts primary + tier */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap', marginBottom: 4 }}>
-            <span style={{ fontFamily: FB, fontSize: 30, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
-              {programEnabled ? (pointsBalance + ' pts') : '—'}
-            </span>
-            <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>·</span>
-            <span style={{
-              fontFamily: FB, fontSize: 14, fontWeight: 700,
-              color: tierColor,
-              textDecoration: 'underline', textDecorationColor: ACCENT, textUnderlineOffset: '3px',
-            }}>
-              {tierLabel}
-            </span>
+          {/* Row 3: pts + tier (left) + gold chip (right) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap', marginBottom: 4 }}>
+                <span style={{ fontFamily: FB, fontSize: 28, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+                  {programEnabled ? (pointsBalance + ' pts') : '—'}
+                </span>
+                <span style={{ fontFamily: FB, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>·</span>
+                <span style={{
+                  fontFamily: FB, fontSize: 14, fontWeight: 700,
+                  color: tierColor,
+                  textDecoration: 'underline', textDecorationColor: ACCENT, textUnderlineOffset: '3px',
+                }}>
+                  {tierLabel}
+                </span>
+              </div>
+              {/* Subtext: program paused / pts value / preload balance */}
+              {!programEnabled && (
+                <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: 2 }}>
+                  Loyalty paused
+                </span>
+              )}
+              {programEnabled && pointValueCents > 0 && pointsBalance > 0 && (
+                <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 2 }}>
+                  {'≈ $' + (pointsBalance * pointValueCents / 100).toFixed(2) + ' in rewards'}
+                </span>
+              )}
+              {preloadEnabled && walletBal > 0 && (
+                <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block' }}>
+                  {'$' + walletBal.toFixed(2) + ' preload balance'}
+                </span>
+              )}
+            </div>
+            {/* Gold EMV chip — bottom-right of card face per ref */}
+            <IconChip />
           </div>
-          {/* Subtext: program paused / pts value / preload balance */}
-          {!programEnabled && (
-            <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: 2 }}>
-              Loyalty paused
-            </span>
-          )}
-          {programEnabled && pointValueCents > 0 && pointsBalance > 0 && (
-            <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 2 }}>
-              {'≈ $' + (pointsBalance * pointValueCents / 100).toFixed(2) + ' in rewards'}
-            </span>
-          )}
-          {preloadEnabled && walletBal > 0 && (
-            <span style={{ fontFamily: FB, fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block' }}>
-              {'$' + walletBal.toFixed(2) + ' preload balance'}
-            </span>
-          )}
         </div>
 
-        {/* ── 1D barcode band — full card width, SVG, tap opens QR modal ── */}
+        {/* ── 1D barcode band — flush full card width, SVG, tap opens QR modal ── */}
         <BarcodeStrip value={identityId} onTap={onScanOpen} />
       </div>
     </div>
@@ -351,8 +372,8 @@ function TxnRow({ date, label, itemName, kind, bizName }: {
     hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Melbourne',
   })
 
-  const iconBg = kind === 'redeem' ? '#e5e7eb' : ACCENT
-  const iconColor = kind === 'redeem' ? INK_MUTED : ACCENT_TEXT
+  const iconBg = kind === 'redeem' ? '#1a1a16' : ACCENT
+  const iconColor = kind === 'redeem' ? '#ffffff' : ACCENT_TEXT
 
   return (
     <div style={{
@@ -484,8 +505,8 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
         }} />
       </div>
 
-      {/* ── Card — overlaps photo by ~50%; overflow:hidden clips rotated corners ── */}
-      <div style={{ marginTop: -140, position: 'relative', zIndex: 2, paddingBottom: 24, overflow: 'hidden' }}>
+      {/* ── Card — overlaps photo by ~50%; card itself has overflow:hidden for barcode clip ── */}
+      <div style={{ marginTop: -140, position: 'relative', zIndex: 2, paddingBottom: 24 }}>
         {isLoggedIn ? (
           <LoyaltyCard
             bizName={bizName}
