@@ -177,6 +177,7 @@ export function SpotlightTour() {
         {currentStepDef.key === 'cx_app' && data.slug && (
           <a
             href={'/' + data.slug} target="_blank" rel="noopener noreferrer"
+            onClick={() => advanceManualStep('cx_app')}
             style={{ display: 'block', marginBottom: 12, fontSize: 12, color: '#7FB897', wordBreak: 'break-all' }}
           >
             ariaos.site/{data.slug} ↗
@@ -236,7 +237,13 @@ export function SpotlightTour() {
           {currentStepDef.key !== 'ask_aria' && (isInformational || !onTargetPage) && (
             <button
               onClick={() => {
-                if (MANUAL_ADVANCE_KEYS.has(currentStepDef.key)) {
+                // cx_app's CTA both marks the step done AND takes the owner to the
+                // real share surface (QR + copy link) — unlike the other manual
+                // steps, "Share your app" should actually go somewhere.
+                if (currentStepDef.key === 'cx_app') {
+                  advanceManualStep('cx_app');
+                  router.push(currentStepDef.href);
+                } else if (MANUAL_ADVANCE_KEYS.has(currentStepDef.key)) {
                   advanceManualStep(currentStepDef.key);
                 } else if (currentStepDef.href) {
                   router.push(currentStepDef.href);

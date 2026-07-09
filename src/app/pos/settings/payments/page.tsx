@@ -43,7 +43,7 @@ export default function PaymentMethodsPage() {
           <p className="text-xs text-[rgba(26,26,22,.4)] mt-1">Set to 0 to disable. Max 10%.</p>
         </Section>
       </div>
-      <div className="mt-6"><button onClick={save} disabled={saving} className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1a1a16] text-white disabled:opacity-50">{saving?'Saving…':saved?'✓ Saved':'Save changes'}</button></div>
+      <div className="mt-6"><button data-tour="payment_methods" onClick={save} disabled={saving} className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1a1a16] text-white disabled:opacity-50">{saving?'Saving…':saved?'✓ Saved':'Save changes'}</button></div>
     </div>
   );
 }

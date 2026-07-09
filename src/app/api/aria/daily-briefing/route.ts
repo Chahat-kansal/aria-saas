@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { callAnthropic } from '@/lib/aria/providers/anthropic'
 import { geminiFlash } from '@/lib/gemini'
 import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
 import { detectLosses } from '@/lib/aria/radar/loss-detector'
@@ -31,6 +31,60 @@ function checkRateLimit(ip: string): boolean {
   if (bucket.count >= 6) return false;
   bucket.count++;
   return true;
+}
+
+// AI-ROUTER-FAILOVER-1 — last-resort template when BOTH Anthropic and Gemini
+// fail. Only ever called once hasActionableData is already known true, so
+// there is always real context to draw from; every field read here comes
+// straight from the `context` object already assembled above (no invented
+// numbers, per the same ANTI-HALLUCINATION rule the AI prompt itself follows).
+function buildTemplatedBriefingFallback(context: Record<string, unknown>): unknown[] {
+  const items: unknown[] = []
+
+  const revenue7d = context.revenue_last_7_days_aud as string | undefined
+  if (revenue7d) {
+    items.push({
+      id: 'revenue-snapshot', priority: 'medium', category: 'revenue',
+      title: 'Your revenue snapshot',
+      description: `A$${revenue7d} in the last 7 days, A$${(context.sales_yesterday_aud as string | undefined) ?? '0.00'} yesterday.`,
+      action_label: 'View reports', action_type: 'navigate', action_payload: {},
+      metric: `A$${revenue7d}`, metric_label: 'last 7 days', trend: null,
+    })
+  }
+
+  const lowStockNames = (context.low_stock_names as string[] | undefined) ?? []
+  if (lowStockNames.length > 0) {
+    items.push({
+      id: 'low-stock-check', priority: 'high', category: 'stock',
+      title: 'Items running low',
+      description: `${lowStockNames.join(', ')} may need reordering soon.`,
+      action_label: 'Check stock', action_type: 'reorder', action_payload: {},
+      metric: String(lowStockNames.length), metric_label: 'items low', trend: null,
+    })
+  }
+
+  const unansweredReviews = Number(context.unanswered_reviews ?? 0)
+  if (unansweredReviews > 0) {
+    items.push({
+      id: 'unanswered-reviews', priority: 'medium', category: 'reviews',
+      title: 'Reviews waiting on a reply',
+      description: `${unansweredReviews} review${unansweredReviews === 1 ? '' : 's'} still need a response.`,
+      action_label: 'Reply now', action_type: 'review_reply', action_payload: {},
+      metric: String(unansweredReviews), metric_label: 'unanswered', trend: null,
+    })
+  }
+
+  if (items.length === 0) {
+    items.push({
+      id: 'aria-paused', priority: 'low', category: 'marketing',
+      title: "Aria's insights are catching up",
+      description: 'AI-generated recommendations are temporarily unavailable — your dashboard data is live and unaffected.',
+      action_label: 'View dashboard', action_type: 'navigate', action_payload: {},
+      metric: '—', metric_label: 'insights paused', trend: null,
+    })
+  }
+
+  return items.slice(0, 3)
 }
 
 async function fetchWeatherForecast7Day(lat: number, lng: number) {
@@ -584,18 +638,22 @@ async function _POST(req: Request) {
 
   let recommendations: unknown[] = [];
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
     const dataStr = typeof context === 'string' ? context : JSON.stringify(context)
     const todayDate = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })
 
-    const _resp = await trackAICall(
-      { route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' },
-      () => _anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        system: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
+    // AI-ROUTER-FAILOVER-1 — this used to call the Anthropic SDK directly,
+    // bypassing every circuit breaker/fallback in the app: an outage here
+    // silently shipped an empty briefing (recommendations stayed []). Routed
+    // through the shared callAnthropic() so an Anthropic outage fails over to
+    // Gemini automatically, with the account-wide circuit breaker skipping
+    // doomed Anthropic calls for the next few minutes once tripped.
+    const resp = await callAnthropic<unknown[]>({
+      model: 'haiku',
+      agentKey: 'ops_narrative',
+      role: 'narrative',
+      businessId: business_id,
+      maxTokens: 1500,
+      systemPrompt: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:
 - id: string slug (e.g. "revenue-up-this-week")
@@ -617,22 +675,25 @@ ANTI-HALLUCINATION (non-negotiable):
 - NEVER claim a promotion is "working" unless it is explicitly active AND started — otherwise call it "scheduled".
 - NEVER state a customer count you weren't given — absence of data is not zero.
 - Cite exact figures from the data (e.g. revenue_last_7_days_aud) — do not round or alter them.`,
-        messages: [{
-          role: 'user',
-          content: `Today: ${todayDate}
+      userPrompt: `Today: ${todayDate}
 Business: ${business.name as string} (${business.industry as string ?? 'retail'}, Australia)
 
 Business data:
 ${dataStr.slice(0, 3000)}
 
-Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). If inbox_status.unread_messages > 0 or new_demand_signals > 0, include a "customers" item like "You have N unread customer messages and M new demand signals worth flagging — check your inbox". If scan_and_go_status is present, include a "revenue" item comparing its avg_basket_aud to normal_avg_basket_aud (e.g. "X scan-and-go checkouts today, avg basket $Y vs $Z normal"). JSON array only.`
-        }]
-      })
-    )
+Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). If inbox_status.unread_messages > 0 or new_demand_signals > 0, include a "customers" item like "You have N unread customer messages and M new demand signals worth flagging — check your inbox". If scan_and_go_status is present, include a "revenue" item comparing its avg_basket_aud to normal_avg_basket_aud (e.g. "X scan-and-go checkouts today, avg basket $Y vs $Z normal"). JSON array only.`,
+    }, [])
 
-    const raw = _resp.content[0].type === 'text' ? _resp.content[0].text.trim() : ''
-    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+    const cleaned = (resp.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
     recommendations = parseLLMJsonOr<unknown[]>(cleaned, [], 'daily-briefing', 'array')
+
+    // Both Anthropic and Gemini failed (rare double-outage) — we already know
+    // there IS actionable data (hasActionableData gated above this block), so
+    // a real-data templated item beats shipping a silently empty briefing.
+    if (!resp.success && recommendations.length === 0) {
+      recommendations = buildTemplatedBriefingFallback(context as Record<string, unknown>)
+      console.error('[daily-briefing] all AI providers failed, served templated fallback', { business_id })
+    }
   } catch (e) {
     console.error('[daily-briefing] AI call failed:', (e as Error).message)
   }

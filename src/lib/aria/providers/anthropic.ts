@@ -3,6 +3,8 @@ import { parseLLMJsonOr } from '@/lib/ai-json'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeCostCentsWithCache } from '../cost'
 import type { AgentKey, AgentRole } from '../types'
+import { isAnthropicCircuitOpen, isAnthropicUnreachable, recordAnthropicFailure, recordAnthropicFallbackProvider, recordAnthropicSuccess } from '../circuit-breaker'
+import { callGemini } from './gemini'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -44,53 +46,52 @@ async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T>
   throw lastErr ?? new Error('All retries failed')
 }
 
-// ONBOARD-FIX-1 (addendum) — account-wide circuit breaker for Anthropic
-// billing exhaustion. "credit balance too low" is an account-level condition,
-// not per-business, so a cached flag here short-circuits EVERY caller of this
-// shared module (ask/route.ts, ai-router.ts, model-router.ts, base-agent.ts —
-// the ~14+ call sites that funnel through callAnthropic/callAnthropicWithTools)
-// instead of each one independently discovering the same failure. Reuses
-// aria_signal_cache (no new table) so the flag survives across serverless
-// instances, not just the current warm container.
-const CREDIT_EXHAUSTED_KEY = 'anthropic:credits_exhausted'
-const CREDIT_EXHAUSTED_TTL_MIN = 10
-
-function isCreditExhaustedError(msg: string): boolean {
-  return /credit balance is too low|insufficient.*credit|billing.*hard.?limit/i.test(msg)
-}
-
-async function isCircuitOpen(): Promise<boolean> {
-  try {
-    const { data } = await supabaseAdmin.from('aria_signal_cache')
-      .select('expires_at').eq('cache_key', CREDIT_EXHAUSTED_KEY).maybeSingle()
-    return !!data && new Date(data.expires_at as string).getTime() > Date.now()
-  } catch { return false }
-}
-
-async function tripCircuit() {
-  try {
-    await supabaseAdmin.from('aria_signal_cache').upsert({
-      cache_key: CREDIT_EXHAUSTED_KEY, signal_type: 'circuit_breaker',
-      payload: { reason: 'credit_balance_too_low' },
-      expires_at: new Date(Date.now() + CREDIT_EXHAUSTED_TTL_MIN * 60_000).toISOString(),
-    }, { onConflict: 'cache_key' })
-  } catch (e) { console.error('[non-fatal]', e) }
+// AI-ROUTER-FAILOVER-1 — this module used to keep its OWN weaker circuit
+// breaker (aria_signal_cache, credit-exhaustion text match only), separate
+// from the account-wide one in ../circuit-breaker.ts that ask/route.ts uses
+// (aria_provider_incidents, trips on credit/rate-limit/5xx/timeout). Two
+// independent breakers meant each discovered the same Anthropic outage on its
+// own — the "6 failed AI calls per onboard" waste. Now consolidated onto the
+// one shared breaker so every caller of callAnthropic/callAnthropicWithTools
+// (ask/route.ts, ai-router.ts, model-router.ts, base-agent.ts, daily-briefing
+// — 14+ call sites) sees the same open/closed state and, on failure, fails
+// over to Gemini (already-proven provider, see ./gemini.ts) instead of just
+// returning the caller's static fallback.
+async function tryGeminiFallback<T>(
+  params: CallParams,
+  fallback: T,
+  incidentId: string | undefined,
+): Promise<{ data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean; provider: 'google' | 'none' }> {
+  const g = await callGemini({
+    systemPrompt: params.systemPrompt,
+    userPrompt: params.userPrompt,
+    maxTokens: params.maxTokens,
+    businessId: params.businessId,
+    agentKey: params.agentKey,
+    role: params.role,
+  })
+  if (!g.success) {
+    return { data: fallback, raw: '', cost_cents: 0, latency_ms: g.latency_ms, success: false, provider: 'none' }
+  }
+  if (incidentId) void recordAnthropicFallbackProvider(incidentId, 'google')
+  const data = parseLLMJsonOr<T>(g.raw, fallback, `aria/gemini-fallback/${params.agentKey}`)
+  return { data, raw: g.raw, cost_cents: g.cost_cents, latency_ms: g.latency_ms, success: true, provider: 'google' }
 }
 
 export async function callAnthropic<T = Record<string, unknown>>(
   params: CallParams,
   fallback: T,
-): Promise<{ data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean }> {
+): Promise<{ data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean; provider: 'anthropic' | 'google' | 'none' }> {
   const modelId = MODEL_IDS[params.model]
   const t0 = Date.now()
   let inputTokens = 0, outputTokens = 0, cachedReadTokens = 0, cachedWriteTokens = 0
   let raw = '', success = true, errorMessage: string | null = null
   let data: T = fallback
 
-  if (await isCircuitOpen()) {
-    return {
-      data: fallback, raw: '', cost_cents: 0, latency_ms: Date.now() - t0, success: false,
-    }
+  const circuit = await isAnthropicCircuitOpen()
+  if (circuit.open) {
+    const g = await tryGeminiFallback(params, fallback, circuit.incidentId)
+    return { ...g, latency_ms: Date.now() - t0, provider: g.success ? 'google' : 'none' }
   }
 
   try {
@@ -125,10 +126,10 @@ export async function callAnthropic<T = Record<string, unknown>>(
     cachedReadTokens = Number(usageAny.cache_read_input_tokens) || 0
     cachedWriteTokens = Number(usageAny.cache_creation_input_tokens) || 0
     data = parseLLMJsonOr<T>(raw, fallback, `aria/anthropic/${params.agentKey}`)
+    void recordAnthropicSuccess()
   } catch (e) {
     success = false
     errorMessage = (e as Error).message
-    if (isCreditExhaustedError(errorMessage)) void tripCircuit()
   }
 
   const latency = Date.now() - t0
@@ -158,7 +159,20 @@ export async function callAnthropic<T = Record<string, unknown>>(
     } catch { /* non-fatal — table may not exist yet */ }
   }
 
-  return { data, raw, cost_cents: cost, latency_ms: latency, success }
+  // AI-ROUTER-FAILOVER-1 — Anthropic failed: record the failure (may trip the
+  // shared circuit for every other caller) and fail over to Gemini before
+  // handing back the caller's static fallback, so a single Anthropic outage
+  // doesn't surface as "no answer" while Gemini is healthy.
+  if (!success) {
+    const tripped = isAnthropicUnreachable(errorMessage) ? await recordAnthropicFailure(errorMessage ?? '') : { tripped: false, incidentId: undefined }
+    const g = await tryGeminiFallback(params, fallback, tripped.incidentId)
+    if (g.success) {
+      return { data: g.data, raw: g.raw, cost_cents: cost + g.cost_cents, latency_ms: Date.now() - t0, success: true, provider: 'google' }
+    }
+    return { data, raw, cost_cents: cost, latency_ms: Date.now() - t0, success: false, provider: 'none' }
+  }
+
+  return { data, raw, cost_cents: cost, latency_ms: latency, success, provider: 'anthropic' }
 }
 
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
@@ -201,10 +215,15 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
   const toolCalls: Array<{ name: string; input: unknown; result: unknown; ms: number }> = []
   let thinkingTokensTotal = 0
 
-  if (await isCircuitOpen()) {
+  // Tool-calling has no Gemini equivalent here (different function-calling
+  // schema) — this shares circuit STATE with callAnthropic so an outage
+  // discovered by either is visible to both, but callers of the tool loop
+  // (e.g. ask/route.ts) already run their own no-tools grounded fallback
+  // (degradedGroundedAnswer) when this returns success:false.
+  if ((await isAnthropicCircuitOpen()).open) {
     return {
       raw: '', tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0,
-      latency_ms: Date.now() - t0, success: false, error_message: 'anthropic_credits_exhausted',
+      latency_ms: Date.now() - t0, success: false, error_message: 'anthropic_unreachable',
     }
   }
 
@@ -292,10 +311,11 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
       }
       messages.push({ role: 'user', content: toolResults })
     }
+    void recordAnthropicSuccess()
   } catch (e) {
     success = false
     errorMessage = (e as Error).message
-    if (isCreditExhaustedError(errorMessage)) void tripCircuit()
+    if (isAnthropicUnreachable(errorMessage)) void recordAnthropicFailure(errorMessage)
   }
 
   const latency = Date.now() - t0

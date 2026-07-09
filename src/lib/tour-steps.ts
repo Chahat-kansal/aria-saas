@@ -82,6 +82,14 @@ export const TOUR_STEPS: TourStep[] = [
     ctaLabel: 'Record opening float',
   },
   {
+    key: 'payment_methods',
+    href: '/pos/settings/payments',
+    dataTourId: 'payment_methods',
+    title: 'Set up how you take payment',
+    narration: () => `Before: you're not sure which payment types are actually switched on, or what happens with card surcharges. Aria way: confirm what you accept — cash, card, split — and set your surcharge in one place, so takings match what customers actually pay.`,
+    ctaLabel: 'Configure payments',
+  },
+  {
     key: 'cash_flow',
     href: '/dashboard/cash-flow',
     dataTourId: 'cash_flow',
@@ -99,11 +107,11 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     key: 'cx_app',
-    href: '',
+    href: '/dashboard/share',
     dataTourId: null,
     title: 'Your customers just got an app',
-    narration: d => `Here's the fun part: ${d.businessName} now has its own customer app — wallet card, rewards, the lot — no download required. This is the bit owners never expect.`,
-    ctaLabel: 'View your app',
+    narration: d => `Here's the fun part: ${d.businessName} now has its own customer app — wallet card, rewards, the lot — no download required. This is the bit owners never expect. Share the link or QR code with a customer and watch their face.`,
+    ctaLabel: 'Share your app',
   },
   {
     key: 'set_hours',

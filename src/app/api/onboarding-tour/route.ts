@@ -32,6 +32,8 @@ async function computeAutoCompleted(businessId: string): Promise<{ keys: string[
     { data: loyaltyConfig },
     { data: biz },
     { count: winbackCount },
+    { count: reorderScheduleCount },
+    { count: paymentSettingsCount },
   ] = await Promise.all([
     supabaseAdmin.from('pos_products').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_active', true),
     supabaseAdmin.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).neq('status', 'voided'),
@@ -42,6 +44,8 @@ async function computeAutoCompleted(businessId: string): Promise<{ keys: string[
     supabaseAdmin.from('pos_loyalty_config').select('program_enabled').eq('business_id', businessId).maybeSingle(),
     supabaseAdmin.from('businesses').select('google_business_url, google_place_id, morning_briefing_enabled, evening_briefing_enabled, weekly_report_enabled, review_auto_request_enabled').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('winback_automations').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_active', true),
+    supabaseAdmin.from('pos_reorder_schedules').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('enabled', true),
+    supabaseAdmin.from('pos_settings').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
   ])
 
   const keys: string[] = []
@@ -49,6 +53,7 @@ async function computeAutoCompleted(businessId: string): Promise<{ keys: string[
   if ((saleCount ?? 0) > 0) keys.push('test_sale')
   if ((staffCount ?? 0) > 0) keys.push('invite_staff')
   if ((cashMovementCount ?? 0) > 0) keys.push('cash_open')
+  if ((paymentSettingsCount ?? 0) > 0) keys.push('payment_methods')
   if ((expenseCount ?? 0) > 0) keys.push('cash_flow')
   if (loyaltyConfig?.program_enabled) keys.push('loyalty')
   if ((hoursCount ?? 0) > 0) keys.push('set_hours')
@@ -61,6 +66,7 @@ async function computeAutoCompleted(businessId: string): Promise<{ keys: string[
   if (biz?.review_auto_request_enabled) automations.push('Review requests after a sale')
   if (loyaltyConfig?.program_enabled) automations.push('Loyalty points on every sale')
   if ((winbackCount ?? 0) > 0) automations.push('Win-back messages to quiet customers')
+  if ((reorderScheduleCount ?? 0) > 0) automations.push('Low-stock reorder alerts')
   if (biz?.weekly_report_enabled) automations.push('Scheduled weekly reports')
 
   return { keys, productCount: productCount ?? 0, automations }

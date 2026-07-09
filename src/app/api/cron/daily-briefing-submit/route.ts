@@ -10,6 +10,60 @@ import { submitBatch } from '@/lib/aria-batch'
 import { nowAEST, toAESTStart, toAESTEnd, startOfWeekAEST } from '@/lib/date-au'
 import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
+import { isAnthropicUnreachable, recordAnthropicFailure, recordTotalOutage } from '@/lib/aria/circuit-breaker'
+import { callGemini } from '@/lib/aria/providers/gemini'
+
+// AI-ROUTER-FAILOVER-1 — the Anthropic Batches API has no per-item Gemini
+// equivalent, so a submitBatch() outage used to fail every business's
+// briefing in one shot with zero fallback. When submission itself fails with
+// an "Anthropic unreachable" error, generate each business's briefing
+// synchronously via Gemini instead (slower, no batching, but every business
+// still gets a real briefing). Bounded concurrency so this stays well inside
+// the 300s cron deadline even for a large business count.
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
+async function fallbackToGeminiPerBusiness(requests: Array<{ custom_id: string; params: { system?: unknown; messages: unknown[] } }>): Promise<{ gemini: number; templated: number; writeErrors: number }> {
+  const today = new Date().toISOString().split('T')[0]
+  let gemini = 0, templated = 0, writeErrors = 0
+
+  await mapWithConcurrency(requests, 8, async req => {
+    const systemPrompt = typeof req.params.system === 'string' ? req.params.system : ARIA_SYSTEM_PROMPT
+    const userMsg = req.params.messages[0] as { content?: string } | undefined
+    const userPrompt = userMsg?.content ?? ''
+
+    const g = await callGemini({
+      systemPrompt, userPrompt, maxTokens: 512,
+      businessId: req.custom_id, agentKey: 'ops_narrative', role: 'narrative',
+    })
+
+    const usedGemini = g.success && !!g.raw.trim()
+    const content = usedGemini
+      ? g.raw.trim()
+      : "Aria's morning briefing is catching up today — your dashboard numbers are live and unaffected."
+
+    const { error } = await supabaseAdmin.from('aria_daily_briefings').upsert({
+      business_id: req.custom_id, briefing_date: today, content,
+      generated_at: new Date().toISOString(), source: usedGemini ? 'gemini_fallback' : 'template_fallback',
+    }, { onConflict: 'business_id,briefing_date' })
+
+    if (error) { writeErrors++; console.error('[daily-briefing-submit] gemini fallback upsert failed', { business_id: req.custom_id, error: error.message }) }
+    else if (usedGemini) gemini++
+    else templated++
+  })
+
+  return { gemini, templated, writeErrors }
+}
 
 interface MarketCtx {
   overpricedCount: number
@@ -148,7 +202,34 @@ async function _GET(req: Request) {
       }
     }))
 
-    const batchId = await submitBatch(requests)
+    // AI-ROUTER-FAILOVER-1 — submitBatch() failing means Anthropic is
+    // unreachable for EVERY business in one shot (no per-item retry inside
+    // the batch API). Trip the shared circuit breaker (so other Anthropic
+    // callers stop hammering it too) and fail every business over to Gemini
+    // individually rather than letting the whole day's briefings silently
+    // fail — this is the exact "onboarding + briefing broke on Anthropic $0"
+    // failure mode this fix exists for.
+    let batchId: string
+    try {
+      batchId = await submitBatch(requests)
+    } catch (batchErr) {
+      const msg = (batchErr as Error).message
+      if (!isAnthropicUnreachable(msg)) throw batchErr
+
+      const { tripped } = await recordAnthropicFailure(msg)
+      console.error('[daily-briefing-submit] batch submit failed, Anthropic unreachable — falling over to Gemini per business', { msg, tripped })
+
+      const { gemini, templated, writeErrors } = await fallbackToGeminiPerBusiness(requests)
+      if (gemini === 0 && templated === 0) await recordTotalOutage(msg)
+
+      await supabaseAdmin.from('cron_logs').update({
+        status: 'completed', finished_at: new Date().toISOString(),
+        businesses_processed: gemini + templated,
+        errors: { message: 'anthropic_unreachable, served via fallback', anthropic_error: msg, gemini_served: gemini, templated_served: templated, write_errors: writeErrors },
+      }).eq('id', cronLogId)
+
+      return NextResponse.json({ ok: true, degraded: true, gemini_served: gemini, templated_served: templated, count: businesses.length })
+    }
 
     await supabaseAdmin.from('aria_batch_jobs').insert({
       batch_id: batchId, job_type: 'daily_briefing',
