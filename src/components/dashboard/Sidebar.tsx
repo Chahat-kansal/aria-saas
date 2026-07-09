@@ -15,6 +15,12 @@ type NavItemDef = {
   section: string;
   target?: string;
   flag?: string; // SS — gates this item behind a feature_flags key (lock badge + upgrade link when plan lacks it)
+  // ONBOARD-FIX-1 (feature-set confirmation) — a DIFFERENT axis from `flag`
+  // above: not a paywall, an owner preference ("I don't run bookings, hide
+  // it"). Same feature_flags.disabled_for_business_ids storage/semantics as
+  // `flag`, deliberately kept as a separate property so this never gets
+  // confused with plan-tier gating. Fully hidden when disabled, not locked.
+  industryFlag?: string;
 };
 
 function SocialIcon({ className }: { className?: string }) {
@@ -51,14 +57,14 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'customers':                  { href: '/dashboard/customers',                label: 'Customers',          icon: UsersIcon,          section: 'Overview'     },
   'customer-tabs':              { href: '/dashboard/customer-tabs',            label: 'Customer tabs',      icon: UsersIcon,          section: 'Overview'     },
   'locations':                  { href: '/dashboard/locations',                label: 'Locations',          icon: GridIcon,           section: 'Overview'     },
-  'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
+  'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations', industryFlag: 'nav_ordering'   },
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
   'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview', flag: 'custom_features' },
   'staff':                      { href: '/dashboard/staff',                    label: 'Team',              icon: TeamIcon,           section: 'Overview'     },
   'pos':                        { href: '/pos',                                label: 'AriaPOS',           icon: RegisterIcon,       badge: 'New', section: 'Modules', target: '_blank' },
   'winback':                    { href: '/dashboard/winback',                  label: 'Customer winback',  icon: UsersIcon,          section: 'Revenue'      },
   'slow-day':                   { href: '/dashboard/churn#slow-day',             label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
-  'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation'   },
+  'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation', industryFlag: 'nav_reviews'   },
   'seo':                        { href: '/dashboard/seo',                      label: 'SEO',               icon: GlobeIcon,          badge: 'AI', section: 'Reputation' },
   'profit-leaks':               { href: '/dashboard/profit-leaks',             label: 'Profit leaks',      icon: AlertIcon,          section: 'Intelligence' },
   'cash-flow':                  { href: '/dashboard/cash-flow',               label: 'Cash flow',         icon: TrendingUpIcon,     section: 'Intelligence' },
@@ -69,13 +75,13 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'invoices':                   { href: '/dashboard/invoices',                 label: 'Invoices',          icon: FileTextIcon,       badge: 'AI', section: 'Revenue' },
   'gift-cards':                 { href: '/dashboard/gift-cards',               label: 'Gift cards',        icon: CreditCardIcon,     section: 'Revenue' },
   'xero':                       { href: '/dashboard/xero',                     label: 'Xero sync',         icon: FileTextIcon,       section: 'Revenue' },
-  'wholesale':                  { href: '/dashboard/wholesale',                label: 'Wholesale orders',  icon: ClipboardIcon,      badge: 'AI', section: 'Revenue' },
-  'bookings':                   { href: '/dashboard/bookings',                 label: 'Bookings + sales',  icon: CalendarIcon,       section: 'Revenue'      },
+  'wholesale':                  { href: '/dashboard/wholesale',                label: 'Wholesale orders',  icon: ClipboardIcon,      badge: 'AI', section: 'Revenue', industryFlag: 'nav_wholesale' },
+  'bookings':                   { href: '/dashboard/bookings',                 label: 'Bookings + sales',  icon: CalendarIcon,       section: 'Revenue', industryFlag: 'nav_bookings'      },
   'quote-builder':              { href: '/dashboard/quote-builder',            label: 'Quote builder',     icon: FileTextIcon,       section: 'Pro tools'    },
-  'compliance':                 { href: '/dashboard/compliance',               label: 'Compliance',        icon: CheckSquareIcon,    section: 'Pro tools'    },
+  'compliance':                 { href: '/dashboard/compliance',               label: 'Compliance',        icon: CheckSquareIcon,    section: 'Pro tools', industryFlag: 'nav_compliance'    },
   'website-chat':               { href: '/dashboard/website-chat',             label: 'Website chat',      icon: GlobeIcon,          badge: 'New', section: 'Modules' },
   'receipt-scan':               { href: '/dashboard/receipt-scan',             label: 'Receipt scan',      icon: CameraIcon,         badge: 'New', section: 'Modules' },
-  'reorder':                    { href: '/dashboard/reorder',                  label: 'Smart reorder',     icon: TruckIcon,          badge: 'AI',  section: 'Intelligence' },
+  'reorder':                    { href: '/dashboard/reorder',                  label: 'Smart reorder',     icon: TruckIcon,          badge: 'AI',  section: 'Intelligence', industryFlag: 'nav_reorder' },
   'recipes':                    { href: '/dashboard/recipes',                  label: 'Recipes & training', icon: GridIcon,            section: 'Pro tools'    },
   'variance':                   { href: '/dashboard/variance',                 label: 'Variance & shrinkage', icon: AlertTriangleIcon, badge: 'AI', section: 'Intelligence' },
   'missed-demand':              { href: '/dashboard/missed-demand',            label: 'Missed demand',     icon: ShoppingBagIcon,    badge: 'New', section: 'Intelligence' },
@@ -184,6 +190,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({});
   const [health, setHealth] = useState<{ score: number; grade: string } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [disabledFeatures, setDisabledFeatures] = useState<Set<string>>(new Set());
   const switcherRef = useRef<HTMLDivElement>(null);
   const config = resolveIndustryConfig(business.industry, business.business_model);
 
@@ -212,6 +219,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
       setBadgeCounts(merged);
       if (h?.grade) setHealth({ score: h.score as number, grade: h.grade as string });
     });
+  }, [business?.id]);
+
+  // ONBOARD-FIX-1 (feature-set confirmation) — which nav_* items this owner
+  // turned off during onboarding (or later in Settings). Separate fetch from
+  // the plan-tier hasFlag() map since it's a real per-business preference.
+  useEffect(() => {
+    if (!business?.id) return;
+    fetch('/api/features/disabled').then(r => r.json()).then(d => {
+      if (Array.isArray(d.disabled)) setDisabledFeatures(new Set(d.disabled as string[]));
+    }).catch(() => {});
   }, [business?.id]);
 
   useEffect(() => {
@@ -276,6 +293,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     if (key === 'pos' && business.pos_enabled === false) continue;
     const item = ALL_ITEMS[key];
     if (!item) continue;
+    // ONBOARD-FIX-1 — fully hidden (not locked/upsell) when the owner turned
+    // this off during onboarding's feature-set confirmation.
+    if (item.industryFlag && disabledFeatures.has(item.industryFlag)) continue;
     if (!sections[item.section]) sections[item.section] = [];
     if (!sections[item.section].some(i => i.href === item.href)) {
       sections[item.section].push(item);

@@ -6,6 +6,7 @@ import { SitePreviewCard } from '@/components/SitePreviewCard';
 import type { SitePreviewResult } from '@/app/api/site-preview/route';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import Papa from 'papaparse';
+import { getFeatureSetForBusiness } from '@/lib/industry-features';
 
 function validateABN(raw: string): boolean {
   const digits = raw.replace(/\s/g, '');
@@ -18,7 +19,7 @@ function validateABN(raw: string): boolean {
   return sum % 89 === 0;
 }
 
-const STEPS = ['identity', 'abn', 'details', 'operations', 'products', 'goals'] as const;
+const STEPS = ['identity', 'abn', 'details', 'operations', 'features', 'products', 'goals'] as const;
 type Step = typeof STEPS[number];
 type Setter = (k: keyof FD, v: FD[keyof FD]) => void;
 
@@ -30,12 +31,13 @@ const STAFF_OPTS = ['Just me', '2–5', '6–15', '16–50', '51+'];
 const REV_OPTS = ['Under $10k', '$10k–$25k', '$25k–$50k', '$50k–$100k', '$100k–$250k', '$250k+'];
 const CHALLENGES = ['cash flow', 'staffing', 'marketing', 'stock', 'compliance', 'time', 'winning customers back', 'knowing my numbers'];
 
-const HEADINGS = ['Tell us about yourself', 'Your ABN details', 'Business location & type', 'Operations', 'Add your first products', 'Your goals'];
+const HEADINGS = ['Tell us about yourself', 'Your ABN details', 'Business location & type', 'Operations', 'Confirm your features', 'Add your first products', 'Your goals'];
 const SUBHEADINGS = [
   "We'll use this to personalise your Aria experience.",
   'Skip for now — add or verify your ABN in Settings at any time.',
   'Help us set up your industry-specific dashboard.',
   'Help us understand how your business runs.',
+  "Aria's picked a sensible default for your industry — you can change any of this later.",
   'Optional — add a few to get your POS started, or skip and import/add them later.',
   'What challenges are you working to overcome?',
 ];
@@ -50,6 +52,7 @@ type FD = {
   biggest_challenge: string[]; goals_notes: string; weekly_revenue_target: string;
   products: { name: string; price: string; category: string }[];
   lat: string; lng: string; place_id: string; formatted_address: string;
+  feature_choices: Record<string, boolean>;
 };
 
 const EMPTY: FD = {
@@ -61,15 +64,17 @@ const EMPTY: FD = {
   biggest_challenge: [], goals_notes: '', weekly_revenue_target: '',
   products: [],
   lat: '', lng: '', place_id: '', formatted_address: '',
+  feature_choices: {},
 };
 
 function isStepValid(step: number, f: FD): boolean {
   if (step === 0) return f.legal_name.trim().length > 0 && f.owner_name.trim().length > 0;
   if (step === 2) return f.business_model.length > 0 && f.industry.length > 0;
-  // Products step (4) — this is the seed data Aria derives categories, config
+  // Products step (5) — this is the seed data Aria derives categories, config
   // etc. from, so product businesses need at least 1 (manual/CSV/photo — any
   // source). Service businesses skip products entirely (not applicable).
-  if (step === 4) return f.business_model === 'service' || f.products.length > 0;
+  if (step === 5) return f.business_model === 'service' || f.products.length > 0;
+  // Features step (4) is always skippable — sensible defaults are pre-ticked.
   return true;
 }
 
@@ -211,8 +216,9 @@ export default function OnboardingWizard() {
         )}
         {idx === 2 && <Details form={form} set={set} />}
         {idx === 3 && <Operations form={form} set={set} />}
-        {idx === 4 && <Products form={form} set={set} />}
-        {idx === 5 && <Goals form={form} set={set} />}
+        {idx === 4 && <Features form={form} set={set} />}
+        {idx === 5 && <Products form={form} set={set} />}
+        {idx === 6 && <Goals form={form} set={set} />}
         <div className="flex gap-3 mt-6">
           {idx > 0 && (
             <button onClick={() => setIdx(idx - 1)} disabled={saving}
@@ -514,6 +520,53 @@ const CSV_HEADER_MAP: Record<string, 'name' | 'price' | 'category'> = {
   'price': 'price', 'rrp': 'price', 'sell price': 'price', 'selling price': 'price', 'retail price': 'price', 'unit price': 'price', 'sale price': 'price',
   'category': 'category', 'department': 'category', 'product type': 'category', 'type': 'category',
 };
+
+// ── Feature-set confirmation (ONBOARD-FIX-1) — Aria proposes a smart default
+//    per industry; owner confirms/adjusts on one screen, not a 50-item form.
+function Features({ form, set }: { form: FD; set: Setter }) {
+  const featureSet = getFeatureSetForBusiness(form.industry, form.business_model);
+
+  // Seed defaults into form.feature_choices the first time this step is seen
+  // for this industry (industry is already known — this step runs after
+  // Details). Re-seeds if the industry changes (owner went Back and changed it).
+  useEffect(() => {
+    const seeded = featureSet.reduce<Record<string, boolean>>((acc, f) => {
+      acc[f.key] = form.feature_choices[f.key] ?? f.defaultOn;
+      return acc;
+    }, {});
+    const changed = featureSet.some(f => form.feature_choices[f.key] === undefined);
+    if (changed) set('feature_choices', seeded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.industry, form.business_model]);
+
+  if (featureSet.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      {featureSet.map(f => {
+        const on = form.feature_choices[f.key] ?? f.defaultOn;
+        return (
+          <div key={f.key} className="flex items-center justify-between gap-3 p-3 border border-[rgba(45,82,64,0.15)] rounded-xl">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[#2D5240]">{f.label}</p>
+              <p className="text-xs text-[rgba(0,0,0,0.45)] mt-0.5">{f.description}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => set('feature_choices', { ...form.feature_choices, [f.key]: !on })}
+              aria-pressed={on}
+              className="flex-shrink-0 relative rounded-full transition-colors"
+              style={{ width: 44, height: 24, background: on ? '#2D5240' : 'rgba(0,0,0,0.15)' }}
+            >
+              <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all" style={{ left: on ? 22 : 2 }} />
+            </button>
+          </div>
+        );
+      })}
+      <p className="text-xs text-[rgba(0,0,0,0.4)] pt-1">You can change any of this later in Settings.</p>
+    </div>
+  );
+}
 
 function Products({ form, set }: { form: FD; set: Setter }) {
   const products = form.products;
