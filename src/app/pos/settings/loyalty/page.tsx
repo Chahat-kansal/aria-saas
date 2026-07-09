@@ -136,8 +136,8 @@ function CounterQRCard({ bizId, outlet }: { bizId: string; outlet: Outlet }) {
     if (!canvasRef.current) return;
     QRCode.toCanvas(canvasRef.current, qrValue, {
       errorCorrectionLevel: 'M',
-      margin: 2,
-      width: 140,
+      margin: 4,
+      width: 600,
       color: { dark: '#1a1a16', light: '#ffffff' },
     }, (err) => {
       if (err) console.error('[CounterQRCard] QR error:', err);

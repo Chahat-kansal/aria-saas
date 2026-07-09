@@ -53,6 +53,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
   const [mode, setMode] = useState<ScanMode>('show')
   const [checkinStatus, setCheckinStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
   const [checkinMsg, setCheckinMsg] = useState('')
+  const [debugMsg, setDebugMsg] = useState('')
   const qrCanvasRef = useRef<HTMLCanvasElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -165,39 +166,94 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
     }
   }, [bizId, slug])
 
-  // ── Start camera + ZXing QR scan loop ─────────────────────────────────────
+  // ── Start camera: BarcodeDetector (Chrome/Android) → jsQR canvas fallback ──
   const startCamera = useCallback(async () => {
     setCheckinStatus('scanning')
     setCheckinMsg('')
+    setDebugMsg('requesting camera…')
     scanningRef.current = true
+
+    // 1 — Acquire stream
+    let stream: MediaStream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-
-      const { BrowserQRCodeReader } = await import('@zxing/library')
-      const reader = new BrowserQRCodeReader()
-
-      const loop = async () => {
-        if (!scanningRef.current || !videoRef.current) return
-        try {
-          const result = await reader.decodeFromVideoElement(videoRef.current)
-          if (result && scanningRef.current) {
-            stopCamera()
-            await processCounterQR(result.getText())
-          }
-        } catch {
-          if (scanningRef.current) setTimeout(loop, 300)
-        }
-      }
-      loop()
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
     } catch {
       setCheckinStatus('error')
-      setCheckinMsg('Camera access denied. Allow camera permission and try again.')
+      setCheckinMsg('Camera access denied — allow camera in browser settings, then retry.')
+      setDebugMsg('getUserMedia rejected')
+      return
     }
+    streamRef.current = stream
+
+    const video = videoRef.current
+    if (!video) { stream.getTracks().forEach(t => t.stop()); return }
+
+    video.srcObject = stream
+    try { await video.play() } catch { /* autoPlay attr handles it on some browsers */ }
+    setDebugMsg('camera on — waiting for first frame…')
+
+    // 2 — iOS: videoWidth stays 0 until loadedmetadata; guard before first rAF
+    if (video.videoWidth === 0) {
+      await new Promise<void>(resolve => {
+        const onMeta = () => { video.removeEventListener('loadedmetadata', onMeta); resolve() }
+        video.addEventListener('loadedmetadata', onMeta)
+        setTimeout(resolve, 3000) // safety
+      })
+    }
+    if (!scanningRef.current) return // user left while we waited
+
+    // 3a — Native BarcodeDetector (Chrome / Android)
+    const winAny = window as unknown as Record<string, unknown>
+    if (typeof winAny['BarcodeDetector'] === 'function') {
+      setDebugMsg('scanning… (BarcodeDetector)')
+      const DetCtor = winAny['BarcodeDetector'] as new (opts: { formats: string[] }) => {
+        detect(v: HTMLVideoElement): Promise<Array<{ rawValue: string }>>
+      }
+      const detector = new DetCtor({ formats: ['qr_code'] })
+      const bdLoop = async () => {
+        if (!scanningRef.current) return
+        try {
+          const codes = await detector.detect(video)
+          if (codes.length > 0 && scanningRef.current) {
+            const val = codes[0].rawValue
+            stopCamera()
+            if ('vibrate' in navigator) navigator.vibrate(50)
+            setDebugMsg('decoded: ' + val.slice(0, 60))
+            await processCounterQR(val)
+            return
+          }
+        } catch { /* no QR this frame */ }
+        if (scanningRef.current) requestAnimationFrame(() => { bdLoop().catch(() => undefined) })
+      }
+      bdLoop().catch(() => undefined)
+      return
+    }
+
+    // 3b — jsQR canvas fallback (Safari / Firefox)
+    setDebugMsg('scanning… (jsQR)')
+    const { default: jsQR } = await import('jsqr')
+    const offscreen = document.createElement('canvas')
+    const ctx = offscreen.getContext('2d')
+    if (!ctx) return
+    const jsLoop = () => {
+      if (!scanningRef.current) return
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        offscreen.width = video.videoWidth
+        offscreen.height = video.videoHeight
+        ctx.drawImage(video, 0, 0)
+        const img = ctx.getImageData(0, 0, offscreen.width, offscreen.height)
+        const result = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+        if (result && scanningRef.current) {
+          stopCamera()
+          if ('vibrate' in navigator) navigator.vibrate(50)
+          setDebugMsg('decoded: ' + result.data.slice(0, 60))
+          void processCounterQR(result.data)
+          return
+        }
+      }
+      if (scanningRef.current) requestAnimationFrame(jsLoop)
+    }
+    jsLoop()
   }, [stopCamera, processCounterQR])
 
   useEffect(() => {
@@ -205,7 +261,7 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
       startCamera()
     } else {
       stopCamera()
-      if (mode === 'show') { setCheckinStatus('idle'); setCheckinMsg('') }
+      if (mode === 'show') { setCheckinStatus('idle'); setCheckinMsg(''); setDebugMsg('') }
     }
     return stopCamera
   }, [mode, startCamera, stopCamera])
@@ -285,10 +341,15 @@ export function ScanClient({ slug, bizId, bizName, logoUrl }: {
             )}
             {checkinStatus !== 'success' && (
               <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', background: '#111', aspectRatio: '1' }}>
-                <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div style={{ width: 180, height: 180, border: '2.5px solid ' + ACCENT, borderRadius: 16, boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }} />
                 </div>
+                {process.env.NODE_ENV !== 'production' && debugMsg && (
+                  <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, background: 'rgba(0,0,0,0.78)', color: ACCENT, fontFamily: 'monospace', fontSize: 10, padding: '4px 8px', borderRadius: 6, wordBreak: 'break-all', pointerEvents: 'none' }}>
+                    {debugMsg}
+                  </div>
+                )}
               </div>
             )}
             {checkinStatus === 'success' && (

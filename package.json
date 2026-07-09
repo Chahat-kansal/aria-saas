@@ -63,6 +63,7 @@
     "framer-motion": "^11.18.2",
     "hls.js": "^1.6.16",
     "jsbarcode": "^3.12.3",
+    "jsqr": "^1.4.0",
     "kokoro-js": "^1.2.1",
     "lucide-react": "^0.436.0",
     "mathjs": "^15.2.0",
