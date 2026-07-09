@@ -86,7 +86,7 @@ export function HistoryClient({ slug, initialCustomerId, initialPhone }: {
     const fetches: Promise<unknown>[] = []
     if (phone) {
       fetches.push(
-        fetch('/api/public/cx/' + slug + '/orders?phone=' + encodeURIComponent(phone)).then(r => r.json())
+        fetch('/api/public/cx/' + slug + '/orders').then(r => r.json())
       )
     }
     if (cid) {
