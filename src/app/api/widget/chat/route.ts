@@ -4,6 +4,7 @@ import { getBusinessItems, getBusinessSales, type Item } from '@/lib/business-da
 import { buildWebsiteAssistantContext, buildProductContext } from '@/lib/aria/website-assistant-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { limit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -149,6 +150,20 @@ async function _POST(req: Request) {
 
     const { message, visitor_id } = await req.json();
     if (!message?.trim()) return err('Message required', 400);
+
+    // Rate limits (Upstash sliding window — shared across all instances, fail-closed in prod)
+    const sessionKey = visitor_id ? String(visitor_id) : apiKey
+    const [sessionRl, bizRl] = await Promise.all([
+      limit('widget:session:' + sessionKey, { requests: 10, window: '1 m' }),
+      limit('widget:business:' + businessId, { requests: 100, window: '1 d' }),
+    ])
+    if (!sessionRl.ok || !bizRl.ok) {
+      const retryAfter = String(Math.max(sessionRl.retryAfter, bizRl.retryAfter))
+      return NextResponse.json(
+        { error: 'Rate limit exceeded — please slow down.' },
+        { status: 429, headers: { ...CORS, 'Retry-After': retryAfter } },
+      )
+    }
 
     // Load existing conversation from DB (server-side persistence)
     let serverHistory: { role: string; content: string }[] = [];

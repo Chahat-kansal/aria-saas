@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getCxSession } from '@/lib/cx/get-cx-session'
 import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
+import { limit } from '@/lib/rate-limit'
 
 // POST /api/public/cx/[slug]/checkin
 // Body: { outlet_id: string }
@@ -18,6 +19,14 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
 
   const session = await getCxSession(req, bid)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const rl = await limit('cx-checkin:identity:' + session.identity_id, { requests: 3, window: '15 m' })
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many check-ins. Please wait 15 minutes.' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    )
+  }
 
   let body: { outlet_id?: string } = {}
   try { body = await req.json() } catch { /* ok — outlet_id optional */ }

@@ -3,32 +3,16 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-
-// In-memory rate limit: 20 receipt views per IP per minute.
-// TODO: replace with Upstash Redis once multi-instance rate-limiting is needed.
-const ipMap = new Map<string, { count: number; start: number }>()
-const WINDOW_MS = 60_000
-const MAX_PER_WINDOW = 20
-
-function getIp(req: Request): string {
-  return (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
-}
-
-function checkRate(ip: string): boolean {
-  const now = Date.now()
-  const entry = ipMap.get(ip)
-  if (!entry || now - entry.start > WINDOW_MS) {
-    ipMap.set(ip, { count: 1, start: now })
-    return true
-  }
-  if (entry.count >= MAX_PER_WINDOW) return false
-  entry.count++
-  return true
-}
+import { limit } from '@/lib/rate-limit'
 
 export async function GET(req: Request, { params }: { params: { sale_id: string } }) {
-  if (!checkRate(getIp(req))) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
+  const rl = await limit('receipt:ip:' + ip, { requests: 20, window: '1 m' })
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    )
   }
 
   const { sale_id } = params

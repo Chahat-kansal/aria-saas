@@ -7,34 +7,12 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { normalisePhone, sendSMS } from '@/lib/clicksend'
 import { linkOrCreateMembership } from '@/lib/loyalty/membership'
 import { clearCxSessionCookie } from '@/lib/cx/get-cx-session'
+import { limit } from '@/lib/rate-limit'
 
 const COOKIE_NAME = 'cx_session'
 const OTP_TTL_MS = 10 * 60 * 1000         // 10 min
 const SESSION_DAYS = 90
 const MAX_ATTEMPTS = 5
-const MAX_SENDS_PER_PHONE = 3              // per 15-min window
-const PHONE_WINDOW_MS = 15 * 60 * 1000
-const MAX_SENDS_PER_IP = 8                // per 1-hour window
-const IP_WINDOW_MS = 60 * 60 * 1000
-
-// ── In-memory rate limit maps (module-scope, per cold-start) ──────────────
-const phoneSends = new Map<string, { count: number; start: number }>()
-const ipSends    = new Map<string, { count: number; start: number }>()
-
-function checkAndIncrementRate(
-  map: Map<string, { count: number; start: number }>,
-  key: string, max: number, windowMs: number,
-): boolean {
-  const now = Date.now()
-  const entry = map.get(key)
-  if (!entry || now - entry.start > windowMs) {
-    map.set(key, { count: 1, start: now })
-    return true
-  }
-  if (entry.count >= max) return false
-  entry.count++
-  return true
-}
 
 function hashCode(code: string): string {
   return crypto.createHash('sha256').update(code).digest('hex')
@@ -85,13 +63,23 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     if (!rawPhone) return NextResponse.json({ error: 'Phone required' }, { status: 400 })
     const phone = normalisePhone(rawPhone)
 
-    // Rate limits
+    // Rate limits (Upstash sliding window — shared across all instances, fail-closed in prod)
     const ip = getIp(req)
-    if (!checkAndIncrementRate(phoneSends, phone + ':' + bid, MAX_SENDS_PER_PHONE, PHONE_WINDOW_MS)) {
-      return NextResponse.json({ error: 'Too many codes sent. Please wait 15 minutes.' }, { status: 429 })
+    const [phoneRl, ipRl] = await Promise.all([
+      limit('cx-send:phone:' + phone + ':' + bid, { requests: 3, window: '15 m' }),
+      limit('cx-send:ip:' + ip, { requests: 8, window: '1 h' }),
+    ])
+    if (!phoneRl.ok) {
+      return NextResponse.json(
+        { error: 'Too many codes sent. Please wait 15 minutes.' },
+        { status: 429, headers: { 'Retry-After': String(phoneRl.retryAfter) } },
+      )
     }
-    if (!checkAndIncrementRate(ipSends, ip, MAX_SENDS_PER_IP, IP_WINDOW_MS)) {
-      return NextResponse.json({ error: 'Too many requests.' }, { status: 429 })
+    if (!ipRl.ok) {
+      return NextResponse.json(
+        { error: 'Too many requests.' },
+        { status: 429, headers: { 'Retry-After': String(ipRl.retryAfter) } },
+      )
     }
 
     // Generate code + hash
@@ -127,6 +115,15 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     if (!rawPhone || !rawCode) return NextResponse.json({ error: 'Phone and code required' }, { status: 400 })
     const phone = normalisePhone(rawPhone)
     const codeHash = hashCode(rawCode)
+
+    // Rate limit before any DB lookup to avoid timing oracle on account existence
+    const verifyRl = await limit('cx-verify:phone:' + phone + ':' + bid, { requests: 5, window: '15 m' })
+    if (!verifyRl.ok) {
+      return NextResponse.json(
+        { error: 'Too many verification attempts. Please request a new code.' },
+        { status: 429, headers: { 'Retry-After': String(verifyRl.retryAfter) } },
+      )
+    }
 
     // Find the most recent unexpired, unconsumed OTP for this phone+business
     const { data: otpRow, error: otpErr } = await supabaseAdmin

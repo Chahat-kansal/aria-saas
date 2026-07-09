@@ -6,34 +6,11 @@ import { NextResponse } from 'next/server'
 import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
+import { limit } from '@/lib/rate-limit'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 interface Message { role: 'user' | 'assistant'; content: string }
-
-// ── In-memory rate limits (TODO: replace with Upstash Redis for multi-instance correctness) ──
-const sessionMsgs = new Map<string, { count: number; start: number }>()
-const bizDayMsgs  = new Map<string, { count: number; start: number }>()
-const SESSION_MAX = 10
-const SESSION_WIN = 60_000
-const BIZ_DAY_MAX = 100
-const BIZ_DAY_WIN = 24 * 60 * 60_000
-
-function checkSessionRate(key: string): boolean {
-  const now = Date.now()
-  const e = sessionMsgs.get(key)
-  if (!e || now - e.start > SESSION_WIN) { sessionMsgs.set(key, { count: 1, start: now }); return true }
-  if (e.count >= SESSION_MAX) return false
-  e.count++; return true
-}
-
-function checkBizDayRate(bizId: string): boolean {
-  const now = Date.now()
-  const e = bizDayMsgs.get(bizId)
-  if (!e || now - e.start > BIZ_DAY_WIN) { bizDayMsgs.set(bizId, { count: 1, start: now }); return true }
-  if (e.count >= BIZ_DAY_MAX) return false
-  e.count++; return true
-}
 
 // ── Parse appointment details from AI response ─────────────────────────────
 function parseAppointmentJSON(text: string): Record<string, string> | null {
@@ -83,9 +60,13 @@ export async function POST(req: Request) {
 
     const businessId = config.business_id as string
 
-    // ── Per-session + per-business-day rate limits ────────────────────────
+    // ── Per-session + per-business-day rate limits (Upstash, fail-closed in prod) ─
     const sessionKey = (visitor_id ?? 'anon') + ':' + businessId
-    if (!checkSessionRate(sessionKey)) {
+    const [sessionRl, bizRl] = await Promise.all([
+      limit('widget:session:' + sessionKey, { requests: 10, window: '1 m' }),
+      limit('widget:business:' + businessId, { requests: 100, window: '1 d' }),
+    ])
+    if (!sessionRl.ok) {
       return NextResponse.json({
         reply: "You've sent a lot of messages! Please wait a moment before sending more.",
         conversation_id: conversation_id ?? null,
@@ -93,7 +74,7 @@ export async function POST(req: Request) {
         booking_id: null,
       })
     }
-    if (!checkBizDayRate(businessId)) {
+    if (!bizRl.ok) {
       return NextResponse.json({
         reply: 'Our chat assistant is resting for today. Please visit us in-store or give us a call directly.',
         conversation_id: conversation_id ?? null,
