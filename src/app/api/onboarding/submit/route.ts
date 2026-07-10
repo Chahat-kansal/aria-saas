@@ -1,41 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { ALL_FEATURES } from '@/lib/industry-features';
+import { applyFeatureChoices } from '@/lib/industry-features';
 
 // ONBOARD-FIX-1 (feature-set confirmation) — apply the owner's confirmed
-// feature choices. Reuses existing infra rather than a new table: loyalty
-// writes the canonical pos_loyalty_config.program_enabled; nav-gated
-// features use the SAME feature_flags.disabled_for_business_ids mechanism
-// plan-enforcement reads (src/lib/features.ts hasFeature() — disabled list
-// always wins). Only businesses that explicitly opt out get written here —
-// existing businesses are untouched (RULE0).
-async function applyFeatureChoices(businessId: string, choices: Record<string, boolean>) {
-  for (const feature of Object.values(ALL_FEATURES)) {
-    const chosen = choices[feature.key]
-    if (chosen === undefined) continue
-
-    if (feature.settingsField === 'loyalty_enabled') {
-      await supabaseAdmin.from('pos_loyalty_config')
-        .upsert({ business_id: businessId, program_enabled: chosen }, { onConflict: 'business_id' })
-      continue
-    }
-
-    if (feature.flagKey) {
-      const { data: flag } = await supabaseAdmin.from('feature_flags')
-        .select('disabled_for_business_ids').eq('flag_key', feature.flagKey).maybeSingle()
-      const current: string[] = (flag?.disabled_for_business_ids as string[] | null) ?? []
-      const wasDisabled = current.includes(businessId)
-      if (chosen === wasDisabled) {
-        // chosen=true & currently disabled -> re-enable; chosen=false & not yet disabled -> disable
-        const next = chosen ? current.filter(id => id !== businessId) : [...current, businessId]
-        await supabaseAdmin.from('feature_flags')
-          .update({ disabled_for_business_ids: next, updated_at: new Date().toISOString() })
-          .eq('flag_key', feature.flagKey)
-      }
-    }
-  }
-}
+// feature choices. applyFeatureChoices lives in src/lib/industry-features.ts
+// (SETTINGS-FEATURES-1) so the settings Features tab can reuse the exact same
+// read/write logic instead of drifting onto a second implementation.
 
 function validateABN(raw: string): boolean {
   const digits = raw.replace(/\s/g, '');

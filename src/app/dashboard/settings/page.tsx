@@ -11,7 +11,9 @@ const inp: React.CSSProperties = {
 }
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }
 
-const TABS = ['Business Profile', 'Notifications', 'Privacy & Data', 'Locations']
+const TABS = ['Business Profile', 'Notifications', 'Privacy & Data', 'Locations', 'Features']
+
+interface FeatureRow { key: string; label: string; description: string; enabled: boolean }
 
 export default function DashboardSettingsPage() {
   const [tab,     setTab]     = useState(0)
@@ -39,6 +41,9 @@ export default function DashboardSettingsPage() {
   const [outletForm,    setOutletForm]    = useState({ name: '', address: '', phone: '', is_active: true })
   const [editingOutlet, setEditingOutlet] = useState<string | null>(null)
   const [savingOutlet,  setSavingOutlet]  = useState(false)
+  const [features,        setFeatures]        = useState<FeatureRow[]>([])
+  const [featuresLoading, setFeaturesLoading] = useState(false)
+  const [togglingKey,     setTogglingKey]     = useState<string | null>(null)
 
   function loadOutlets() {
     setOutletsLoading(true)
@@ -67,6 +72,24 @@ export default function DashboardSettingsPage() {
     await fetch(`/api/pos/outlets?id=${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: next }) }).catch(() => {})
   }
 
+  function loadFeatures() {
+    setFeaturesLoading(true)
+    fetch('/api/settings/features').then(r => r.json()).then(d => { setFeatures(d.features ?? []); setFeaturesLoading(false) }).catch(() => setFeaturesLoading(false))
+  }
+
+  async function toggleFeature(key: string, next: boolean) {
+    setTogglingKey(key)
+    setFeatures(fs => fs.map(f => f.key === key ? { ...f, enabled: next } : f))
+    await fetch('/api/settings/features', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choices: { [key]: next } }),
+    }).catch(() => {
+      // revert on network failure — the toggle didn't actually take
+      setFeatures(fs => fs.map(f => f.key === key ? { ...f, enabled: !next } : f))
+    })
+    setTogglingKey(null)
+  }
+
   useEffect(() => {
     fetch('/api/settings/business').then(r => r.json()).then(d => {
       const b = d.business ?? d
@@ -82,6 +105,11 @@ export default function DashboardSettingsPage() {
     }).catch(() => {})
     loadOutlets()
   }, [])
+
+  useEffect(() => {
+    if (tab === 4 && features.length === 0 && !featuresLoading) loadFeatures()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   async function save() {
     setSaving(true)
@@ -355,6 +383,36 @@ export default function DashboardSettingsPage() {
         <input type="tel" value={ownerPhone} onChange={e => setOwnerPhone(e.target.value)}
           placeholder="+61400000000" style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
       </div>
+        </div>
+      )}
+
+      {tab === 4 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 16, lineHeight: 1.6 }}>
+            Aria set a sensible default for these when you onboarded. Turn any of them on or off — a feature you turn off is hidden from your dashboard, not deleted, and you can turn it back on anytime.
+          </p>
+          {featuresLoading ? (
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading…</p>
+          ) : (
+            features.map(f => (
+              <div key={f.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', borderBottom: '1px solid var(--divider)' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{f.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{f.description}</div>
+                </div>
+                <button
+                  onClick={() => toggleFeature(f.key, !f.enabled)}
+                  disabled={togglingKey === f.key}
+                  style={{
+                    width: 44, height: 24, borderRadius: 12, border: 'none', cursor: togglingKey === f.key ? 'not-allowed' : 'pointer',
+                    background: f.enabled ? 'var(--violet)' : 'var(--bg-elevated)', position: 'relative', transition: 'background 200ms',
+                    opacity: togglingKey === f.key ? 0.6 : 1,
+                  }}>
+                  <div style={{ position: 'absolute', top: 3, left: f.enabled ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 200ms' }} />
+                </button>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
