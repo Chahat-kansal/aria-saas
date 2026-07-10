@@ -16,8 +16,11 @@ async function getAuthCookies(request: import('@playwright/test').APIRequestCont
 
 test.describe('API health checks', () => {
   test('GET /api/health returns 200 with ok status', async ({ request }) => {
+    // CI-E2E-1 VERIFY — intentionally broken assertion (599 can never be a
+    // real response status) to confirm the e2e-local job actually goes red
+    // on a real failure. Revert before merging this branch.
     const res = await request.get('/api/health')
-    expect(res.status()).toBe(200)
+    expect(res.status()).toBe(599)
     const body = await res.json()
     expect(body.ok).toBe(true)
     expect(body.status).toBe('ok')
