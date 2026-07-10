@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { reverseEarnOnSale } from '@/lib/loyalty/reverseEarnOnSale'
 
 type Params = { params: { id: string } }
 
@@ -112,7 +113,7 @@ async function _DELETE(req: Request, { params }: Params) {
   const reason = String(body.reason ?? '').slice(0, 500)
   if (!reason) return NextResponse.json({ error: 'Void reason required' }, { status: 400 })
 
-  const { data: sale } = await supabase.from('pos_sales').select('id, business_id, status').eq('id', id).eq('business_id', bid).maybeSingle()
+  const { data: sale } = await supabase.from('pos_sales').select('id, business_id, status, total_amount').eq('id', id).eq('business_id', bid).maybeSingle()
   if (!sale) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (sale.status === 'voided') return NextResponse.json({ error: 'Already voided' }, { status: 400 })
 
@@ -121,6 +122,12 @@ async function _DELETE(req: Request, { params }: Params) {
     last_edited_at: new Date().toISOString(),
     last_edited_by: user.id,
   }).eq('id', id).eq('business_id', bid)
+
+  // LOYALTY-FINISH — reverse any loyalty points earned on this sale. Never
+  // blocks the void itself; a reversal failure is logged, not fatal.
+  try {
+    await reverseEarnOnSale({ businessId: bid, saleId: id, totalAmount: Number(sale.total_amount ?? 0) })
+  } catch (e) { console.error('[pos/sales-history void] loyalty reversal failed:', (e as Error).message) }
 
   await supabase.from('pos_sale_edits').insert({
     sale_id: id,

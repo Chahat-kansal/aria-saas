@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { verifyManagerToken } from '@/lib/pos/manager-token'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { reverseEarnOnSale } from '@/lib/loyalty/reverseEarnOnSale'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -43,6 +44,12 @@ async function _POST(req: Request, { params }: Params) {
     await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }) // cache
     await adjustOutletStock(supabase, { businessId: bid, outletId: voidOutletId, productId: item.product_id, delta: Math.abs(Number(item.quantity)) }) // canonical
   }
+
+  // LOYALTY-FINISH — reverse any loyalty points earned on this sale. Never
+  // blocks the void itself; a reversal failure is logged, not fatal.
+  try {
+    await reverseEarnOnSale({ businessId: bid, saleId: id, totalAmount: Number(sale.total_amount ?? 0) })
+  } catch (e) { console.error('[pos/sales/void] loyalty reversal failed:', (e as Error).message) }
 
   const { error: auditErr } = await supabase.from('pos_audit_log').insert({
     business_id: bid, action: 'void', reason_code: reason_code ?? 'other',

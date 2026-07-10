@@ -127,7 +127,12 @@ function Barcode1D({ value, heightPx, widthPercent, barWidth = 3 }: {
   )
 }
 
-// ── Full-width 1D barcode strip on the card face. Tap opens the scan modal.
+// ── 1D barcode strip on the card face, inset with its own rounding — LOYALTY-FINISH:
+// this used to be a flush full-width strip relying on the CARD's own overflow:hidden
+// to clip its corners, which left a visible seam where the strip's square corners met
+// the card's rounded ones. Own borderRadius + margin (mx-3.5 mb-3.5) makes it a
+// distinct inset panel instead, matching public/menu/_refs/cx-app-wallet.png (the
+// card's black face visibly frames the white strip on all sides, no full-bleed edge).
 function BarcodeStrip({ value, onTap }: {
   value: string | null
   onTap: () => void
@@ -141,6 +146,8 @@ function BarcodeStrip({ value, onTap }: {
       onClick={onTap}
       style={{
         background: '#ffffff',
+        borderRadius: 12,
+        margin: '0 14px 14px',
         padding: '8px 0',
         cursor: 'pointer',
         display: 'flex',
@@ -438,7 +445,7 @@ function LoyaltyCard({ bizName, name, tier, walletBal, pointsBalance, programEna
           </div>
         </div>
 
-        {/* ── 1D barcode band — flush full card width, SVG, tap opens QR modal ── */}
+        {/* ── 1D barcode band — inset panel with its own rounding, SVG, tap opens QR modal ── */}
         <BarcodeStrip value={identityId} onTap={onScanOpen} />
       </div>
     </div>
@@ -576,12 +583,17 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
         @keyframes cx-spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Header — full-bleed café photo, fades to #fafafa at bottom ── */}
+      {/* ── Header — full-bleed café photo, fades to #fafafa at bottom ──
+          LOYALTY-FINISH: had no border-radius at all — a hard rectangular
+          edge against the app's otherwise-rounded design language, visible
+          as a seam versus public/menu/_refs/cx-app-wallet.png's rounded
+          bottom corners. Rounded bottom-only (flush with viewport top). */}
       <div style={{
         position: 'relative',
         height: '38vh',
         background: heroBg + ', linear-gradient(160deg, #3a2010 0%, #1a0d04 100%)',
-        border: 'none',
+        borderRadius: '0 0 24px 24px',
+        overflow: 'hidden',
       }}>
         {/* Cream fade — starts at 28%, fully opaque #fafafa by 88% */}
         <div style={{
@@ -623,7 +635,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
           {/* Apple + Google pills */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <a
-              href={'/api/public/wallet-pass/' + slug}
+              href={'/api/public/cx/' + slug + '/wallet-pass?format=apple_json'}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
                 background: '#111', borderRadius: 100, height: 56,
@@ -637,7 +649,7 @@ export function WalletClient({ slug, bizName, heroImageUrl, isSignedIn, name, ti
               </div>
             </a>
             <a
-              href={'/api/public/google-pass/' + slug}
+              href={'/api/public/cx/' + slug + '/wallet-pass?format=google_redirect'}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
                 background: '#111', borderRadius: 100, height: 56,

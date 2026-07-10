@@ -74,6 +74,10 @@ export async function GET(req: Request) {
     return {
       id: r.id,
       customer_id: r.customer_id,
+      // LOYALTY-FINISH — was fetched above but dropped before the response,
+      // so the POS attach path had no way to call the canonical resolver
+      // (which resolves by loyalty_identity_id, not pos_customers.id).
+      loyalty_identity_id: r.loyalty_identity_id,
       name: cust?.name ?? 'Member',
       points_balance: Number(cust?.points_balance ?? 0),
       stamps_count: Number(cust?.stamps_count ?? 0),

@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { earnOnSale } from '@/lib/loyalty/earnOnSale'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -40,18 +41,26 @@ async function _POST(req: Request) {
     status: 'redeemed', redeemed_at: new Date().toISOString(), redeemed_sale_id: body.sale_id ?? null,
   }).eq('id', cart.id)
 
-  // Award loyalty points if the cart was linked to a member (points = $ spent, simple default).
+  // LOYALTY-FINISH — this used to be a bespoke earn implementation:
+  // hardcoded 1pt/$1 (ignored pos_loyalty_config.points_per_dollar), never
+  // checked program_enabled, a non-atomic read-then-write on points_balance
+  // (race-prone), never synced the legacy loyalty_points column, and never
+  // touched total_spent/visit_count/last_visit. Now goes through the single
+  // source of truth — same call every other sale-completion path makes.
   let pointsAwarded = 0
-  if (cart.loyalty_customer_id) {
-    pointsAwarded = Math.floor((cart.subtotal_cents as number) / 100)
-    if (pointsAwarded > 0) {
-      try {
-        const { data: cust } = await supabaseAdmin.from('pos_customers').select('points_balance, loyalty_points').eq('id', cart.loyalty_customer_id).maybeSingle()
-        const current = Number(cust?.points_balance ?? cust?.loyalty_points ?? 0)
-        await supabaseAdmin.from('pos_customers').update({ points_balance: current + pointsAwarded }).eq('id', cart.loyalty_customer_id)
-        await supabaseAdmin.from('pos_loyalty_transactions').insert({ business_id: bid, customer_id: cart.loyalty_customer_id, sale_id: body.sale_id ?? null, type: 'earn', points_delta: pointsAwarded })
-      } catch (e) { console.error('[non-fatal]', e) }
-    }
+  if (cart.loyalty_customer_id && body.sale_id) {
+    try {
+      const result = await earnOnSale({
+        businessId: bid,
+        customerId: cart.loyalty_customer_id,
+        saleId: body.sale_id,
+        totalAmount: (cart.subtotal_cents as number) / 100,
+      })
+      pointsAwarded = result.earnedPoints
+    } catch (e) { console.error('[pos/scan-and-go/complete] earnOnSale failed:', (e as Error).message) }
+  } else if (cart.loyalty_customer_id && !body.sale_id) {
+    // Can't safely dedupe an earn without a sale_id to key the ledger on — skip rather than risk a double-award.
+    console.error('[pos/scan-and-go/complete] loyalty customer attached but no sale_id provided — skipping earn')
   }
 
   return NextResponse.json({ ok: true, points_awarded: pointsAwarded })

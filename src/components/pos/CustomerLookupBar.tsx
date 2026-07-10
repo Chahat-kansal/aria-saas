@@ -45,6 +45,7 @@ interface LoyaltyConfig {
 interface HereNowEntry {
   id: string
   customer_id: string | null
+  loyalty_identity_id: string | null
   name: string
   points_balance: number
   stamps_count: number
@@ -243,22 +244,34 @@ export default function CustomerLookupBar({
     if (onCheckinConsumed) onCheckinConsumed(entry.id)
     setHereNow(h => h.filter(x => x.id !== entry.id))
     setShowHereNow(false)
-    // Resolve full customer via scan-lookup with customer_id (UUID accepted)
-    onSelect({
-      id: entry.customer_id,
-      name: entry.name,
-      phone: null,
-      email: null,
-      points_balance: entry.points_balance,
-      stamps_count: entry.stamps_count,
-      total_spent: 0,
-      visit_count: 0,
-      last_visit_at: null,
-      tags: [],
-      loyalty_tier: entry.loyalty_tier,
-      preload_balance: 0,
-      stamp_reward_ready: false,
-    })
+    // LOYALTY-FINISH — this used to hand-build the onSelect payload with
+    // hardcoded total_spent:0/visit_count:0/preload_balance:0/
+    // stamp_reward_ready:false instead of actually calling the resolver (the
+    // comment here always said "via scan-lookup" but never did) — a customer
+    // attached via counter-QR checkin showed zero preload balance and no
+    // reward chips even when they had real ones. resolveCode expects the
+    // loyalty_identity UUID, not pos_customers.id, hence loyalty_identity_id.
+    if (entry.loyalty_identity_id) {
+      await resolveCode(entry.loyalty_identity_id)
+    } else {
+      // Fallback for any pre-fix check-in row that predates loyalty_identity_id
+      // being returned — degrade to the partial data rather than attach nothing.
+      onSelect({
+        id: entry.customer_id,
+        name: entry.name,
+        phone: null,
+        email: null,
+        points_balance: entry.points_balance,
+        stamps_count: entry.stamps_count,
+        total_spent: 0,
+        visit_count: 0,
+        last_visit_at: null,
+        tags: [],
+        loyalty_tier: entry.loyalty_tier,
+        preload_balance: 0,
+        stamp_reward_ready: false,
+      })
+    }
   }
 
   // Redeem a reward rule chip

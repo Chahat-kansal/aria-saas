@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { logSaleEdit } from '@/lib/pos/sale-audit';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { reverseEarnOnSale } from '@/lib/loyalty/reverseEarnOnSale';
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -112,6 +113,12 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       last_edited_at: new Date().toISOString(),
       last_edited_by: user.id,
     }).eq('id', saleId);
+
+    // LOYALTY-FINISH — reverse any loyalty points earned on this sale. Never
+    // blocks the void itself; a reversal failure is logged, not fatal.
+    try {
+      await reverseEarnOnSale({ businessId: bid, saleId, totalAmount: Number(existing.total_amount ?? 0) });
+    } catch (e) { console.error('[pos/sales/[id] void] loyalty reversal failed:', (e as Error).message); }
 
     await logSaleEdit(supabase, {
       sale_id: saleId, business_id: bid, edited_by: user.id,

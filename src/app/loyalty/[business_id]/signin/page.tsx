@@ -669,7 +669,7 @@ export default function LoyaltySignInPage() {
                 <a href={wallet.google.save_url} target="_blank" rel="noopener noreferrer" style={{ ...btn, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48 }}>Add to Google Wallet</a>
               )}
               {wallet.apple?.configured && (
-                <a href={`/api/loyalty/wallet-pass?business_id=${encodeURIComponent(bid)}&format=apple`} style={{ height: 48, borderRadius: 12, border: BORDER, background: INK, color: CREAM, fontWeight: 700, fontSize: 15, fontFamily: FONT, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Add to Apple Wallet</a>
+                <a href={`/api/loyalty/wallet-pass?business_id=${encodeURIComponent(bid)}&format=apple_json`} style={{ height: 48, borderRadius: 12, border: BORDER, background: INK, color: CREAM, fontWeight: 700, fontSize: 15, fontFamily: FONT, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Add to Apple Wallet</a>
               )}
             </div>
           </div>
