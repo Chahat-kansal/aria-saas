@@ -44,6 +44,15 @@ export function SpotlightTour() {
   const [data, setData] = useState<TourResponse | null>(null);
   const [snoozed, setSnoozed] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  // Some anchors are conditionally rendered behind the real page's OWN async
+  // state (e.g. test_sale's Charge button only exists once the register is
+  // open — until then the page shows "Open Register to Sell" instead), not
+  // just slow to hydrate. A single fixed-delay retry can lose that race
+  // and leave the overlay blocking the page forever. anchorGaveUp fails the
+  // overlay OPEN after a bounded wait so the owner is never trapped, while
+  // the MutationObserver below keeps watching so the real highlight still
+  // attaches whenever the anchor does eventually appear.
+  const [anchorGaveUp, setAnchorGaveUp] = useState(false);
   const elRef = useRef<HTMLElement | null>(null);
   const origStyle = useRef<{ boxShadow: string; position: string; zIndex: string } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -83,9 +92,12 @@ export function SpotlightTour() {
   // Find + highlight the target element on the current page, if this step has one.
   useEffect(() => {
     clearHighlight();
+    setAnchorGaveUp(false);
     if (!currentStepDef?.dataTourId) return;
+    const dataTourId = currentStepDef.dataTourId;
+
     const tryFind = () => {
-      const el = document.querySelector<HTMLElement>('[data-tour="' + currentStepDef.dataTourId + '"]');
+      const el = document.querySelector<HTMLElement>('[data-tour="' + dataTourId + '"]');
       if (!el) return false;
       elRef.current = el;
       origStyle.current = { boxShadow: el.style.boxShadow, position: el.style.position, zIndex: el.style.zIndex };
@@ -93,13 +105,26 @@ export function SpotlightTour() {
       el.style.position = 'relative';
       el.style.zIndex = '9999';
       setRect(el.getBoundingClientRect());
+      setAnchorGaveUp(false);
       return true;
     };
-    if (!tryFind()) {
-      const retry = setTimeout(tryFind, 400);
-      return () => clearTimeout(retry);
-    }
-    return () => clearHighlight();
+
+    if (tryFind()) return () => clearHighlight();
+
+    // Watch the DOM (not a single fixed-delay retry) until the anchor
+    // actually appears — it may depend on the target page's own async
+    // state (register open, data finished loading), which can take far
+    // longer than one retry. Keeps watching for as long as this step is
+    // current, so the highlight still attaches whenever it shows up.
+    const observer = new MutationObserver(() => { if (tryFind()) observer.disconnect(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    // Separately: stop BLOCKING the page after a bounded wait regardless of
+    // whether the anchor was found, so an anchor that's legitimately not
+    // there yet (or never will be) can never trap the owner behind the dim
+    // overlay — the observer keeps running in case it appears later.
+    const giveUp = setTimeout(() => setAnchorGaveUp(true), 15_000);
+
+    return () => { observer.disconnect(); clearTimeout(giveUp); clearHighlight(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStepDef?.key, pathname]);
 
@@ -157,18 +182,19 @@ export function SpotlightTour() {
 
   const onTargetPage = !!rect;
   const isInformational = !currentStepDef.dataTourId;
+  const onHrefPath = !!currentStepDef.href
+    && (pathname === currentStepDef.href || pathname.startsWith(currentStepDef.href + '/'));
   // Informational steps (no in-page anchor, e.g. cx_app) still navigate
   // somewhere real via the CTA — once the owner has actually arrived there,
   // that page must be usable too, not permanently dimmed-and-blocked.
-  const arrivedAtDestination = isInformational && !!currentStepDef.href
-    && (pathname === currentStepDef.href || pathname.startsWith(currentStepDef.href + '/'));
+  const arrivedAtDestination = isInformational && onHrefPath;
   // True whenever there's a real, live feature under the tour card right
-  // now (an anchored highlight found on this page, or an informational
-  // step's own destination page) — the overlay must never dim OR capture
-  // clicks over that feature, or the owner is trapped: can't use it, can't
-  // progress (the real signal that completes these steps only fires once
-  // they've actually interacted with it).
-  const interactive = onTargetPage || arrivedAtDestination;
+  // now (an anchored highlight found on this page, an informational step's
+  // own destination page, or the anchor-wait gave up) — the overlay must
+  // never dim OR capture clicks over the real page, or the owner is
+  // trapped: can't use it, can't progress (the real signal that completes
+  // these steps only fires once they've actually interacted with it).
+  const interactive = onTargetPage || arrivedAtDestination || anchorGaveUp;
 
   // Position: anchored below the highlighted element when found, else a
   // fixed floating card (bottom-right) so the tour is always visible
@@ -282,7 +308,13 @@ export function SpotlightTour() {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          {currentStepDef.key !== 'ask_aria' && (isInformational || !onTargetPage) && (
+          {currentStepDef.key !== 'ask_aria' && (isInformational || !onTargetPage)
+            // Once the anchor-wait has given up AND the owner is already on
+            // this step's own page (e.g. test_sale's register genuinely
+            // isn't open yet), re-showing "Take me to the POS" would just
+            // navigate to where they already are — hide it; Skip this step
+            // (always visible below) is the real way forward here.
+            && !(anchorGaveUp && onHrefPath && !isInformational) && (
             <button
               onClick={() => {
                 // Manual-advance steps (no real-data signal to auto-detect
