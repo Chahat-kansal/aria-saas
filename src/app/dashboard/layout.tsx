@@ -11,6 +11,15 @@ import InstallPrompt from '@/components/InstallPrompt';
 
 const WarmupPinger = dynamic(() => import('@/components/dashboard/WarmupPinger'), { ssr: false })
 
+// CX-LEAK-1 — moved from root layout.tsx, which also wraps the customer-facing
+// /[slug] CX app and leaked the owner's tour onto customer pages. Mounted here
+// (and in pos/layout.tsx, the other owner surface with tour anchors) instead —
+// both layouts already gate on supabase.auth.getUser() above.
+const SpotlightTour = dynamic(
+  () => import('@/components/SpotlightTour').then(m => ({ default: m.SpotlightTour })),
+  { ssr: false },
+)
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -53,6 +62,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <ApiErrorToaster />
       <WarmupPinger />
       <InstallPrompt />
+      <SpotlightTour />
     </BusinessProvider>
   );
 }

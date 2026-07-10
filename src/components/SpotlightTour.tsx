@@ -20,15 +20,27 @@ const MANUAL_ADVANCE_KEYS = new Set(['products', 'cx_app', 'ask_aria', 'aria_run
 const SESSION_SNOOZE_KEY = 'aria_tour_snoozed';
 const POLL_MS = 4000;
 
-// SPOTLIGHT-TOUR-1 — mounted once at the root layout (like AriaFloatingButton)
-// so it works across BOTH /dashboard and /pos routes. The old TourSpotlight
-// was only rendered inside /dashboard/layout.tsx even though 2 of its 5
-// data-tour anchors (add_product, test_sale) live on /pos pages — meaning
-// those tooltips could never actually fire. Mounting here fixes that as a
-// side effect of building this properly.
+// SPOTLIGHT-TOUR-1 — mounted in dashboard/layout.tsx and pos/layout.tsx (the
+// two owner-only layouts) so it works across BOTH /dashboard and /pos routes.
+// The old TourSpotlight was only rendered inside /dashboard/layout.tsx even
+// though 2 of its 5 data-tour anchors (add_product, test_sale) live on /pos
+// pages — meaning those tooltips could never actually fire.
+//
+// CX-LEAK-1 — this used to be mounted at the ROOT layout instead, which also
+// wraps the customer-facing /[slug] CX app: an owner's own Supabase session
+// (e.g. logged into their dashboard in another tab) made the tour render on
+// a completely unrelated business's customer wallet page, showing THAT
+// owner's tour state ("Global Liquor") over the CX page being viewed ("Sip
+// Café"). Moving the mount fixes the root cause, but this component also
+// belt-and-braces refuses to fetch/render outside the two owner route
+// prefixes, in case a future layout change reintroduces it somewhere it
+// shouldn't be.
+const OWNER_ROUTE_PREFIXES = ['/dashboard', '/pos'];
+
 export function SpotlightTour() {
   const pathname = usePathname();
   const router = useRouter();
+  const isOwnerRoute = OWNER_ROUTE_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'));
   const [data, setData] = useState<TourResponse | null>(null);
   const [snoozed, setSnoozed] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -37,6 +49,7 @@ export function SpotlightTour() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchProgress = useCallback(async () => {
+    if (!isOwnerRoute) { setData(null); return; }
     try {
       const res = await fetch('/api/onboarding-tour', { cache: 'no-store' });
       if (!res.ok) { setData(null); return; }
@@ -44,7 +57,8 @@ export function SpotlightTour() {
       if (json.error) { setData(null); return; }
       setData(json);
     } catch { /* silent — tour just doesn't show */ }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwnerRoute]);
 
   useEffect(() => {
     try { setSnoozed(sessionStorage.getItem(SESSION_SNOOZE_KEY) === '1'); } catch { /* ignore */ }
@@ -119,7 +133,7 @@ export function SpotlightTour() {
     if (res.ok) fetchProgress();
   }
 
-  if (!data || data.dismissed || snoozed || isLastStepDone || !currentStepDef) return null;
+  if (!isOwnerRoute || !data || data.dismissed || snoozed || isLastStepDone || !currentStepDef) return null;
 
   const tourData: TourData = {
     businessName: data.business_name, industry: data.industry, productCount: data.product_count, slug: data.slug,

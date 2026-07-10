@@ -2,11 +2,23 @@ import '@/styles/pos-design-system.css';
 import '@/styles/aria-tokens.css';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import dynamic from 'next/dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import POSShell from '@/components/pos/POSShell';
 import { POSThemeProvider } from '@/components/pos/ThemeProvider';
 import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
 import { BusinessProvider } from '@/components/providers/BusinessProvider';
+
+// CX-LEAK-1 — moved from root layout.tsx (see dashboard/layout.tsx comment).
+// Several tour anchors (test_sale, cash_open, loyalty) live on /pos pages,
+// which is why this was mounted at root in the first place — mounting here
+// instead keeps those anchors reachable without also wrapping the customer
+// /[slug] CX app. Not rendered in the /pos/login bypass branch below (that
+// branch is unauthenticated and returns before this would apply anyway).
+const SpotlightTour = dynamic(
+  () => import('@/components/SpotlightTour').then(m => ({ default: m.SpotlightTour })),
+  { ssr: false },
+)
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
@@ -46,6 +58,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
           {children}
         </POSShell>
         <AriaBrainPanel businessId={biz.id} />
+        <SpotlightTour />
       </BusinessProvider>
     </POSThemeProvider>
   );

@@ -15,12 +15,13 @@ const AriaFloatingButton = dynamic(
   { ssr: false },
 );
 
-// SPOTLIGHT-TOUR-1 — mounted at root (not /dashboard/layout.tsx) so it works
-// across both /dashboard and /pos routes; several tour anchors live on /pos.
-const SpotlightTour = dynamic(
-  () => import('@/components/SpotlightTour').then(m => ({ default: m.SpotlightTour })),
-  { ssr: false },
-);
+// SPOTLIGHT-TOUR-1 fix (CX-LEAK-1) — SpotlightTour used to mount here at
+// root, which also wraps the customer-facing /[slug] CX app. That leaked the
+// OWNER'S onboarding tour (and whichever business their own Supabase session
+// belongs to) onto a customer's wallet page. It's now mounted only in
+// src/app/dashboard/layout.tsx and src/app/pos/layout.tsx — the two owner-only
+// layouts, both of which already gate on supabase.auth.getUser() — so it's
+// never even in the component tree for /[slug] pages, regardless of session.
 
 const cormorant = Cormorant({
   subsets: ['latin'],
@@ -107,7 +108,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </PostHogProvider>
         <PWARegister />
         <AriaFloatingButton />
-        <SpotlightTour />
       </body>
     </html>
   );
