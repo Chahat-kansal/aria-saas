@@ -4,8 +4,8 @@ const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID ?? ''
 
 /** Make an authenticated request using TEST_EMAIL + TEST_PASSWORD via the login cookie. */
 async function getAuthCookies(request: import('@playwright/test').APIRequestContext) {
-  const email = process.env.TEST_EMAIL ?? ''
-  const password = process.env.TEST_PASSWORD ?? ''
+  const email = process.env.TEST_USER_EMAIL ?? ''
+  const password = process.env.TEST_USER_PASSWORD ?? ''
   if (!email || !password) return null
 
   const res = await request.post('/api/auth/signin', {

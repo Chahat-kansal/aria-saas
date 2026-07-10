@@ -1,11 +1,110 @@
 name: E2E Tests
 
+# CI-E2E-1 — required GitHub Actions secrets (Settings > Secrets and
+# variables > Actions) before the typecheck/e2e-local jobs below can run:
+#
+#   SUPABASE_URL                  — a dedicated TEST Supabase project URL.
+#                                    NEVER point this at production.
+#   SUPABASE_SERVICE_ROLE_KEY     — service-role key for that TEST project.
+#   NEXT_PUBLIC_SUPABASE_URL      — same TEST project URL (client-exposed).
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY — anon key for that TEST project.
+#   TEST_USER_EMAIL               — a real Supabase Auth user that already
+#                                    exists in the TEST project (create once
+#                                    via the dashboard or Admin API — the
+#                                    seed script provisions business data,
+#                                    not the auth user itself).
+#   TEST_USER_PASSWORD            — that user's password.
+#
+# Deliberately NOT included: any Stripe or ClickSend key, test or prod.
+# Specs that need live Stripe are quarantined — see e2e/payment.spec.ts
+# (test.skip + // QUARANTINE comments), not deleted.
+#
+# The `test` job below (repository_dispatch, prod smoke test against the
+# live site) is unrelated pre-existing infrastructure, untouched — it uses
+# the same TEST_USER_EMAIL/PASSWORD secrets but runs against production.
+
 on:
+  push:
+    branches: [main]
+  pull_request:
   repository_dispatch:
     types:
       - 'vercel.deployment.success'
 
 jobs:
+  typecheck:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+  e2e-local:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build (TEST env)
+        run: npm run build
+
+      - name: Seed test data (idempotent — Sip business, staff, products, reward)
+        run: npx tsx e2e/helpers/seed.ts
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start server
+        run: npm run start &
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/api/health > /dev/null; then
+              echo "Server is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Server did not become ready in time"
+          exit 1
+
+      - name: Run e2e specs (quarantined specs self-skip via test.skip)
+        run: npx playwright test --project=chromium --reporter=github,html
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ── Pre-existing prod smoke test — unchanged, kept as-is per RULE0 ─────────
   test:
     if: github.event.client_payload.environment == 'production'
     runs-on: ubuntu-latest

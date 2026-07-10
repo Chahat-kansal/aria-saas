@@ -7,10 +7,11 @@ export const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID ?? ''
 /** Resolve the business ID for the test user via the DB (requires service-role key). */
 export async function resolveTestBusinessId(userId: string): Promise<string | null> {
   if (!hasDbAccess || !dbAdmin) return TEST_BUSINESS_ID || null
+  // businesses.user_id, not owner_id — CLAUDE.md RULE 6 column trap.
   const { data } = await dbAdmin
     .from('businesses')
     .select('id')
-    .eq('owner_id', userId)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

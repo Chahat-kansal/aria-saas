@@ -28,7 +28,12 @@ test.describe('Payment processing (Stripe test mode)', () => {
     await login(page)
   })
 
-  test('checkout with successful test card (4242) completes payment', async ({ page }) => {
+  // QUARANTINE: requires live Stripe test-mode keys wired to the deployed
+  // app so Stripe Elements actually renders in the checkout iframe — CI-E2E-1
+  // deliberately does not provision Stripe keys as CI secrets (sprint scope:
+  // Supabase test + NEXT_PUBLIC_* only, no Stripe/ClickSend). Do not delete —
+  // re-enable once a Stripe test-mode secret pair is added to CI.
+  test.skip('checkout with successful test card (4242) completes payment', async ({ page }) => {
     // Navigate to a checkout or payment page
     await page.goto('/dashboard/invoices')
     await expect(page.locator('body')).toBeVisible()
@@ -76,7 +81,9 @@ test.describe('Payment processing (Stripe test mode)', () => {
     await expect(page.getByText(/application error|500|crashed/i)).not.toBeVisible()
   })
 
-  test('checkout with declined card (4000000000000002) shows decline error', async ({ page }) => {
+  // QUARANTINE: same reason as above — needs live Stripe test-mode keys to
+  // render the Elements iframe. Do not delete.
+  test.skip('checkout with declined card (4000000000000002) shows decline error', async ({ page }) => {
     await page.goto('/dashboard/invoices')
     const createBtn = page
       .getByRole('button', { name: '+ New Invoice' })

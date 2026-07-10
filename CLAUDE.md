@@ -191,6 +191,24 @@ sprint 500'd on every auth request as a result. Applied 2026-07-08 via Supabase 
 
 ---
 
+## 🔒 RULE 12 — CI IS THE SOURCE OF TRUTH (from: CI-E2E-1)
+
+**"Build green" now means CI green, not local.** `npx tsc --noEmit` and `npm run build`
+passing on your own machine is necessary but no longer sufficient to declare a sprint done.
+
+- ✅ Before declaring any sprint done: e2e (`.github/workflows/e2e.yml`, `typecheck` +
+  `e2e-local` jobs) must be green on the pushed commit — check the Actions tab, not just
+  your terminal
+- ✅ A local `tsc`/`build` pass that hasn't been pushed and confirmed green in Actions is
+  an unverified claim, not a finished sprint
+- ❌ Never declare "build green" from local output alone once CI exists for this repo
+- ❌ Never merge/consider done a PR with a red or pending required check
+
+Full detail: see `.github/workflows/e2e.yml` header comment for required secrets and
+`e2e/helpers/seed.ts` for the idempotent test-data seed (Sip test business).
+
+---
+
 ## Design system (Aria POS)
 - Palette: deep forest green #2D5240 + sage #7FB897
 - Fraunces italic for branding/totals, Inter for body

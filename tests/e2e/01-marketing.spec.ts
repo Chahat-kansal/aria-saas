@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Marketing site', () => {
+  // CI-E2E-1 — the landing page shows a one-time full-screen video intro
+  // (src/components/marketing/landing/LandingShell.tsx) gated on
+  // sessionStorage['aria_intro_seen']. A fresh Playwright context never has
+  // this set, so the intro overlay covers the CTA/nav for several seconds
+  // (up to a 10-12s fallback) — same experience a first-time visitor gets,
+  // but it starves these assertions. Skipping it here tests the actual page
+  // content (this suite's intent), not the one-time animation.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('aria_intro_seen', '1'))
+  })
+
   test('homepage loads with title and CTA', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveTitle(/aria/i)
@@ -19,7 +30,10 @@ test.describe('Marketing site', () => {
 
   test('login page loads with Sign in button', async ({ page }) => {
     await page.goto('/login')
-    await expect(page.getByRole('button', { name: /sign in|log in|continue/i })).toBeVisible()
+    // CI-E2E-1 — the loose name regex now also matches the "Sign in"/"Sign up"
+    // tab toggle AND "Continue with Google", a Playwright strict-mode
+    // violation (3 matches). Scope to the actual form submit button.
+    await expect(page.locator('form').getByRole('button', { name: /sign in|log in|continue/i }).first()).toBeVisible()
     await expect(page.locator('input[type="email"]').first()).toBeVisible()
     await expect(page.locator('input[type="password"]').first()).toBeVisible()
   })

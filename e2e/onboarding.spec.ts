@@ -72,15 +72,16 @@ test.describe('Onboarding — DB verification', () => {
     const userId = await getUserIdByEmail(EMAIL)
     if (!userId) return
 
+    // businesses.user_id, not owner_id — CLAUDE.md RULE 6 column trap.
     const { data: business } = await dbAdmin
       .from('businesses')
-      .select('id, name, owner_id')
-      .eq('owner_id', userId)
+      .select('id, name, user_id')
+      .eq('user_id', userId)
       .limit(1)
       .maybeSingle()
 
     expect(business).not.toBeNull()
-    expect(business!.owner_id).toBe(userId)
+    expect(business!.user_id).toBe(userId)
     expect(business!.name).toBeTruthy()
   })
 })
