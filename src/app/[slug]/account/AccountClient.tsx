@@ -1,7 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CxTabBar } from '../CxTabBar'
+
+interface LinkedCard {
+  id: string
+  brand: string | null
+  last4: string | null
+  created_at: string
+}
 
 const BG = '#f3efe4'
 const INK = '#0a0a0a'
@@ -108,6 +115,33 @@ export function AccountClient({ slug, bizName, logoUrl, customerId, name: initia
 }) {
   const [sms, setSms]     = useState(true)
   const [emailNotif, setEmailNotif] = useState(true)
+
+  const [linkedCards, setLinkedCards] = useState<LinkedCard[]>([])
+  const [cardsLoading, setCardsLoading] = useState(true)
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null)
+
+  const loadLinkedCards = useCallback(async () => {
+    try {
+      const res = await fetch('/api/public/cx/' + slug + '/linked-cards').then(r => r.json())
+      setLinkedCards(res.cards ?? [])
+    } catch { /* ok — section just shows empty */ }
+    setCardsLoading(false)
+  }, [slug])
+
+  useEffect(() => { void loadLinkedCards() }, [loadLinkedCards])
+
+  async function unlink(id: string) {
+    setUnlinkingId(id)
+    try {
+      await fetch('/api/public/cx/' + slug + '/linked-cards', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link_id: id }),
+      })
+      setLinkedCards(cards => cards.filter(c => c.id !== id))
+    } catch { /* ok — leave it listed, they can retry */ }
+    setUnlinkingId(null)
+  }
 
   const [editing, setEditing]   = useState(false)
   const [editName, setEditName] = useState(initialName ?? '')
@@ -284,6 +318,42 @@ export function AccountClient({ slug, bizName, logoUrl, customerId, name: initia
             <Toggle label="Email updates" value={emailNotif} onToggle={() => setEmailNotif(v => !v)} />
           </div>
         </GlassCard>
+
+        {/* Linked cards — LOYALTY-LOOP-2: tap-to-earn, customer-managed */}
+        {!cardsLoading && linkedCards.length > 0 && (
+          <>
+            <SectionLabel title="Linked cards" />
+            <GlassCard>
+              <p style={{ fontFamily: FB, fontSize: 12, color: INK_MUTED, margin: 0, padding: '12px 18px 4px', lineHeight: 1.5 }}>
+                Tap one of these cards to earn points automatically — no sign-in needed.
+              </p>
+              {linkedCards.map((card, i) => (
+                <div
+                  key={card.id}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 18px', borderBottom: i < linkedCards.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
+                  }}
+                >
+                  <span style={{ fontFamily: FB, fontSize: 15, color: INK }}>
+                    {(card.brand ?? 'Card').replace(/^\w/, c => c.toUpperCase())} •••• {card.last4 ?? '····'}
+                  </span>
+                  <button
+                    onClick={() => void unlink(card.id)}
+                    disabled={unlinkingId === card.id}
+                    style={{
+                      background: 'none', border: 'none', fontFamily: FB, fontSize: 13, fontWeight: 700,
+                      color: '#dc2626', cursor: unlinkingId === card.id ? 'not-allowed' : 'pointer',
+                      opacity: unlinkingId === card.id ? 0.5 : 1, padding: '6px 4px',
+                    }}
+                  >
+                    {unlinkingId === card.id ? 'Unlinking…' : 'Unlink'}
+                  </button>
+                </div>
+              ))}
+            </GlassCard>
+          </>
+        )}
 
         {/* Privacy */}
         <SectionLabel title="Privacy" />

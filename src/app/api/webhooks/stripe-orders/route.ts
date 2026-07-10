@@ -6,6 +6,10 @@ import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { waitUntil } from '@vercel/functions'
 import { fireKdsForOrder } from '@/lib/online-orders/fireKdsForOrder'
+import {
+  linkCardToIdentity, resolveIdentityByCardFingerprint,
+  sendCardLinkedNotice, logCardLinkEvent,
+} from '@/lib/loyalty/card-link'
 
 // ORD-PAYMENT webhook — on payment_intent.succeeded:
 //   1. Mark order paid (stripe_payment_status='succeeded', paid_at)
@@ -106,5 +110,112 @@ export async function POST(req: Request) {
     }
   })())
 
+  // LOYALTY-LOOP-2 — card-linked auto-earn. Non-blocking: a linking failure
+  // must never hold up order acceptance/KDS. Only ever runs for a real
+  // Stripe card payment (this route only exists for online orders, and we
+  // additionally confirm pm.type === 'card' below — PayID/other rails never
+  // reach this branch).
+  waitUntil((async () => {
+    try {
+      await linkOrAutoAttachCard(pi, bid, orderId, meta)
+    } catch (linkErr) {
+      void supabaseAdmin.from('activity_log').insert({
+        business_id: bid,
+        action_type: 'loyalty_card_link_error',
+        description: '[stripe-orders] card link/auto-attach failed: ' + (linkErr as Error).message,
+        metadata: { order_id: orderId, stripe_event_id: eid, pi_id: pi.id },
+        created_at: now,
+      })
+    }
+  })())
+
   return NextResponse.json({ ok: true })
+}
+
+/**
+ * LOYALTY-LOOP-2 — the payment card becomes the loyalty key.
+ *
+ * LINK: a customer IS already attached (place-order requires a cx_session —
+ * guest checkout is disabled, so customer_id is resolved for every online
+ * order today). Every card-paid order therefore links the card to that
+ * customer's loyalty identity (idempotent — re-linking the same card is a
+ * no-op). First-ever link for an identity fires the one-time consent notice.
+ *
+ * AUTO-ATTACH: defensive/forward-compatible. Under today's mandatory-login
+ * online-order flow this branch never actually fires (customer_id is always
+ * already resolved before Stripe is even invoked) — it exists so this
+ * exact mechanism works immediately the day either guest checkout is
+ * re-enabled, or an in-person Stripe Terminal integration is added (neither
+ * exists yet — see PRE-FLIGHT). Scope boundary: if no pos_customers row
+ * exists yet for the resolved identity at this business, auto-attach is
+ * skipped rather than fabricating one with no identifying info — sale-row
+ * backfill for a saleless paid order is intentionally not implemented here.
+ */
+async function linkOrAutoAttachCard(
+  pi: Stripe.PaymentIntent,
+  businessId: string,
+  orderId: string,
+  meta: Record<string, string>,
+): Promise<void> {
+  const pmId = typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id
+  if (!pmId) return
+
+  const pm = await stripe.paymentMethods.retrieve(pmId)
+  if (pm.type !== 'card' || !pm.card?.fingerprint) return // guardrail: card payments only
+
+  const fingerprint = pm.card.fingerprint
+  const brand = pm.card.brand ?? null
+  const last4 = pm.card.last4 ?? null
+
+  const customerId = meta.customer_id || null
+
+  if (customerId) {
+    const { data: cust } = await supabaseAdmin
+      .from('pos_customers')
+      .select('loyalty_identity_id')
+      .eq('id', customerId)
+      .eq('business_id', businessId)
+      .maybeSingle()
+    const identityId = (cust as { loyalty_identity_id: string | null } | null)?.loyalty_identity_id
+    if (!identityId) return // no loyalty identity on this customer — nothing to link
+
+    const result = await linkCardToIdentity({ businessId, identityId, fingerprint, brand, last4 })
+    if (result.isNewLink) {
+      await sendCardLinkedNotice({ businessId, customerId })
+      await logCardLinkEvent({
+        businessId, actionType: 'loyalty_card_link_created',
+        description: 'Card linked for automatic future earn',
+        metadata: { order_id: orderId, customer_id: customerId, brand, last4 },
+      })
+    }
+    return
+  }
+
+  // Auto-attach branch — see function header comment for why this is currently unreachable.
+  const { data: order } = await supabaseAdmin
+    .from('pos_online_orders')
+    .select('customer_id')
+    .eq('id', orderId)
+    .maybeSingle()
+  if ((order as { customer_id: string | null } | null)?.customer_id) return // already attached — never override
+
+  const match = await resolveIdentityByCardFingerprint({ businessId, fingerprint })
+  if (!match) return
+
+  const { data: existingCust } = await supabaseAdmin
+    .from('pos_customers')
+    .select('id')
+    .eq('business_id', businessId)
+    .eq('loyalty_identity_id', match.identityId)
+    .is('deleted_at', null)
+    .maybeSingle()
+  const matchedCustomerId = (existingCust as { id: string } | null)?.id
+  if (!matchedCustomerId) return // no existing membership at this business to attach to
+
+  await supabaseAdmin.from('pos_online_orders').update({ customer_id: matchedCustomerId }).eq('id', orderId)
+  await logCardLinkEvent({
+    businessId, actionType: 'loyalty_card_auto_attach',
+    description: 'Customer auto-attached via linked card — no scan, no sign-in',
+    metadata: { order_id: orderId, customer_id: matchedCustomerId, brand, last4 },
+  })
 }
