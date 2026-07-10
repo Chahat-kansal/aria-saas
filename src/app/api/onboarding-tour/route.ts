@@ -129,10 +129,25 @@ async function _POST(req: Request) {
   const biz = await getBiz(supabase, user.id)
   if (!biz) return NextResponse.json({ error: 'No business' }, { status: 404 })
 
-  const body = await req.json().catch(() => ({})) as { complete_step?: string }
+  const body = await req.json().catch(() => ({})) as { complete_step?: string; skip_step?: string }
   const stepKey = body.complete_step
-  if (!stepKey || !MANUAL_STEP_KEYS.has(stepKey)) {
-    return NextResponse.json({ error: 'complete_step must be a manual step (' + Array.from(MANUAL_STEP_KEYS).join(', ') + ')' }, { status: 400 })
+  const skipKey = body.skip_step
+
+  // skip_step is the "never trap the owner" escape hatch — unlike
+  // complete_step (gated to the manual, no-real-signal steps), it accepts
+  // ANY real tour step key, so a broken CTA or an unreachable feature can
+  // always be skipped past instead of stalling the whole tour.
+  let keyToMark: string
+  if (skipKey) {
+    if (!TOUR_STEPS.some(s => s.key === skipKey)) {
+      return NextResponse.json({ error: 'skip_step must be a real tour step key' }, { status: 400 })
+    }
+    keyToMark = skipKey
+  } else {
+    if (!stepKey || !MANUAL_STEP_KEYS.has(stepKey)) {
+      return NextResponse.json({ error: 'complete_step must be a manual step (' + Array.from(MANUAL_STEP_KEYS).join(', ') + ')' }, { status: 400 })
+    }
+    keyToMark = stepKey
   }
 
   const { data: existing } = await supabaseAdmin
@@ -141,7 +156,7 @@ async function _POST(req: Request) {
     .eq('business_id', biz.id)
     .maybeSingle()
 
-  const completedSteps = Array.from(new Set([...(existing?.completed_steps ?? []), stepKey]))
+  const completedSteps = Array.from(new Set([...(existing?.completed_steps ?? []), keyToMark]))
   const nextStep = TOUR_STEPS.find(s => !completedSteps.includes(s.key))?.key ?? TOUR_STEPS[TOUR_STEPS.length - 1].key
 
   await supabaseAdmin.from('onboarding_tour_progress').upsert({

@@ -133,6 +133,19 @@ export function SpotlightTour() {
     if (res.ok) fetchProgress();
   }
 
+  // Escape hatch — moves past THIS step specifically (unlike "Skip tour",
+  // which dismisses all of them, or "Remind me later", which snoozes the
+  // whole session). Works for every step, not just the manual-advance ones,
+  // so a broken/unreachable CTA can never trap the owner here.
+  async function skipStep() {
+    if (!currentStepDef) return;
+    clearHighlight();
+    const res = await fetch('/api/onboarding-tour', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skip_step: currentStepDef.key }),
+    });
+    if (res.ok) fetchProgress();
+  }
+
   if (!isOwnerRoute || !data || data.dismissed || snoozed || isLastStepDone || !currentStepDef) return null;
 
   const tourData: TourData = {
@@ -144,6 +157,18 @@ export function SpotlightTour() {
 
   const onTargetPage = !!rect;
   const isInformational = !currentStepDef.dataTourId;
+  // Informational steps (no in-page anchor, e.g. cx_app) still navigate
+  // somewhere real via the CTA — once the owner has actually arrived there,
+  // that page must be usable too, not permanently dimmed-and-blocked.
+  const arrivedAtDestination = isInformational && !!currentStepDef.href
+    && (pathname === currentStepDef.href || pathname.startsWith(currentStepDef.href + '/'));
+  // True whenever there's a real, live feature under the tour card right
+  // now (an anchored highlight found on this page, or an informational
+  // step's own destination page) — the overlay must never dim OR capture
+  // clicks over that feature, or the owner is trapped: can't use it, can't
+  // progress (the real signal that completes these steps only fires once
+  // they've actually interacted with it).
+  const interactive = onTargetPage || arrivedAtDestination;
 
   // Position: anchored below the highlighted element when found, else a
   // fixed floating card (bottom-right) so the tour is always visible
@@ -160,10 +185,19 @@ export function SpotlightTour() {
 
   return (
     <>
-      {!isInformational && (
-        <div className="fixed inset-0" style={{ zIndex: 9997, background: onTargetPage ? 'transparent' : 'rgba(10,14,17,0.55)' }} />
-      )}
-      {isInformational && <div className="fixed inset-0" style={{ zIndex: 9997, background: 'rgba(10,14,17,0.6)' }} />}
+      <div
+        className="fixed inset-0"
+        style={{
+          zIndex: 9997,
+          background: interactive ? 'transparent' : (isInformational ? 'rgba(10,14,17,0.6)' : 'rgba(10,14,17,0.55)'),
+          // The cutout: once the real feature is on screen, this overlay
+          // must let every click pass straight through to it, regardless
+          // of the highlighted element's own stacking context (its inline
+          // z-index only wins locally — it can't be trusted to outrank a
+          // fixed full-screen sibling on every page).
+          pointerEvents: interactive ? 'none' : 'auto',
+        }}
+      />
 
       <div
         style={{
@@ -251,14 +285,15 @@ export function SpotlightTour() {
           {currentStepDef.key !== 'ask_aria' && (isInformational || !onTargetPage) && (
             <button
               onClick={() => {
-                // cx_app's CTA both marks the step done AND takes the owner to the
-                // real share surface (QR + copy link) — unlike the other manual
-                // steps, "Share your app" should actually go somewhere.
-                if (currentStepDef.key === 'cx_app') {
-                  advanceManualStep('cx_app');
-                  router.push(currentStepDef.href);
-                } else if (MANUAL_ADVANCE_KEYS.has(currentStepDef.key)) {
+                // Manual-advance steps (no real-data signal to auto-detect
+                // completion from) mark themselves done on click — but if
+                // they also have a real destination (products -> the products
+                // list, cx_app -> the share hub), the CTA must actually take
+                // the owner there too, not just dismiss the card in place.
+                // aria_runs has no href (final recap step, nothing to open).
+                if (MANUAL_ADVANCE_KEYS.has(currentStepDef.key)) {
                   advanceManualStep(currentStepDef.key);
+                  if (currentStepDef.href) router.push(currentStepDef.href);
                 } else if (currentStepDef.href) {
                   router.push(currentStepDef.href);
                 }
@@ -273,6 +308,9 @@ export function SpotlightTour() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
+          <button onClick={skipStep} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+            Skip this step
+          </button>
           <button onClick={remindLater} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', padding: 0 }}>
             Remind me later
           </button>
