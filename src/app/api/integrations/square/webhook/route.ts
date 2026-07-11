@@ -1,15 +1,14 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-import { createClient } from '@supabase/supabase-js';
 import { createHmac } from 'crypto';
 import { NextResponse } from 'next/server';
+import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy';
 
-// Use service-role client — webhook is public, no user auth context
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Use service-role client — webhook is public, no user auth context.
+// Lazy (see supabase-lazy.ts) — module-scope createClient() crashes Next's
+// build-time page-data collection if env vars aren't readable there.
+const supabaseAdmin = makeLazyServiceRoleClient();
 
 function verifySignature(body: string, signature: string, url: string): boolean {
   const key = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;

@@ -1,15 +1,14 @@
 export const maxDuration = 300
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/auth/cron';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { withRetry } from '@/lib/api/retry'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
+import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy (see supabase-lazy.ts) — module-scope createClient() crashes Next's
+// build-time page-data collection if env vars aren't readable there.
+const supabaseAdmin = makeLazyServiceRoleClient();
 
 type IntelligenceEventInsert = {
   business_id: string;

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
 import { toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import type { AskBlock } from './ask-types'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
@@ -10,10 +10,9 @@ import { logAICallSafe } from './log-ai-call'
 import { buildSkillInjection, type EnabledSkill } from './industry-skills'
 import { detectCouncilConflicts, formatConflictsForSynthesis } from './council-conflicts'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy (see supabase-lazy.ts) — module-scope createClient() crashes Next's
+// build-time page-data collection if env vars aren't readable there.
+const supabaseAdmin = makeLazyServiceRoleClient()
 
 // ── Types ──────────────────────────────────────────────────────────
 type BrainRole = 'growth' | 'risk' | 'strategy' | 'context'
