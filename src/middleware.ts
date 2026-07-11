@@ -20,6 +20,17 @@ function applySecurityHeaders(res: NextResponse): NextResponse {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // CI-E2E-1 diagnostic (CI-RED-2) — proves in the server log whether
+  // middleware executes at all for the routes the e2e failures centre on,
+  // and whether the two client-exposed Supabase vars are actually present
+  // at runtime. Boolean/length only, never a value — safe in shared logs.
+  if (process.env.CI && (pathname === '/login' || pathname === '/dashboard' || pathname === '/pos/terminal' || pathname === '/')) {
+    console.log('[middleware:diag]', pathname,
+      'NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? `set(${process.env.NEXT_PUBLIC_SUPABASE_URL.length})` : 'MISSING',
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? `set(${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length})` : 'MISSING',
+    )
+  }
+
   if (pathname.startsWith('/monitoring')) return NextResponse.next()
 
   // ── PUBLIC API ROUTES — rate limit by IP ──────────────────────────────────

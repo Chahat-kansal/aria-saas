@@ -1,13 +1,32 @@
 name: E2E Tests
 
 # CI-E2E-1 — required GitHub Actions secrets (Settings > Secrets and
-# variables > Actions) before the typecheck/e2e-local jobs below can run:
+# variables > Actions) before the typecheck/e2e-local jobs below can run.
+# These are FOUR INDEPENDENT secrets, not two pairs — setting the
+# server-only pair does NOT mean the NEXT_PUBLIC_ pair exists too (this bit
+# us once already: e2e/helpers/seed.ts only ever reads SUPABASE_URL /
+# SUPABASE_SERVICE_ROLE_KEY, so a green "Seed test data" step is NOT
+# evidence the NEXT_PUBLIC_ pair below is set — those two are read by
+# `npm run build` to inline into the CLIENT bundle, and by middleware.ts /
+# every server component at runtime; missing them there is invisible to
+# seed.ts entirely and instead surfaces as the whole app 500ing):
 #
 #   SUPABASE_URL                  — a dedicated TEST Supabase project URL.
 #                                    NEVER point this at production.
+#                                    (server-only — used by seed.ts + the
+#                                    app's supabaseAdmin client)
 #   SUPABASE_SERVICE_ROLE_KEY     — service-role key for that TEST project.
-#   NEXT_PUBLIC_SUPABASE_URL      — same TEST project URL (client-exposed).
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY — anon key for that TEST project.
+#                                    (server-only — same usage as above)
+#   NEXT_PUBLIC_SUPABASE_URL      — same TEST project URL, but this is the
+#                                    SEPARATE secret the app itself needs —
+#                                    inlined into the client bundle at BUILD
+#                                    time and read by middleware.ts / every
+#                                    server component at RUNTIME. Verify
+#                                    this one explicitly; it is not implied
+#                                    by SUPABASE_URL being set.
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY — anon key for that TEST project — same
+#                                    "separate secret, verify explicitly"
+#                                    note as above.
 #   TEST_USER_EMAIL               — a real Supabase Auth user that already
 #                                    exists in the TEST project (create once
 #                                    via the dashboard or Admin API — the
@@ -71,7 +90,38 @@ jobs:
 
       - run: npm ci
 
+      # Proves which of the 4 Supabase secrets are actually present BEFORE
+      # spending a build on it — seed.ts succeeding later is NOT evidence
+      # the NEXT_PUBLIC_ pair exists (see the header comment above). Never
+      # prints values, only presence/length, safe to appear in public logs.
+      - name: Verify required secrets are present
+        run: |
+          check() {
+            local val="${!1}"
+            if [ -z "$val" ]; then
+              echo "::error::$1 is EMPTY or unset — set it in Settings > Secrets and variables > Actions"
+              MISSING=1
+            else
+              echo "$1 is set (${#val} chars)"
+            fi
+          }
+          MISSING=0
+          check NEXT_PUBLIC_SUPABASE_URL
+          check NEXT_PUBLIC_SUPABASE_ANON_KEY
+          check SUPABASE_URL
+          check SUPABASE_SERVICE_ROLE_KEY
+          check TEST_USER_EMAIL
+          check TEST_USER_PASSWORD
+          if [ "$MISSING" = "1" ]; then exit 1; fi
+
+      # NEXT_PUBLIC_* vars are inlined into the client bundle at BUILD time,
+      # not read at server-start time — explicit here even though the job-
+      # level env: block above already covers this step, so it's never
+      # ambiguous which vars this specific step needs.
       - name: Build (TEST env)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - name: Seed test data (idempotent — Sip business, staff, products, reward)
