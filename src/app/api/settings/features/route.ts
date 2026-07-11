@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { ALL_FEATURES, getFeatureChoicesForBusiness, applyFeatureChoices } from '@/lib/industry-features'
+import { ALL_FEATURES } from '@/lib/industry-features'
+import { getFeatureChoicesForBusiness, applyFeatureChoices } from '@/lib/industry-features-server'
 
 // SETTINGS-FEATURES-1 — lets an owner change the feature choices they made
 // (or accepted the defaults for) during onboarding's feature-set confirmation

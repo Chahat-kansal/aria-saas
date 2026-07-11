@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { applyFeatureChoices } from '@/lib/industry-features';
+import { applyFeatureChoices } from '@/lib/industry-features-server';
 
 // ONBOARD-FIX-1 (feature-set confirmation) — apply the owner's confirmed
-// feature choices. applyFeatureChoices lives in src/lib/industry-features.ts
+// feature choices. applyFeatureChoices lives in src/lib/industry-features-server.ts
 // (SETTINGS-FEATURES-1) so the settings Features tab can reuse the exact same
 // read/write logic instead of drifting onto a second implementation.
 
@@ -63,7 +63,12 @@ export async function POST(request: NextRequest) {
     lng: form.lng ? Number(form.lng) : null,
     place_id: (form.place_id as string) || null,
     formatted_address: (form.formatted_address as string) || null,
-    year_established: form.year_established,
+    // year_established is an integer column — unlike lat/lng/weekly_revenue_target
+    // (already guarded below), this was passed through as the raw form string
+    // unconverted, so leaving it blank (a fully optional field, no validation
+    // requires it) 500'd on submit with "invalid input syntax for type integer:
+    // \"\"" — caught via ONBOARD-WIZARD-1's real fresh-onboard verification.
+    year_established: form.year_established ? Number(form.year_established) || null : null,
     staff_count: form.staff_count,
     monthly_revenue: form.monthly_revenue,
     website: form.website,
