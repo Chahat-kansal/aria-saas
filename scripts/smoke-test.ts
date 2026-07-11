@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 
 // Load .env.local
 import { config } from 'dotenv'
-config({ path: '.env.local' })
+config({ path: '.env.local', quiet: true })
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 const TEST_BID = process.env.SMOKE_TEST_BUSINESS_ID || ''

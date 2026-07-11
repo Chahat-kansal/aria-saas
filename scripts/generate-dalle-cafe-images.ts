@@ -18,7 +18,7 @@ import OpenAI            from 'openai'
 import * as path         from 'path'
 import * as dotenv       from 'dotenv'
 
-dotenv.config({ path: path.join(process.cwd(), '.env.local') })
+dotenv.config({ path: path.join(process.cwd(), '.env.local'), quiet: true })
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY!

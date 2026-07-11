@@ -1,5 +1,5 @@
 import { config } from 'dotenv'
-config({ path: '.env.local' })
+config({ path: '.env.local', quiet: true })
 
 async function main() {
   const { supabaseAdmin } = await import('../src/lib/supabase-admin')
