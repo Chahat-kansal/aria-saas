@@ -39,10 +39,23 @@ export async function middleware(request: NextRequest) {
 
   let response = NextResponse.next({ request: { headers: requestHeaders } })
 
+  // isProtected is used both by the main logic below AND the catch-all
+  // failure fallback, so it's computed once, up front, outside the try.
+  const isProtected =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/visa') ||
+    pathname.startsWith('/businesses') ||
+    pathname.startsWith('/chat') ||
+    pathname.startsWith('/settings')
+
   function makeSupabase() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !key) throw new Error('middleware: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY not configured')
     return createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      url,
+      key,
       {
         cookies: {
           getAll() { return request.cookies.getAll() },
@@ -58,6 +71,15 @@ export async function middleware(request: NextRequest) {
     )
   }
 
+  // Every branch below calls makeSupabase() (or checkRateLimit above, already
+  // guarded). Middleware runs on nearly every route (see matcher) with no
+  // Next.js error boundary of its own — an uncaught throw here previously
+  // 500'd the ENTIRE site on every matched request (login included) instead
+  // of degrading to "no session". Wrapping the whole auth-dependent block
+  // means a missing/misconfigured Supabase env var or a transient outage
+  // fails SAFE: protected routes redirect to /login exactly as they would
+  // for a genuinely logged-out user, public/auth pages still render.
+  try {
   // ── ADMIN ROUTES ──────────────────────────────────────────────────────────
   if (pathname.startsWith('/admin')) {
     const { data: { user } } = await makeSupabase().auth.getUser()
@@ -71,14 +93,6 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── PROTECTED ROUTES — require auth ───────────────────────────────────────
-  const isProtected =
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/onboarding') ||
-    pathname.startsWith('/visa') ||
-    pathname.startsWith('/businesses') ||
-    pathname.startsWith('/chat') ||
-    pathname.startsWith('/settings')
-
   if (isProtected) {
     // Block POS employees from owner dashboard
     if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings')) {
@@ -251,6 +265,20 @@ export async function middleware(request: NextRequest) {
   }
 
   return applySecurityHeaders(response)
+  } catch (err) {
+    // Fail safe, not hard — see the comment above the try. A misconfigured/
+    // unreachable Supabase must never take the whole site down; treat it
+    // the same as "no session" (protected routes -> /login, everything
+    // else falls through unauthenticated) and log loudly so it's obvious
+    // in server logs rather than silently swallowed.
+    console.error('[middleware] auth check failed — failing safe:', err)
+    if (pathname.startsWith('/admin') || isProtected) {
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirectTo', pathname)
+      return applySecurityHeaders(NextResponse.redirect(loginUrl))
+    }
+    return applySecurityHeaders(response)
+  }
 }
 
 export const config = {
