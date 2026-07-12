@@ -1,60 +1,36 @@
-const CACHE = 'aria-os-v2'
+// BLANK-SCREEN-FIX-1 — self-destructing replacement for the old root-scoped
+// (scope '/') aria-sw.js. That SW served a stale app shell to returning
+// visitors after a deploy deleted the JS chunks it referenced ->
+// ChunkLoadError -> blank page (dark bg, so blank not white). This app gets
+// no functional benefit from a root-scoped SW that's worth that P0 risk.
+//
+// PWARegister.tsx (mounted in the root layout) is the FAST, primary kill
+// path — it actively calls getRegistrations().unregister() on every page
+// load, which doesn't wait on the browser's own SW update-check cadence.
+// This script is the belt-and-braces backup for the rare case a SW is
+// already controlling the very first navigation before that component's JS
+// gets a chance to run: it takes over immediately, unregisters itself, and
+// purges every 'aria-os-*' cache, so any remaining installs finish killing
+// themselves without needing a user to manually clear site data.
+//
+// community-sw.js (/community/) and inventory-sw.js (/inventory/) are
+// untouched, different, tightly-scoped SWs serving a real purpose — not
+// part of this incident and not affected by this file (SW scope is a hard
+// browser boundary).
 
-// Only pre-cache the offline fallback page — nothing else on install
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/offline'])).then(() => self.skipWaiting()))
+self.addEventListener('install', () => {
+  self.skipWaiting()
 })
 
-// Purge all prior aria-os-* caches (aria-os-v1 etc.) on activate
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k.startsWith('aria-os-')).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  )
-})
-
-self.addEventListener('fetch', e => {
-  const req = e.request
-  if (req.method !== 'GET') return
-  const url = new URL(req.url)
-
-  // Pass through: cross-origin, /api, /auth — SW never intercepts these
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api') || url.pathname.startsWith('/auth')) return
-
-  // NETWORK-ONLY (with offline fallback) for:
-  //   - all navigation requests (HTML page loads)
-  //   - /menu, /pos, /dashboard paths (dynamic app pages — must always be fresh)
-  //   - RSC payloads (?_rsc=...) — Next.js server-component fetches
-  const isBypass = url.pathname.startsWith('/menu') ||
-                   url.pathname.startsWith('/pos') ||
-                   url.pathname.startsWith('/dashboard') ||
-                   url.searchParams.has('_rsc')
-  if (req.mode === 'navigate' || isBypass) {
-    e.respondWith(fetch(req).catch(() => caches.match('/offline')))
-    return
-  }
-
-  // Static hashed assets (/_next/static/*): stale-while-revalidate
-  // Safe to cache — filenames are content-hashed, never change for same content
-  if (url.pathname.startsWith('/_next/static/')) {
-    e.respondWith(
-      caches.match(req).then(cached => {
-        const net = fetch(req).then(res => {
-          const copy = res.clone()
-          caches.open(CACHE).then(c => c.put(req, copy))
-          return res
-        })
-        return cached || net
-      })
-    )
-    return
-  }
-
-  // Everything else: network-first, fall back to cache only when offline
-  e.respondWith(
-    fetch(req)
-      .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res })
-      .catch(() => caches.match(req).then(r => r || caches.match('/offline')))
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys()
+      await Promise.all(keys.filter(k => k.startsWith('aria-os-')).map(k => caches.delete(k)))
+      await self.clients.claim()
+      await self.registration.unregister()
+      const clientsList = await self.clients.matchAll({ type: 'window' })
+      for (const client of clientsList) client.navigate(client.url)
+    })()
   )
 })
