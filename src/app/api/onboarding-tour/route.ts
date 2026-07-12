@@ -8,13 +8,30 @@ import { TOUR_STEPS } from '@/lib/tour-steps'
 async function getBiz(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data } = await supabase
     .from('businesses')
-    .select('id, name, industry, slug')
+    .select('id, name, industry, slug, created_at')
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
   return data
+}
+
+// TOUR-RESURRECT-FIX-1 — an established business (old enough, or already
+// running real volume) must never have the tour auto-open just because a
+// later sprint added a step it never saw. "Established" is computed from
+// data that already exists — no new column needed for this part.
+const ESTABLISHED_AGE_MS = 14 * 24 * 60 * 60 * 1000
+const ESTABLISHED_SALE_COUNT = 50
+
+async function isEstablishedBusiness(businessId: string, bizCreatedAt: string): Promise<boolean> {
+  if (Date.now() - new Date(bizCreatedAt).getTime() > ESTABLISHED_AGE_MS) return true
+  const { count } = await supabaseAdmin
+    .from('pos_sales')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+    .neq('status', 'voided')
+  return (count ?? 0) > ESTABLISHED_SALE_COUNT
 }
 
 // Steps with no real-data signal to auto-check (informational / can't be
@@ -82,19 +99,44 @@ async function _GET() {
 
   const { data: existing } = await supabaseAdmin
     .from('onboarding_tour_progress')
-    .select('step, completed_steps, dismissed')
+    .select('step, completed_steps, dismissed, completed_at')
     .eq('business_id', biz.id)
     .maybeSingle()
 
   const { keys: autoCompleted, productCount, automations } = await computeAutoCompleted(biz.id)
   const stored: string[] = existing?.completed_steps ?? []
-  // On the very first-ever load, show "products" as a celebratory first beat
-  // even though it's already auto-completed (products are mandatory in
-  // onboarding now) — otherwise the tour would skip straight past it and the
-  // owner would never see "you've added N products" at all.
-  const completedSteps = !existing
-    ? autoCompleted.filter(k => k !== 'products')
-    : Array.from(new Set([...stored, ...autoCompleted]))
+  const allStepKeys = TOUR_STEPS.map(s => s.key)
+
+  // TOUR-RESURRECT-FIX-1 — once completed_at is set (natural full
+  // completion, dismissal, or the established-business guard below),
+  // EVERY current tour-steps.ts key is kept grandfathered into
+  // completed_steps forever, regardless of whether a later sprint adds
+  // steps this business never saw. That's what stops a new step from ever
+  // re-opening a finished tour: currentStep can never resolve to anything
+  // but the last step, and isLastStepDone (SpotlightTour's own render
+  // guard) stays permanently true.
+  let completedAt: string | null = existing?.completed_at ?? null
+  const alreadySnapshotted = !!completedAt
+  const established = alreadySnapshotted ? false : await isEstablishedBusiness(biz.id, biz.created_at)
+
+  let completedSteps: string[]
+  if (alreadySnapshotted || established) {
+    completedSteps = Array.from(new Set([...stored, ...autoCompleted, ...allStepKeys]))
+    if (!completedAt) completedAt = new Date().toISOString()
+  } else {
+    // On the very first-ever load, show "products" as a celebratory first
+    // beat even though it's already auto-completed (products are mandatory
+    // in onboarding now) — otherwise the tour would skip straight past it
+    // and the owner would never see "you've added N products" at all.
+    completedSteps = !existing
+      ? autoCompleted.filter(k => k !== 'products')
+      : Array.from(new Set([...stored, ...autoCompleted]))
+    // Natural full completion — every step that exists RIGHT NOW is done —
+    // snapshot it too, so a step added tomorrow can't resurrect this tour.
+    if (allStepKeys.every(k => completedSteps.includes(k))) {
+      completedAt = new Date().toISOString()
+    }
+  }
 
   // Current step = first in defined order not yet completed.
   const currentStep = TOUR_STEPS.find(s => !completedSteps.includes(s.key))?.key ?? TOUR_STEPS[TOUR_STEPS.length - 1].key
@@ -102,10 +144,12 @@ async function _GET() {
   if (!existing) {
     await supabaseAdmin.from('onboarding_tour_progress').insert({
       business_id: biz.id, step: currentStep, completed_steps: completedSteps, dismissed: false,
+      completed_at: completedAt,
     })
-  } else if (completedSteps.length !== stored.length || existing.step !== currentStep) {
+  } else if (completedSteps.length !== stored.length || existing.step !== currentStep || (completedAt && !existing.completed_at)) {
     await supabaseAdmin.from('onboarding_tour_progress').update({
       step: currentStep, completed_steps: completedSteps, updated_at: new Date().toISOString(),
+      completed_at: completedAt,
     }).eq('business_id', biz.id)
   }
 
@@ -177,9 +221,16 @@ async function _PATCH(req: Request) {
   const body = await req.json().catch(() => ({})) as { dismissed?: boolean }
   if (body.dismissed === undefined) return NextResponse.json({ error: 'dismissed required' }, { status: 400 })
 
-  await supabaseAdmin.from('onboarding_tour_progress').upsert({
+  // TOUR-RESURRECT-FIX-1 — dismissing IS a completion signal (requirement
+  // 1: "set completed_at... or dismisses"). Only stamp it on dismissed:true
+  // — the UI never sends dismissed:false, but if it ever did, un-dismissing
+  // shouldn't un-snapshot a completion that already happened.
+  const updates: Record<string, unknown> = {
     business_id: biz.id, dismissed: body.dismissed, updated_at: new Date().toISOString(),
-  }, { onConflict: 'business_id' })
+  }
+  if (body.dismissed) updates.completed_at = new Date().toISOString()
+
+  await supabaseAdmin.from('onboarding_tour_progress').upsert(updates, { onConflict: 'business_id' })
 
   return NextResponse.json({ ok: true })
 }
