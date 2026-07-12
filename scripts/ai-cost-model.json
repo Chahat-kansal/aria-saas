@@ -1,0 +1,83 @@
+{
+  "_comment": "Data file for scripts/ai-cost-model.ts. Every number here traces to AI-COST-AUDIT-1 (AI-COST-AUDIT-REPORT.md, repo root). Update this file (add a job / adjust an estimate) whenever a sprint adds or changes an LLM call, per the CLAUDE.md process rule.",
+  "audit": {
+    "business": "Sip Cafe (ff5055a0-c351-4ada-817a-1804961035f3)",
+    "windowStart": "2026-06-11",
+    "windowEnd": "2026-06-25",
+    "windowDays": 15,
+    "anthropicInvoiceUsd": 20
+  },
+  "pricing": {
+    "claude-haiku-4-5-20251001":  { "input_per_m_usd": 1.00, "output_per_m_usd": 5.00, "source": "src/lib/aria/cost.ts (canonical)" },
+    "claude-sonnet-4-5-20250929": { "input_per_m_usd": 3.00, "output_per_m_usd": 15.00, "source": "src/lib/aria/cost.ts (canonical)" },
+    "claude-opus-4-5-20251101":   { "input_per_m_usd": 5.00, "output_per_m_usd": 25.00, "source": "src/lib/aria/cost.ts (canonical) -- NOTE base-agent.ts uses $15/$75 for the same model, disagreement flagged in report section 1, not used here" },
+    "gemini-2.5-flash":           { "input_per_m_usd": 0.10, "output_per_m_usd": 0.40, "source": "src/lib/aria/providers/gemini.ts" },
+    "gpt-4o-mini":                { "input_per_m_usd": 0.15, "output_per_m_usd": 0.60, "source": "ASSUMED -- not present in src/lib/aria/cost.ts PRICING table at all; this is OpenAI's published gpt-4o-mini rate, not a codebase constant" }
+  },
+  "cache": {
+    "writeMultiplier": 1.25,
+    "readMultiplier": 0.10,
+    "source": "src/lib/aria/cost.ts computeCostCentsWithCache"
+  },
+  "batchDiscountFactor": 0.5,
+  "batchDiscountSource": "ASSUMED -- no batch-rate constant exists anywhere in this codebase; this is Anthropic's publicly documented Batch API discount (50% off input+output), applied to both input and output uniformly",
+  "measuredJobs": [
+    { "key": "ask_aria_haiku", "label": "Ask Aria chat (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "user chat", "batchEligible": false, "callsPerBusinessPerDay": 4.7333, "inputTokensPerCall": 1599, "outputTokensPerCall": 166, "cacheWriteTokensPerCall": 7948, "cacheReadTokensPerCall": 11492 },
+    { "key": "ask_aria_sonnet", "label": "Ask Aria chat (sonnet)", "model": "claude-sonnet-4-5-20250929", "trigger": "user chat", "batchEligible": false, "callsPerBusinessPerDay": 5.4667, "inputTokensPerCall": 1900, "outputTokensPerCall": 321, "cacheWriteTokensPerCall": 479, "cacheReadTokensPerCall": 1085 },
+    { "key": "council_synthesis_sonnet", "label": "Council synthesis (sonnet)", "model": "claude-sonnet-4-5-20250929", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 0.8, "inputTokensPerCall": 9803, "outputTokensPerCall": 817, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "council_synthesis_haiku", "label": "Council synthesis (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 1.2667, "inputTokensPerCall": 11019, "outputTokensPerCall": 1037, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "council_growth", "label": "Council sub-agent: growth", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 2.3333, "inputTokensPerCall": 4424, "outputTokensPerCall": 836, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "council_risk", "label": "Council sub-agent: risk", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 2.3333, "inputTokensPerCall": 3926, "outputTokensPerCall": 848, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "council_context", "label": "Council sub-agent: context", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 2.3333, "inputTokensPerCall": 3771, "outputTokensPerCall": 828, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "council_strategy", "label": "Council sub-agent: strategy", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 2.3333, "inputTokensPerCall": 3974, "outputTokensPerCall": 763, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "ops_narrative", "label": "business-brain ops narrative (ariaInvoke)", "model": "claude-haiku-4-5-20251001", "trigger": "dashboard load (daily/health/sales modes)", "batchEligible": false, "callsPerBusinessPerDay": 4.2, "inputTokensPerCall": 1813, "outputTokensPerCall": 238, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "hypothesis_engine", "label": "Hypothesis engine", "model": "claude-haiku-4-5-20251001", "trigger": "cron h15 daily", "batchEligible": true, "wasteGateNoDeltaReductionFactor": 0.73, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 870, "outputTokensPerCall": 1136, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "parallel_merge", "label": "ariaInvoke parallel merge", "model": "claude-sonnet-4-5-20250929", "trigger": "chat pipeline", "batchEligible": false, "callsPerBusinessPerDay": 0.9333, "inputTokensPerCall": 766, "outputTokensPerCall": 234, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "memory_extractor_haiku", "label": "Chat memory extractor (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "chat pipeline", "batchEligible": false, "callsPerBusinessPerDay": 3.4, "inputTokensPerCall": 872, "outputTokensPerCall": 83, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "bas_compliance", "label": "BAS compliance monitor", "model": "claude-sonnet-4-5-20250929", "trigger": "cron h22 daily", "batchEligible": true, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 188, "outputTokensPerCall": 144, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "ask_suggestions", "label": "Ask Aria follow-up suggestions", "model": "claude-haiku-4-5-20251001", "trigger": "user chat", "batchEligible": false, "callsPerBusinessPerDay": 1.5333, "inputTokensPerCall": 117, "outputTokensPerCall": 153, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "conversation_summarizer_haiku", "label": "Conversation summarizer (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "chat pipeline", "batchEligible": false, "callsPerBusinessPerDay": 1.1333, "inputTokensPerCall": 411, "outputTokensPerCall": 139, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "reel_suggestions", "label": "Reel suggestions", "model": "claude-haiku-4-5-20251001", "trigger": "user action", "batchEligible": false, "callsPerBusinessPerDay": 0.2, "inputTokensPerCall": 854, "outputTokensPerCall": 979, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "generic", "label": "Generic ariaInvoke agent calls", "model": "claude-haiku-4-5-20251001", "trigger": "mixed", "batchEligible": false, "callsPerBusinessPerDay": 1.3333, "inputTokensPerCall": 207, "outputTokensPerCall": 80, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "clv", "label": "Customer lifetime value", "model": "claude-haiku-4-5-20251001", "trigger": "cron h21 weekly", "batchEligible": true, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 88, "outputTokensPerCall": 78, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "weekly_promos", "label": "Weekly promos generator", "model": "claude-sonnet-4-5-20250929", "trigger": "cron, weekly", "batchEligible": true, "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 174, "outputTokensPerCall": 399, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "inventory_financing", "label": "Inventory financing", "model": "claude-haiku-4-5-20251001", "trigger": "cron h19 weekly", "batchEligible": true, "callsPerBusinessPerDay": 0.2667, "inputTokensPerCall": 102, "outputTokensPerCall": 84, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "review_reputation", "label": "Review/reputation agent", "model": "claude-haiku-4-5-20251001", "trigger": "user action", "batchEligible": false, "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 198, "outputTokensPerCall": 132, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "inventory_insight", "label": "Inventory insight", "model": "claude-haiku-4-5-20251001", "trigger": "user action", "batchEligible": false, "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 80, "outputTokensPerCall": 85, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "signal_engine_synth", "label": "Anomaly-synth (Gemini, not Anthropic)", "model": "gemini-2.5-flash", "trigger": "cron h03 daily, gated on new signals", "batchEligible": false, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 290, "outputTokensPerCall": 355, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "memory_extractor_gpt4omini", "label": "Chat memory extractor (gpt-4o-mini, not Anthropic)", "model": "gpt-4o-mini", "trigger": "chat pipeline fallback", "batchEligible": false, "callsPerBusinessPerDay": 0.4667, "inputTokensPerCall": 842, "outputTokensPerCall": 46, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "conversation_summarizer_gpt4omini", "label": "Conversation summarizer (gpt-4o-mini, not Anthropic)", "model": "gpt-4o-mini", "trigger": "chat pipeline fallback", "batchEligible": false, "callsPerBusinessPerDay": 0.2, "inputTokensPerCall": 386, "outputTokensPerCall": 90, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 }
+  ],
+  "estimatedComponents": [
+    {
+      "key": "model_router_business_brain",
+      "label": "business-brain analyse() via model-router.ts -- NOT logged to aria_ai_calls at all (no cost function called anywhere in model-router.ts)",
+      "source": "estimate",
+      "includeInProjection": true,
+      "usdPerBusinessPerDayLow": 0.20,
+      "usdPerBusinessPerDayMid": 0.35,
+      "usdPerBusinessPerDayHigh": 0.50,
+      "wasteGatedUsdPerBusinessPerDay": 0.15,
+      "wasteGatedNote": "MODELED: cap business-brain 'daily' analyse() to a 1x/hour/business cache instead of the current no-cache/no-cooldown pattern (report section 6). Not implemented.",
+      "basis": "15-25K input tokens/call (compactData payload), 800 max output tokens, haiku rate, assumed 5-30 calls/day during the audited window's active dev/testing period. No logged data exists to pin this down more precisely -- see report section 4."
+    },
+    {
+      "key": "other_deleted_businesses_cron",
+      "label": "Cron-driven spend for ~16 other businesses that existed during the audit window and were hard-deleted (with their aria_ai_calls rows) by migration 20260709000001, 4 days before this audit ran",
+      "source": "estimate",
+      "includeInProjection": false,
+      "usdTotalOverWindowLow": 0,
+      "usdTotalOverWindowHigh": 5,
+      "basis": "Lower bound: 15 x Sip's own measured cron-only (non-chat) total (~$0.15/15days). Unrecoverable from the DB -- report section 2.4/4. Historical-window-only; excluded from forward-looking projections since it reflects deleted dev/test fixtures, not real customers."
+    },
+    {
+      "key": "phantom_daily_briefing_batch",
+      "label": "Daily-briefing Batch API cost for the 16 business-slots/day observed in aria_batch_jobs during the window (no cost column exists on that table)",
+      "source": "estimate",
+      "includeInProjection": false,
+      "usdTotalOverWindow": 0.15,
+      "basis": "240 requests (16 businesses x 15 days), ~300 input + ~200 output tokens/request, haiku batch rate. Report section 2.4/4. Historical-window-only."
+    }
+  ],
+  "planPricingUsdPerMonth": 297
+}

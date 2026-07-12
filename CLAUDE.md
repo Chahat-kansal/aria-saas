@@ -191,6 +191,25 @@ sprint 500'd on every auth request as a result. Applied 2026-07-08 via Supabase 
 
 ---
 
+## 🔒 RULE 11 — COST ESTIMATION IS PART OF PRE-FLIGHT (from: AI-COST-AUDIT-1)
+
+Any sprint adding or modifying an LLM call must state est. $/business/day in its commit
+message, computed via `scripts/ai-cost-model.ts`.
+
+- ✅ Before coding: add/update the job's entry in `scripts/ai-cost-model.json`
+  (model, batch?, calls/business/day, est. input/output tokens)
+- ✅ Run `npx tsx scripts/ai-cost-model.ts` and quote the resulting $/business/day in the
+  commit message — same discipline as the RULE 10 migration-verification dump
+- ❌ Never ship a new or changed LLM call without this number in the commit message
+
+**Incident record:** AI-COST-AUDIT-1 (2026-07-13) found ~$20 USD Anthropic spend in ~2 weeks
+for ONE business with zero real customers, and that the true breakdown was unknowable after
+the fact — three separate unlogged/mispriced call paths (`ai-router.ts`, `model-router.ts`,
+`council.ts`'s missing `cost_usd_cents`) meant the DB's own cost ledger undercounted real
+spend by roughly half. See `AI-COST-AUDIT-REPORT.md` at repo root.
+
+---
+
 ## 🔒 RULE 12 — CI IS THE SOURCE OF TRUTH (from: CI-E2E-1)
 
 **"Build green" now means CI green, not local.** `npx tsc --noEmit` and `npm run build`
