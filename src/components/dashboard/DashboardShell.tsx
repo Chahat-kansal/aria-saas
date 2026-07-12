@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import TrialBanner from '@/components/dashboard/TrialBanner';
 import { trialDaysRemaining } from '@/lib/plans/resolve-plan';
 import { SchedulePDFButton } from '@/components/dashboard/SchedulePDFButton';
+import HydrationBeacon from '@/components/HydrationBeacon';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { business, loading, trialEndingSoon } = useBusinessContext();
@@ -49,6 +50,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-[#0f0f13] overflow-hidden">
+      {/* MONITOR-1 — fires only once the REAL dashboard shell (past the
+          loading skeleton above, with a real business loaded) has mounted. */}
+      <HydrationBeacon path="/dashboard" />
       {/* AN-B spell 4: reduced-motion fallback for spring sidebar */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media (prefers-reduced-motion: reduce){

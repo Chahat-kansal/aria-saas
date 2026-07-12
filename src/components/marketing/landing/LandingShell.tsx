@@ -5,6 +5,7 @@ import HeroAct from './HeroAct'
 import StickyOverlay from './StickyOverlay'
 import ProgressBar from './ProgressBar'
 import { SCENES } from './scene-data'
+import HydrationBeacon from '@/components/HydrationBeacon'
 
 const VideoIntro = dynamic(() => import('./VideoIntro'), { ssr: false })
 
@@ -124,6 +125,9 @@ export default function LandingShell() {
 
   return (
     <div className="landing-v3">
+      {/* MONITOR-1 — fires only once THIS component (the landing page's real
+          content chunk, loaded via dynamic(ssr:false)) has actually mounted. */}
+      <HydrationBeacon path="/" />
       {/* Video intro overlay — renders above everything, removes itself when done */}
       {showIntro && <VideoIntro onDone={handleIntroDone} />}
 

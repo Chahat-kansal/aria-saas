@@ -86,6 +86,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+      {/* MONITOR-1 — server-rendered, no JS required to read it. The silent-
+          blank synthetic check does a plain headless fetch of '/' and parses
+          this out to know the CURRENT buildId, then checks whether any
+          hydration beacons for that exact buildId have actually arrived. */}
+      <meta name="aria-build" content={process.env.NEXT_PUBLIC_BUILD_ID ?? 'unknown'} />
       <script dangerouslySetInnerHTML={{__html: `
 (function(){
   try {

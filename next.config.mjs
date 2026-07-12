@@ -2,6 +2,15 @@
 // cache-bust: 2026-05-21T03:09:13.930953
 import { withSentryConfig } from '@sentry/nextjs'
 
+// MONITOR-1 — same value generateBuildId() below already computes per build,
+// captured once here so it can ALSO be inlined into the client bundle as
+// NEXT_PUBLIC_BUILD_ID (read by the hydration beacon) and read server-side
+// by the root layout's <meta name="aria-build"> tag (read by the silent-
+// blank synthetic check, no JS execution required). Same source of truth,
+// two consumers — not a second build-id mechanism.
+const BUILD_ID = `build-${Date.now()}`
+process.env.NEXT_PUBLIC_BUILD_ID = BUILD_ID
+
 const nextConfig = {
   // Prevent Node.js-only @huggingface/transformers modules from being bundled
   // in browser chunks (including the kokoro-js Web Worker bundle).
@@ -30,8 +39,10 @@ const nextConfig = {
     return config
   },
   generateBuildId: async () => {
-    // Force unique build ID every deployment so Vercel never restores stale CSS cache
-    return `build-${Date.now()}`
+    // Force unique build ID every deployment so Vercel never restores stale CSS cache.
+    // Same value as NEXT_PUBLIC_BUILD_ID above (MONITOR-1) — captured once at module
+    // load, not recomputed here, so both stay identical.
+    return BUILD_ID
   },
   productionBrowserSourceMaps: false,
   experimental: {
