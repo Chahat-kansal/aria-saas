@@ -4,6 +4,7 @@ export const maxDuration = 30;
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -47,18 +48,21 @@ async function _POST(req: Request, { params }: Params) {
       return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     }
 
-    const supabase = createServerSupabaseClient();
-
-    const { data: existing } = await supabase.from('stripe_events').select('id').eq('id', event.id).maybeSingle();
+    // M-10: this branch is Stripe-initiated (no session cookie exists here), so the session-cookie
+    // client (createServerSupabaseClient) silently no-ops all these writes under RLS. Use the
+    // service-role client instead, matching src/app/api/stripe/webhook/route.ts. Do NOT change the
+    // other branches below (checkout/portal/GET) — those legitimately run with the user's session.
+    const { data: existing } = await supabaseAdmin.from('stripe_events').select('id').eq('id', event.id).maybeSingle();
     if (existing) return NextResponse.json({ received: true });
 
-    await supabase.from('stripe_events').insert({ id: event.id, type: event.type, payload: event as unknown as Record<string, unknown> });
+    const { error: insertErr } = await supabaseAdmin.from('stripe_events').insert({ id: event.id, type: event.type, payload: event as unknown as Record<string, unknown> });
+    if (insertErr) console.error('[billing/webhook] stripe_events insert failed:', insertErr.message);
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       const { business_id, tier } = (session.metadata ?? {}) as { business_id?: string; tier?: string };
       if (business_id) {
-        await supabase.from('business_subscriptions').upsert({
+        const { error: upsertErr } = await supabaseAdmin.from('business_subscriptions').upsert({
           business_id,
           stripe_customer_id: session.customer as string,
           stripe_subscription_id: session.subscription as string,
@@ -66,32 +70,37 @@ async function _POST(req: Request, { params }: Params) {
           status: 'trialing',
           updated_at: new Date().toISOString(),
         }, { onConflict: 'business_id' });
+        if (upsertErr) console.error('[billing/webhook] business_subscriptions upsert failed:', upsertErr.message);
       }
     } else if (event.type === 'customer.subscription.updated') {
       const sub = event.data.object as Stripe.Subscription;
-      await supabase.from('business_subscriptions').update({
+      const { error: updateErr } = await supabaseAdmin.from('business_subscriptions').update({
         status: sub.status,
         current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
         current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
         cancel_at_period_end: sub.cancel_at_period_end,
         updated_at: new Date().toISOString(),
       }).eq('stripe_subscription_id', sub.id);
+      if (updateErr) console.error('[billing/webhook] business_subscriptions update (subscription.updated) failed:', updateErr.message);
     } else if (event.type === 'customer.subscription.deleted') {
       const sub = event.data.object as Stripe.Subscription;
-      await supabase.from('business_subscriptions').update({
+      const { error: cancelErr } = await supabaseAdmin.from('business_subscriptions').update({
         status: 'cancelled',
         cancelled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }).eq('stripe_subscription_id', sub.id);
+      if (cancelErr) console.error('[billing/webhook] business_subscriptions update (subscription.deleted) failed:', cancelErr.message);
     } else if (event.type === 'invoice.payment_failed') {
       const invoice = event.data.object as Stripe.Invoice;
-      await supabase.from('business_subscriptions').update({
+      const { error: failedErr } = await supabaseAdmin.from('business_subscriptions').update({
         status: 'past_due',
         updated_at: new Date().toISOString(),
       }).eq('stripe_subscription_id', invoice.subscription as string);
+      if (failedErr) console.error('[billing/webhook] business_subscriptions update (invoice.payment_failed) failed:', failedErr.message);
     }
 
-    await supabase.from('stripe_events').update({ processed: true }).eq('id', event.id);
+    const { error: processedErr } = await supabaseAdmin.from('stripe_events').update({ processed: true }).eq('id', event.id);
+    if (processedErr) console.error('[billing/webhook] stripe_events processed-flag update failed:', processedErr.message);
     return NextResponse.json({ received: true });
   }
 

@@ -83,7 +83,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     }
 
     // Generate code + hash
-    const code = (Math.floor(100000 + Math.random() * 900000)).toString()
+    const code = String(crypto.randomInt(100000, 1000000))
     const codeHash = hashCode(code)
     const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString()
 

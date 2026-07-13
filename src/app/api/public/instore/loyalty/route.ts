@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 function isValidEmail(s: string) {
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     // check src/app/api/public/scan-and-go/cart|finish already use — proves the caller actually
     // went through this specific business's kiosk session flow (src/app/api/public/instore/session)
     // rather than just claiming a business_id.
-    if (!cookies().get(`ariakiosk_${business_id}`)) {
+    if (!hasValidKioskSession(business_id)) {
       return NextResponse.json({ error: 'session_expired' }, { status: 401 })
     }
     if (!isValidEmail(email)) {

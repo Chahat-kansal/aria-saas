@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import { cookies } from 'next/headers'
+import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -13,7 +13,7 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
   const t = searchParams?.t
   if (t) redirect(`/api/public/instore/session?biz=${encodeURIComponent(biz)}&t=${encodeURIComponent(t)}&next=welcome`)
 
-  if (!cookies().get(`ariakiosk_${biz}`)) redirect(`/in-store/${biz}`)
+  if (!hasValidKioskSession(biz)) redirect(`/in-store/${biz}`)
 
   // Only show the chooser if the business opted into scan-and-go; otherwise straight to chat.
   const { data: cfg } = await supabaseAdmin.from('instore_kiosk_configs').select('scan_and_go_enabled').eq('business_id', biz).maybeSingle()

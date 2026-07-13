@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 45
 
 import { NextResponse } from 'next/server'
+import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
@@ -22,6 +23,14 @@ export async function POST(req: Request) {
     const { business_id, query } = await req.json() as { business_id: string; query: string }
     if (!business_id || !query) {
       return NextResponse.json({ error: 'business_id and query required' }, { status: 400 })
+    }
+    // SECURITY-P1 (H-04) — this route used to go straight from parsing business_id/query to
+    // querying instore_kiosk_configs/pos_products and triggering a paid Claude call with zero
+    // auth: any unauthenticated caller supplying any business_id could pull catalogue data and
+    // burn AI spend. Same ariakiosk_${bid} cookie check as the sibling instore/loyalty route —
+    // proves the caller actually went through this business's kiosk session flow.
+    if (!hasValidKioskSession(business_id)) {
+      return NextResponse.json({ error: 'session_expired' }, { status: 401 })
     }
 
     const { data: config } = await supabaseAdmin

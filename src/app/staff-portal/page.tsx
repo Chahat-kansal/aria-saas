@@ -19,7 +19,16 @@ function usePortalSession() {
     if (raw) { try { setSession(JSON.parse(raw) as PortalSession) } catch { localStorage.removeItem('aria-portal-session') } }
   }, [])
   const save = (s: PortalSession) => { localStorage.setItem('aria-portal-session', JSON.stringify(s)); setSession(s) }
-  const clear = () => { localStorage.removeItem('aria-portal-session'); setSession(null) }
+  // SECURITY-P2 — logout used to only clear the local token, leaving it valid server-side for
+  // the rest of its 4h TTL. Best-effort revoke call, never blocks the local clear on failure.
+  const clear = () => {
+    const token = session?.token
+    localStorage.removeItem('aria-portal-session')
+    setSession(null)
+    if (token) {
+      fetch('/api/staff-portal/logout', { method: 'POST', headers: { 'x-portal-token': token } }).catch(() => { /* best-effort */ })
+    }
+  }
   return { session, save, clear }
 }
 

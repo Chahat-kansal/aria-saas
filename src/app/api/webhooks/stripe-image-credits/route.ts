@@ -31,25 +31,17 @@ export async function POST(req: Request) {
 
     const creditsNum = parseInt(credits, 10)
 
-    const { data: existing } = await supabase
-      .from('pos_image_credits').select('paid_credits').eq('business_id', business_id).maybeSingle()
-
-    if (existing) {
-      await supabase
-        .from('pos_image_credits')
-        .update({ paid_credits: existing.paid_credits + creditsNum, updated_at: new Date().toISOString() })
-        .eq('business_id', business_id)
-    } else {
-      await supabase.from('pos_image_credits').insert({ business_id, paid_credits: creditsNum })
-    }
-
-    await supabase.from('pos_image_transactions').insert({
-      business_id,
-      type: pack === 'single' ? 'paid_single' : 'paid_pack',
-      pack_size: creditsNum,
-      amount_charged: pi.amount / 100,
-      stripe_payment_intent_id: pi.id,
+    // SECURITY-P2 H-13 — was read-then-write (TOCTOU race on concurrent Stripe retries).
+    // Single atomic + idempotent RPC, same shape as loyalty_preload_load: the unique index on
+    // pos_image_transactions.idempotency_key is the concurrency guard, not an app-level check.
+    const { error: creditErr } = await supabase.rpc('credit_image_credits', {
+      p_business: business_id,
+      p_credits: creditsNum,
+      p_pi: pi.id,
+      p_pack: pack ?? 'pack',
+      p_amount: pi.amount / 100,
     })
+    if (creditErr) console.error('[stripe-image-credits] credit_image_credits rpc failed:', creditErr.message)
   }
 
   return NextResponse.json({ ok: true })

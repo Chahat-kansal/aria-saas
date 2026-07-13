@@ -2,23 +2,19 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getBid } from '@/lib/auth/get-bid'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase
-    .from('user_active_business')
-    .select('business_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data?.id ?? null;
+// H-17 — POST/PATCH used to spread the whole request body directly into the DB write, so a
+// client could set any column verbatim. Explicit allowlist matching pos_suppliers' real columns
+// (confirmed live via information_schema — id/business_id/created_at are never client-settable).
+const SUPPLIER_FIELDS = [
+  'name', 'contact_name', 'email', 'phone', 'address', 'notes',
+  'delivery_days', 'order_cutoff_days', 'region', 'short_code', 'order_email', 'custom_columns',
+] as const
+function pickSupplierFields(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const f of SUPPLIER_FIELDS) if (f in body) out[f] = body[f]
+  return out
 }
 
 async function _GET() {
@@ -43,7 +39,7 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const body = await req.json();
-  const { data: supplier, error } = await supabase.from('pos_suppliers').insert({ ...body, business_id: bid }).select().single();
+  const { data: supplier, error } = await supabase.from('pos_suppliers').insert({ ...pickSupplierFields(body), business_id: bid }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ supplier });
 }
@@ -61,7 +57,7 @@ async function _PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const body = await req.json();
-  const { error } = await supabase.from('pos_suppliers').update(body).eq('id', id).eq('business_id', bid);
+  const { error } = await supabase.from('pos_suppliers').update(pickSupplierFields(body)).eq('id', id).eq('business_id', bid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

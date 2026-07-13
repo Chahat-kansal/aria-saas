@@ -64,6 +64,21 @@ export async function verifyOtpAndCreateSession(
   return sessionToken
 }
 
+/**
+ * SECURITY-P2 — session hygiene review found no logout path existed at all: client-side "logout"
+ * only discarded the token locally, so a stolen/leaked token stayed valid for the full 4h TTL
+ * regardless. Marks the session row revoked (mirrors the exact pattern already used for CX
+ * sessions in src/app/api/cx/[slug]/auth/route.ts's logout action).
+ */
+export async function revokeSession(token: string): Promise<void> {
+  const tokenHash = sha256(token)
+  await supabaseAdmin
+    .from('staff_portal_sessions')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('token_hash', tokenHash)
+    .is('revoked_at', null)
+}
+
 export interface PortalIdentity { staff_member_id: string; business_id: string }
 
 /** Reads x-portal-token, hashes it, and resolves the still-valid (unexpired, unrevoked) session. */

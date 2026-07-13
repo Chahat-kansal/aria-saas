@@ -1,7 +1,26 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+import { timingSafeEqual } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { limit } from '@/lib/rate-limit'
+
+// H-12 — this webhook reads Body/From in Twilio's inbound-SMS format but had zero signature
+// verification: anyone who knows/guesses a customer's phone number could POST a fake NPS score
+// attributed to them. No `twilio` package dependency and no TWILIO_AUTH_TOKEN env var exist
+// anywhere in this codebase (confirmed via grep) — so despite the Twilio-shaped payload, this may
+// actually be provisioned through a different SMS vendor. Real signature validation
+// (twilio.validateRequest with TWILIO_AUTH_TOKEN) should replace this shared-secret gate once the
+// actual inbound SMS provider is confirmed. Pattern follows CLICKSEND_INBOUND_SECRET in
+// src/app/api/webhooks/clicksend-inbound/route.ts.
+function authorised(req: Request, url: URL): boolean {
+  const secret = process.env.NPS_WEBHOOK_SECRET
+  if (!secret) return false // fail closed
+  const provided = url.searchParams.get('secret') ?? req.headers.get('x-nps-secret') ?? ''
+  const expected = Buffer.from(secret)
+  const actual = Buffer.from(provided)
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
+}
 
 export async function POST(req: Request) {
   const twiml = (msg: string) => new Response(
@@ -9,12 +28,20 @@ export async function POST(req: Request) {
     { headers: { 'Content-Type': 'text/xml' } }
   )
 
+  const url = new URL(req.url)
+  if (!authorised(req, url)) return new Response('Forbidden', { status: 403 })
+
   let body = '', from = ''
   try {
     const fd = await req.formData()
     body = (fd.get('Body') as string ?? '').trim()
     from = (fd.get('From') as string ?? '').replace(/\s/g, '')
   } catch { return twiml('Thanks for your response!') }
+
+  if (!from) return twiml('Thanks for your response!')
+
+  const rl = await limit(`nps-response:${from}`, { requests: 5, window: '1 h' })
+  if (!rl.ok) return new Response('Too Many Requests', { status: 429 })
 
   const score = parseInt(body)
   if (isNaN(score) || score < 0 || score > 10) {

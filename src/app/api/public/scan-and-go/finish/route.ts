@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -11,7 +11,7 @@ async function _POST(req: Request) {
   const body = await req.json().catch(() => ({})) as { business_id?: string; token?: string; loyalty_phone?: string }
   const bid = body.business_id
   if (!bid || !body.token) return NextResponse.json({ error: 'business_id and token required' }, { status: 400 })
-  if (!cookies().get(`ariakiosk_${bid}`)) return NextResponse.json({ error: 'session_expired' }, { status: 401 })
+  if (!hasValidKioskSession(bid)) return NextResponse.json({ error: 'session_expired' }, { status: 401 })
 
   const { data: cart } = await supabaseAdmin.from('pos_self_checkout_carts')
     .select('id, items, status').eq('token', body.token).eq('business_id', bid).maybeSingle()

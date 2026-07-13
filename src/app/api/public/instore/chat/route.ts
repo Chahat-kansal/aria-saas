@@ -7,6 +7,7 @@ import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { limit } from '@/lib/rate-limit'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -53,6 +54,15 @@ export async function POST(req: Request) {
     // Require a valid kiosk session (customer 7-min token cookie OR counter-tablet cookie).
     if (!cookies().get(`ariakiosk_${business_id}`)) {
       return NextResponse.json({ error: 'session_expired' }, { status: 401 })
+    }
+
+    // SECURITY-P1 (M-11) — the kiosk cookie check above proves a valid session but does not
+    // bound call volume: a single valid kiosk session could otherwise drive unlimited Claude
+    // streaming calls (a cost-attack surface, not an auth gap). New, additive per-business limit
+    // scoped only to this route.
+    const rl = await limit('instore-chat:' + business_id, { requests: 60, window: '1 h' })
+    if (!rl.ok) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } })
     }
 
     // ── Load kiosk config (auto-create if missing) ────────────────────

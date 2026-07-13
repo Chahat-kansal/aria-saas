@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import { cookies } from 'next/headers'
+import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { redirect } from 'next/navigation'
 import KioskClient from './KioskClient'
 
@@ -28,8 +28,7 @@ export default function InStorePage({ params, searchParams }: { params: { busine
   // when the business has scan-and-go disabled, so cafes lose no taps.
   if (t) redirect(`/api/public/instore/session?biz=${encodeURIComponent(biz)}&t=${encodeURIComponent(t)}&next=welcome`)
 
-  const hasSession = cookies().get(`ariakiosk_${biz}`)
-  if (!hasSession) return <ScanLanding />
+  if (!hasValidKioskSession(biz)) return <ScanLanding />
 
   return <KioskClient />
 }

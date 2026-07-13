@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import crypto from 'node:crypto'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -38,7 +38,7 @@ async function _POST(req: Request) {
   const body = await req.json().catch(() => ({})) as { business_id?: string; token?: string; action?: string; barcode?: string; product_id?: string; qty?: number }
   const bid = body.business_id
   if (!bid) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
-  if (!cookies().get(`ariakiosk_${bid}`)) return NextResponse.json({ error: 'session_expired' }, { status: 401 })
+  if (!hasValidKioskSession(bid)) return NextResponse.json({ error: 'session_expired' }, { status: 401 })
 
   // Load or create the shopping cart.
   let cart: { id: string; token: string; items: CartItem[] } | null = null
@@ -77,10 +77,14 @@ async function _POST(req: Request) {
 
 // Customer phone polls cart status by token (so it can show "paid" after redemption).
 async function _GET(req: Request) {
-  const token = new URL(req.url).searchParams.get('token')
+  const url = new URL(req.url)
+  const token = url.searchParams.get('token')
+  const bid = url.searchParams.get('business_id')
   if (!token) return NextResponse.json({ error: 'token required' }, { status: 400 })
+  if (!bid) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+  if (!hasValidKioskSession(bid)) return NextResponse.json({ error: 'session_expired' }, { status: 401 })
   const { data } = await supabaseAdmin.from('pos_self_checkout_carts')
-    .select('token, items, subtotal_cents, status, expires_at, redeemed_at').eq('token', token).maybeSingle()
+    .select('token, items, subtotal_cents, status, expires_at, redeemed_at').eq('token', token).eq('business_id', bid).maybeSingle()
   if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return NextResponse.json({ token: data.token, items: data.items, subtotal_cents: data.subtotal_cents, status: data.status, expires_at: data.expires_at, redeemed_at: data.redeemed_at })
 }

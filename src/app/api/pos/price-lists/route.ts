@@ -3,12 +3,18 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getBid } from '@/lib/auth/get-bid'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  return data?.id ?? null;
+// H-17 — POST used to spread the whole request body directly into insert(), so a client could
+// set any column verbatim (business_id override, etc). Explicit allowlist matching
+// pos_price_lists' real columns, verified via information_schema against prod (matches
+// supabase/migrations/20260530000011_promotions_pricelist_completion.sql's CREATE TABLE).
+// business_id/id/created_at are never client-settable.
+const PRICE_LIST_FIELDS = ['name', 'description', 'customer_group_ids', 'is_active'] as const
+function pickPriceListFields(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const f of PRICE_LIST_FIELDS) if (f in body) out[f] = body[f]
+  return out
 }
 
 async function _GET(req: Request) {
@@ -65,11 +71,29 @@ async function _POST(req: Request) {
   const body = await req.json();
   const { item } = body;
   if (item) {
-    const { data, error } = await supabase.from('pos_price_list_items').upsert(item, { onConflict: 'price_list_id,product_id' }).select().single();
+    // SECURITY (H-17): `item` used to be upserted raw with NO check that item.price_list_id
+    // actually belongs to the caller's business — a cross-tenant write, since a caller could
+    // upsert price-list items into ANY business's price list by guessing/enumerating a
+    // price_list_id UUID. Verify ownership first (same pattern as the DELETE handler below),
+    // then allowlist to just the real columns for the upsert itself. NOTE: the live
+    // pos_price_list_items table's price column is actually named `price` (verified via
+    // information_schema against prod) — the frontend/migration-file name `override_price` does
+    // not exist as a column — so we accept the client's `override_price` key but write it to the
+    // real `price` column.
+    const priceListId = item?.price_list_id;
+    if (!priceListId || !item?.product_id) return NextResponse.json({ error: 'price_list_id and product_id required' }, { status: 400 });
+    const { data: list } = await supabase.from('pos_price_lists').select('id').eq('id', priceListId).eq('business_id', bid).maybeSingle();
+    if (!list) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const safeItem = {
+      price_list_id: priceListId,
+      product_id: item.product_id,
+      price: item.override_price ?? item.price,
+    };
+    const { data, error } = await supabase.from('pos_price_list_items').upsert(safeItem, { onConflict: 'price_list_id,product_id' }).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ item: data });
   }
-  const { data, error } = await supabase.from('pos_price_lists').insert({ ...body, business_id: bid }).select().single();
+  const { data, error } = await supabase.from('pos_price_lists').insert({ ...pickPriceListFields(body), business_id: bid }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ price_list: data });
 }
@@ -84,7 +108,9 @@ async function _PATCH(req: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   const body = await req.json();
-  const { error } = await supabase.from('pos_price_lists').update(body).eq('id', id).eq('business_id', bid);
+  // SECURITY (H-17 gap-fill): PATCH was still spreading the raw body — not in the original H-17
+  // list (only POST was flagged there), same table/fix as the POST allowlist above.
+  const { error } = await supabase.from('pos_price_lists').update(pickPriceListFields(body)).eq('id', id).eq('business_id', bid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

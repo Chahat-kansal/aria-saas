@@ -149,7 +149,7 @@ export async function POST(req: Request) {
             if (tier?.perks) perks = ' Tier perks: ' + tier.perks + '.'
             else if (tier?.tier_name) perks = ' ' + tier.tier_name + ' tier.'
           }
-          memberContext = 'MEMBER LOOKUP: ' + (cust.name ?? 'Customer') + ' is a verified member with ' + points + ' loyalty points' + (cust.loyalty_tier ? ' (' + cust.loyalty_tier + ' tier)' : '') + '.' + perks + ' Greet them by name, share these real numbers — never invent any.'
+          memberContext = 'MEMBER LOOKUP: ' + String(cust.name ?? 'Customer').replace(/[<>{}\n\r]/g, '').slice(0, 60) + ' is a verified member with ' + points + ' loyalty points' + (cust.loyalty_tier ? ' (' + cust.loyalty_tier + ' tier)' : '') + '.' + perks + ' Greet them by name, share these real numbers — never invent any.'
         } else {
           memberContext = 'MEMBER LOOKUP: No membership found for ' + lookup + '. If asked, invite them to join the loyalty program — it is free.'
         }

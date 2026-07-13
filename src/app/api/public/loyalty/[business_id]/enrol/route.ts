@@ -40,6 +40,10 @@ export async function POST(req: Request, { params }: Params) {
 
   const normPhone = normalisePhone(phone)
 
+  // SEC: per-phone throttle so the same number can't be repeatedly enrolled from different IPs.
+  const phoneRl = await rateLimit(`enrol:phone:${normPhone}`, 5, 3600)
+  if (!phoneRl.allowed) return tooManyRequests(phoneRl.retryAfter)
+
   const { data: existing } = await db
     .from('pos_customers')
     .select('id')

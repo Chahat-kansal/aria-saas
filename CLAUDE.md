@@ -238,8 +238,9 @@ AND normal owner/customer flows still work (login, dashboard, Ask Aria, POS sale
 bookings, admin authz, CX public page) — a security change that blocks Sip fails the sprint.
 
 - ✅ Before push, for any sprint changing auth/session/rate-limit/RLS/middleware code:
-  `npm run test:smoke` must pass locally (CI wiring for this suite is a P2/P3 follow-up —
-  today it's a required manual pre-push step, same tier as RULE 3's tsc/build)
+  `npm run test:smoke` must pass locally, same tier as RULE 3's tsc/build. As of SECURITY-P2
+  it also runs in CI (`.github/workflows/smoke.yml`) on every PR touching `src/**` — a red
+  smoke check blocks merge same as a red typecheck/e2e-local check.
 - ✅ A new auth-adjacent route or form needs a corresponding assertion added to
   `tests/smoke/owner-flows.spec.ts` (legitimate case) — and to
   `tests/smoke/security-guards.spec.ts` if it adds a new rate limit or Turnstile gate

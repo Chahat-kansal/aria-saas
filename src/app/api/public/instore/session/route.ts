@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { validateToken, SESSION_MAX_AGE, TABLET_MAX_AGE } from '@/lib/kiosk/tokens'
+import { signKioskValue } from '@/lib/kiosk/cookie'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 // Redeems a kiosk token (?t=, customer phone, 7-min) or tablet key (?key=, 30-day),
@@ -30,7 +31,7 @@ async function _GET(req: Request) {
 
   const res = NextResponse.redirect(dest)
   if (maxAge > 0) {
-    res.cookies.set(`ariakiosk_${biz}`, '1', {
+    res.cookies.set(`ariakiosk_${biz}`, signKioskValue(biz, maxAge), {
       httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge,
     })
   }

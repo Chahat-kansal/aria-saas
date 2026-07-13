@@ -2,23 +2,16 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getBid } from '@/lib/auth/get-bid'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase
-    .from('user_active_business')
-    .select('business_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data?.id ?? null;
+// H-17 — POST/PATCH used to spread the whole request body directly into the DB write, so a
+// client could set any column verbatim. Explicit allowlist matching pos_categories' real columns
+// (confirmed live via information_schema — id/business_id/created_at are never client-settable).
+const CATEGORY_FIELDS = ['name', 'color', 'is_active', 'sort_order', 'ordering_archetype'] as const
+function pickCategoryFields(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const f of CATEGORY_FIELDS) if (f in body) out[f] = body[f]
+  return out
 }
 
 async function _POST(req: Request) {
@@ -32,7 +25,7 @@ async function _POST(req: Request) {
   const body = await req.json();
   const { data: category, error } = await supabase
     .from('pos_categories')
-    .insert({ ...body, business_id: bid })
+    .insert({ ...pickCategoryFields(body), business_id: bid })
     .select()
     .single();
 
@@ -55,7 +48,7 @@ async function _PATCH(req: Request) {
   const body = await req.json();
   const { error } = await supabase
     .from('pos_categories')
-    .update(body)
+    .update(pickCategoryFields(body))
     .eq('id', id)
     .eq('business_id', bid);
 

@@ -1,0 +1,95 @@
+name: Smoke Suite
+
+# SECURITY-P2 (item 4) — wires tests/smoke/ (RULE 13, playwright.smoke.config.ts) into CI.
+# Runs on PRs touching src/ only (unlike e2e.yml's typecheck/e2e-local, which run on every
+# push/PR) — the smoke suite specifically proves auth/routing/middleware/RLS changes didn't
+# regress normal owner/admin/customer flows, so it only needs to gate the code that could cause
+# that regression.
+#
+# Required GitHub secrets — SAME SIX as e2e.yml (reuse, do not duplicate/rename):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL,
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY, TEST_USER_EMAIL, TEST_USER_PASSWORD
+# Optional (positive admin-access assertion only — suite skips that one test if absent):
+#   TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD
+# Turnstile: NOT a secret. Cloudflare's official always-pass test keys are public constants
+# (documented at developers.cloudflare.com/turnstile/troubleshooting/testing) and are hardcoded
+# below — never put a real TURNSTILE_SECRET_KEY in CI.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/smoke/**'
+      - 'playwright.smoke.config.ts'
+      - 'package.json'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+      # Cloudflare official always-pass test keys — public, not secret.
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: '1x00000000000000000000AA'
+      TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA'
+      BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify required secrets are present
+        run: |
+          check() {
+            local val="${!1}"
+            if [ -z "$val" ]; then
+              echo "::error::$1 is EMPTY or unset — set it in Settings > Secrets and variables > Actions"
+              MISSING=1
+            else
+              echo "$1 is set (${#val} chars)"
+            fi
+          }
+          MISSING=0
+          check NEXT_PUBLIC_SUPABASE_URL
+          check NEXT_PUBLIC_SUPABASE_ANON_KEY
+          check SUPABASE_URL
+          check SUPABASE_SERVICE_ROLE_KEY
+          check TEST_USER_EMAIL
+          check TEST_USER_PASSWORD
+          if [ "$MISSING" = "1" ]; then exit 1; fi
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # playwright.smoke.config.ts's own webServer runs `npm run build && npm run start` — no
+      # separate build step here (reuseExistingServer is false under CI, so it always rebuilds
+      # itself regardless; a second explicit build step would just double the work).
+      - name: Run smoke suite
+        env:
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: npx playwright test --config=playwright.smoke.config.ts --reporter=github,html
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: playwright-report/
+          retention-days: 7

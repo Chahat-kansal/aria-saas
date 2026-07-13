@@ -4,16 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (data?.id) {
-    console.warn('[getBid] No user_active_business row, falling back to oldest active business', { userId, fallback_business_id: data.id });
-  }
-  return data?.id ?? null;
-}
+import { getBid } from '@/lib/auth/get-bid'
 
 async function _GET() {
   const supabase = createServerSupabaseClient();
@@ -46,11 +37,28 @@ const PROMO_TYPE_MAP: Record<string, string> = {
   multibuy: 'bogo',
 }
 
+// H-17 — this used to spread {...body} straight into the insert/update, so any client-supplied
+// key rode along untouched. Explicit allowlist of pos_promotions' real live columns, verified via
+// information_schema against prod (the base 20260430000001_pos_promotions.sql CREATE TABLE is
+// missing many columns added by later migrations — receipt/waste-elimination/loyalty-offers/
+// idempotency-key sprints — so that file alone is not the full picture). 'type' and 'is_active'
+// are deliberately excluded: the alias logic below always folds them into promotion_type/active
+// and deletes the raw keys, matching this function's pre-existing behaviour.
+const PROMO_FIELDS = [
+  'name', 'value', 'min_quantity', 'applies_to', 'category_id', 'product_id',
+  'valid_from', 'valid_until', 'active', 'promotion_type', 'product_ids', 'category_ids',
+  'buy_quantity', 'get_quantity', 'discount_amount', 'discount_percent', 'bundle_price',
+  'min_spend', 'starts_at', 'ends_at', 'notes', 'discount_type', 'active_days',
+  'active_hour_start', 'active_hour_end', 'requires_code', 'max_uses_per_day',
+  'max_uses_per_customer', 'stacks_with_others', 'stack_priority', 'customer_group_id',
+  'min_customer_lifetime_spend', 'min_customer_visits', 'max_total_uses', 'current_uses',
+  'exclude_discounted', 'idempotency_key',
+] as const
+
 function normPromoPayload(body: Record<string, unknown>, bid?: string): Record<string, unknown> {
   const rawType = String(body.promotion_type ?? body.discount_type ?? body.type ?? 'percent_off')
   const promotion_type = PROMO_TYPE_MAP[rawType] ?? rawType
   const p: Record<string, unknown> = { ...body, promotion_type }
-  if (bid) p.business_id = bid
   // cleanup legacy keys
   delete p.type; delete p.discount_type; delete p.is_active
   if (body.is_active !== undefined && p.active === undefined) p.active = body.is_active
@@ -68,7 +76,13 @@ function normPromoPayload(body: Record<string, unknown>, bid?: string): Record<s
     if (c.customer_segment != null && p.customer_group_id === undefined) p.customer_group_id = c.customer_segment
     delete p.conditions
   }
-  return p
+  // SECURITY: allowlist to pos_promotions' real columns only — everything built above still
+  // originates from a {...body} spread, so unrecognized/malicious keys must be dropped here,
+  // right before the value is handed to the DB write.
+  const out: Record<string, unknown> = {}
+  for (const f of PROMO_FIELDS) if (f in p) out[f] = p[f]
+  if (bid) out.business_id = bid
+  return out
 }
 
 async function _POST(req: Request) {
