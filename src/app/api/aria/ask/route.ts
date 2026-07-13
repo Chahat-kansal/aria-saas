@@ -2081,7 +2081,7 @@ GROUNDING (absolute): every number, name, ranking or count MUST come from a tool
   if (circuit.open) {
     // Circuit OPEN — skip the dead provider's tool-loop entirely (saves the full per-request timeout).
     console.warn('[aria/ask] Anthropic circuit OPEN — serving degraded grounded answer', 'business', bid)
-    const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: true })
+    const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: true, businessId: bid })
     degradedProvider = deg.provider
     if (circuit.incidentId) await recordAnthropicFallbackProvider(circuit.incidentId, deg.provider)
     toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
@@ -2123,7 +2123,7 @@ GROUNDING (absolute): every number, name, ranking or count MUST come from a tool
       const errMsg = toolResult.error_message ?? 'empty tool-loop result'
       const providerDown = isAnthropicUnreachable(errMsg)
       const rec = await recordAnthropicFailure(errMsg)
-      const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: providerDown })
+      const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: providerDown, businessId: bid })
       degradedProvider = deg.provider
       if (rec.incidentId) await recordAnthropicFallbackProvider(rec.incidentId, deg.provider)
       console.warn('[aria/ask] degraded answer served by', deg.provider, 'business', bid, 'providerDown:', providerDown)

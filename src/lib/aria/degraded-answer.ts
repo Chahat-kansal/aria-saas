@@ -24,6 +24,8 @@ export async function degradedGroundedAnswer(args: {
   maxTokens?: number
   /** true when the Anthropic circuit is OPEN — skip claude+haiku, go straight to gemini/openai. */
   skipAnthropic?: boolean
+  /** AI-COST-2 — needed so a Claude call made in this degraded path lands in aria_ai_calls. */
+  businessId?: string
 }): Promise<{ reply: string; provider: string }> {
   const historyText = (args.history ?? [])
     .slice(-6)
@@ -41,6 +43,8 @@ export async function degradedGroundedAnswer(args: {
 
   const { text, provider } = await ariaChatWithProvider('chat', prompt, args.maxTokens ?? 1200, {
     skipAnthropic: args.skipAnthropic,
+    businessId: args.businessId,
+    agentKey: 'degraded_grounded_answer',
   })
 
   // If every provider failed, hand back an honest "all down" message (NOT a fabricated answer).

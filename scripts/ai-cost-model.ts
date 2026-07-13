@@ -33,6 +33,10 @@ interface MeasuredJob {
   trigger: string
   batchEligible: boolean
   wasteGateNoDeltaReductionFactor?: number
+  /** AI-COST-2 shipped this job's batch conversion for real — apply in every "current" scenario, not just waste_gated. */
+  alwaysApplyBatch?: boolean
+  /** AI-COST-2 shipped this job's delta-gate for real — apply in every "current" scenario, not just waste_gated. */
+  alwaysApplyDeltaGate?: boolean
   callsPerBusinessPerDay: number
   inputTokensPerCall: number
   outputTokensPerCall: number
@@ -45,6 +49,8 @@ interface EstimatedComponent {
   label: string
   source: string
   includeInProjection: boolean
+  /** AI-COST-2 shipped the optimization this component's wasteGated value models — use it in every "current" scenario. */
+  shippedAsOfAiCost2?: boolean
   usdPerBusinessPerDayLow?: number
   usdPerBusinessPerDayMid?: number
   usdPerBusinessPerDayHigh?: number
@@ -92,11 +98,16 @@ function callCostUsd(data: CostModelData, job: MeasuredJob, useBatch: boolean): 
   return baseInput + cacheWrite + cacheRead + output
 }
 
-function jobUsdPerDay(data: CostModelData, job: MeasuredJob, scenario: 'as_is' | 'waste_gated'): number {
-  const useBatch = scenario === 'waste_gated'
+// applyShippedFixes=true means: honor alwaysApplyBatch/alwaysApplyDeltaGate/shippedAsOfAiCost2 —
+// i.e. this is a "current, real architecture" computation (projections). false means: ignore
+// those flags entirely — used by the historical reconciliation, which must reflect the pre-fix
+// state of the audited window regardless of what's shipped since.
+function jobUsdPerDay(data: CostModelData, job: MeasuredJob, scenario: 'as_is' | 'waste_gated', applyShippedFixes: boolean): number {
+  const useBatch = scenario === 'waste_gated' || (applyShippedFixes && !!job.alwaysApplyBatch)
   const perCall = callCostUsd(data, job, useBatch)
   let calls = job.callsPerBusinessPerDay
-  if (scenario === 'waste_gated' && job.wasteGateNoDeltaReductionFactor) {
+  const applyDeltaGate = scenario === 'waste_gated' || (applyShippedFixes && !!job.alwaysApplyDeltaGate)
+  if (applyDeltaGate && job.wasteGateNoDeltaReductionFactor) {
     calls = calls * (1 - job.wasteGateNoDeltaReductionFactor)
   }
   return perCall * calls
@@ -104,14 +115,14 @@ function jobUsdPerDay(data: CostModelData, job: MeasuredJob, scenario: 'as_is' |
 
 function computeScenarioTotal(data: CostModelData, scenario: 'as_is' | 'waste_gated'): { total: number; anthropicOnly: number; rows: Array<{ label: string; usdPerDay: number; provider: string }> } {
   const rows = data.measuredJobs.map(job => {
-    const usdPerDay = jobUsdPerDay(data, job, scenario)
+    const usdPerDay = jobUsdPerDay(data, job, scenario, true)
     const provider = job.model.startsWith('claude') ? 'anthropic' : job.model.startsWith('gemini') ? 'google' : job.model.startsWith('gpt') ? 'openai' : 'other'
     return { label: job.label, usdPerDay, provider }
   })
 
   for (const comp of data.estimatedComponents) {
     if (!comp.includeInProjection) continue
-    const usdPerDay = scenario === 'waste_gated' && comp.wasteGatedUsdPerBusinessPerDay !== undefined
+    const usdPerDay = (scenario === 'waste_gated' || comp.shippedAsOfAiCost2) && comp.wasteGatedUsdPerBusinessPerDay !== undefined
       ? comp.wasteGatedUsdPerBusinessPerDay
       : (comp.usdPerBusinessPerDayMid ?? 0)
     rows.push({ label: comp.label, usdPerDay, provider: 'anthropic' })
@@ -132,8 +143,8 @@ function printProjection(data: CostModelData, venues: number, plan: number) {
   console.log('-'.repeat(72))
 
   const rows = [
-    { name: 'as-is (current architecture)', perDay: asIs.total },
-    { name: 'waste-gated (MODELED, not implemented)', perDay: wasteGated.total },
+    { name: 'as-is (current architecture, incl. AI-COST-2)', perDay: asIs.total },
+    { name: 'waste-gated (remaining cron-tail batch, MODELED)', perDay: wasteGated.total },
   ]
 
   for (const r of rows) {
@@ -150,9 +161,11 @@ function measuredAnthropicOnlyUsdPerDay(data: CostModelData): number {
   // Deliberately excludes estimatedComponents (e.g. model_router_business_brain) --
   // those are NOT in aria_ai_calls at all, so they must not be folded into the
   // "measured" line here; printReconcile lists them as separate additive rows.
+  // applyShippedFixes=false: this reconciles the historical AUDITED window, which predates
+  // AI-COST-2's batch/delta-gate/cache fixes -- it must reflect the pre-fix state.
   return data.measuredJobs
     .filter(job => job.model.startsWith('claude'))
-    .reduce((sum, job) => sum + jobUsdPerDay(data, job, 'as_is'), 0)
+    .reduce((sum, job) => sum + jobUsdPerDay(data, job, 'as_is', false), 0)
 }
 
 function printReconcile(data: CostModelData) {

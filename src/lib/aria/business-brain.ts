@@ -3,6 +3,7 @@ import { AriaTask, runAriaModel } from '@/lib/aria/model-router';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { getBusinessContext } from '@/lib/aria/get-business-context';
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt';
+import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy';
 
 export type AriaBrainMode =
   | 'daily'
@@ -250,10 +251,54 @@ function normaliseOutput(value: any, data: AriaBusinessData): AriaBrainOutput {
   };
 }
 
-async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: object, systemPromptOverride?: string, tools?: any[]): Promise<AriaBrainOutput> {
+// AI-COST-2 — the dominant lever (AI-COST-AUDIT-1 §4/§6b). This route had NO cache/cooldown at
+// all: every POST re-ran the full compactData() query + a 15-25K token LLM call, uncapped, up to
+// the generic 20/hour/user rate limit. 'chat' and 'explain' are excluded — their `context` param
+// varies per call (the actual question/payload), so caching by (business_id, mode) alone would
+// silently return a stale answer to a DIFFERENT question. Everything else (daily/health/sales/
+// inventory/reorder/profit/supplier/customer/staff) has no such per-call variance — the SAME
+// inputs produce the same analysis until new POS data lands, which a 60-minute TTL comfortably
+// outlives for a dashboard-refresh cadence.
+const CACHEABLE_MODES = new Set<AriaBrainMode>(['daily', 'health', 'sales', 'inventory', 'reorder', 'profit', 'supplier', 'customer', 'staff']);
+const BUSINESS_BRAIN_CACHE_TTL_MS = 60 * 60 * 1000;
+const businessBrainCacheClient = makeLazyServiceRoleClient();
+
+async function readBusinessBrainCache(businessId: string, mode: AriaBrainMode): Promise<AriaBrainOutput | null> {
+  try {
+    const { data } = await businessBrainCacheClient
+      .from('business_brain_cache')
+      .select('result')
+      .eq('business_id', businessId)
+      .eq('mode', mode)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    return (data?.result as AriaBrainOutput | undefined) ?? null;
+  } catch (e) { console.error('[business-brain] cache read failed (non-fatal):', (e as Error).message); return null; }
+}
+
+async function writeBusinessBrainCache(businessId: string, mode: AriaBrainMode, output: AriaBrainOutput): Promise<void> {
+  try {
+    await businessBrainCacheClient.from('business_brain_cache').upsert({
+      business_id: businessId,
+      mode,
+      result: output as unknown as Record<string, unknown>,
+      expires_at: new Date(Date.now() + BUSINESS_BRAIN_CACHE_TTL_MS).toISOString(),
+    }, { onConflict: 'business_id,mode' });
+  } catch (e) { console.error('[business-brain] cache write failed (non-fatal):', (e as Error).message); }
+}
+
+async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: object, systemPromptOverride?: string, tools?: any[], bypassCache = false): Promise<AriaBrainOutput> {
   const missing = enoughForMode(data, mode);
   if (missing.length > 0 && mode !== 'explain' && mode !== 'chat') {
     return emptyOutput(data, 'Aria is ready, but live business data is not connected yet.', missing);
+  }
+
+  const businessId = data.business?.id;
+  const cacheable = CACHEABLE_MODES.has(mode) && !!businessId;
+
+  if (cacheable && !bypassCache) {
+    const cached = await readBusinessBrainCache(businessId!, mode);
+    if (cached) return cached;
   }
 
   const smartModes = new Set<AriaBrainMode>(['reorder', 'profit', 'supplier', 'explain'])
@@ -274,6 +319,8 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
       temperature: 0.15,
       maxTokens: 800,
       tools,
+      businessId: data.business?.id ?? undefined,
+      agentKey: `business_brain_${mode}`,
       userPrompt: JSON.stringify({
         mode,
         context: context ?? null,
@@ -290,43 +337,47 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
     };
   }
 
-  return normaliseOutput(result.data, data);
+  const output = normaliseOutput(result.data, data);
+  // Only cache genuine successes — a transient failure must never block real analysis for the
+  // full TTL window.
+  if (cacheable) await writeBusinessBrainCache(businessId!, mode, output);
+  return output;
 }
 
-export function analyseBusinessHealth(input: AriaBusinessData) {
-  return analyse('health', input);
+export function analyseBusinessHealth(input: AriaBusinessData, bypassCache = false) {
+  return analyse('health', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function generateDailyDecisions(input: AriaBusinessData) {
-  return analyse('daily', input);
+export function generateDailyDecisions(input: AriaBusinessData, bypassCache = false) {
+  return analyse('daily', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function analyseSales(input: AriaBusinessData) {
-  return analyse('sales', input);
+export function analyseSales(input: AriaBusinessData, bypassCache = false) {
+  return analyse('sales', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function analyseInventory(input: AriaBusinessData) {
-  return analyse('inventory', input);
+export function analyseInventory(input: AriaBusinessData, bypassCache = false) {
+  return analyse('inventory', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function analyseProfitLeaks(input: AriaBusinessData) {
-  return analyse('profit', input);
+export function analyseProfitLeaks(input: AriaBusinessData, bypassCache = false) {
+  return analyse('profit', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function analyseSupplierRisks(input: AriaBusinessData) {
-  return analyse('supplier', input);
+export function analyseSupplierRisks(input: AriaBusinessData, bypassCache = false) {
+  return analyse('supplier', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function analyseCustomerWinback(input: AriaBusinessData) {
-  return analyse('customer', input);
+export function analyseCustomerWinback(input: AriaBusinessData, bypassCache = false) {
+  return analyse('customer', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function analyseStaffing(input: AriaBusinessData) {
-  return analyse('staff', input);
+export function analyseStaffing(input: AriaBusinessData, bypassCache = false) {
+  return analyse('staff', input, undefined, undefined, undefined, bypassCache);
 }
 
-export function generateReorderPlan(input: AriaBusinessData) {
-  return analyse('reorder', input);
+export function generateReorderPlan(input: AriaBusinessData, bypassCache = false) {
+  return analyse('reorder', input, undefined, undefined, undefined, bypassCache);
 }
 
 export function explainRecommendation(input: AriaBusinessData, context?: object) {

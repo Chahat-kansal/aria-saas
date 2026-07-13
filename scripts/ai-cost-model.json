@@ -1,5 +1,5 @@
 {
-  "_comment": "Data file for scripts/ai-cost-model.ts. Every number here traces to AI-COST-AUDIT-1 (AI-COST-AUDIT-REPORT.md, repo root). Update this file (add a job / adjust an estimate) whenever a sprint adds or changes an LLM call, per the CLAUDE.md process rule.",
+  "_comment": "Data file for scripts/ai-cost-model.ts. Every number here traces to AI-COST-AUDIT-1 (AI-COST-AUDIT-REPORT.md, repo root) plus AI-COST-2 (the follow-up implementation sprint). Update this file (add a job / adjust an estimate) whenever a sprint adds or changes an LLM call, per the CLAUDE.md process rule. Fields 'alwaysApplyBatch' / 'alwaysApplyDeltaGate' on a job, and 'shippedAsOfAiCost2' on an estimatedComponent, mean that job/component's optimization is REAL and shipped (applied in EVERY scenario), not merely modeled in the waste_gated scenario.",
   "audit": {
     "business": "Sip Cafe (ff5055a0-c351-4ada-817a-1804961035f3)",
     "windowStart": "2026-06-11",
@@ -20,7 +20,7 @@
     "source": "src/lib/aria/cost.ts computeCostCentsWithCache"
   },
   "batchDiscountFactor": 0.5,
-  "batchDiscountSource": "ASSUMED -- no batch-rate constant exists anywhere in this codebase; this is Anthropic's publicly documented Batch API discount (50% off input+output), applied to both input and output uniformly",
+  "batchDiscountSource": "AI-COST-2: now a real exported constant, src/lib/aria/cost.ts BATCH_DISCOUNT_FACTOR (0.5), used by computeBatchCostCents(). Anthropic's publicly documented Batch API discount (50% off input+output), applied uniformly.",
   "measuredJobs": [
     { "key": "ask_aria_haiku", "label": "Ask Aria chat (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "user chat", "batchEligible": false, "callsPerBusinessPerDay": 4.7333, "inputTokensPerCall": 1599, "outputTokensPerCall": 166, "cacheWriteTokensPerCall": 7948, "cacheReadTokensPerCall": 11492 },
     { "key": "ask_aria_sonnet", "label": "Ask Aria chat (sonnet)", "model": "claude-sonnet-4-5-20250929", "trigger": "user chat", "batchEligible": false, "callsPerBusinessPerDay": 5.4667, "inputTokensPerCall": 1900, "outputTokensPerCall": 321, "cacheWriteTokensPerCall": 479, "cacheReadTokensPerCall": 1085 },
@@ -31,17 +31,17 @@
     { "key": "council_context", "label": "Council sub-agent: context", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 2.3333, "inputTokensPerCall": 3771, "outputTokensPerCall": 828, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "council_strategy", "label": "Council sub-agent: strategy", "model": "claude-haiku-4-5-20251001", "trigger": "user chat (council mode)", "batchEligible": false, "callsPerBusinessPerDay": 2.3333, "inputTokensPerCall": 3974, "outputTokensPerCall": 763, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "ops_narrative", "label": "business-brain ops narrative (ariaInvoke)", "model": "claude-haiku-4-5-20251001", "trigger": "dashboard load (daily/health/sales modes)", "batchEligible": false, "callsPerBusinessPerDay": 4.2, "inputTokensPerCall": 1813, "outputTokensPerCall": 238, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
-    { "key": "hypothesis_engine", "label": "Hypothesis engine", "model": "claude-haiku-4-5-20251001", "trigger": "cron h15 daily", "batchEligible": true, "wasteGateNoDeltaReductionFactor": 0.73, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 870, "outputTokensPerCall": 1136, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "hypothesis_engine", "label": "Hypothesis engine", "model": "claude-haiku-4-5-20251001", "trigger": "cron h15 batch-submit / h03 batch-poll (AI-COST-2: converted to Batch API)", "batchEligible": true, "alwaysApplyBatch": true, "alwaysApplyDeltaGate": true, "wasteGateNoDeltaReductionFactor": 0.73, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 870, "outputTokensPerCall": 1136, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "parallel_merge", "label": "ariaInvoke parallel merge", "model": "claude-sonnet-4-5-20250929", "trigger": "chat pipeline", "batchEligible": false, "callsPerBusinessPerDay": 0.9333, "inputTokensPerCall": 766, "outputTokensPerCall": 234, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "memory_extractor_haiku", "label": "Chat memory extractor (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "chat pipeline", "batchEligible": false, "callsPerBusinessPerDay": 3.4, "inputTokensPerCall": 872, "outputTokensPerCall": 83, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
-    { "key": "bas_compliance", "label": "BAS compliance monitor", "model": "claude-sonnet-4-5-20250929", "trigger": "cron h22 daily", "batchEligible": true, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 188, "outputTokensPerCall": 144, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "bas_compliance", "label": "BAS compliance monitor", "model": "claude-sonnet-4-5-20250929", "trigger": "cron h22 daily", "batchEligible": true, "batchConversionDeferred": "AI-COST-2 scoped the full batch conversion to hypothesis_engine only (cleanest single-call/non-chained candidate, and the audit's own featured waste example). bas_compliance/clv/inventory_financing/weekly_promos remain realtime pending a follow-up sprint -- see AI-COST-2 commit message.", "callsPerBusinessPerDay": 1, "inputTokensPerCall": 188, "outputTokensPerCall": 144, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "ask_suggestions", "label": "Ask Aria follow-up suggestions", "model": "claude-haiku-4-5-20251001", "trigger": "user chat", "batchEligible": false, "callsPerBusinessPerDay": 1.5333, "inputTokensPerCall": 117, "outputTokensPerCall": 153, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "conversation_summarizer_haiku", "label": "Conversation summarizer (haiku)", "model": "claude-haiku-4-5-20251001", "trigger": "chat pipeline", "batchEligible": false, "callsPerBusinessPerDay": 1.1333, "inputTokensPerCall": 411, "outputTokensPerCall": 139, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "reel_suggestions", "label": "Reel suggestions", "model": "claude-haiku-4-5-20251001", "trigger": "user action", "batchEligible": false, "callsPerBusinessPerDay": 0.2, "inputTokensPerCall": 854, "outputTokensPerCall": 979, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "generic", "label": "Generic ariaInvoke agent calls", "model": "claude-haiku-4-5-20251001", "trigger": "mixed", "batchEligible": false, "callsPerBusinessPerDay": 1.3333, "inputTokensPerCall": 207, "outputTokensPerCall": 80, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
-    { "key": "clv", "label": "Customer lifetime value", "model": "claude-haiku-4-5-20251001", "trigger": "cron h21 weekly", "batchEligible": true, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 88, "outputTokensPerCall": 78, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
-    { "key": "weekly_promos", "label": "Weekly promos generator", "model": "claude-sonnet-4-5-20250929", "trigger": "cron, weekly", "batchEligible": true, "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 174, "outputTokensPerCall": 399, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
-    { "key": "inventory_financing", "label": "Inventory financing", "model": "claude-haiku-4-5-20251001", "trigger": "cron h19 weekly", "batchEligible": true, "callsPerBusinessPerDay": 0.2667, "inputTokensPerCall": 102, "outputTokensPerCall": 84, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "clv", "label": "Customer lifetime value", "model": "claude-haiku-4-5-20251001", "trigger": "cron h21 weekly", "batchEligible": true, "batchConversionDeferred": "see bas_compliance note -- also has a multi-step claudeStructured+claudeReason chain in customer-acquisition-agent.ts, architecturally harder to batch safely", "callsPerBusinessPerDay": 1, "inputTokensPerCall": 88, "outputTokensPerCall": 78, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "weekly_promos", "label": "Weekly promos generator", "model": "claude-sonnet-4-5-20250929", "trigger": "cron, weekly", "batchEligible": true, "batchConversionDeferred": "see bas_compliance note", "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 174, "outputTokensPerCall": 399, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
+    { "key": "inventory_financing", "label": "Inventory financing", "model": "claude-haiku-4-5-20251001", "trigger": "cron h19 weekly", "batchEligible": true, "batchConversionDeferred": "see bas_compliance note", "callsPerBusinessPerDay": 0.2667, "inputTokensPerCall": 102, "outputTokensPerCall": 84, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "review_reputation", "label": "Review/reputation agent", "model": "claude-haiku-4-5-20251001", "trigger": "user action", "batchEligible": false, "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 198, "outputTokensPerCall": 132, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "inventory_insight", "label": "Inventory insight", "model": "claude-haiku-4-5-20251001", "trigger": "user action", "batchEligible": false, "callsPerBusinessPerDay": 0.0667, "inputTokensPerCall": 80, "outputTokensPerCall": 85, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
     { "key": "signal_engine_synth", "label": "Anomaly-synth (Gemini, not Anthropic)", "model": "gemini-2.5-flash", "trigger": "cron h03 daily, gated on new signals", "batchEligible": false, "callsPerBusinessPerDay": 1, "inputTokensPerCall": 290, "outputTokensPerCall": 355, "cacheWriteTokensPerCall": 0, "cacheReadTokensPerCall": 0 },
@@ -51,15 +51,16 @@
   "estimatedComponents": [
     {
       "key": "model_router_business_brain",
-      "label": "business-brain analyse() via model-router.ts -- NOT logged to aria_ai_calls at all (no cost function called anywhere in model-router.ts)",
+      "label": "business-brain analyse() via model-router.ts",
       "source": "estimate",
       "includeInProjection": true,
+      "shippedAsOfAiCost2": true,
       "usdPerBusinessPerDayLow": 0.20,
       "usdPerBusinessPerDayMid": 0.35,
       "usdPerBusinessPerDayHigh": 0.50,
       "wasteGatedUsdPerBusinessPerDay": 0.15,
-      "wasteGatedNote": "MODELED: cap business-brain 'daily' analyse() to a 1x/hour/business cache instead of the current no-cache/no-cooldown pattern (report section 6). Not implemented.",
-      "basis": "15-25K input tokens/call (compactData payload), 800 max output tokens, haiku rate, assumed 5-30 calls/day during the audited window's active dev/testing period. No logged data exists to pin this down more precisely -- see report section 4."
+      "wasteGatedNote": "AI-COST-2 SHIPPED: model-router.ts now logs every call to aria_ai_calls (closing the blind spot the 0.20-0.50 estimate existed to bound), and business-brain.ts now has a real 60-min TTL cache keyed (business_id, mode) with an explicit bypass for owner-initiated refresh (business_brain_cache table). 0.15/day is this sprint's modeled expected value for the cached architecture -- will be superseded by real aria_ai_calls data once this has run in production for a few days.",
+      "basis": "15-25K input tokens/call (compactData payload), 800 max output tokens, haiku rate, assumed 5-30 calls/day pre-cache. No logged data existed to pin this down more precisely before AI-COST-2 (model-router.ts had zero cost-tracking) -- see AI-COST-AUDIT-REPORT.md section 4."
     },
     {
       "key": "other_deleted_businesses_cron",

@@ -15,7 +15,7 @@ export interface GeneratedHypothesis {
   evidence_summary: string
 }
 
-const HYPOTHESIS_SYSTEM = `You generate specific, testable business hypotheses for Australian small businesses. Each hypothesis is a concrete what-if prediction backed by real data.
+export const HYPOTHESIS_SYSTEM = `You generate specific, testable business hypotheses for Australian small businesses. Each hypothesis is a concrete what-if prediction backed by real data.
 
 RULES:
 - Every hypothesis must reference a specific number from the evidence provided
@@ -39,8 +39,12 @@ Schema per item:
   "evidence_summary": "One sentence: what data this is based on, including counts/amounts"
 }`
 
-export async function generateHypothesesForBusiness(businessId: string): Promise<{
-  hypotheses: GeneratedHypothesis[]
+// AI-COST-2 — evidence-gathering + prompt-building split out of generateHypothesesForBusiness so
+// the Batch API submit/poll pair (hypothesis-engine-batch-submit / -poll) can reuse the exact same
+// evidence query and prompt template without duplicating it. generateHypothesesForBusiness (the
+// realtime path) is unchanged in behavior — it now just calls this internally.
+export async function buildHypothesisPrompt(businessId: string): Promise<{
+  prompt: string
   evidence_payload: Record<string, unknown>
 }> {
   const now = new Date()
@@ -129,6 +133,28 @@ ${weightLines.join('\n')}
 
 Generate up to 5 hypotheses. Avoid categories with weight < 0.7 (previous suggestions backfired). Favour categories with weight > 1.2 (track record of working). Return JSON array only.`
 
+  return { prompt, evidence_payload }
+}
+
+export function parseHypothesesFromText(businessId: string, raw: string): GeneratedHypothesis[] {
+  try {
+    const cleaned = raw
+      .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim()
+    const parsed = JSON.parse(cleaned)
+    if (Array.isArray(parsed)) return parsed.slice(0, 5) as GeneratedHypothesis[]
+    return []
+  } catch {
+    console.error('[hypothesis/generate] parse failed for', businessId, raw.slice(0, 200))
+    return []
+  }
+}
+
+export async function generateHypothesesForBusiness(businessId: string): Promise<{
+  hypotheses: GeneratedHypothesis[]
+  evidence_payload: Record<string, unknown>
+}> {
+  const { prompt, evidence_payload } = await buildHypothesisPrompt(businessId)
+
   const result = await callAnthropic<GeneratedHypothesis[]>(
     {
       model: 'haiku',
@@ -142,17 +168,17 @@ Generate up to 5 hypotheses. Avoid categories with weight < 0.7 (previous sugges
     [],
   )
 
-  let hypotheses: GeneratedHypothesis[] = []
-  try {
-    const cleaned = result.raw
-      .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim()
-    const parsed = JSON.parse(cleaned)
-    if (Array.isArray(parsed)) hypotheses = parsed.slice(0, 5) as GeneratedHypothesis[]
-  } catch {
-    console.error('[hypothesis/generate] parse failed for', businessId, result.raw.slice(0, 200))
-  }
-
+  const hypotheses = parseHypothesesFromText(businessId, result.raw)
   return { hypotheses, evidence_payload }
+}
+
+// AI-COST-2 — delta-gate (AI-COST-AUDIT-1 §5.1/§5.2: "Fix POS sync" re-fired 11 of 15 days,
+// re-diagnosing the same unresolved problem with slightly different dollar figures each time,
+// never accepted or dismissed even once). Normalized-title match against still-ACTIVE hypotheses
+// for this business — if today's candidate is the same diagnosis as one already sitting active
+// and unresolved, skip re-inserting it rather than piling up duplicates the owner never actioned.
+function normalizeHypothesisTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ')
 }
 
 export async function persistHypotheses(
@@ -169,7 +195,19 @@ export async function persistHypotheses(
     .eq('status', 'active')
     .lt('expires_at', new Date().toISOString())
 
-  const rows = hypotheses.map(h => ({
+  const { data: stillActive } = await supabaseAdmin
+    .from('aria_hypotheses')
+    .select('title')
+    .eq('business_id', businessId)
+    .eq('status', 'active')
+  const activeTitleHashes = new Set((stillActive ?? []).map(r => normalizeHypothesisTitle((r.title as string) ?? '')))
+
+  const gated = hypotheses.filter(h => !activeTitleHashes.has(normalizeHypothesisTitle(h.title ?? '')))
+  const skipped = hypotheses.length - gated.length
+  if (skipped > 0) console.log(`[hypothesis/persist] delta-gated ${skipped} duplicate-diagnosis hypotheses for business ${businessId}`)
+  if (gated.length === 0) return 0
+
+  const rows = gated.map(h => ({
     business_id: businessId,
     title: (h.title ?? '').slice(0, 200),
     description: h.description ?? '',

@@ -47,3 +47,14 @@ export function computeCostCentsWithCache(
 export function computeCostCents(modelId: string, inputTokens: number, outputTokens: number): number {
   return computeCostCentsWithCache(modelId, inputTokens, outputTokens)
 }
+
+// AI-COST-2 — the Anthropic Batches API discount (AI-COST-AUDIT-1 §1 flagged this as ASSUMED:
+// "no batch-rate constant exists anywhere in the codebase"). 50% off both input and output,
+// applied uniformly — Anthropic's published Batches API rate as of this sprint. Used by
+// daily-briefing-submit and hypothesis-engine-batch-submit; scripts/ai-cost-model.json's
+// batchDiscountFactor mirrors this exact value so the cost model and the real pricing fn agree.
+export const BATCH_DISCOUNT_FACTOR = 0.5
+
+export function computeBatchCostCents(modelId: string, inputTokens: number, outputTokens: number): number {
+  return Math.round(computeCostCentsWithCache(modelId, inputTokens, outputTokens) * BATCH_DISCOUNT_FACTOR)
+}

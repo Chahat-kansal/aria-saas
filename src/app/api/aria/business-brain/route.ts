@@ -101,17 +101,18 @@ async function saveRecommendations(
 async function runMode(
   mode: AriaBrainMode,
   data: Awaited<ReturnType<typeof collectBusinessData>>,
-  context?: object
+  context?: object,
+  bypassCache = false
 ) {
-  if (mode === 'daily')    return generateDailyDecisions(data);
-  if (mode === 'health')   return analyseBusinessHealth(data);
-  if (mode === 'sales')    return analyseSales(data);
-  if (mode === 'inventory') return analyseInventory(data);
-  if (mode === 'reorder')  return generateReorderPlan(data);
-  if (mode === 'profit')   return analyseProfitLeaks(data);
-  if (mode === 'supplier') return analyseSupplierRisks(data);
-  if (mode === 'customer') return analyseCustomerWinback(data);
-  if (mode === 'staff')    return analyseStaffing(data);
+  if (mode === 'daily')    return generateDailyDecisions(data, bypassCache);
+  if (mode === 'health')   return analyseBusinessHealth(data, bypassCache);
+  if (mode === 'sales')    return analyseSales(data, bypassCache);
+  if (mode === 'inventory') return analyseInventory(data, bypassCache);
+  if (mode === 'reorder')  return generateReorderPlan(data, bypassCache);
+  if (mode === 'profit')   return analyseProfitLeaks(data, bypassCache);
+  if (mode === 'supplier') return analyseSupplierRisks(data, bypassCache);
+  if (mode === 'customer') return analyseCustomerWinback(data, bypassCache);
+  if (mode === 'staff')    return analyseStaffing(data, bypassCache);
   if (mode === 'explain')  return explainRecommendation(data, context);
   return chatWithBusinessBrain(data, context);
 }
@@ -127,6 +128,9 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
   const body = await req.json().catch(() => ({}));
   const businessId = typeof body.business_id === 'string' ? body.business_id : '';
   const mode = (typeof body.mode === 'string' ? body.mode : 'daily') as AriaBrainMode;
+  // AI-COST-2 — explicit owner-initiated refresh bypasses the 60-min TTL cache (business-brain.ts).
+  // Never blocks an owner-initiated ask, per the sprint's explicit requirement.
+  const bypassCache = body.refresh === true;
 
   if (!businessId) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
   if (!MODES.has(mode)) return NextResponse.json({ error: 'Invalid mode' }, { status: 400 });
@@ -152,7 +156,7 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
         setTimeout(() => reject(new Error('claude_timeout')), 45_000)
       );
       output = await Promise.race([
-        runMode(mode, businessData, body.context && typeof body.context === 'object' ? body.context : undefined),
+        runMode(mode, businessData, body.context && typeof body.context === 'object' ? body.context : undefined, bypassCache),
         timeoutSignal,
       ]);
     } catch (err: unknown) {

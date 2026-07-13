@@ -60,6 +60,7 @@ export async function ariaObserve(obs: AriaObservation): Promise<void> {
       category: obs.category,
       data: obs.data,
       triggered_by: obs.triggered_by,
+      businessId: obs.business_id,
     })
 
     const { parseLLMJsonOr } = await import('@/lib/ai-json')

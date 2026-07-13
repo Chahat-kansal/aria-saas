@@ -5,6 +5,37 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
+import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
+import { computeCostCentsWithCache } from '@/lib/aria/cost'
+
+// AI-COST-2 — this file's Claude call sites (callClaude/callHaiku) never wrote to aria_ai_calls
+// at all (AI-COST-AUDIT-1 §1: a confirmed blind spot). Lazy client — module-scope createClient()
+// crashes Next's build-time page-data collection if env vars aren't readable there.
+const supabaseAdmin = makeLazyServiceRoleClient()
+
+async function logClaudeCall(params: {
+  task: AiTask; model_id: string
+  input_tokens: number; output_tokens: number; success: boolean
+  business_id?: string; agent_key?: string; error_message?: string
+}) {
+  if (!params.business_id) return // no business context to attribute this call to — nothing to log against
+  try {
+    const cost = computeCostCentsWithCache(params.model_id, params.input_tokens, params.output_tokens)
+    const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
+      business_id: params.business_id,
+      agent_key: params.agent_key ?? `ai_router_${params.task}`,
+      provider: 'anthropic',
+      model_id: params.model_id,
+      role: 'analysis',
+      input_tokens: params.input_tokens,
+      output_tokens: params.output_tokens,
+      cost_usd_cents: cost,
+      success: params.success,
+      error_message: params.error_message ?? null,
+    })
+    if (error) console.error('[ai-router] aria_ai_calls insert failed:', error.message)
+  } catch (e) { console.error('[ai-router] aria_ai_calls insert threw (non-fatal):', (e as Error).message) }
+}
 
 // ── Evidence rules — injected into every system prompt ────────────────
 const EVIDENCE_RULES = `EVIDENCE-BASED OUTPUTS — MANDATORY:
@@ -87,15 +118,29 @@ const TASK_PROVIDERS: Record<AiTask, 'claude' | 'gemini' | 'openai' | 'haiku'> =
 }
 
 // ── Claude Sonnet ──────────────────────────────────────────────────────
-async function callClaude(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
+async function callClaude(task: AiTask, userPrompt: string, maxTokens: number, businessId?: string, agentKey?: string): Promise<string> {
+  const model = 'claude-sonnet-4-5-20250929'
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
-    max_tokens: maxTokens,
-    system: SYSTEM_PROMPTS[task],
-    messages: [{ role: 'user', content: userPrompt }],
-  })
-  return msg.content[0].type === 'text' ? msg.content[0].text : ''
+  try {
+    const msg = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system: SYSTEM_PROMPTS[task],
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+    const text = msg.content[0].type === 'text' ? msg.content[0].text : ''
+    await logClaudeCall({
+      task, model_id: model, input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens,
+      success: !!text, business_id: businessId, agent_key: agentKey,
+    })
+    return text
+  } catch (e) {
+    await logClaudeCall({
+      task, model_id: model, input_tokens: 0, output_tokens: 0, success: false,
+      business_id: businessId, agent_key: agentKey, error_message: (e as Error).message,
+    })
+    throw e
+  }
 }
 
 // ── Gemini Flash ───────────────────────────────────────────────────────
@@ -147,15 +192,29 @@ async function callOpenAI(task: AiTask, userPrompt: string, maxTokens: number): 
 }
 
 // ── Haiku — emergency fallback only ───────────────────────────────────
-async function callHaiku(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
+async function callHaiku(task: AiTask, userPrompt: string, maxTokens: number, businessId?: string, agentKey?: string): Promise<string> {
+  const model = 'claude-haiku-4-5-20251001'
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const msg = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: maxTokens,
-    system: SYSTEM_PROMPTS[task],
-    messages: [{ role: 'user', content: userPrompt }],
-  })
-  return msg.content[0].type === 'text' ? msg.content[0].text : ''
+  try {
+    const msg = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system: SYSTEM_PROMPTS[task],
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+    const text = msg.content[0].type === 'text' ? msg.content[0].text : ''
+    await logClaudeCall({
+      task, model_id: model, input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens,
+      success: !!text, business_id: businessId, agent_key: agentKey,
+    })
+    return text
+  } catch (e) {
+    await logClaudeCall({
+      task, model_id: model, input_tokens: 0, output_tokens: 0, success: false,
+      business_id: businessId, agent_key: agentKey, error_message: (e as Error).message,
+    })
+    throw e
+  }
 }
 
 // ── Main router with fallback chain ───────────────────────────────────
@@ -166,14 +225,14 @@ export async function ariaChatWithProvider(
   task: AiTask,
   userPrompt: string,
   maxTokens = 800,
-  opts: { skipAnthropic?: boolean } = {},
+  opts: { skipAnthropic?: boolean; businessId?: string; agentKey?: string } = {},
 ): Promise<{ text: string; provider: string }> {
   const primary = TASK_PROVIDERS[task]
   const providerFns: Record<string, () => Promise<string>> = {
-    claude: () => callClaude(task, userPrompt, maxTokens),
+    claude: () => callClaude(task, userPrompt, maxTokens, opts.businessId, opts.agentKey),
     gemini: () => callGemini(task, userPrompt, maxTokens),
     openai: () => callOpenAI(task, userPrompt, maxTokens),
-    haiku:  () => callHaiku(task, userPrompt, maxTokens),
+    haiku:  () => callHaiku(task, userPrompt, maxTokens, opts.businessId, opts.agentKey),
   }
   // Order: primary first, then fallback sequence
   const fallbackOrder = ['claude', 'gemini', 'openai', 'haiku'].filter(p => p !== primary)
@@ -191,8 +250,8 @@ export async function ariaChatWithProvider(
   return { text: '', provider: 'none' }
 }
 
-export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800): Promise<string> {
-  const { text } = await ariaChatWithProvider(task, userPrompt, maxTokens)
+export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800, businessId?: string, agentKey?: string): Promise<string> {
+  const { text } = await ariaChatWithProvider(task, userPrompt, maxTokens, { businessId, agentKey })
   return text
 }
 
@@ -228,9 +287,10 @@ export async function ariaInsight(params: {
   category: string
   data: Record<string, unknown>
   triggered_by?: string
+  businessId?: string
 }): Promise<string> {
   const prompt = `Business event:\nCategory: ${params.category}\nEvent: ${params.event_type}\nData: ${JSON.stringify(params.data)}\nTriggered by: ${params.triggered_by ?? 'system'}\n\nGenerate ONE insight backed by the data above.`
-  return ariaChat('insight', prompt, 300)
+  return ariaChat('insight', prompt, 300, params.businessId, 'aria_observe_insight')
 }
 
 export async function ariaBriefing(params: {

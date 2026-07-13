@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { computeCostCents } from '@/lib/aria/cost';
 import type { AgentType, AgentDecision, AgentDecisionInput, AgentRunResult, AgentSettings } from './types';
 
 export abstract class BaseAgent {
@@ -63,17 +64,6 @@ export abstract class BaseAgent {
     }
   }
 
-  private computeCostCents(model: string, inputTokens: number, outputTokens: number): number {
-    if (model.includes('sonnet')) {
-      return Math.round((inputTokens * 0.000003 + outputTokens * 0.000015) * 100);
-    }
-    if (model.includes('opus')) {
-      return Math.round((inputTokens * 0.000015 + outputTokens * 0.000075) * 100);
-    }
-    // haiku
-    return Math.round((inputTokens * 0.00000025 + outputTokens * 0.00000125) * 100);
-  }
-
   protected async claudeReason(opts: {
     system: string;
     user: string;
@@ -96,7 +86,10 @@ export abstract class BaseAgent {
       const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
 
       if (opts.agent_key && opts.role) {
-        const costUsdCents = this.computeCostCents(model, msg.usage.input_tokens, msg.usage.output_tokens);
+        // AI-COST-2 — was a private, hardcoded pricing table 4x too cheap on haiku ($0.25/$1.25 vs
+        // cost.ts's correct $1.00/$5.00) and disagreeing with cost.ts on opus ($15/$75 vs $5/$25).
+        // One canonical pricing table now (AI-COST-AUDIT-1 §1/§5.4).
+        const costUsdCents = computeCostCents(model, msg.usage.input_tokens, msg.usage.output_tokens);
         try {
           const { error: aiCallErr } = await supabaseAdmin.from('aria_ai_calls').insert({  // LOGGING-AUDIT-3 Part 3
             business_id: opts.business_id ?? null,

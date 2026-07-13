@@ -182,6 +182,28 @@ async function _GET(req: Request) {
       return NextResponse.json({ ok: true, count: 0 })
     }
 
+    // AI-COST-2 — idempotency guard (AI-COST-AUDIT-1 §1 live risk): withCronRetry wraps the ENTIRE
+    // handler, so if anything AFTER submitBatch() succeeds throws, a retry would re-invoke this
+    // whole function and submit a SECOND full Batch API job for every business. Check first —
+    // aria_batch_jobs' (job_type, submit_date) unique index (AI-COST-2 migration) is the hard
+    // backstop if this check ever races.
+    const today = new Date().toISOString().slice(0, 10)
+    const { data: alreadySubmitted } = await supabaseAdmin
+      .from('aria_batch_jobs')
+      .select('id, batch_id')
+      .eq('job_type', 'daily_briefing')
+      .eq('submit_date', today)
+      .in('status', ['submitted', 'processing', 'completed'])
+      .maybeSingle()
+    if (alreadySubmitted) {
+      console.warn('[daily-briefing-submit] already submitted today — skipping duplicate submission', alreadySubmitted)
+      await supabaseAdmin.from('cron_logs').update({
+        status: 'completed', finished_at: new Date().toISOString(), businesses_processed: 0,
+        errors: { message: 'idempotency guard: already submitted today', existing_batch_id: alreadySubmitted.batch_id },
+      }).eq('id', cronLogId)
+      return NextResponse.json({ ok: true, skipped: true, reason: 'already_submitted_today', batch_id: alreadySubmitted.batch_id })
+    }
+
     const requests = await Promise.all(businesses.map(async biz => {
       const [ctx, marketCtx] = await Promise.all([
         buildBriefingContext(biz.id),
@@ -231,10 +253,14 @@ async function _GET(req: Request) {
       return NextResponse.json({ ok: true, degraded: true, gemini_served: gemini, templated_served: templated, count: businesses.length })
     }
 
-    await supabaseAdmin.from('aria_batch_jobs').insert({
+    const { error: insertErr } = await supabaseAdmin.from('aria_batch_jobs').insert({
       batch_id: batchId, job_type: 'daily_briefing',
       business_count: businesses.length, status: 'submitted',
     })
+    // 23505 = unique_violation on (job_type, submit_date) — the pre-check above raced and lost;
+    // the Batches API call itself already happened (can't be undone), but this is now a duplicate
+    // record, not a duplicate FUTURE submission — log it, don't fail the cron run over it.
+    if (insertErr && insertErr.code !== '23505') console.error('[daily-briefing-submit] aria_batch_jobs insert failed:', insertErr.message)
 
     await supabaseAdmin.from('cron_logs').update({
       status: 'completed', finished_at: new Date().toISOString(),

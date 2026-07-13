@@ -468,6 +468,47 @@ function buildRedRecommendation(check: WiringCheck): string {
   }
 }
 
+// ─── SH-5: per-business AI daily budget ceiling ───────────────────────────────
+
+async function checkBudgetCeilings(todayStart: string): Promise<number> {
+  const { data: businesses } = await supabaseAdmin
+    .from('businesses')
+    .select('id, name, ai_daily_budget_cents, ai_budget_alert_sent_date')
+    .eq('is_active', true)
+    .not('ai_daily_budget_cents', 'is', null)
+
+  if (!businesses?.length) return 0
+
+  const todayDate = todayStart.slice(0, 10)
+  let alertsSent = 0
+
+  for (const biz of businesses as Array<{ id: string; name: string; ai_daily_budget_cents: number; ai_budget_alert_sent_date: string | null }>) {
+    if (biz.ai_budget_alert_sent_date === todayDate) continue // already alerted today — dedup
+
+    const { data: rows } = await supabaseAdmin
+      .from('aria_ai_calls')
+      .select('cost_usd_cents')
+      .eq('business_id', biz.id)
+      .gte('created_at', todayStart)
+      .limit(50_000)
+
+    const spentCents = (rows ?? []).reduce((s, r) => s + Number((r as { cost_usd_cents: number | null }).cost_usd_cents ?? 0), 0)
+    const pct = biz.ai_daily_budget_cents > 0 ? (spentCents / biz.ai_daily_budget_cents) * 100 : 0
+    if (pct < 80) continue
+
+    void sendAlert({
+      title: `AI budget: ${biz.name} at ${pct.toFixed(0)}% of daily ceiling`,
+      summary: `Spent $${(spentCents / 100).toFixed(2)} of $${(biz.ai_daily_budget_cents / 100).toFixed(2)} daily AI budget today. Alert-only — no calls have been blocked (never blocks an owner-initiated ask).`,
+      severity: pct >= 100 ? 'high' : 'normal',
+      details: { business_id: biz.id, spent_cents: spentCents, budget_cents: biz.ai_daily_budget_cents, pct: Math.round(pct) },
+    })
+    await supabaseAdmin.from('businesses').update({ ai_budget_alert_sent_date: todayDate }).eq('id', biz.id)
+    alertsSent++
+  }
+
+  return alertsSent
+}
+
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
@@ -546,6 +587,15 @@ export async function GET(req: Request) {
       console.log(`[aria-health-monitor] SH-3 ticket created: ${anomaly.category}`)
     }
   }
+
+  // ── SH-5: per-business AI daily budget ceiling (AI-COST-2) ────────────────
+  // Config, default OFF (ai_daily_budget_cents is NULL for every business today). Alert-only —
+  // never blocks a call, and this cron never touches ask_aria/council's request path at all.
+  // "Not for savings — for SaaS plan enforcement later and runaway protection now" per the sprint.
+  // Calendar-day window (not a rolling 24h one) since this is a DAILY ceiling that resets at midnight.
+  const todayStart = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z'
+  const budgetAlertsSent = await checkBudgetCeilings(todayStart)
+  if (budgetAlertsSent > 0) console.log(`[aria-health-monitor] SH-5: ${budgetAlertsSent} budget-ceiling alert(s) sent`)
 
   // ── SH-4: wiring health pass ──────────────────────────────────────────────
 

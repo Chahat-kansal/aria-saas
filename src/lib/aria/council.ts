@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
 import { toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { computeCostCentsWithCache } from './cost'
 import type { AskBlock } from './ask-types'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
@@ -101,6 +102,11 @@ async function logAICall(params: {
     // ('guard','validator','chat',…). Supabase .insert() returns {error} WITHOUT throwing, so the old
     // try/catch never fired and the rejection was invisible (also why LOGGING-FIX-1's fallback never ran).
     // Fix: valid role ('analysis' — council synthesis IS analysis) + CHECK the returned error.
+    // AI-COST-2 — this insert previously never computed cost_usd_cents at all, so every
+    // council row landed at $0 regardless of real token volume (AI-COST-AUDIT-1 §3.1: ~$1.94
+    // of real Sip spend was invisible to the cost ledger this way). Same pricing fn every
+    // other logger uses — no cache read/write tracked in this file, so those default to 0.
+    const cost = computeCostCentsWithCache(params.model_id, params.input_tokens, params.output_tokens)
     const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: params.business_id,
       agent_key: params.agent_key,
@@ -109,6 +115,7 @@ async function logAICall(params: {
       role: 'analysis',
       input_tokens: params.input_tokens,
       output_tokens: params.output_tokens,
+      cost_usd_cents: cost,
       success: params.success,
       error_message: params.error_message ?? null,
       request_summary: params.request_summary ?? null,
