@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aria Inventory — Pipel Theme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a0a0a; --lime:#d9f54e; --bg:#fafafa; --card:#ffffff;
+    --muted:#6f6f6f; --faint:#9a9a9a; --line:#0a0a0a;
+    --soft:#eceae3; --amber:#BA7517; --red:#E24B4A;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Plus Jakarta Sans',sans-serif;background:#cfd2cc;color:var(--ink);
+    display:flex;justify-content:center;padding:40px 20px;-webkit-font-smoothing:antialiased}
+  .phone{width:392px;background:var(--bg);border-radius:42px;overflow:hidden;
+    box-shadow:0 40px 90px rgba(20,30,20,.3);position:relative;border:1px solid #b9beb7}
+  .scroll{max-height:840px;overflow-y:auto;padding-bottom:100px}
+  .scroll::-webkit-scrollbar{display:none}
+
+  .status{height:46px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 24px;font-size:13.5px;font-weight:700}
+  .status .r{display:flex;gap:7px;font-size:11px;color:var(--muted);font-weight:600}
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 14px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .crest{width:44px;height:44px;border-radius:13px;background:var(--lime);border:1.5px solid var(--ink);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px}
+  .wordmark{font-weight:800;font-size:26px;letter-spacing:-.02em}
+  .circbtns{display:flex;gap:9px}
+  .circ{width:42px;height:42px;border-radius:50%;background:var(--card);border:1.5px solid var(--ink);
+    display:flex;align-items:center;justify-content:center}
+  .circ svg{stroke:var(--ink)}
+  .circ.av{background:var(--ink);color:var(--lime);font-weight:800;font-size:13px;border:none}
+
+  /* ---------- OUTLET PILL TOGGLE ---------- */
+  .seg{display:flex;margin:0 16px 14px;background:var(--card);border:1.5px solid var(--ink);
+    border-radius:30px;padding:5px;gap:5px}
+  .seg .opt{flex:1;text-align:center;padding:11px;border-radius:24px;font-weight:700;font-size:14px;color:var(--muted)}
+  .seg .opt.on{background:var(--lime);color:var(--ink);border:1.5px solid var(--ink)}
+
+  /* ---------- GREETING ---------- */
+  .greet{padding:4px 20px 2px}
+  .greet h1{font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1}
+  .greet h1 .lo{color:var(--muted)}
+  .greet .date{margin-top:7px;font-size:13px;color:var(--muted);font-weight:600}
+
+  /* ---------- HERO STOCK VALUE ---------- */
+  .hero{margin:16px 16px 0;background:var(--card);border:1.5px solid var(--ink);border-radius:28px;padding:20px}
+  .hero .cap{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .hero .val{font-weight:800;font-size:50px;letter-spacing:-.03em;line-height:1;margin:8px 0 2px}
+  .hero .val .c{color:var(--ink)}
+  .bar{height:14px;border-radius:8px;background:var(--soft);border:1.5px solid var(--ink);
+    margin:16px 0 11px;overflow:hidden;display:flex}
+  .bar .cost{width:39%;background:var(--ink)}
+  .bar .marg{flex:1;background:var(--lime)}
+  .legend{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);font-weight:600}
+  .legend b{color:var(--ink);font-weight:800}
+  .legend .tag{background:var(--lime);border:1.5px solid var(--ink);border-radius:8px;padding:1px 7px;color:var(--ink);font-weight:800}
+  .stats{display:flex;margin-top:16px;gap:9px}
+  .stats .s{flex:1;background:var(--bg);border:1.5px solid var(--ink);border-radius:16px;padding:11px;text-align:center}
+  .stats .n{font-weight:800;font-size:22px;line-height:1}
+  .stats .n.warn{color:var(--amber)} .stats .n.alert{color:var(--red)}
+  .stats .k{font-size:10.5px;color:var(--muted);margin-top:3px;font-weight:600}
+
+  /* ---------- SECTION HEAD ---------- */
+  .sechead{display:flex;align-items:center;justify-content:space-between;margin:24px 20px 12px}
+  .sechead .t{font-weight:800;font-size:16px;letter-spacing:-.01em}
+  .sechead .t em{font-style:normal;color:var(--faint);font-weight:600;font-size:13px}
+
+  /* ---------- NEEDS YOU ---------- */
+  .needs{display:flex;flex-direction:column;gap:10px;margin:0 16px}
+  .need{display:flex;align-items:center;gap:13px;background:var(--card);border:1.5px solid var(--ink);
+    border-radius:20px;padding:13px 14px}
+  .need .ic{width:40px;height:40px;border-radius:12px;border:1.5px solid var(--ink);display:flex;
+    align-items:center;justify-content:center;flex-shrink:0;background:var(--lime)}
+  .need.order .ic{background:#fff}
+  .need .ic svg{stroke:var(--ink)}
+  .need .tx{flex:1}
+  .need .tx .h{font-weight:800;font-size:14.5px;line-height:1.15}
+  .need .tx .d{font-size:12px;color:var(--muted);margin-top:2px;font-weight:500}
+  .need .cta{font-weight:800;font-size:13px;padding:9px 15px;border-radius:13px;
+    background:var(--lime);border:1.5px solid var(--ink);white-space:nowrap}
+
+  /* ============ TOOLS — the liveliest part ============ */
+  .tools{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin:0 16px}
+  .tool{position:relative;background:var(--card);border:1.5px solid var(--ink);border-radius:22px;
+    padding:15px;box-shadow:3px 3px 0 var(--ink);display:flex;flex-direction:column;
+    justify-content:space-between;min-height:128px;overflow:hidden}
+  .thead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+  .tool .ic{width:46px;height:46px;border-radius:13px;border:1.5px solid var(--ink);
+    background:var(--lime);display:flex;align-items:center;justify-content:center}
+  .tool .ic svg{stroke:var(--ink)}
+  .badge{font-size:10px;font-weight:800;padding:3px 9px;border-radius:9px;border:1.5px solid var(--ink);background:#fff}
+  .badge.lime{background:var(--lime)}
+  .badge.amber{color:var(--amber)}
+  .tool .lab{font-weight:800;font-size:15.5px;line-height:1}
+  .tool .stat{margin-top:7px;font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:baseline;gap:5px}
+  .tool .stat b{font-weight:800;font-size:17px;color:var(--ink)}
+  /* featured lime-filled tile */
+  .tool.feat{background:var(--lime)}
+  .tool.feat .ic{background:#fff}
+  .tool.feat .badge{background:var(--ink);color:var(--lime)}
+  .tool.feat .stat{color:#3c451a}
+  .tool.feat .stat b{color:var(--ink)}
+  /* loss tile */
+  .tool.loss .ic{background:#fdeceb}
+  .tool.loss .ic svg{stroke:var(--red)}
+  .tool.loss .stat b{color:var(--red)}
+
+  /* ---------- BOTTOM NAV (Pipel) ---------- */
+  .nav{position:absolute;bottom:0;left:0;right:0;height:88px;background:rgba(250,250,250,.95);
+    backdrop-filter:blur(12px);border-top:1.5px solid var(--ink);
+    display:flex;align-items:center;justify-content:space-around;padding:0 16px 12px}
+  .ni{display:flex;align-items:center;justify-content:center;color:var(--ink)}
+  .ni svg{stroke:var(--ink)}
+  .ni.home{gap:8px;background:var(--lime);border:1.5px solid var(--ink);
+    padding:11px 18px;border-radius:18px;font-weight:800;font-size:14px}
+  .ni.scan{width:54px;height:54px;border-radius:16px;background:var(--lime);border:1.5px solid var(--ink)}
+  .ni.aria{width:54px;height:54px;border-radius:50%;background:var(--ink);
+    font-weight:800;font-size:22px;color:var(--lime)}
+</style>
+</head>
+<body>
+<div class="phone"><div class="scroll">
+
+  <div class="status"><span>8:45</span><span class="r">5G&nbsp;&nbsp;▦&nbsp;&nbsp;84%</span></div>
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="crest">S</div>
+      <div class="wordmark">sip</div>
+    </div>
+    <div class="circbtns">
+      <div class="circ"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></div>
+      <div class="circ av">MR</div>
+    </div>
+  </div>
+
+  <!-- OUTLET TOGGLE -->
+  <div class="seg">
+    <div class="opt on">Global</div>
+    <div class="opt">Southbank</div>
+  </div>
+
+  <!-- GREETING -->
+  <div class="greet">
+    <h1>morning, <span class="lo">maya</span></h1>
+    <div class="date">Tuesday, 25 June · stock is per-outlet</div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="cap">Stock value on hand · at cost</div>
+    <div class="val"><span class="c">$11,471</span></div>
+    <div class="bar"><div class="cost"></div><div class="marg"></div></div>
+    <div class="legend"><span><b>$11,471</b> cost</span><span class="tag">60% margin</span><span><b>$29,173</b> retail</span></div>
+    <div class="stats">
+      <div class="s"><div class="n">0</div><div class="k">sold today</div></div>
+      <div class="s"><div class="n">0</div><div class="k">tasks open</div></div>
+      <div class="s"><div class="n">0</div><div class="k">to review</div></div>
+    </div>
+  </div>
+
+  <!-- NEEDS YOU -->
+  <div class="sechead"><span class="t">needs you <em>· before close</em></span></div>
+  <div class="needs">
+    <div class="need recv">
+      <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/></svg></div>
+      <div class="tx"><div class="h">1 delivery to receive</div><div class="d">Oat milk · ALM · arrived 9:10</div></div>
+      <div class="cta">Receive</div>
+    </div>
+    <div class="need order">
+      <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="18" cy="21" r="1.5"/><path d="M1 1h4l2.6 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg></div>
+      <div class="tx"><div class="h">1 line below par</div><div class="d">Reorder before the weekend</div></div>
+      <div class="cta">Order</div>
+    </div>
+  </div>
+
+  <!-- TOOLS -->
+  <div class="sechead"><span class="t">inventory tools</span><span class="all">all 10</span></div>
+  <div class="tools">
+
+    <div class="tool">
+      <div class="thead">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      </div>
+      <div><div class="lab">Count</div><div class="stat"><b>74</b> items · last 3d</div></div>
+    </div>
+
+    <div class="tool">
+      <div class="thead">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></div>
+      </div>
+      <div><div class="lab">Adjust</div><div class="stat"><b>2</b> fixes this week</div></div>
+    </div>
+
+    <div class="tool">
+      <div class="thead">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13M7 4L3 8M7 4l4 4"/><path d="M17 20V7M17 20l4-4M17 20l-4-4"/></svg></div>
+        <div class="badge">1 draft</div>
+      </div>
+      <div><div class="lab">Transfer</div><div class="stat"><b>1</b> in transit</div></div>
+    </div>
+
+    <div class="tool loss">
+      <div class="thead">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></div>
+      </div>
+      <div><div class="lab">Waste</div><div class="stat"><b>$0</b> logged today</div></div>
+    </div>
+
+    <div class="tool feat">
+      <div class="thead">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v8M8 12h8"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <div class="badge">new</div>
+      </div>
+      <div><div class="lab">Tickets</div><div class="stat"><b>12</b> to print</div></div>
+    </div>
+
+    <div class="tool">
+      <div class="thead">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <div class="badge amber">soon</div>
+      </div>
+      <div><div class="lab">Expiring</div><div class="stat"><b>3</b> within 7 days</div></div>
+    </div>
+
+  </div>
+
+</div>
+
+  <!-- BOTTOM NAV -->
+  <div class="nav">
+    <div class="ni home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>home</div>
+    <div class="ni"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+    <div class="ni scan"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18"/></svg></div>
+    <div class="ni"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+    <div class="ni aria">A</div>
+  </div>
+
+</div>
+</body>
+</html>
