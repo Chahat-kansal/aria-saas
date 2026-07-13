@@ -1,17 +1,30 @@
 {
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
-      "Bash(*)",
-      "Read(*)",
-      "Write(*)",
-      "Edit(*)",
-      "MultiEdit(*)",
-      "WebFetch(*)",
-      "TodoWrite(*)",
-      "Glob(*)",
-      "Grep(*)",
-      "LS(*)"
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__claude_ai_Supabase__list_migrations",
+      "mcp__claude_ai_Supabase__list_extensions"
     ],
-    "deny": []
+    "ask": [
+      "Bash(git push:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push:* --force)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout .)",
+      "mcp__claude_ai_Vercel__deploy_to_vercel"
+    ]
   }
 }
