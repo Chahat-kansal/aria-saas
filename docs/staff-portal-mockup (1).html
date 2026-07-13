@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sip — Staff Portal (Mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sage:#7FB897;
+    --sage-deep:#2D5240;
+    --sand:#C9A37A;
+    --amber:#BA7517;
+    --red:#E24B4A;
+    --ink:#1d2a24;
+    --muted:#6b7d74;
+    --line:#e6ece8;
+    --card:#ffffff;
+    --bg:#f4f7f5;
+    --sage-tint:#eef6f1;
+    --shadow:0 1px 2px rgba(45,82,64,.06), 0 8px 24px rgba(45,82,64,.06);
+    --shadow-lift:0 6px 16px rgba(45,82,64,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:#dfe7e2;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;
+    padding:28px 16px 60px;min-height:100vh;
+  }
+  .intro{max-width:420px;text-align:center;margin-bottom:24px}
+  .intro h1{font-family:'Fraunces',serif;font-weight:600;font-size:24px;color:var(--sage-deep);margin-bottom:6px}
+  .intro p{font-size:13.5px;color:#46584f;line-height:1.5}
+  .intro .tag{display:inline-block;margin-top:10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:#fff;border:1px solid var(--line);padding:4px 10px;border-radius:999px}
+
+  /* phone frame */
+  .phone{
+    width:390px;max-width:100%;background:var(--bg);
+    border-radius:38px;padding:0;overflow:hidden;position:relative;
+    box-shadow:0 0 0 10px #11201a, 0 0 0 12px #2c3d35, 0 30px 60px rgba(0,0,0,.28);
+    border:1px solid #0d1813;
+  }
+  .notch{height:30px;background:transparent;display:flex;justify-content:center;align-items:flex-start;padding-top:8px}
+  .notch::before{content:"";width:120px;height:26px;background:#11201a;border-radius:0 0 16px 16px}
+  .screen{height:780px;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth}
+  .screen::-webkit-scrollbar{width:0}
+
+  /* top greeting bar */
+  .topbar{padding:8px 20px 18px;background:linear-gradient(180deg,var(--sage-deep) 0%, #356048 100%);color:#fff;border-radius:0 0 26px 26px;position:relative;overflow:hidden}
+  .topbar .leaf{position:absolute;right:-30px;top:-30px;width:160px;height:160px;background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.14), transparent 60%);border-radius:50%}
+  .greet-row{display:flex;align-items:center;gap:13px;position:relative;z-index:1}
+  .avatar{width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#9fd0b3,#7FB897);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:var(--sage-deep);box-shadow:0 0 0 3px rgba(255,255,255,.25), 0 0 0 6px rgba(255,255,255,.12)}
+  .greet h2{font-family:'Fraunces',serif;font-weight:500;font-size:21px;line-height:1.1}
+  .greet .sub{font-size:12.5px;opacity:.82;margin-top:3px}
+  .greet .pill{display:inline-block;font-size:10.5px;background:rgba(255,255,255,.18);padding:2px 9px;border-radius:999px;margin-top:6px;letter-spacing:.02em}
+
+  /* streak strip */
+  .streak{display:flex;align-items:center;gap:10px;margin-top:16px;background:rgba(255,255,255,.12);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:11px 14px;position:relative;z-index:1}
+  .streak .flame{font-size:22px}
+  .streak .s-txt{flex:1}
+  .streak .s-txt b{font-size:14px;font-weight:600}
+  .streak .s-txt span{display:block;font-size:11.5px;opacity:.8;margin-top:1px}
+  .streak .dots{display:flex;gap:4px}
+  .streak .dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.3)}
+  .streak .dot.on{background:#ffd98a;box-shadow:0 0 6px rgba(255,217,138,.8)}
+
+  .body{padding:18px 16px 30px}
+  .section-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:22px 4px 10px;font-weight:600}
+  .section-label:first-child{margin-top:4px}
+
+  /* next shift card */
+  .shift{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:0;overflow:hidden;border:1px solid var(--line)}
+  .shift .accent{height:4px;background:linear-gradient(90deg,var(--sage),var(--sage-deep))}
+  .shift .inner{padding:16px 17px;display:flex;gap:14px;align-items:center}
+  .shift .daybox{text-align:center;background:var(--sage-tint);border-radius:14px;padding:9px 13px;min-width:58px}
+  .shift .daybox .dow{font-size:11px;font-weight:700;color:var(--sage-deep);letter-spacing:.06em}
+  .shift .daybox .num{font-family:'Fraunces',serif;font-size:26px;font-weight:600;color:var(--sage-deep);line-height:1}
+  .shift .mid{flex:1}
+  .shift .mid .time{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--ink)}
+  .shift .mid .meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .chip{font-size:11px;background:#f0f4f1;color:#42594e;padding:3px 9px;border-radius:999px;border:1px solid var(--line)}
+  .chip.role{background:var(--sage-tint);color:var(--sage-deep)}
+  .confirm-btn{display:flex;align-items:center;gap:7px;width:100%;border:none;background:#fff;color:var(--amber);font-family:inherit;font-weight:600;font-size:13px;padding:12px 17px;border-top:1px dashed var(--line);cursor:pointer}
+  .confirm-btn.done{color:var(--sage-deep);background:var(--sage-tint)}
+  .confirm-btn svg{width:16px;height:16px}
+
+  /* stat grid */
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:11px}
+  .stat{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:15px 15px 14px;border:1px solid var(--line)}
+  .stat .top{display:flex;justify-content:space-between;align-items:flex-start}
+  .stat .ico{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .ico.green{background:var(--sage-tint)}
+  .ico.sand{background:#f6efe5}
+  .stat .num{font-family:'Fraunces',serif;font-size:25px;font-weight:600;margin-top:9px;line-height:1}
+  .stat .lbl{font-size:11.5px;color:var(--muted);margin-top:3px}
+  /* progress ring */
+  .ring-wrap{display:flex;align-items:center;gap:12px}
+  .ring{position:relative;width:52px;height:52px;flex-shrink:0}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:13px;font-weight:600;color:var(--sage-deep)}
+
+  /* leave progress bars */
+  .leave-card{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:15px 16px;border:1px solid var(--line)}
+  .leave-row{margin-bottom:13px}
+  .leave-row:last-child{margin-bottom:0}
+  .leave-row .lr-top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px}
+  .leave-row .lr-top b{font-weight:600}
+  .leave-row .lr-top .rem{color:var(--muted)}
+  .bar{height:8px;background:#eef2ef;border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--sage),var(--sage-deep))}
+  .bar i.low{background:linear-gradient(90deg,#e9b765,var(--amber))}
+
+  /* training card */
+  .train{background:linear-gradient(135deg,#2D5240,#3a6b50);border-radius:20px;padding:17px;color:#fff;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  .train .badge{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.16);font-size:10.5px;padding:3px 10px;border-radius:999px}
+  .train h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin-bottom:4px}
+  .train p{font-size:12.5px;opacity:.85;line-height:1.45;max-width:230px}
+  .train .tprog{margin-top:14px;display:flex;align-items:center;gap:11px}
+  .train .tbar{flex:1;height:7px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden}
+  .train .tbar i{display:block;height:100%;width:60%;background:#ffd98a;border-radius:99px}
+  .train .tnum{font-size:12px;font-weight:600}
+  .train .cta{margin-top:14px;display:inline-flex;align-items:center;gap:7px;background:#fff;color:var(--sage-deep);font-weight:600;font-size:12.5px;padding:9px 15px;border-radius:11px;border:none;cursor:pointer}
+
+  .train-list{margin-top:11px;display:flex;flex-direction:column;gap:9px}
+  .tl-item{display:flex;align-items:center;gap:13px;background:var(--card);border:1px solid var(--line);border-radius:15px;padding:12px 14px;box-shadow:var(--shadow)}
+  .tl-item .tl-ic{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .tl-ic.coffee{background:#f6efe5}
+  .tl-ic.safety{background:#fdeceb}
+  .tl-ic.done{background:var(--sage-tint)}
+  .tl-item .tl-mid{flex:1}
+  .tl-item .tl-mid b{font-size:13.5px;font-weight:600;display:block}
+  .tl-item .tl-mid span{font-size:11.5px;color:var(--muted)}
+  .tl-item .tl-status{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px}
+  .st-todo{background:#fdeceb;color:var(--red)}
+  .st-prog{background:#fbf2e2;color:var(--amber)}
+  .st-done{background:var(--sage-tint);color:var(--sage-deep)}
+
+  /* quick actions */
+  .qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:11px}
+  .qa{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:15px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s ease, box-shadow .15s ease;text-align:left}
+  .qa:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift)}
+  .qa:active{transform:translateY(0)}
+  .qa .qa-ic{width:38px;height:38px;border-radius:11px;background:var(--sage-tint);display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:10px}
+  .qa b{font-size:13.5px;font-weight:600;display:block}
+  .qa span{font-size:11px;color:var(--muted);display:block;margin-top:2px}
+
+  /* bottom nav */
+  .nav{position:sticky;bottom:0;display:flex;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:9px 8px 11px}
+  .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--muted);text-decoration:none;font-weight:500}
+  .nav a .ni{font-size:19px}
+  .nav a.active{color:var(--sage-deep)}
+  .nav a.active .ni{filter:none}
+
+  .note{max-width:420px;margin-top:26px;font-size:12px;color:#46584f;line-height:1.55;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .note b{color:var(--sage-deep)}
+  .note ul{margin:8px 0 0 18px}
+  .note li{margin-bottom:4px}
+</style>
+</head>
+<body>
+
+  <div class="intro">
+    <h1>Sip — Staff Portal redesign</h1>
+    <p>A mockup of the home screen, designed mobile-first and gamified, with the new training section. Sample data shown — this is a design to react to, not the live app.</p>
+    <span class="tag">Mockup · tap the cards</span>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+
+      <!-- greeting -->
+      <div class="topbar">
+        <div class="leaf"></div>
+        <div class="greet-row">
+          <div class="avatar">AK</div>
+          <div class="greet">
+            <h2>Morning, Aashi</h2>
+            <div class="sub">Barista · Sip Brunswick</div>
+            <span class="pill">Part-time</span>
+          </div>
+        </div>
+        <div class="streak">
+          <div class="flame">🔥</div>
+          <div class="s-txt"><b>6-shift streak</b><span>Confirmed every shift this fortnight</span></div>
+          <div class="dots">
+            <span class="dot on"></span><span class="dot on"></span><span class="dot on"></span>
+            <span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="body">
+
+        <!-- next shift -->
+        <div class="section-label">Your next shift</div>
+        <div class="shift">
+          <div class="accent"></div>
+          <div class="inner">
+            <div class="daybox">
+              <div class="dow">THU</div>
+              <div class="num">12</div>
+            </div>
+            <div class="mid">
+              <div class="time">7:00 AM – 1:00 PM</div>
+              <div class="meta">
+                <span class="chip role">Barista</span>
+                <span class="chip">Front counter</span>
+                <span class="chip">6 hrs</span>
+              </div>
+            </div>
+          </div>
+          <button class="confirm-btn" onclick="this.classList.add('done');this.innerHTML='&#10003; Shift confirmed — see you Thursday'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+            Tap to confirm this shift
+          </button>
+        </div>
+
+        <!-- stats -->
+        <div class="section-label">This week</div>
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="top">
+              <div class="ring-wrap">
+                <div class="ring">
+                  <svg width="52" height="52"><circle cx="26" cy="26" r="22" fill="none" stroke="#eef2ef" stroke-width="6"/><circle cx="26" cy="26" r="22" fill="none" stroke="#7FB897" stroke-width="6" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="38"/></svg>
+                  <div class="pct">72%</div>
+                </div>
+              </div>
+              <div class="ico green">⏱️</div>
+            </div>
+            <div class="num">26<span style="font-size:14px;color:var(--muted)">h</span></div>
+            <div class="lbl">Hours worked</div>
+          </div>
+          <div class="stat">
+            <div class="top">
+              <div class="ico sand">💰</div>
+            </div>
+            <div class="num">$512</div>
+            <div class="lbl">Est. this week</div>
+          </div>
+        </div>
+
+        <!-- training (the new feature) -->
+        <div class="section-label">Your training</div>
+        <div class="train">
+          <span class="badge">2 assigned</span>
+          <h3>Keep your skills sharp ☕</h3>
+          <p>Sarah assigned you the latte-art module. Quick — 4 short cards, about 6 minutes.</p>
+          <div class="tprog">
+            <div class="tbar"><i></i></div>
+            <div class="tnum">60%</div>
+          </div>
+          <button class="cta">Continue training →</button>
+        </div>
+        <div class="train-list">
+          <div class="tl-item">
+            <div class="tl-ic coffee">🥛</div>
+            <div class="tl-mid"><b>Latte art basics</b><span>4 cards · in progress</span></div>
+            <span class="tl-status st-prog">60%</span>
+          </div>
+          <div class="tl-item">
+            <div class="tl-ic safety">🧯</div>
+            <div class="tl-mid"><b>Food safety refresher</b><span>Due Fri · not started</span></div>
+            <span class="tl-status st-todo">To do</span>
+          </div>
+          <div class="tl-item">
+            <div class="tl-ic done">✓</div>
+            <div class="tl-mid"><b>Opening checklist</b><span>Completed 3 days ago</span></div>
+            <span class="tl-status st-done">Done</span>
+          </div>
+        </div>
+
+        <!-- leave -->
+        <div class="section-label">Leave balances</div>
+        <div class="leave-card">
+          <div class="leave-row">
+            <div class="lr-top"><b>Annual leave</b><span class="rem">14.5 / 20 days</span></div>
+            <div class="bar"><i style="width:72%"></i></div>
+          </div>
+          <div class="leave-row">
+            <div class="lr-top"><b>Personal leave</b><span class="rem">2 / 10 days</span></div>
+            <div class="bar"><i class="low" style="width:20%"></i></div>
+          </div>
+        </div>
+
+        <!-- quick actions -->
+        <div class="section-label">Quick actions</div>
+        <div class="qa-grid">
+          <button class="qa"><div class="qa-ic">📅</div><b>My schedule</b><span>See all shifts</span></button>
+          <button class="qa"><div class="qa-ic">🏖️</div><b>Request leave</b><span>Book time off</span></button>
+          <button class="qa"><div class="qa-ic">🕒</div><b>Timesheets</b><span>Clock history</span></button>
+          <button class="qa"><div class="qa-ic">✉️</div><b>Messages</b><span>1 unread</span></button>
+        </div>
+
+      </div>
+
+      <!-- bottom nav -->
+      <div class="nav">
+        <a class="active"><span class="ni">🏠</span>Home</a>
+        <a><span class="ni">📅</span>Schedule</a>
+        <a><span class="ni">🎓</span>Training</a>
+        <a><span class="ni">🏖️</span>Leave</a>
+        <a><span class="ni">✉️</span>Inbox</a>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="note">
+    <b>What this mockup shows (vs the current flat portal):</b>
+    <ul>
+      <li><b>Gamified header</b> — greeting + shift-streak with flame & progress dots (the #1 engagement pattern from the research)</li>
+      <li><b>Progress rings & bars</b> instead of flat numbers — hours, pay, leave shown visually</li>
+      <li><b>Training section</b> (the new feature) — assigned modules, microlearning "cards" style, progress %, owner-assigned ("Sarah assigned you…")</li>
+      <li><b>Confirm-shift</b> is a clear tappable action (try it)</li>
+      <li><b>Mobile-first</b> with a bottom tab bar — designed for a phone between tasks</li>
+    </ul>
+    Sample data only. Nothing here is built or wired — it's a visual direction to react to before we touch the real portal.
+  </div>
+
+</body>
+</html>

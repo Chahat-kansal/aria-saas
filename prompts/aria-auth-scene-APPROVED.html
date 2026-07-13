@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ariaOS — Auth (warm scene)</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Cormorant:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sage:#7FB897;--green:#2D5240;--green2:#3a6b50;--sand:#C9A37A;--amber:#BA7517;--red:#E24B4A;
+  --bg:#F5F0E8;--ink:#1A1D23;--ink2:#4A5568;--ink3:#8896A5;--ink4:#B0BEC5;--border:#E8E2D6;
+}
+body{font-family:'Outfit',sans-serif;background:#0c0f0d;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;-webkit-font-smoothing:antialiased}
+.stage{position:relative;width:100%;max-width:980px;display:flex;border-radius:26px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.55);min-height:660px;background:#fff}
+
+/* LEFT — full cafe scene */
+.left{position:relative;flex:1.15;overflow:hidden}
+.scene-layer{position:absolute;inset:0;overflow:hidden}
+.scene{position:absolute;inset:-4%;width:108%;height:108%;object-fit:cover;object-position:center;opacity:0;transition:opacity .6s ease;will-change:opacity,transform}
+.scene.on{opacity:1}
+.scene-zoom{animation:kenburns 18s ease-in-out infinite alternate}
+@keyframes kenburns{0%{transform:scale(1) translate(0,0)}100%{transform:scale(1.06) translate(-1%,-1%)}}
+/* warm vignette + readability gradient toward the bottom for the bubble */
+.scene-overlay{position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(180deg,rgba(45,82,64,.05) 0%,transparent 30%,transparent 60%,rgba(45,82,64,.25) 100%),
+  radial-gradient(ellipse 80% 60% at 50% 40%,transparent 40%,rgba(20,30,24,.18) 100%)}
+
+.brand{position:absolute;top:28px;left:28px;display:flex;align-items:center;gap:10px;z-index:5}
+.brand-mark{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--sage),var(--green));display:grid;place-items:center;box-shadow:0 8px 22px rgba(0,0,0,.3)}
+.brand-mark::after{content:"✦";color:#fff;font-size:.9rem}
+.brand-name{font-size:1.2rem;font-weight:300;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.3)}.brand-name b{font-weight:700}
+.tagline{position:absolute;top:80px;left:28px;z-index:5;max-width:280px}
+.tagline h2{font-family:'Cormorant';font-style:italic;font-weight:600;font-size:1.6rem;color:#fff;line-height:1.18;text-shadow:0 2px 14px rgba(0,0,0,.35)}
+.tagline h2 .a{color:#cde6d6}
+
+.speech{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);z-index:6;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);
+  border-radius:18px 18px 18px 5px;padding:12px 18px;font-size:.85rem;color:var(--ink);font-weight:500;
+  box-shadow:0 14px 34px rgba(0,0,0,.28);max-width:80%;text-align:center;line-height:1.4;transition:opacity .35s,transform .35s}
+.speech.hide{opacity:0;transform:translateX(-50%) translateY(6px)}
+.speech b{color:var(--green)}
+
+/* RIGHT — form */
+.right{position:relative;flex:1;background:#FBFAF7;padding:46px 40px;display:flex;flex-direction:column;justify-content:center}
+.tabs{display:flex;gap:3px;background:#F0ECE3;padding:4px;border-radius:11px;margin-bottom:24px}
+.tab{flex:1;text-align:center;padding:10px;border-radius:8px;font-size:.85rem;font-weight:600;color:var(--ink3);cursor:pointer;transition:.2s}
+.tab.active{background:#fff;color:var(--green);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.ftitle{font-family:'Cormorant';font-style:italic;font-size:1.75rem;font-weight:600;color:var(--ink)}
+.fsub{font-size:.84rem;color:var(--ink3);margin-bottom:22px}
+.gbtn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:11px;background:#fff;font-family:'Outfit';font-size:.86rem;font-weight:600;color:var(--ink2);cursor:pointer;transition:.15s}
+.gbtn:hover{border-color:var(--sage);background:#FAFCFA}
+.gi{width:17px;height:17px;border-radius:50%;background:conic-gradient(from -45deg,#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0)}
+.dv{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink4);font-size:.74rem}
+.dv::before,.dv::after{content:"";flex:1;height:1px;background:var(--border)}
+.field{margin-bottom:15px}
+.fl{display:block;font-size:.7rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.fw{position:relative}
+.fin{width:100%;padding:12px 38px 12px 14px;background:#fff;border:1.5px solid var(--border);border-radius:10px;font-family:'Outfit';font-size:.9rem;color:var(--ink);outline:none;transition:.15s}
+.fin:focus{border-color:var(--sage);background:#fff;box-shadow:0 0 0 4px rgba(127,184,151,.12)}
+.fin.valid{border-color:var(--sage);background:#F4FAF6}.fin.error{border-color:var(--red);background:#FDF5F5}
+.fic{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:.85rem;opacity:0;transition:.15s}
+.fic.show{opacity:1}.fic.ok{color:var(--green)}.fic.err{color:var(--red)}
+.fhint{font-size:.7rem;max-height:0;overflow:hidden;color:var(--red);transition:.2s}
+.fhint.show{max-height:30px;margin-top:5px}
+.cta{width:100%;padding:13px;border-radius:11px;border:none;background:var(--green);color:#fff;font-family:'Outfit';font-size:.9rem;font-weight:600;cursor:pointer;transition:.15s;box-shadow:0 6px 18px rgba(45,82,64,.25);margin-top:6px}
+.cta:hover:not(:disabled){background:var(--green2);transform:translateY(-1px)}
+.cta:disabled{background:var(--ink4);box-shadow:none;cursor:not-allowed}
+.foot{text-align:center;margin-top:18px;font-size:.82rem;color:var(--ink3)}
+.foot a{color:var(--green);font-weight:600;text-decoration:none;cursor:pointer}
+.staff{text-align:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:.78rem;color:var(--ink3)}
+.staff a{color:var(--green);text-decoration:none;font-weight:500}
+@media(max-width:820px){.left{display:none}.stage{max-width:440px}}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <!-- LEFT scene -->
+  <div class="left" id="left">
+    <div class="scene-layer" id="sceneLayer">
+      <img class="scene scene-zoom on" id="sc_pos"     src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eal6Oeags0ToQcfhefc19bpPVl/hf_20260615_075141_860cee57-db0e-46a7-857e-95a453ada5bf.png">
+      <img class="scene scene-zoom"    id="sc_welcome" src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eal6Oeags0ToQcfhefc19bpPVl/hf_20260615_075440_ca714199-e589-4340-a7dd-e88832e47d3b.png">
+      <img class="scene scene-zoom"    id="sc_eyes"    src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eal6Oeags0ToQcfhefc19bpPVl/hf_20260615_075445_a66d9841-0ca4-4ad1-bbb9-09e9cd6c1a92.png">
+      <img class="scene scene-zoom"    id="sc_cheer"   src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eal6Oeags0ToQcfhefc19bpPVl/hf_20260615_075451_5745614f-68d3-47cd-bbf2-f4fd832d0048.png">
+    </div>
+    <div class="scene-overlay"></div>
+    <div class="brand"><div class="brand-mark"></div><div class="brand-name">aria<b>OS</b></div></div>
+    <div class="tagline"><h2>Your business has a <span class="a">second brain</span> now.</h2></div>
+    <div class="speech" id="speech">Hi! I'm Aria 👋 Let's get you set up.</div>
+  </div>
+
+  <!-- RIGHT form -->
+  <div class="right">
+    <div class="tabs"><div class="tab" id="tL" onclick="mode('login')">Sign in</div><div class="tab active" id="tS" onclick="mode('signup')">Start free trial</div></div>
+    <div class="ftitle" id="ft">Start your free trial</div>
+    <div class="fsub" id="fs">14 days free · No credit card required</div>
+    <button class="gbtn"><span class="gi"></span> Continue with Google</button>
+    <div class="dv" id="dvr">or sign up with email</div>
+    <div class="field" id="nf"><div class="fl">Full name</div><div class="fw"><input id="iname" class="fin" placeholder="Jane Smith" autocomplete="off" onfocus="st('name')" oninput="vName()"><span id="cn" class="fic ok">✓</span></div></div>
+    <div class="field"><div class="fl">Email</div><div class="fw"><input id="iemail" class="fin" placeholder="you@example.com" autocomplete="off" onfocus="st('email')" oninput="vEmail()"><span id="ce" class="fic ok">✓</span></div></div>
+    <div class="field"><div class="fl">Password</div><div class="fw"><input id="ipass" type="password" class="fin" placeholder="Min 8 characters" onfocus="st('pass')" onblur="st('email')" oninput="vPass()"><span id="cp" class="fic">✓</span></div><div id="ph" class="fhint">Must be at least 8 characters</div></div>
+    <button class="cta" id="cta" disabled onclick="success()">Create account</button>
+    <div class="foot" id="ft2">Already have an account? <a onclick="mode('login')">Sign in</a></div>
+    <div class="staff">Staff member? <a>Go to POS →</a></div>
+  </div>
+</div>
+
+<script>
+const SC={pos:'sc_pos',welcome:'sc_welcome',eyes:'sc_eyes',cheer:'sc_cheer'};
+const SAY={welcome:"Hi! I'm Aria 👋 Let's get you set up.",name:"Nice to meet you! What should I call you?",email:"I'll send your verification link there.",pass:"Eyes closed — promise I'm not peeking! 🙈",ok:"Looking good — you're all set!",success:"You're in! Welcome to the team 🎉",back:"Welcome back! 👋"};
+const speech=document.getElementById('speech');let cur='pos',signup=true;
+function show(s){if(s===cur)return;Object.values(SC).forEach(id=>document.getElementById(id).classList.remove('on'));document.getElementById(SC[s]).classList.add('on');cur=s;}
+function say(t){speech.classList.add('hide');setTimeout(()=>{speech.innerHTML=t;speech.classList.remove('hide');},300);}
+function st(s){if(s==='pass'){show('eyes');say(SAY.pass);}else if(s==='name'){show('welcome');say(SAY.name);}else if(s==='email'){show('welcome');say(SAY.email);}}
+function mark(inp,ic,ok){let e=document.getElementById(inp),i=document.getElementById(ic);e.classList.remove('valid','error');i.classList.remove('show','ok','err');if(!e.value.length)return;if(ok){e.classList.add('valid');i.classList.add('show','ok');i.textContent='✓';}else{e.classList.add('error');i.classList.add('show','err');i.textContent='✕';}}
+function vName(){mark('iname','cn',document.getElementById('iname').value.trim().length>0);chk();}
+function vEmail(){mark('iemail','ce',/^[^@]+@[^@]+\.[^@]+$/.test(document.getElementById('iemail').value));chk();}
+function vPass(){let v=document.getElementById('ipass').value,ok=v.length>=8;mark('ipass','cp',ok);document.getElementById('ph').classList.toggle('show',!ok&&v.length>0);chk();}
+function chk(){let n=!signup||document.getElementById('iname').value.trim().length>0,em=/^[^@]+@[^@]+\.[^@]+$/.test(document.getElementById('iemail').value),pw=document.getElementById('ipass').value.length>=8,all=n&&em&&pw;document.getElementById('cta').disabled=!all;if(all&&cur!=='cheer'){show('welcome');say(SAY.ok);}}
+function success(){if(document.getElementById('cta').disabled)return;show('cheer');say(SAY.success);document.getElementById('cta').textContent='✓ '+(signup?'Account created':'Signed in');}
+function mode(m){signup=m==='signup';tS.classList.toggle('active',signup);tL.classList.toggle('active',!signup);ft.textContent=signup?'Start your free trial':'Welcome back';fs.textContent=signup?'14 days free · No credit card required':'Sign in to your dashboard';dvr.textContent=signup?'or sign up with email':'or continue with email';nf.style.display=signup?'block':'none';document.getElementById('cta').textContent=signup?'Create account':'Sign in';ft2.innerHTML=signup?'Already have an account? <a onclick="mode(\'login\')">Sign in</a>':'New here? <a onclick="mode(\'signup\')">Start free trial</a>';show(signup?'welcome':'pos');say(signup?SAY.welcome:SAY.back);chk();}
+
+/* cursor parallax on the scene */
+const sl=document.getElementById('sceneLayer'),left=document.getElementById('left');
+document.getElementById('stage').addEventListener('mousemove',e=>{const r=left.getBoundingClientRect();const dx=((e.clientX-r.left)/r.width-.5),dy=((e.clientY-r.top)/r.height-.5);sl.style.transform=`translate(${dx*-10}px,${dy*-8}px)`;});
+</script>
+</body>
+</html>

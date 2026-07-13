@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aria Reels — R2 through R11</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;1,500&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--sage:#7FB897;--deep:#2D5240;--sand:#C9A37A;--amber:#BA7517;--red:#E24B4A;--bg:#0F1814;--bg2:#0A130F;--panel:#142019;--panel2:#1A2820;--ink:#E8EDE9;--soft:#8FA398;--dim:#5A6D63;--line:#1F2F26;--display:'Cormorant',serif;--body:'Outfit',sans-serif;--mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--body);background:var(--bg);color:var(--ink);line-height:1.55;padding:32px 16px;font-size:15px}
+.wrap{max-width:980px;margin:0 auto}
+header{margin-bottom:32px;border-bottom:1px solid var(--line);padding-bottom:24px}
+h1{font-family:var(--display);font-size:36px;font-weight:600;font-style:italic;color:var(--sage);letter-spacing:-.5px}
+h1 small{font-family:var(--body);font-style:normal;font-size:13px;font-weight:500;color:var(--soft);letter-spacing:.04em;text-transform:uppercase;margin-left:10px}
+.lede{color:var(--soft);font-size:16px;max-width:760px;margin-top:4px}
+.chips{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.chip{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sand);background:rgba(201,163,122,.08);border:1px solid rgba(201,163,122,.25);padding:5px 11px;border-radius:30px}
+.chip.ok{color:var(--sage);background:rgba(127,184,151,.08);border-color:rgba(127,184,151,.3)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 24px;margin-bottom:20px}
+.card h2{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:21px;margin-bottom:12px}
+.card ul{list-style:none}
+.card li{padding:5px 0 5px 22px;position:relative;font-size:14px}
+.card li::before{content:"";position:absolute;left:6px;top:14px;width:6px;height:6px;border-radius:50%;background:var(--sage)}
+.card li b{color:var(--sand);font-weight:600}
+code.k{font-family:var(--mono);font-size:12px;background:var(--panel2);padding:1px 6px;border-radius:4px;color:var(--sand)}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px}
+.toc a{display:block;padding:11px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--ink);text-decoration:none;font-size:13px}
+.toc a:hover{border-color:var(--sage)}
+.toc a b{display:block;font-family:var(--display);font-style:italic;color:var(--sage);font-size:17px;font-weight:600}
+.toc a span{color:var(--soft);font-size:12px}
+.prompt{margin-bottom:26px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 24px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(127,184,151,.04),transparent)}
+.ph h3{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:23px}
+.ph h3 small{display:block;font-family:var(--body);font-style:normal;color:var(--soft);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+.pa{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.b{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:5px 10px;border-radius:30px;border:1px solid var(--line);color:var(--soft);white-space:nowrap}
+.b.t1{color:var(--sage);border-color:rgba(127,184,151,.4);background:rgba(127,184,151,.06)}
+.b.t2{color:var(--sand);border-color:rgba(201,163,122,.4);background:rgba(201,163,122,.06)}
+.b.t3{color:var(--amber);border-color:rgba(186,117,23,.45);background:rgba(186,117,23,.08)}
+.b.t4{color:#a6c5f3;border-color:rgba(166,197,243,.35);background:rgba(166,197,243,.06)}
+.b.t5{color:#d8a5e8;border-color:rgba(216,165,232,.35);background:rgba(216,165,232,.06)}
+.b.par{color:var(--sage);border-color:rgba(127,184,151,.4)}
+.b.moat{color:var(--amber);border-color:rgba(186,117,23,.45)}
+.cp{cursor:pointer;background:var(--panel2);border:1px solid var(--line);color:var(--ink);font-family:var(--body);font-size:11px;font-weight:600;padding:5px 12px;border-radius:8px;letter-spacing:.04em;text-transform:uppercase}
+.cp:hover{border-color:var(--sage);color:var(--sage)}
+.cp.done{color:var(--sage);border-color:var(--sage);background:rgba(127,184,151,.1)}
+.pb{padding:18px 24px 22px}
+.sum{color:var(--soft);font-size:14px;margin-bottom:14px;line-height:1.65}
+.sum b{color:var(--sand);font-weight:600}
+pre{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.65;color:#cfd6d2;white-space:pre-wrap;word-break:break-word}
+.notice{background:rgba(186,117,23,.06);border:1px solid rgba(186,117,23,.25);border-radius:12px;padding:16px 20px;margin-bottom:22px}
+.notice h2{color:var(--amber);font-family:var(--display);font-style:italic;font-size:18px;margin-bottom:8px}
+.notice p{font-size:13px;line-height:1.7}
+.notice b{color:var(--sand)}
+footer{margin-top:36px;padding:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+<h1>Aria Reels<small>R2 — R11</small></h1>
+<p class="lede">Ten sprint prompts. One commit each. Fully additive. $0 ongoing cost. Strategy: <b>parity, not domination</b> — owner never reaches for CapCut / Buffer / Sintra / Submagic.</p>
+<div class="chips">
+<span class="chip ok">✓ Free forever</span><span class="chip ok">✓ Aria theme locked</span><span class="chip ok">✓ RULE 0</span>
+<span class="chip">10 sprints · 6 parity · 4 moat</span><span class="chip">Post-launch only</span>
+</div>
+</header>
+
+<section class="card"><h2>Constitutional rules — every prompt applies these</h2><ul>
+<li><b>RULE 0 (UPGRADE_ONLY)</b> — extend, never remove working function/fields/flows</li>
+<li><b>THEME GUARD</b> — Aria tokens only <code class="k">#7FB897 / #2D5240 / #C9A37A / #BA7517 / #E24B4A</code> + Cormorant + Outfit. Reuse existing UI primitives. No new tokens.</li>
+<li><b>PROTECTED FILES</b> — never touch <code class="k">AnimatedBg</code>, <code class="k">FlyToCart</code>, <code class="k">CursorGlow</code>, <code class="k">pos-sfx.ts</code>, <code class="k">aria-voice-guide.ts</code></li>
+<li><b>WORKTREE LOCK</b> — <code class="k">c:\Users\kansa\Downloads\aria-saas-main\repo-worktree</code> never touched by Claude Code</li>
+<li><b>SOLO discipline</b> — pwd confirm · pre-flight quotes verbatim · build green (tsc 0 + build PASS) · ONE commit · STOP before push · report file</li>
+<li><b>$0 ongoing cost</b> — Pixabay Music + Free Music Archive · in-browser AI (Whisper / WebGPU / MediaPipe) · free platform APIs (Meta Graph / TikTok Content Posting / YouTube Data v3)</li>
+<li><b>DROPPED</b> — eye-contact correction (Captions.ai pitch, paid) · licensed music libs · paid translation services</li>
+</ul></section>
+
+<section class="card"><h2>Quick nav · parity first then moat</h2>
+<div class="toc">
+<a href="#r2"><b>R2</b><span>Editor MVP · parity</span></a><a href="#r3"><b>R3</b><span>Editor full · parity</span></a>
+<a href="#r4"><b>R4</b><span>AI essentials · parity</span></a><a href="#r5"><b>R5</b><span>AI useful · parity</span></a>
+<a href="#r6"><b>R6</b><span>Scheduling · parity</span></a><a href="#r7"><b>R7</b><span>Social-ops · parity</span></a>
+<a href="#r8"><b>R8</b><span>POS captions · moat</span></a><a href="#r9"><b>R9</b><span>Spike + trend · moat</span></a>
+<a href="#r10"><b>R10</b><span>POS-CTA + segments · moat</span></a><a href="#r11"><b>R11</b><span>Aria diff · moat</span></a>
+</div></section>
+
+<div class="notice"><h2>Run order &amp; pre-conditions</h2>
+<p>Run <b>R2 → R3 → R6 → R4 → R5 → R7 → R8 → R9 → R10 → R11</b>. R2 first (felt parity moment). Don't start R8+ until R7 is live (moat needs parity bed). <b>Reels ships after CX-1 P1–P5 community</b>. Pre-conditions: Whisper (Free AI 1.1), pgvector (1.2), bg-removal (2.4), Aria 3D character (Prompt V), forecast v1 (3.7) should be live before R4/R5/R9.</p></div>
+
+<article class="prompt" id="r2"><div class="ph">
+<h3>R2 — Editor MVP<small>Timeline, trim, music, text, stickers, filters</small></h3>
+<div class="pa"><span class="b t1">Tier 1</span><span class="b par">Parity</span><button class="cp" data-t="p2">Copy</button></div></div>
+<div class="pb"><p class="sum">The felt parity moment. After this, owner has a real in-browser editor (CapCut/InShot equivalent for 80% of jobs). Browser-native — Canvas API, Web Audio, HTML5 video — zero server transcoding.</p>
+<pre id="p2">R2 — Reels Editor MVP. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+THEME GUARD: Aria tokens only (#7FB897 sage / #2D5240 deep / #C9A37A sand / #BA7517 amber / #E24B4A red). Cormorant + Outfit. Reuse existing primitives. No new tokens.
+
+PRE-CONDITION: CX-1 P4 (Bunny Stream upload + community_posts.media_urls schema) deployed. Whisper (Free AI 1.1) optional.
+
+PRE-FLIGHT (verbatim quotes in report):
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read community_posts schema (applied per CX-1 prerequisites)
+3. Read CX-1 P4 reels upload route + bunny-webhook handler — confirm media_urls JSONB shape {bunny_guid, hls_url, thumb_url, duration, processing_status}
+4. grep existing video / canvas / waveform code to avoid duplicating primitives
+5. Quote Aria CSS tokens (--color-sage, --font-display) verbatim
+
+BUILD (additive only, browser-native, no server transcoding):
+
+PART 1 — Editor shell route
+src/app/(community)/community/reels/editor/[draftId]/page.tsx
+- Three-panel layout: preview (top), timeline (middle), controls (bottom)
+- Loads community_posts row with post_type='reel_draft' status='draft'
+- Saves edit state to media_urls JSONB: {bunny_guid, edit_state: {clips, music, text, stickers, filters}}
+
+PART 2 — Multi-clip timeline (1-5 clips)
+src/components/reels/Timeline.tsx
+- HTML5 video + Canvas-rendered timeline UI
+- Operations: add / trim (in-out handles) / split at playhead / drag-reorder
+- State: { clips: [{ id, src, in_ms, out_ms, position_ms }] }
+- Persist to media_urls.edit_state.clips on every change (debounced 500ms)
+
+PART 3 — Music library
+src/components/reels/MusicLibrary.tsx + src/lib/reels/music-catalog.ts
+- ~50 Pixabay + FMA tracks (royalty-free, $0). Categories: upbeat/chill/cinematic/hip-hop/lo-fi/acoustic
+- Each: { id, title, artist, license, url, duration, bpm }
+- Web Audio API preview + waveform via AudioContext
+- Owner-upload allowed (community_posts.media_urls.music_upload)
+- Audio ducking when voiceover layer active
+
+PART 4 — Text overlays with animations
+src/components/reels/TextLayer.tsx
+- 5 animations: fade / slide-up / typewriter / pop / wave
+- Font: Outfit body + Cormorant display (Aria stack)
+- 4 sizes: small / medium / large / hero
+- Persist: { text_overlays: [{ id, content, font, size, color, animation, start_ms, end_ms, x_pct, y_pct }] }
+
+PART 5 — Stickers + emojis + drawing
+src/components/reels/StickerLayer.tsx
+- Native emoji picker (no library)
+- 30 SVG sticker shapes (arrows, hearts, stars, badges) using Aria tokens
+- Canvas pen tool: 4 palette colors, 3 stroke weights
+- Persist: { stickers: [{ type, payload, x_pct, y_pct, scale, rotation, start_ms, end_ms }] }
+
+PART 6 — Filters + color grading
+src/components/reels/FilterLayer.tsx
+- 8 LUTs: original / warm / cool / cinema / mono / vintage / vivid / muted
+- CSS filter on preview video (free, no GPU shader needed for v1)
+- Persist: { filter: 'name' }
+
+PART 7 — Render-on-export
+src/lib/reels/export.ts
+- MediaRecorder API → OffscreenCanvas (video frame + overlays + stickers + filter)
+- Outputs MP4/WebM blob → POST /api/community/upload-media (existing CX-1 P4 Bunny pipeline)
+- Updates community_posts.status to 'published' on success
+
+API surface:
+- POST /api/community/reels/draft
+- PATCH /api/community/reels/draft/[id]
+- POST /api/community/reels/draft/[id]/export
+
+BUILD GATE:
+- npx tsc --noEmit → 0 errors
+- npm run build → PASS
+- ONE commit: feat(r2): reels editor mvp — timeline, music, text, stickers, filters
+- STOP before push. reports/sprint-R2-report.md: verbatim pre-flight quotes, file:line, additive-only confirmation, $0-cost confirmation.
+
+VERIFY POST-DEPLOY:
+1. Owner uploads 15s clip via P4 pipeline
+2. Editor: 2 trim handles + 1 music + 1 text + 1 sticker + 'warm' filter
+3. Export → MP4 blob → Bunny → community_posts.status='published'
+4. Reel plays in feed (CX-1 P2) with overlays baked in
+SQL: select count(*) from community_posts where business_id=? and post_type='reel_draft' and status='published' and (media_urls->>'edit_state') is not null;
+
+DO NOT:
+- No server-side transcoding (Bunny does it post-upload)
+- No paid music (Pixabay + FMA only)
+- No new color tokens / fonts / shadows
+- No npm dependencies beyond existing
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r3"><div class="ph">
+<h3>R3 — Editor full<small>Speed, transitions, ratios, waveform, multi-track</small></h3>
+<div class="pa"><span class="b t1">Tier 1</span><span class="b par">Parity</span><button class="cp" data-t="p3">Copy</button></div></div>
+<div class="pb"><p class="sum">Closes the gap to Filmora Go / InShot. Every editor capability an owner would reach for in a mobile pro editor.</p>
+<pre id="p3">R3 — Reels Editor Full. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2 deployed.
+
+THEME GUARD: Aria tokens only. Extend R2 primitives, don't fork.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read R2 Timeline.tsx, MusicLibrary.tsx — paste signatures
+3. Confirm Web Audio API access pattern from R2 (AudioContext + AnalyserNode)
+4. Quote media_urls.edit_state schema R2 established
+
+BUILD (additive, extends R2 components):
+
+PART 1 — Speed control
+src/components/reels/SpeedControl.tsx
+- Per-clip: 0.25× / 0.5× / 0.75× / 1× / 1.25× / 1.5× / 2× / 4×
+- Ramp curves (linear / ease-in / ease-out / smooth) within a clip
+- Preview via HTMLVideoElement.playbackRate
+- Export via frame timestamp math (extend lib/reels/export.ts)
+- Persist: clip.speed = { factor: 1.5, ramp: 'smooth' }
+
+PART 2 — Transitions
+src/components/reels/TransitionLayer.tsx
+- 6 transitions: cut / fade / cross-dissolve / swipe-left / zoom / glitch
+- Canvas blending on export pipeline
+- Per-cut: { transition_type, duration_ms: 50-500 }
+
+PART 3 — Aspect ratios
+src/components/reels/AspectRatioPicker.tsx
+- 4 ratios: 9:16 (default) / 1:1 / 16:9 / 4:5
+- Crop overlay shows safe areas
+- Persist: media_urls.edit_state.aspect = '9:16'
+
+PART 4 — Trim handles + waveform
+- Extend R2 Timeline.tsx: render audio waveform under video clips
+- AnalyserNode.getByteFrequencyData on music track
+- Trim handles snap ±50ms + beat markers if BPM detected (lib/reels/beat-detect.ts; client-side FFT)
+
+PART 5 — Multi-track audio
+- Extend MusicLibrary.tsx: 3 audio lanes
+  Lane 1: original video audio (volume slider)
+  Lane 2: music track (volume + auto-ducking when lane 3 active)
+  Lane 3: voiceover (navigator.mediaDevices.getUserMedia + MediaRecorder)
+- Ducking: lane 3 amplitude > threshold → lane 2 gain × 0.2
+- Persist: media_urls.edit_state.audio_lanes = [{ lane, volume, voiceover_url? }]
+
+API surface: POST /api/community/reels/draft/[id]/voiceover
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(r3): editor full · STOP before push.
+
+VERIFY POST-DEPLOY:
+1. Open R2 draft → 1.5× speed on clip 2 with ease-in ramp
+2. Fade transition between clips 1-2
+3. Switch ratio to 9:16
+4. Record 3s voiceover → music auto-ducks
+5. Export → playback shows all effects baked correctly
+SQL: select media_urls->'edit_state' from community_posts where id = '&lt;draft&gt;' should show speed/transitions/aspect/audio_lanes keys.
+
+DO NOT:
+- No paid audio libraries / SDKs
+- No server-side ffmpeg (browser handles all)
+- No replacing R2 Timeline — extend it
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r4"><div class="ph">
+<h3>R4 — AI essentials<small>Captions, beat-sync, background removal</small></h3>
+<div class="pa"><span class="b t2">Tier 2</span><span class="b par">Parity</span><button class="cp" data-t="p4">Copy</button></div></div>
+<div class="pb"><p class="sum">Closes parity with Submagic + CapCut auto-features. All in-browser AI — zero per-use cost. Uses Free AI 1.1 (Whisper) + 2.4 (WebGPU bg-removal).</p>
+<pre id="p4">R4 — AI Essentials. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2 + R3 + Free AI 1.1 (Whisper) + Free AI 2.4 (WebGPU bg-removal) deployed.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Confirm @huggingface/transformers Whisper integration from Free AI 1.1. Quote import.
+3. Confirm WebGPU bg-removal pipeline from Free AI 2.4. Quote helper signature.
+4. Read R2 TextLayer.tsx — caption rendering extends it.
+5. Read R3 beat-detect.ts — beat-sync uses its output.
+
+BUILD (additive):
+
+PART 1 — AI auto-captions (Whisper, in-browser)
+src/components/reels/AutoCaptions.tsx
+- "Auto-caption" button in editor
+- Audio from active clip via Web Audio API → ArrayBuffer
+- Whisper (transformers.js base.en, WebWorker)
+- Output: timestamped word list with confidence
+- Convert to overlay segments (max 6 words, 0.8s min duration)
+- Auto-inject into R2 TextLayer with style 'caption' (Outfit semibold, sage outline)
+- User edits text / drags / restyles
+- Persist: media_urls.edit_state.captions = [{ start_ms, end_ms, text, confidence }]
+
+PART 2 — Auto-cut on beat
+src/lib/reels/beat-sync.ts (uses R3 beat-detect)
+- Detect BPM from music track
+- Suggest cut markers on each beat
+- "Sync to beat" button: auto-trim clips so cuts land on beats ±50ms
+- Per-clip toggle
+- Persist: media_urls.edit_state.beat_sync = { bpm, beats: [ms], enabled }
+
+PART 3 — Background removal (WebGPU)
+src/components/reels/BackgroundRemoval.tsx
+- "Remove background" button per clip
+- Each frame through WebGPU bg-removal pipeline (U²-Net / RMBG)
+- Composite over: solid color (Aria palette) / blurred original / uploaded image / Veo-generated (R11)
+- Cache per-clip mask
+- Persist: media_urls.edit_state.bg_removal = [{ clip_id, mode, replacement_url }]
+- Fallback: if WebGPU unavailable, "requires Chrome/Edge desktop", no error
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(r4): ai essentials · STOP.
+
+VERIFY POST-DEPLOY:
+1. Draft with speech → auto-caption → overlay segments sync to speech
+2. Music with BPM → "Sync to beat" places cut markers
+3. "Remove background" on person clip → alpha cutout
+4. Replace background with sage solid → exports correctly
+SQL: select media_urls->'edit_state'->'captions' should be populated array.
+
+DO NOT:
+- No external Whisper APIs — in-browser only
+- No paid bg-removal services — WebGPU only
+- No frame-by-frame server processing
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r5"><div class="ph">
+<h3>R5 — AI useful<small>Face-zoom, B-roll, thumbnail, Aria narrator, music, translate</small></h3>
+<div class="pa"><span class="b t2">Tier 2</span><span class="b par">Parity</span><button class="cp" data-t="p5">Copy</button></div></div>
+<div class="pb"><p class="sum">Closes parity with mid-tier Submagic / Captions.ai (minus eye-contact correction — DROPPED, paid pitch). Aria's 3D character becomes the narrator option.</p>
+<pre id="p5">R5 — AI Useful. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2-R4 deployed. Aria 3D character (Phase ARIA-3D Prompt V) live.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Confirm MediaPipe face detection (@mediapipe/face_mesh, ~5MB in-browser)
+3. Confirm Aria 3D character + Kokoro voice ready (Prompt V)
+4. Confirm Whisper translate mode (Free AI 1.1 translateTask)
+5. Read existing image bucket pattern
+
+BUILD (additive):
+
+PART 1 — Auto-zoom on speaker face
+src/lib/reels/face-zoom.ts
+- Per-frame: MediaPipe face_mesh detect dominant face → bounding box + smoothed centroid
+- Auto-keyframe virtual camera, zoom 1.2-1.5× toward speaker
+- Smooth via cubic-bezier interpolation
+- Per-clip toggle
+- Persist: media_urls.edit_state.face_zoom = [{ clip_id, enabled, intensity, keyframes }]
+
+PART 2 — B-roll suggestions from existing library
+src/components/reels/BRollPicker.tsx
+- Query owner's image bucket + Aria Studio assets + pos_products images
+- Per R4 caption segment → /api/aria/ask intent='broll_match'
+- Aria suggests 2-3 images per segment (keyword + pgvector similarity from Free AI 1.2)
+- User picks / overrides
+- Insert as overlay with R3 'cross-dissolve' on accept
+- Persist: media_urls.edit_state.broll = [{ segment_ms, image_url, mode }]
+
+PART 3 — Auto-thumbnail picker
+src/lib/reels/thumbnail-picker.ts
+- Sample frames at 0.5s intervals
+- Score: face presence (MediaPipe) + visual complexity (pixel variance) + brightness + open-eyes
+- Best-3 candidates → user picks
+- Updates media_urls.thumb_url
+
+PART 4 — Aria avatar narrator
+src/components/reels/AriaNarrator.tsx
+- "Add Aria voice" button
+- Input: text script (auto-suggested from caption OR R8 POS-generated)
+- Kokoro (af_heart voice, already in bundle)
+- Output WAV → upload as voiceover lane (extends R3 lane 3)
+- Optional: render Aria 3D as picture-in-picture corner
+- Persist: media_urls.edit_state.aria_narrator = { script, voice_url, show_avatar, avatar_position }
+
+PART 5 — Auto-generated music in trend style
+src/components/reels/AutoMusic.tsx
+- Pick trending genre (R6 will populate from platform APIs later)
+- Use curated Pixabay/FMA subset matching genre + duration
+- One-click "Match my reel"
+- Falls back to R2 MusicLibrary browse
+
+PART 6 — Auto-translate captions (10+ languages)
+src/lib/reels/translate-captions.ts
+- Per R4 caption segment
+- Whisper translate mode (transformers.js translation task) to English
+- For other target langs: /api/aria/translate via existing Anthropic Haiku (additive)
+- User picks target lang → alternate caption track added
+- Persist: media_urls.edit_state.translations = [{ lang, segments }]
+
+NOTE: Eye-contact correction (Captions.ai) intentionally DROPPED. Document in report.
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(r5): ai useful · STOP.
+
+VERIFY POST-DEPLOY:
+1. Face in frame → face-zoom enables → preview tracks subject
+2. With R4 captions → B-roll suggester returns 2-3 images per segment
+3. Thumbnail picker surfaces 3 candidates
+4. Aria narrator: script → voiceover on lane 3
+5. Auto-music picks matching-length track
+6. Translate to Spanish → second caption track
+SQL: face_zoom + broll + aria_narrator keys populated when used.
+
+DO NOT:
+- No Captions.ai / no eye-contact correction
+- No paid translation services (DeepL / Google Translate)
+- No external face-detection SDKs — MediaPipe in-browser only
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r6"><div class="ph">
+<h3>R6 — Scheduling parity<small>IG + TikTok + YT Shorts + FB · time predictor · hashtags</small></h3>
+<div class="pa"><span class="b t4">Tier 4</span><span class="b par">Parity</span><button class="cp" data-t="p6">Copy</button></div></div>
+<div class="pb"><p class="sum">After R6, owner has no reason to open Buffer / Later / Hootsuite. All 4 platform APIs are FREE. One-time Meta App verification = no ongoing cost.</p>
+<pre id="p6">R6 — Scheduling Parity. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2-R5 deployed. CX-1 P5 web push live (for owner publish notifications).
+
+THEME GUARD: Aria tokens only.
+
+PRE-CONDITION: Meta App verification approved (IG + FB). TikTok app keys obtained. YouTube OAuth setup. All free; one-time.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Confirm Vercel env vars: META_APP_ID, META_APP_SECRET, TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET. STOP if missing.
+3. Confirm existing OAuth callback pattern (Stripe/Square/Xero). Reuse.
+4. Read businesses table — connected_accounts column?
+
+BUILD (additive):
+
+PART 1 — Platform connections table
+Migration file (DO NOT execute; chat-Claude applies):
+CREATE TABLE IF NOT EXISTS reel_platform_connections (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id) on delete cascade,
+  platform text not null check (platform in ('instagram','tiktok','youtube','facebook')),
+  access_token text not null,
+  refresh_token text,
+  expires_at timestamptz,
+  platform_user_id text,
+  platform_username text,
+  connected_at timestamptz default now(),
+  revoked_at timestamptz,
+  unique (business_id, platform)
+);
+-- RLS: owner can read/write own only
+
+CREATE TABLE IF NOT EXISTS reel_scheduled_publishes (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id) on delete cascade,
+  draft_id uuid not null references community_posts(id),
+  scheduled_for timestamptz not null,
+  platforms text[] not null,
+  captions jsonb not null default '{}',
+  status text not null check (status in ('pending','published','failed')) default 'pending',
+  platform_post_ids jsonb default '{}',
+  error_msg text,
+  created_at timestamptz default now()
+);
+
+PART 2 — OAuth connect flows
+- GET /api/reels/connect/[platform] — initiates OAuth
+- GET /api/reels/oauth/[platform]/callback — stores tokens
+- UI in /community/settings → "Connected accounts" (reuses CX-1 P5 layout)
+
+PART 3 — Schedule a reel
+- Editor Publish sheet extends:
+  · Publish now
+  · Schedule for: [date+time]
+  · Platforms: [checkboxes — connected only]
+  · Caption per platform (optionally same; truncated to platform limit)
+- POST /api/community/reels/schedule { draft_id, scheduled_for, platforms, captions }
+- Writes to reel_scheduled_publishes
+
+PART 4 — Publish cron (daily, daily-max locked rule)
+src/app/api/cron/publish-reels/route.ts
+- Cron @ 1am AEST: processes all reels scheduled in next 24h in one run, queues with per-platform delay
+- For each: fetch Bunny MP4 → POST platform API (Meta Graph /me/media for IG, TikTok /v2/post/publish, YouTube videos.insert, Facebook Graph /me/videos)
+- Update status, platform_post_id
+- On fail: status='failed', error_msg, owner push via CX-1 P5
+
+PART 5 — Best-time-to-post predictor
+src/lib/reels/best-time-predictor.ts
+- Per platform optimal window:
+  · Owner timezone (Australia/Sydney)
+  · Historical engagement (R7 reel_platform_metrics)
+  · POS busy hours (audience awake)
+  · Fallback: weekday 12-1pm + 6-7pm AEST
+- Returns [{ platform, recommended_window, confidence }]
+- Surfaces "Aria suggests posting Tue 12:30pm"
+
+PART 6 — Hashtag suggestions
+src/lib/reels/hashtag-suggester.ts
+- Based on: businesses.suburb + category + reel caption keywords + trending list (free public sources)
+- Cafe in Brunswick → #BrunswickCafes #MelbourneCoffee #FlatWhite
+- Returns ranked list; owner picks
+
+API surface:
+- GET /api/reels/connect/[platform]
+- GET /api/reels/oauth/[platform]/callback
+- POST /api/community/reels/schedule
+- GET /api/community/reels/schedule
+- DELETE /api/community/reels/schedule/[id]
+- /api/cron/publish-reels (daily)
+
+BUILD GATE:
+- tsc 0 + build PASS
+- Function count ≤22 (locked). If push past, document collapse strategy.
+- ONE commit feat(r6): scheduling parity · STOP.
+
+VERIFY POST-DEPLOY:
+1. Settings → connect IG via OAuth → reel_platform_connections row
+2. Reel publish sheet → check IG → schedule next day 1pm
+3. Cron 1am next day → Bunny MP4 posted to IG via Graph API → status='published' with platform_post_id
+4. Best-time predictor returns Tuesday 12:30pm based on POS busy hours
+5. Hashtag suggester returns location + category aware tags
+SQL: select platform, count(*) from reel_platform_connections group by platform;
+
+DO NOT:
+- No paid scheduling services (Buffer/Later API)
+- No browser automation (Puppeteer) — official APIs only
+- No auto-posting without owner schedule action
+- No sub-daily crons (locked)
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r7"><div class="ph">
+<h3>R7 — Social-ops parity<small>Calendar, A/B, analytics, auto-reply, recurring, cross-platform, brand voice</small></h3>
+<div class="pa"><span class="b t4">Tier 4</span><span class="b par">Parity</span><button class="cp" data-t="p7">Copy</button></div></div>
+<div class="pb"><p class="sum">Closes parity with Sintra AI + remaining Buffer features. After R7, every social-ops task an owner does in another tool is doable in Aria.</p>
+<pre id="p7">R7 — Social-ops Parity. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R6 deployed. Brain quality (AUTOPILOT-FIX-1 + GROUNDING-TEETH-V2) live.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read R6 reel_platform_connections + reel_scheduled_publishes
+3. Read existing analytics surface — reuse layout primitives
+4. Confirm pgvector ready (Free AI 1.2) for brand-voice similarity
+
+BUILD (additive):
+
+PART 1 — Content calendar
+src/app/(community)/community/reels/calendar/page.tsx
+- Month/week view of scheduled + published across platforms
+- Drag to reschedule (PATCH /api/community/reels/schedule/[id])
+- Per-platform color coded with Aria palette tokens (each platform = one token)
+- Filter chips: by platform, status (scheduled/published/failed)
+
+PART 2 — A/B test variations
+src/components/reels/ABTestSheet.tsx
+- Owner picks draft → "Generate variants" → /api/aria/ask intent='reel_ab_hooks'
+- Each variant: its own thumbnail / first 3 seconds
+- Publish: variant A to 50% best-time, variant B to other 50%
+- After 24h: select winner by engagement_rate, publish to remaining schedule
+- New table reel_ab_tests
+- Feeds back into Aria brain (R11 loop)
+
+PART 3 — Engagement analytics tied to revenue
+src/app/(community)/community/reels/analytics/page.tsx
+- Per published reel, daily fetch:
+  · IG Graph /<media-id>/insights
+  · TikTok Display API stats
+  · YouTube Analytics API
+- Store in reel_platform_metrics (new table)
+- ATTRIBUTION (the moat):
+  · Match published reel times against pos_sales spikes in 0-72h window
+  · "This reel drove ~$340 (estimated 4-12 incremental visits)"
+  · Aria estimates conservatively, surface confidence
+
+PART 4 — Auto-reply to comments
+src/lib/reels/auto-reply.ts
+- Cron pulls new comments via platform APIs (extends R6 cron)
+- Each → /api/aria/ask intent='community_aria_reply' (CX-1 P3 endpoint)
+- Aria drafts reply from business context
+- Owner sees in dashboard inbox → approve / edit / skip
+- NEVER auto-publishes (owner approval required — matches CX-1 P5 rule)
+- New table reel_comment_replies (drafts kept for review)
+
+PART 5 — Recurring template campaigns
+src/components/reels/RecurringCampaign.tsx
+- "Tuesday Tea Time" weekly template pulls fresh data each cycle (POS top item, weather, hashtag)
+- Owner: cadence (weekly/fortnightly), platforms, template script
+- Cron generates next instance 24h before publish; owner reviews; publishes per schedule
+- New table reel_recurring_campaigns
+
+PART 6 — Cross-platform optimization
+- Extend R6 schedule UI: same reel, different caption per platform (already in R6 P3)
+- Per-platform aspect ratio override (TikTok 9:16, YouTube 16:9 with same footage)
+- R5 face-zoom variant per platform auto
+
+PART 7 — Brand voice consistency check
+src/lib/reels/brand-voice-check.ts
+- Compute pgvector embedding of every published caption
+- Mean embedding = owner's brand voice
+- New draft caption similarity vs mean → flag if cosine &lt;0.7
+- Soft warning, not block
+- Owner can lock a style guide string for stricter matching
+
+API surface:
+- GET /api/community/reels/calendar
+- POST /api/community/reels/ab-test
+- GET /api/community/reels/analytics
+- GET /api/community/reels/comments
+- POST /api/community/reels/comment-replies/[id]/approve
+- POST /api/community/reels/recurring
+- POST /api/community/reels/brand-voice-check
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · ONE commit feat(r7): social-ops parity · STOP.
+
+VERIFY POST-DEPLOY:
+1. Calendar shows scheduled + published with correct platform colors
+2. A/B: 2 hook variants generated, both publish, winner emerges after 24h
+3. Analytics: published reel shows views + estimated revenue attribution
+4. Real comment → Aria draft → owner approves → posted
+5. Recurring "Tuesday Tea Time" generates next week's instance
+6. Off-brand caption draft → soft warning
+SQL: select count(*) from reel_platform_metrics where business_id=? and recorded_at &gt; now() - interval '24 hours';
+
+DO NOT:
+- No auto-publishing Aria-drafted comments
+- No paid analytics (Sprout / Hootsuite Insights)
+- No sub-daily crons
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r8"><div class="ph">
+<h3>R8 — POS caption engine<small>Caption ideas from sales · reel of the week · launch detect</small></h3>
+<div class="pa"><span class="b t3">Tier 3</span><span class="b moat">Moat</span><button class="cp" data-t="p8">Copy</button></div></div>
+<div class="pb"><p class="sum">The moat begins. Nobody else can do this. Aria reads your POS, finds reel-worthy moments, writes captions you couldn't have without your numbers.</p>
+<pre id="p8">R8 — POS Caption Engine. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2-R7 deployed. Brain quality + GROUNDING-TEETH-V2 live.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read pos_sales / pos_sale_items / pos_products schemas. Confirm joins.
+3. Read GROUNDING-TEETH-V2 helper. Reel captions MUST pass before save.
+4. Read /api/aria/ask intent system — add 'reel_caption_from_pos', 'reel_of_the_week', 'reel_launch_detect'
+
+BUILD (additive):
+
+PART 1 — Caption ideas from POS
+src/components/reels/CaptionFromPOS.tsx
+- "Aria suggests" panel opens when reel has no caption
+- Ground-truth signals (FIXED wh_payments_coverage RPC):
+  · Top-selling item this week (pos_sale_items × pos_products)
+  · Item biggest WoW growth %
+  · Sold-out streak (out of stock 3 weeks running)
+  · Top-customer pattern ("Charlotte ordered Big Breakfast 4 weeks running")
+- Pipe to /api/aria/ask intent='reel_caption_from_pos' with REAL numbers
+- Aria generates 3-5 candidates, each with grounding citations
+- GROUNDING-TEETH-V2 validates every dollar/percent/count BEFORE surface
+- Owner picks / edits / regenerates
+- Log to aria_ai_calls agent_key='reel_caption_pos' role='analysis'
+
+PART 2 — Reel-of-the-week suggestion
+src/lib/reels/reel-of-the-week.ts (weekly cron extends R6)
+- Identify most reel-worthy moment last 7 days POS:
+  · Record sales day for an item
+  · New menu item launched + got traction
+  · Repeat customer milestone
+- Aria drafts hook+body+CTA via R11's script pipeline
+- Surfaces in owner inbox via CX-1 P5 push: "I found a reel idea for this week"
+- Log to aria_ai_calls agent_key='reel_of_week'
+
+PART 3 — Auto-detect promotion / launch moments
+src/lib/reels/launch-detect.ts (runs on pos_product upsert + aria_action status='executed')
+- Trigger: new pos_product OR existing one's price changes &gt;20% OR aria_action promo executes
+- Aria emits "You launched [product] today. Want me to draft a launch reel?"
+- One-click: editor pre-populated (script + suggested clips from photo library)
+- No auto-publish; owner publishes
+
+API surface:
+- POST /api/community/reels/caption-from-pos
+- GET /api/community/reels/of-the-week
+- POST /api/community/reels/launch-detect/dismiss
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(r8): pos caption engine · STOP.
+
+VERIFY POST-DEPLOY:
+1. Empty draft → "Aria suggests" returns 3 caption ideas; verify each cited number traces back via SQL
+2. Weekly cron → reel-of-week notification
+3. Add new pos_product → launch-detect notification within next cron run
+SQL: select agent_key, count(*), max(created_at) from aria_ai_calls where agent_key in ('reel_caption_pos','reel_of_week') group by 1;
+
+DO NOT:
+- No invented numbers (GROUNDING-TEETH-V2 enforces)
+- No auto-published reels
+- No reading from poisoned context (AUTOPILOT-FIX-1 framing rules apply)
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r9"><div class="ph">
+<h3>R9 — Sales-spike trigger + trend matching<small>Performance prediction · spike generator · trending audio</small></h3>
+<div class="pa"><span class="b t3">Tier 3</span><span class="b moat">Moat</span><button class="cp" data-t="p9">Copy</button></div></div>
+<div class="pb"><p class="sum">POS-derived reel performance prediction + real-time reel generation when sales spike. No competitor without POS integration can do this.</p>
+<pre id="p9">R9 — Spike + Trend. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2-R8 deployed.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Confirm forecast-v1 (Free AI 3.7) live for baseline-vs-actual detection
+3. Read reel_platform_metrics from R7 — predictions use historical performance
+
+BUILD (additive):
+
+PART 1 — Performance prediction
+src/lib/reels/performance-predictor.ts
+- Pre-publish score 0-100:
+  · POS alignment (features real top seller?)
+  · Best-time-to-post match (R6)
+  · Hook strength (classify first 3s against historical winners)
+  · Audience timing (R6 activity)
+  · Trend audio match (Part 3)
+- Publish sheet: "Score 73/100. Likely to outperform last 3 by X%."
+- Store against reel for post-publish accuracy check (R11 loop)
+
+PART 2 — Sales-spike reel generator
+src/lib/reels/sales-spike-detector.ts (background on pos_sales insert)
+- Detect: last-hour revenue &gt;1.5× same-hour-historical-avg (Free AI 3.7 forecasted)
+- Threshold gated to small-business baseline (≥5 sales in hour, prevents false positives)
+- Auto-draft: "Looks busy today — want to film 30s for 'what's hot now' reel?"
+- If Aria narrator (R5 P4) enabled, generate real-time voiceover script ("We've already sold 23 flat whites this morning")
+- Owner reviews + publishes / dismisses
+- NEVER auto-publishes
+
+PART 3 — Trending audio matched to business type
+src/lib/reels/trend-audio.ts (weekly cron extends R6)
+- Pull trending audio per platform (free public sources — TikTok Creative Center, Reels trending, YouTube trending)
+- Tag each by category: lifestyle / food / fashion / retail / fitness / cafe
+- Per business, surface 5 trends matching businesses.category
+- "Use this trend": picks trend audio, opens editor pre-loaded on lane 2
+- Persist in reel_trend_suggestions
+
+API surface:
+- POST /api/community/reels/predict-performance
+- GET /api/community/reels/trends
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(r9): spike + prediction + trend audio · STOP.
+
+VERIFY POST-DEPLOY:
+1. Publish-sheet shows score breakdown
+2. Synthetic sales spike (5+ in hour) → spike detector creates draft notification
+3. Cafe trend list shows 5 audio trends, not generic
+SQL: select * from reel_trend_suggestions order by created_at desc limit 5;
+
+DO NOT:
+- No scraping copyrighted trend data — public APIs / Creative Centre only
+- No auto-published spike reels
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r10"><div class="ph">
+<h3>R10 — POS-CTA + narrator + inventory + segments<small>One-tap order · real-number narrator · stock guard · top-customer reels</small></h3>
+<div class="pa"><span class="b t3">Tier 3</span><span class="b moat">Moat</span><button class="cp" data-t="p10">Copy</button></div></div>
+<div class="pb"><p class="sum">Final POS moat layer. Aria knows what's selling, in stock, and who your top customers are — uses all of it to make reels nobody else can.</p>
+<pre id="p10">R10 — POS-CTA + Inventory + Segments. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2-R9 deployed.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read pos_products for current_stock / restock_level
+3. Read pos_customers for top-customer LTV ranking
+4. Confirm AUTOPILOT-FIX-1 small-sample guard pattern; reuse for stock thresholds
+
+BUILD (additive):
+
+PART 1 — POS-deep-link CTA
+src/components/reels/POSDeepLinkCTA.tsx
+- "Order in one tap" sticker overlay
+- Owner picks pos_product → sticker with deep link
+- Link: ariaos.site/order/[business_id]/?item=[product_id]&qty=1&source=reel
+- Order page pre-fills cart with linked item
+- Per-platform behavior:
+  · IG: link sticker (business account, Graph API)
+  · TikTok: URL in caption
+  · YouTube: pinned comment + description
+- Owner picks per-platform (extends R7 cross-platform UI)
+- Persist: media_urls.edit_state.pos_cta = { product_id, deep_link }
+
+PART 2 — Aria narrator with real POS data
+- Extends R5 AriaNarrator. New mode: "narrate with my numbers"
+- Picks grounded stat:
+  · "We sold 47 flat whites this week"
+  · "Our customers asked for X 23 times last month"
+  · "Tuesday is our quietest day — that's why we made this offer"
+- Numbers trace to pos_sales / pos_customers via R8 grounding (GROUNDING-TEETH-V2 applies)
+- Kokoro voices the script
+- Aria avatar pops in for the line if R5 picture-in-picture enabled
+
+PART 3 — Inventory-aware reels
+src/lib/reels/inventory-guard.ts
+- Pre-publish: check every pos_product referenced in caption / POS-CTA / narrator script
+- If current_stock &lt; restock_level OR is_out_of_stock → soft warning "You're low on X — publish anyway?"
+- Owner override possible (warning not block)
+
+PART 4 — Customer-segment targeted reels
+- Publish mode: "Show this first to my top customers"
+- Aria: pos_customers where marketing_consent=true ORDER BY total_spent DESC LIMIT N
+- Push (CX-1 P5) sent to these customers when reel publishes
+- Aria: "I'll show this to your top 5 first — wider audience after 24h"
+- Track engagement uplift separately in reel_platform_metrics
+
+API surface:
+- POST /api/community/reels/inventory-check
+- POST /api/community/reels/target-segment
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(r10): pos-cta + inventory + segments · STOP.
+
+VERIFY POST-DEPLOY:
+1. POS-CTA sticker for "Big Breakfast" → order page link works
+2. Narrator picks "We sold 47 flat whites this week" → SQL verifies count within 2%
+3. Set product current_stock=0 → publish warning fires
+4. Segment="top 5" → push to those 5 consented customers first
+SQL: select learning_signal, count(*) from aria_ai_calls where agent_key='reel_narrator_pos' group by 1;
+
+DO NOT:
+- No POS-CTA to non-existent products
+- No fabricated narrator numbers (GROUNDING-TEETH-V2)
+- No marketing to customers without marketing_consent=true (locked)
+- No new color tokens
+- No protected files</pre></div></article>
+
+<article class="prompt" id="r11"><div class="ph">
+<h3>R11 — Aria differentiation<small>Script generator · Veo · community link · dashboard repurpose · feedback loop</small></h3>
+<div class="pa"><span class="b t5">Tier 5</span><span class="b moat">Moat</span><button class="cp" data-t="p11">Copy</button></div></div>
+<div class="pb"><p class="sum">The capstone. Aria writes the reel script, generates AI video via Veo, links to community, repurposes any dashboard tile into a reel idea, and learns from outcomes. Closes the loop.</p>
+<pre id="p11">R11 — Aria Differentiation. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: R2-R10 deployed. Aria Studio Veo tab live. CX-1 P1-P5 community live.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read existing /api/aria/ask intent system
+3. Confirm Aria Studio Veo endpoint + GEMINI_API_KEY env var
+4. Read CX-1 P2 feed schema — reels become community posts too
+5. Read dashboard tile registry — identify tiles for "repurpose to reel" button
+
+BUILD (additive):
+
+PART 1 — Aria-scripts-your-reel (hook + body + CTA)
+src/lib/reels/script-generator.ts
+- New intent /api/aria/ask 'reel_script_full'
+- Pipeline:
+  1. Aria reads grounded business context (POS top items, customer segments, recent executed actions)
+  2. HOOK (3-5 word opener, first 1.5s)
+  3. BODY (3 beats: tease → reveal → demo, 4-15s)
+  4. CTA (action, where, urgency, 1-3s)
+- Each segment validated through GROUNDING-TEETH-V2
+- Returns: { hook, body_beats, cta, total_duration_estimate_seconds }
+- Editor pre-populates text overlays + B-roll matching beats
+
+PART 2 — Veo generation tab in editor
+src/components/reels/VeoTab.tsx
+- "Generate clip" → Veo composer inside editor
+- Existing Aria Studio Veo backend (shipped)
+- Owner prompt → Veo clip (5-8s) → Vercel Blob → "Add to timeline"
+- Persist: media_urls.edit_state.veo_clips = [{ clip_id, prompt, blob_url }]
+
+PART 3 — Auto-link to community feed
+- When reel publishes via R6, ALSO create community_posts row (CX-1 P2):
+  · post_type='reel'
+  · media_urls same as scheduled publish
+  · POS chip auto-attached (CX-1 P2 busy-now/fresh-batch derivation)
+- Owner can opt-out per reel ("External only, not community")
+
+PART 4 — "Repurpose to reel" button on every dashboard tile
+src/components/dashboard/RepurposeToReel.tsx
+- Per dashboard tile (sales spike alert, customer milestone, product launch, weather opportunity):
+  · "Make a reel about this" button
+  · Pre-populates editor with Aria script for that specific tile
+  · Auto-suggests B-roll from owner's image bucket
+
+PART 5 — Reel performance feeds back into Aria's brain
+src/lib/reels/feedback-loop.ts
+- After R7 analytics collect metrics, score each reel:
+  · views, engagement_rate, attributed_revenue (from R7 P3)
+- Compute "what worked": which hooks, times, POS items performed
+- Persist to aria_business_memory kind='reel_performance_pattern' (durable fact)
+- R8 caption-from-POS + R9 performance predictor READ these to improve next reel
+- Brain genuinely learns. Log to aria_ai_calls agent_key='reel_feedback_learn'
+
+API surface:
+- POST /api/community/reels/script
+- POST /api/community/reels/veo
+- POST /api/community/reels/feedback (called by R7 cron)
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · ONE commit feat(r11): aria differentiation · STOP.
+
+VERIFY POST-DEPLOY:
+1. Empty editor → "Aria, write me a reel" → grounded script
+2. Veo tab → generate "morning coffee golden hour" → MP4 on timeline
+3. Reel publishes → community feed shows it as post with POS chip
+4. Dashboard tile "Top seller this week" → "Repurpose to reel" → editor pre-populated
+5. After 48h: published reel performance shows in aria_business_memory as reel_performance_pattern
+SQL:
+  select kind, count(*) from aria_business_memory where business_id=? and kind='reel_performance_pattern' group by 1;
+  select agent_key, count(*) from aria_ai_calls where agent_key in ('reel_script_full','reel_feedback_learn') group by 1;
+
+DO NOT:
+- No fabricated scripts (GROUNDING-TEETH-V2 applies)
+- No publishing without owner confirm
+- No reading from poisoned context (use FIXED RPC + AUTOPILOT-FIX-1 framing)
+- No new color tokens
+- No protected files</pre></div></article>
+
+<footer>Saved 14 Jun 2026 · all CODE-ONLY · SOLO · RULE 0 UPGRADE_ONLY · Aria theme locked · <code class="k">$0 ongoing cost</code></footer>
+
+</div><script>
+document.querySelectorAll('.cp').forEach(b=>b.addEventListener('click',async()=>{
+  const t=document.getElementById(b.dataset.t);if(!t)return;
+  try{await navigator.clipboard.writeText(t.innerText);const o=b.textContent;b.textContent='✓ Copied';b.classList.add('done');setTimeout(()=>{b.textContent=o;b.classList.remove('done')},1600)}catch(e){b.textContent='Select & copy manually';b.classList.add('done')}
+}));
+</script></body></html>

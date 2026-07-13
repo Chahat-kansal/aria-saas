@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aria Intelligence — 12 sprints (audited against live DB)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;1,500&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--sage:#7FB897;--deep:#2D5240;--sand:#C9A37A;--amber:#BA7517;--red:#E24B4A;--bg:#0F1814;--bg2:#0A130F;--panel:#142019;--panel2:#1A2820;--ink:#E8EDE9;--soft:#8FA398;--dim:#5A6D63;--line:#1F2F26;--display:'Cormorant',serif;--body:'Outfit',sans-serif;--mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--body);background:var(--bg);color:var(--ink);line-height:1.55;padding:32px 16px;font-size:15px}
+.wrap{max-width:1040px;margin:0 auto}
+header.top{margin-bottom:28px;border-bottom:1px solid var(--line);padding-bottom:22px}
+h1{font-family:var(--display);font-size:36px;font-weight:600;font-style:italic;color:var(--sage);letter-spacing:-.5px}
+h1 small{font-family:var(--body);font-style:normal;font-size:13px;font-weight:500;color:var(--soft);letter-spacing:.04em;text-transform:uppercase;margin-left:10px}
+.lede{color:var(--soft);font-size:16px;max-width:840px;margin-top:6px}
+.lede b{color:var(--sand);font-weight:600}
+.chips{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.chip{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sand);background:rgba(201,163,122,.08);border:1px solid rgba(201,163,122,.25);padding:5px 11px;border-radius:30px}
+.chip.ok{color:var(--sage);background:rgba(127,184,151,.08);border-color:rgba(127,184,151,.3)}
+.section{margin:30px 0 16px}
+.section h2{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:24px;margin-bottom:6px;letter-spacing:-.3px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:14px}
+.card h3{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:20px;margin-bottom:8px}
+.card ul{list-style:none}
+.card li{padding:4px 0 4px 22px;position:relative;font-size:13px;line-height:1.6}
+.card li::before{content:"";position:absolute;left:6px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--sage)}
+.card li b{color:var(--sand);font-weight:600}
+code.k{font-family:var(--mono);font-size:12px;background:var(--panel2);padding:1px 6px;border-radius:4px;color:var(--sand)}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;margin-top:8px}
+.toc a{display:block;padding:11px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--ink);text-decoration:none;font-size:13px}
+.toc a:hover{border-color:var(--sage)}
+.toc a b{display:block;font-family:var(--display);font-style:italic;color:var(--sage);font-size:16px;font-weight:600}
+.toc a span{color:var(--soft);font-size:12px}
+.sprint{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(127,184,151,.04),transparent)}
+.ph h3{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:21px}
+.ph h3 small{display:block;font-family:var(--body);font-style:normal;color:var(--soft);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+.pa{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:flex-start}
+.b{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:5px 10px;border-radius:30px;border:1px solid var(--line);color:var(--soft);white-space:nowrap}
+.b.fnd{color:var(--sage);border-color:rgba(127,184,151,.4);background:rgba(127,184,151,.06)}
+.b.wir{color:var(--sand);border-color:rgba(201,163,122,.4);background:rgba(201,163,122,.06)}
+.b.rsn{color:#a6c5f3;border-color:rgba(166,197,243,.35);background:rgba(166,197,243,.06)}
+.b.knw{color:#d8a5e8;border-color:rgba(216,165,232,.35);background:rgba(216,165,232,.06)}
+.b.extend{color:var(--sage)}
+.b.new{color:var(--amber);border-color:rgba(186,117,23,.45)}
+.pb{padding:14px 22px 16px}
+.sum{color:var(--soft);font-size:13.5px;line-height:1.65;margin-bottom:10px}
+.sum b{color:var(--sand);font-weight:600}
+details{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+details:first-of-type{border-top:none;padding-top:0}
+summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--soft);letter-spacing:.04em;text-transform:uppercase;padding:6px 0;display:flex;align-items:center;justify-content:space-between;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸";color:var(--sage);font-size:10px;display:inline-block;transition:transform .15s}
+details[open] summary::before{transform:rotate(90deg)}
+summary:hover{color:var(--sage)}
+summary span.left{display:flex;align-items:center;gap:8px;flex:1}
+.cp{cursor:pointer;background:var(--panel2);border:1px solid var(--line);color:var(--ink);font-family:var(--body);font-size:10px;font-weight:600;padding:4px 10px;border-radius:6px;letter-spacing:.04em;text-transform:uppercase}
+.cp:hover{border-color:var(--sage);color:var(--sage)}
+.cp.done{color:var(--sage);border-color:var(--sage);background:rgba(127,184,151,.1)}
+pre{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:11.5px;line-height:1.65;color:#cfd6d2;white-space:pre-wrap;word-break:break-word;margin-top:6px}
+.cmd{background:rgba(127,184,151,.05);border-left:3px solid var(--sage)}
+.bl{background:rgba(201,163,122,.05);border:1px solid rgba(201,163,122,.2);border-radius:10px;padding:14px 18px;margin:10px 0;font-size:13px;line-height:1.7}
+.bl b{color:var(--sand)}
+.notice{background:rgba(186,117,23,.06);border:1px solid rgba(186,117,23,.25);border-radius:12px;padding:16px 20px;margin-bottom:20px;font-size:13.5px;line-height:1.65}
+.notice h2{color:var(--amber);font-family:var(--display);font-style:italic;font-size:18px;margin-bottom:8px}
+.notice b{color:var(--sand)}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--soft);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+td code.k{font-size:11px}
+footer{margin-top:36px;padding:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body><div class="wrap">
+
+<header class="top">
+<h1>Aria Intelligence<small>12 sprints · audited against live DB</small></h1>
+<p class="lede">Every prompt below was audited against the actual Supabase schema, existing crons, and current agent_keys before writing. The shocking truth: <b>most of this infrastructure already exists — the wiring is just broken or never completed</b>. These are mostly WIRING sprints, not building sprints.</p>
+<div class="chips">
+<span class="chip ok">✓ RULE 0 (UPGRADE_ONLY)</span><span class="chip ok">✓ Aria theme locked</span><span class="chip ok">✓ Audited against live DB</span>
+<span class="chip">12 sprints · 4 tiers</span>
+</div>
+</header>
+
+<div class="notice">
+<h2>The audit that drove these prompts</h2>
+<p>I queried 14+ tables before writing a single line. Findings: <code class="k">aria_outcomes</code> has 6 rows / <b>zero acted_on</b>. <code class="k">aria_advice_weights</code> is <b>completely empty</b> (schema exists). <code class="k">aria_hypotheses</code> has <b>1,653 rows generated but zero verdicts</b>. <code class="k">aria_skills</code> has 12 personas but all <code class="k">enabled=false</code>. <code class="k">ask_aria_verifier</code> fired exactly <b>once</b> (June 7, never since). <code class="k">businesses.weekly_revenue_target</code> + <code class="k">industry</code> columns already exist. <code class="k">aria_wiring_health_checks</code> already computes payment_coverage_pct daily. <code class="k">aria_signal_cache</code> already caches dow_pattern + revenue_velocity + churn_velocity.<br><br>
+<b>Conclusion:</b> Aria's intelligence framework was built but never fully wired. These 12 sprints close the loops. Where the audit showed an existing table or column, the prompt EXTENDS it (RULE 0 UPGRADE_ONLY). Where genuinely nothing exists, it creates carefully.</p>
+</div>
+
+<section class="section">
+<h2>Universal constitutional rules<small>apply to every sprint</small></h2>
+<div class="card"><ul>
+<li><b>RULE 0 (UPGRADE_ONLY)</b> — extend, never remove working function/fields/flows</li>
+<li><b>THEME GUARD</b> — Aria tokens only <code class="k">#7FB897 / #2D5240 / #C9A37A / #BA7517 / #E24B4A</code> + Cormorant + Outfit. No new tokens.</li>
+<li><b>PROTECTED FILES</b> — never touch <code class="k">AnimatedBg</code>, <code class="k">FlyToCart</code>, <code class="k">CursorGlow</code>, <code class="k">pos-sfx.ts</code>, <code class="k">aria-voice-guide.ts</code></li>
+<li><b>WORKTREE LOCK</b> — <code class="k">c:\Users\kansa\Downloads\aria-saas-main\repo-worktree</code> never touched by Claude Code</li>
+<li><b>logAICallSafe MANDATORY</b> — every new aria_ai_calls write goes through the typed helper from LOGGING-AUDIT-3. role + provider must be in CHECK lists.</li>
+<li><b>GROUNDING-TEETH-V2 applies</b> — every new $/% that surfaces to user MUST resolve to an anchor in <code class="k">_anchor_values</code></li>
+<li><b>SOLO discipline</b> — pwd confirm · pre-flight quotes verbatim · build green (tsc 0 + build PASS) · ONE commit · STOP before push · report file</li>
+<li><b>RULE 9 (NEW, learned tonight)</b> — model becomes intelligent through richer ground truth, not prompt rules. If you find yourself writing "NEVER say X, ALWAYS say Y", extract the missing FACT and surface it instead.</li>
+</ul></div>
+</section>
+
+<section class="section">
+<h2>Quick nav</h2>
+<div class="toc">
+<a href="#i1"><b>I1 HEALTH-SIGNALS</b><span>Foundation · facts → groundTruth</span></a>
+<a href="#i2"><b>I2 GOAL-AWARE</b><span>Foundation · trajectory awareness</span></a>
+<a href="#i3"><b>I3 PATTERN-MEMORY</b><span>Foundation · compounding learning</span></a>
+<a href="#i4"><b>I4 OUTCOME-LOOP</b><span>Wiring · close the learning loop</span></a>
+<a href="#i5"><b>I5 PLAN-PERSISTENCE</b><span>Wiring · follow-up on recommendations</span></a>
+<a href="#i6"><b>I6 INDUSTRY-KNOWLEDGE</b><span>Wiring · enable existing skills</span></a>
+<a href="#i7"><b>I7 TOOL-USE</b><span>Reasoning · agentic fact-fetching</span></a>
+<a href="#i8"><b>I8 SELF-VERIFY</b><span>Reasoning · pre-emission check</span></a>
+<a href="#i9"><b>I9 DEEP-REASONING</b><span>Reasoning · plan→verify→conclude</span></a>
+<a href="#i10"><b>I10 BENCHMARK</b><span>Knowledge · cross-business aggregates</span></a>
+<a href="#i11"><b>I11 COUNTERFACTUAL</b><span>Knowledge · interactive what-ifs</span></a>
+<a href="#i12"><b>I12 CAUSAL</b><span>Knowledge · event timeline correlation</span></a>
+</div>
+</section>
+
+<section class="section">
+<h2>Run order &amp; gating</h2>
+<div class="card">
+<ol style="padding-left:22px;font-size:13.5px;line-height:1.85">
+<li><b>Foundation</b> (parallel-safe): I1 HEALTH-SIGNALS → I2 GOAL-AWARE → I3 PATTERN-MEMORY</li>
+<li><b>Wiring</b> (depends on Foundation): I4 OUTCOME-LOOP → I5 PLAN-PERSISTENCE → I6 INDUSTRY-KNOWLEDGE</li>
+<li><b>Reasoning</b> (depends on Wiring): I7 TOOL-USE → I8 SELF-VERIFY → I9 DEEP-REASONING</li>
+<li><b>Knowledge</b> (depends on Reasoning): I10 BENCHMARK → I11 COUNTERFACTUAL → I12 CAUSAL</li>
+</ol>
+<p style="color:var(--soft);font-size:13px;margin-top:8px">Total estimated effort: ~3-4 weeks of focused work. Foundation tier could ship in one week.</p>
+</div>
+</section>
+
+<!-- ============ I1 HEALTH-SIGNALS ============ -->
+<article class="sprint" id="i1">
+<div class="ph"><h3>I1 — HEALTH-SIGNALS<small>Foundation · expose diagnostic facts</small></h3>
+<div class="pa"><span class="b fnd">Foundation</span><span class="b extend">Mostly extend</span><button class="cp" data-t="p1">Copy prompt</button><button class="cp" data-t="c1">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">aria_wiring_health_checks.payments_coverage_pct</code> already runs daily. <code class="k">aria_signal_cache.day_of_week_pattern</code> and <code class="k">revenue_velocity_7d</code> already exist. <b>weather signal doesn't exist yet</b> (no weather_history table). This sprint COMPOSES existing facts into a business_health blob + adds weather + adds explicit known_unknowns list. Kills "POS broken" hallucination structurally.</p>
+
+<details open><summary><span class="left">Full prompt</span></summary>
+<pre id="p1">I1 HEALTH-SIGNALS-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+WHY (from audit):
+The 07:54 AM AEST test (after V2 deployed) still said "POS payment sync is broken" — because Aria's context contained no diagnostic facts about POS health. V2 stripped 22 fabricated numbers but couldn't strip qualitative inferences. The fix is not a prompt rule — it's adding facts.
+
+AUDIT FINDINGS:
+- aria_wiring_health_checks.payments_coverage_pct ALREADY computes payment coverage daily (48 rows, last 2026-06-13 05:00)
+- aria_signal_cache.day_of_week_pattern ALREADY caches dow baselines (3 rows; needs expansion to all 16 businesses)
+- aria_signal_cache.revenue_velocity_7d / churn_velocity / avg_basket_trend ALREADY exist (16 rows each)
+- pos_sales canonical: status='completed', total_amount in dollars, created_at AEST conversion
+- weather: NO existing table. aria_signal_cache has no weather signal_type yet.
+
+PRE-FLIGHT (mandatory verbatim quotes in report):
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read src/app/api/aria/ask/route.ts: quote groundTruth construction site (V2 expanded it)
+3. Read src/lib/aria/council.ts: quote where advisor input context is assembled
+4. Confirm logAICallSafe import from LOGGING-AUDIT-3
+5. Confirm wh_payments_coverage RPC signature via Supabase tool (AUTOPILOT-FIX-1 fixed it)
+6. List aria_signal_cache rows: chat-Claude confirms which signal_types exist for businessId
+
+BUILD (additive only):
+
+PART 1 — src/lib/aria/health-signals.ts (NEW)
+Export computeHealthSignals(businessId): Promise&lt;HealthSignals&gt;
+
+Read from existing tables (DO NOT recompute what's already there):
+- pos_health: 
+  - payment_coverage_pct: SELECT * FROM wh_payments_coverage(businessId, now() - interval '7 days')
+  - last_sale_at: SELECT max(created_at) FROM pos_sales WHERE business_id=? AND status='completed'
+  - last_sync_at: SELECT max(checked_at) FROM aria_wiring_health_checks WHERE business_id=? AND check_name='payments_coverage_pct'
+  - status logic:
+    - OK: coverage >= 95% AND completed_count >= 5 AND last_sale_at within 48h
+    - DEGRADED: coverage < 95% AND completed_count >= 10 (matches AUTOPILOT-FIX-1 baseline)
+    - INSUFFICIENT_SAMPLE: completed_count < 5 — small biz, no conclusion
+  - reasoning: human-readable one-liner
+
+- dow_context (cache check first):
+  - First: SELECT payload FROM aria_signal_cache WHERE business_id=? AND signal_type='day_of_week_pattern' AND expires_at > now()
+  - If miss: compute via SQL avg per dow last 56 days, write to cache with 24h TTL
+  - Surface: today_dow_name, today_baseline_avg, today_baseline_rank (1=best, 7=worst), actual_today, deviation_pct
+
+- weather_context:
+  - First: SELECT payload FROM aria_signal_cache WHERE business_id=? AND signal_type='weather_today' AND expires_at > now()
+  - If miss: fetch via open-meteo provider (free, already in provider CHECK list as 'open-meteo'), write to cache 6h TTL
+  - businesses.lat + lng required (verify column existence in pre-flight)
+  - If lat/lng null: return { available: false, reason: 'no_location' }
+  - Surface: conditions_today_text, temp_c, rain_pct, historical_revenue_on_similar_days (compute from pos_sales + cached weather history)
+
+- data_freshness:
+  - last_pos_sync_at, last_action_executed_at, stale_signal_count (signal_cache rows past expires_at)
+  - reasoning: human-readable
+
+- known_unknowns: string[] (ALWAYS included; this IS the architecture's honesty)
+  - "Whether the shop was physically open today"
+  - "Whether staff were present"
+  - "Whether there was a local event/closure/disruption"
+  - "Whether a payment provider had an outage today"
+  - "Whether marketing/promo was running"
+  - "Whether private events / catering / wholesale moved revenue off-POS"
+
+Return shape:
+{ pos_health, dow_context, weather_context, data_freshness, known_unknowns, computed_at }
+
+PART 2 — Surface to groundTruth (in src/app/api/aria/ask/route.ts)
+- Call computeHealthSignals(businessId) once during groundTruth construction
+- Add groundTruth.business_health = result
+- Push every numeric value (payment_coverage_pct, today_baseline_avg, deviation_pct, temp_c) into _anchor_values so V2 Check 6 can validate them when synthesis cites them
+
+PART 3 — Pass to advisors AND synthesis (in src/lib/aria/council.ts)
+- Include groundTruth.business_health in each advisor's input
+- Include in synthesis input
+- In advisor prompt template ADD ONE fact-pointer line (NOT a rule — RULE 9):
+    "DIAGNOSTIC_FACTS: The user's verifiable system state is in business_health. 
+    Reason from these facts. known_unknowns lists what cannot be verified — frame those as questions."
+- Do NOT script "ask vs assert" — let the facts make wrong claims structurally inconsistent
+
+PART 4 — Log via logAICallSafe
+For every call to computeHealthSignals, write ONE row:
+  agent_key: 'health_signals', role: 'analysis', provider: 'other'
+  request_summary: businessId
+  response_summary: JSON.stringify({ pos_status, dow_rank, weather_available }).slice(0, 200)
+
+BUILD GATE:
+- npx tsc --noEmit → 0 errors
+- npm run build → PASS
+- ONE commit: feat(i1-health-signals): diagnostic facts in groundTruth, no prompt rules
+- STOP before push. Report includes verbatim pre-flight quotes + sample healthSignals for Sip + confirmation Parts 1-4 are additive + the ONE advisor prompt line shown verbatim.
+
+VERIFY POST-DEPLOY (chat-Claude SQL):
+1. select * from aria_ai_calls where agent_key='health_signals' and business_id='ff5055a0-c351-4ada-817a-1804961035f3' and created_at > now() - interval '5 minutes';
+   PASS: row appears with pos_status, dow_rank, weather_available in response_summary
+2. Fresh chat "how am I doing this week?":
+   - NO "POS payment sync is broken" stated as fact (pos_health.status='OK' in context)
+   - Aria states "POS is healthy (100% coverage, last sale Xh ago)" or asks about known_unknowns
+   - dow context surfaces: "Tuesday baseline $327, today's $7 still N% below" — using fact, not invention
+
+DO NOT:
+- Do not add prompt rules telling Aria how to phrase ("ask, don't assert")
+- Do not strip qualitative claims downstream
+- Do not modify any other advisor system prompt beyond ONE fact-pointer line
+- Do not block on weather if lat/lng missing — mark unavailable
+- No new npm dependencies</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c1" class="cmd">Run I1 HEALTH-SIGNALS-1 only (prompts/I1-health-signals.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Add diagnostic facts (pos_health, dow_context, weather_context, data_freshness, known_unknowns) to groundTruth in src/app/api/aria/ask/route.ts. NEW file src/lib/aria/health-signals.ts. Read from aria_wiring_health_checks + aria_signal_cache (existing) and wh_payments_coverage RPC (FIXED). Push every numeric into _anchor_values for V2 Check 6. ADD one fact-pointer line to advisor prompts in src/lib/aria/council.ts — NO prompt rules (RULE 9). Log via logAICallSafe with agent_key='health_signals' role='analysis' provider='other'. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-I1-health-signals-report.md.</pre></details>
+</div></article>
+
+<!-- ============ I2 GOAL-AWARE ============ -->
+<article class="sprint" id="i2">
+<div class="ph"><h3>I2 — GOAL-AWARE<small>Foundation · surface goal trajectory to groundTruth</small></h3>
+<div class="pa"><span class="b fnd">Foundation</span><span class="b extend">Pure wiring</span><button class="cp" data-t="p2">Copy prompt</button><button class="cp" data-t="c2">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">businesses.weekly_revenue_target</code> ALREADY exists. Currently surfaced once per chat. <b>This sprint frames every recommendation against goal trajectory.</b> No new tables.</p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p2">I2 GOAL-AWARE-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I1 HEALTH-SIGNALS deployed (groundTruth shape established).
+
+WHY (from audit):
+businesses.weekly_revenue_target column ALREADY exists. Today Aria mentions it occasionally. Smarter: every recommendation framed against goal trajectory. Owner feels accountability + Aria becomes coach, not analyst.
+
+AUDIT FINDINGS:
+- businesses.weekly_revenue_target: numeric column, exists
+- pos_sales: total_amount, status='completed' — canonical revenue source
+- Tonight's WEEK-1 + SWLM-1 already compute revenue_this_week_calendar + same_week_last_month
+- aria_actions.expected_impact already exists per recommendation
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read I1 health-signals.ts — confirm pattern
+3. Quote groundTruth construction site verbatim (post-I1)
+4. SELECT business_id, weekly_revenue_target FROM businesses WHERE weekly_revenue_target IS NOT NULL — chat-Claude lists which have targets set
+
+BUILD (additive):
+
+PART 1 — src/lib/aria/goal-context.ts (NEW)
+Export computeGoalContext(businessId): Promise&lt;GoalContext&gt;
+
+Shape:
+{
+  weekly_target: number | null,   // from businesses.weekly_revenue_target
+  revenue_this_week: number,      // from WEEK-1 calculation
+  days_remaining_in_week: number, // 0-6 based on AEST
+  projected_eow_revenue: number,  // linear extrapolation; cap at 2× current_pace if days < 3
+  projection_method: 'linear' | 'dow_weighted', // dow_weighted uses I1 dow_context if available
+  on_track_pct: number,           // projected / target × 100
+  gap_to_target: number,          // target - projected
+  pace_required: number,          // (target - revenue_so_far) / days_remaining = needed_daily_avg
+  yesterday_actual: number,       // for context
+  status: 'ahead' | 'on_track' | 'behind' | 'critical' | 'no_target',
+  reasoning: string               // human-readable one-liner
+}
+
+Status rules:
+- ahead: on_track_pct >= 110
+- on_track: on_track_pct in [90, 110)
+- behind: on_track_pct in [70, 90)
+- critical: on_track_pct < 70
+- no_target: weekly_target is null
+
+PART 2 — Surface to groundTruth in route.ts
+- Call computeGoalContext during groundTruth construction (after I1)
+- Add groundTruth.goal_context = result
+- Push (weekly_target, projected_eow_revenue, gap_to_target, pace_required, on_track_pct) into _anchor_values
+
+PART 3 — Add one fact-pointer to synthesis prompt
+ADD ONE line to synthesis input (not advisor — synthesis only):
+  "GOAL_CONTEXT: Owner's target is in goal_context. Frame your recommendation 
+  against the gap or pace required if relevant. Do not invent a target if 
+  goal_context.status='no_target' — instead ask the owner what their target is."
+
+PART 4 — Log
+logAICallSafe row per call:
+  agent_key: 'goal_context', role: 'analysis', provider: 'other'
+  response_summary: JSON.stringify({ status, on_track_pct, gap_to_target }).slice(0, 200)
+
+BUILD GATE:
+- tsc 0 + build PASS
+- ONE commit: feat(i2-goal-aware): surface weekly target + trajectory to groundTruth
+- STOP. Report includes pre-flight quotes + per-business goal_context sample for Sip.
+
+VERIFY POST-DEPLOY:
+1. Set Sip's businesses.weekly_revenue_target = 4500 (chat-Claude SQL)
+2. Fresh chat "how am I doing this week?":
+   - Aria mentions "$7 vs $4,500 target — projecting to fall short by $X"
+   - OR "On track / Ahead / Behind / Critical" framing
+   - NO invented targets
+   - Aria asks "Want to adjust your target?" if owner mentions concern
+3. SQL: select agent_key, response_summary from aria_ai_calls 
+   where agent_key='goal_context' and business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   and created_at > now() - interval '5 minutes';
+
+DO NOT:
+- Do not invent a default target if column is null
+- Do not change projection math without documenting (linear vs dow_weighted)
+- Do not modify any advisor prompt beyond ONE line in synthesis input
+- Do not change businesses table schema</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c2" class="cmd">Run I2 GOAL-AWARE-1 only (prompts/I2-goal-aware.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. NEW file src/lib/aria/goal-context.ts computing trajectory against existing businesses.weekly_revenue_target. Add to groundTruth + _anchor_values. ADD one fact-pointer line to synthesis input (NO prompt rules). Log via logAICallSafe agent_key='goal_context'. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I3 PATTERN-MEMORY ============ -->
+<article class="sprint" id="i3">
+<div class="ph"><h3>I3 — PATTERN-MEMORY<small>Foundation · compounding per-business intelligence</small></h3>
+<div class="pa"><span class="b fnd">Foundation</span><span class="b extend">Extend kind CHECK</span><button class="cp" data-t="p3">Copy prompt</button><button class="cp" data-t="c3">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">aria_business_memory.kind</code> CHECK currently allows {preference, fact, tried, decision, concern, goal}. Needs <code class="k">'pattern'</code> added. <code class="k">source_type='signal'</code> already exists. This sprint detects patterns from raw data and writes them as memory rows.</p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p3">I3 PATTERN-MEMORY-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+WHY (from audit):
+aria_business_memory has 119 rows of facts/decisions/concerns extracted from conversations. But it stores what the OWNER said, not what the DATA says. Patterns like "Sip averages $327 on Tuesdays" should be detected and written so future chats reason from compounding intelligence.
+
+AUDIT FINDINGS:
+- aria_business_memory.kind CHECK: ['preference', 'fact', 'tried', 'decision', 'concern', 'goal']
+- aria_business_memory.source_type CHECK: ['conversation', 'action_outcome', 'signal', 'manual']
+- Patterns belong in source_type='signal' once we add kind='pattern'
+- aria_signal_cache already has day_of_week_pattern, revenue_velocity, churn_velocity — these are EPHEMERAL (TTL-based). Patterns we want DURABLE.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Quote pg_constraint for aria_business_memory.kind CHECK verbatim
+3. Read I1 + I2 to understand groundTruth pattern
+4. Read aria_signal_cache existing signal_type list to avoid duplication
+
+BUILD (additive):
+
+PART 0 — Migration: extend kind CHECK
+File DO NOT execute (chat-Claude applies via Supabase tool):
+ALTER TABLE aria_business_memory DROP CONSTRAINT aria_business_memory_kind_check;
+ALTER TABLE aria_business_memory ADD CONSTRAINT aria_business_memory_kind_check 
+  CHECK (kind = ANY (ARRAY['preference', 'fact', 'tried', 'decision', 'concern', 'goal', 'pattern']));
+
+PART 1 — src/lib/aria/pattern-detection.ts (NEW)
+Export detectPatterns(businessId): Promise&lt;DetectedPattern[]&gt;
+
+Patterns to detect (all SQL-based, no LLM):
+1. WEEKDAY_BASELINE — avg revenue per dow over last 56 days. Threshold: ≥4 days observed.
+   content: "Sip averages $X on Tuesdays, $Y on Wednesdays... (last 56 days)"
+2. PEAK_HOUR — top 3 hours by transaction count last 30 days
+   content: "Peak hours are 8-10am (avg N transactions/hour)"
+3. ITEM_CO_OCCURRENCE — top item pairs that sell together (basket analysis from pos_sale_items)
+   content: "Customers buying Big Breakfast also order flat white 78% of the time"
+4. SEASONAL_TREND — month-over-month revenue change last 6 months
+   content: "Revenue trending +12% MoM over last 6 months"
+5. CUSTOMER_RETENTION_PATTERN — % returning vs new last 90 days
+   content: "62% of weekly revenue comes from repeat customers"
+
+Each pattern returns:
+{ kind: 'pattern', source_type: 'signal', content, topic, confidence, importance }
+
+PART 2 — Pattern detection cron
+src/app/api/cron/pattern-memory/route.ts (NEW, daily-max, gated SEC-1 CRON_SECRET):
+- For each business with ≥30 days of pos_sales data:
+  · Run detectPatterns
+  · For each detected pattern: INSERT INTO aria_business_memory if no active pattern with same topic exists
+  · If active pattern exists but content differs: mark old as superseded_by + insert new (preserves history)
+  · skip detection if last pattern run < 7 days ago for that business
+
+Cron schedule: weekly (Mondays 03:00 UTC = 13:00 AEST)
+
+PART 3 — Reads
+Patterns get pulled by existing recall.ts (already filters is_active=true + deleted_at IS NULL post RECALL-PARITY-1). 
+ADD pattern-prioritization: when fetching memories for groundTruth context, pull up to 5 patterns ordered by importance DESC. 
+Cap pattern context size to prevent token bloat.
+
+PART 4 — Log
+For each pattern_memory cron run:
+  agent_key: 'pattern_detector', role: 'data', provider: 'other'
+  response_summary: JSON.stringify({ patterns_detected, patterns_written, patterns_superseded })
+
+BUILD GATE:
+- tsc 0 + build PASS · function count ≤22 · daily-max cron
+- ONE commit feat(i3-pattern-memory): detect data patterns, write to aria_business_memory
+- STOP. Report includes migration SQL, sample patterns detected for Sip, confirmation Part 3 doesn't break RECALL-PARITY-1.
+
+VERIFY POST-DEPLOY:
+1. Apply migration (chat-Claude)
+2. Trigger /api/cron/pattern-memory with valid CRON_SECRET
+3. SQL: select kind, source_type, topic, left(content,80), importance from aria_business_memory 
+   where business_id='ff5055a0-c351-4ada-817a-1804961035f3' and kind='pattern' 
+   order by importance desc;
+   PASS: 3-5 pattern rows appear with real-data-grounded content
+4. Fresh chat "what patterns do you see in my sales?" — Aria cites patterns from memory
+
+DO NOT:
+- Do not write patterns with confidence below configurable threshold (default 0.6)
+- Do not duplicate patterns — supersede on content change
+- Do not skip aria_signal_cache for ephemeral signals; patterns are DURABLE distillations
+- Do not LLM-generate pattern content — SQL-only, deterministic
+- Do not affect aria_signal_cache writes from signal-engine cron</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c3" class="cmd">Run I3 PATTERN-MEMORY-1 only (prompts/I3-pattern-memory.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Apply migration via chat-Claude to extend aria_business_memory.kind CHECK with 'pattern'. NEW src/lib/aria/pattern-detection.ts (SQL-only, no LLM). NEW src/app/api/cron/pattern-memory/route.ts weekly with CRON_SECRET. Patterns: WEEKDAY_BASELINE, PEAK_HOUR, ITEM_CO_OCCURRENCE, SEASONAL_TREND, CUSTOMER_RETENTION. Supersede on change. logAICallSafe agent_key='pattern_detector' role='data' provider='other'. RULE 0 UPGRADE_ONLY. Function count ≤22. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I4 OUTCOME-LOOP ============ -->
+<article class="sprint" id="i4">
+<div class="ph"><h3>I4 — OUTCOME-LOOP<small>Wiring · close the learning loop that already exists</small></h3>
+<div class="pa"><span class="b wir">Wiring</span><span class="b extend">Pure wiring</span><button class="cp" data-t="p4">Copy prompt</button><button class="cp" data-t="c4">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">aria_outcomes</code> exists (6 rows, ZERO acted_on). <code class="k">aria_advice_weights</code> exists (empty). <code class="k">outcome-check</code> cron exists (27 runs, ZERO success). <b>The entire framework was built but NEVER WIRED.</b> This sprint wires it.</p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p4">I4 OUTCOME-LOOP-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I1 HEALTH-SIGNALS deployed.
+
+WHY (from audit):
+- aria_outcomes table EXISTS with full schema (recommendation_type, acted_on, outcome_7d_cents, outcome_30d_cents, outcome_verdict, category, advice_weight_delta) — 6 rows, ZERO acted_on, ZERO verdicts
+- aria_advice_weights table EXISTS with full schema (business_id, category, weight, positive/negative/neutral_outcomes, last_updated_at) — 0 rows
+- outcome-check cron EXISTS — 27 runs, all status NOT 'success'
+- aria_hypotheses has 1653 rows generated nightly, ZERO accepted, ZERO outcome_verdicts
+
+This is the most underutilized intelligence asset in the entire codebase. The infrastructure is fully built. The wiring is missing.
+
+PRE-FLIGHT (mandatory, exhaustive):
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. grep -rn "aria_outcomes\|aria_advice_weights" src --include="*.ts" — find every existing reference. PASTE VERBATIM. Document who writes / who reads.
+3. Find src/app/api/cron/outcome-check/route.ts (or similar). Quote its current body. Document why it's failing (likely empty due to filters or bug).
+4. Find where aria_actions.status transitions to 'executed' — that's the trigger point for outcome creation.
+5. grep -rn "hypothesis" src/app/api/cron — find aria_hypotheses generator. Document its outcome-check logic if any.
+6. Verify CHECK constraints on aria_outcomes.outcome_verdict and aria_outcomes.category (chat-Claude pulls)
+
+BUILD (additive only):
+
+PART 1 — Wire aria_actions.status='executed' → aria_outcomes insert
+Find the action-execution endpoint (likely src/app/api/aria/actions/[id]/execute/route.ts or similar). After status update:
+  INSERT INTO aria_outcomes (
+    business_id, recommendation_type, recommendation_detail, recommended_at,
+    acted_on=true, acted_on_at=now(), action_id, category, baseline_metric_cents
+  ) VALUES (...)
+- recommendation_type from aria_actions.category
+- baseline_metric_cents: snapshot revenue last 7 days × 100 (so post-execution delta is computable)
+
+PART 2 — Fix outcome-check cron
+src/app/api/cron/outcome-check/route.ts (FIX existing, don't recreate):
+- For each aria_outcomes WHERE acted_on=true AND outcome_verdict IS NULL:
+  · If acted_on_at < now() - interval '7 days': compute outcome_7d_cents = (current_7d_revenue - baseline_metric_cents)
+  · If acted_on_at < now() - interval '30 days': compute outcome_30d_cents
+  · outcome_verdict: 'positive' if outcome_7d_cents > baseline × 0.05, 'negative' if < -0.05 of baseline, 'neutral' otherwise
+  · UPDATE aria_outcomes SET ... outcome_checked_at = now()
+- Gate via SEC-1 CRON_SECRET
+- Log via logAICallSafe agent_key='outcome_check' role='analysis' provider='other'
+
+PART 3 — Wire aria_outcomes → aria_advice_weights
+After each outcome_verdict update, UPDATE aria_advice_weights:
+- If row exists for (business_id, category): increment positive/negative/neutral_outcomes; recompute weight via Laplace smoothing:
+    weight = (positive + 1) / (positive + negative + neutral + 3)
+- If row doesn't exist: INSERT initial row with the verdict counter set to 1
+- This is the per-business per-category confidence multiplier the table comment promised
+
+PART 4 — Surface aria_advice_weights to groundTruth
+In src/app/api/aria/ask/route.ts (after I1 + I2):
+- Read aria_advice_weights for current businessId
+- Add to groundTruth.advice_weights = [{ category, weight, total_outcomes }]
+- Synthesis can now reason: "I'm less confident about pricing changes for you because past pricing recommendations had weight=0.4"
+
+PART 5 — Hypothesis outcome closure
+Extend the outcome-check cron: for aria_hypotheses WHERE action_id IS NOT NULL AND outcome_checked_at IS NULL:
+- Same 7d/30d computation against baseline_metric_cents
+- Update outcome_verdict, outcome_checked_at
+- This finally closes the 1653-row hypothesis loop
+
+BUILD GATE:
+- tsc 0 + build PASS · daily-max cron · function count ≤22
+- ONE commit feat(i4-outcome-loop): wire aria_outcomes + aria_advice_weights + hypothesis closure
+- STOP. Report MUST include:
+  - Verbatim grep output of every existing reference to outcome tables
+  - Diff of outcome-check cron (before vs after)
+  - Confirmation no schema changes (additive ONLY to existing tables via inserts/updates)
+  - Sample weight calculation showing Laplace smoothing
+
+VERIFY POST-DEPLOY:
+1. Execute one aria_action (chat-Claude updates status='executed' manually for a test action)
+2. SQL: select * from aria_outcomes where business_id='ff5055a0-c351-4ada-817a-1804961035f3' and acted_on=true;
+   PASS: row exists with baseline_metric_cents set
+3. Wait 7 days (or use chat-Claude to backdate acted_on_at to 8 days ago for test): cron sets outcome_verdict
+4. SQL: select category, weight, positive_outcomes from aria_advice_weights where business_id='ff5055a0-c351-4ada-817a-1804961035f3';
+   PASS: row exists with weight ≠ NULL
+5. Fresh chat: groundTruth.advice_weights surfaces in context
+
+DO NOT:
+- Do not create new tables (everything exists)
+- Do not modify existing aria_outcomes / aria_advice_weights schema
+- Do not write outcome_verdict before 7d elapsed (statistical floor)
+- Do not bypass SEC-1 CRON_SECRET</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c4" class="cmd">Run I4 OUTCOME-LOOP-1 only (prompts/I4-outcome-loop.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. WIRING SPRINT — aria_outcomes + aria_advice_weights EXIST but are unwired. Find existing outcome-check cron and FIX it (verify why 27 runs all failed). Wire aria_actions.status='executed' transition to aria_outcomes insert. After 7d/30d, compute outcome_verdict + update aria_advice_weights via Laplace smoothing. Close aria_hypotheses loop too (1653 rows with zero verdicts). Surface advice_weights to groundTruth. CRON_SECRET via SEC-1. logAICallSafe. RULE 0 UPGRADE_ONLY — DO NOT create new tables. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I5 PLAN-PERSISTENCE ============ -->
+<article class="sprint" id="i5">
+<div class="ph"><h3>I5 — PLAN-PERSISTENCE<small>Wiring · follow up on recommendations</small></h3>
+<div class="pa"><span class="b wir">Wiring</span><span class="b extend">Pure wiring</span><button class="cp" data-t="p5">Copy prompt</button><button class="cp" data-t="c5">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">aria_actions</code> already has 434 rows. <code class="k">aria_action_log</code> tracks 7 executions. <b>What's missing: the conversation follow-up.</b> Aria never asks "did X work?"</p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p5">I5 PLAN-PERSISTENCE-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I4 OUTCOME-LOOP deployed.
+
+WHY (from audit):
+Aria suggests "test smoothie bundle" 3 weeks ago. Next chat: completely forgotten. Owner feels unseen. Aria misses outcome data point. With I4 wiring outcomes, this sprint surfaces the follow-up in conversation.
+
+AUDIT FINDINGS:
+- aria_actions has 434 rows with status field (pending, executed, dismissed, expired)
+- aria_action_log: 7 rows of executed actions with before/after state
+- aria_outcomes (post-I4): outcome_verdict populated after 7d/30d
+- Currently NO chat surface for "you tried X last week — how did it go?"
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read I1 + I4 groundTruth additions
+3. Find where ask_suggestions are generated (post-response follow-up questions). Quote signature.
+4. SELECT count(*) from aria_actions where status='executed' GROUP BY business_id — chat-Claude pulls
+
+BUILD (additive):
+
+PART 1 — Open-loop detection
+src/lib/aria/open-loops.ts (NEW)
+Export getOpenLoops(businessId): Promise&lt;OpenLoop[]&gt;
+
+Returns aria_actions WHERE status='executed' AND executed_by_user_id IS NOT NULL AND updated_at &gt; now() - interval '60 days' AND id NOT IN (SELECT action_id FROM aria_outcomes WHERE acted_on=true)
+
+Each open loop:
+{
+  action_id, title, executed_at, days_since_executed,
+  baseline_revenue, current_revenue, observed_delta,
+  outcome_status: 'too_soon' (< 7d) | 'ready_to_review' (≥ 7d) | 'closed' (verdict set)
+}
+
+PART 2 — Surface to groundTruth
+groundTruth.open_loops = getOpenLoops(businessId) limited to 5 most recent
+
+PART 3 — Add fact-pointer line to synthesis prompt (NOT a rule)
+"OPEN_LOOPS: actions the owner executed but Aria hasn't followed up on. 
+If outcome_status='ready_to_review', ASK about the result naturally in your response — 
+this is data that helps you give better future advice."
+
+PART 4 — Surface in ask_suggestions
+The post-response suggestion generator (existing) gains awareness:
+If groundTruth.open_loops has any with status='ready_to_review':
+- Add suggestion: "How did [action title] work out?"
+- When owner clicks: opens chat with that question → user response feeds aria_outcomes.notes
+
+PART 5 — Owner-provided outcome route
+src/app/api/aria/actions/[id]/outcome/route.ts (NEW, optional, owner-driven)
+- POST with body { worked: boolean, notes: string }
+- Updates aria_outcomes: acted_on_at if missing, outcome_verdict if owner indicates, notes
+- This is the OWNER override of the cron's automatic 7d verdict
+
+PART 6 — Log
+logAICallSafe agent_key='open_loops' role='analysis' provider='other'
+response_summary: JSON.stringify({ open_count, ready_to_review_count }).slice(0, 200)
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(i5-plan-persistence) · STOP.
+
+VERIFY POST-DEPLOY:
+1. chat-Claude sets one Sip aria_actions to status='executed' with executed_at = 10 days ago
+2. Fresh chat "how am I doing this week?": 
+   - Aria naturally asks "Last week you tried [X] — how did it go?" 
+3. Owner replies "Yeah it worked great" or similar
+4. SQL: select notes, outcome_verdict from aria_outcomes where action_id='&lt;id&gt;';
+   PASS: notes populated, possibly verdict='positive' if owner used positive language
+5. ask_suggestions includes the open loop as a clickable follow-up
+
+DO NOT:
+- Do not push open loops if outcome_status='too_soon' (statistical floor)
+- Do not interrupt main question with open loop — surface in CONTEXT or ask_suggestions only
+- Do not auto-set verdict from owner's notes — only if explicit positive/negative
+- Do not modify aria_actions schema</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c5" class="cmd">Run I5 PLAN-PERSISTENCE-1 only (prompts/I5-plan-persistence.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. NEW src/lib/aria/open-loops.ts reading executed aria_actions without aria_outcomes follow-up. Surface to groundTruth.open_loops + ask_suggestions. ADD one fact-pointer line to synthesis prompt (NO rules). NEW route /api/aria/actions/[id]/outcome for owner override. logAICallSafe agent_key='open_loops' role='analysis' provider='other'. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I6 INDUSTRY-KNOWLEDGE ============ -->
+<article class="sprint" id="i6">
+<div class="ph"><h3>I6 — INDUSTRY-KNOWLEDGE<small>Wiring · enable the 12 dormant skills</small></h3>
+<div class="pa"><span class="b wir">Wiring</span><span class="b extend">Pure wiring</span><button class="cp" data-t="p6">Copy prompt</button><button class="cp" data-t="c6">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">aria_skills</code> has 12 personas (Accountant, Compliance, Growth, HR, Inventory, Marketing) with rich <code class="k">system_prompt_addition</code> — ALL <code class="k">enabled=false</code>. Industry column on businesses has values (cafe/gym/retail/etc). <b>Wire them.</b></p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p6">I6 INDUSTRY-KNOWLEDGE-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+WHY (from audit):
+aria_skills has 12 rows: Accountant, Compliance officer, Growth advisor, HR coach, Inventory expert, Marketing strategist — each with rich system_prompt_addition (e.g. "Act as the business owner's accountant. Focus on cash flow, expenses, GST (10%), BAS lodgement..."). ALL CURRENTLY DISABLED (enabled=false). Industries (cafe/gym/realestate/retail/tradie/visa/warehouse) exist on businesses but skills don't filter by them.
+
+This sprint:
+1. Enables skills for owners by default
+2. Adds industry-aware filtering
+3. Wires skill.system_prompt_addition into council advisor selection
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. grep -rn "aria_skills" src --include="*.ts" — find existing references
+3. Confirm businesses.industry values via SQL (cafe/gym/realestate/retail/tradie/visa/warehouse)
+4. Read council.ts advisor invocation site to find injection point
+
+BUILD (additive):
+
+PART 1 — Migration (chat-Claude applies)
+ALTER TABLE aria_skills ADD COLUMN IF NOT EXISTS industries text[] DEFAULT NULL;
+-- NULL means applies to all industries
+-- Populate built-in skills with industry hints (one-time UPDATE in migration):
+UPDATE aria_skills SET industries = NULL WHERE built_in=true AND name IN ('Accountant', 'Compliance officer', 'HR coach'); -- universal
+UPDATE aria_skills SET industries = ARRAY['cafe','retail','gym','tradie','warehouse'] WHERE built_in=true AND name = 'Inventory expert';
+UPDATE aria_skills SET industries = ARRAY['cafe','retail','gym','realestate'] WHERE built_in=true AND name = 'Marketing strategist';
+UPDATE aria_skills SET industries = ARRAY['cafe','retail','gym','tradie','realestate'] WHERE built_in=true AND name = 'Growth advisor';
+
+PART 2 — Activation: bulk enable for relevant industries
+UPDATE aria_skills SET enabled = true 
+WHERE built_in = true 
+  AND (industries IS NULL OR industries && ARRAY[(SELECT industry FROM businesses WHERE id = aria_skills.business_id)]);
+
+(Note: built-in skills have business_id NULL probably; if so, need a different activation mechanism)
+
+PART 3 — Council advisor skill injection
+src/lib/aria/council.ts: at advisor invocation:
+- Fetch active aria_skills for business: SELECT name, system_prompt_addition FROM aria_skills WHERE (business_id = ? OR business_id IS NULL) AND enabled=true AND (industries IS NULL OR ? = ANY(industries))
+- Inject relevant skill's system_prompt_addition based on advisor role:
+  - council_growth → Growth advisor + Marketing strategist
+  - council_risk → Compliance officer + Accountant
+  - council_strategy → Growth advisor
+  - council_context → Inventory expert + HR coach
+- Concatenate up to 2 skills per advisor
+
+PART 4 — Settings UI surface (optional, additive)
+src/app/dashboard/settings/skills/page.tsx (NEW or extend existing)
+- List all aria_skills available for this business industry
+- Toggle enabled per skill
+- Owner control
+
+PART 5 — Log skill usage
+logAICallSafe row when skill is injected:
+  agent_key: 'skill_inject', role: 'classify', provider: 'other'
+  response_summary: JSON.stringify({ advisor, skills_injected: [name1, name2] }).slice(0, 200)
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(i6-industry-knowledge) · STOP.
+
+VERIFY POST-DEPLOY:
+1. Apply migration (chat-Claude)
+2. SQL: select name, industries, enabled from aria_skills order by name;
+   PASS: industries column populated, some skills enabled
+3. Fresh chat for Sip (industry='cafe') asking growth question:
+   - Aria's response shows Growth advisor + Marketing strategist style (specific terminology like "AOV", "table turn", "cover count")
+4. SQL: select agent_key, response_summary from aria_ai_calls 
+   where agent_key='skill_inject' and business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   and created_at > now() - interval '5 minutes';
+   PASS: skills_injected array populated
+
+DO NOT:
+- Do not delete any aria_skills row
+- Do not modify system_prompt_addition content (just enable)
+- Do not inject more than 2 skills per advisor (prompt bloat)
+- Do not skip the owner-toggleable UI affordance</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c6" class="cmd">Run I6 INDUSTRY-KNOWLEDGE-1 only (prompts/I6-industry-knowledge.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. WIRING SPRINT — aria_skills has 12 personas all disabled. Migration via chat-Claude: ADD industries text[] column, populate, enable defaults. Wire skill.system_prompt_addition injection into council advisors based on businesses.industry match. Max 2 skills per advisor. logAICallSafe agent_key='skill_inject'. Settings UI toggle. RULE 0 UPGRADE_ONLY — DO NOT delete skills. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I7 TOOL-USE ============ -->
+<article class="sprint" id="i7">
+<div class="ph"><h3>I7 — TOOL-USE<small>Reasoning · agentic context fetching</small></h3>
+<div class="pa"><span class="b rsn">Reasoning</span><span class="b new">Architectural</span><button class="cp" data-t="p7">Copy prompt</button><button class="cp" data-t="c7">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">product_lookup</code> agent_key fired once (Jun 13) — proves the tool-use pattern works. Anthropic SDK supports tool definitions natively. <b>This is the one-time architectural leap that makes every future sprint cheaper.</b></p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p7">I7 TOOL-USE-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I1 + I2 + I4 + I5 deployed (groundTruth is solid first).
+
+WHY (from audit):
+Today Aria gets ALL context upfront in groundTruth (15+ anchors, business memory, signal cache, health signals, goal context, open loops). Token-heavy and rigid. Aria can't decide "I need to look at the last 10 sales to answer this specific question."
+
+Anthropic SDK supports tool_use mode natively. Existing agent_key 'product_lookup' (single fire June 13) proves the pattern works. This sprint formalizes it across 5 read-only tools.
+
+PRE-FLIGHT (mandatory):
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read existing /api/aria/ask/route.ts model invocation. Quote the Anthropic SDK call signature.
+3. grep -rn "tools:\|tool_use\|tool_choice" src — find any existing tool definitions
+4. Find product_lookup implementation (single use). Quote its tool definition signature.
+5. Read AUTOPILOT-FIX-1's verifyBusinessAccess pattern from SEC-2 — every tool must use this
+
+BUILD (additive):
+
+PART 1 — Tool definitions
+src/lib/aria/tools/ (NEW directory)
+
+Five tools, each a separate file:
+1. query_pos_sales.ts — input: { hours_back: 1-720, group_by?: 'hour'|'day'|'item', limit?: 1-100 }
+2. query_pos_products.ts — input: { search?: string, low_stock_only?: boolean, limit?: 1-50 }
+3. query_customers.ts — input: { sort_by?: 'lifetime_value'|'recency'|'frequency', has_consent?: boolean, limit?: 1-50 }
+4. query_inventory.ts — input: { product_id?: uuid, low_stock_threshold?: number, limit?: 1-50 }
+5. query_calendar.ts — input: { days_ahead?: 1-90 } (queries business_hours + bookings + staff_leave)
+
+Each tool:
+- Takes businessId + input
+- VERIFIES via SEC-2 verifyBusinessAccess pattern
+- Returns structured JSON limited to safe row count
+- Logs to aria_ai_calls via logAICallSafe (agent_key: tool name, role: 'data', provider: 'other')
+- NEVER WRITES — read-only
+
+PART 2 — Anthropic SDK integration
+src/lib/aria/tools/index.ts:
+- Export TOOLS array in Anthropic tool definition format (name, description, input_schema as JSON Schema)
+- Export executeTool(toolName, input, businessId) — dispatches to handler
+
+PART 3 — Wire to /api/aria/ask
+- Add tools: TOOLS to the model call
+- Loop on response.stop_reason:
+  - if 'tool_use': execute the tool, append result, recall model
+  - if 'end_turn': break
+- Cap iterations at 4 (prevent runaway loops; AUTOPILOT-FIX-1 small-sample logic for safety)
+- Log each tool call: agent_key='tool_call:&lt;tool_name&gt;', role='data'
+
+PART 4 — Tool result validation
+Tool results contain numbers that may end up in synthesis. Push every tool result into _anchor_values so V2 Check 6 can validate citations.
+
+PART 5 — Add SHORT fact-pointer to synthesis prompt
+"AVAILABLE_TOOLS: You can call query_pos_sales, query_pos_products, query_customers, 
+query_inventory, query_calendar if you need fresh data beyond the upfront context. 
+Each tool reads only the user's business data."
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · ONE commit feat(i7-tool-use) · STOP.
+
+VERIFY POST-DEPLOY:
+1. Fresh chat "How many flat whites did I sell yesterday?"
+   - Aria triggers tool_use: query_pos_sales({ hours_back: 24, group_by: 'item' })
+2. SQL: select agent_key, request_summary, response_summary 
+   from aria_ai_calls 
+   where business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   and agent_key like 'tool_call:%' 
+   and created_at > now() - interval '5 minutes';
+   PASS: tool_call rows appear
+3. Aria's response cites the tool result number, V2 Check 6 validates it against _anchor_values
+
+DO NOT:
+- Tools NEVER write to any table
+- Cap iterations at 4 (prevent runaway)
+- Verify business membership via SEC-2 every call
+- Do not expose other businesses' data (RLS + verifyBusinessAccess both required)
+- No filesystem / network access tools
+- No new npm dependencies beyond what Anthropic SDK already provides</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c7" class="cmd">Run I7 TOOL-USE-1 only (prompts/I7-tool-use.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. NEW src/lib/aria/tools/ directory with 5 read-only tools (query_pos_sales, query_pos_products, query_customers, query_inventory, query_calendar). Each verifies via SEC-2 verifyBusinessAccess, logs via logAICallSafe (agent_key='tool_call:&lt;name&gt;' role='data' provider='other'), pushes results to _anchor_values for V2 validation. Anthropic SDK tool_use mode in /api/aria/ask. Cap 4 iterations. RULE 0 UPGRADE_ONLY. Build green. Function count ≤22. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I8 SELF-VERIFY ============ -->
+<article class="sprint" id="i8">
+<div class="ph"><h3>I8 — SELF-VERIFY<small>Reasoning · pre-emission consistency check</small></h3>
+<div class="pa"><span class="b rsn">Reasoning</span><span class="b extend">Wire ask_aria_verifier</span><button class="cp" data-t="p8">Copy prompt</button><button class="cp" data-t="c8">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">ask_aria_verifier</code> agent_key exists, fired exactly ONCE (June 7, never since). The hook EXISTS. <b>This sprint wires it as a pre-emission check.</b></p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p8">I8 SELF-VERIFY-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I1 + I7 deployed.
+
+WHY (from audit):
+GROUNDING-TEETH-V2 strips bad numbers AFTER synthesis (Check 6 + advisor_guard). Smarter: Aria self-checks BEFORE emitting. ask_aria_verifier agent_key exists in code (fired 2026-06-07 once) — the hook is already there, just not invoked.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. grep -rn "ask_aria_verifier" src — find the existing implementation
+3. Quote what it does today
+4. Read V2's Check 6 + advisor_guard to understand current verification
+
+BUILD (additive):
+
+PART 1 — Verify the existing verifier
+Find ask_aria_verifier code. Three scenarios:
+A. Exists and works but isn't called: WIRE IT
+B. Exists but is broken: FIX + WIRE
+C. Doesn't exist (despite agent_key in DB): CREATE
+
+For C: create src/lib/aria/self-verify.ts with verifySynthesis(synthesis, groundTruth, advisors): Promise&lt;VerifyResult&gt;
+
+VerifyResult: { ok: boolean; contradictions: string[]; suggestion?: string }
+
+Logic:
+1. Extract key claims from synthesis (numeric + assertive statements)
+2. For each claim, check against:
+   - groundTruth.business_health (e.g. claim "POS broken" vs health.pos_health.status='OK' → contradiction)
+   - groundTruth._anchor_values (numeric validation, but V2 already covers this — skip if V2 ran)
+   - groundTruth.advice_weights (claim with weight &lt; 0.4 → low confidence, suggest soften)
+3. If contradictions: return { ok: false, contradictions, suggestion: rewrite-hint }
+
+PART 2 — Invoke before emission
+In council.ts post-synthesis, before returning response:
+- const verify = await verifySynthesis(synthesis, groundTruth, advisors)
+- If !verify.ok:
+  - Log to aria_ai_calls agent_key='ask_aria_verifier' role='other' learning_signal='self_verify_contradiction_found'
+  - Options for handling (choose one in pre-flight):
+    a) Retry synthesis with contradictions appended as guidance (cost: +1 model call)
+    b) Strip the contradictory sentence (similar to V2 behavior, but earlier)
+    c) Add a hedge: prepend "I want to verify — " to the contradictory claim
+- Default to (c) — surgical, fastest, lowest cost. Document choice in report.
+
+PART 3 — Log every check
+logAICallSafe row per invocation:
+  agent_key: 'ask_aria_verifier', role: 'other', provider: 'other'
+  request_summary: 'verify_synthesis'
+  response_summary: JSON.stringify({ ok: bool, contradiction_count }).slice(0, 200)
+  learning_signal: contradictions[0] ? `self_verify:${contradictions[0]}`.slice(0,100) : 'self_verify:passed'
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(i8-self-verify) · STOP.
+
+VERIFY POST-DEPLOY:
+1. Force a contradiction test: manually set Sip's pos_health to OK, generate a synthesis claiming POS is broken (use a test endpoint or manually craft)
+2. SQL: select agent_key, learning_signal from aria_ai_calls 
+   where agent_key='ask_aria_verifier' 
+   and business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   and created_at > now() - interval '5 minutes';
+   PASS: row appears with learning_signal documenting the contradiction
+3. Synthesis output is modified (hedge prepended) before reaching user
+
+DO NOT:
+- Do not retry synthesis more than once per request (cost cap)
+- Do not delete contradictory sentences without trace (logged + hedged is safer)
+- Do not skip if V2 Check 6 also fires — they're complementary
+- Do not modify groundTruth structure</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c8" class="cmd">Run I8 SELF-VERIFY-1 only (prompts/I8-self-verify.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. ask_aria_verifier agent_key already exists (fired once June 7). Either WIRE existing OR CREATE src/lib/aria/self-verify.ts checking synthesis against groundTruth.business_health + advice_weights for CONTRADICTIONS (not just numbers — V2 covers those). Invoke in council.ts post-synthesis. On contradiction: prepend hedge phrase. logAICallSafe agent_key='ask_aria_verifier' role='other' provider='other'. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I9 DEEP-REASONING ============ -->
+<article class="sprint" id="i9">
+<div class="ph"><h3>I9 — DEEP-REASONING<small>Reasoning · plan → verify → conclude per advisor</small></h3>
+<div class="pa"><span class="b rsn">Reasoning</span><span class="b extend">Council enhancement</span><button class="cp" data-t="p9">Copy prompt</button><button class="cp" data-t="c9">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> Council exists with 4 advisors + synthesis (5 ai_calls per chat). <code class="k">agent_council_proposals</code> table has unused <code class="k">conflicts_with</code> + <code class="k">synergises_with</code> columns. <b>3-step reasoning per advisor + conflict detection.</b></p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p9">I9 DEEP-REASONING-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I7 TOOL-USE deployed (advisors can use tools).
+
+WHY (from audit):
+Council currently does parallel advisor calls + synthesis (5 LLM calls per chat). Each advisor reads context, emits observations + recommendations in ONE shot. Smarter: each advisor does plan→verify→conclude inside its turn. Plus surface conflicts between advisors before synthesis.
+
+agent_council_proposals table has conflicts_with/synergises_with columns UNUSED (table only has 2 rows total since June 4). Wire them.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read src/lib/aria/council.ts advisor invocation. Quote signature.
+3. Check agent_council_proposals schema (already audited: has conflicts_with array, synergises_with array, council_decision, council_reasoning)
+
+BUILD (additive):
+
+PART 1 — Per-advisor 3-step reasoning
+Modify each advisor's prompt template:
+"Reason through this in 3 steps before concluding:
+1. PLAN: What's the question really asking? What facts do you need?
+2. VERIFY: Look at the relevant anchors in business_health + advice_weights + (tool calls if needed). What does the data say?
+3. CONCLUDE: Your observations + recommendations.
+
+Output JSON: { plan, verify_findings, observations, recommendations, confidence: 0-1 }"
+
+This increases token cost ~2-3× per advisor but inference quality improves disproportionately. Anthropic prompt caching makes repeated context tokens cheaper.
+
+PART 2 — Conflict detection between advisors
+After all 4 advisors return:
+src/lib/aria/council-conflicts.ts (NEW)
+Detect:
+- Numeric conflict: advisor A says "+$200 lift", advisor B says "no impact" — flag
+- Recommendation conflict: A says "raise prices", B says "lower prices" — flag
+- Confidence delta: one advisor confidence > 0.8, another < 0.4 on same claim — flag
+
+For each conflict, write to agent_council_proposals (the table that exists but is unused):
+  proposal_data: { observation, sources: [advisor_role] },
+  conflicts_with: [other_advisor_id],
+  council_reasoning: text describing conflict,
+  agent_type: 'council_conflict_detector'
+
+PART 3 — Surface conflicts to synthesis
+Before synthesis runs, append to its input:
+"CONFLICTS_DETECTED: ..." with the conflicts list.
+Synthesis must resolve: pick a side with stated reason OR acknowledge tradeoff.
+
+PART 4 — Log
+logAICallSafe per advisor (already logs council_growth etc.) — extend learning_signal:
+  learning_signal: `plan_verify_conclude:${confidence_score}`
+Per conflict: agent_key='council_conflict' role='analysis' provider='other'
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(i9-deep-reasoning) · STOP.
+
+VERIFY POST-DEPLOY:
+1. Fresh chat with a question that has multiple valid framings (e.g. "should I raise prices?")
+2. SQL: select agent_key, learning_signal from aria_ai_calls 
+   where agent_key like 'council_%' 
+   and business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   and created_at > now() - interval '5 minutes';
+   PASS: rows show learning_signal with plan_verify_conclude:0.X
+3. SQL: select agent_type, conflicts_with, council_reasoning from agent_council_proposals 
+   where business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   order by created_at desc limit 5;
+   PASS: conflicts captured if any
+4. Synthesis output naturally addresses conflicts (e.g. "Growth and Risk advisors disagree on pricing — here's why I lean toward...")
+
+DO NOT:
+- Do not increase advisor count (4 is the limit; more = slower, not smarter)
+- Do not bypass V2 stripping (still applies to plan + observations + recommendations)
+- Do not skip cache layer (cache key still based on businessId + question hash)</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c9" class="cmd">Run I9 DEEP-REASONING-1 only (prompts/I9-deep-reasoning.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Modify each council advisor prompt to do plan→verify→conclude (JSON output). NEW src/lib/aria/council-conflicts.ts detecting numeric/recommendation/confidence conflicts between 4 advisors. Wire to existing agent_council_proposals table (conflicts_with, synergises_with columns). Surface conflicts to synthesis input. Extend logAICallSafe learning_signal. RULE 0 UPGRADE_ONLY — keep 4 advisors. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I10 BENCHMARK ============ -->
+<article class="sprint" id="i10">
+<div class="ph"><h3>I10 — BENCHMARK<small>Knowledge · cross-business privacy-safe aggregates</small></h3>
+<div class="pa"><span class="b knw">Knowledge</span><span class="b new">NEW table</span><button class="cp" data-t="p10">Copy prompt</button><button class="cp" data-t="c10">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> 16 businesses across 7 industries. No <code class="k">industry_benchmarks</code> table exists. <b>This is one of only 2 sprints that creates a new table.</b> Privacy-safe aggregates only.</p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p10">I10 BENCHMARK-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+WHY (from audit):
+Aria has 16 businesses across cafe/gym/realestate/retail/tradie/visa/warehouse. Cross-business benchmarks are an impossible-to-replicate moat. Privacy-safe via aggregates only (median, percentile, mean — never individual business identifiers).
+
+AUDIT FINDINGS:
+- 16 businesses with industry set
+- No industry_benchmarks table exists
+- pos_sales / pos_customers / pos_products are canonical aggregation sources
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Confirm industry values: SELECT industry, count(*) FROM businesses GROUP BY 1 (chat-Claude)
+3. Read I1 health-signals + I2 goal-context patterns
+
+BUILD (additive):
+
+PART 1 — Migration: industry_benchmarks table (chat-Claude applies)
+CREATE TABLE IF NOT EXISTS industry_benchmarks (
+  id uuid primary key default gen_random_uuid(),
+  industry text not null,
+  metric_name text not null,
+  metric_period text not null check (metric_period in ('daily','weekly','monthly')),
+  sample_size int not null check (sample_size >= 5),  -- privacy floor
+  p25 numeric, p50 numeric, p75 numeric, p90 numeric, mean numeric,
+  computed_at timestamptz default now(),
+  expires_at timestamptz default (now() + interval '7 days'),
+  unique (industry, metric_name, metric_period, computed_at::date)
+);
+CREATE INDEX idx_industry_benchmarks_lookup ON industry_benchmarks(industry, metric_name, expires_at DESC);
+-- RLS: read-only for any authenticated user
+
+PART 2 — Aggregation cron
+src/app/api/cron/industry-benchmarks/route.ts (NEW, weekly, CRON_SECRET via SEC-1)
+
+Metrics to compute per industry per period:
+- weekly_revenue_p25/p50/p75/p90/mean
+- daily_avg_transactions_p50
+- avg_basket_size_p50
+- customer_count_p50
+- new_vs_returning_pct_p50
+
+Privacy guard: ONLY compute if sample_size ≥ 5 distinct businesses in that industry.
+For industries with &lt;5 businesses (e.g. visa), set sample_size=0 and don't insert benchmark.
+
+PART 3 — Surface to groundTruth
+src/lib/aria/benchmark-context.ts (NEW)
+- For current business, fetch industry from businesses.industry
+- Lookup latest non-expired benchmarks for that industry
+- Compare business's actual metrics to industry p50:
+  - "Your AOV $X is N% above/below industry median"
+- Add groundTruth.industry_benchmarks = comparisons
+- Push every benchmark number into _anchor_values
+
+PART 4 — Add fact-pointer line
+"INDUSTRY_BENCHMARKS: industry_benchmarks compares this business to anonymized industry peers. 
+Cite these when relevant. Always include sample_size when citing a benchmark."
+
+PART 5 — Log
+logAICallSafe agent_key='industry_benchmark' role='analysis' provider='other'
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · daily-max cron · ONE commit feat(i10-benchmark) · STOP.
+
+VERIFY POST-DEPLOY:
+1. Apply migration
+2. Trigger cron with CRON_SECRET
+3. SQL: select industry, metric_name, sample_size, p50 from industry_benchmarks order by industry, metric_name;
+   PASS: rows exist for cafe industry (Sip + others), null/empty for visa (sample &lt; 5)
+4. Fresh chat for Sip "how am I doing vs other cafes?":
+   - Aria cites percentile rank with sample_size
+
+DO NOT:
+- Do not surface individual business names/IDs in benchmarks
+- Do not compute benchmarks for industries with &lt;5 businesses (privacy floor)
+- Do not store anything beyond aggregates (no raw rows from other businesses)
+- Do not skip RLS — read should be authenticated but data is non-identifying</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c10" class="cmd">Run I10 BENCHMARK-1 only (prompts/I10-benchmark.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. NEW industry_benchmarks table via chat-Claude migration. Privacy floor: sample_size ≥ 5 distinct businesses per industry. NEW src/app/api/cron/industry-benchmarks/route.ts weekly with CRON_SECRET. Aggregate: weekly_revenue percentiles, AOV, transaction count, customer count, new_vs_returning. Surface via src/lib/aria/benchmark-context.ts to groundTruth. logAICallSafe agent_key='industry_benchmark'. RULE 0 UPGRADE_ONLY. Function count ≤22. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I11 COUNTERFACTUAL ============ -->
+<article class="sprint" id="i11">
+<div class="ph"><h3>I11 — COUNTERFACTUAL<small>Knowledge · make aria_hypotheses interactive</small></h3>
+<div class="pa"><span class="b knw">Knowledge</span><span class="b extend">Wire existing</span><button class="cp" data-t="p11">Copy prompt</button><button class="cp" data-t="c11">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">aria_hypotheses</code> has <b>1,653 rows</b> from nightly cron, ZERO accepted, ZERO outcome_verdicts. Categories: cashflow/customers/hours/inventory/marketing/pricing/staff. <b>The infrastructure is rich. Make it interactive.</b></p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p11">I11 COUNTERFACTUAL-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I4 OUTCOME-LOOP (extends hypothesis outcome closure) deployed.
+
+WHY (from audit):
+aria_hypotheses table has 1,653 rows generated by the nightly hypothesis-engine cron. Categories: cashflow, customers, hours, inventory, marketing, pricing, staff. predicted_impact_cents, confidence, risk_level all populated. ZERO accepted_at, ZERO outcome_verdict. The owner never sees these.
+
+This sprint:
+1. Surfaces existing hypotheses in dashboard + chat
+2. Allows owner to ask "what if I do X" interactively → live counterfactual computation
+3. On accept, creates aria_action + tracks outcome (I4 wiring)
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read aria_hypotheses schema (audited: id, title, description, category, predicted_impact_cents, confidence, evidence_payload, status, accepted_at)
+3. Read existing dashboard layout primitives to reuse
+4. Find existing hypothesis-engine cron — quote scoring logic for live counterfactual reuse
+
+BUILD (additive):
+
+PART 1 — Surface existing hypotheses in chat groundTruth
+src/lib/aria/hypothesis-context.ts (NEW)
+- Fetch top 3 unaccepted aria_hypotheses for current business by confidence DESC, expires_at &gt; now()
+- Add groundTruth.live_hypotheses = [...]
+- Synthesis can mention proactively: "Based on this week's data, I see 3 hypotheses worth testing"
+
+PART 2 — Dashboard surface
+src/app/dashboard/hypotheses/page.tsx (NEW or extend existing /dashboard)
+- List unaccepted hypotheses, sortable by confidence/predicted_impact/category
+- Each card: title, description, predicted_impact_label, evidence_summary expandable
+- Actions: Accept (creates aria_action), Reject (sets rejected_at + reason), Snooze (extends expires_at)
+
+PART 3 — Interactive counterfactual via /api/aria/ask
+When owner asks "what if I [do X]":
+- Detect counterfactual intent (regex on "what if", "would happen if", "should I")
+- Call new tool counterfactual_simulate(business_id, scenario_description)
+- Tool generates a synthetic hypothesis via Anthropic Haiku with grounded business context
+- INSERT aria_hypotheses with status='interactive_query'
+- Return predicted_impact + confidence + risk_level
+- Tool logged: agent_key='counterfactual', role='forecast', provider='anthropic'
+- All numbers pushed to _anchor_values for V2 validation
+
+PART 4 — Accept flow
+POST /api/aria/hypotheses/[id]/accept:
+- Set aria_hypotheses.accepted_at = now()
+- INSERT aria_action linking back via action_id
+- Status='pending'
+- Sets up I4 outcome tracking automatically
+
+PART 5 — Log
+logAICallSafe rows for hypothesis_surface, counterfactual_simulate, hypothesis_accept
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(i11-counterfactual) · STOP.
+
+VERIFY POST-DEPLOY:
+1. Fresh chat: "What would happen if I ran a Tuesday bundle?"
+   - Aria triggers counterfactual_simulate
+2. SQL: select id, title, predicted_impact_cents, confidence, status 
+   from aria_hypotheses 
+   where business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   and status='interactive_query' 
+   order by generated_at desc limit 3;
+   PASS: new row exists from the interactive query
+3. /dashboard/hypotheses shows existing 1,653 hypothesis backlog for Sip's business + new interactive ones
+4. Accept one → aria_actions row created with action_id pointing back
+
+DO NOT:
+- Do not modify aria_hypotheses schema
+- Do not auto-accept any hypothesis
+- Do not bypass V2 for hypothesis numbers
+- Do not skip evidence_payload — owner needs to see the reasoning</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c11" class="cmd">Run I11 COUNTERFACTUAL-1 only (prompts/I11-counterfactual.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. WIRING — aria_hypotheses has 1,653 rows zero accepted. Surface via NEW src/lib/aria/hypothesis-context.ts to groundTruth.live_hypotheses. NEW /dashboard/hypotheses page to view + accept/reject. NEW counterfactual_simulate tool (I7 pattern) for interactive what-if queries. Accept flow creates aria_action linked via action_id for I4 outcome tracking. logAICallSafe agent_key='counterfactual' role='forecast' provider='anthropic'. RULE 0 UPGRADE_ONLY — no schema change. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<!-- ============ I12 CAUSAL ============ -->
+<article class="sprint" id="i12">
+<div class="ph"><h3>I12 — CAUSAL<small>Knowledge · event timeline correlation</small></h3>
+<div class="pa"><span class="b knw">Knowledge</span><span class="b extend">Use intelligence_events</span><button class="cp" data-t="p12">Copy prompt</button><button class="cp" data-t="c12">Copy command</button></div></div>
+<div class="pb">
+<p class="sum"><b>Audit found:</b> <code class="k">intelligence_events</code> exists (48 rows) with event_type, severity, triggered_at, data jsonb. Current types: stockout_imminent, visa_expiry_critical. <b>Expand event types + compute temporal correlation with revenue.</b></p>
+
+<details><summary><span class="left">Full prompt</span></summary>
+<pre id="p12">I12 CAUSAL-1. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: I3 PATTERN-MEMORY + I4 OUTCOME-LOOP deployed.
+
+WHY (from audit):
+Aria sees correlations but can't reason about causation. Did the May 12 staff change cause the revenue drop, or was it the weather, or the menu update? Temporal correlation + counterfactual baseline can produce probabilistic causal hypotheses.
+
+intelligence_events table exists with 48 rows + clean schema for events (event_type, severity, title, body, data jsonb, triggered_at).
+
+This sprint:
+1. Expands event sources to include: pos_actions executed, staff changes, menu price changes, promotional starts, weather extremes
+2. Computes 14-day pre/post revenue deltas around each event
+3. Surfaces probabilistic causal hypotheses ("revenue change after event X is 73% likely caused by event X, given baseline volatility")
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read intelligence_events schema (audited)
+3. SELECT distinct event_type FROM intelligence_events (currently: stockout_imminent, visa_expiry_critical)
+4. Find existing event-emission code
+
+BUILD (additive):
+
+PART 1 — Expand event sources
+src/lib/aria/event-emitter.ts (NEW or extend existing)
+Emit intelligence_events when:
+- aria_actions transitions to status='executed' → event_type='action_executed', data={action_id, category, impact_expected}
+- pos_products.cost_price or price changes by &gt;10% → event_type='price_change', data={product_id, old, new}
+- staff_members.is_active toggles → event_type='staff_change', data={staff_id, role}
+- aria_signal_cache writes a 'weather_extreme' signal (rainfall >20mm or temp_c &lt; 5 or &gt; 35) → event_type='weather_extreme'
+- aria_promotions creates a row → event_type='promo_started'
+
+(Don't emit redundantly — check last identical event for 24h dedup window)
+
+PART 2 — Causal inference function
+src/lib/aria/causal-analysis.ts (NEW)
+Export analyzeEvent(event_id): Promise&lt;CausalHypothesis&gt;
+
+Per event:
+- 14d pre/post revenue from pos_sales
+- Baseline volatility: std dev of weekly revenue deltas last 12 weeks
+- p_caused = (observed_delta / baseline_volatility) bounded [0, 1] via sigmoid
+- For events with multiple co-occurring causes: assign fractional credit by recency
+
+Returns: {
+  event_id, observed_delta_cents, baseline_volatility,
+  p_caused_pct, alternative_explanations: [...other events in window with credit %],
+  reasoning: human-readable
+}
+
+PART 3 — Daily causal-analysis cron
+src/app/api/cron/causal-analysis/route.ts (CRON_SECRET via SEC-1)
+- For each intelligence_events row with severity in ('high','medium') and triggered_at < now() - interval '14 days' (so post-period is complete) and not already analyzed:
+  · Call analyzeEvent
+  · Store result in intelligence_events.data.causal_analysis = result
+  · If p_caused_pct &gt; 0.6 AND |observed_delta_cents| &gt; baseline_volatility × 2:
+    - Write durable pattern to aria_business_memory (kind='pattern' from I3): "When [event_type] occurs, revenue typically shifts by [+/-]$X (p=Y)"
+
+PART 4 — Surface in chat
+groundTruth.recent_causal_events = top 3 high-confidence events in last 30 days (post-analysis)
+Fact-pointer to synthesis: "RECENT_CAUSAL_EVENTS lists events with computed revenue impact. Cite these when relevant."
+
+PART 5 — Log
+logAICallSafe agent_key='causal_analysis' role='analysis' provider='other'
+
+BUILD GATE: tsc 0 + build PASS · daily-max cron · function count ≤22 · ONE commit feat(i12-causal) · STOP.
+
+VERIFY POST-DEPLOY:
+1. chat-Claude inserts test event: severity='high', event_type='action_executed', triggered_at = 15 days ago
+2. Trigger /api/cron/causal-analysis
+3. SQL: select event_type, data->'causal_analysis'->>'p_caused_pct' as p, data->'causal_analysis'->>'observed_delta_cents' as delta 
+   from intelligence_events 
+   where business_id='ff5055a0-c351-4ada-817a-1804961035f3' 
+   order by triggered_at desc;
+   PASS: causal_analysis populated
+4. Fresh chat "what happened in May?" — Aria cites causal hypothesis from intelligence_events
+
+DO NOT:
+- Do not claim causation with p &lt; 0.6 (statistical floor)
+- Do not skip alternative_explanations (always offer alternatives)
+- Do not write to intelligence_events as fact when uncertain — use data.causal_analysis with explicit p
+- Do not skip baseline_volatility (raw delta is meaningless without it)
+- No external causal-inference dependencies (DoWhy etc) — keep it simple SQL + sigmoid</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span></summary>
+<pre id="c12" class="cmd">Run I12 CAUSAL-1 only (prompts/I12-causal.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. EXTEND intelligence_events with event_emitter for action_executed/price_change/staff_change/weather_extreme/promo_started events (24h dedup). NEW src/lib/aria/causal-analysis.ts computing 14d pre/post deltas with baseline volatility + p_caused sigmoid. NEW /api/cron/causal-analysis (CRON_SECRET, daily). Write high-confidence patterns back to aria_business_memory kind='pattern' (I3). Surface to groundTruth. logAICallSafe agent_key='causal_analysis' role='analysis' provider='other'. RULE 0 UPGRADE_ONLY. Function count ≤22. Build green. ONE commit, STOP before push.</pre></details>
+</div></article>
+
+<section class="section">
+<h2>The architecture that emerges</h2>
+<div class="card">
+<p style="font-size:13.5px;line-height:1.7">After all 12 ship, Aria's brain works like this for every "how am I doing?" question:</p>
+<ol style="padding-left:22px;font-size:13px;line-height:1.85;margin-top:8px;color:var(--ink)">
+<li><b>Context assembled</b> with health signals (I1) + goal trajectory (I2) + memory patterns (I3) + open loops (I5) + advice weights (I4) + industry benchmarks (I10) + live hypotheses (I11) + recent causal events (I12)</li>
+<li><b>4 advisors run</b> with plan→verify→conclude (I9), each can call tools (I7) for fresh data, each gets industry-specific skill prompts (I6)</li>
+<li><b>Conflicts detected</b> between advisors (I9) before synthesis</li>
+<li><b>Synthesis composes</b> response, citing real anchors only</li>
+<li><b>Self-verify check</b> (I8) catches contradictions before emission</li>
+<li><b>V2 Check 6</b> strips any ungrounded $/% (already shipped)</li>
+<li><b>Response emitted</b> with every number traceable, every claim grounded</li>
+<li><b>Owner executes action</b> → I4 outcome cron tracks 7d/30d delta → I4 updates advice_weights → next chat reasons from updated confidence</li>
+<li><b>Causal analysis</b> runs on the executed action 14 days later (I12) → writes durable pattern to memory (I3) → compounds intelligence</li>
+</ol>
+<p style="font-size:13px;color:var(--soft);margin-top:14px;line-height:1.7">Every loop closed. Every claim grounded. Every recommendation tracked. Every outcome learned from. This is the architecture that makes Aria genuinely smarter over time — not by changing the model, by feeding it richer truth.</p>
+</div>
+</section>
+
+<footer>Audited against live DB 14 Jun 2026 · 12 sprints · 4 tiers · RULE 0 UPGRADE_ONLY · Aria theme locked · logAICallSafe + V2 Check 6 + SEC-1 CRON_SECRET enforced throughout · save as <code class="k">prompts/intelligence-12-sprints.html</code></footer>
+
+</div>
+<script>
+document.querySelectorAll('.cp').forEach(b=>b.addEventListener('click',async e=>{
+  e.stopPropagation();const t=document.getElementById(b.dataset.t);if(!t)return;
+  try{await navigator.clipboard.writeText(t.innerText);const o=b.textContent;b.textContent='✓ Copied';b.classList.add('done');setTimeout(()=>{b.textContent=o;b.classList.remove('done')},1600)}catch(err){b.textContent='Select manually';b.classList.add('done')}
+}));
+</script></body></html>

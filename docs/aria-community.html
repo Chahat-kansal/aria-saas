@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Aria Community</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sage:#7FB897;--pine:#2D5240;--tan:#c9a37a;
+  --bg:#0c1310;--bg2:#070b09;--card:#121b17;
+  --glass:rgba(255,255,255,.05);--brd:rgba(255,255,255,.08);
+  --txt:#eaf0ea;--mut:#9aae a2;--mut:#9aaea2;--dim:#677b70;--live:#ff5a6e;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+body{font-family:'Inter',sans-serif;background:#000;color:var(--txt);display:flex;justify-content:center;overflow:hidden}
+.app{width:100%;max-width:440px;height:100vh;background:linear-gradient(180deg,var(--bg),var(--bg2));position:relative;overflow:hidden;
+  border-left:1px solid rgba(255,255,255,.04);border-right:1px solid rgba(255,255,255,.04)}
+.fr{font-family:'Fraunces',serif}.it{font-style:italic}
+.ico{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* SCREEN SYSTEM */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:linear-gradient(180deg,var(--bg),var(--bg2));
+  transform:translateX(100%);transition:transform .34s cubic-bezier(.4,0,.2,1);will-change:transform;overflow:hidden}
+.screen.active{transform:translateX(0)}
+.screen.behind{transform:translateX(-22%);filter:brightness(.6)}
+.screen.root{transform:translateX(0)}
+.screen.root.behind{transform:translateX(-22%);filter:brightness(.6)}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+
+/* TOP BAR */
+.tbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;position:sticky;top:0;z-index:20;
+  background:linear-gradient(180deg,rgba(12,19,16,.97),rgba(12,19,16,.5));backdrop-filter:blur(16px)}
+.tbar .back{cursor:pointer;color:var(--txt);display:flex;align-items:center}
+.tbar h2{font-size:16px;font-weight:600}
+.logo{font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:26px;letter-spacing:-.5px;
+  background:linear-gradient(95deg,var(--sage),var(--tan));-webkit-background-clip:text;background-clip:text;color:transparent}
+.tbar-actions{display:flex;gap:18px;align-items:center;color:var(--txt)}
+.tbar-actions .ico{width:25px;height:25px}
+.badge-n{position:relative}
+.badge-n::after{content:"";position:absolute;top:-1px;right:-1px;width:8px;height:8px;background:var(--live);border-radius:50%;border:2px solid var(--bg)}
+
+/* MODE TOGGLE */
+.modesw{display:flex;background:var(--glass);border:1px solid var(--brd);border-radius:30px;padding:3px;gap:3px;position:relative;width:186px}
+.modesw button{flex:1;border:0;background:0;color:var(--mut);font-family:inherit;font-size:12px;font-weight:700;padding:7px 0;
+  border-radius:24px;cursor:pointer;z-index:2;transition:color .25s}
+.modesw .pill{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:24px;z-index:1;
+  background:linear-gradient(135deg,var(--pine),#1d3327);border:1px solid rgba(127,184,151,.4);
+  transition:transform .3s cubic-bezier(.5,1.5,.5,1)}
+.app[data-mode="owner"] .pill{transform:translateX(100%)}
+.app[data-mode="owner"] .modesw button:last-child{color:var(--txt)}
+.app[data-mode="customer"] .modesw button:first-child{color:var(--txt)}
+
+/* STORIES RAIL */
+.stories{display:flex;gap:14px;padding:14px 16px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--brd)}
+.stories::-webkit-scrollbar{display:none}
+.story{flex-shrink:0;width:66px;text-align:center;cursor:pointer}
+.story .ring{width:64px;height:64px;border-radius:50%;padding:2.5px;background:conic-gradient(from 210deg,var(--sage),var(--tan),var(--live),var(--sage));
+  display:flex;align-items:center;justify-content:center;transition:transform .2s}
+.story:active .ring{transform:scale(.92)}
+.story.seen .ring{background:var(--brd)}
+.story.own .ring{background:var(--brd);position:relative}
+.story img{width:100%;height:100%;border-radius:50%;object-fit:cover;border:2.5px solid var(--bg)}
+.story .add{position:absolute;bottom:-2px;right:-2px;width:22px;height:22px;background:var(--sage);border:3px solid var(--bg);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0c1410;font-weight:800;font-size:15px;line-height:1}
+.story span{font-size:11px;color:var(--mut);margin-top:5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* POST */
+.post{border-bottom:1px solid var(--brd);animation:fadein .5s both}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.phead{display:flex;align-items:center;gap:10px;padding:11px 14px}
+.phead img.av{width:38px;height:38px;border-radius:50%;object-fit:cover}
+.phead .av-ring{padding:2px;border-radius:50%;background:conic-gradient(from 210deg,var(--sage),var(--tan),var(--sage))}
+.phead .av-ring img{width:36px;height:36px;border:2px solid var(--bg)}
+.phead .who{flex:1;line-height:1.3}
+.phead .who b{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:5px}
+.verif{width:13px;height:13px;fill:var(--sage);stroke:none}
+.phead .who small{font-size:11px;color:var(--mut);display:flex;align-items:center;gap:5px}
+.pos-live{display:inline-flex;align-items:center;gap:4px;background:rgba(255,90,110,.14);border:1px solid rgba(255,90,110,.4);
+  color:#ff8b9a;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700}
+.pdot{width:6px;height:6px;border-radius:50%;background:var(--live);animation:pp 1.5s infinite}
+@keyframes pp{0%{box-shadow:0 0 0 0 rgba(255,90,110,.6)}70%{box-shadow:0 0 0 6px rgba(255,90,110,0)}100%{box-shadow:0 0 0 0 transparent}}
+.media{position:relative;width:100%;aspect-ratio:1;background:#0a0f0d;overflow:hidden}
+.media .track{display:flex;height:100%;transition:transform .35s cubic-bezier(.4,0,.2,1)}
+.media .track img{width:100%;height:100%;object-fit:cover;flex-shrink:0}
+.dots{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:3}
+.dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.45);transition:.2s}
+.dots i.on{background:#fff;width:7px;height:7px}
+.posbadge{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:6px;
+  background:rgba(8,12,10,.62);backdrop-filter:blur(10px);border:1px solid var(--brd);padding:7px 12px;border-radius:30px;
+  font-size:12px;font-weight:700;color:var(--sage)}
+.pacts{display:flex;align-items:center;gap:18px;padding:12px 14px 6px}
+.pacts .ico{width:25px;height:25px;cursor:pointer;transition:transform .15s}
+.pacts .ico:active{transform:scale(.8)}
+.pacts .liked{fill:var(--live);stroke:var(--live)}
+.pacts .sp{flex:1}
+.plikes{padding:0 14px;font-size:13px;font-weight:700}
+.pcap{padding:5px 14px;font-size:13.5px;line-height:1.45}
+.pcap b{font-weight:600}
+.pcmt{padding:4px 14px;font-size:13px;color:var(--mut);cursor:pointer}
+.ptime{padding:3px 14px 14px;font-size:10.5px;color:var(--dim);letter-spacing:.4px;text-transform:uppercase}
+.ai-flag{display:inline-flex;align-items:center;gap:4px;color:var(--tan);font-size:10px;font-weight:700;margin-left:6px}
+
+/* AI INSIGHT POST */
+.aipost{margin:14px;border-radius:22px;overflow:hidden;border:1px solid rgba(127,184,151,.3);
+  background:linear-gradient(135deg,rgba(45,82,64,.5),rgba(18,27,23,.6));padding:17px;position:relative;animation:fadein .5s both}
+.aipost::before{content:"";position:absolute;right:-40px;top:-40px;width:140px;height:140px;border-radius:50%;
+  background:radial-gradient(circle,rgba(127,184,151,.22),transparent 70%)}
+.aih{display:flex;align-items:center;gap:8px;font-family:'Fraunces',serif;font-style:italic;font-size:15px;color:var(--sage);margin-bottom:8px}
+.aib{font-size:13.5px;line-height:1.55}.aib b{color:var(--sage);font-weight:600}
+.aicta{display:flex;gap:8px;margin-top:13px}
+.aicta button{flex:1;font-family:inherit;font-size:12.5px;font-weight:700;padding:10px;border-radius:12px;border:1px solid var(--brd);
+  background:var(--glass);color:var(--txt);cursor:pointer;transition:.15s}
+.aicta button.prim{background:var(--sage);color:#0c1410;border-color:var(--sage)}
+.aicta button:active{transform:scale(.97)}
+.ground{margin-top:10px;font-size:9.5px;color:var(--dim);display:flex;align-items:center;gap:5px}
+
+/* BOTTOM NAV */
+.bnav{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-around;align-items:center;
+  padding:10px 0 24px;background:linear-gradient(180deg,transparent,rgba(7,11,9,.97) 32%);backdrop-filter:blur(18px);
+  border-top:1px solid var(--brd);z-index:40}
+.bnav button{background:0;border:0;color:var(--dim);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:9px;font-weight:600;font-family:inherit;transition:color .2s}
+.bnav button.on{color:var(--txt)}
+.bnav .fab{margin-top:-22px;width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,var(--sage),var(--pine));
+  display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(127,184,151,.4)}
+.bnav .fab .ico{color:#0c1410;stroke-width:2.4}
+.bnav .meav{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--dim)}
+.bnav button.on .meav{border-color:var(--sage)}
+
+/* PROFILE */
+.pf-cover{height:120px;background-size:cover;background-position:center;position:relative}
+.pf-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent,var(--bg))}
+.pf-top{padding:0 18px;margin-top:-38px;position:relative;z-index:2;display:flex;align-items:flex-end;gap:16px}
+.pf-av{width:84px;height:84px;border-radius:50%;object-fit:cover;border:3px solid var(--bg)}
+.pf-av-w{padding:2.5px;border-radius:50%;background:conic-gradient(from 210deg,var(--sage),var(--tan),var(--live),var(--sage))}
+.pf-stats{flex:1;display:flex;justify-content:space-around;padding-bottom:6px}
+.pf-stats div{text-align:center}.pf-stats b{font-size:17px;font-weight:700;display:block}.pf-stats span{font-size:11px;color:var(--mut)}
+.pf-info{padding:12px 18px 0}
+.pf-name{font-family:'Fraunces',serif;font-weight:600;font-size:20px;display:flex;align-items:center;gap:6px}
+.pf-cat{font-size:12.5px;color:var(--tan);font-weight:600;margin-top:1px}
+.pf-bio{font-size:13px;color:var(--txt);line-height:1.5;margin-top:7px}
+.pf-meta{font-size:12px;color:var(--mut);margin-top:6px;display:flex;align-items:center;gap:6px}
+.pf-livebar{margin:12px 18px 0;display:flex;align-items:center;gap:8px;background:rgba(255,90,110,.1);border:1px solid rgba(255,90,110,.35);
+  border-radius:14px;padding:11px 14px;font-size:12.5px;font-weight:600;cursor:pointer}
+.pf-btns{display:flex;gap:8px;padding:14px 18px}
+.pf-btns button{flex:1;font-family:inherit;font-size:13px;font-weight:700;padding:10px;border-radius:11px;border:1px solid var(--brd);
+  background:var(--glass);color:var(--txt);cursor:pointer;transition:.15s}
+.pf-btns button.prim{background:var(--sage);color:#0c1410;border-color:var(--sage)}
+.pf-btns button.foll{background:var(--card)}
+.pf-btns button:active{transform:scale(.97)}
+.pf-tabs{display:flex;border-top:1px solid var(--brd);border-bottom:1px solid var(--brd);margin-top:6px}
+.pf-tabs button{flex:1;background:0;border:0;padding:12px 0;color:var(--dim);cursor:pointer;display:flex;justify-content:center;border-bottom:2px solid transparent}
+.pf-tabs button.on{color:var(--txt);border-bottom-color:var(--sage)}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;padding-bottom:90px}
+.grid .cell{aspect-ratio:1;position:relative;overflow:hidden;cursor:pointer;background:#0a0f0d}
+.grid .cell img{width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.grid .cell:active img{transform:scale(1.05)}
+.grid .cell .tag{position:absolute;top:6px;right:6px;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.grid .cell .tag .ico{width:16px;height:16px;stroke-width:2.2}
+
+/* REELS IMMERSIVE */
+.reels{position:absolute;inset:0;background:#000;z-index:80;transform:translateY(100%);transition:transform .35s cubic-bezier(.4,0,.2,1)}
+.reels.active{transform:translateY(0)}
+.reels .rscroll{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none}
+.reels .rscroll::-webkit-scrollbar{display:none}
+.reel{height:100%;scroll-snap-align:start;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.reel img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.reel::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.4),transparent 25%,transparent 55%,rgba(0,0,0,.8))}
+.reel .rtop{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:16px;z-index:5}
+.reel .rtop .ttl{font-size:17px;font-weight:700}
+.reel .livetag{display:flex;align-items:center;gap:6px;background:var(--live);padding:5px 11px;border-radius:8px;font-size:12px;font-weight:800}
+.reel .viewers{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600;display:flex;gap:5px;align-items:center}
+.reel .rside{position:absolute;right:12px;bottom:130px;z-index:5;display:flex;flex-direction:column;gap:22px;align-items:center}
+.reel .rside .act{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+.reel .rside .act .ico{width:30px;height:30px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))}
+.reel .rside .act span{font-size:11px;font-weight:700}
+.reel .rside .liked{fill:var(--live);stroke:var(--live)}
+.reel .rbot{position:absolute;left:14px;right:80px;bottom:34px;z-index:5}
+.reel .rbot .rwho{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.reel .rbot .rwho img{width:36px;height:36px;border-radius:50%;border:1.5px solid #fff;object-fit:cover}
+.reel .rbot .rwho b{font-size:14px;font-weight:700;display:flex;align-items:center;gap:5px}
+.reel .rbot .rwho button{margin-left:4px;background:0;border:1px solid #fff;color:#fff;font-family:inherit;font-size:12px;font-weight:700;padding:4px 12px;border-radius:8px;cursor:pointer}
+.reel .rbot .rcap{font-size:13px;line-height:1.4}
+.reel .rbot .rpos{display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:rgba(127,184,151,.2);backdrop-filter:blur(8px);
+  border:1px solid rgba(127,184,151,.5);padding:7px 12px;border-radius:30px;font-size:12px;font-weight:700;color:#bfe6cd}
+.reel-close{position:absolute;top:16px;right:16px;z-index:10;cursor:pointer}
+
+/* LIVE CHAT OVERLAY */
+.lchat{position:absolute;left:14px;bottom:130px;right:80px;z-index:6;max-height:160px;overflow:hidden;display:flex;flex-direction:column;gap:8px;justify-content:flex-end}
+.lchat .msg{font-size:12.5px;animation:slideup .4s both}
+.lchat .msg b{font-weight:700;color:var(--sage)}
+@keyframes slideup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* POST DETAIL / COMMENTS */
+.cmts{padding:4px 0 90px}
+.cmt{display:flex;gap:11px;padding:11px 16px}
+.cmt img{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0}
+.cmt .ct{flex:1;font-size:13px;line-height:1.45}
+.cmt .ct b{font-weight:600}.cmt .ct .meta{font-size:11px;color:var(--dim);margin-top:4px;display:flex;gap:14px}
+.cmt .heart{color:var(--dim);cursor:pointer}
+.cmt.ai{background:rgba(127,184,151,.06)}
+.cmt.ai .ct b{color:var(--sage)}
+.cinput{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:12px 16px 26px;
+  background:linear-gradient(180deg,transparent,var(--bg2) 25%);backdrop-filter:blur(14px);border-top:1px solid var(--brd)}
+.cinput img{width:32px;height:32px;border-radius:50%}
+.cinput .box{flex:1;background:var(--glass);border:1px solid var(--brd);border-radius:30px;padding:10px 16px;font-size:13px;color:var(--dim)}
+.cinput .send{color:var(--sage);font-weight:700;font-size:13px;cursor:pointer}
+
+/* SETTINGS */
+.set-search{margin:8px 16px 6px;background:var(--glass);border:1px solid var(--brd);border-radius:12px;padding:10px 14px;
+  display:flex;align-items:center;gap:10px;color:var(--dim);font-size:14px}
+.acenter{margin:10px 16px;border-radius:18px;background:linear-gradient(135deg,rgba(45,82,64,.4),rgba(18,27,23,.5));
+  border:1px solid var(--brd);padding:16px;cursor:pointer;transition:.15s}
+.acenter:active{transform:scale(.99)}
+.acenter .ac-h{display:flex;align-items:center;gap:10px}
+.acenter .ac-logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--sage),var(--tan));display:flex;align-items:center;justify-content:center}
+.acenter .ac-logo b{font-family:'Fraunces';font-style:italic;color:#0c1410;font-size:18px}
+.acenter .ac-h b{font-size:15px;font-weight:700}
+.acenter .ac-sub{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.5}
+.acenter .ac-row{display:flex;gap:18px;margin-top:14px}
+.acenter .ac-row .aci{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--mut);font-size:10px;font-weight:600}
+.acenter .ac-row .aci .ico{width:20px;height:20px;color:var(--sage)}
+.set-sec{font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;padding:18px 18px 6px}
+.set-list{padding:0 8px}
+.set-row{display:flex;align-items:center;gap:15px;padding:14px 12px;border-radius:12px;cursor:pointer;transition:background .15s}
+.set-row:active{background:var(--glass)}
+.set-row .ico{width:22px;height:22px;color:var(--txt);flex-shrink:0}
+.set-row .lbl{flex:1;font-size:14.5px;font-weight:500}
+.set-row .chev{color:var(--dim)}
+.set-row .sub{font-size:11.5px;color:var(--dim);margin-top:2px}
+.set-row .lblw{flex:1}
+.pro-pill{font-size:10px;font-weight:800;color:#0c1410;background:var(--tan);padding:2px 8px;border-radius:20px;margin-left:8px}
+
+/* toast */
+.toast{position:absolute;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pine);
+  border:1px solid rgba(127,184,151,.4);color:var(--txt);font-size:13px;padding:11px 18px;border-radius:30px;opacity:0;
+  transition:.3s;z-index:90;pointer-events:none;font-weight:500;max-width:80%;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div class="app" data-mode="customer" id="app">
+
+<!-- ============ HOME FEED ============ -->
+<section class="screen root active" id="s-home">
+  <div class="tbar">
+    <div class="modesw"><div class="pill"></div>
+      <button onclick="setMode('customer')">Discover</button>
+      <button onclick="setMode('owner')">For Owners</button>
+    </div>
+    <div class="tbar-actions">
+      <span class="badge-n" onclick="toast('Notifications')"><svg class="ico" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+      <span onclick="go('s-chat')"><svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+    </div>
+  </div>
+  <div class="scroll" id="feedScroll">
+    <div class="stories" id="stories"></div>
+    <div id="feedBody"></div>
+  </div>
+  <nav class="bnav" id="nav-home"></nav>
+</section>
+
+<!-- ============ PROFILE ============ -->
+<section class="screen" id="s-profile">
+  <div class="tbar">
+    <span class="back" onclick="back()"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span>
+    <h2 id="pf-handle">sipcafe</h2>
+    <div class="tbar-actions"><span onclick="go('s-settings')"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+  </div>
+  <div class="scroll" id="profileBody"></div>
+  <nav class="bnav" id="nav-profile"></nav>
+</section>
+
+<!-- ============ POST DETAIL ============ -->
+<section class="screen" id="s-post">
+  <div class="tbar">
+    <span class="back" onclick="back()"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span>
+    <h2>Post</h2><div class="tbar-actions"></div>
+  </div>
+  <div class="scroll" id="postBody"></div>
+  <div class="cinput">
+    <img src="https://i.pravatar.cc/100?img=5">
+    <div class="box">Add a comment…</div><span class="send" onclick="toast('Posted')">Post</span>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="screen" id="s-settings">
+  <div class="tbar">
+    <span class="back" onclick="back()"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span>
+    <h2>Settings and activity</h2><div class="tbar-actions"></div>
+  </div>
+  <div class="scroll">
+    <div class="set-search"><svg class="ico" style="width:18px;height:18px" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</div>
+    <div class="acenter" onclick="go('s-accounts')">
+      <div class="ac-h"><div class="ac-logo"><b>A</b></div><b>Accounts Centre</b></div>
+      <div class="ac-sub">Password, security, business details, connected experiences, AI &amp; insight preferences across Aria.</div>
+      <div class="ac-row">
+        <div class="aci"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Security</div>
+        <div class="aci"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Profiles</div>
+        <div class="aci"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Insights</div>
+      </div>
+    </div>
+    <div id="settingsList"></div>
+  </div>
+</section>
+
+<!-- ============ ACCOUNTS CENTRE ============ -->
+<section class="screen" id="s-accounts">
+  <div class="tbar">
+    <span class="back" onclick="back()"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span>
+    <h2>Accounts Centre</h2><div class="tbar-actions"></div>
+  </div>
+  <div class="scroll" id="accountsBody"></div>
+</section>
+
+<!-- ============ REELS / LIVE IMMERSIVE ============ -->
+<div class="reels" id="reels">
+  <span class="reel-close" onclick="closeReels()"><svg class="ico" style="width:28px;height:28px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+  <div class="rscroll" id="reelScroll"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ---------------- DATA (shaped like community_* schema) ---------------- */
+const IMG = {
+  sip:'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&q=70',
+  sip2:'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=70',
+  sip3:'https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=800&q=70',
+  bar:'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&q=70',
+  bar2:'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&q=70',
+  bake:'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&q=70',
+  bake2:'https://images.unsplash.com/photo-1486427944299-d1955d23e34d?w=800&q=70',
+  brunch:'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&q=70',
+  latte:'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800&q=70',
+  wine:'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=70',
+  cover:'https://images.unsplash.com/photo-1453614512568-c4024d13c247?w=900&q=70'
+};
+const av=n=>`https://i.pravatar.cc/120?img=${n}`;
+const verifSvg='<svg class="verif" viewBox="0 0 24 24"><path d="M12 2l2.4 1.8 3 .2.9 2.9L21 9l-1.2 2.8L21 14.6l-2.7 1.9-.9 2.9-3 .2L12 22l-2.4-1.8-3-.2-.9-2.9L3 14.6l1.2-2.9L3 9l2.7-1.9L6.6 4l3-.2z"/><path d="M9 12l2 2 4-4" stroke="#0c1410" stroke-width="2" fill="none"/></svg>';
+
+const stories = [
+  {own:true,img:av(5),name:'Your story'},
+  {img:IMG.sip,name:'Sip Café',live:true,seen:false},
+  {img:IMG.bar,name:'The Tan Line',seen:false},
+  {img:IMG.bake,name:'Pine & Crumb',seen:false},
+  {img:IMG.brunch,name:'Maple & Co',seen:true},
+  {img:IMG.wine,name:'Cellar 9',seen:true},
+];
+
+const feedCustomer = [
+  {kind:'ai',h:'3 spots buzzing near you right now',body:'<b>Sip Café</b> is busier than usual — Tuesdays are normally their quietest, so you\'ll get a seat. Two others just dropped offers.',cta:['Show me','Ask Aria'],ground:'Live POS activity · last 60 min'},
+  {kind:'post',biz:'Sip Café',handle:'sipcafe',av:IMG.sip,verif:true,cat:'400 m away',live:true,
+    media:[IMG.latte,IMG.sip2,IMG.sip3],pos:'☕ Busy now · 14 orders/hr',likes:142,
+    cap:'Tuesday slow-day special — oat flat whites $4 till close. Come grab the quiet corner ☀️',
+    cmts:18,time:'2 hours ago',ai:false},
+  {kind:'post',biz:'The Tan Line',handle:'thetanline',av:IMG.bar,verif:false,cat:'1.2 km away',live:false,
+    media:[IMG.bar2,IMG.wine],pos:'🍷 Happy hour till 6pm',likes:89,
+    cap:'New Italian orange wines just landed. Happy hour pricing till six.',cmts:7,time:'5 hours ago',ai:false},
+  {kind:'ai',h:'Because you saved 2 brunch spots',body:'<b>Maple & Co</b> added a weekend brunch menu and is trending up in your area this week.',cta:['View menu','Not for me'],ground:'Saved-prefs + POS menu update'},
+  {kind:'post',biz:'Pine & Crumb',handle:'pinecrumb',av:IMG.bake,verif:false,cat:'850 m away',live:false,
+    media:[IMG.bake2,IMG.bake],pos:'🥐 Fresh batch out',likes:204,
+    cap:'Cardamom buns out of the oven 8 minutes ago. AI tip: these sell out by 10am ✨',cmts:31,time:'12 minutes ago',ai:true},
+];
+const feedOwner = [
+  {kind:'ai',h:'Your community snapshot',body:'<b>Sip Café</b> has <b>0 followers</b> in the community — cold start. 4 nearby cafés posted reels this week and gained reach. Want Aria to draft your first 3 posts from this week\'s POS activity?',cta:['Draft 3 posts','Later'],ground:'community_business_follows + pos_sales'},
+  {kind:'post',biz:'The Tan Line',handle:'thetanline',av:IMG.bar,verif:false,cat:'Owner · 1.2 km',live:false,
+    media:[IMG.bar2],pos:'📈 Posts daily · +40 reach/wk',likes:34,cap:'Behind the bar: how we run Thursday tastings. Happy to share notes with nearby owners.',cmts:5,time:'1 day ago',ai:false},
+  {kind:'ai',h:'What\'s working for cafés like you',body:'Owners posting <b>POS-backed reels</b> (busy-now, fresh-batch) get 3× the engagement of generic posts. Your slowest day is <b>Tuesday ($392/day)</b> — a Tuesday promo reel could lift it.',cta:['Build the reel','Ask Aria'],ground:'slow-day.ts · 28-day · to the cent'},
+  {kind:'post',biz:'Pine & Crumb',handle:'pinecrumb',av:IMG.bake,verif:false,cat:'Owner · 850 m',live:false,
+    media:[IMG.bake],pos:'🤝 Open to collab',likes:22,cap:'Looking for a café to cross-promote weekend pastries. DM if keen.',cmts:3,time:'2 days ago',ai:false},
+];
+
+const reels = [
+  {bg:IMG.latte,biz:'Sip Café',handle:'sipcafe',av:IMG.sip,verif:true,live:true,viewers:'47',title:'Live: morning rush',cap:'Pulling shots live ☕ slow-day special on now',pos:'☕ Busy now · Tuesday special live',likes:'1.2k',cmts:'88',
+    chat:[['mia_k','this place is the best 😍'],['owner_replied','grab the corner seat!'],['dan','on my way 🏃']]},
+  {bg:IMG.bake,biz:'Pine & Crumb',handle:'pinecrumb',av:IMG.bake,verif:false,live:false,viewers:'',title:'',cap:'Cardamom buns, 8 min out the oven 🥐',pos:'🥐 Fresh batch · sells out by 10am',likes:'3.4k',cmts:'120',chat:[]},
+  {bg:IMG.wine,biz:'The Tan Line',handle:'thetanline',av:IMG.bar,verif:false,live:false,viewers:'',title:'',cap:'Orange wine flight, Thursday tasting 🍷',pos:'🍷 Happy hour till 6pm',likes:'890',cmts:'42',chat:[]},
+];
+
+const comments = [
+  {ai:true,name:'Aria',av:null,text:'This post is grounded in live POS data — Sip Café is averaging 14 orders/hr right now, genuinely busy.',time:'now',likes:'—'},
+  {name:'mia_k',av:av(9),text:'Best flat white in the area, no contest ☕',time:'1h',likes:'12'},
+  {name:'dan_w',av:av(12),text:'Is the quiet corner still free?? heading over',time:'47m',likes:'3'},
+  {name:'sophie',av:av(20),text:'Saved! love a Tuesday deal',time:'32m',likes:'8'},
+  {name:'thetanline',av:IMG.bar,text:'Great shot 🔥 see you at our happy hour after?',time:'20m',likes:'5'},
+];
+
+const settings = [
+  {sec:'How you use Aria Community',rows:[
+    {i:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>',l:'Saved'},
+    {i:'<path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>',l:'Archive'},
+    {i:'<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/>',l:'Your activity'},
+    {i:'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>',l:'Notifications'},
+    {i:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',l:'Time management'},
+  ]},
+  {sec:'For professionals',rows:[
+    {i:'<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/>',l:'Insights',sub:'POS-grounded reach, busy-now, slow-day lift'},
+    {i:'<path d="M12 2l2.4 1.8 3 .2.9 2.9L21 9l-1.2 2.8L21 14.6"/><path d="M9 12l2 2 4-4"/>',l:'Aria Verified',pro:true,sub:'Verified badge · priority discovery ranking'},
+    {i:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>',l:'Account type and tools'},
+    {i:'<path d="M2 9h20l-2 11H4z"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/>',l:'Ads &amp; promotions',sub:'Boost a POS-backed post'},
+  ]},
+  {sec:'Who can see your content',rows:[
+    {i:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',l:'Account privacy',sub:'Public'},
+    {i:'<circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>',l:'Customer / Owner mode',sub:'Currently: Discover'},
+    {i:'<path d="M18 6 6 18M6 6l12 12"/>',l:'Blocked'},
+    {i:'<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M8 12h8"/>',l:'Hide story and live'},
+  ]},
+];
+
+const accounts = [
+  {sec:'Accounts',rows:[
+    {i:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',l:'Sip Café',sub:'@sipcafe · Café · primary'},
+    {i:'<path d="M12 5v14M5 12h14"/>',l:'Add accounts',sub:'Manage another venue'},
+  ]},
+  {sec:'Account settings',rows:[
+    {i:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',l:'Password and security'},
+    {i:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',l:'Business details',sub:'Name, category, location, hours'},
+    {i:'<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/>',l:'Insight &amp; AI preferences',sub:'What Aria may surface publicly'},
+    {i:'<path d="M4 4h16v16H4z"/><path d="M4 9h16"/>',l:'Connected experiences',sub:'POS · Reels · Live · Web widget'},
+    {i:'<path d="M2 9h20l-2 11H4z"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/>',l:'Ads payments'},
+  ]},
+];
+
+/* ---------------- RENDER ---------------- */
+const $=id=>document.getElementById(id);
+let navStack=['s-home'];
+
+function setMode(m){
+  $('app').dataset.mode=m;
+  document.querySelectorAll('.modesw button').forEach((b,i)=>b.style.color=(m==='customer'&&i===0)||(m==='owner'&&i===1)?'var(--txt)':'');
+  renderFeed();toast(m==='owner'?'Owner mode — network & grow':'Discover mode');
+}
+function go(id){
+  const cur=$(navStack[navStack.length-1]);cur.classList.add('behind');cur.classList.remove('active');
+  const nx=$(id);nx.classList.add('active');nx.classList.remove('behind');
+  navStack.push(id);
+  if(id==='s-profile')renderProfile();if(id==='s-post')renderPost();
+}
+function back(){
+  if(navStack.length<2)return;
+  const cur=$(navStack.pop());cur.classList.remove('active');
+  const prev=$(navStack[navStack.length-1]);prev.classList.add('active');prev.classList.remove('behind');
+}
+
+function renderStories(){
+  $('stories').innerHTML=stories.map(s=>`<div class="story ${s.seen?'seen':''} ${s.own?'own':''}" onclick="${s.live?`openReels(0)`:`toast('${s.name}')`}">
+    <div class="ring">${s.live?'':''}<img src="${s.img}">${s.own?'<span class="add">+</span>':''}</div>
+    <span>${s.name}</span></div>`).join('');
+}
+function renderFeed(){
+  renderStories();
+  const data=$('app').dataset.mode==='owner'?feedOwner:feedCustomer;
+  $('feedBody').innerHTML=data.map((it,idx)=>{
+    if(it.kind==='ai')return `<div class="aipost">
+      <div class="aih"><svg class="ico" style="width:17px;height:17px;color:var(--sage)" viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg>${it.h}</div>
+      <div class="aib">${it.body}</div>
+      <div class="aicta">${it.cta.map((c,j)=>`<button class="${j===0?'prim':''}" onclick="toast('${c}')">${c}</button>`).join('')}</div>
+      <div class="ground"><svg class="ico" style="width:11px;height:11px;color:var(--dim)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>Grounded: ${it.ground}</div></div>`;
+    return renderPostCard(it,idx);
+  }).join('');
+  attachCarousels();
+}
+function renderPostCard(it,idx){
+  return `<article class="post">
+    <div class="phead">
+      <div class="${it.live?'av-ring':''}" onclick="go('s-profile')"><img class="av" src="${it.av}"></div>
+      <div class="who" onclick="go('s-profile')">
+        <b>${it.handle}${it.verif?verifSvg:''}</b>
+        <small>${it.cat}${it.live?'<span class="pos-live"><span class="pdot"></span>LIVE</span>':''}</small>
+      </div>
+      <svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+    </div>
+    <div class="media" data-idx="${idx}" onclick="${it.live?'openReels(0)':`go('s-post')`}">
+      <div class="track">${it.media.map(m=>`<img src="${m}">`).join('')}</div>
+      ${it.media.length>1?`<div class="dots">${it.media.map((_,i)=>`<i class="${i===0?'on':''}"></i>`).join('')}</div>`:''}
+      <div class="posbadge">${it.pos}</div>
+    </div>
+    <div class="pacts">
+      <svg class="ico like" viewBox="0 0 24 24" onclick="likeToggle(this,event)"><path d="m12 21-1.5-1.3C5 14.9 2 12.2 2 8.8 2 6.1 4 4 6.5 4c1.5 0 3 .8 3.8 2 .8-1.2 2.3-2 3.8-2C20 4 22 6.1 22 8.8c0 3.4-3 6.1-8.5 10.9z"/></svg>
+      <svg class="ico" viewBox="0 0 24 24" onclick="go('s-post')"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <svg class="ico" viewBox="0 0 24 24" onclick="toast('Shared')"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>
+      <span class="sp"></span>
+      <svg class="ico" viewBox="0 0 24 24" onclick="toast('Saved')"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <div class="plikes">${it.likes.toLocaleString()} likes</div>
+    <div class="pcap"><b>${it.handle}</b> ${it.cap}${it.ai?'<span class="ai-flag"><svg class="ico" style="width:11px;height:11px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Aria-assisted</span>':''}</div>
+    <div class="pcmt" onclick="go('s-post')">View all ${it.cmts} comments</div>
+    <div class="ptime">${it.time}</div>
+  </article>`;
+}
+function attachCarousels(){
+  document.querySelectorAll('.media').forEach(m=>{
+    const track=m.querySelector('.track');if(!track)return;
+    let sx=0;
+    m.addEventListener('touchstart',e=>sx=e.touches[0].clientX,{passive:true});
+    m.addEventListener('touchend',e=>{
+      const dx=e.changedTouches[0].clientX-sx;const dots=m.querySelectorAll('.dots i');if(!dots.length)return;
+      let cur=[...dots].findIndex(d=>d.classList.contains('on'));
+      if(dx<-40&&cur<dots.length-1)cur++;else if(dx>40&&cur>0)cur--;
+      track.style.transform=`translateX(-${cur*100}%)`;dots.forEach((d,i)=>d.classList.toggle('on',i===cur));
+    });
+  });
+}
+function likeToggle(el,e){e.stopPropagation();el.classList.toggle('liked');
+  if(el.classList.contains('liked')){el.style.transform='scale(1.3)';setTimeout(()=>el.style.transform='',150);}}
+
+function renderProfile(){
+  const isOwner=$('app').dataset.mode==='owner';
+  const grid=[IMG.latte,IMG.sip2,IMG.sip3,IMG.sip,IMG.bake2,IMG.brunch,IMG.wine,IMG.bar2,IMG.bake];
+  $('profileBody').innerHTML=`
+    <div class="pf-cover" style="background-image:url('${IMG.cover}')"></div>
+    <div class="pf-top">
+      <div class="pf-av-w"><img class="pf-av" src="${IMG.sip}"></div>
+      <div class="pf-stats">
+        <div><b>9</b><span>posts</span></div>
+        <div onclick="toast('Followers')"><b>${isOwner?'0':'1,204'}</b><span>followers</span></div>
+        <div><b>312</b><span>following</span></div>
+      </div>
+    </div>
+    <div class="pf-info">
+      <div class="pf-name">Sip Café ${verifSvg}</div>
+      <div class="pf-cat">Specialty coffee · Café</div>
+      <div class="pf-bio">Slow mornings, fast espresso. Tuesday slow-day specials on now ☕ Powered by Aria.</div>
+      <div class="pf-meta"><svg class="ico" style="width:13px;height:13px;color:var(--mut)" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg> ${isOwner?'<b style="color:var(--sage)">Owner view · POS-linked</b>':'400 m away · Open now'}</div>
+    </div>
+    <div class="pf-livebar" onclick="openReels(0)"><span class="pdot"></span>Live now — morning rush · 47 watching</div>
+    <div class="pf-btns">
+      ${isOwner
+        ? `<button class="prim" onclick="toast('Compose post')">Create post</button><button onclick="openReels(0)">Go live</button><button onclick="go('s-settings')"><svg class="ico" style="width:18px;height:18px;margin:auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4"/></svg></button>`
+        : `<button class="prim foll" onclick="this.textContent='Following';this.classList.add('foll')">Follow</button><button onclick="toast('Message')">Message</button><button onclick="openReels(0)"><svg class="ico" style="width:18px;height:18px;margin:auto" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg></button>`}
+    </div>
+    <div class="pf-tabs">
+      <button class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+      <button onclick="toast('Reels')"><svg class="ico" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg></button>
+      <button onclick="toast('Tagged')"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button>
+    </div>
+    <div class="grid">${grid.map((g,i)=>`<div class="cell" onclick="${i<3?'openReels('+i+')':`go('s-post')`}"><img src="${g}">${i<3?'<span class="tag"><svg class="ico" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg></span>':(i%4===0?'<span class="tag"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>':'')}</div>`).join('')}</div>`;
+}
+
+function renderPost(){
+  const it=feedCustomer[1];
+  $('postBody').innerHTML=`
+    <article class="post" style="border:0">
+      <div class="phead"><div class="av-ring"><img class="av" src="${it.av}"></div>
+        <div class="who"><b>${it.handle}${verifSvg}</b><small>${it.cat}<span class="pos-live"><span class="pdot"></span>LIVE</span></small></div></div>
+      <div class="media"><div class="track">${it.media.map(m=>`<img src="${m}">`).join('')}</div>
+        <div class="dots">${it.media.map((_,i)=>`<i class="${i===0?'on':''}"></i>`).join('')}</div>
+        <div class="posbadge">${it.pos}</div></div>
+      <div class="pacts">
+        <svg class="ico like liked" viewBox="0 0 24 24" onclick="likeToggle(this,event)"><path d="m12 21-1.5-1.3C5 14.9 2 12.2 2 8.8 2 6.1 4 4 6.5 4c1.5 0 3 .8 3.8 2 .8-1.2 2.3-2 3.8-2C20 4 22 6.1 22 8.8c0 3.4-3 6.1-8.5 10.9z"/></svg>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>
+        <span class="sp"></span><svg class="ico" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+      <div class="plikes">${it.likes} likes</div>
+      <div class="pcap"><b>${it.handle}</b> ${it.cap}</div>
+    </article>
+    <div class="cmts">${comments.map(c=>`<div class="cmt ${c.ai?'ai':''}">
+      ${c.ai?`<div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--sage),var(--tan));display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg class="ico" style="width:18px;height:18px;color:#0c1410" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>`:`<img src="${c.av}">`}
+      <div class="ct"><b>${c.name}</b> ${c.text}<div class="meta"><span>${c.time}</span><span>${c.likes==='—'?'grounded ✓':c.likes+' likes'}</span><span>Reply</span></div></div>
+      <svg class="ico heart" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="m12 21-1.5-1.3C5 14.9 2 12.2 2 8.8 2 6.1 4 4 6.5 4c1.5 0 3 .8 3.8 2 .8-1.2 2.3-2 3.8-2C20 4 22 6.1 22 8.8c0 3.4-3 6.1-8.5 10.9z"/></svg>
+    </div>`).join('')}</div>`;
+  attachCarousels();
+}
+
+function renderSettings(){
+  $('settingsList').innerHTML=settings.map(g=>`<div class="set-sec">${g.sec}</div><div class="set-list">${g.rows.map(r=>`
+    <div class="set-row" onclick="toast('${r.l.replace(/&amp;/g,'&').replace(/'/g,'')}')">
+      <svg class="ico" viewBox="0 0 24 24">${r.i}</svg>
+      <div class="lblw"><div style="display:flex;align-items:center">${r.l}${r.pro?'<span class="pro-pill">PRO</span>':''}</div>${r.sub?`<div class="sub">${r.sub}</div>`:''}</div>
+      <svg class="ico chev" style="width:18px;height:18px" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+    </div>`).join('')}</div>`).join('');
+}
+function renderAccounts(){
+  $('accountsBody').innerHTML=accounts.map(g=>`<div class="set-sec">${g.sec}</div><div class="set-list">${g.rows.map(r=>`
+    <div class="set-row" onclick="toast('${r.l.replace(/&amp;/g,'&')}')">
+      <svg class="ico" viewBox="0 0 24 24">${r.i}</svg>
+      <div class="lblw"><div>${r.l}</div>${r.sub?`<div class="sub">${r.sub}</div>`:''}</div>
+      <svg class="ico chev" style="width:18px;height:18px" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+    </div>`).join('')}</div>`).join('');
+}
+
+/* REELS */
+function openReels(start=0){
+  $('reelScroll').innerHTML=reels.map((r,i)=>`<div class="reel">
+    <img class="bg" src="${r.bg}">
+    <div class="rtop">
+      <div class="ttl">${r.live?'<span class="livetag"><span class="pdot"></span>LIVE</span>':'Reels'}</div>
+      ${r.live?`<div class="viewers"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>${r.viewers}</div>`:''}
+    </div>
+    ${r.live?`<div class="lchat">${r.chat.map(c=>`<div class="msg"><b>${c[0]}</b> ${c[1]}</div>`).join('')}</div>`:''}
+    <div class="rside">
+      <div class="act" onclick="likeToggle(this.querySelector('.ico'),event)"><svg class="ico" viewBox="0 0 24 24"><path d="m12 21-1.5-1.3C5 14.9 2 12.2 2 8.8 2 6.1 4 4 6.5 4c1.5 0 3 .8 3.8 2 .8-1.2 2.3-2 3.8-2C20 4 22 6.1 22 8.8c0 3.4-3 6.1-8.5 10.9z"/></svg><span>${r.likes}</span></div>
+      <div class="act"><svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>${r.cmts}</span></div>
+      <div class="act"><svg class="ico" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg><span>Share</span></div>
+      <div class="act"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></div>
+    </div>
+    <div class="rbot">
+      <div class="rwho"><img src="${r.av}"><b>${r.handle}${r.verif?verifSvg:''}</b><button onclick="this.textContent='Following'">Follow</button></div>
+      <div class="rcap">${r.cap}</div>
+      <div class="rpos">${r.pos}</div>
+    </div>
+  </div>`).join('');
+  $('reels').classList.add('active');
+  setTimeout(()=>{const t=$('reelScroll');t.scrollTop=start*t.clientHeight;},50);
+}
+function closeReels(){$('reels').classList.remove('active');}
+
+/* NAV BARS */
+function renderNav(target,active){
+  $(target).innerHTML=`
+    <button class="${active==='home'?'on':''}" onclick="resetHome()"><svg class="ico" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</button>
+    <button onclick="toast('Search')"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</button>
+    <button class="fab" onclick="toast('Create post / reel / go live')"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button onclick="openReels(0)"><svg class="ico" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg>Reels</button>
+    <button class="${active==='profile'?'on':''}" onclick="goProfile()"><img class="meav" src="${IMG.sip}">You</button>`;
+}
+function resetHome(){while(navStack.length>1)back();}
+function goProfile(){if(navStack[navStack.length-1]!=='s-profile')go('s-profile');}
+
+/* INIT */
+renderFeed();renderSettings();renderAccounts();
+renderNav('nav-home','home');renderNav('nav-profile','profile');
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),1500);}
+</script>
+</body>
+</html>

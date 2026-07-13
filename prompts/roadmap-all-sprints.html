@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aria — Roadmap Sprint Prompts &amp; Claude Code Commands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;1,500&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--sage:#7FB897;--deep:#2D5240;--sand:#C9A37A;--amber:#BA7517;--red:#E24B4A;--bg:#0F1814;--bg2:#0A130F;--panel:#142019;--panel2:#1A2820;--ink:#E8EDE9;--soft:#8FA398;--dim:#5A6D63;--line:#1F2F26;--display:'Cormorant',serif;--body:'Outfit',sans-serif;--mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--body);background:var(--bg);color:var(--ink);line-height:1.55;padding:32px 16px;font-size:15px}
+.wrap{max-width:1040px;margin:0 auto}
+header.top{margin-bottom:30px;border-bottom:1px solid var(--line);padding-bottom:24px}
+h1{font-family:var(--display);font-size:36px;font-weight:600;font-style:italic;color:var(--sage);letter-spacing:-.5px}
+h1 small{font-family:var(--body);font-style:normal;font-size:13px;font-weight:500;color:var(--soft);letter-spacing:.04em;text-transform:uppercase;margin-left:10px}
+.lede{color:var(--soft);font-size:16px;max-width:820px;margin-top:6px}
+.lede b{color:var(--sand);font-weight:600}
+.chips{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.chip{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sand);background:rgba(201,163,122,.08);border:1px solid rgba(201,163,122,.25);padding:5px 11px;border-radius:30px}
+.chip.ok{color:var(--sage);background:rgba(127,184,151,.08);border-color:rgba(127,184,151,.3)}
+.chip.red{color:var(--red);background:rgba(226,75,74,.06);border-color:rgba(226,75,74,.3)}
+.section{margin:34px 0 18px}
+.section h2{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:26px;margin-bottom:6px;letter-spacing:-.3px}
+.section h2 small{font-family:var(--body);font-style:normal;font-size:12px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.08em;margin-left:10px}
+.section p{color:var(--soft);font-size:14px;max-width:780px;margin-top:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:14px}
+.card h3{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:20px;margin-bottom:8px}
+.card ul{list-style:none}
+.card li{padding:4px 0 4px 22px;position:relative;font-size:13px}
+.card li::before{content:"";position:absolute;left:6px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--sage)}
+.card li b{color:var(--sand);font-weight:600}
+code.k{font-family:var(--mono);font-size:12px;background:var(--panel2);padding:1px 6px;border-radius:4px;color:var(--sand)}
+.sprint{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(127,184,151,.04),transparent)}
+.ph h3{font-family:var(--display);font-style:italic;font-weight:600;color:var(--sage);font-size:21px}
+.ph h3 small{display:block;font-family:var(--body);font-style:normal;color:var(--soft);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+.pa{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:flex-start}
+.b{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:5px 10px;border-radius:30px;border:1px solid var(--line);color:var(--soft);white-space:nowrap}
+.b.brain{color:#d8a5e8;border-color:rgba(216,165,232,.35);background:rgba(216,165,232,.06)}
+.b.sec{color:var(--red);border-color:rgba(226,75,74,.45);background:rgba(226,75,74,.08)}
+.b.seo{color:#a6c5f3;border-color:rgba(166,197,243,.35);background:rgba(166,197,243,.06)}
+.b.val{color:var(--sand);border-color:rgba(201,163,122,.45);background:rgba(201,163,122,.08)}
+.b.pre{color:var(--amber);border-color:rgba(186,117,23,.45)}
+.b.post{color:var(--sage);border-color:rgba(127,184,151,.4)}
+.pb{padding:14px 22px 16px}
+.sum{color:var(--soft);font-size:13px;line-height:1.65;margin-bottom:10px}
+.sum b{color:var(--sand);font-weight:600}
+details{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+details:first-of-type{border-top:none;padding-top:0}
+summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--soft);letter-spacing:.04em;text-transform:uppercase;padding:6px 0;display:flex;align-items:center;justify-content:space-between;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸";color:var(--sage);font-size:10px;display:inline-block;transition:transform .15s}
+details[open] summary::before{transform:rotate(90deg)}
+summary:hover{color:var(--sage)}
+summary span.left{display:flex;align-items:center;gap:8px;flex:1}
+.cp{cursor:pointer;background:var(--panel2);border:1px solid var(--line);color:var(--ink);font-family:var(--body);font-size:10px;font-weight:600;padding:4px 10px;border-radius:6px;letter-spacing:.04em;text-transform:uppercase}
+.cp:hover{border-color:var(--sage);color:var(--sage)}
+.cp.done{color:var(--sage);border-color:var(--sage);background:rgba(127,184,151,.1)}
+pre{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:11.5px;line-height:1.65;color:#cfd6d2;white-space:pre-wrap;word-break:break-word;margin-top:6px}
+.cmd{background:rgba(127,184,151,.05);border-left:3px solid var(--sage)}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-top:10px}
+.toc a{display:block;padding:11px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--ink);text-decoration:none;font-size:13px}
+.toc a:hover{border-color:var(--sage)}
+.toc a b{display:block;font-family:var(--display);font-style:italic;color:var(--sage);font-size:16px;font-weight:600}
+.toc a span{color:var(--soft);font-size:12px}
+.bl{background:rgba(201,163,122,.05);border:1px solid rgba(201,163,122,.2);border-radius:10px;padding:14px 18px;margin-top:10px;font-size:13px;line-height:1.7}
+.bl b{color:var(--sand)}
+.bl ul{list-style:none;margin-top:6px}
+.bl li{padding:3px 0 3px 18px;position:relative}
+.bl li::before{content:"·";position:absolute;left:6px;color:var(--sand)}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--soft);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+td code.k{font-size:11px}
+footer{margin-top:36px;padding:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body><div class="wrap">
+
+<header class="top">
+<h1>Aria Roadmap<small>Phase 1 · pre-launch → first soft-launch · 15 sprints</small></h1>
+<p class="lede">Every sprint below has the full prompt + Claude Code run command. Order is the <b>LOCKED BUILD ORDER</b> from user memory. Copy buttons on every block. Reels (R2–R11) and community (CX-1 P1–P5) prompts already documented separately — referenced at the bottom.</p>
+<div class="chips">
+<span class="chip ok">✓ RULE 0 (UPGRADE_ONLY)</span><span class="chip ok">✓ Aria theme locked</span><span class="chip ok">✓ $0 ongoing cost</span>
+<span class="chip">SOLO discipline</span><span class="chip red">Security x4 = launch blocker</span>
+</div>
+</header>
+
+<section class="section">
+<h2>Universal constitutional rules<small>apply to every sprint</small></h2>
+<div class="card">
+<ul>
+<li><b>RULE 0 (UPGRADE_ONLY)</b> — extend, never remove working function/fields/flows</li>
+<li><b>THEME GUARD</b> — Aria tokens only <code class="k">#7FB897 / #2D5240 / #C9A37A / #BA7517 / #E24B4A</code> + Cormorant + Outfit. Reuse existing UI primitives. No new tokens.</li>
+<li><b>PROTECTED FILES</b> — never touch <code class="k">AnimatedBg</code>, <code class="k">FlyToCart</code>, <code class="k">CursorGlow</code>, <code class="k">pos-sfx.ts</code>, <code class="k">aria-voice-guide.ts</code></li>
+<li><b>WORKTREE LOCK</b> — <code class="k">c:\Users\kansa\Downloads\aria-saas-main\repo-worktree</code> never touched by Claude Code</li>
+<li><b>SOLO discipline</b> — pwd confirm · pre-flight quotes verbatim · build green (tsc 0 + build PASS) · ONE commit · STOP before push · report file</li>
+<li><b>Function count ≤22</b> (Vercel hobby) · <b>daily-max crons</b> (no sub-daily) · all amounts in dollars (numeric)</li>
+<li><b>pos_customers canonical</b> (not customers) · revenue from <code class="k">pos_sales.total_amount WHERE status='completed'</code></li>
+<li><b>DB pre-flight protocol</b> — dump column types + CHECK constraints verbatim + FK + UNIQUE + numeric column list + grep value conflicts + verify API signatures</li>
+</ul>
+</div>
+</section>
+
+<section class="section">
+<h2>Quick nav</h2>
+<p>Phase 1 sprints in run order. Click any to jump.</p>
+<div class="toc">
+<a href="#gt-v2"><b>GROUNDING-TEETH-V2</b><span>Brain · close-out</span></a>
+<a href="#la4"><b>LOGGING-AUDIT-4</b><span>Brain · backlog</span></a>
+<a href="#wuc"><b>WAITUNTIL-COLUMN-FIX</b><span>Brain · backlog</span></a>
+<a href="#sec1"><b>SEC-1</b><span>Cron auth bypass</span></a>
+<a href="#sec2"><b>SEC-2</b><span>Unauth POS stubs</span></a>
+<a href="#sec3"><b>SEC-3</b><span>Square status ownership</span></a>
+<a href="#sec4"><b>SEC-4</b><span>PII encryption + audit</span></a>
+<a href="#seo2"><b>SEO-2</b><span>Crawler + audit engine</span></a>
+<a href="#seo3"><b>SEO-3</b><span>AI fix recommendation</span></a>
+<a href="#seo4"><b>SEO-4</b><span>Dashboard surface</span></a>
+<a href="#ri1"><b>RI-1</b><span>Recipe import (CSV/AI)</span></a>
+<a href="#cmi1"><b>CMI-1</b><span>Customer mgmt CRM lite</span></a>
+<a href="#cmi2"><b>CMI-2</b><span>Invoicing</span></a>
+<a href="#wbi1"><b>WBI-1</b><span>Weekly BI report</span></a>
+<a href="#cx-ref"><b>CX-1 P1–P5</b><span>Community (referenced)</span></a>
+<a href="#reels-ref"><b>R2–R11</b><span>Reels (referenced)</span></a>
+</div>
+</section>
+
+<section class="section">
+<h2>Run order &amp; gating</h2>
+<div class="card">
+<ol style="padding-left:22px;font-size:13.5px;line-height:1.85">
+<li><b>GROUNDING-TEETH-V2</b> — final brain quality close-out (~45 min)</li>
+<li><b>LOGGING-AUDIT-4 + WAITUNTIL-COLUMN-FIX</b> — backlog hot list (~2h combined)</li>
+<li><b>SEC-1 → SEC-2 → SEC-3 → SEC-4</b> — non-negotiable launch blockers (~4-6 days)</li>
+<li>🚀 <b>SOFT LAUNCH</b> — Sip + 1-2 more cafes, silent mode, 2 weeks</li>
+<li><b>SEO-2 → SEO-3 → SEO-4</b> — discoverability post-launch (~5 days)</li>
+<li><b>RI-1</b> — recipe import (1 day)</li>
+<li><b>CMI-1 → CMI-2</b> — customer mgmt + invoicing (~4 days)</li>
+<li><b>WBI-1</b> — weekly BI report (1 day)</li>
+<li><b>CX-1 P1–P5</b> — community (5 sprints, ~2 weeks) — already prompted</li>
+<li><b>R2–R11</b> — reels (10 sprints, ~3-4 months) — already prompted</li>
+<li>Post-reels: <b>AR / TB / WH / FIN</b> deep verticals</li>
+</ol>
+</div>
+</section>
+
+<!-- ============ GROUNDING-TEETH-V2 ============ -->
+<article class="sprint" id="gt-v2">
+<div class="ph"><h3>GROUNDING-TEETH-V2<small>Brain quality · final close-out</small></h3>
+<div class="pa"><span class="b brain">Brain</span><span class="b pre">Pre-launch</span></div></div>
+<div class="pb">
+<p class="sum">Strips model-invented dollar/percent values like the "$480/month leak" by validating against <b>groundTruth anchors ONLY</b>, not advisor corpus (V1's flaw). Also extends groundTruth with Tuesday-avg + recent_promo_count + target_weekly_revenue. Applies to advisor outputs AND synthesis. Skips qualitative sentences and direct memory citations.</p>
+
+<details open><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-gtv2">Copy</button></summary>
+<pre id="p-gtv2">GROUNDING-TEETH-V2. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+WHY V1 FAILED
+V1's Check 5 validated synthesis against {advisor_outputs + business_context + groundTruth}. Flaw: when advisors invent "$480", synthesis repeats it, Check 5 sees "$480" in BOTH → "grounded" → kept. Verified 2026-06-13 09:11 PM: zero "$480" in DB anywhere; pure model invention; V1 kept it.
+
+THEME GUARD: Aria tokens only.
+
+PRE-FLIGHT (mandatory):
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read src/lib/aria/response-validator.ts. Quote Check 4 + Check 5 signatures verbatim. Quote validateAndHeal call site in council.ts.
+3. Find council advisor invocation site — quote where observations/recommendations are collected.
+4. Find groundTruth construction in src/app/api/aria/ask/route.ts. Quote JSON shape.
+5. Compute tuesday_avg_revenue via SQL:
+   SELECT round(avg(daily_total), 2) FROM (
+     SELECT date_trunc('day', created_at at time zone 'Australia/Sydney') as day,
+            sum(total_amount) as daily_total
+     FROM pos_sales
+     WHERE business_id='ff5055a0-c351-4ada-817a-1804961035f3'
+       AND status='completed'
+       AND extract(dow from created_at at time zone 'Australia/Sydney') = 2
+       AND created_at >= now() - interval '56 days'
+     GROUP BY 1) t;
+   Document the real value in report.
+
+BUILD (additive):
+
+PART 1 — Check 6 (strict ground-truth validation)
+src/lib/aria/response-validator.ts: ADD check6_strictGroundTruth(text, groundTruth)
+- Skip if groundTruth empty
+- Scan tokens: /\$[\d,]+(?:\.\d+)?(?:\/(?:month|week|day|year))?/ + /\b\d{1,3}(?:\.\d+)?\s?%/
+- Compare each match against groundTruth anchors with 2% tolerance
+- No match → strip the containing sentence
+- Append once: "(Some figures couldn't be verified — focus on confirmed numbers above.)"
+- Safety: never strip if kept.length === 0
+
+PART 2 — Run V2 on advisor outputs BEFORE synthesis
+src/lib/aria/council.ts: for each advisor, run check6 on observations + recommendations
+- If stripped: log row { agent_key: 'advisor_guard', role: 'other', learning_signal: 'guard_fired:advisor_fabrication_stripped:'+advisor.role, response_summary: stripped.join(' | ').slice(0,100) }
+- Use logAICallSafe from LOGGING-AUDIT-3
+
+PART 3 — Expand groundTruth anchors in ask/route.ts
+Add: tuesday_avg_revenue, tuesday_vs_average_gap_dollars, recent_promotion_actions, target_weekly_revenue (from businesses.weekly_target if exists, else null)
+
+PART 4 — Bypass on memory citations
+Never strip sentences containing "you mentioned" / "you stated" / "you said" / "you committed" — these are valid memory grounding.
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(grounding-teeth-v2): strict groundTruth validation · STOP. Report includes verbatim pre-flight quotes + real tuesday_avg_revenue value + 5 test cases (3 strip, 2 pass).
+
+VERIFY POST-DEPLOY:
+Fresh chat "how am I doing this week?":
+- NO "$480/month leak"
+- Real numbers kept ($7, $4,446.90, customer LTVs)
+- Qualitative framing preserved
+SQL: select agent_key, role, learning_signal, count(*) from aria_ai_calls where business_id=? and created_at > now()-interval '10 minutes' and (agent_key='advisor_guard' or learning_signal like '%fabrication%') group by 1,2,3;
+
+DO NOT:
+- No modifying Check 4/Check 5 (additive only)
+- No stripping qualitative sentences
+- No stripping memory citation sentences
+- No modifying advisor prompts (strip downstream)
+- No npm deps</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-gtv2">Copy</button></summary>
+<pre id="c-gtv2" class="cmd">Run GROUNDING-TEETH-V2 only (prompts/GROUNDING-TEETH-V2.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. All pre-flight quotes verbatim including the tuesday_avg_revenue SQL value. RULE 0 UPGRADE_ONLY: extend, never remove. Use logAICallSafe from LOGGING-AUDIT-3 for the advisor_guard logger. Build green (tsc 0 + build PASS). ONE commit, STOP before push, write reports/sprint-GROUNDING-TEETH-V2-report.md. Do not start another sprint.</pre></details>
+</div></article>
+
+<!-- ============ LOGGING-AUDIT-4 ============ -->
+<article class="sprint" id="la4">
+<div class="ph"><h3>LOGGING-AUDIT-4<small>Brain quality · tighten AgentRole + route through logAICallSafe</small></h3>
+<div class="pa"><span class="b brain">Brain</span><span class="b pre">Pre-launch</span></div></div>
+<div class="pb">
+<p class="sum">LOGGING-AUDIT-3 left two caveats: <b>AgentRole union still has off-list <code class="k">'agent'</code> and <code class="k">'export'</code></b>; central loggers <code class="k">role: params.role</code> pass-through means any caller using these still produces silent .error rejection (now logged but not prevented). Solution: tighten the union to remove the off-list values, force every remaining caller through <code class="k">logAICallSafe</code> for compile-time enforcement.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-la4">Copy</button></summary>
+<pre id="p-la4">LOGGING-AUDIT-4. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: COUNCIL-LOG-FIX-1 + LOGGING-AUDIT-3 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read src/lib/aria/log-ai-call.ts. Quote AgentRole + AiCallRole + AiCallProvider unions verbatim.
+3. grep -rn "role:\s*'agent'\|role:\s*'export'" src --include="*.ts" — paste file:line for every match.
+4. grep -rn "from.*log-ai-call\|logAICallSafe\|logAICall(" src --include="*.ts" — paste every caller.
+5. Verify against pg_constraint CHECK lists (do via Supabase tool).
+
+BUILD (additive):
+
+PART 1 — Remove off-list values from AgentRole
+- Drop 'agent' and 'export' from AgentRole literal union.
+- For each caller using these, replace with the closest valid value (likely 'other' or 'classify' or 'briefing' — semantic match).
+- Document in report.
+
+PART 2 — Route every aria_ai_calls insert through logAICallSafe
+- For every caller (central + waitUntil loggers): replace direct insert with logAICallSafe.
+- Helper signature constrains role+provider at compile time.
+- Maintain backward compat — same field names, same semantics.
+
+PART 3 — Sanity grep
+After fix: grep -rn "from\('aria_ai_calls'\)\.insert" src — should return zero direct inserts (all routed through helper).
+
+BUILD GATE: tsc 0 + build PASS · ONE commit fix(logging-audit-4): tighten AgentRole + route all callers through logAICallSafe · STOP.
+
+VERIFY POST-DEPLOY:
+After 1 fresh chat test:
+SQL: select count(*) from aria_ai_calls where created_at > now()-interval '10 minutes';
+Expected: same row volume as before (no regression), zero silent drops in Vercel runtime logs.
+
+DO NOT:
+- No agent_key renames (semantic intent preserved)
+- No CHECK constraint changes
+- No removing logAICall function (logAICallSafe replaces it as the typed wrapper)</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-la4">Copy</button></summary>
+<pre id="c-la4" class="cmd">Run LOGGING-AUDIT-4 only (prompts/LOGGING-AUDIT-4.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Tighten AgentRole union (drop 'agent'/'export'), route every aria_ai_calls caller through logAICallSafe from LOGGING-AUDIT-3, sanity grep should return zero direct inserts. RULE 0 UPGRADE_ONLY: extend, never remove. Build green. ONE commit, STOP before push, write reports/sprint-LOGGING-AUDIT-4-report.md.</pre></details>
+</div></article>
+
+<!-- ============ WAITUNTIL-COLUMN-FIX ============ -->
+<article class="sprint" id="wuc">
+<div class="ph"><h3>WAITUNTIL-COLUMN-FIX<small>Brain quality · fix legacy column names in waitUntil loggers</small></h3>
+<div class="pa"><span class="b brain">Brain</span><span class="b pre">Pre-launch</span></div></div>
+<div class="pb">
+<p class="sum">The long-tail fire-and-forget <code class="k">waitUntil</code> loggers (bookings, gift-cards, etc.) use <b>legacy column names</b> like <code class="k">model</code> / <code class="k">prompt_summary</code> / <code class="k">tokens_used</code> that don't exist in current <code class="k">aria_ai_calls</code> schema (it uses <code class="k">model_id</code> / <code class="k">request_summary</code> / <code class="k">input_tokens</code> / <code class="k">output_tokens</code>). These silently fail.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-wuc">Copy</button></summary>
+<pre id="p-wuc">WAITUNTIL-COLUMN-FIX. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: LOGGING-AUDIT-3 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Pull current aria_ai_calls schema via Supabase tool — list every column exactly.
+3. grep -rn "waitUntil\|after(" src/app/api --include="*.ts" — find every fire-and-forget logger.
+4. For each match, paste the insert row shape verbatim. Flag column mismatches.
+
+BUILD (additive):
+
+PART 1 — Migrate every waitUntil logger to logAICallSafe (LOGGING-AUDIT-3)
+- The typed helper enforces correct column names at compile time.
+- Map legacy names: model→model_id, prompt_summary→request_summary, completion_summary→response_summary, tokens_used→(input_tokens + output_tokens split).
+- Per file: replace direct insert with logAICallSafe.
+
+PART 2 — Verify no orphan column references
+grep -rn "model:\s*['\"]\|prompt_summary\|completion_summary\|tokens_used" src --include="*.ts" should return zero after fix.
+
+BUILD GATE: tsc 0 + build PASS · ONE commit fix(waituntil-column-fix): migrate fire-and-forget loggers to logAICallSafe · STOP.
+
+VERIFY POST-DEPLOY:
+After any feature that uses a waitUntil logger fires (e.g. booking creation):
+SQL: select agent_key, count(*), max(created_at) from aria_ai_calls where agent_key in ('booking_*','gift_card_*') and created_at > now()-interval '24 hours' group by agent_key;
+Expected: rows appear.
+
+DO NOT:
+- No agent_key renames
+- No removing waitUntil pattern itself (Vercel-supported)
+- No new dependencies</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-wuc">Copy</button></summary>
+<pre id="c-wuc" class="cmd">Run WAITUNTIL-COLUMN-FIX only (prompts/WAITUNTIL-COLUMN-FIX.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Migrate every fire-and-forget waitUntil/after logger to logAICallSafe from LOGGING-AUDIT-3, mapping legacy column names (model→model_id, prompt_summary→request_summary, tokens_used split into input+output). RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-WAITUNTIL-COLUMN-FIX-report.md.</pre></details>
+</div></article>
+
+<!-- ============ SEC-1 ============ -->
+<article class="sprint" id="sec1">
+<div class="ph"><h3>SEC-1<small>Square sync cron auth bypass fix</small></h3>
+<div class="pa"><span class="b sec">Security</span><span class="b pre">Pre-launch · blocker</span></div></div>
+<div class="pb">
+<p class="sum">Square sync cron was accepting <b>User-Agent spoofing</b> as proof of being Vercel cron — anyone setting <code class="k">User-Agent: vercel-cron/1.0</code> in a request could trigger sync. Replace with Vercel <code class="k">CRON_SECRET</code> Bearer auth (Vercel-native).</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-sec1">Copy</button></summary>
+<pre id="p-sec1">SEC-1 — Square sync cron auth bypass fix. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. grep -rn "vercel-cron\|user-agent\|userAgent" src/app/api/cron --include="*.ts" — find every cron route checking UA.
+3. Confirm CRON_SECRET env var present in Vercel (chat-Claude can verify via Vercel tool).
+4. Read existing CRON auth pattern if any standard exists.
+
+BUILD (additive):
+
+PART 1 — Vercel cron auth helper
+src/lib/security/verify-cron.ts (NEW)
+export function verifyCron(req: Request): boolean {
+  const auth = req.headers.get('authorization')
+  return auth === `Bearer ${process.env.CRON_SECRET}`
+}
+
+PART 2 — Apply to every cron route
+For each route under src/app/api/cron/, replace UA check with:
+  if (!verifyCron(req)) return new Response('unauthorized', { status: 401 })
+
+PART 3 — vercel.json sanity check
+Confirm every cron entry routes to a path that now requires CRON_SECRET. Document any not-yet-protected routes.
+
+BUILD GATE: tsc 0 + build PASS · ONE commit fix(sec-1): cron auth via CRON_SECRET, kill UA-spoof bypass · STOP.
+
+VERIFY POST-DEPLOY:
+1. curl https://ariaos.site/api/cron/square-sync -H 'User-Agent: vercel-cron/1.0' → 401
+2. curl with proper Authorization: Bearer $CRON_SECRET → 200 / runs
+
+DO NOT:
+- No removing crons
+- No exposing CRON_SECRET in client
+- No fallback to UA check</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-sec1">Copy</button></summary>
+<pre id="c-sec1" class="cmd">Run SEC-1 only (prompts/SEC-1.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Replace User-Agent based cron auth with CRON_SECRET Bearer token across every src/app/api/cron route. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-SEC-1-report.md with verbatim grep output of every cron route changed.</pre></details>
+</div></article>
+
+<!-- ============ SEC-2 ============ -->
+<article class="sprint" id="sec2">
+<div class="ph"><h3>SEC-2<small>Lock down unauthenticated POS stubs</small></h3>
+<div class="pa"><span class="b sec">Security</span><span class="b pre">Pre-launch · blocker</span></div></div>
+<div class="pb">
+<p class="sum">Past audit flagged some POS API routes have <b>no auth check</b> — they trust the business_id from the request body. Any actor with a business UUID can read/write POS data. Fix: require Supabase session + business membership verification on every POS route.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-sec2">Copy</button></summary>
+<pre id="p-sec2">SEC-2 — Lock down unauthenticated POS stubs. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEC-1 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. grep -rn "businessId\|business_id" src/app/api/pos --include="*.ts" — find every POS route taking business_id.
+3. For each route, paste the auth check at the top (or note "NO AUTH" if missing).
+4. Read existing business membership helper if any — quote signature.
+
+BUILD (additive):
+
+PART 1 — Centralized auth helper
+src/lib/security/verify-business-access.ts (NEW)
+export async function verifyBusinessAccess(req, businessId): Promise<{ ok: boolean; userId?: string; error?: string }>
+- Reads Supabase session from cookies
+- Confirms userId membership of businessId via businesses.user_id OR business_users join
+- Returns ok+userId or error
+
+PART 2 — Apply to every POS route
+For each route under src/app/api/pos/:
+- At top, after parsing body: const { ok, error } = await verifyBusinessAccess(req, body.business_id); if (!ok) return new Response(error, { status: 403 })
+
+PART 3 — Audit RLS as backstop
+Run Supabase advisor → confirm RLS enabled on every pos_* table. Document any gap.
+
+BUILD GATE: tsc 0 + build PASS · ONE commit fix(sec-2): require business-membership auth on every POS route · STOP.
+
+VERIFY POST-DEPLOY:
+1. Sign out, curl POST /api/pos/sale with valid body → 403
+2. Sign in as different business owner, curl same body → 403
+3. Sign in as Sip owner, curl Sip body → 200
+
+DO NOT:
+- No bypassing for cron — crons use SEC-1 CRON_SECRET separately
+- No leaking business_id in error responses
+- No new tables</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-sec2">Copy</button></summary>
+<pre id="c-sec2" class="cmd">Run SEC-2 only (prompts/SEC-2.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Add business-membership auth check on every src/app/api/pos route via new src/lib/security/verify-business-access.ts helper. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-SEC-2-report.md including Supabase RLS advisor output.</pre></details>
+</div></article>
+
+<!-- ============ SEC-3 ============ -->
+<article class="sprint" id="sec3">
+<div class="ph"><h3>SEC-3<small>Square status ownership verification</small></h3>
+<div class="pa"><span class="b sec">Security</span><span class="b pre">Pre-launch · blocker</span></div></div>
+<div class="pb">
+<p class="sum">Square OAuth callback flagged earlier: a business owner can <b>connect ANY Square account they have credentials for</b>, but the system doesn't verify the connection belongs to them. Risk: account hijacking on connection swap. Fix: verify Square merchant ID matches stored value on every subsequent sync.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-sec3">Copy</button></summary>
+<pre id="p-sec3">SEC-3 — Square status ownership verification. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEC-1 + SEC-2 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Find Square OAuth callback route — paste current logic.
+3. Find every Square API caller (sync, status, webhook). Paste merchant_id usage.
+4. Confirm businesses.square_merchant_id column exists; if not, document migration needed.
+
+BUILD (additive):
+
+PART 1 — Verify merchant on every Square call
+src/lib/integrations/square/verify-merchant.ts (NEW)
+- Before any Square API call, confirm businesses.square_merchant_id matches the connection's current merchant
+- If mismatch → log incident, force disconnect, notify owner via existing notification mechanism
+
+PART 2 — Migration (if needed): add square_merchant_id column
+File DO NOT execute (chat-Claude applies):
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS square_merchant_id text;
+
+PART 3 — On OAuth callback: lock to first merchant
+- First successful connect → write merchant_id to businesses.square_merchant_id
+- Subsequent reconnects → verify same merchant_id (or fail and require manual reset)
+
+PART 4 — Webhook signature verification
+- Square webhooks must validate HMAC signature against env SQUARE_WEBHOOK_SECRET
+- Reject any webhook lacking valid signature
+
+BUILD GATE: tsc 0 + build PASS · ONE commit fix(sec-3): square merchant ownership lock + webhook signature verify · STOP.
+
+VERIFY POST-DEPLOY:
+1. Connect Square as Sip → square_merchant_id written
+2. Attempt re-connect with different Square account → blocked with helpful error
+3. Send fake webhook without HMAC → rejected
+
+DO NOT:
+- No silently swapping merchant_id
+- No bypassing webhook signature even for testing</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-sec3">Copy</button></summary>
+<pre id="c-sec3" class="cmd">Run SEC-3 only (prompts/SEC-3.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Add Square merchant_id ownership lock on OAuth callback, verify on every Square API call, validate webhook HMAC signature. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-SEC-3-report.md.</pre></details>
+</div></article>
+
+<!-- ============ SEC-4 ============ -->
+<article class="sprint" id="sec4">
+<div class="ph"><h3>SEC-4<small>PII encryption (pgcrypto) + admin audit log</small></h3>
+<div class="pa"><span class="b sec">Security</span><span class="b pre">Pre-launch · blocker</span></div></div>
+<div class="pb">
+<p class="sum">Customer PII (email, phone, full_name) stored as plaintext. AU Privacy Act + GDPR-adjacent risk. Encrypt at rest via pgcrypto; build admin audit log for every PII read by Aria; ship data export + deletion routes for owner-initiated GDPR-style flows.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-sec4">Copy</button></summary>
+<pre id="p-sec4">SEC-4 — PII encryption + admin audit log + export/delete routes. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEC-1 + SEC-2 + SEC-3.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. List columns in pos_customers (email, phone, full_name, etc) + community_members (email, phone)
+3. Confirm pgcrypto extension via SELECT * FROM pg_extension WHERE extname='pgcrypto'; (chat-Claude verifies)
+4. Read existing customer read sites — quote select statements.
+
+BUILD (additive):
+
+PART 1 — Migration: enable pgcrypto + add encrypted columns
+File DO NOT execute (chat-Claude applies):
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS email_enc bytea, ADD COLUMN IF NOT EXISTS phone_enc bytea, ADD COLUMN IF NOT EXISTS full_name_enc bytea;
+ALTER TABLE community_members ADD COLUMN IF NOT EXISTS email_enc bytea, ADD COLUMN IF NOT EXISTS phone_enc bytea;
+CREATE TABLE IF NOT EXISTS pii_admin_audit_log (id uuid primary key default gen_random_uuid(), business_id uuid, actor text, action text check (action in ('read','write','export','delete')), table_name text, row_id uuid, accessed_at timestamptz default now());
+
+PART 2 — Helpers
+src/lib/security/pii-crypt.ts (NEW)
+- encryptPII(plaintext): bytea via pgp_sym_encrypt with PII_SECRET env var
+- decryptPII(bytea): plaintext via pgp_sym_decrypt
+- logPIIAccess(actor, action, table, rowId, businessId) → pii_admin_audit_log row via logAICallSafe-style typed helper
+
+PART 3 — Migrate existing rows
+One-time backfill script src/app/api/admin/pii-backfill/route.ts — encrypts every plaintext value into new _enc column. Owner triggers manually post-deploy. Idempotent.
+
+PART 4 — Update reads/writes
+Every read of pos_customers.email/phone/full_name now reads _enc and decrypts via helper + logs to pii_admin_audit_log.
+Every write encrypts to _enc.
+Legacy plaintext columns kept temporarily for backwards compat. Dropped in a future sprint after verified zero readers.
+
+PART 5 — Owner-initiated routes
+src/app/api/account/export/route.ts — returns full JSON of business's data
+src/app/api/account/delete/route.ts — soft-deletes business + cascades (already exists per memory; verify + extend if needed)
+
+BUILD GATE: tsc 0 + build PASS · ONE commit fix(sec-4): pii encryption + audit log + export/delete · STOP.
+
+VERIFY POST-DEPLOY:
+1. SQL: select email_enc from pos_customers where business_id='ff5055a0-c351-4ada-817a-1804961035f3' limit 1 — should show bytea
+2. Admin reads a customer email via UI → pii_admin_audit_log row appears
+3. Owner clicks "Export my data" → JSON file with all decrypted PII downloads
+4. Owner clicks "Delete account" → soft-delete cascade fires
+
+DO NOT:
+- No exposing PII_SECRET in client / logs
+- No skipping audit log on programmatic reads
+- No deleting old plaintext columns yet (separate sprint)</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-sec4">Copy</button></summary>
+<pre id="c-sec4" class="cmd">Run SEC-4 only (prompts/SEC-4.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Apply pgcrypto migration (chat-Claude applies via Supabase), add encrypted columns to pos_customers + community_members, build pii-crypt helpers, route every PII read/write through them, log to pii_admin_audit_log, ship /api/account/export + /api/account/delete routes. PII_SECRET env var required. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-SEC-4-report.md.</pre></details>
+</div></article>
+
+<!-- ============ SEO-2 ============ -->
+<article class="sprint" id="seo2">
+<div class="ph"><h3>SEO-2<small>Crawler + audit engine</small></h3>
+<div class="pa"><span class="b seo">SEO</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Sprint 1 (DB tables seo_audits/pages/issues/keywords/keyword_history/local with RLS) already shipped. SEO-2 builds the <b>crawler that fetches the owner's public website + computes audit signals</b> (meta tags, headings, alt text, schema markup, page speed via Lighthouse API, mobile readiness). Read-only — Aria never writes to customer sites.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-seo2">Copy</button></summary>
+<pre id="p-seo2">SEO-2 — Crawler + audit engine. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEO-1 (DB tables) deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Quote seo_audits, seo_pages, seo_issues schemas verbatim from existing migrations.
+3. Confirm businesses.website_url column exists.
+
+BUILD (additive):
+
+PART 1 — Lightweight crawler
+src/lib/seo/crawl.ts (NEW)
+- Input: site_url + max_pages (cap 50)
+- Fetch homepage → parse HTML → extract <a href> internal links → recurse
+- For each page: extract <title>, <meta description>, headings, <img alt>, schema.org markup, canonical URL
+- Returns: { pages: [{ url, title, description, h1, h2_count, issues: [] }] }
+
+PART 2 — Audit signals (read-only checks)
+src/lib/seo/audit.ts (NEW)
+- title missing / too long / too short
+- description missing / too long / too short  
+- multiple H1s
+- images without alt
+- canonical mismatch
+- broken internal link
+- missing schema (LocalBusiness, Product)
+- robots.txt + sitemap.xml presence
+- page speed (Lighthouse API call, free PageSpeed Insights)
+
+PART 3 — Persist to DB
+- INSERT one seo_audits row per crawl
+- INSERT one seo_pages row per page crawled
+- INSERT seo_issues rows per problem found
+- Keep last 12 audits per business (rolling)
+
+PART 4 — Cron entry
+src/app/api/cron/seo-audit/route.ts (daily-max, 1 cron entry)
+- Per active business with website_url set, run weekly audit (skip if last audit <6 days)
+- Uses SEC-1 CRON_SECRET auth
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · ONE commit feat(seo-2): crawler + audit engine · STOP.
+
+VERIFY POST-DEPLOY:
+1. Owner sets businesses.website_url for Sip
+2. Trigger /api/cron/seo-audit with valid CRON_SECRET → seo_audits + seo_pages + seo_issues rows populated
+3. Sip has detected issues (e.g. missing alt text)
+SQL: select count(*) from seo_audits where business_id=? and created_at > now()-interval '24 hours';
+
+DO NOT:
+- No writing to customer sites
+- No headless browser (too heavy; fetch+parse only)
+- No paid SEO services
+- No sub-daily crons</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-seo2">Copy</button></summary>
+<pre id="c-seo2" class="cmd">Run SEO-2 only (prompts/SEO-2.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Build read-only SEO crawler + audit engine. Cron uses SEC-1 CRON_SECRET auth. Free PageSpeed Insights API for performance signals. Max 50 pages per crawl. Keep rolling last-12 audits per business. RULE 0 UPGRADE_ONLY. Function count ≤22. Build green. ONE commit, STOP before push, write reports/sprint-SEO-2-report.md.</pre></details>
+</div></article>
+
+<!-- ============ SEO-3 ============ -->
+<article class="sprint" id="seo3">
+<div class="ph"><h3>SEO-3<small>AI fix recommendation route</small></h3>
+<div class="pa"><span class="b seo">SEO</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">For each seo_issue, Aria generates a <b>concrete fix recommendation</b> with copy-paste-ready code/text. Owner reviews and applies on their own site. Aria stays read-only advisor.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-seo3">Copy</button></summary>
+<pre id="p-seo3">SEO-3 — AI fix recommendation. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEO-2 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read seo_issues schema verbatim
+3. Add column if missing: ALTER TABLE seo_issues ADD COLUMN IF NOT EXISTS ai_recommendation jsonb (chat-Claude applies)
+
+BUILD (additive):
+
+PART 1 — Per-issue fix generator
+src/lib/seo/fix-suggester.ts (NEW)
+- Input: seo_issue row + page context
+- Pipe to /api/aria/ask with intent='seo_fix' (new) + ground-truth business context
+- Output: { title, problem_summary, fix_code, fix_explanation, priority: 'high'|'medium'|'low' }
+- GROUNDING-TEETH-V2 validates output
+
+PART 2 — Background fill cron
+src/app/api/cron/seo-fix-fill/route.ts (daily-max)
+- Per business: process seo_issues where ai_recommendation IS NULL (cap 20/run/business)
+- Persist generated recommendation
+- Log to aria_ai_calls agent_key='seo_fix' role='analysis' via logAICallSafe
+
+PART 3 — API surface
+- GET /api/seo/issues/[business_id] (auth via SEC-2 helper) returns issues with recommendations
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(seo-3): ai fix recommendations · STOP.
+
+VERIFY POST-DEPLOY:
+1. seo_issues rows exist for Sip with ai_recommendation populated after cron run
+2. Each recommendation has copy-paste-ready code (e.g. complete <meta description> tag)
+SQL: select count(*) from seo_issues where business_id=? and ai_recommendation is not null;
+
+DO NOT:
+- No automated writing to customer sites
+- No fabricated recommendations (GROUNDING-TEETH-V2)</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-seo3">Copy</button></summary>
+<pre id="c-seo3" class="cmd">Run SEO-3 only (prompts/SEO-3.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Aria generates concrete fix recommendations per seo_issue row, persisted via background cron with CRON_SECRET auth. Use logAICallSafe + GROUNDING-TEETH-V2. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-SEO-3-report.md.</pre></details>
+</div></article>
+
+<!-- ============ SEO-4 ============ -->
+<article class="sprint" id="seo4">
+<div class="ph"><h3>SEO-4<small>SEO dashboard surface</small></h3>
+<div class="pa"><span class="b seo">SEO</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Owner-facing dashboard: audit history, current issues prioritized, AI recommendations expandable, keyword tracker, local search rank for top 5 keywords in business suburb.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-seo4">Copy</button></summary>
+<pre id="p-seo4">SEO-4 — Dashboard surface. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEO-2 + SEO-3 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read existing dashboard layout primitives — reuse, don't fork
+3. Read seo_keywords + seo_keyword_history schemas
+
+BUILD (additive):
+
+PART 1 — Dashboard route
+src/app/dashboard/seo/page.tsx
+- Overview: score gauge (computed from issue count + severity)
+- Recent audits timeline
+- Current issues grouped by priority + page (paginated, 10/page)
+- Each issue expands to show AI recommendation (collapsed by default)
+- Keyword tracker tab
+- Local search rank tab (Brunswick top 5 cafe keywords)
+
+PART 2 — Keyword tracker
+- Owner adds keywords (max 20 per business — Pro plan can lift)
+- Daily cron checks rank via free SerpAPI alternative (or DuckDuckGo HTML scrape — free)
+- Persists to seo_keyword_history
+
+PART 3 — Local search rank
+- Per business with category=cafe + suburb set, check rank for ['cafe near me', 'best coffee <suburb>', '<suburb> brunch', etc.]
+- Persists daily
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(seo-4): seo dashboard surface · STOP.
+
+VERIFY POST-DEPLOY:
+1. /dashboard/seo loads for Sip → shows audit + issues + keywords
+2. Adding "brunswick coffee" as keyword triggers rank tracking next cron
+3. AI recommendations expand on click
+
+DO NOT:
+- No paid SERP APIs
+- No new color tokens
+- No protected files</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-seo4">Copy</button></summary>
+<pre id="c-seo4" class="cmd">Run SEO-4 only (prompts/SEO-4.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Build /dashboard/seo page with audit history, issues prioritized, AI recommendations, keyword tracker, local search rank. Free rank-check via DuckDuckGo HTML scrape (no paid SERP API). Reuse existing dashboard layout primitives. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-SEO-4-report.md.</pre></details>
+</div></article>
+
+<!-- ============ RI-1 ============ -->
+<article class="sprint" id="ri1">
+<div class="ph"><h3>RI-1<small>Recipe import (CSV/Excel + AI mapping)</small></h3>
+<div class="pa"><span class="b val">Value-add</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Cafes have menus, retail has product lists. Owner uploads a CSV/Excel → Aria's existing Haiku mapping (from CSV import expansion) maps unfamiliar columns to <code class="k">pos_products</code>. New: handle recipes with multiple ingredient rows linked to a parent product (e.g. "Smoothie Bowl" → 6 ingredients).</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-ri1">Copy</button></summary>
+<pre id="p-ri1">RI-1 — Recipe import. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: existing CSV import expansion (35-field) deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read existing src/lib/csv-import — quote AI mapping pattern
+3. Read pos_products + pos_product_recipes (if exists) or document migration
+
+BUILD (additive):
+
+PART 1 — Migration if needed
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS is_recipe boolean default false;
+CREATE TABLE IF NOT EXISTS pos_product_recipes (id uuid primary key default gen_random_uuid(), product_id uuid not null references pos_products(id), ingredient_name text not null, quantity numeric, unit text, notes text, position int default 0);
+-- RLS via business_id join
+
+PART 2 — Recipe-aware CSV parser
+src/lib/recipe-import/parse.ts (NEW)
+- Detect format: flat (one product per row) vs nested (parent + indented children)
+- For each parent product: detect linked ingredients via column convention (e.g. "ingredients", "components", or comma-separated cell)
+- Aria maps unfamiliar headers via existing CSV-import Haiku prompt + new fields (ingredient_name, quantity, unit)
+
+PART 3 — UI extension to existing CSV import
+- "Recipe mode" toggle in existing import wizard
+- Preview shows parent product + ingredient tree per row
+- Conflict resolution: existing product name → merge / create new
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(ri-1): recipe import csv/excel · STOP.
+
+VERIFY POST-DEPLOY:
+1. Owner uploads CSV with "Smoothie Bowl" + 6 ingredient rows → preview shows tree
+2. Import → pos_products row + 6 pos_product_recipes rows
+3. Existing product gets merged correctly when name matches
+SQL: select count(*) from pos_product_recipes where product_id in (select id from pos_products where business_id=? and name='Smoothie Bowl');
+
+DO NOT:
+- No replacing existing CSV import — extend it
+- No new color tokens</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-ri1">Copy</button></summary>
+<pre id="c-ri1" class="cmd">Run RI-1 only (prompts/RI-1.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Extend existing CSV import to handle recipes (parent product + linked ingredients). Apply migration via chat-Claude. Reuse Haiku mapping pattern. RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-RI-1-report.md.</pre></details>
+</div></article>
+
+<!-- ============ CMI-1 ============ -->
+<article class="sprint" id="cmi1">
+<div class="ph"><h3>CMI-1<small>Customer management (CRM lite)</small></h3>
+<div class="pa"><span class="b val">Value-add</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Customer detail page on dashboard: full visit/spend history, notes/tags, last interaction, marketing consent toggle, lifetime value. Aria-curated "next contact suggestion" per customer (when to reach out, what to offer).</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-cmi1">Copy</button></summary>
+<pre id="p-cmi1">CMI-1 — Customer management CRM lite. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: SEC-4 PII encryption deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read pos_customers schema (post SEC-4 — encrypted columns)
+3. Confirm dashboard layout reusable
+
+BUILD (additive):
+
+PART 1 — Migration: customer notes/tags
+ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS notes text, ADD COLUMN IF NOT EXISTS tags text[] default '{}';
+
+PART 2 — Customer list + detail pages
+src/app/dashboard/customers/page.tsx — list sortable by LTV/recency/visits, filter by tag
+src/app/dashboard/customers/[id]/page.tsx — detail with visit history (from pos_sales joined by customer_id), notes editor, tag editor, marketing consent toggle, Aria's next-contact suggestion
+
+PART 3 — Next-contact suggestion via Aria
+src/lib/aria/next-contact.ts (NEW)
+- Per customer: read visit history, average gap, last visit, top items
+- Aria via /api/aria/ask intent='next_contact_suggestion'
+- Returns: { suggested_offer, days_until_recommended, reasoning }
+- GROUNDING-TEETH-V2 applies
+
+BUILD GATE: tsc 0 + build PASS · ONE commit feat(cmi-1): customer management crm lite · STOP.
+
+VERIFY POST-DEPLOY:
+1. /dashboard/customers lists Sip's 37 customers, sortable
+2. Click Charlotte Nguyen → detail shows 24 visits + $557.50 LTV (via SEC-4 decrypted email) + Aria's suggestion
+3. Edit notes/tags persists
+
+DO NOT:
+- No bulk operations that bypass SEC-4 audit log
+- No marketing to customers without marketing_consent=true</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-cmi1">Copy</button></summary>
+<pre id="c-cmi1" class="cmd">Run CMI-1 only (prompts/CMI-1.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Customer list + detail pages on dashboard, Aria next-contact suggestion, notes/tags. Uses SEC-4 encrypted PII columns (decrypt via helper, every read logs to pii_admin_audit_log). RULE 0 UPGRADE_ONLY. Build green. ONE commit, STOP before push, write reports/sprint-CMI-1-report.md.</pre></details>
+</div></article>
+
+<!-- ============ CMI-2 ============ -->
+<article class="sprint" id="cmi2">
+<div class="ph"><h3>CMI-2<small>Invoicing (creation + payment)</small></h3>
+<div class="pa"><span class="b val">Value-add</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Some cafes invoice catering. Owner creates invoice from products + customer → PDF (via existing skill) → emails customer (via SendGrid) → links to Stripe payment intent → tracks paid/overdue. Foundation for AR sprint later.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-cmi2">Copy</button></summary>
+<pre id="p-cmi2">CMI-2 — Invoicing. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: CMI-1 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Read existing PDF generation pattern (Aria Studio? document skill?)
+3. Read existing Stripe integration for payment intent creation pattern
+4. Confirm SendGrid usage pattern
+
+BUILD (additive):
+
+PART 1 — Migration: invoices schema
+CREATE TABLE IF NOT EXISTS invoices (id uuid primary key default gen_random_uuid(), business_id uuid references businesses(id) on delete cascade, customer_id uuid references pos_customers(id), invoice_number text not null, issue_date date default current_date, due_date date, status text check (status in ('draft','sent','viewed','paid','overdue','void')) default 'draft', total_amount numeric not null, currency text default 'AUD', stripe_payment_intent_id text, sent_at timestamptz, paid_at timestamptz);
+CREATE TABLE IF NOT EXISTS invoice_line_items (id uuid primary key default gen_random_uuid(), invoice_id uuid references invoices(id) on delete cascade, product_id uuid references pos_products(id), description text, quantity numeric, unit_price numeric, line_total numeric, position int);
+CREATE UNIQUE INDEX uq_invoices_business_number on invoices(business_id, invoice_number);
+
+PART 2 — Invoice creation page
+src/app/dashboard/invoices/new/page.tsx — pick customer (CMI-1), add line items (auto-suggest from pos_products), set due date, preview PDF
+src/app/api/invoices/[id]/pdf/route.ts — renders PDF via skill
+
+PART 3 — Email + payment
+- POST /api/invoices/[id]/send — generates PDF, creates Stripe payment intent, sends email via SendGrid with invoice link + pay button
+- Stripe webhook: payment_intent.succeeded → invoice.status='paid' + paid_at=now
+
+PART 4 — Overdue cron
+src/app/api/cron/invoice-overdue/route.ts — daily marks invoices past due_date as 'overdue', optionally sends reminder email (owner opt-in toggle)
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · ONE commit feat(cmi-2): invoicing creation + payment · STOP.
+
+VERIFY POST-DEPLOY:
+1. Owner creates invoice for Charlotte (CMI-1) → PDF previews
+2. Send → email arrives with pay button → click → Stripe payment → webhook fires → invoice.status='paid'
+3. Cron marks past-due invoices
+
+DO NOT:
+- No bypass of SEC-4 PII audit on customer email read
+- No marketing emails to customers without consent (this is transactional, fine)
+- No sub-daily crons</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-cmi2">Copy</button></summary>
+<pre id="c-cmi2" class="cmd">Run CMI-2 only (prompts/CMI-2.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Invoice creation, PDF, Stripe payment intent, SendGrid email, overdue cron with CRON_SECRET. PII reads via SEC-4 helper. RULE 0 UPGRADE_ONLY. Function count ≤22. Build green. ONE commit, STOP before push, write reports/sprint-CMI-2-report.md.</pre></details>
+</div></article>
+
+<!-- ============ WBI-1 ============ -->
+<article class="sprint" id="wbi1">
+<div class="ph"><h3>WBI-1<small>Weekly BI report</small></h3>
+<div class="pa"><span class="b val">Value-add</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Sunday evening: Aria emails the owner a one-page summary — revenue WoW, top sellers, top customers, week's actions executed, single Aria recommendation. Sets retention rhythm. Stops owners forgetting Aria exists between logins.</p>
+
+<details><summary><span class="left">📋 Full prompt</span><button class="cp" data-t="p-wbi1">Copy</button></summary>
+<pre id="p-wbi1">WBI-1 — Weekly BI report. CODE ONLY. SOLO. RULE 0 UPGRADE_ONLY.
+DEPENDENCY: brain quality (GROUNDING-TEETH-V2) + SEC-4 deployed.
+
+PRE-FLIGHT:
+1. pwd confirms C:\Users\kansa\aria-saas-audit
+2. Confirm businesses.weekly_report_enabled column exists (per user memory)
+3. Read existing SendGrid + email template patterns
+4. Read existing weekly briefing patterns (if morning_briefing or evening_briefing already shipped)
+
+BUILD (additive):
+
+PART 1 — Weekly report cron
+src/app/api/cron/weekly-bi-report/route.ts
+- Sundays 7pm AEST (daily cron @ 9am UTC, gated on day-of-week=Sunday inside handler)
+- For each business with weekly_report_enabled=true:
+  · Compute via FIXED wh_payments_coverage RPC + existing brain pipeline (no fabrication)
+  · Revenue WoW (calendar-aligned via SWLM-1)
+  · Top 3 sellers (pos_sale_items)
+  · Top 3 customers by week's spend (pos_customers via SEC-4 decrypt)
+  · Actions executed this week (aria_actions where executed_at between)
+  · ONE Aria recommendation (validated through GROUNDING-TEETH-V2)
+- Render HTML email + plaintext fallback
+- SendGrid via existing wrapper
+- Insert aria_weekly_reports row (new table — migration in part 0)
+
+PART 0 — Migration
+CREATE TABLE IF NOT EXISTS aria_weekly_reports (id uuid primary key default gen_random_uuid(), business_id uuid references businesses(id) on delete cascade, week_start date not null, payload jsonb not null, sent_at timestamptz, email_status text, unique (business_id, week_start));
+
+PART 2 — Dashboard archive
+src/app/dashboard/reports/weekly/page.tsx — last 12 weekly reports for the business, viewable
+
+BUILD GATE: tsc 0 + build PASS · function count ≤22 · daily-max cron · ONE commit feat(wbi-1): weekly bi report · STOP.
+
+VERIFY POST-DEPLOY:
+1. Sunday 7pm AEST → Sip owner receives email with last week's numbers
+2. /dashboard/reports/weekly shows archive
+3. SQL: select * from aria_weekly_reports where business_id=? order by week_start desc;
+4. Every numeric in the email traces to DB (manual spot-check 3 figures)
+
+DO NOT:
+- No sending without explicit weekly_report_enabled=true
+- No marketing content in transactional email
+- No fabricated numbers (GROUNDING-TEETH-V2)
+- No sub-daily crons</pre></details>
+
+<details><summary><span class="left">⚡ Claude Code command</span><button class="cp" data-t="c-wbi1">Copy</button></summary>
+<pre id="c-wbi1" class="cmd">Run WBI-1 only (prompts/WBI-1.md). SOLO: pwd confirms C:\Users\kansa\aria-saas-audit. Sunday 7pm AEST weekly BI report email via SendGrid, dashboard archive, only for businesses with weekly_report_enabled=true. Uses FIXED wh_payments_coverage RPC + SWLM-1 calendar alignment + GROUNDING-TEETH-V2. PII via SEC-4. CRON_SECRET via SEC-1. RULE 0 UPGRADE_ONLY. Function count ≤22. Build green. ONE commit, STOP before push, write reports/sprint-WBI-1-report.md.</pre></details>
+</div></article>
+
+<!-- ============ Community reference ============ -->
+<article class="sprint" id="cx-ref">
+<div class="ph"><h3>CX-1 P1 through P5<small>Community foundation — already documented</small></h3>
+<div class="pa"><span class="b val">Community</span><span class="b post">Post-launch</span></div></div>
+<div class="pb">
+<p class="sum">Five sprints already specced in detail earlier this session. All 12 community_* tables already applied in DB. Theme guard locked. Reels (R2–R11) depend on P4. Order: <b>P1 → P2 → P3 → P4 → P5</b>.</p>
+<div class="bl">
+<b>Already documented sprint prompts (preserved in chat-Claude memory + your prefs):</b>
+<ul>
+<li><b>CX-1 P1</b> — Identity (anon + optional account + owner auth), per-business follow consent, privacy filter, realtime text chat/DM via Supabase Realtime</li>
+<li><b>CX-1 P2</b> — Home feed, stories rail, story viewer, POS-signal chips (busy-now/fresh-batch derived live), geo-scoped to suburb, cursor pagination</li>
+<li><b>CX-1 P3</b> — Business profile (cover/avatar/stats/grid/reels/tagged), post detail, comments, AI-grounded Aria replies (only on explicit trigger), engagement table</li>
+<li><b>CX-1 P4</b> — Reels via Bunny Stream upload + playback (HLS) + FREE live room (Realtime presence + chat + POS pulse, no video)</li>
+<li><b>CX-1 P5</b> — Settings, Accounts Centre (7 sections), create FAB (Photo/Reel/Story/Update with Aria drafting), web push notifications</li>
+</ul>
+</div>
+<details><summary><span class="left">⚡ Claude Code command (run in order)</span><button class="cp" data-t="c-cx">Copy</button></summary>
+<pre id="c-cx" class="cmd">Reference: detailed prompts written in earlier session — restore from chat history if needed.
+
+Run order:
+1. Run CX-1 P1 — community foundation (identity + follows + privacy + realtime chat)
+2. Run CX-1 P2 — feed + stories + POS chips
+3. Run CX-1 P3 — profile + post detail + Aria grounded comments
+4. Run CX-1 P4 — reels via Bunny + free live room (Realtime presence + chat + POS pulse)
+5. Run CX-1 P5 — settings + accounts centre + create FAB + web push
+
+Per sprint: SOLO, pwd confirms C:\Users\kansa\aria-saas-audit, theme guard (Aria tokens, IGNORE prototype's #8B5CF6 purple), RULE 0 UPGRADE_ONLY, build green, ONE commit, STOP before push, report.</pre></details>
+</div></article>
+
+<!-- ============ Reels reference ============ -->
+<article class="sprint" id="reels-ref">
+<div class="ph"><h3>R2 through R11<small>Reels — 10 sprints, already documented in separate HTML</small></h3>
+<div class="pa"><span class="b val">Reels</span><span class="b post">Post-launch · post-community</span></div></div>
+<div class="pb">
+<p class="sum">Already saved at <code class="k">prompts/reels-R2-R11.html</code> from earlier session. Strategy: parity-not-domination. Every capability $0 ongoing cost (Pixabay + FMA music, in-browser AI, free platform APIs). Dropped: eye-contact correction.</p>
+<div class="bl">
+<b>Run order (post-community):</b>
+<ul>
+<li><b>Parity:</b> R2 (Editor MVP) → R3 (Editor full) → R4 (AI captions/beat/bg-removal) → R5 (face-zoom/B-roll/thumb/narrator/music/translate) → R6 (IG+TikTok+YT+FB scheduling) → R7 (calendar/AB/analytics/auto-reply/recurring/cross-platform/brand voice)</li>
+<li><b>Moat:</b> R8 (POS captions/reel-of-the-week/launch-detect) → R9 (sales-spike trigger/trend audio) → R10 (POS-CTA/narrator with real numbers/inventory/segments) → R11 (Aria script/Veo/community link/dashboard repurpose/feedback loop)</li>
+</ul>
+</div>
+<details><summary><span class="left">⚡ Claude Code commands (run in order)</span><button class="cp" data-t="c-reels">Copy</button></summary>
+<pre id="c-reels" class="cmd">Reference: full prompts in prompts/reels-R2-R11.html — copy from there per sprint.
+
+Run order:
+1. R2 Editor MVP (Tier 1)
+2. R3 Editor full (Tier 1)
+3. R4 AI essentials (Tier 2)
+4. R5 AI useful (Tier 2)
+5. R6 Scheduling parity (Tier 4) — requires Meta App verification, TikTok keys, YouTube OAuth
+6. R7 Social-ops parity (Tier 4)
+7. R8 POS caption engine (Tier 3, moat)
+8. R9 Spike + trend (Tier 3, moat)
+9. R10 POS-CTA + segments (Tier 3, moat)
+10. R11 Aria differentiation (Tier 5, moat)
+
+Per sprint: SOLO, RULE 0 UPGRADE_ONLY, theme guard, $0 cost, build green, function count ≤22, ONE commit, STOP before push, report.</pre></details>
+</div></article>
+
+<!-- ============ Future backlog ============ -->
+<section class="section">
+<h2>Phase 2+ backlog<small>Tracked, not yet prompted in detail</small></h2>
+<p>Listed here so they don't disappear. Each gets its own detailed prompt when its turn arrives. Likely 4-6 months out.</p>
+
+<div class="card">
+<table>
+<tr><th>Sprint</th><th>Tier</th><th>One-liner</th></tr>
+<tr><td><code class="k">AR-1..3</code></td><td>Vertical</td><td>Accounts receivable — aging, automated reminders, payment plans</td></tr>
+<tr><td><code class="k">TB-1..4</code></td><td>Vertical</td><td>Bookings/table reservations — calendar, capacity, deposits</td></tr>
+<tr><td><code class="k">WH-1..3</code></td><td>Vertical</td><td>Warehouse polish — pick lists, multi-location stock, supplier reorder</td></tr>
+<tr><td><code class="k">FIN-1..2</code></td><td>Vertical</td><td>Xero integration + BAS readiness</td></tr>
+<tr><td><code class="k">AVATAR M/L/canvas</code></td><td>Polish</td><td>Aria 3D character — medium/large variants + transparent canvas (Prompt V follow-ups)</td></tr>
+<tr><td><code class="k">AN A..E</code></td><td>Polish</td><td>22 micro-animations across the app (Phase AN)</td></tr>
+<tr><td><code class="k">FREE-AI 1.1..3.7</code></td><td>Foundation</td><td>Whisper, pgvector, OCR, bg-removal, moderation, Gemini Nano, forecast v1 (7 sprints)</td></tr>
+<tr><td><code class="k">LV-1..3</code></td><td>Loyalty</td><td>Loyalty toggle / accrual / display (3 sprints)</td></tr>
+<tr><td><code class="k">ST-1..4</code></td><td>Tasks</td><td>Item / authoring / completion / data (4 sprints)</td></tr>
+<tr><td><code class="k">AM-1..3</code></td><td>Memory</td><td>Adaptive memory — owner patterns / visitor patterns / signal gate</td></tr>
+<tr><td><code class="k">AG-1..3</code></td><td>Agents</td><td>Parallel agent orchestration / task outputs / multi-format (specs written)</td></tr>
+<tr><td><code class="k">WIRE-1..3</code></td><td>Infra</td><td>DB consolidation across legacy duplicates</td></tr>
+<tr><td><code class="k">CACHE-EPOCH-2</code></td><td>Infra</td><td>Deploy-time cache invalidation</td></tr>
+<tr><td><code class="k">CRON-1</code></td><td>Infra</td><td>54 cron entries vs 22 function configs census + cleanup</td></tr>
+<tr><td><code class="k">COMMAND-PORT-1</code></td><td>Brain</td><td>Port BREVITY/GROUNDING/RICH-1 to AriaCommandBar</td></tr>
+<tr><td><code class="k">TZ-2-LIB-FIX</code></td><td>Infra</td><td>date-au.ts 10h-late bug (TZ-2)</td></tr>
+<tr><td><code class="k">MEMORY-DEDUPE-1</code></td><td>Brain</td><td>Cross-table memory deduplication</td></tr>
+<tr><td><code class="k">MONITOR-1</code></td><td>Ops</td><td>External 3-tier watchdog for autonomous twice-daily health checks</td></tr>
+<tr><td><code class="k">RICH-2 / RICH-3</code></td><td>Brain</td><td>Rich response formatting follow-ups (RICH-1 already shipped)</td></tr>
+<tr><td><code class="k">SPELLS-1</code></td><td>Polish</td><td>22-pattern Design Spells animation library implementation</td></tr>
+<tr><td><code class="k">Block 7-9</code></td><td>Platform</td><td>PP/QQ/RR onboarding + LL/MM/NN/OO mobile/push/offline + SS/TT/UU/VV/WW/XX/YY platform infra (14 sprints total)</td></tr>
+</table>
+</div>
+</section>
+
+<footer>Saved 14 Jun 2026 · 15 Phase 1 sprints + references to community (5) + reels (10) + backlog (60+) · all CODE-ONLY · SOLO discipline · RULE 0 UPGRADE_ONLY · Aria theme locked · save as <code class="k">prompts/roadmap-all-sprints.html</code></footer>
+
+</div><script>
+document.querySelectorAll('.cp').forEach(b=>b.addEventListener('click',async e=>{
+  e.stopPropagation();const t=document.getElementById(b.dataset.t);if(!t)return;
+  try{await navigator.clipboard.writeText(t.innerText);const o=b.textContent;b.textContent='✓ Copied';b.classList.add('done');setTimeout(()=>{b.textContent=o;b.classList.remove('done')},1600)}catch(err){b.textContent='Select manually';b.classList.add('done')}
+}));
+</script></body></html>
