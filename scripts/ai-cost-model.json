@@ -80,5 +80,28 @@
       "basis": "240 requests (16 businesses x 15 days), ~300 input + ~200 output tokens/request, haiku batch rate. Report section 2.4/4. Historical-window-only."
     }
   ],
+  "nonAiCosts": [
+    {
+      "key": "sms",
+      "label": "SMS (ClickSend)",
+      "usdPerBusinessPerDay": 0.0528,
+      "source": "estimate",
+      "basis": "COST-LEDGER-1: no real cost_events volume history exists yet (instrumentation just shipped this sprint). Placeholder ESTIMATE: ~1 SMS/business/day (reminders, OTP, staff/owner alerts) x CLICKSEND_RATE_AUD_CENTS(8) x USD_PER_AUD(0.66) -- see src/lib/clicksend.ts. Replace with a real average once cost_events has a few weeks of production data."
+    },
+    {
+      "key": "email",
+      "label": "Email (Resend)",
+      "usdPerBusinessPerDay": 0,
+      "source": "measured",
+      "basis": "$0 while inside the Resend free tier (RESEND_MONTHLY_QUOTA, src/lib/external-apis.ts). The real cost event is the forced plan upgrade once volume crosses the quota -- aria-health-monitor alerts at 80% BEFORE that happens, it doesn't show up here as a $ figure until the plan actually changes."
+    },
+    {
+      "key": "payment_fee",
+      "label": "Stripe processing fees (subscription billing)",
+      "usdPerBusinessPerDay": 0.1067,
+      "source": "estimate",
+      "basis": "COST-LEDGER-1: no real cost_events volume history exists yet (charge.succeeded handler + backfill just shipped this sprint). Placeholder ESTIMATE: one subscription charge/business/month at Stripe's standard 2.9%+$0.30 rate against a representative ~$85 USD-equivalent plan price, spread over 30 days ((85*0.029+0.30)/30). Replace with a real average once cost_events has a few billing cycles of production data. NOTE: this is OUR Stripe fee for collecting a business's subscription payment -- NOT that business's own POS transaction fees, which are a business-side cost, not ours."
+    }
+  ],
   "planPricingUsdPerMonth": 297
 }

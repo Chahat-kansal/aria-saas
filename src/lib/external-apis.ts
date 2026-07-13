@@ -272,6 +272,31 @@ async function logEmailSend(row: {
   }
 }
 
+// COST-LEDGER-1 — Resend's current plan is inside its free tier, so metered $ cost per send is
+// genuinely 0 today. The real "cost event" here is the forced plan upgrade once volume crosses the
+// quota, so this logs a $0 cost_events row (for send-volume visibility, joinable with everything
+// else) AND aria-health-monitor separately alerts at 80% of RESEND_MONTHLY_QUOTA — surfaced BEFORE
+// the upgrade is forced, not after the bill arrives. Update this constant if the Resend plan changes.
+export const RESEND_MONTHLY_QUOTA = 3000 // Resend free tier: 3,000 emails/month as of this sprint.
+
+async function logEmailCostEvent(businessId: string | null, resendId: string | null): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    await supabaseAdmin.from('cost_events').insert({
+      category: 'email',
+      provider: 'resend',
+      business_id: businessId,
+      reference_id: resendId,
+      amount_usd_cents: 0,
+      quantity: 1,
+      unit: 'email',
+      metadata: { plan: 'free_tier', monthly_quota: RESEND_MONTHLY_QUOTA },
+    })
+  } catch (err) {
+    console.error('[email] cost_events insert failed (non-fatal):', err instanceof Error ? err.message : String(err))
+  }
+}
+
 /** Add an address to the email opt-out list (for unsubscribe handling + manual/admin). */
 export async function suppressEmail(
   businessId: string | null,
@@ -374,6 +399,7 @@ export async function sendEmail(
     let resendId: string | null = null
     try { const d = await res.json() as { id?: string }; resendId = d?.id ?? null } catch { /* body not json */ }
     await logEmailSend({ business_id: businessId, to_email: toNorm, subject: params.subject, category, consent_ok: consentOk, suppressed, resend_id: resendId, status: res.ok ? 'sent' : 'failed', error: res.ok ? null : `resend_http_${res.status}` })
+    if (res.ok) void logEmailCostEvent(businessId, resendId)
     return res.ok;
   } catch (e) {
     await logEmailSend({ business_id: businessId, to_email: toNorm, subject: params.subject, category, consent_ok: consentOk, suppressed, resend_id: null, status: 'failed', error: e instanceof Error ? e.message : 'send_failed' })

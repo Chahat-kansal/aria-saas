@@ -17,6 +17,7 @@
  * lets STOP handling / manual admin add opt-outs today.
  */
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { USD_PER_AUD } from '@/lib/fx-rate'
 
 interface ClickSendResult {
   ok: boolean
@@ -79,6 +80,31 @@ async function logSend(row: {
     await supabaseAdmin.from('sms_send_log').insert(row)
   } catch (err) {
     console.error('[sms] sms_send_log insert failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+// COST-LEDGER-1 — ClickSend's send-sms response (parsed above) does not carry a per-message price
+// field on this account/plan, so cost is computed from a flat rate rather than read from the API.
+// AUD is ClickSend's billing currency for AU numbers; USD_PER_AUD is a fixed, deliberately simple
+// conversion (not a live FX rate) — both the AUD and USD figures are recorded in metadata so a more
+// precise rate can be back-applied later without re-deriving from nothing.
+const CLICKSEND_RATE_AUD_CENTS = 8 // AUD $0.08/SMS — ClickSend's standard AU alphanumeric-sender rate as of this sprint; update if the account's actual negotiated rate differs.
+
+async function logSmsCostEvent(businessId: string | null, messageId: string | null): Promise<void> {
+  try {
+    const amountUsdCents = Math.round(CLICKSEND_RATE_AUD_CENTS * USD_PER_AUD)
+    await supabaseAdmin.from('cost_events').insert({
+      category: 'sms',
+      provider: 'clicksend',
+      business_id: businessId,
+      reference_id: messageId,
+      amount_usd_cents: amountUsdCents,
+      quantity: 1,
+      unit: 'message',
+      metadata: { rate_aud_cents: CLICKSEND_RATE_AUD_CENTS, usd_per_aud: USD_PER_AUD },
+    })
+  } catch (err) {
+    console.error('[sms] cost_events insert failed (non-fatal):', err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -218,6 +244,7 @@ export async function sendSMS(to: string, body: string, opts: SendSMSOptions = {
       business_id: businessId, to_number: phone, body: finalBody, category,
       consent_ok: consentOk, suppressed, clicksend_message_id: msg?.message_id ?? null, status: 'sent', error: null,
     })
+    void logSmsCostEvent(businessId, msg?.message_id ?? null)
     return { ok: true, message_id: msg?.message_id }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)

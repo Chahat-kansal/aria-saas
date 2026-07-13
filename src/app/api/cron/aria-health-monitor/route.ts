@@ -509,6 +509,75 @@ async function checkBudgetCeilings(todayStart: string): Promise<number> {
   return alertsSent
 }
 
+// ─── COST-LEDGER-1: cost_subscriptions renewal alerts (T-7 days) ─────────────
+
+async function checkSubscriptionRenewals(todayDate: string): Promise<number> {
+  const in7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  const { data: renewing } = await supabaseAdmin
+    .from('cost_subscriptions')
+    .select('id, provider, plan_name, amount_usd_cents, renewal_date, renewal_alert_sent_date')
+    .eq('active', true)
+    .not('renewal_date', 'is', null)
+    .lte('renewal_date', in7Days)
+    .gte('renewal_date', todayDate)
+
+  if (!renewing?.length) return 0
+
+  let alertsSent = 0
+  for (const sub of renewing as Array<{ id: string; provider: string; plan_name: string; amount_usd_cents: number; renewal_date: string; renewal_alert_sent_date: string | null }>) {
+    if (sub.renewal_alert_sent_date === todayDate) continue // already alerted today — dedup (re-alerts once/day it's inside the window, not once total, so it stays visible as T-7 counts down)
+
+    void sendAlert({
+      title: `Renewal in ${Math.max(0, Math.round((new Date(sub.renewal_date).getTime() - Date.now()) / 86_400_000))}d: ${sub.provider} — ${sub.plan_name}`,
+      summary: `$${(sub.amount_usd_cents / 100).toFixed(2)} renews ${sub.renewal_date}. Manage in Admin → Cost Ledger → Subscriptions.`,
+      severity: 'normal',
+      details: { cost_subscription_id: sub.id, provider: sub.provider, plan_name: sub.plan_name, amount_usd_cents: sub.amount_usd_cents, renewal_date: sub.renewal_date },
+    })
+    await supabaseAdmin.from('cost_subscriptions').update({ renewal_alert_sent_date: todayDate }).eq('id', sub.id)
+    alertsSent++
+  }
+  return alertsSent
+}
+
+// ─── COST-LEDGER-1: Resend monthly quota (surface the forced-upgrade BEFORE it happens) ──────────
+
+async function checkResendQuota(): Promise<boolean> {
+  const { RESEND_MONTHLY_QUOTA } = await import('@/lib/external-apis')
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
+
+  const { count } = await supabaseAdmin
+    .from('cost_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('category', 'email')
+    .eq('provider', 'resend')
+    .gte('created_at', monthStart)
+
+  const sent = count ?? 0
+  const pct = (sent / RESEND_MONTHLY_QUOTA) * 100
+  if (pct < 80) return false
+
+  // Dedup: only one Resend-quota alert per calendar month, tracked via cost_subscriptions'
+  // Resend row (seeded in the COST-LEDGER-1 migration) rather than a new table. renewal_alert_sent_date
+  // is a `date` column, so the dedup marker is the 1st of the current month (a valid date), compared
+  // by year-month prefix rather than exact equality.
+  const monthFirstDay = monthStart.slice(0, 10)
+  const { data: resendSub } = await supabaseAdmin
+    .from('cost_subscriptions')
+    .select('id, renewal_alert_sent_date')
+    .eq('provider', 'Resend').eq('plan_name', 'Free/Pro').maybeSingle()
+  if (resendSub?.renewal_alert_sent_date?.slice(0, 7) === monthFirstDay.slice(0, 7)) return false
+
+  void sendAlert({
+    title: `Resend email volume at ${pct.toFixed(0)}% of monthly quota`,
+    summary: `${sent} of ${RESEND_MONTHLY_QUOTA} emails sent this month. The real cost event is the forced plan upgrade this triggers — act before it happens, not after the bill.`,
+    severity: pct >= 100 ? 'high' : 'normal',
+    details: { sent, quota: RESEND_MONTHLY_QUOTA, pct: Math.round(pct) },
+  })
+  if (resendSub?.id) await supabaseAdmin.from('cost_subscriptions').update({ renewal_alert_sent_date: monthFirstDay }).eq('id', resendSub.id)
+  return true
+}
+
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
@@ -596,6 +665,12 @@ export async function GET(req: Request) {
   const todayStart = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z'
   const budgetAlertsSent = await checkBudgetCeilings(todayStart)
   if (budgetAlertsSent > 0) console.log(`[aria-health-monitor] SH-5: ${budgetAlertsSent} budget-ceiling alert(s) sent`)
+
+  // ── SH-6: cost_subscriptions renewals (T-7 days) + SH-7: Resend monthly quota (COST-LEDGER-1) ──
+  const renewalAlertsSent = await checkSubscriptionRenewals(todayStart.slice(0, 10))
+  if (renewalAlertsSent > 0) console.log(`[aria-health-monitor] SH-6: ${renewalAlertsSent} renewal alert(s) sent`)
+  const resendQuotaAlerted = await checkResendQuota()
+  if (resendQuotaAlerted) console.log('[aria-health-monitor] SH-7: Resend quota alert sent')
 
   // ── SH-4: wiring health pass ──────────────────────────────────────────────
 

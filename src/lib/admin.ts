@@ -30,6 +30,16 @@ export function formatCents(cents: number): string {
   });
 }
 
+// COST-LEDGER-1 — the cost ledger (cost_events/cost_subscriptions/aria_ai_calls) is entirely
+// USD-denominated (matching cost.ts's PRICING convention), unlike formatCents above which is
+// hardcoded to AUD — using formatCents for a USD amount would silently mislabel the currency.
+export function formatUsdCents(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  return sign + '$' + (Math.abs(cents) / 100).toLocaleString('en-US', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+}
+
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-AU', {
     day: 'numeric', month: 'short', year: 'numeric',

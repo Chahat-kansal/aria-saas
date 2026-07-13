@@ -7,6 +7,47 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
 
+// COST-LEDGER-1 — pulls the real Stripe processing fee off the charge's balance_transaction and
+// logs it as a payment_fee cost_event. cost_events' (provider, reference_id) unique index makes
+// this idempotent against the backfill script (scripts/backfill-stripe-fees.ts) covering the same
+// balance_transaction id.
+async function logChargeFee(charge: Stripe.Charge): Promise<void> {
+  const btId = typeof charge.balance_transaction === 'string' ? charge.balance_transaction : charge.balance_transaction?.id
+  if (!btId) return // e.g. a $0 or not-yet-settled charge — no fee to record yet
+  try {
+    const bt = await stripe.balanceTransactions.retrieve(btId)
+    if (bt.currency !== 'usd') {
+      console.warn('[stripe/webhook] balance_transaction currency is not usd, skipping fee log:', bt.currency, btId)
+      return
+    }
+    const customerId = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id
+    let businessId: string | null = null
+    if (customerId) {
+      const { data: bSub } = await supabaseAdmin
+        .from('business_subscriptions')
+        .select('business_id')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle()
+      businessId = (bSub?.business_id as string | undefined) ?? null
+    }
+    const { error } = await supabaseAdmin.from('cost_events').insert({
+      category: 'payment_fee',
+      provider: 'stripe',
+      business_id: businessId,
+      reference_id: btId,
+      amount_usd_cents: bt.fee,
+      quantity: 1,
+      unit: 'charge',
+      metadata: { charge_id: charge.id, gross_usd_cents: bt.amount, net_usd_cents: bt.net, fee_details: bt.fee_details },
+    })
+    // 23505 = unique_violation on (provider, reference_id) — already logged (webhook redelivery or
+    // the backfill script beat this event to it). Not an error.
+    if (error && error.code !== '23505') console.error('[stripe/webhook] cost_events insert failed:', error.message)
+  } catch (err) {
+    console.error('[stripe/webhook] logChargeFee failed (non-fatal):', err instanceof Error ? err.message : String(err))
+  }
+}
+
 function tierFromPriceId(priceId: string | undefined): string {
   if (!priceId) return 'starter'
   if (priceId === process.env.STRIPE_PRICE_ID_PRO) return 'pro'
@@ -147,6 +188,15 @@ export async function POST(req: Request) {
             .eq('status', 'billed')
         }
       }
+    }
+
+    // ── charge.succeeded (COST-LEDGER-1) ───────────────────────────────────
+    // NOTE: this event type must be enabled on the Stripe dashboard's webhook endpoint config
+    // (or via `stripe listen`/API) for this branch to ever fire — code alone can't subscribe a
+    // live webhook endpoint to a new event type.
+    if (event.type === 'charge.succeeded') {
+      const charge = event.data.object as Stripe.Charge
+      await logChargeFee(charge)
     }
 
     // ── invoice.payment_failed ─────────────────────────────────────────────
