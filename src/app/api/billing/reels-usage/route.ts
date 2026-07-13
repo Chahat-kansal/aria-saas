@@ -2,14 +2,31 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+// SECURITY-P2 ADDENDUM (P0, external audit) — used to accept business_id from the client body
+// with zero auth, then write usage + increment that business's invoice and fire real Stripe
+// metered-usage billing for it. Any caller could inflate/trigger real charges against ANY
+// business by just guessing its UUID. No signed internal/service-token caller exists anywhere in
+// this codebase (fal-webhook and generate-video both record their own usage directly via
+// supabaseAdmin, not via this route) — the one plausible caller per the original design spec
+// (prompts/236-reels-standalone-billing.md) is a client-side fire-and-forget call right after a
+// successful reel generation, so this is gated the same way as every other owner-authenticated
+// business_id route in this codebase: session + ownership check.
 export async function POST(req: NextRequest) {
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 
   const { business_id, post_id, cost_aud, duration_seconds, provider, reel_mode, reel_style, fal_request_id } = body
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: biz } = await supabaseAdmin.from('businesses').select('id')
+    .eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const billing_month = new Date().toISOString().slice(0, 7)
 

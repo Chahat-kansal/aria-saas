@@ -6,6 +6,42 @@ evidence — not a re-read of P1's own carry-forward notes.
 
 ---
 
+## 0. ADDENDUM (2026-07-14) — new P0 from an external full-read audit
+
+`src/app/api/billing/reels-usage/route.ts` accepted `business_id` from the request body with
+**zero auth**, then wrote a `reel_usage_log` row, attempted to increment that business's monthly
+invoice, and — if `STRIPE_SECRET_KEY` is configured — fired **real Stripe metered-usage billing**
+against that business's subscription. Any caller could inflate or trigger real charges against
+any business by guessing its UUID.
+
+**Verified before fixing** (RULE 2/10 — read and confirm before editing, don't just patch on
+the auditor's say-so):
+- Grepped the entire repo for any caller of this route — none exists in `src/` (only the route's
+  own `console.error` string references its own path). `fal-webhook` and `social/generate-video`
+  both record their own usage directly via `supabaseAdmin`, not through this route.
+- `reel_usage_log` has **0 rows, ever** (`select count(*)` against prod) — confirms this route has
+  never been successfully called by legitimate traffic or an attacker.
+- `increment_reel_invoice` (the RPC this route calls) **does not exist live** (`pg_proc` query,
+  empty result) — matches a pre-existing, unrelated finding already on record in
+  `reports/db-wiring-audit-2026-06-14.md` ("RPC_MISSING ❌ billing counter"). The invoice-increment
+  call has been silently no-op-ing (caught by its own try/catch) since before this session — not
+  fixed here, out of scope for an auth fix, flagged as a separate pre-existing bug.
+- The original design spec (`prompts/236-reels-standalone-billing.md`) shows the intended caller
+  was a client-side fire-and-forget `fetch()` right after a successful reel generation — that
+  wiring was apparently never actually added to the frontend. Currently unwired, not fully dead:
+  the Kling/fal.ai reel flow (`reels/generate` + `fal-webhook`) has no usage-billing recorder
+  anywhere else, unlike the Higgsfield flow (`generate-video`, which records internally).
+
+**Fixed:** added `getUser()` session + `businesses.user_id` ownership check before any write,
+same pattern as the sibling `social/reel-billing/route.ts` (GET, already correctly authenticated)
+and every other owner-scoped `business_id` route in this codebase. No signed service-token path
+added — no legitimate server-to-server caller exists anywhere in this codebase today, so building
+one would be speculative rather than fixing an actual gap.
+
+`tsc --noEmit`: 0 errors. `npm run build`: 0 errors.
+
+---
+
 ## 1. Live triage — the 26 carried-forward findings
 
 Dispatched 5 parallel independent triage passes (H-01/02/04/05/12; H-17's 8 routes; M-02–08;
