@@ -6,13 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getWeekTimesheets, computeHours } from '@/lib/staff/timesheets'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { getBid } from '@/lib/auth/get-bid'
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient()

@@ -6,13 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { generateXeroCsv } from '@/lib/staff/payroll-csv'
 import type { PayrollLineItem } from '@/lib/staff/payroll'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { getBid } from '@/lib/auth/get-bid'
 
 async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient()
