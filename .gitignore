@@ -37,3 +37,7 @@ supabase/.temp/
 .vscode/
 public/menu/_ingest/
 *.pkl
+
+# SECURITY-P3-LITE — stale generated build log (602KB, predated the AUD-1-TWILIO-FIX commit by
+# 11 days and caused this exact sprint's item 2 to chase already-fixed module-not-found warnings)
+build-log.txt

@@ -117,7 +117,7 @@ export default function MarketingPage() {
         const sendJson = await sendRes.json() as { error?: string; not_configured?: boolean }
         if (!sendRes.ok) {
           const msg = sendJson.not_configured
-            ? 'SMS not configured — connect Twilio in Settings → Integrations first.'
+            ? 'SMS not configured — connect ClickSend in Settings → Integrations first.'
             : (sendJson.error ?? 'Send failed — please try again.')
           setSendError(msg); return
         }
@@ -329,7 +329,7 @@ export default function MarketingPage() {
               {sendError && (
                 <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 13, color: '#F87171', marginBottom: 10 }}>
                   {sendError}
-                  {sendError.includes('Twilio') && (
+                  {sendError.includes('ClickSend') && (
                     <a href="/dashboard/integrations" style={{ marginLeft: 8, color: '#F87171', fontWeight: 600 }}>Go to Integrations →</a>
                   )}
                 </div>

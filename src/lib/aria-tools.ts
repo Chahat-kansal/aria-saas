@@ -243,7 +243,7 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
   },
   {
     name: 'send_sms_now',
-    description: 'Send an SMS via Twilio. Use ONLY when user explicitly asks. Australian numbers (0412... or +61412...).',
+    description: 'Send an SMS via ClickSend. Use ONLY when user explicitly asks. Australian numbers (0412... or +61412...).',
     input_schema: {
       type: 'object',
       properties: {

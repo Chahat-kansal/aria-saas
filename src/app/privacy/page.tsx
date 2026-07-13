@@ -41,7 +41,7 @@ export default function PrivacyPage() {
         ]},
         { title: '4. Data Sharing', items: [
           'We do not sell your personal information.',
-          'We share data with service providers: Supabase (database), Vercel (hosting), Stripe (payments), Resend (email), Twilio (SMS), Anthropic/Google/OpenAI (AI).',
+          'We share data with service providers: Supabase (database), Vercel (hosting), Stripe (payments), Resend (email), ClickSend (SMS), Anthropic/Google/OpenAI (AI).',
           'We may share data if required by Australian law.',
           'Facebook/Instagram data is handled in accordance with Meta\'s terms.',
         ]},

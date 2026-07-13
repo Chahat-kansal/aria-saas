@@ -1311,7 +1311,7 @@ CITATION RULES — NON-NEGOTIABLE:
 
 ACTION TOOLS (do things on behalf of user — confirm first):
 • send_email_now: send email via Resend
-• send_sms_now: send SMS via Twilio
+• send_sms_now: send SMS via ClickSend
 • update_product_price: change a product's selling price
 • suggest_promotion: generate promotion rule
 
@@ -1363,7 +1363,7 @@ CRITICAL RULES:
    - If it says "column does not exist" → use a different column name and retry
    - If it says "OPENAI_API_KEY not configured" → tell user "Image generation isn't set up yet — admin needs to add OPENAI_API_KEY"
    - If it says "RESEND_API_KEY not configured" → tell user "Email sending isn't set up yet — admin needs to add RESEND_API_KEY"
-   - If it says "Twilio not configured" → tell user "SMS isn't set up — admin needs to add Twilio credentials"
+   - If it says "SMS not configured" → tell user "SMS isn't set up — admin needs to add ClickSend credentials"
    - NEVER say "Let me try again — one moment" without actually retrying in the same response. If you say it, DO IT.
    - You have admin DB access — you CAN make queries work
    - SHOW the underlying error message to the user when relevant
@@ -2309,7 +2309,7 @@ GROUNDING (absolute): every number, name, ranking or count MUST come from a tool
     for (const tc of toolResult.tool_calls) {
       if (tc.name === 'generate_image') await trackSpend(bid, 4, 'image') // ~$0.04 for DALL-E 3
       if (tc.name === 'web_search') await trackSpend(bid, 1, 'web_search')
-      if (tc.name === 'send_sms_now') await trackSpend(bid, 7, 'sms') // ~$0.07 Twilio AU
+      if (tc.name === 'send_sms_now') await trackSpend(bid, 7, 'sms') // ~$0.07 ClickSend AU
     }
   } catch (e) { console.error('[ask/track-spend] failed', e) }
 

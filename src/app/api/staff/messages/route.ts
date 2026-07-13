@@ -58,7 +58,7 @@ async function _POST(req: Request) {
   }
   if (!senderId) return NextResponse.json({ error: 'Sender not found' }, { status: 500 })
 
-  // Broadcast via Twilio SMS
+  // Broadcast via ClickSend SMS
   if (isBroadcast) {
     const { data: allStaff } = await supabase.from('staff_members')
       .select('mobile,first_name').eq('business_id', bid).eq('status', 'active')

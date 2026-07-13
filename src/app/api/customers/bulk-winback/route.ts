@@ -53,7 +53,7 @@ async function _POST(req: Request) {
       errors.push({ id, error: String(e) })
     }
 
-    // Stagger: 1 per second to avoid Twilio rate limits (skip last item)
+    // Stagger: 1 per second to avoid ClickSend rate limits (skip last item)
     if (i < customer_ids.length - 1) {
       await new Promise(r => setTimeout(r, 1000))
     }
