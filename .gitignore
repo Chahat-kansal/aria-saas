@@ -28,3 +28,12 @@ public/menu/_lib/spin/*.mp4
 
 # Design/mockup reference screenshots — local-only, not app assets
 public/_refs/
+
+# WORKTREE-TRIAGE-1 — local/scratch state that should never be tracked
+.claude/*.lock
+.claude/settings.local.json
+supabase/.temp/
+*.tsbuildinfo
+.vscode/
+public/menu/_ingest/
+*.pkl
