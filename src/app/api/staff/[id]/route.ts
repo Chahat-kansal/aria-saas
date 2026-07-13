@@ -5,6 +5,26 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// SECURITY-P1 (H-14) — same allowlist as src/app/api/staff/route.ts's POST (kept in sync manually;
+// see that file's comment for the full rationale on which fields are deliberately excluded).
+const STAFF_FIELDS = [
+  'first_name', 'last_name', 'preferred_name', 'date_of_birth', 'gender', 'profile_photo_url',
+  'personal_email', 'work_email', 'mobile', 'emergency_contact_name', 'emergency_contact_phone',
+  'emergency_contact_relationship', 'position', 'department', 'employment_type', 'start_date',
+  'end_date', 'status', 'pay_type', 'pay_rate_cents', 'pay_per_annum_cents', 'pay_frequency',
+  'superannuation_rate', 'tax_file_number', 'bank_account_name', 'bank_bsb', 'bank_account_number',
+  'visa_type', 'visa_subclass', 'visa_expiry_date', 'visa_work_restrictions', 'passport_country',
+  'passport_expiry_date', 'notes', 'custom_fields', 'color', 'bank_account', 'tax_free_threshold',
+  'name', 'award_classification', 'base_rate_cents', 'saturday_multiplier', 'sunday_multiplier',
+  'ph_multiplier', 'overtime_multiplier', 'leave_balance_days', 'personal_leave_balance_days',
+  'hourly_rate',
+] as const;
+function pickStaffFields(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of STAFF_FIELDS) if (f in body) out[f] = body[f];
+  return out;
+}
+
 async function verifyStaff(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   userId: string,
@@ -51,12 +71,10 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  // Remove read-only fields
-  delete body.id; delete body.business_id; delete body.created_at;
-  body.updated_at = new Date().toISOString();
+  const updates = { ...pickStaffFields(body), updated_at: new Date().toISOString() };
 
   const { data, error: e } = await supabase.from('staff_members')
-    .update(body)
+    .update(updates)
     .eq('id', params.id)
     .select('*')
     .single();

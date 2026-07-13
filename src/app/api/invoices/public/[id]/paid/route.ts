@@ -14,10 +14,17 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
 
   const { data: inv } = await supabaseAdmin
     .from('invoices')
-    .select('id, status')
+    .select('id, status, signature_token')
     .eq('id', params.id)
     .maybeSingle()
   if (!inv) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // SECURITY-P1 (H-07) — UUID alone used to be sufficient to flip any invoice's status; a financial
+  // state transition must not be authorisable by a guessable/enumerable UUID. Same signature_token
+  // the GET route and /sign now both require.
+  const signatureToken = String(body.signature_token ?? '')
+  if (!inv.signature_token || signatureToken !== inv.signature_token) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   if (inv.status === 'paid') return NextResponse.json({ ok: true, already_paid: true })
 
   await supabaseAdmin.from('invoices').update({

@@ -228,6 +228,36 @@ Full detail: see `.github/workflows/e2e.yml` header comment for required secrets
 
 ---
 
+## 🔒 RULE 13 — SMOKE SUITE FOR AUTH/ROUTING/MIDDLEWARE/RLS SPRINTS (from: SECURITY-P1)
+
+Any sprint touching auth, routing, middleware, or RLS must run `npm run test:smoke`
+(`tests/smoke/`, config: `playwright.smoke.config.ts`) green before push — alongside tsc/build,
+not instead of them. This suite runs against a real production build (`next build && next
+start`, not `next dev`) and asserts BOTH halves: the attacks it exists to block actually fail,
+AND normal owner/customer flows still work (login, dashboard, Ask Aria, POS sale, loyalty,
+bookings, admin authz, CX public page) — a security change that blocks Sip fails the sprint.
+
+- ✅ Before push, for any sprint changing auth/session/rate-limit/RLS/middleware code:
+  `npm run test:smoke` must pass locally (CI wiring for this suite is a P2/P3 follow-up —
+  today it's a required manual pre-push step, same tier as RULE 3's tsc/build)
+- ✅ A new auth-adjacent route or form needs a corresponding assertion added to
+  `tests/smoke/owner-flows.spec.ts` (legitimate case) — and to
+  `tests/smoke/security-guards.spec.ts` if it adds a new rate limit or Turnstile gate
+- ❌ Never tighten a rate limit or add a new gate without running the legitimate-flow half of
+  this suite — if it starts failing, the fix is to loosen the limit/gate, never to loosen the test
+- Test credentials: `TEST_USER_EMAIL`/`TEST_USER_PASSWORD` (reuses the existing e2e convention),
+  optionally `TEST_ADMIN_EMAIL`/`TEST_ADMIN_PASSWORD` for the positive admin-access assertion.
+  Never real production user passwords — see `SECURITY-P1-REPORT.md`'s founder env checklist.
+
+**Incident record:** SECURITY-P1 (2026-07-14) found 9 of 14 audited CRITICAL findings still
+open against current code (`SECURITY-AUTHZ-AUDIT.md`, 2026-07-06) despite several having been
+reported as already fixed — including a staff-portal OTP/session system that referenced two
+columns (`staff_members.portal_token`/`portal_token_expires_at`) that had never existed in the
+live database at all (no migration ever created them, confirmed via `information_schema`), so
+the feature had been silently non-functional in production, not merely insecure.
+
+---
+
 ## Design system (Aria POS)
 - Palette: deep forest green #2D5240 + sage #7FB897
 - Fraunces italic for branding/totals, Inter for body

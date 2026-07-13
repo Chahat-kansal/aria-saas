@@ -21,6 +21,21 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    // SECURITY-P1 — rate-limit guard before the direct-to-Supabase call (see
+    // src/app/api/auth/guard/route.ts for why this can't be enforced server-side more strongly).
+    try {
+      const guardRes = await fetch('/api/auth/guard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset' }),
+      });
+      if (!guardRes.ok) {
+        const d = await guardRes.json().catch(() => ({}));
+        setError(d.error ?? 'Too many attempts — please try again shortly.');
+        setLoading(false);
+        return;
+      }
+    } catch { /* guard transport failure must never brick password reset — fail open */ }
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${location.origin}/auth/callback`,
     });

@@ -24,22 +24,33 @@ export async function GET(
     })
   }
 
-  const botName = (config.bot_name ?? 'Aria').replace(/'/g, "\\'")
-  const color = (config.primary_color ?? '#1D9E75').replace(/'/g, "\\'")
-  const greeting = (config.greeting ?? 'Hi! How can I help you today?').replace(/'/g, "\\'")
-  const chatToken = ((config.chat_token as string | null) ?? '').replace(/'/g, "\\'")
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site'
+  // SECURITY-P1 (C-14) — the old .replace(/'/g, "\\'") only escaped single quotes; a bot_name
+  // ending in a backslash (e.g. tenant-controlled input like `Foo\`) would escape the closing
+  // quote itself and break out of the JS string literal, letting attacker-controlled trailing
+  // content execute as script. JSON.stringify() produces a fully-escaped, self-contained JS string
+  // literal (quotes, backslashes, newlines, everything) — this is the correct primitive for
+  // interpolating an untrusted string into a JS source string, not manual char-class replacement.
+  const botName = JSON.stringify(config.bot_name ?? 'Aria')
+  // COLOR is concatenated as a RAW (unquoted) CSS value throughout the stylesheet below
+  // ('background:' + COLOR + ...), so it can't be JSON.stringify()'d like the others (that would
+  // embed literal quote characters into the CSS and break every rule using it). Instead validate
+  // it's actually a hex color — the only shape that's ever valid there — and fall back otherwise.
+  const rawColor = (config.primary_color as string | null) ?? '#1D9E75'
+  const color = /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : '#1D9E75'
+  const greeting = JSON.stringify(config.greeting ?? 'Hi! How can I help you today?')
+  const chatToken = JSON.stringify((config.chat_token as string | null) ?? '')
+  const baseUrl = JSON.stringify(process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site')
 
   const js = `
 (function() {
   if (window.__ariaWidget) return;
   window.__ariaWidget = true;
 
-  var CHAT_TOKEN = '${chatToken}';
-  var BOT_NAME = '${botName}';
+  var CHAT_TOKEN = ${chatToken};
+  var BOT_NAME = ${botName};
   var COLOR = '${color}';
-  var GREETING = '${greeting}';
-  var BASE_URL = '${baseUrl}';
+  var GREETING = ${greeting};
+  var BASE_URL = ${baseUrl};
   var conversationId = null;
   var messages = [];
   var visitorId = localStorage.getItem('aria_visitor_id') || (Math.random().toString(36).slice(2));
@@ -98,7 +109,12 @@ export async function GET(
   panel.innerHTML = [
     '<div id="aria-w-header">',
     '  <div id="aria-w-avatar">✦</div>',
-    '  <div><div id="aria-w-name">' + BOT_NAME + '</div><div id="aria-w-status">● Online</div></div>',
+    // SECURITY-P1 (C-14) — BOT_NAME is tenant-controlled input; it used to be concatenated
+    // straight into this innerHTML string, so a crafted bot_name containing markup (e.g.
+    // "<img src=x onerror=...>") would execute as HTML/script the moment innerHTML was assigned,
+    // regardless of how safely BOT_NAME was JS-string-escaped above. The div is left empty here
+    // and its text is set via .textContent below (DOM text nodes, never parsed as markup).
+    '  <div><div id="aria-w-name"></div><div id="aria-w-status">● Online</div></div>',
     '  <button id="aria-w-close" aria-label="Close chat">×</button>',
     '</div>',
     '<div id="aria-w-messages"></div>',
@@ -109,6 +125,7 @@ export async function GET(
     '<div id="aria-w-powered">Powered by <a href="https://ariaos.site" target="_blank" rel="noopener">Aria OS</a></div>',
   ].join('');
   document.body.appendChild(panel);
+  document.getElementById('aria-w-name').textContent = BOT_NAME;
 
   var msgContainer = document.getElementById('aria-w-messages');
   var input = document.getElementById('aria-w-input');

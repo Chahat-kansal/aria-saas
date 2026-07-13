@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { limit } from '@/lib/rate-limit'
+import { verifyOtpAndCreateSession } from '@/lib/staff-portal/session'
 
 async function _POST(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -23,7 +24,7 @@ async function _POST(req: Request) {
 
   const { data: member } = await supabaseAdmin
     .from('staff_members')
-    .select('id, business_id, first_name, last_name, position, portal_token, portal_token_expires_at, portal_enabled')
+    .select('id, business_id, first_name, last_name, position, portal_enabled')
     .or('personal_email.eq.' + email + ',work_email.eq.' + email)
     .eq('status', 'active')
     .maybeSingle()
@@ -32,16 +33,16 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'Invalid code' }, { status: 401 })
   }
 
-  if (member.portal_token !== code) {
-    return NextResponse.json({ error: 'Invalid code' }, { status: 401 })
-  }
-
-  if (member.portal_token_expires_at && new Date(member.portal_token_expires_at as string) < new Date()) {
-    return NextResponse.json({ error: 'Code expired — request a new one' }, { status: 401 })
+  // SECURITY-P1 (C-08) — verifies against the hashed OTP (timing-safe compare) and, only on
+  // success, issues a brand-new random session token — this is what's returned as `token`, never
+  // the OTP itself. See src/lib/staff-portal/session.ts for the full design rationale.
+  const sessionToken = await verifyOtpAndCreateSession(String(member.id), String(member.business_id), code)
+  if (!sessionToken) {
+    return NextResponse.json({ error: 'Invalid or expired code' }, { status: 401 })
   }
 
   return NextResponse.json({
-    token: String(member.portal_token),
+    token: sessionToken,
     staff_member_id: String(member.id),
     business_id: String(member.business_id),
     name: String(member.first_name) + ' ' + String(member.last_name),

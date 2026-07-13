@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 interface LineItem {
   id: string
@@ -42,6 +42,10 @@ interface Business {
 
 export default function PublicInvoicePage() {
   const { id } = useParams<{ id: string }>()
+  // SECURITY-P1 (H-06) — the API now requires the view token (?t=) that's embedded in the emailed
+  // link; a bare invoice UUID with no token 404s.
+  const searchParams = useSearchParams()
+  const viewToken = searchParams.get('t') ?? ''
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [business, setBusiness] = useState<Business | null>(null)
   const [lines, setLines] = useState<LineItem[]>([])
@@ -58,7 +62,7 @@ export default function PublicInvoicePage() {
 
   useEffect(() => {
     if (!id) return
-    fetch('/api/invoices/public/' + id)
+    fetch('/api/invoices/public/' + id + '?t=' + encodeURIComponent(viewToken))
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); return }
@@ -68,7 +72,7 @@ export default function PublicInvoicePage() {
       })
       .catch(() => setError('Failed to load invoice'))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, viewToken])
 
   async function signInvoice() {
     if (!invoice || sigLoading || !sigAgreed || sigName.trim().length < 2) return
@@ -102,7 +106,7 @@ export default function PublicInvoicePage() {
       const res = await fetch('/api/invoices/public/' + id + '/paid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method }),
+        body: JSON.stringify({ method, signature_token: invoice.signature_token }),
       })
       const d = await res.json()
       if (d.ok) setMarkedPaid(true)

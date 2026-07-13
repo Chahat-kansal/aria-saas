@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { issueOtp } from '@/lib/staff-portal/session'
 
 async function _POST(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -29,13 +30,9 @@ async function _POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000))
-  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString()
-
-  await supabaseAdmin.from('staff_members').update({
-    portal_token: code,
-    portal_token_expires_at: expiresAt,
-  }).eq('id', member.id)
+  // SECURITY-P1 (C-08/M-02/M-03) — crypto.randomInt() (CSPRNG) instead of Math.random(), hashed at
+  // rest (issueOtp), 30-min TTL instead of an unenforced 24h (L-04).
+  const code = await issueOtp(String(member.id))
 
   const resendKey = process.env.RESEND_API_KEY
   if (resendKey) {

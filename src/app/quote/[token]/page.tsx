@@ -167,6 +167,7 @@ export default async function QuotePage({ params }: { params: { token: string } 
         {/* Client section: accept button + view tracking */}
         <AcceptSection
           quoteId={quote.id as string}
+          quoteToken={token}
           status={quote.status as string}
           isExpired={isExpired}
           acceptedAt={(quote.accepted_at as string | null) ?? null}

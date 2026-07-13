@@ -12,6 +12,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
     "test:e2e:ci": "playwright test --reporter=github",
+    "test:smoke": "playwright test --config=playwright.smoke.config.ts",
+    "test:smoke:headed": "playwright test --config=playwright.smoke.config.ts --headed",
     "seed:cafe-images": "tsx scripts/fetch-cafe-images.ts",
     "seed:dalle-images": "tsx scripts/generate-dalle-cafe-images.ts",
     "tauri": "tauri",

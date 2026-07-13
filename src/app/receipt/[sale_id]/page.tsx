@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 interface SaleData {
   sale: {
@@ -16,17 +16,20 @@ interface SaleData {
 export default function ReceiptPortalPage() {
   const params = useParams()
   const saleId = params?.sale_id as string
+  // SECURITY-P1 (C-01) — the API now requires the per-sale receipt_token (?t=) alongside the UUID.
+  const searchParams = useSearchParams()
+  const receiptToken = searchParams.get('t') ?? ''
   const [data, setData] = useState<SaleData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!saleId) return
-    fetch('/api/public/receipt/' + saleId)
+    fetch('/api/public/receipt/' + saleId + '?t=' + encodeURIComponent(receiptToken))
       .then(r => r.json())
       .then(d => { if (d.error) setError(d.error); else setData(d); setLoading(false) })
       .catch(() => { setError('Could not load receipt'); setLoading(false) })
-  }, [saleId])
+  }, [saleId, receiptToken])
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#F6F6F4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

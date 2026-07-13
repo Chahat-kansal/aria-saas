@@ -1,5 +1,10 @@
 .env
 .env.local
+# SECURITY-P1 (M-04) — .env / .env.local only covered the two conventional names; a .env.production
+# or .env.staging file would have been silently committable. Wildcard covers every variant while
+# still allowing .env.example (explicitly re-included below — it's placeholders only, meant to be committed).
+*.env*
+!.env.example
 node_modules/
 .next/
 
@@ -7,6 +12,9 @@ node_modules/
 /test-results/
 /playwright-report/
 /playwright/.cache/
+# SECURITY-P1 (8b) — Playwright storageState files contain live session cookies for the smoke
+# suite's test accounts; never commit these.
+tests/smoke/.auth/
 .vercel
 
 # Claude Code local skills (dev tooling, not product)
@@ -17,3 +25,6 @@ skills-lock.json
 # Spin frame extraction scratch dirs and source MP4 renders
 public/menu/_lib/spin/**/_tmp/
 public/menu/_lib/spin/*.mp4
+
+# Design/mockup reference screenshots — local-only, not app assets
+public/_refs/

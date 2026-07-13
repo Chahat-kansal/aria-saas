@@ -5,10 +5,15 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { getCxSession } from '@/lib/cx/get-cx-session'
 
 type Params = { params: { business_id: string } }
 
-// Public points-balance check — a customer looks up their own points by phone.
+// SECURITY-P1 (C-02) — this route had NO auth at all: any caller could enumerate any phone
+// number against any business_id and get back that customer's full name, points, visit count,
+// and lifetime spend. Now requires a valid cx_session (the same phone-OTP session every other CX
+// personal route uses) AND that the session's own phone matches the phone being queried — a
+// logged-in customer can look up their own balance, never someone else's by changing ?phone=.
 async function _GET(req: Request, { params }: Params) {
   const { business_id } = params
   const phone = new URL(req.url).searchParams.get('phone')?.trim()
@@ -16,6 +21,11 @@ async function _GET(req: Request, { params }: Params) {
 
   const realId = await resolveBusinessId(supabaseAdmin, business_id)
   if (!realId) return NextResponse.json({ found: false })
+
+  const session = await getCxSession(req, realId)
+  if (!session || !session.phone || session.phone !== phone) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const { data } = await supabaseAdmin.from('pos_customers')
     .select('name, points_balance, loyalty_points, visit_count, total_spent, total_spend')

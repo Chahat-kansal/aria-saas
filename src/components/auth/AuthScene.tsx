@@ -3,7 +3,28 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { posthog } from '@/lib/posthog'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 import './auth-scene.css'
+
+// SECURITY-P1 — login/signup/reset go straight from the browser to Supabase Auth; this guard call
+// hits our own server first (rate limit + Turnstile-on-signup) before the real Supabase call is
+// made. See src/app/api/auth/guard/route.ts for the full rationale and its limitations.
+async function checkAuthGuard(action: 'login' | 'signup' | 'reset', turnstileToken?: string): Promise<string | null> {
+  try {
+    const res = await fetch('/api/auth/guard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, turnstile_token: turnstileToken }),
+    })
+    if (res.ok) return null
+    const d = await res.json().catch(() => ({}))
+    return d.error ?? 'Too many attempts — please try again shortly.'
+  } catch {
+    // Network error reaching our own guard endpoint must never brick login/signup — fail open here
+    // (the guard's own internal checks already fail appropriately; this is only the transport).
+    return null
+  }
+}
 
 // AUTH-BRAND-FIX — the approved unified auth scene as a real component. The visuals (scene switching,
 // speech bubble, validation ticks, parallax) are presentation only; submission goes through the
@@ -39,6 +60,7 @@ export default function AuthScene({ initialTab }: { initialTab: 'login' | 'signu
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fieldErr, setFieldErr] = useState<{ name?: string; email?: string; password?: string }>({})
+  const [turnstileToken, setTurnstileToken] = useState('')
 
   const [scene, setScene] = useState<Scene>(initialTab === 'signup' ? 'welcome' : 'pos')
   const [speech, setSpeech] = useState(initialTab === 'signup' ? SAY.welcome : SAY.back)
@@ -95,6 +117,8 @@ export default function AuthScene({ initialTab }: { initialTab: 'login' | 'signu
   async function handleLogin() {
     if (!supabase) { setError('Configuration error — please contact support.'); return }
     setLoading(true); setError('')
+    const guardErr = await checkAuthGuard('login')
+    if (guardErr) { setError(guardErr); setLoading(false); return }
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
@@ -118,6 +142,8 @@ export default function AuthScene({ initialTab }: { initialTab: 'login' | 'signu
     setFieldErr(errs)
     if (Object.keys(errs).length > 0) { setError(''); return }
     setLoading(true); setError('')
+    const guardErr = await checkAuthGuard('signup', turnstileToken)
+    if (guardErr) { setError(guardErr); setLoading(false); return }
     try {
       const { data, error: err } = await supabase.auth.signUp({
         email: email.trim(),
@@ -234,6 +260,8 @@ export default function AuthScene({ initialTab }: { initialTab: 'login' | 'signu
             </div>
 
             {error && <div className="errbox">{error}</div>}
+
+            {signup && <TurnstileWidget onToken={setTurnstileToken} />}
 
             <button type="submit" className="cta" disabled={loading || !ctaEnabled}>{ctaLabel}</button>
           </form>

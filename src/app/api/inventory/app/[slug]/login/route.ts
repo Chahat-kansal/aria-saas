@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { setStaffCookie } from '@/lib/inventory/staff-session'
+import { limit } from '@/lib/rate-limit'
 
 // INV-STAFF-APP-1 — per-staff PIN login. The PIN is checked SERVER-SIDE against pos_staff.pin (never sent
 // to the client) for the resolved business only. On success, an HMAC-signed acting-staff cookie is set.
@@ -19,6 +20,16 @@ async function _POST(req: Request, { params }: Params) {
 
   const body = await req.json().catch(() => ({})) as { staff_id?: string; pin?: string }
   if (!body.staff_id || !body.pin) return NextResponse.json({ error: 'Pick your name and enter your PIN' }, { status: 400 })
+
+  // SECURITY-P1 (H-11) — PINs are 4-6 numeric digits with no throttle: unlimited guesses were
+  // previously allowed. 5 attempts / 15 min per staff_id (matches staff-portal/verify's rate).
+  const rl = await limit('inv-login:' + body.staff_id, { requests: 5, window: '15 m' })
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many attempts. Please wait before trying again.' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    )
+  }
 
   const { data: staff } = await supabaseAdmin.from('pos_staff')
     .select('id, name, role, color, pin').eq('id', body.staff_id).eq('business_id', bid).eq('is_active', true).maybeSingle()

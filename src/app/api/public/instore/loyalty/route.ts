@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 function isValidEmail(s: string) {
@@ -19,6 +20,15 @@ export async function POST(req: Request) {
 
     if (!business_id || !email) {
       return NextResponse.json({ error: 'business_id and email required' }, { status: 400 })
+    }
+    // SECURITY-P1 (C-03) — business_id used to be trusted straight from the body with no session
+    // check at all: any caller could look up any customer by email for any business, and phantom
+    // pos_customers rows could be injected into any business's data. Same ariakiosk_${bid} cookie
+    // check src/app/api/public/scan-and-go/cart|finish already use — proves the caller actually
+    // went through this specific business's kiosk session flow (src/app/api/public/instore/session)
+    // rather than just claiming a business_id.
+    if (!cookies().get(`ariakiosk_${business_id}`)) {
+      return NextResponse.json({ error: 'session_expired' }, { status: 401 })
     }
     if (!isValidEmail(email)) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 })

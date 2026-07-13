@@ -6,15 +6,22 @@ import { NextResponse } from 'next/server'
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const { id } = params
-  const body = await req.json() as { name?: string }
+  const body = await req.json() as { name?: string; token?: string }
   if (!body.name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
 
   const { data: quote } = await supabaseAdmin
     .from('quotes')
-    .select('id,business_id,status,customer_email,quote_amount,quote_breakdown,expires_at')
+    .select('id,business_id,status,customer_email,quote_amount,quote_breakdown,expires_at,token')
     .eq('id', id)
     .maybeSingle()
   if (!quote) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // SECURITY-P1 (H-08) — UUID-only gate used to let anyone accept any quote as any name (binding
+  // acceptance, fires emails). Reuses quotes.token — the same secret already gating the /quote/[token]
+  // view page, so no new column/migration needed. A plain 404 (not 401/403) on mismatch avoids
+  // confirming the quote id exists to a caller without the right token.
+  if (!quote.token || body.token !== quote.token) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   if (quote.status === 'accepted') return NextResponse.json({ error: 'Already accepted' }, { status: 400 })
   if (quote.expires_at && new Date(quote.expires_at as string) < new Date()) {
     return NextResponse.json({ error: 'Quote has expired' }, { status: 400 })

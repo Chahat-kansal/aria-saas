@@ -11,8 +11,15 @@ const TTL_SECONDS = 60 * 60 * 12 // a shift
 interface StaffPayload { b: string; s: string; n: string; exp: number }
 export interface ActingStaff { business_id: string; staff_id: string; staff_name: string }
 
+// SECURITY-P1 (C-12) — the old fallback chain (INV_STAFF_SECRET || SUPABASE_SERVICE_ROLE_KEY ||
+// 'dev-only-secret') meant any environment missing BOTH real env vars would sign every staff
+// cookie with the publicly-known literal string 'dev-only-secret', letting anyone forge a valid
+// aria_inv_staff cookie for any business. Throw at startup instead — no hardcoded fallback, and no
+// borrowing the service-role key (a different secret with a different blast radius if it leaked).
 function secret(): string {
-  return process.env.INV_STAFF_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'dev-only-secret'
+  const s = process.env.INV_STAFF_SECRET
+  if (!s) throw new Error('INV_STAFF_SECRET is not set — inventory staff sessions cannot be signed or verified without it.')
+  return s
 }
 function b64url(buf: Buffer | string): string {
   return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -30,8 +37,8 @@ export function makeToken(businessId: string, staffId: string, staffName: string
 export function verifyToken(token: string | undefined | null): ActingStaff | null {
   if (!token || !token.includes('.')) return null
   const [body, sig] = token.split('.')
-  const expected = sign(body)
   try {
+    const expected = sign(body)
     const a = Buffer.from(sig), b = Buffer.from(expected)
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null
     const payload = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString()) as StaffPayload

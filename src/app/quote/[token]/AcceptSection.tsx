@@ -5,6 +5,7 @@ const G = '#2D5240', Glight = '#7FB897'
 
 interface Props {
   quoteId: string
+  quoteToken: string
   status: string
   isExpired: boolean
   acceptedAt: string | null
@@ -13,7 +14,7 @@ interface Props {
   total: number
 }
 
-export default function AcceptSection({ quoteId, status, isExpired, acceptedAt, acceptedByName, businessName, total }: Props) {
+export default function AcceptSection({ quoteId, quoteToken, status, isExpired, acceptedAt, acceptedByName, businessName, total }: Props) {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -55,7 +56,7 @@ export default function AcceptSection({ quoteId, status, isExpired, acceptedAt, 
     const res = await fetch(`/api/quotes/${quoteId}/accept`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() }),
+      body: JSON.stringify({ name: name.trim(), token: quoteToken }),
     })
     const d = await res.json()
     if (d.ok) {

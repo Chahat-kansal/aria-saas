@@ -1,11 +1,13 @@
 'use client'
 import { useState } from 'react'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 
 export default function ContactPage() {
   const [name,    setName]    = useState('')
   const [email,   setEmail]   = useState('')
   const [message, setMessage] = useState('')
   const [status,  setStatus]  = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [turnstileToken, setTurnstileToken] = useState('')
 
   const inputStyle: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box',
@@ -24,7 +26,7 @@ export default function ContactPage() {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, message }),
+        body: JSON.stringify({ name, email, message, turnstile_token: turnstileToken }),
       })
       setStatus(res.ok ? 'sent' : 'error')
     } catch {
@@ -91,6 +93,8 @@ export default function ContactPage() {
                 Something went wrong — please email us directly at hello@ariaos.site
               </p>
             )}
+
+            <TurnstileWidget onToken={setTurnstileToken} theme="dark" />
 
             <button type="submit" disabled={status === 'sending'}
               style={{

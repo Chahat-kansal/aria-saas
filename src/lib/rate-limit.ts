@@ -90,7 +90,17 @@ export async function checkRateLimit(
   identifier: string,
 ): Promise<{ ok: boolean; remaining: number; reset: number }> {
   const limiter = limiters[tier]
-  if (!limiter) return { ok: true, remaining: 999, reset: 0 }
+  if (!limiter) {
+    // SECURITY-P1 (M-01) — this legacy path used to fail OPEN unconditionally, silently
+    // disabling every ai/messaging/standard/public rate limit whenever Upstash env vars were
+    // absent, including in production. Match limit()'s behavior above: fail closed in prod so a
+    // missing env var can never silently strip rate limiting; fail open only in dev/CI.
+    if (IS_PROD) {
+      console.error('[rate-limit] checkRateLimit() called but Redis unavailable in production — returning not-ok for tier:', tier)
+      return { ok: false, remaining: 0, reset: Date.now() + 60_000 }
+    }
+    return { ok: true, remaining: 999, reset: 0 }
+  }
   const { success, remaining, reset } = await limiter.limit(identifier)
   return { ok: success, remaining, reset }
 }

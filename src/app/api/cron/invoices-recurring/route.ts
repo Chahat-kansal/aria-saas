@@ -176,7 +176,9 @@ async function _GET(req: Request) {
 
       // Send email if configured
       if (resendKey && baseInv.bill_to_email) {
-        const publicUrl = `${appUrl}/invoice/${newInv.id}`
+        // SECURITY-P1 (H-06/H-07) — the emailed link must carry the view token; the GET route now
+        // requires it (a UUID alone is no longer sufficient to view/mutate an invoice).
+        const publicUrl = `${appUrl}/invoice/${newInv.id}?t=${signatureToken}`
         const from = fromDomain
           ? `${biz.name} <invoices@${fromDomain}>`
           : `${biz.name} <onboarding@resend.dev>`

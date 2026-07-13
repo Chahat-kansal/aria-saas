@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createElement } from 'react'
 import { render } from '@react-email/render'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { requireTurnstile } from '@/lib/security/turnstile'
 import { ContactNotificationEmail } from '@/emails/ContactNotificationEmail'
 
 export async function POST(req: Request) {
@@ -10,12 +11,16 @@ export async function POST(req: Request) {
   const rl = await rateLimit(`contact:${clientIp(req)}`, 5, 60)
   if (!rl.allowed) return tooManyRequests(rl.retryAfter)
 
-  let body: { name?: string; email?: string; message?: string }
+  let body: { name?: string; email?: string; message?: string; turnstile_token?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
+
+  // SECURITY-P1 — fail-closed when TURNSTILE_SECRET_KEY is configured, fail-open (logged) when absent.
+  const turnstileDenied = await requireTurnstile(body.turnstile_token, clientIp(req))
+  if (turnstileDenied) return turnstileDenied
 
   const { name, email, message } = body
   if (!name?.trim() || !email?.trim() || !message?.trim()) {

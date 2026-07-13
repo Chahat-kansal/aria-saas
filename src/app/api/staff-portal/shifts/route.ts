@@ -4,20 +4,10 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function resolveToken(req: Request): Promise<{ staff_member_id: string; business_id: string } | null> {
-  const token = req.headers.get('x-portal-token')?.trim()
-  if (!token) return null
-  const { data } = await supabaseAdmin.from('staff_members')
-    .select('id, business_id, portal_token_expires_at')
-    .eq('portal_token', token).eq('status', 'active').maybeSingle()
-  if (!data) return null
-  if (data.portal_token_expires_at && new Date(data.portal_token_expires_at as string) < new Date()) return null
-  return { staff_member_id: String(data.id), business_id: String(data.business_id) }
-}
+import { resolvePortalSession } from '@/lib/staff-portal/session'
 
 async function _GET(req: Request) {
-  const identity = await resolveToken(req)
+  const identity = await resolvePortalSession(req)
   if (!identity) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const today = new Date().toISOString().slice(0, 10)

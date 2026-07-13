@@ -1,18 +1,30 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
+// SECURITY-P1 (C-04) — this route had NO auth at all: any unauthenticated caller could trigger
+// paid Anthropic calls and overwrite pos_products.description for ANY business by path. This is an
+// owner-facing operation (regenerate AI menu copy), not a public one — now requires the caller to
+// be signed in AND own the business (route uses "public/" in its path for historical/URL reasons,
+// not because it's meant to be public).
 export async function POST(_req: Request, { params }: Params) {
   const { business_id: idOrSlug } = 'then' in params ? await params : params
-  const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const db = supabaseAdmin
   const business_id = await resolveBusinessId(db, idOrSlug)
   if (!business_id) return NextResponse.json({ updated: 0 })
+
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: owns } = await db.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!owns) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { data: products } = await db.from('pos_products')
     .select('id, name, brand, price, alcohol_percentage, volume, container_type, country_of_origin')
     .eq('business_id', business_id).eq('is_active', true)

@@ -18,15 +18,22 @@ export async function GET(req: Request, { params }: { params: { sale_id: string 
   const { sale_id } = params
   if (!sale_id) return NextResponse.json({ error: 'sale_id required' }, { status: 400 })
 
+  // SECURITY-P1 (C-01) — this route had zero auth: any valid sale UUID returned full sale detail,
+  // all payments, and business contact info. receipt_token is a random per-sale secret (migration
+  // 20260714000001) that must accompany the sale_id — a bare UUID is no longer sufficient.
+  const token = new URL(req.url).searchParams.get('t')
+
   // PII policy: name only (no email/phone). Voided sales are excluded.
   const { data: sale } = await supabaseAdmin
     .from('pos_sales')
-    .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, business_id, pos_customers(name)')
+    .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, business_id, receipt_token, pos_customers(name)')
     .eq('id', sale_id)
     .neq('status', 'voided')
     .maybeSingle()
 
-  if (!sale) return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
+  if (!sale || !token || token !== sale.receipt_token) {
+    return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
+  }
 
   const bid = sale.business_id as string
 
