@@ -57,6 +57,36 @@ function formatHours(opening_hours: unknown): string {
   return 'Today ' + slot.open + ' – ' + slot.close
 }
 
+function staticMapUrlFor(outlet: Outlet): string | null {
+  if (outlet.lat == null || outlet.lng == null) return null
+  return '/api/geoapify/staticmap?lat=' + outlet.lat + '&lng=' + outlet.lng
+}
+
+// Fails soft: the geoapify route 503s when GEOAPIFY_API_KEY is unset (dev/preview,
+// or before the founder configures it) — hide the thumbnail entirely on load failure
+// rather than showing a browser broken-image icon on the public locations page.
+function OutletMapThumb({ outlet }: { outlet: Outlet }) {
+  const [failed, setFailed] = useState(false)
+  const src = staticMapUrlFor(outlet)
+  if (!src || failed) return null
+  return (
+    <a
+      href={mapsUrlFor(outlet) ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ display: 'block', margin: '-18px -20px 12px' }}
+    >
+      <img
+        src={src}
+        alt={outlet.address ?? outlet.name ?? 'Map'}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
+      />
+    </a>
+  )
+}
+
 function HoursTooltip({ opening_hours }: { opening_hours: unknown }) {
   if (!opening_hours || typeof opening_hours !== 'object') return null
   const hours = opening_hours as Hours
@@ -130,9 +160,11 @@ export function LocationsClient({ slug, bizName, outlets }: {
                 border: isActive ? ('2px solid ' + ACCENT) : GLASS_BORDER,
                 boxShadow: isActive ? ('0 0 0 1px ' + ACCENT + ', 0 4px 20px rgba(0,0,0,0.06)') : GLASS_SHADOW,
                 padding: '18px 20px',
+                overflow: 'hidden',
                 transition: 'border 0.15s',
               }}
             >
+              <OutletMapThumb outlet={outlet} />
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
