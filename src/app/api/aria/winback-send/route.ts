@@ -6,11 +6,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import Anthropic from '@anthropic-ai/sdk'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { requireFeature } from '@/lib/features'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { runCustomerFacingCopy } from '@/lib/aria/grounded'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -67,16 +64,20 @@ async function _POST(req: Request) {
   if (enable_ab_test && sms_message) {
     let variantBMessage: string = sms_message
     try {
-      const msg = await trackAICall(
-        { route: 'aria/winback-send/ab', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'winback-ab-variant' },
-        () => anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 200,
-          system: 'Create an alternative SMS for A/B testing. Same offer, different angle/tone/hook. Max 160 chars. Return ONLY the SMS text, no quotes or explanation.',
-          messages: [{ role: 'user', content: `Original: ${sms_message}` }],
-        })
-      )
-      variantBMessage = msg.content[0].type === 'text' ? msg.content[0].text.trim().slice(0, 160) : sms_message
+      // AI-GROUNDING-1 — was a raw `new Anthropic()` call logged only to console/Sentry via
+      // trackAICall, invisible in the aria_ai_calls cost ledger and with no circuit-breaker/Gemini
+      // failover, despite writing text that gets SMS'd straight to real customers.
+      const resp = await runCustomerFacingCopy({
+        model: 'haiku',
+        agentKey: 'marketing_ai_generate',
+        role: 'narrative',
+        businessId: business_id,
+        maxTokens: 200,
+        fallback: sms_message,
+        systemPrompt: 'Create an alternative SMS for A/B testing. Same offer, different angle/tone/hook. Max 160 chars. Return ONLY the SMS text, no quotes or explanation.',
+        userPrompt: `Original: ${sms_message}`,
+      })
+      variantBMessage = resp.safe ? resp.data.slice(0, 160) : sms_message
     } catch { /* keep original as variant B fallback */ }
 
     const allCust = customers ?? []

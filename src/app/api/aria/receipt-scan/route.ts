@@ -2,24 +2,21 @@
 // Create via Supabase dashboard → Storage → New bucket → name "receipt-ocr", public OFF.
 // If the bucket is missing, persistence is skipped with a console warning — the Claude vision
 // call itself still works on the in-memory buffer.
-import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { requireFeature } from '@/lib/features'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { geminiVision } from '@/lib/gemini'
+import { runVisionOrMedia } from '@/lib/aria/grounded'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -147,18 +144,20 @@ All amounts in dollars. If unclear, use null. If not an invoice, return empty li
   }
 
   if (extractedLines.length === 0) try {
-    const response = await trackAICall({ route: 'aria/receipt-scan', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'receipt-scan-vision' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 4096,
-      temperature: 0.2,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-          {
-            type: 'text',
-            text: `You are processing a supplier invoice for an Australian retail/hospitality business.
-Extract ALL line items. Also extract supplier name, invoice date, and invoice total if visible.
+    // AI-GROUNDING-1 — was a raw `new Anthropic()` call logged only to console/Sentry via
+    // trackAICall, invisible in the aria_ai_calls cost ledger and with no circuit-breaker/Gemini
+    // failover. Routed through the canonical vision entry point (same call shape, same prompt).
+    const resp = await runVisionOrMedia<{ supplier_name: string | null; invoice_date: string | null; invoice_total_aud: number | null; lines: unknown[] }>({
+      model: 'sonnet',
+      agentKey: 'document_vision',
+      role: 'document',
+      businessId: business_id,
+      maxTokens: 4096,
+      imageBase64: base64,
+      imageMimeType: mediaType,
+      fallback: { supplier_name: null, invoice_date: null, invoice_total_aud: null, lines: [] },
+      systemPrompt: 'You are processing a supplier invoice for an Australian retail/hospitality business. Be precise — these numbers update real inventory.',
+      userPrompt: `Extract ALL line items. Also extract supplier name, invoice date, and invoice total if visible.
 Limit to 20 most significant line items. Ensure the JSON is complete and valid.
 
 Return ONLY this JSON structure, no markdown, no explanation:
@@ -175,14 +174,10 @@ Return ONLY this JSON structure, no markdown, no explanation:
     "total_price_aud": number or null
   }]
 }
-If this is not an invoice/receipt, return: {"supplier_name":null,"invoice_date":null,"invoice_total_aud":null,"lines":[]}
-Be precise — these numbers update real inventory.`,
-          },
-        ],
-      }],
-    }));
+If this is not an invoice/receipt, return: {"supplier_name":null,"invoice_date":null,"invoice_total_aud":null,"lines":[]}`,
+    })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = resp.raw ?? '';
     console.log('[receipt-scan] Claude response (first 400 chars):', text.slice(0, 400));
 
     // Strategy 1: extract full JSON object (supplier_name + lines)

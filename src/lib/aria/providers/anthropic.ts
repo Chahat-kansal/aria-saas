@@ -28,6 +28,10 @@ interface CallParams {
   role: AgentRole
   timeoutMs?: number
   toolChoice?: { type: 'tool'; name: string } | { type: 'auto' }
+  /** AI-GROUNDING-1 — optional image input for vision calls (runVisionOrMedia). Omit for text-only
+   * calls (the default, unchanged behaviour for every existing caller). */
+  imageBase64?: string
+  imageMimeType?: string
 }
 
 async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
@@ -104,6 +108,15 @@ export async function callAnthropic<T = Record<string, unknown>>(
         rej(new Error(`Anthropic call timed out after ${timeoutMs}ms`))
       }, timeoutMs)
     })
+    // AI-GROUNDING-1 — image content block when the caller (runVisionOrMedia) supplies one;
+    // every existing text-only caller is unaffected (imageBase64 is undefined for them).
+    const userContent = params.imageBase64 && params.imageMimeType
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? ([
+          { type: 'image', source: { type: 'base64', media_type: params.imageMimeType, data: params.imageBase64 } },
+          { type: 'text', text: params.userPrompt },
+        ] as any)
+      : params.userPrompt
     const response = await Promise.race([
       withBackoff(() => client.messages.create({
         model: modelId,
@@ -114,7 +127,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           cache_control: { type: 'ephemeral' } as any,
         }],
-        messages: [{ role: 'user', content: params.userPrompt }],
+        messages: [{ role: 'user', content: userContent }],
       }, { signal: ac.signal })),
       hardTimeout,
     ])

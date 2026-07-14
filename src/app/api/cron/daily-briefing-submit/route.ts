@@ -210,6 +210,14 @@ async function _GET(req: Request) {
         getMarketPriceContext(biz.id),
       ])
       const marketBlock = buildMarketPricesPromptBlock(marketCtx, biz.industry ?? null)
+      // AI-GROUNDING-1 — this prompt asked the model to write "today's" briefing and describe
+      // "yesterday" without ever stating what either date actually is. Claude has no reliable
+      // knowledge of the real wall-clock date (only its training cutoff), and this is a Batch API
+      // submission that can sit queued for hours — so any date/day-of-week reference the model
+      // produced unprompted was a guess, not a fact. Ground it exactly like the sibling
+      // /api/aria/daily-briefing route already does (`todayDate` in that file).
+      const todayDateStr = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })
+      const yesterdayDateStr = new Date(nowAEST().getTime() - 86400000).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Sydney' })
       return {
         custom_id: biz.id,
         params: {
@@ -218,7 +226,7 @@ async function _GET(req: Request) {
           system: ARIA_SYSTEM_PROMPT,
           messages: [{
             role: 'user' as const,
-            content: `Write today's morning briefing for ${biz.name}, a ${biz.industry ?? 'business'} in ${biz.city ?? 'Australia'}. Owner: ${biz.owner_name ?? 'there'}.\n\nYesterday: A$${ctx.yesterdayRevenue} from ${ctx.yesterdayTransactions} sales. Top seller: ${ctx.topProduct}.\nWeek so far: A$${ctx.weekRevenue}.\nLow stock: ${ctx.lowStock.join(', ') || 'none'}.${marketBlock}\n\nWrite 4 sentences: how yesterday went, one thing to watch today, one specific action they should take now. If market price data is included, add a sentence about the pricing opportunity. End with a single priority. No bullet points.`,
+            content: `Today is ${todayDateStr}. Write today's morning briefing for ${biz.name}, a ${biz.industry ?? 'business'} in ${biz.city ?? 'Australia'}. Owner: ${biz.owner_name ?? 'there'}.\n\nYesterday (${yesterdayDateStr}): A$${ctx.yesterdayRevenue} from ${ctx.yesterdayTransactions} sales. Top seller: ${ctx.topProduct}.\nWeek so far: A$${ctx.weekRevenue}.\nLow stock: ${ctx.lowStock.join(', ') || 'none'}.${marketBlock}\n\nWrite 4 sentences: how yesterday went, one thing to watch today, one specific action they should take now. If market price data is included, add a sentence about the pricing opportunity. End with a single priority. No bullet points. Do not state any date other than the ones given above — if you don't need to mention a date, don't.`,
           }],
         },
       }

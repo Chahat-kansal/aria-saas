@@ -1,4 +1,3 @@
-import { parseLLMJsonOr } from '@/lib/ai-json';
 import { todayAEST, toAESTStart } from '@/lib/date-au';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -8,7 +7,7 @@ import { NextResponse } from 'next/server';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { callAnthropic } from '@/lib/aria/providers/anthropic'
+import { runGroundedAnalysis } from '@/lib/aria/grounded'
 import { geminiFlash } from '@/lib/gemini'
 import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
 import { detectLosses } from '@/lib/aria/radar/loss-detector'
@@ -641,18 +640,20 @@ async function _POST(req: Request) {
     const dataStr = typeof context === 'string' ? context : JSON.stringify(context)
     const todayDate = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })
 
-    // AI-ROUTER-FAILOVER-1 — this used to call the Anthropic SDK directly,
-    // bypassing every circuit breaker/fallback in the app: an outage here
-    // silently shipped an empty briefing (recommendations stayed []). Routed
-    // through the shared callAnthropic() so an Anthropic outage fails over to
-    // Gemini automatically, with the account-wide circuit breaker skipping
-    // doomed Anthropic calls for the next few minutes once tripped.
-    const resp = await callAnthropic<unknown[]>({
+    // AI-ROUTER-FAILOVER-1 — this used to call the Anthropic SDK directly, bypassing every circuit
+    // breaker/fallback in the app: an outage here silently shipped an empty briefing.
+    // AI-GROUNDING-1 — migrated from a direct callAnthropic() call to the canonical
+    // runGroundedAnalysis() entry point (owner-facing background analysis). Behaviour-identical:
+    // same model/prompts/truncation, same fallback-to-templated-items path on double-outage — the
+    // wrapper's own grounding clause now covers what the inline ANTI-HALLUCINATION block did.
+    const resp = await runGroundedAnalysis<unknown[]>({
       model: 'haiku',
       agentKey: 'ops_narrative',
       role: 'narrative',
       businessId: business_id,
       maxTokens: 1500,
+      fallback: [],
+      shape: 'array',
       systemPrompt: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:
@@ -668,13 +669,7 @@ Each item in the array must have these exact fields:
 - metric_label: string (e.g. "this week" or "at risk")
 - trend: "up" | "down" | "flat" | null
 
-Return 3-5 items. Use real numbers from the data. Do not invent data.
-
-ANTI-HALLUCINATION (non-negotiable):
-- Every number, count, and causal claim MUST come from the business data provided. Never invent, round, or estimate.
-- NEVER claim a promotion is "working" unless it is explicitly active AND started — otherwise call it "scheduled".
-- NEVER state a customer count you weren't given — absence of data is not zero.
-- Cite exact figures from the data (e.g. revenue_last_7_days_aud) — do not round or alter them.`,
+Return 3-5 items. Use real numbers from the data. Do not invent data.`,
       userPrompt: `Today: ${todayDate}
 Business: ${business.name as string} (${business.industry as string ?? 'retail'}, Australia)
 
@@ -682,10 +677,9 @@ Business data:
 ${dataStr.slice(0, 3000)}
 
 Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). If inbox_status.unread_messages > 0 or new_demand_signals > 0, include a "customers" item like "You have N unread customer messages and M new demand signals worth flagging — check your inbox". If scan_and_go_status is present, include a "revenue" item comparing its avg_basket_aud to normal_avg_basket_aud (e.g. "X scan-and-go checkouts today, avg basket $Y vs $Z normal"). JSON array only.`,
-    }, [])
+    })
 
-    const cleaned = (resp.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
-    recommendations = parseLLMJsonOr<unknown[]>(cleaned, [], 'daily-briefing', 'array')
+    recommendations = resp.data
 
     // Both Anthropic and Gemini failed (rare double-outage) — we already know
     // there IS actionable data (hasActionableData gated above this block), so

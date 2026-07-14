@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { logAICallSafe } from '@/lib/aria/log-ai-call'
+import { runActionPlanner } from '@/lib/aria/grounded'
 
 // LOY-CHALLENGES — AI-personalised loyalty missions from REAL purchase history.
 // GROUNDING-TEETH: every "buy N more X" challenge targets a product the customer ACTUALLY buys. The AI
@@ -47,29 +47,28 @@ async function topItems(customerId: string, businessId: string, limit = 5): Prom
   return Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name, qty]) => ({ name, qty }))
 }
 
-// The AI proposes which REAL items to challenge (constrained to the provided list). Logged to aria_ai_calls.
+// The AI proposes which REAL items to challenge (constrained to the provided list).
+// AI-GROUNDING-1 — was a raw `new Anthropic()` call with its own hand-rolled JSON parse and a manual
+// logAICallSafe() call — bypassed the shared circuit breaker/Gemini failover, and a genuinely down
+// Anthropic meant every business with challenges enabled got zero missions with no fallback. Routed
+// through the canonical autonomous-action entry point (this output gets persisted and later
+// auto-awards real points via evaluateChallenges, with no human review — the exact "autonomous
+// decision" case runActionPlanner exists for).
 async function aiProposeChallenges(businessId: string, items: TopItem[], reward: number): Promise<Array<{ item: string; count: number }>> {
-  let proposed: Array<{ item: string; count: number }> = []
-  let inTok = 0, outTok = 0, success = false
-  try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
-    const list = items.map(i => `- ${i.name} (bought ${i.qty}x)`).join('\n')
-    const res = await client.messages.create({
-      model: MODEL, max_tokens: 400, temperature: 0.4,
-      system: 'You design personalised loyalty challenges for a cafe/retail regular. Use ONLY products from the provided purchase history — NEVER invent a product. Return JSON only, no prose.',
-      messages: [{ role: 'user', content: `Customer's real purchase history:\n${list}\n\nPropose 1-2 "buy N more X" challenges using ONLY these exact product names. Each rewards ${reward} points. Return JSON: {"challenges":[{"item":"<exact product name from the list>","count":<1-3>}]}` }],
-    })
-    const raw = res.content.filter(b => b.type === 'text').map(b => (b as { text?: string }).text ?? '').join('').trim()
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
-    const parsed = JSON.parse(cleaned) as { challenges?: Array<{ item?: string; count?: number }> }
-    proposed = Array.isArray(parsed.challenges)
-      ? parsed.challenges.map(c => ({ item: String(c.item ?? ''), count: Number(c.count) || 2 }))
-      : []
-    inTok = res.usage.input_tokens; outTok = res.usage.output_tokens; success = true
-  } catch (e) { console.error('[challenge-gen] AI failed:', (e as Error).message) }
-  await logAICallSafe({ business_id: businessId, agent_key: 'loyalty_challenge_gen', provider: 'anthropic', model_id: MODEL, role: 'generator', input_tokens: inTok, output_tokens: outTok, success })
-  return proposed
+  const list = items.map(i => `- ${i.name} (bought ${i.qty}x)`).join('\n')
+  const resp = await runActionPlanner<{ challenges: Array<{ item: string; count: number }> }>({
+    model: 'haiku',
+    agentKey: 'generic',
+    role: 'analysis',
+    businessId,
+    maxTokens: 400,
+    fallback: { challenges: [] },
+    systemPrompt: 'You design personalised loyalty challenges for a cafe/retail regular. Use ONLY products from the provided purchase history — NEVER invent a product. Return JSON only, no prose.',
+    userPrompt: `Customer's real purchase history:\n${list}\n\nPropose 1-2 "buy N more X" challenges using ONLY these exact product names. Each rewards ${reward} points. Return JSON: {"challenges":[{"item":"<exact product name from the list>","count":<1-3>}]}`,
+  })
+  return Array.isArray(resp.data.challenges)
+    ? resp.data.challenges.map(c => ({ item: String(c.item ?? ''), count: Number(c.count) || 2 }))
+    : []
 }
 
 /** Generate 1-3 grounded challenges for a member. Skips if they already have active ones. */
