@@ -3,11 +3,8 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { ariaObserve } from '@/lib/aria/brain'
-import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
-import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { createSale } from '@/lib/pos/create-sale'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -59,6 +56,15 @@ async function _GET(req: Request) {
   return NextResponse.json({ sales: sales || [] });
 }
 
+// POS-SALE-CONSOLIDATE-1 — this handler used to be a full second, independently-maintained copy
+// of sale creation (its own sale+items inserts, its own stock decrement, its own inline KDS-ticket
+// block, no compensating void on a failed item insert). Confirmed via a live-caller audit that this
+// POST has zero real callers today (client or server) — but it's the one route with gift-card,
+// arbitrary split-payment, and direct-deposit support that pos/sale doesn't have, so it's kept (not
+// deleted, RULE0) and redirected onto the shared createSale() service instead of carrying its own
+// copy of the same logic. Every caller — present or future — now gets the full, consistent set of
+// downstream effects (loyalty's full LOY-* hook set, the canonical fireKdsTickets, the
+// compensating void-on-item-insert-failure) instead of the smaller subset this route used to have.
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -93,15 +99,10 @@ async function _POST(req: Request) {
 
   if (!items?.length) return NextResponse.json({ error: 'No items provided' }, { status: 400 });
 
-  // Normalise payment method label
+  // If paying by Aria gift card, validate it first before creating the sale — unchanged behaviour.
+  let validatedGiftCard: { id: string; balance: number } | null = null;
   const GIFT_CARD_METHODS = ['gift_card', 'aria_gift_card', 'visa_gift_card', 'mastercard_gift_card'];
   const isGiftCard = GIFT_CARD_METHODS.includes(payment_method) || !!gift_card_code;
-  const isDirectDeposit = ['direct_deposit', 'bank_transfer'].includes(payment_method);
-  const isCash = payment_method === 'cash';
-  const isSplit = payment_method === 'split' || (split_payments?.length > 1);
-
-  // If paying by Aria gift card, validate it first before creating the sale
-  let validatedGiftCard: { id: string; balance: number } | null = null;
   if (isGiftCard && gift_card_code) {
     const code = String(gift_card_code).toUpperCase().trim();
     const { data: gc, error: gcErr } = await supabase
@@ -120,14 +121,8 @@ async function _POST(req: Request) {
     }
   }
 
-  const { data: openSession } = await supabase
-    .from('pos_cash_sessions')
-    .select('id, total_cash_sales, total_card_sales')
-    .eq('business_id', bid)
-    .is('closed_at', null)
-    .maybeSingle();
-
   // Resolve outlet_id + register_id — use request values, else look up first active ones
+  // (unchanged behaviour: this route, unlike pos/sale, always fills a fallback outlet on the row).
   let resolvedOutletId: string | null = requestOutletId ?? null;
   let resolvedRegisterId: string | null = requestRegisterId ?? null;
   if (!resolvedOutletId) {
@@ -139,99 +134,39 @@ async function _POST(req: Request) {
     resolvedRegisterId = firstReg?.id ?? null;
   }
 
-  // Build sale insert — include new columns if they exist
-  const salePayload: Record<string, unknown> = {
-    business_id: bid,
-    session_id: openSession?.id ?? null,
-    customer_id: customer_id ?? null,
-    total_amount,
-    discount_amount: discount_amount ?? 0,
-    payment_method,
-    status: 'completed',
-  };
+  const result = await createSale(supabase, {
+    businessId: bid,
+    userId: user.id,
+    items: (items as Array<Record<string, unknown>>).map(i => ({
+      product_id: (i.product_id as string) ?? '',
+      product_name: (i.product_name as string) ?? (i.name as string) ?? 'Unknown',
+      product_sku: (i.sku as string) ?? null,
+      quantity: Number(i.quantity) || 0,
+      unit_price: Number(i.unit_price) || 0,
+      discount_percent: Number(i.discount_percent) || 0,
+      line_total: Math.round((Number(i.unit_price) * Number(i.quantity) - Number(i.discount_amount ?? 0)) * 100) / 100,
+      cost_price: (i.cost_price as number) ?? null,
+    })),
+    customerId: customer_id,
+    paymentMethod: payment_method,
+    subtotal: (items as Array<{ unit_price: number; quantity: number }>).reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0),
+    discountAmount: discount_amount ?? 0,
+    totalAmount: total_amount,
+    notes: order_notes ?? notes ?? null,
+    servedBy: served_by,
+    splitPayments: split_payments,
+    outletId: resolvedOutletId,
+    registerId: resolvedRegisterId,
+    tableLabel: table_label ?? null,
+    giftCard: gift_card_code ? { id: validatedGiftCard?.id ?? null, code: gift_card_code, amount: gift_card_amount ?? 0 } : null,
+    directDepositRef: direct_deposit_ref,
+  })
 
-  // Add optional columns (safe — if column doesn't exist yet Supabase ignores unknown keys
-  // but will error on schema mismatch; these are added by migration 20260506000003)
-  if (served_by !== undefined) salePayload.served_by = served_by;
-  if (notes !== undefined) salePayload.notes = notes;
-  if (resolvedOutletId) salePayload.outlet_id = resolvedOutletId;
-  if (resolvedRegisterId) salePayload.register_id = resolvedRegisterId;
-  if (direct_deposit_ref) salePayload.direct_deposit_ref = direct_deposit_ref;
-  // split_payments array not stored in pos_sales — split_cash/split_card columns handle the amounts
-  if (gift_card_code) {
-    salePayload.gift_card_code = String(gift_card_code).toUpperCase().trim();
-    salePayload.gift_card_amount = gift_card_amount ?? 0;
-    if (validatedGiftCard) salePayload.gift_card_id = validatedGiftCard.id;
-  }
+  if (result.error) return NextResponse.json({ error: result.error }, { status: result.status });
+  const sale = result.sale as { id: string }
 
-  const { data: sale, error: saleError } = await supabase
-    .from('pos_sales')
-    .insert(salePayload)
-    .select()
-    .single();
-
-  if (saleError) return NextResponse.json({ error: saleError.message }, { status: 500 });
-
-  const { error: itemsError } = await supabase.from('pos_sale_items').insert(
-    items.map((i: any) => ({
-      sale_id:      sale.id,
-      business_id:  bid,
-      product_id:   i.product_id ?? null,
-      product_name: i.product_name ?? i.name ?? 'Unknown',
-      product_sku:  i.sku ?? null,
-      quantity:     i.quantity,
-      unit_price:   i.unit_price,
-      line_total:   Math.round((i.unit_price * i.quantity - (i.discount_amount ?? 0)) * 100) / 100,
-      discount_percent: i.discount_percent ?? 0,
-      cost_price:   i.cost_price ?? 0,
-    }))
-  );
-
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
-
-  // ── KDS ticket creation (waitUntil — keeps function alive, never blocks response) ──
-  if (!salePayload.is_training) {
-    waitUntil((async () => {
-      try {
-        // Fetch the inserted items with their IDs + KDS fields
-        const { data: saleItems } = await supabase
-          .from('pos_sale_items')
-          .select('id, product_id, seat_number, course')
-          .eq('sale_id', sale.id)
-        if (!saleItems?.length) return
-
-        // Look up kds_station per product
-        const productIds = [...new Set(saleItems.map(i => i.product_id).filter(Boolean))]
-        const { data: products } = await supabase
-          .from('pos_products')
-          .select('id, kds_station')
-          .in('id', productIds as string[])
-        const stationMap: Record<string, string> = {}
-        for (const p of products ?? []) stationMap[p.id] = p.kds_station ?? 'barista'
-
-        const now = new Date().toISOString()
-        await supabase.from('pos_kds_tickets').insert(
-          saleItems.map(item => ({
-            business_id: bid,
-            outlet_id: resolvedOutletId ?? null,
-            sale_id: sale.id,
-            sale_item_id: item.id,
-            station: stationMap[item.product_id as string] ?? 'barista',
-            course: item.course ?? null,
-            seat_number: item.seat_number ?? null,
-            status: 'fired',
-            fired_at: now,
-            created_at: now,
-            updated_at: now,
-          }))
-        )
-      } catch (kdsErr) {
-        console.error('[pos/sales] KDS ticket creation failed (non-fatal):', (kdsErr as Error).message)
-      }
-    })())
-  }
-
-  // Deduct from gift card balance
+  // Deduct from gift card balance — unchanged, route-specific (not part of the shared service since
+  // it mutates a different domain object, not the sale itself).
   if (validatedGiftCard && gift_card_amount) {
     const charge = parseFloat(String(gift_card_amount));
     const newBalance = Math.max(0, (validatedGiftCard.balance ?? 0) - charge);
@@ -241,160 +176,10 @@ async function _POST(req: Request) {
     }).eq('id', validatedGiftCard.id);
   }
 
-  // Update session totals
-  if (openSession) {
-    await supabase.from('pos_cash_sessions').update({
-      total_cash_sales: (openSession.total_cash_sales || 0) + (isCash ? total_amount : 0),
-      total_card_sales: (openSession.total_card_sales || 0) + (!isCash && !isGiftCard && !isDirectDeposit ? total_amount : 0),
-    }).eq('id', openSession.id);
-  }
-
-  // Loyalty earn — deferred, non-blocking, same shared helper as /api/pos/sale.
-  if (customer_id) {
-    waitUntil((async () => {
-      try {
-        const { earnOnSale } = await import('@/lib/loyalty/earnOnSale')
-        await earnOnSale({ businessId: bid, customerId: customer_id, saleId: sale.id, totalAmount: total_amount ?? 0 })
-      } catch (e) {
-        console.error('[pos/sales] loyalty earn failed:', (e as Error).message)
-      }
-    })())
-  }
-
-  // ── Save payment record(s) — amount_cents is CENTS not dollars ──────────────
-  try {
-    const paymentsToInsert: Array<{ sale_id: string; method: string; amount_cents: number; reference?: string | null }> = [];
-    if (isSplit && Array.isArray(split_payments) && split_payments.length > 0) {
-      for (const sp of split_payments as Array<{ method: string; amount: number }>) {
-        paymentsToInsert.push({ sale_id: sale.id, method: sp.method, amount_cents: Math.round((sp.amount ?? 0) * 100) });
-      }
-    } else {
-      paymentsToInsert.push({
-        sale_id: sale.id,
-        method: payment_method,
-        amount_cents: Math.round((total_amount ?? 0) * 100),
-        reference: direct_deposit_ref ?? null,
-      });
-    }
-    if (paymentsToInsert.length > 0) {
-      const { error: payInsertErr } = await supabase.from('pos_sale_payments').insert(paymentsToInsert);
-      if (payInsertErr) {
-        console.error('[pos/sales] PAYMENT INSERT FAILED:', JSON.stringify({
-          code: payInsertErr.code,
-          message: payInsertErr.message,
-          details: payInsertErr.details,
-          hint: payInsertErr.hint,
-          attempted_rows: paymentsToInsert,
-        }));
-      } else {
-        console.log('[pos/sales] payment saved:', paymentsToInsert.length, 'rows');
-      }
-    }
-  } catch (payErr) {
-    console.error('[pos/sales] payment save failed (non-fatal):', (payErr as Error).message);
-  }
-
-  // ── Decrement stock — CANONICAL pos_outlet_inventory.items_on_hand (+ stock_quantity cache) ──
-  // INV-DECREMENT-FIX phase 2: items_on_hand (per resolved outlet) is the source of truth; stock_quantity
-  // is kept decremented as a rollback cache. The movement records post-decrement items_on_hand.
-  const saleMovementLines: SaleMovementLine[] = [];
-  const outletForStock = await resolveOutletId(supabase, bid, resolvedOutletId);
-  try {
-    for (const item of (items as Array<{ product_id: string; quantity: number }>) ?? []) {
-      // cache (rollback safety): pos_products.stock_quantity
-      const { data: prod } = await supabase.from('pos_products')
-        .select('stock_quantity').eq('id', item.product_id).maybeSingle();
-      if (prod?.stock_quantity != null) {
-        const { data: newQty } = await supabase.rpc('decrement_stock_quantity', { p_product_id: item.product_id, p_amount: item.quantity });
-        // Observe low stock for Aria Brain (fire-and-forget)
-        if ((newQty ?? 0) <= 5) {
-          const { data: prodInfo } = await supabase.from('pos_products').select('name, reorder_point').eq('id', item.product_id).maybeSingle();
-          ariaObserve({ business_id: bid, category: 'inventory', event_type: 'low_stock', data: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty ?? 0, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
-        }
-      }
-      // canonical: pos_outlet_inventory.items_on_hand (atomic, never negative)
-      const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: outletForStock, productId: item.product_id, delta: -item.quantity });
-      saleMovementLines.push({ itemId: item.product_id, quantitySold: item.quantity, newStock: itemsOnHand });
-    }
-  } catch (stockErr) {
-    console.error('[pos/sales] stock decrement failed (non-fatal):', (stockErr as Error).message);
-  }
-  await recordSaleMovements(supabase, { businessId: bid, saleId: sale.id, saleNumber: (sale as { sale_number?: string | null }).sale_number ?? null, lines: saleMovementLines });
-
-  // ── KDS order creation for cafe (waitUntil — keeps function alive, never blocks response) ──
-  if (!salePayload.is_training) {
-    waitUntil((async () => {
-      try {
-        const { data: bizInfo } = await supabase.from('businesses').select('industry').eq('id', bid).maybeSingle();
-        if (bizInfo?.industry === 'cafe') {
-          const kdsItems = (items as Array<{ product_name?: string; label?: string; qty?: number; quantity?: number; modifiers?: unknown[]; notes?: string }>).map(i => ({
-            name: i.product_name ?? i.label ?? 'Item',
-            qty: i.qty ?? i.quantity ?? 1,
-            modifiers: i.modifiers ?? [],
-            special_instructions: i.notes ?? null,
-          }));
-          await supabase.from('pos_kds_orders').insert({
-            business_id: bid,
-            sale_id: sale.id,
-            table_number: table_label ?? null,
-            items: kdsItems,
-            status: 'new',
-            priority: 1,
-            notes: order_notes ?? notes ?? null,
-            created_at: new Date().toISOString(),
-          });
-        }
-      } catch (kdsErr) {
-        console.error('[pos/sales] KDS order creation failed (non-fatal):', (kdsErr as Error).message);
-      }
-    })());
-  }
-
-  // ── Recipe ingredient deduction for cafe (waitUntil — keeps function alive, never blocks response) ──
-  waitUntil((async () => {
-    try {
-      const { data: bizInfo } = await supabase.from('businesses').select('industry').eq('id', bid).maybeSingle();
-      if (bizInfo?.industry === 'cafe') {
-        for (const item of (items as Array<{ product_id?: string; qty?: number; quantity?: number }>) ?? []) {
-          if (!item.product_id) continue;
-          const { data: recipe } = await supabase.from('recipes')
-            .select('id, recipe_ingredients(product_id, quantity)')
-            .eq('business_id', bid).eq('product_id', item.product_id).maybeSingle();
-          if (!recipe?.recipe_ingredients) continue;
-          const qty = item.qty ?? item.quantity ?? 1;
-          for (const ing of recipe.recipe_ingredients as Array<{ product_id?: string; quantity?: number }>) {
-            if (!ing.product_id) continue;
-            const { data: ingProd } = await supabase.from('pos_products')
-              .select('stock_quantity').eq('id', ing.product_id).eq('business_id', bid).maybeSingle();
-            if (ingProd) {
-              await supabase.from('pos_products').update({
-                stock_quantity: Math.max(0, (ingProd.stock_quantity ?? 0) - (ing.quantity ?? 0) * qty),
-              }).eq('id', ing.product_id).eq('business_id', bid);
-            }
-          }
-        }
-      }
-    } catch { /* non-fatal — ingredient tracking never blocks a sale */ }
-  })());
-
-  // Log to activity_log (fire-and-forget — non-blocking)
-  supabase.from('activity_log').insert({
-    business_id: bid,
-    action_type: 'sale_completed',
-    description: `Sale completed — A$${(total_amount ?? 0).toFixed(2)} via ${payment_method ?? 'unknown'}`,
-    metadata: { sale_id: sale.id, total: total_amount, method: payment_method },
-    created_at: new Date().toISOString(),
-  }).then(({ error }) => { if (error) console.warn('[pos/sales] activity_log write failed:', error.message); });
-
-  // Aria Brain — observe large sale (fire-and-forget)
-  ariaObserve({
-    business_id: bid,
-    category: 'sales',
-    event_type: 'sale_completed',
-    data: { sale_id: sale.id, total_cents: Math.round((total_amount ?? 0) * 100), method: payment_method },
-  }).catch(() => {});
-
-  // Auto-request Google review SMS (fire-and-forget, respects business settings + cooldown)
+  // Auto-request Google review SMS (fire-and-forget, respects business settings + cooldown) —
+  // unchanged, route-specific extra that pos/sale never had; kept here rather than folded into the
+  // shared service so migrating pos/sale to createSale() doesn't silently add a new customer SMS
+  // trigger to the terminal checkout flow.
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.ariaos.site'
   fetch(`${baseUrl}/api/reviews/auto-request`, {
     method: 'POST',
@@ -402,7 +187,7 @@ async function _POST(req: Request) {
     body: JSON.stringify({ sale_id: sale.id, business_id: bid }),
   }).catch(() => {});
 
-  return NextResponse.json({ sale });
+  return NextResponse.json({ sale: result.sale });
 }
 
 async function _PATCH(req: Request) {
