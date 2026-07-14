@@ -115,6 +115,8 @@ export default function KioskClient() {
   const [signupBusy, setSignupBusy] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [error, setError] = useState('')
+  const [helpRequesting, setHelpRequesting] = useState(false)
+  const [helpSent, setHelpSent] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<KioskRecognition | null>(null)
 
@@ -307,6 +309,27 @@ export default function KioskClient() {
     recognitionRef.current = rec
     setListening(true)
   }, [sendMessage])
+
+  // KIOSK-INBOX-1 — prompts/81-kiosk-improvements.md Improvement 4, "real safety valve".
+  const requestHelp = useCallback(async () => {
+    if (helpRequesting || helpSent) return
+    setHelpRequesting(true)
+    try {
+      const res = await fetch('/api/public/instore/help', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id, conversation_id: conversationId }),
+      })
+      if (res.status === 401) { window.location.href = `/in-store/${business_id}`; return }
+      const confirmMsg = res.ok
+        ? "Got it — flagging this for someone now. They'll be with you in a moment."
+        : "Sorry, couldn't reach staff right now — please wave someone down directly."
+      setMessages(m => [...m, { role: 'assistant', content: confirmMsg }])
+      if (voiceEnabled) speak(confirmMsg)
+      setHelpSent(res.ok)
+    } catch (e) { console.error('[non-fatal]', e) }
+    setHelpRequesting(false)
+  }, [business_id, conversationId, helpRequesting, helpSent, voiceEnabled])
 
   async function submitSignup() {
     if (!signupEmail) return
@@ -523,6 +546,16 @@ export default function KioskClient() {
               opacity: !input.trim() || sending ? 0.5 : 1, fontFamily: 'inherit',
             }}>
             Send
+          </button>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button onClick={requestHelp} disabled={helpRequesting || helpSent}
+            style={{
+              background: 'transparent', border: 'none', color: C.dim, fontSize: 12,
+              cursor: helpSent ? 'default' : 'pointer', fontFamily: 'inherit', padding: '6px 10px',
+              textDecoration: helpSent ? 'none' : 'underline',
+            }}>
+            {helpSent ? 'Staff notified ✓' : helpRequesting ? 'Flagging for staff…' : 'Talk to staff →'}
           </button>
         </div>
       </div>
