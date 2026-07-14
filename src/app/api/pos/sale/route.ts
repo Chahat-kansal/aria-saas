@@ -57,6 +57,53 @@ async function _POST(req: Request) {
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
 
+  // REDEMPTION-VERIFY-1 — the terminal computes a loyalty-redeem discount (points_cost * point_value)
+  // and folds it straight into applied_discounts/discount_amount/total_amount BEFORE the sale is ever
+  // submitted here; the ONLY server-side balance check previously lived in a separate, fire-and-forget
+  // /api/pos/loyalty/redeem call fired AFTER this sale already committed — its failure never undid the
+  // discount already charged. Verify against the customer's REAL current balance here, before the
+  // discount is trusted into the sale total — same "never trust the client" principle as the KDS and
+  // reels-usage fixes. Caps down only (never up) and only touches loyalty-tagged entries; every other
+  // discount/promotion on the sale is untouched.
+  interface AppliedDiscountEntry { promotion_id: string; promotion_name: string; type: string; amount_off: number; code?: string }
+  let verifiedAppliedDiscounts: AppliedDiscountEntry[] =
+    Array.isArray(applied_discounts) ? (applied_discounts as AppliedDiscountEntry[]).map(d => ({ ...d })) : []
+  let verifiedDiscountAmount = Number(discount_amount) || 0
+  let verifiedTotalAmount = Number(total_amount) || 0
+
+  const loyaltyEntries = verifiedAppliedDiscounts.filter(d => typeof d.promotion_id === 'string' && d.promotion_id.startsWith('loyalty-redeem-'))
+  if (customer_id && loyaltyEntries.length > 0) {
+    const [{ data: redeemCustomer }, { data: loyaltyCfg }] = await Promise.all([
+      supabase.from('pos_customers').select('points_balance, stamps_count').eq('id', customer_id).eq('business_id', business.id).maybeSingle(),
+      supabase.from('pos_loyalty_config').select('point_value_cents, stamps_to_reward').eq('business_id', business.id).maybeSingle(),
+    ])
+    const realPointsBalance = Number(redeemCustomer?.points_balance ?? 0)
+    const realStampsCount = Number(redeemCustomer?.stamps_count ?? 0)
+    const pointValueCents = Number(loyaltyCfg?.point_value_cents ?? 1)
+    const stampsNeeded = Number(loyaltyCfg?.stamps_to_reward ?? 10)
+    const maxValidPointsDiscount = Math.round(realPointsBalance * pointValueCents) / 100
+
+    let shortfall = 0
+    verifiedAppliedDiscounts = verifiedAppliedDiscounts.map(d => {
+      if (typeof d.promotion_id !== 'string' || !d.promotion_id.startsWith('loyalty-redeem-')) return d
+      const claimed = Number(d.amount_off) || 0
+      const isStamp = d.promotion_id === 'loyalty-redeem-stamp'
+      const cap = isStamp ? (realStampsCount >= stampsNeeded ? claimed : 0) : Math.min(claimed, maxValidPointsDiscount)
+      if (cap < claimed - 0.005) {
+        logger.warn('pos/sale loyalty redemption exceeded real balance — capped', {
+          route: 'pos/sale', businessId: business.id, customer_id, claimed, cap, realPointsBalance, realStampsCount,
+        })
+        shortfall += claimed - cap
+        return { ...d, amount_off: cap }
+      }
+      return d
+    })
+    if (shortfall > 0.005) {
+      verifiedDiscountAmount = Math.max(0, verifiedDiscountAmount - shortfall)
+      verifiedTotalAmount = verifiedTotalAmount + shortfall
+    }
+  }
+
   // ── Permission check: discount limit (line-item and total) ────────
   if (pos_user_id) {
     // Compute max line discount and effective total discount from items
@@ -198,9 +245,9 @@ async function _POST(req: Request) {
       subtotal: +subtotal.toFixed(2),
       tax_amount: +(computedTaxTotal || Number(tax_amount) || Math.round(Number(subtotal) * 0.1 * 100) / 100).toFixed(2),
       tax_breakdown: computedTaxBreakdown,
-      discount_amount: +(discount_amount ?? 0).toFixed(2),
+      discount_amount: +(verifiedDiscountAmount ?? 0).toFixed(2),
       pos_user_id: pos_user_id ?? null,
-      total_amount: +total_amount.toFixed(2),
+      total_amount: +verifiedTotalAmount.toFixed(2),
       cash_tendered: cash_tendered ?? null,
       change_given: change_given ?? null,
       split_cash: split_cash ?? null,
@@ -222,11 +269,8 @@ async function _POST(req: Request) {
   }
 
   // ── Sprint D: record promotion redemptions ──────────────────────
-  if (Array.isArray(applied_discounts) && applied_discounts.length > 0) {
-    const redemptionRows = (applied_discounts as Array<{
-      promotion_id: string; promotion_name: string; type: string;
-      amount_off: number; code?: string;
-    }>).map(d => ({
+  if (verifiedAppliedDiscounts.length > 0) {
+    const redemptionRows = verifiedAppliedDiscounts.map(d => ({
       business_id: business.id,
       promotion_id: d.promotion_id,
       sale_id: sale.id,
