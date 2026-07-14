@@ -1,10 +1,14 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { rateLimit } from '@/lib/security/rate-limit'
 import { isAnthropicCircuitOpen } from '@/lib/aria/circuit-breaker'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { isAdminEmail } from '@/lib/admin'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 interface CheckResult { ok: boolean; ms: number; note?: string }
 
@@ -63,7 +67,14 @@ function checkFailoverKey(name: 'OPENAI_API_KEY' | 'GEMINI_API_KEY'): CheckResul
   return { ok: !!v, ms: 0, note: v ? 'key present (failover ready)' : name + ' not set' }
 }
 
-export async function GET() {
+// AUDIT-CLEANUP-QUICK-1 — this pinged live Anthropic (a real, if throttled, spend) plus Redis and
+// Supabase with zero auth, publicly reachable by anyone. Gated behind the same admin-email check the
+// sibling health/stripe route already uses. Public liveness now lives at /api/healthz ({ok:true} only).
+async function _GET() {
+  const auth = createServerSupabaseClient()
+  const { data: { user } } = await auth.auth.getUser()
+  if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const [supabase, redis, anthropic, circuit] = await Promise.all([
     checkSupabase(), checkRedis(), checkAnthropicLive(), isAnthropicCircuitOpen(),
   ])
@@ -85,3 +96,5 @@ export async function GET() {
     { status: httpStatus },
   )
 }
+
+export const GET = withErrorCapture('health/deep', _GET)
