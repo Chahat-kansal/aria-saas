@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
 import { notifyReady } from '@/lib/notify-ready'
+import { earnOnSale } from '@/lib/loyalty/earnOnSale'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -139,13 +140,31 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
         waitUntil((async () => {
           try {
             const { data: onlineOrd } = await supabaseAdmin
-              .from('pos_online_orders').select('id, status')
+              .from('pos_online_orders').select('id, status, customer_id, total')
               .eq('sale_id', salId).eq('business_id', businessId).maybeSingle()
-            const ord = onlineOrd as { id: string; status: string | null } | null
+            const ord = onlineOrd as { id: string; status: string | null; customer_id: string | null; total: string | null } | null
             if (!ord || ord.status === 'completed') return
             const dNow = new Date().toISOString()
             await supabaseAdmin.from('pos_online_orders')
               .update({ status: 'completed', picked_up_at: dNow, updated_at: dNow }).eq('id', ord.id)
+            // LOYALTY-REGRESSION-1 — this KDS "delivered" bump is a second, independent path that
+            // can drive pos_online_orders.status -> 'completed' (the other being the manual PATCH
+            // in online-orders/[id]/route.ts, which already calls earnOnSale). This one never did,
+            // so any online order completed via the kitchen screen rather than the "Mark picked up"
+            // button in the Online Orders queue silently earned zero loyalty points. earnOnSale is
+            // idempotent (SELECT-first + unique index), so this is safe even if both paths ever fire
+            // for the same sale.
+            if (ord.customer_id) {
+              try {
+                await earnOnSale({ businessId, customerId: ord.customer_id, saleId: salId, totalAmount: Number(ord.total ?? 0) })
+              } catch (earnErr) {
+                void supabaseAdmin.from('activity_log').insert({
+                  business_id: businessId, action_type: 'kds_online_earn_error',
+                  description: '[kds/[id]] earnOnSale on delivered failed: ' + (earnErr as Error).message,
+                  metadata: { kds_order_id: id, sale_id: salId }, created_at: new Date().toISOString(),
+                })
+              }
+            }
           } catch (e) {
             void supabaseAdmin.from('activity_log').insert({
               business_id: businessId, action_type: 'kds_online_sync_error',
