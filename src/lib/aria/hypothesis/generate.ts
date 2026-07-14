@@ -155,12 +155,19 @@ export async function generateHypothesesForBusiness(businessId: string): Promise
 }> {
   const { prompt, evidence_payload } = await buildHypothesisPrompt(businessId)
 
+  // HYPOTHESIS-JSON-FIX-1 — was maxTokens: 2048. The Anthropic->Gemini fallback (c5ba5b8a,
+  // 2026-07-10) forwards this same value as Gemini's maxOutputTokens (src/lib/aria/providers/
+  // gemini.ts), but Gemini is measurably more token-hungry than Claude for the same structured
+  // JSON content — a verbose 5-hypothesis array (title + 2-3 sentence description + 1-sentence
+  // evidence_summary each) genuinely exceeded 2048 tokens on the fallback path every single time
+  // it ran, hitting MAX_TOKENS mid-array. 4096 gives real headroom; still well under either
+  // provider's per-call cost concern for a once-daily cron.
   const result = await callAnthropic<GeneratedHypothesis[]>(
     {
       model: 'haiku',
       systemPrompt: HYPOTHESIS_SYSTEM,
       userPrompt: prompt,
-      maxTokens: 2048,
+      maxTokens: 4096,
       businessId,
       agentKey: 'hypothesis_engine',
       role: 'analysis',
@@ -168,7 +175,16 @@ export async function generateHypothesesForBusiness(businessId: string): Promise
     [],
   )
 
-  const hypotheses = parseHypothesesFromText(businessId, result.raw)
+  // HYPOTHESIS-JSON-FIX-1 — this used to re-parse result.raw from scratch via the stricter,
+  // zero-repair-tolerance parseHypothesesFromText, discarding result.data entirely — which had
+  // already been parsed via the more tolerant parseLLMJsonOr (multi-strategy: fence-stripping,
+  // balanced-brace extraction, trailing-comma cleanup) inside callAnthropic's Gemini-fallback
+  // path. Two independent parse attempts on the same text, the second one strictly weaker, was
+  // pure waste even before the truncation bug — now uses the already-parsed, already-typed result.
+  const hypotheses = Array.isArray(result.data) ? result.data.slice(0, 5) : []
+  if (hypotheses.length === 0 && result.raw) {
+    console.warn('[hypothesis/generate] provider succeeded but yielded 0 usable hypotheses for', businessId, '— raw (first 200 chars):', result.raw.slice(0, 200))
+  }
   return { hypotheses, evidence_payload }
 }
 

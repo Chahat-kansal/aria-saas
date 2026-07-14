@@ -92,6 +92,15 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
     const partsOut = content?.parts as Array<Record<string, unknown>> | undefined
     raw = (partsOut?.[0]?.text as string) ?? ''
 
+    // HYPOTHESIS-JSON-FIX-1 — a MAX_TOKENS finish silently produced truncated, unparseable JSON
+    // for 5 days (2026-07-10 to -14) with zero visibility anywhere until a live Vercel-log dig.
+    // Loud now so a future recurrence (a different caller with a still-too-tight maxTokens) is
+    // diagnosable from aria_ai_calls alone.
+    const finishReason = candidates?.[0]?.finishReason as string | undefined
+    if (finishReason === 'MAX_TOKENS') {
+      console.warn('[gemini] response truncated at maxOutputTokens=' + (params.maxTokens ?? 1024) + ' for agent', params.agentKey, '— raw output was likely cut off mid-structure')
+    }
+
     const usage = (data.usageMetadata ?? {}) as Record<string, number>
     inputTokens  = usage.promptTokenCount     ?? 0
     outputTokens = usage.candidatesTokenCount ?? 0
