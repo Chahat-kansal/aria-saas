@@ -1,0 +1,23 @@
+appId: site.ariaos.canopy
+productName: Canopy
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Canopy
+publish:
+  provider: github
+  owner: ${env.CANOPY_GITHUB_OWNER}
+  repo: ${env.CANOPY_GITHUB_REPO_NAME}
