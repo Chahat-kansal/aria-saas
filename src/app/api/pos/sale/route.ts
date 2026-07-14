@@ -10,6 +10,7 @@ import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture
 import { logger } from '@/lib/observability/logger'
 import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { fireKdsTickets } from '@/lib/pos/kds-fire'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -432,6 +433,32 @@ async function _POST(req: Request) {
           const { error: ingErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: ing.product_id, p_amount: deduct })
           if (ingErr) logger.error('pos/sale ingredient decrement failed', { route: 'pos/sale', businessId: business.id, productId: ing.product_id, error: ingErr.message })
         }
+      }
+    } catch (e) { console.error('[non-fatal]', e) }
+  })())
+
+  // KDS-FIX-1 — station-KDS ticket creation (pos_kds_tickets) used to depend entirely on the
+  // terminal firing a SEPARATE, fire-and-forget POST /api/pos/kds/auto-fire after this request
+  // returned — a fragile second network round-trip whose failures were completely invisible
+  // (fetch(...).catch(() => {}), response never read). Now created here too, server-side,
+  // colocated with the sale/sale_items this same request just created — reliable regardless of
+  // whether the client-triggered auto-fire call ever fires or succeeds. fireKdsTickets is
+  // idempotent (skips if tickets already exist for this sale_id), so both call sites are safe
+  // together. Not industry-gated — the auto-fire call this replaces/backstops fired for every
+  // business, every sale, unconditionally; this keeps that same reach.
+  waitUntil((async () => {
+    try {
+      const result = await fireKdsTickets(supabase, {
+        business_id: business.id, outlet_id: outlet_id ?? null, sale_id: sale.id,
+        table_label: table_id ? `Table ${table_id}` : (order_type === 'dine_in' ? 'Dine-in' : 'Takeaway'),
+      })
+      if (result.errors.length > 0) {
+        logger.error('pos/sale fireKdsTickets failed', { route: 'pos/sale', businessId: business.id, saleId: sale.id, errors: result.errors })
+        void supabaseAdmin.from('activity_log').insert({
+          business_id: business.id, action_type: 'kds_ticket_fire_error',
+          description: '[pos/sale] fireKdsTickets failed: ' + result.errors.join('; '),
+          metadata: { sale_id: sale.id, errors: result.errors }, created_at: new Date().toISOString(),
+        })
       }
     } catch (e) { console.error('[non-fatal]', e) }
   })())

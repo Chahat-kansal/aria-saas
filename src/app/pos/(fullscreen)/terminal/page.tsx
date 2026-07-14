@@ -1618,13 +1618,15 @@ export default function TerminalPage() {
           items: cartSnapshot.reduce((s: number, i: { qty: number }) => s + i.qty, 0), time: new Date(),
         }, ...prev].slice(0, 5));
         if (!d.sale.id) return;
-        // KDS auto-fire (non-blocking)
+        // KDS auto-fire (non-blocking) — belt-and-braces alongside the reliable server-side call
+        // /api/pos/sale now makes itself (KDS-FIX-1); fireKdsTickets is idempotent so this is
+        // safe as a redundant trigger, not the sole one. Item identity is resolved server-side
+        // from sale_id now, never trusted from the client — no items field needed here.
         fetch('/api/pos/kds/auto-fire', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sale_id: d.sale.id, outlet_id: capturedOutletId ?? null,
             table_label: capturedCustomerDetails?.name ?? null,
-            items: cartSnapshot.map(i => ({ id: i.product.id, product_id: i.product.id, quantity: i.qty, notes: null, seat_number: null, course: null })),
           }),
         }).catch(() => {});
         // Loyalty earn (non-blocking)
