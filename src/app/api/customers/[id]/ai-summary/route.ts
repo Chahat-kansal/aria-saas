@@ -16,11 +16,16 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // L-02 — verify ownership on a minimal id/business_id fetch BEFORE loading the full PII row,
+  // so a future bug in the ownership check can't leak the whole customer record.
+  const { data: customerRef } = await supabaseAdmin.from('customers').select('id, business_id').eq('id', params.id).maybeSingle()
+  if (!customerRef) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const { data: biz } = await supabase.from('businesses').select('id, name, industry').eq('id', customerRef.business_id).eq('user_id', user.id).single()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const { data: customer } = await supabaseAdmin.from('customers').select('*').eq('id', params.id).maybeSingle()
   if (!customer) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: biz } = await supabase.from('businesses').select('id, name, industry').eq('id', customer.business_id).eq('user_id', user.id).single()
-  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // Fetch last 20 sales
   const orParts = ['customer_id.eq.' + params.id]

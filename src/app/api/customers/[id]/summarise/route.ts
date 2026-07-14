@@ -15,13 +15,18 @@ export async function POST(req: Request, { params }: Params) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: customer } = await supabaseAdmin.from('customers').select('*').eq('id', params.id).maybeSingle()
-  if (!customer) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // L-01 — verify ownership on a minimal id/business_id fetch BEFORE loading the full PII row,
+  // so a future bug in the ownership check can't leak the whole customer record.
+  const { data: customerRef } = await supabaseAdmin.from('customers').select('id, business_id').eq('id', params.id).maybeSingle()
+  if (!customerRef) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: biz } = await supabase
     .from('businesses').select('id, name, industry, city')
-    .eq('id', customer.business_id).eq('user_id', user.id).single()
+    .eq('id', customerRef.business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const { data: customer } = await supabaseAdmin.from('customers').select('*').eq('id', params.id).maybeSingle()
+  if (!customer) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const totalSpent = Number(customer.total_spent ?? customer.total_spend ?? 0)
   const isHighValue = totalSpent > 500 || Number(customer.visit_count ?? 0) > 10

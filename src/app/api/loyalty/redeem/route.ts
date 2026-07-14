@@ -45,10 +45,12 @@ async function _POST(req: Request) {
   const newStamps = stRedeem > 0 ? Math.max(0, currentStamps - stampsNeeded) : currentStamps
   const rewardText = stRedeem > 0 ? (config?.stamp_reward_text ?? 'Free reward') : null
 
+  // L-03 — close the TOCTOU window: the customer fetch above is already scoped to business_id,
+  // but the final update was id-only. No behavior change for legitimate calls.
   await supabaseAdmin.from('pos_customers').update({
     points_balance: newPoints, loyalty_points: newPoints, loyalty_balance: newPoints,
     stamps_count: newStamps, updated_at: new Date().toISOString(),
-  }).eq('id', customer_id)
+  }).eq('id', customer_id).eq('business_id', business_id)
 
   await supabaseAdmin.from('pos_loyalty_transactions').insert({
     business_id, customer_id, sale_id: sale_id ?? null,
