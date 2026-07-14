@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { sendSlackMessage } from '@/lib/integrations/slack'
+import { sendSlackMessage, getSlackAccessToken } from '@/lib/integrations/slack'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -21,14 +21,15 @@ async function _POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: bizData } = await supabaseAdmin.from('businesses')
-    .select('slack_access_token, slack_channel_id, slack_connected')
+    .select('slack_channel_id, slack_connected')
     .eq('id', business_id).single()
 
-  if (!bizData?.slack_connected || !bizData.slack_access_token || !bizData.slack_channel_id) {
+  const accessToken = bizData?.slack_connected ? await getSlackAccessToken(business_id) : null
+  if (!accessToken || !bizData?.slack_channel_id) {
     return NextResponse.json({ error: 'Slack not connected or no channel selected' }, { status: 400 })
   }
 
-  const result = await sendSlackMessage(bizData.slack_access_token, bizData.slack_channel_id, message, blocks)
+  const result = await sendSlackMessage(accessToken, bizData.slack_channel_id, message, blocks)
   if (!result.ok) return NextResponse.json({ error: result.error ?? 'Slack send failed' }, { status: 502 })
 
   return NextResponse.json({ ok: true })

@@ -3,7 +3,10 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { redeemOAuthState } from '@/lib/integrations/oauth-state'
+import { writeSlackToken, SLACK_KEY } from '@/lib/integrations/slack'
 
 async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -20,13 +23,16 @@ async function _GET(req: Request) {
     return NextResponse.redirect(appUrl + '/dashboard/integrations?error=slack_missing_params')
   }
 
-  let businessId: string
-  try {
-    const parsed = JSON.parse(Buffer.from(stateRaw, 'base64url').toString())
-    businessId = parsed.business_id
-  } catch {
+  // CONNECTOR-VAULT-1a — state is now a random token looked up server-side (never decoded/trusted),
+  // checked for expiry, and re-verified against the CURRENT session's business access — not just
+  // whatever business_id was embedded in the client-supplied value.
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const redeemed = await redeemOAuthState(stateRaw, SLACK_KEY, user?.id)
+  if (!redeemed) {
     return NextResponse.redirect(appUrl + '/dashboard/integrations?error=slack_invalid_state')
   }
+  const { businessId, integrationId } = redeemed
 
   const clientId = process.env.SLACK_CLIENT_ID
   const clientSecret = process.env.SLACK_CLIENT_SECRET
@@ -57,8 +63,11 @@ async function _GET(req: Request) {
   const teamId = (tokenData.team as Record<string, unknown>)?.id as string ?? ''
   const teamName = (tokenData.team as Record<string, unknown>)?.name as string ?? ''
 
+  // CONNECTOR-VAULT-1a — the credential itself is now encrypted in pos_oauth_integrations; the
+  // non-secret display columns stay on businesses exactly as before.
+  await writeSlackToken(businessId, integrationId, accessToken)
+
   const { error: dbErr } = await supabaseAdmin.from('businesses').update({
-    slack_access_token: accessToken,
     slack_team_id: teamId,
     slack_team_name: teamName,
     slack_connected: true,

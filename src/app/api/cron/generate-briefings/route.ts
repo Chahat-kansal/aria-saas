@@ -8,14 +8,13 @@ import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { sendSlackMessage } from '@/lib/integrations/slack'
+import { sendSlackMessage, getSlackAccessToken } from '@/lib/integrations/slack'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 
 interface BriefingBusinessWithSlack extends BriefingBusiness {
   slack_connected?: boolean
   slack_briefing_enabled?: boolean
-  slack_access_token?: string | null
   slack_channel_id?: string | null
   name?: string
   lat?: number | null
@@ -217,16 +216,20 @@ async function generateMorning(
   ])
   if (cacheErr) console.warn('[generate-briefings] aria_briefings_cache upsert:', cacheErr.message)
 
-  // Send to Slack if enabled
-  if (biz.slack_connected && biz.slack_briefing_enabled && biz.slack_access_token && biz.slack_channel_id) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site'
-    const bizName = biz.name ?? 'Your Business'
-    const blocks = [
-      { type: 'header', text: { type: 'plain_text', text: 'Aria Morning Briefing — ' + bizName } },
-      { type: 'section', text: { type: 'mrkdwn', text: bullets.map((b: string) => '• ' + b).join('\n') } },
-      { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open Aria' }, url: appUrl + '/dashboard' }] },
-    ]
-    sendSlackMessage(biz.slack_access_token, biz.slack_channel_id, 'Morning briefing for ' + bizName, blocks).catch(() => {})
+  // Send to Slack if enabled — CONNECTOR-VAULT-1a: token now read from the encrypted vault
+  // (pos_oauth_integrations) instead of the plaintext businesses.slack_access_token column.
+  if (biz.slack_connected && biz.slack_briefing_enabled && biz.slack_channel_id) {
+    const slackToken = await getSlackAccessToken(biz.id)
+    if (slackToken) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site'
+      const bizName = biz.name ?? 'Your Business'
+      const blocks = [
+        { type: 'header', text: { type: 'plain_text', text: 'Aria Morning Briefing — ' + bizName } },
+        { type: 'section', text: { type: 'mrkdwn', text: bullets.map((b: string) => '• ' + b).join('\n') } },
+        { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open Aria' }, url: appUrl + '/dashboard' }] },
+      ]
+      sendSlackMessage(slackToken, biz.slack_channel_id, 'Morning briefing for ' + bizName, blocks).catch(() => {})
+    }
   }
 
   // ── Structured parallel briefing → aria_daily_briefings (source of truth) ─
@@ -371,7 +374,7 @@ async function _GET(req: NextRequest) {
 
   const { data: bizList, error } = await supabaseAdmin
     .from('businesses')
-    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_access_token, slack_channel_id, lat, lng, city')
+    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_channel_id, lat, lng, city')
     .eq('is_active', true)
     .limit(500)
 

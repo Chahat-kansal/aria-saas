@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { disconnectSlack } from '@/lib/integrations/slack'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -18,6 +19,10 @@ async function _POST(req: Request) {
 
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', businessId).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // CONNECTOR-VAULT-1a — clear the encrypted vault row; the old plaintext column is left in place
+  // (unused going forward) rather than dropped in this pass.
+  await disconnectSlack(businessId)
 
   await supabaseAdmin.from('businesses').update({
     slack_access_token: null,

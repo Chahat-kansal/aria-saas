@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getSlackAccessToken } from '@/lib/integrations/slack'
 
 // GET — list channels for the connected workspace
 async function _GET(req: Request) {
@@ -17,12 +18,13 @@ async function _GET(req: Request) {
   if (!businessId) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
   const { data: biz } = await supabase.from('businesses')
-    .select('slack_access_token, slack_connected')
+    .select('slack_connected')
     .eq('id', businessId).eq('user_id', user.id).maybeSingle()
-  if (!biz?.slack_connected || !biz.slack_access_token) return NextResponse.json({ error: 'Slack not connected' }, { status: 400 })
+  const accessToken = biz?.slack_connected ? await getSlackAccessToken(businessId) : null
+  if (!accessToken) return NextResponse.json({ error: 'Slack not connected' }, { status: 400 })
 
   const res = await fetch('https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200', {
-    headers: { Authorization: 'Bearer ' + biz.slack_access_token },
+    headers: { Authorization: 'Bearer ' + accessToken },
   })
   const data = await res.json() as Record<string, unknown>
   if (!data.ok) return NextResponse.json({ error: String(data.error ?? 'Failed to list channels') }, { status: 502 })
