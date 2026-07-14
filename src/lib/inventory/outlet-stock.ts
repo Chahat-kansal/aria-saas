@@ -49,11 +49,12 @@ export async function adjustOutletStock(
   if (!outletId || !productId || !delta) return null
   const rowId = await ensureRow(supabase, businessId, productId, outletId)
   if (!rowId) return null
-  if (delta < 0) {
-    await supabase.rpc('decrement_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: Math.abs(delta) })
-  } else {
-    await supabase.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: delta })
-  }
+  // INVENTORY-DECREMENT-FIX-1 — this RPC result was never checked; a failure here (e.g. a locked row,
+  // a transient RPC error) silently produced a wrong post-adjust items_on_hand with zero visibility.
+  const { error: rpcErr } = delta < 0
+    ? await supabase.rpc('decrement_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: Math.abs(delta) })
+    : await supabase.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: delta })
+  if (rpcErr) console.error('[adjustOutletStock] numeric RPC failed:', { businessId, productId, outletId, delta, error: rpcErr.message })
   await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', rowId)
   const { data: after } = await supabase.from('pos_outlet_inventory').select('items_on_hand').eq('id', rowId).maybeSingle()
   return after ? Number(after.items_on_hand) : null

@@ -1517,7 +1517,6 @@ export default function TerminalPage() {
     const capturedGiftCardCode = giftCardCode;
     const capturedGiftCardBalance = giftCardBalance;
     const capturedDirectDepositRef = directDepositRef;
-    const capturedActiveOutletId = activeOutletId;
     const capturedBusinessId = businessId;
     const capturedBusinessName = businessName;
     const capturedCustomerDetails = customerDetails;
@@ -1676,21 +1675,13 @@ export default function TerminalPage() {
             }).catch(() => null);
           }).catch(() => null);
         }
-        // Outlet inventory decrement (non-blocking)
-        if (capturedActiveOutletId && capturedBusinessId) {
-          import('@/lib/supabase').then(({ supabase: sb }) => {
-            if (!sb) return;
-            cartSnapshot.forEach(i => {
-              if (!i.product.track_stock) return;
-              Promise.resolve(sb.rpc('decrement_outlet_inventory', {
-                p_business_id: capturedBusinessId,
-                p_product_id: i.product.id,
-                p_outlet_id: capturedActiveOutletId,
-                p_qty: i.qty,
-              })).catch(() => {});
-            });
-          });
-        }
+        // INVENTORY-DECREMENT-FIX-1 — this block used to fire a second, unawaited client-side
+        // decrement_outlet_inventory RPC against the exact same pos_outlet_inventory.items_on_hand
+        // row that the server already decrements (awaited, via adjustOutletStock) as part of the
+        // reliable /api/pos/sale completion path. Every track_stock line item sold at the terminal
+        // was silently double-decremented. Removed — the server-side decrement in pos/sale/route.ts
+        // is the single source of truth; nothing here needs to re-touch stock after the sale response
+        // already confirmed it.
       } catch { /* background sync failed — receipt already shown */ }
     })();
   }
