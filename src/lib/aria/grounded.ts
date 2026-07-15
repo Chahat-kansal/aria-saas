@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from './providers/anthropic'
+import { safeAIOutput } from './ai-output-guard'
 import type { AgentKey, AgentRole } from './types'
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
 
@@ -69,17 +70,21 @@ export async function runGroundedAnalysis<T = Record<string, unknown>>(
     systemPrompt: withGrounding(params.systemPrompt, params.groundTruth),
     userPrompt: params.userPrompt,
   }, params.fallback)
-  const cleaned = (resp.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+  // AI-OUTPUT-INTEGRITY-1 — route the model's raw text through the shared scaffold/empty guard
+  // before it's ever parsed into structured data, so a leaked internal-prompt artifact can't
+  // survive into `data` the way BRIEF-INTEGRITY-1's raw prose glue-on did for briefings.
+  const guarded = safeAIOutput(resp.raw, '', { label: `grounded/analysis/${params.agentKey}` })
+  const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
 }
 
-const LEAK_PATTERNS = [/\[INSERT[^\]]*\]/i, /\bTODO\b/, /\{\{[^}]*\}\}/, /\bplaceholder\b/i, /\bsystem prompt\b/i, /\bAPI key\b/i]
-
 /**
  * 2. runCustomerFacingCopy — prose that an end CUSTOMER will read directly (receipts, SMS/email
  * replies, marketing copy, public text). Plain-text output (not JSON) plus a content-safety pass
- * that refuses to ship an obvious leak/placeholder (better an empty result than a broken send).
+ * (AI-OUTPUT-INTEGRITY-1: the shared safeAIOutput() guard, which now also carries this function's
+ * original leak-pattern regexes — see GENERIC_SCAFFOLD_MARKERS in ai-output-guard.ts) that refuses
+ * to ship an obvious leak/placeholder/scaffold artifact (better an empty result than a broken send).
  */
 export async function runCustomerFacingCopy(
   params: BaseParams & { fallback: string },
@@ -94,11 +99,9 @@ export async function runCustomerFacingCopy(
     systemPrompt: withGrounding(params.systemPrompt, params.groundTruth) + '\n\nThis text goes DIRECTLY to a customer — no markdown, no placeholders, no internal jargon, no mention of AI/prompts/systems. Plain, warm, Australian English prose only.',
     userPrompt: params.userPrompt,
   }, params.fallback)
-  const text = (resp.raw ?? '').trim()
-  const leaked = LEAK_PATTERNS.some(p => p.test(text))
-  const safe = resp.success && text.length > 0 && !leaked
-  if (leaked) console.error(`[grounded/customer-facing] leak pattern matched, refusing to ship — agentKey=${params.agentKey}`)
-  return { data: safe ? text : params.fallback, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, safe }
+  const guarded = safeAIOutput(resp.raw, '', { label: `grounded/customer-facing/${params.agentKey}` })
+  const safe = resp.success && guarded.length > 0
+  return { data: safe ? guarded : params.fallback, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, safe }
 }
 
 interface AuditEntry {
@@ -137,7 +140,8 @@ export async function runActionPlanner<T = Record<string, unknown>>(
       tools: params.tools,
       executeTool: params.executeTool,
     })
-    const cleaned = (loop.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+    const guardedLoop = safeAIOutput(loop.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
+    const cleaned = guardedLoop.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
     const data = cleaned ? parseLLMJsonOr<T>(cleaned, params.fallback, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : params.fallback
     if (params.auditLog && loop.success) await writeActionAudit(params.businessId, params.auditLog)
     return { ...loop, data }
@@ -153,7 +157,8 @@ export async function runActionPlanner<T = Record<string, unknown>>(
     systemPrompt: groundedSystem,
     userPrompt: params.userPrompt,
   }, params.fallback)
-  const cleaned = (resp.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+  const guarded = safeAIOutput(resp.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
+  const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : resp.data
   if (params.auditLog && resp.success) await writeActionAudit(params.businessId, params.auditLog)
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
@@ -196,7 +201,8 @@ export async function runBackgroundAgent<T = Record<string, unknown>>(
     systemPrompt: withGrounding(params.systemPrompt, params.groundTruth),
     userPrompt: params.userPrompt,
   }, params.fallback)
-  const cleaned = (resp.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+  const guarded = safeAIOutput(resp.raw, '', { label: `grounded/background/${params.agentKey}` })
+  const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/background/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
 }
@@ -223,7 +229,8 @@ export async function runVisionOrMedia<T = Record<string, unknown>>(
     imageBase64: params.imageBase64,
     imageMimeType: params.imageMimeType,
   }, params.fallback)
-  const cleaned = (resp.raw ?? '').trim().replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+  const guarded = safeAIOutput(resp.raw, '', { label: `grounded/vision/${params.agentKey}` })
+  const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/vision/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
 }
