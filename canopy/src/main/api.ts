@@ -94,6 +94,25 @@ export interface CanopyPinResult {
   token?: string
 }
 
+// CANOPY-REPORTS-AS-FILES-1 — Files app data, real per-business saved reports (canopy_saved_reports,
+// via /api/canopy/reports GET). Matches this file's own established convention exactly: a
+// pre-existing route, called from the main process over the shared session cookie jar.
+export interface SavedReport {
+  id: string
+  title: string
+  source_kind: string
+  grounding: string
+  pdf_url: string
+  generated_at: string
+  saved_by: string
+  created_at: string
+}
+
+export async function fetchSavedReports(): Promise<SavedReport[]> {
+  const data = await apiFetch<{ reports?: SavedReport[] }>('/api/canopy/reports')
+  return data?.reports ?? []
+}
+
 export async function verifyCanopyPin(businessId: string, pin: string): Promise<CanopyPinResult> {
   try {
     const res = await net.fetch(`${PRODUCTION_URL}/api/pos/canopy-pin`, {

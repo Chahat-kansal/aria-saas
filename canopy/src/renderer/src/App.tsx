@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { ActivityItem, CurrentBusiness } from './global'
+import type { ActivityItem, CurrentBusiness, SavedReport } from './global'
 
 // ═══ CANOPY — the Aria OS desktop environment ═══
 // CANOPY-REDESIGN-1: ported from the updated design/aria-environment-dock-final.jsx (the file that
@@ -115,6 +115,14 @@ const ARIA_FEATURES: AriaFeature[] = [
   { id: 'feat-shift-reports',  label: 'Shift Reports',           route: '/dashboard/shift-reports' },
   { id: 'feat-integrations',   label: 'Integrations',            route: '/dashboard/integrations' },
 ]
+
+// CANOPY-REPORTS-AS-FILES-1 — Files app display labels for canopy_saved_reports.source_kind, and
+// colors for its grounding tag (the Business Truth typing principle applied at this sprint's
+// scale — design/ARIA-ENVIRONMENT-BUILD-PLAN.md's locked "verified/derived/estimated" tag).
+const FILE_SOURCE_LABEL: Record<string, string> = {
+  ask_aria_deliverable: 'Ask Aria', weekly_report: 'Weekly Report', daily_briefing: 'Daily Briefing', profit_leaks: 'Profit Leaks',
+}
+const FILE_GROUNDING_COLOR: Record<string, string> = { verified: '#7A8C1E', derived: '#3C7A89', estimated: '#BA7517' }
 
 // Real cropped logo icons (design/icon-sprite-sheet.png, 5x3 grid) — Aria-native apps only. xero and
 // store have no sprite crop (third-party/store, not brand-iconed) and fall back to the SVG glyph.
@@ -248,6 +256,11 @@ export default function App() {
   const [feed, setFeed] = useState<ActivityItem[]>([])
   const [todaySalesCents, setTodaySalesCents] = useState<number | null>(null)
   const [issues, setIssues] = useState<string[]>([])
+  // CANOPY-REPORTS-AS-FILES-1 — Files app's real per-business saved reports (item 2). Fetched
+  // lazily when Files is actually opened, not on every boot — unlike the ambient feed/health/sales
+  // above, nothing on the default desktop needs this.
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([])
+  const [reportsLoading, setReportsLoading] = useState(false)
 
   useEffect(() => {
     const t = setInterval(() => setBoot((p) => Math.min(100, p + 5)), 46)
@@ -290,6 +303,19 @@ export default function App() {
     const t = setInterval(load, 45000)
     return () => { cancelled = true; clearInterval(t) }
   }, [ready, business])
+
+  // CANOPY-REPORTS-AS-FILES-1 item 2 — loads real saved reports only once Files is actually opened
+  // (the `wins` array gains 'files' when its dock/launcher entry is clicked, same as every other
+  // in-Canopy Win), not on every boot like the always-visible ambient feed above.
+  useEffect(() => {
+    if (!ready || !business || !wins.includes('files')) return
+    let cancelled = false
+    setReportsLoading(true)
+    window.canopyAPI.getSavedReports().then((reports) => {
+      if (!cancelled) setSavedReports(reports)
+    }).finally(() => { if (!cancelled) setReportsLoading(false) })
+    return () => { cancelled = true }
+  }, [ready, business, wins])
 
   useEffect(() => window.canopyAPI.onAppClosed((kind) => setWins((w) => w.filter((id) => id !== kind))), [])
 
@@ -722,13 +748,40 @@ export default function App() {
         </div>
       </Win>
 
-      <Win id="files" title="Files" ariaApp w={460} h={400} x={330} y={100}>
-        <div style={{ fontFamily: ariaSerif, fontSize: 18, fontWeight: 700, color: '#16241C', marginBottom: 10 }}>Documents</div>
-        {[['Lease agreement.pdf', '2.1 MB'], ['Public liability insurance.pdf', '840 KB'], ['Riverina supplier contract.pdf', '1.4 MB'], ['Food Safety Supervisor cert.pdf', '310 KB'], ['Q2 BAS statement.pdf', '220 KB']].map(([n, s]) => (
-          <div key={n} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${A.line}`, fontSize: 12 }}>
-            <span style={{ color: 'rgba(22,36,28,.8)' }}>{n}</span><span style={{ color: 'rgba(22,36,28,.4)', fontSize: 10.5 }}>{s}</span>
+      {/* CANOPY-REPORTS-AS-FILES-1 — real, per-business saved reports (canopy_saved_reports),
+          replacing the old static/demo document list. Each row carries its provenance (what kind
+          of report it is + its Business Truth grounding tag) rather than just a filename+size, and
+          a real "Export" that writes the actual PDF to Windows via a native save dialog. */}
+      <Win id="files" title="Files" ariaApp w={460} h={440} x={330} y={100}>
+        <div style={{ fontFamily: ariaSerif, fontSize: 18, fontWeight: 700, color: '#16241C', marginBottom: 10 }}>Saved reports</div>
+        {reportsLoading && savedReports.length === 0 && (
+          <div style={{ fontSize: 11.5, color: 'rgba(22,36,28,.5)', padding: '10px 2px' }}>Loading…</div>
+        )}
+        {!reportsLoading && savedReports.length === 0 && (
+          <div style={{ fontSize: 11.5, color: 'rgba(22,36,28,.5)', padding: '10px 2px', lineHeight: 1.6 }}>
+            No reports saved yet — use "Save to Files" from Ask Aria, Weekly Reports, Profit Leaks, or the Daily Briefing.
           </div>
-        ))}
+        )}
+        {savedReports.map((r) => {
+          const kindLabel = FILE_SOURCE_LABEL[r.source_kind] ?? r.source_kind
+          const groundColor = FILE_GROUNDING_COLOR[r.grounding] ?? A.sage
+          return (
+            <div key={r.id} style={{ padding: '10px 0', borderBottom: `1px solid ${A.line}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#16241C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                    <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: A.card, color: A.sage, fontWeight: 700 }}>{kindLabel}</span>
+                    <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: groundColor + '18', color: groundColor, fontWeight: 700, textTransform: 'uppercase' }}>{r.grounding}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'rgba(22,36,28,.4)', marginTop: 3 }}>
+                    Generated {new Date(r.generated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </Win>
 
       <Win id="help" title="Help" ariaApp w={440} h={340} x={350} y={110}>

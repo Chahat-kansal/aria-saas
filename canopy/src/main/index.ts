@@ -6,6 +6,7 @@ import {
 } from './windows'
 import {
   fetchCurrentBusiness, fetchRecentActivity, fetchHealthQuick, fetchTodaySales, verifyCanopyPin,
+  fetchSavedReports,
 } from './api'
 
 app.whenReady().then(() => {
@@ -74,4 +75,7 @@ function registerCanopyIpc(): void {
     // for the main process to do beyond confirming the window is still there.
     return !!getCanopyWindow()
   })
+
+  // CANOPY-REPORTS-AS-FILES-1 — Files app's real data (item 2).
+  ipcMain.handle('canopy:get-saved-reports', async () => fetchSavedReports())
 }

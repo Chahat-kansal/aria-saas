@@ -30,6 +30,18 @@ export interface CanopyPinResult {
   token?: string
 }
 
+// CANOPY-REPORTS-AS-FILES-1 — mirrors canopy_saved_reports (main app DB) exactly.
+export interface SavedReport {
+  id: string
+  title: string
+  source_kind: string
+  grounding: string
+  pdf_url: string
+  generated_at: string
+  saved_by: string
+  created_at: string
+}
+
 export interface CanopyAPI {
   getBusiness: () => Promise<CurrentBusiness | null>
   getActivity: (businessId: string) => Promise<ActivityItem[]>
@@ -42,6 +54,7 @@ export interface CanopyAPI {
   signOut: () => Promise<boolean>
   exitApp: () => Promise<boolean>
   onAppClosed: (cb: (kind: string) => void) => () => void
+  getSavedReports: () => Promise<SavedReport[]>
 }
 
 declare global {

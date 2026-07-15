@@ -24,6 +24,8 @@ const api = {
     ipcRenderer.on('canopy:app-closed', listener)
     return () => ipcRenderer.removeListener('canopy:app-closed', listener)
   },
+  // CANOPY-REPORTS-AS-FILES-1 — real per-business saved reports for the Files app (item 2).
+  getSavedReports: () => ipcRenderer.invoke('canopy:get-saved-reports'),
 }
 
 contextBridge.exposeInMainWorld('canopyAPI', api)
