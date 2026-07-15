@@ -15,16 +15,18 @@ export async function POST(req: Request, { params }: Params) {
   const { id } = await params
   const { qty = 1 } = await req.json().catch(() => ({}))
 
+  // SECURITY-CRITICAL-1 — bid was computed above but never applied to either query (BUG-HUNT-1
+  // Tier 0.4): any authenticated user could decrement any other business's batch by guessing its id.
   const { data: batch } = await supabase
     .from('pos_product_batches').select('quantity_remaining')
-    .eq('id', id).maybeSingle()
+    .eq('id', id).eq('business_id', bid).maybeSingle()
 
   if (!batch) return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
 
   const newQty = Math.max(0, (batch.quantity_remaining || 0) - qty)
   await supabase.from('pos_product_batches')
     .update({ quantity_remaining: newQty, updated_at: new Date().toISOString() })
-    .eq('id', id)
+    .eq('id', id).eq('business_id', bid)
 
   return NextResponse.json({ ok: true, quantity_remaining: newQty })
 }

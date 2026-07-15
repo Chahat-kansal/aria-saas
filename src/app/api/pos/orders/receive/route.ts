@@ -23,6 +23,13 @@ async function _POST(req: Request) {
   }
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
+  // SECURITY-CRITICAL-1 — order_id ownership was previously only checked (implicitly, via a filter
+  // that silently matches 0 rows on mismatch) on the final status update AFTER the loop below had
+  // already read/written pos_purchase_order_items by item.line_id alone. Verify up front so every
+  // item.line_id used below is scoped to an order this business actually owns (BUG-HUNT-1 Tier 0.3).
+  const { data: order } = await supabase.from('pos_purchase_orders').select('id').eq('id', order_id).eq('business_id', bid).maybeSingle();
+  if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+
   // Fetch primary outlet once (reused across all items)
   const { data: outlet } = await supabase
     .from('pos_outlets').select('id').eq('business_id', bid).limit(1).maybeSingle();
@@ -61,7 +68,8 @@ async function _POST(req: Request) {
         // line's unit_cost) onto item_cost/last_item_cost. Only writes a positive cost; never fabricates.
         let unitCost = item.unit_cost ?? null;
         if ((unitCost == null || unitCost <= 0) && item.line_id) {
-          const { data: poLine } = await supabase.from('pos_purchase_order_items').select('unit_cost').eq('id', item.line_id).maybeSingle();
+          // SECURITY-CRITICAL-1 — scoped to the already-verified order_id, not id alone.
+          const { data: poLine } = await supabase.from('pos_purchase_order_items').select('unit_cost').eq('id', item.line_id).eq('order_id', order_id).maybeSingle();
           unitCost = poLine?.unit_cost ?? null;
         }
         await captureReceiptCost(supabase, { businessId: bid, outletId: outlet.id, productId: item.product_id, unitCost });
@@ -72,9 +80,10 @@ async function _POST(req: Request) {
         const ordered = item.quantity_ordered ?? item.received_qty;
         const receiveStatus = item.received_qty >= ordered ? 'received'
           : item.received_qty > 0 ? 'partial' : 'not_received';
+        // SECURITY-CRITICAL-1 — scoped to the already-verified order_id, not id alone.
         await supabase.from('pos_purchase_order_items')
           .update({ quantity_received: item.received_qty, receive_status: receiveStatus, received_at: new Date().toISOString() })
-          .eq('id', item.line_id);
+          .eq('id', item.line_id).eq('order_id', order_id);
       }
 
       // 4. Create pos_product_batches if expiry_date provided

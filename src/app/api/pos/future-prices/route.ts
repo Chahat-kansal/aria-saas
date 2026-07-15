@@ -23,7 +23,10 @@ async function _GET() {
     .select('*').eq('business_id', bid).eq('applied', false).lte('effective_date', today);
   if (due?.length) {
     for (const fp of due) {
-      await supabase.from('pos_products').update({ price: fp.new_price }).eq('id', fp.product_id);
+      // SECURITY-CRITICAL-1 — scoped to bid, not id alone (BUG-HUNT-1 Tier 0.5): the pos_future_prices
+      // row itself was already business-scoped above, but this write's own filter wasn't — a crafted
+      // product_id pointing at another tenant's product would have silently overwritten its live price.
+      await supabase.from('pos_products').update({ price: fp.new_price }).eq('id', fp.product_id).eq('business_id', bid);
       await supabase.from('pos_future_prices').update({ applied: true, applied_at: new Date().toISOString() }).eq('id', fp.id);
     }
   }
@@ -41,7 +44,10 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const { product_id, new_price, effective_date } = await req.json();
   if (!product_id || !new_price || !effective_date) return NextResponse.json({ error: 'product_id, new_price, effective_date required' }, { status: 400 });
-  const { data: product } = await supabase.from('pos_products').select('price').eq('id', product_id).single();
+  // SECURITY-CRITICAL-1 — verify product_id belongs to bid before scheduling a price change for it,
+  // not just at auto-apply time (defense in depth alongside the GET-side fix above).
+  const { data: product } = await supabase.from('pos_products').select('price').eq('id', product_id).eq('business_id', bid).maybeSingle();
+  if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
   const { data, error } = await supabase.from('pos_future_prices').insert({
     business_id: bid, product_id, new_price, effective_date,
     current_price: product?.price ?? null, applied: false,

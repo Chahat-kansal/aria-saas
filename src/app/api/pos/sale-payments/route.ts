@@ -30,6 +30,14 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'sale_id, method, and amount_cents (or amount) are required' }, { status: 400 });
   }
 
+  // SECURITY-CRITICAL-1 — bid was fetched (gates "belongs to *a* business") but never checked against
+  // sale_id, and pos_sale_payments has no business_id column of its own to scope by (tenant isolation
+  // for this table is derived entirely via the sale_id FK) — so this was a wide-open cross-tenant
+  // write: any authenticated user could inject a payment row against any other business's sale
+  // (BUG-HUNT-1 Tier 0.6). Verify the sale belongs to bid before inserting.
+  const { data: sale } = await supabase.from('pos_sales').select('id').eq('id', sale_id).eq('business_id', bid).maybeSingle();
+  if (!sale) return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
+
   console.log('[sale-payments] inserting:', JSON.stringify({ sale_id, method, amount_cents }))
   const { data, error: insertErr } = await supabase.from('pos_sale_payments').insert({
     sale_id,
