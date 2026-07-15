@@ -92,6 +92,10 @@ export interface CanopyPinResult {
   staff_id?: string
   name?: string
   token?: string
+  // CANOPY-STAFF-CLOCK-1 — which staff table resolved the PIN (only 'pos_staff' can clock in/out —
+  // that's the table those routes authenticate against) and whether a shift is already open.
+  source?: 'pos_users' | 'pos_staff'
+  already_clocked_in?: boolean
 }
 
 // CANOPY-REPORTS-AS-FILES-1 — Files app data, real per-business saved reports (canopy_saved_reports,
@@ -124,5 +128,50 @@ export async function verifyCanopyPin(businessId: string, pin: string): Promise<
     return await res.json() as CanopyPinResult
   } catch {
     return { valid: false }
+  }
+}
+
+// CANOPY-STAFF-CLOCK-1 — thin wrappers over the pre-existing, unmodified
+// /api/staff/timesheets/clock-in|clock-out routes (same ones the terminal/staff-portal already
+// use). Both derive the business from the caller's own authenticated session server-side (not a
+// body param), matching how those routes already work for every other caller — no businessId
+// param needed here.
+export interface ClockResult {
+  ok: boolean
+  staff_name?: string
+  clock_in?: string
+  hours_worked?: number
+  total_pay_cents?: number
+  message?: string
+  error?: string
+}
+
+export async function clockInStaff(pin: string): Promise<ClockResult> {
+  try {
+    const res = await net.fetch(`${PRODUCTION_URL}/api/staff/timesheets/clock-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    })
+    const json = await res.json().catch(() => ({})) as Partial<ClockResult>
+    if (!res.ok) return { ok: false, error: json.error ?? 'Clock-in failed' }
+    return { ok: true, staff_name: json.staff_name, clock_in: json.clock_in, message: json.message }
+  } catch {
+    return { ok: false, error: 'Network error' }
+  }
+}
+
+export async function clockOutStaff(pin: string): Promise<ClockResult> {
+  try {
+    const res = await net.fetch(`${PRODUCTION_URL}/api/staff/timesheets/clock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    })
+    const json = await res.json().catch(() => ({})) as Partial<ClockResult>
+    if (!res.ok) return { ok: false, error: json.error ?? 'Clock-out failed' }
+    return { ok: true, staff_name: json.staff_name, hours_worked: json.hours_worked, total_pay_cents: json.total_pay_cents, message: json.message }
+  } catch {
+    return { ok: false, error: 'Network error' }
   }
 }

@@ -251,6 +251,22 @@ export default function App() {
   const [exitConfirm, setExitConfirm] = useState(false)
   const [exitPin, setExitPin] = useState('')
   const [exitPinError, setExitPinError] = useState(false)
+  // CANOPY-STAFF-CLOCK-1 — a staff PIN resolved via pos_staff (the real staff/timesheet roster)
+  // may need an explicit "clock in?" confirmation before entering the staff view (never silent —
+  // item 1), shown at most once per shift (skipped when already_clocked_in — item 3). The PIN just
+  // entered on the lock screen is carried over here rather than re-prompted, since clock-in reuses
+  // the exact identity just verified.
+  const [clockInPrompt, setClockInPrompt] = useState(false)
+  const [clockInPromptPin, setClockInPromptPin] = useState('')
+  const [clockInPromptName, setClockInPromptName] = useState('')
+  const [clockInBusy, setClockInBusy] = useState(false)
+  // Clock out is deliberately its own re-authenticated flow (mirrors Exit Canopy's pattern) —
+  // distinct from the plain "Lock" control (item 2): locking pauses for a break, clocking out ends
+  // the shift and returns to the lock screen.
+  const [clockOutConfirm, setClockOutConfirm] = useState(false)
+  const [clockOutPin, setClockOutPin] = useState('')
+  const [clockOutPinError, setClockOutPinError] = useState(false)
+  const [clockOutStatus, setClockOutStatus] = useState<string | null>(null)
   const [clock, setClock] = useState('')
   const [business, setBusiness] = useState<CurrentBusiness | null>(null)
   const [feed, setFeed] = useState<ActivityItem[]>([])
@@ -379,11 +395,59 @@ export default function App() {
         if (result.valid && result.scope) {
           setRole(result.scope)
           if (result.scope === 'staff') setWins((w) => w.filter((id) => STAFF_VISIBLE.includes(id)))
-          setLocked(false); setPin(''); setJustUnlocked(true)
-          setTimeout(() => setJustUnlocked(false), 2600)
+          setLocked(false)
+          // CANOPY-STAFF-CLOCK-1 — only a pos_staff-sourced staff PIN can clock in/out (that's the
+          // table those routes check); never prompt for a pos_users match (currently only ever the
+          // owner) or when a shift is already open.
+          if (result.scope === 'staff' && result.source === 'pos_staff' && !result.already_clocked_in) {
+            setClockInPromptPin(next)
+            setClockInPromptName(result.name ?? '')
+            setClockInPrompt(true)
+            setPin('')
+          } else {
+            setPin(''); setJustUnlocked(true)
+            setTimeout(() => setJustUnlocked(false), 2600)
+          }
         } else {
           setPinError(true)
           setTimeout(() => { setPin(''); setPinError(false) }, 420)
+        }
+      })
+    }
+  }
+
+  // CANOPY-STAFF-CLOCK-1 — resolves the clock-in prompt either way (Yes or No/dismiss); declining
+  // still enters the staff view normally, it just never calls clockIn() — no silent auto-clock-in.
+  const confirmClockIn = useCallback((doClockIn: boolean) => {
+    const finish = () => {
+      setClockInPrompt(false); setClockInPromptPin(''); setClockInBusy(false)
+      setJustUnlocked(true)
+      setTimeout(() => setJustUnlocked(false), 2600)
+    }
+    if (!doClockIn) { finish(); return }
+    setClockInBusy(true)
+    window.canopyAPI.clockIn(clockInPromptPin).then(finish)
+  }, [clockInPromptPin])
+
+  const coi = useRef(0)
+  const pressClockOutPin = (d: string) => {
+    const next = (clockOutPin + d).slice(0, 4)
+    setClockOutPin(next)
+    if (next.length === 4) {
+      coi.current += 1
+      const attempt = coi.current
+      window.canopyAPI.clockOut(next).then((result) => {
+        if (attempt !== coi.current) return
+        if (result.ok) {
+          setClockOutConfirm(false); setClockOutPin('')
+          setClockOutStatus(result.message ?? 'Clocked out.')
+          // Ending a shift returns to the lock screen — distinct from a mid-shift Lock, which
+          // stays clocked in.
+          setLocked(true)
+          setTimeout(() => setClockOutStatus(null), 5000)
+        } else {
+          setClockOutPinError(true)
+          setTimeout(() => { setClockOutPin(''); setClockOutPinError(false) }, 420)
         }
       })
     }
@@ -489,10 +553,22 @@ export default function App() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: 34, padding: '0 16px', color: P.ink, fontSize: 12 }}>
         <AMark s={16} />
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: P.dim }}><span style={{ width: 6, height: 6, borderRadius: 99, background: P.lime }} /> {businessName} · Open {role === 'staff' && '· Staff view'}</span>
-        <div onClick={() => setLocked(true)} title="Lock — switch staff" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: P.dim, padding: '3px 8px', borderRadius: 6 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = P.ink)} onMouseLeave={(e) => (e.currentTarget.style.color = P.dim)}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5.5" y="11" width="13" height="9" rx="2" /><path d="M8 11V7.5a4 4 0 0 1 8 0V11" /></svg>
-          <span style={{ fontSize: 11 }}>Lock</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* CANOPY-STAFF-CLOCK-1 item 2 — a separate control from Lock below: Lock pauses for a
+              break and stays clocked in; Clock out ends the shift for real. Only shown for staff —
+              the owner never clocks in/out of their own business. */}
+          {role === 'staff' && (
+            <div onClick={() => setClockOutConfirm(true)} title="Clock out — end your shift" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: P.dim, padding: '3px 8px', borderRadius: 6 }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = P.ink)} onMouseLeave={(e) => (e.currentTarget.style.color = P.dim)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+              <span style={{ fontSize: 11 }}>Clock out</span>
+            </div>
+          )}
+          <div onClick={() => setLocked(true)} title="Lock — switch staff" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: P.dim, padding: '3px 8px', borderRadius: 6 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = P.ink)} onMouseLeave={(e) => (e.currentTarget.style.color = P.dim)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5.5" y="11" width="13" height="9" rx="2" /><path d="M8 11V7.5a4 4 0 0 1 8 0V11" /></svg>
+            <span style={{ fontSize: 11 }}>Lock</span>
+          </div>
         </div>
         <span style={{ color: P.dim, ...num }}>{clock}</span>
       </div>
@@ -520,6 +596,59 @@ export default function App() {
             ))}
           </div>
           <div style={{ fontSize: 10.5, color: P.faint, marginTop: 22, textAlign: 'center', maxWidth: 220, lineHeight: 1.5 }}>Owner and staff both unlock with their own PIN — the machine recognizes which by the code itself, never by a button.</div>
+        </div>
+      )}
+
+      {/* CANOPY-STAFF-CLOCK-1 — explicit clock-in confirmation, shown right after a fresh
+          pos_staff-sourced staff unlock with no shift already open. Deliberately a plain Yes/No,
+          not another PIN pad — the PIN was just entered on the lock screen a moment ago; asking
+          for it again here would just be friction, not extra security (declining still opens the
+          staff view normally, it only skips the clock-in call). */}
+      {clockInPrompt && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(245,243,236,.97)', zIndex: 205, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 74, height: 74, borderRadius: '50%', background: P.limeSoft, display: 'grid', placeItems: 'center', marginBottom: 8 }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={A.sage} strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+          </div>
+          <div style={{ color: P.ink, fontSize: 16, fontWeight: 600 }}>{clockInPromptName ? `Welcome, ${clockInPromptName}` : 'Welcome'}</div>
+          <div style={{ color: P.dim, fontSize: 11.5, marginTop: 3, marginBottom: 22 }}>Clock in for your shift?</div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button disabled={clockInBusy} onClick={() => confirmClockIn(false)} style={{ padding: '10px 20px', borderRadius: 8, border: `1px solid ${P.line}`, background: 'transparent', color: P.dim, fontWeight: 600, fontSize: 12.5, cursor: clockInBusy ? 'default' : 'pointer', fontFamily: sans }}>Not now</button>
+            <button disabled={clockInBusy} onClick={() => confirmClockIn(true)} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: P.lime, color: P.ink, fontWeight: 700, fontSize: 12.5, cursor: clockInBusy ? 'default' : 'pointer', fontFamily: sans }}>{clockInBusy ? 'Clocking in…' : 'Clock in'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* CANOPY-STAFF-CLOCK-1 — Clock out, re-authenticated the same way Exit Canopy is (item 2:
+          deliberately distinct from the plain "Lock" control below — locking pauses for a break
+          and stays clocked in, clocking out ends the shift for real and returns to the lock
+          screen). Reuses the exact PIN-pad visual pattern exitConfirm already established. */}
+      {clockOutConfirm && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(245,243,236,.97)', zIndex: 212, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => { setClockOutConfirm(false); setClockOutPin('') }} style={{ position: 'absolute', top: 20, right: 24, fontSize: 12, color: P.dim, cursor: 'pointer', padding: '6px 10px', borderRadius: 6 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = P.ink)} onMouseLeave={(e) => (e.currentTarget.style.color = P.dim)}>Cancel</div>
+          <div style={{ width: 74, height: 74, borderRadius: '50%', background: P.limeSoft, display: 'grid', placeItems: 'center', marginBottom: 8 }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={A.sage} strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+          </div>
+          <div style={{ color: P.ink, fontSize: 16, fontWeight: 600 }}>Clock out</div>
+          <div style={{ color: P.dim, fontSize: 11.5, marginTop: 3, marginBottom: 22 }}>Enter your PIN to end your shift.</div>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 26, animation: clockOutPinError ? 'shake .3s' : undefined }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} style={{ width: 13, height: 13, borderRadius: 99, border: `1.5px solid ${clockOutPinError ? P.red : P.line}`, background: i < clockOutPin.length ? (clockOutPinError ? P.red : P.lime) : 'transparent' }} />
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 62px)', gap: 12 }}>
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((d, i) => d === '' ? <div key={i} /> : (
+              <button key={i} onClick={() => (d === '⌫' ? setClockOutPin((p) => p.slice(0, -1)) : pressClockOutPin(d))} style={{
+                width: 62, height: 62, borderRadius: '50%', border: `1px solid ${P.line}`, background: P.raised, color: P.ink, fontSize: 18, cursor: 'pointer', fontFamily: sans,
+              }}>{d}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {clockOutStatus && (
+        <div style={{ position: 'absolute', top: 44, left: '50%', transform: 'translateX(-50%)', background: P.limeSoft, border: '1px solid rgba(217,245,78,.3)', borderRadius: 99, padding: '5px 14px', fontSize: 11.5, color: P.ink, zIndex: 220, maxWidth: 320, textAlign: 'center' }}>
+          {clockOutStatus}
         </div>
       )}
 

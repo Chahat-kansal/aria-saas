@@ -28,6 +28,21 @@ export interface CanopyPinResult {
   staff_id?: string
   name?: string
   token?: string
+  // CANOPY-STAFF-CLOCK-1 — which staff table resolved the PIN (only 'pos_staff' can clock in/out)
+  // and whether a shift is already open.
+  source?: 'pos_users' | 'pos_staff'
+  already_clocked_in?: boolean
+}
+
+// CANOPY-STAFF-CLOCK-1 — mirrors canopy/src/main/api.ts's ClockResult exactly.
+export interface ClockResult {
+  ok: boolean
+  staff_name?: string
+  clock_in?: string
+  hours_worked?: number
+  total_pay_cents?: number
+  message?: string
+  error?: string
 }
 
 // CANOPY-REPORTS-AS-FILES-1 — mirrors canopy_saved_reports (main app DB) exactly.
@@ -63,6 +78,8 @@ export interface CanopyAPI {
   onAppClosed: (cb: (kind: string) => void) => () => void
   getSavedReports: () => Promise<SavedReport[]>
   exportReport: (pdfUrl: string, suggestedName: string) => Promise<ExportReportResult>
+  clockIn: (pin: string) => Promise<ClockResult>
+  clockOut: (pin: string) => Promise<ClockResult>
 }
 
 declare global {

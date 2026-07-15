@@ -43,6 +43,19 @@ export function computeHours(clockIn: string, clockOut: string, breakMinutes: nu
   return Math.max(0, +(totalMinutes / 60).toFixed(2))
 }
 
+// CANOPY-STAFF-CLOCK-1 — factored out of clockIn()'s own double-clock-in guard so Canopy's PIN
+// route can check clock status WITHOUT mutating anything (never silently clock someone in just to
+// find out whether they already are). Behavior-identical to the inline check this replaces.
+export async function getActiveClockIn(
+  businessId: string,
+  posStaffId: string,
+): Promise<{ id: string; clock_in: string } | null> {
+  const supabase = createServerSupabaseClient()
+  const { data } = await supabase.from('pos_timesheets')
+    .select('id,clock_in').eq('business_id', businessId).eq('staff_id', posStaffId).is('clock_out', null).maybeSingle()
+  return (data as { id: string; clock_in: string } | null) ?? null
+}
+
 export async function clockIn(
   businessId: string,
   posStaffId: string,
@@ -55,8 +68,7 @@ export async function clockIn(
   if (!posStaff) return null
 
   // Prevent double clock-in
-  const { data: existing } = await supabase.from('pos_timesheets')
-    .select('id').eq('business_id', businessId).eq('staff_id', posStaffId).is('clock_out', null).maybeSingle()
+  const existing = await getActiveClockIn(businessId, posStaffId)
   if (existing) return null
 
   const { data: member } = await supabase.from('staff_members')

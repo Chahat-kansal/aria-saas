@@ -6,7 +6,7 @@ import {
 } from './windows'
 import {
   fetchCurrentBusiness, fetchRecentActivity, fetchHealthQuick, fetchTodaySales, verifyCanopyPin,
-  fetchSavedReports,
+  fetchSavedReports, clockInStaff, clockOutStaff,
 } from './api'
 import { exportReportToWindows } from './export'
 
@@ -83,4 +83,8 @@ function registerCanopyIpc(): void {
   // CANOPY-REPORTS-AS-FILES-1 — real Windows-side export via native save dialog (item 4).
   ipcMain.handle('canopy:export-report', async (_e, pdfUrl: string, suggestedName: string) =>
     exportReportToWindows(getCanopyWindow(), pdfUrl, suggestedName))
+
+  // CANOPY-STAFF-CLOCK-1 — real staff clock-in/out via the pre-existing timesheets routes.
+  ipcMain.handle('canopy:clock-in', async (_e, pin: string) => clockInStaff(pin))
+  ipcMain.handle('canopy:clock-out', async (_e, pin: string) => clockOutStaff(pin))
 }

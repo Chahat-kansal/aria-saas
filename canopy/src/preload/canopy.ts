@@ -28,6 +28,9 @@ const api = {
   getSavedReports: () => ipcRenderer.invoke('canopy:get-saved-reports'),
   // CANOPY-REPORTS-AS-FILES-1 — Windows-side export via native save dialog (item 4).
   exportReport: (pdfUrl: string, suggestedName: string) => ipcRenderer.invoke('canopy:export-report', pdfUrl, suggestedName),
+  // CANOPY-STAFF-CLOCK-1 — real staff clock-in/out via the pre-existing timesheets routes.
+  clockIn: (pin: string) => ipcRenderer.invoke('canopy:clock-in', pin),
+  clockOut: (pin: string) => ipcRenderer.invoke('canopy:clock-out', pin),
 }
 
 contextBridge.exposeInMainWorld('canopyAPI', api)
