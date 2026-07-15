@@ -5,6 +5,19 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Canopy</title>
+    <style>
+      /* CANOPY-POLISH-1 item 1 — a real OS desktop must never scroll. Without this reset, the
+         browser's UA default `body { margin: 8px }` alone adds 16px of vertical overflow on top of
+         a 100vh-tall root (#root's child is exactly window-height, so ANY extra margin/border
+         anywhere pushes total content past the viewport and the browser adds a page scrollbar) —
+         independent of anything App.tsx itself renders, and independent of window size, so no
+         per-component fix could have caught this. box-sizing: border-box is set globally so any
+         future fixed-width/height element with padding/border can't silently grow past its
+         intended size and reintroduce overflow the same way.
+      */
+      html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+      *, *::before, *::after { box-sizing: border-box; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
