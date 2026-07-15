@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
+import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton';
 
 interface Leak {
   id: string; title: string; category: string; description: string;
@@ -193,6 +194,20 @@ export default function ProfitLeaksPage() {
     ? Math.round(((history[history.length - 1].total_leak_cents - history[0].total_leak_cents) / Math.max(history[history.length - 1].total_leak_cents, 1)) * 100)
     : null;
 
+  // CANOPY-REPORTS-AS-FILES-1 — profit-leaks has no existing PDF/deliverable of its own (confirmed
+  // via investigation); this builds the exact same simple HTML shape generateDeliverable() already
+  // produces for Ask Aria deliverables, reusing the identical downstream PDF pipeline (see
+  // saveReport() in src/lib/aria/canopy-reports.ts) rather than adding a second one.
+  function buildProfitLeaksHtml(): string {
+    const rows = activeLeaks.map(l => `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">${l.title}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#EF4444;font-weight:700">$${(Number(l.monthly_loss) || 0).toFixed(0)}/mo</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555">${l.recommendation ?? ''}</td></tr>`).join('')
+    return `<html><body style="font-family:sans-serif;padding:24px;color:#111">
+      <h1 style="font-size:22px">Profit Leaks</h1>
+      <p style="color:#555">Estimated monthly loss: <strong style="color:#EF4444">$${totalLoss.toFixed(0)}</strong> · ${activeLeaks.length} active leak${activeLeaks.length !== 1 ? 's' : ''}</p>
+      ${aiSummary ? `<p style="background:#f0faf5;border-left:4px solid #1D9E75;padding:12px 16px;color:#333">${aiSummary}</p>` : ''}
+      <table style="width:100%;border-collapse:collapse;margin-top:12px"><thead><tr><th style="text-align:left;padding:8px 12px">Leak</th><th style="text-align:left;padding:8px 12px">Est. loss</th><th style="text-align:left;padding:8px 12px">Recommendation</th></tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`
+  }
+
   if (loading && leaks.length === 0) {
     return (
       <div style={{ padding: '24px 28px', maxWidth: 800 }}>
@@ -215,10 +230,18 @@ export default function ProfitLeaksPage() {
           <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Aria identified these areas where your business is losing money.</p>
           {lastRunAt && <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Last updated: {fmtAgo(lastRunAt)}</p>}
         </div>
-        <button onClick={runRefresh} disabled={refreshing}
-          style={{ padding: '8px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#9ca3af', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, opacity: refreshing ? 0.6 : 1 }}>
-          {refreshing ? 'Analysing…' : '↻ Refresh'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {leaks.length > 0 && (
+            <SaveToFilesButton
+              sourceKind="profit_leaks" title={'Profit Leaks — ' + new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+              grounding="estimated" html={buildProfitLeaksHtml()}
+              style={{ padding: '8px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#9ca3af', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }} />
+          )}
+          <button onClick={runRefresh} disabled={refreshing}
+            style={{ padding: '8px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#9ca3af', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: refreshing ? 0.6 : 1 }}>
+            {refreshing ? 'Analysing…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Fix rate banner */}

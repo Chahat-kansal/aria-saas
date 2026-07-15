@@ -14,6 +14,7 @@ import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import type { AskBlock } from '@/lib/aria/ask-types'
+import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 
 const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
@@ -458,6 +459,11 @@ function DeliverableToolbar({ deliverable, summaryText }: { deliverable: Deliver
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><path strokeLinecap="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
           {emailLoading ? 'Sending…' : 'Email'}
         </button>
+        {/* CANOPY-REPORTS-AS-FILES-1 — grounded 'verified': this deliverable's numbers were pulled
+            directly from live pos_sales/pos_sale_items/pos_customers queries (see
+            src/lib/aria/deliverables.ts's fetch*Data functions), not an AI estimate. */}
+        <SaveToFilesButton className={btnBase} style={btnStyle}
+          sourceKind="ask_aria_deliverable" sourceId={deliverable.id} title={deliverable.title} grounding="verified" />
         <button className={btnBase} style={scheduleOpen ? btnActiveStyle : btnStyle} onClick={() => setScheduleOpen(v => !v)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3 h-3"><rect x="3" y="4" width="18" height="18" rx="2"/><path strokeLinecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
           Schedule

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useBusiness } from '@/components/providers/BusinessProvider'
 import { supabase } from '@/lib/supabase'
 import { pickCanonicalBriefing } from '@/lib/aria/briefing-guard'
+import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 
 interface Rec {
   id: string
@@ -342,6 +343,20 @@ export default function DailyBriefingPage() {
   const weather = snap.external_context?.weather_next_3_days ?? []
   const holidays = snap.external_context?.upcoming_holidays ?? []
 
+  // CANOPY-REPORTS-AS-FILES-1 — daily-briefing has no existing PDF/deliverable of its own
+  // (confirmed via investigation); builds the same simple HTML shape generateDeliverable() already
+  // produces for Ask Aria deliverables, reusing the identical downstream PDF pipeline (see
+  // saveReport() in src/lib/aria/canopy-reports.ts) rather than adding a second one.
+  function buildBriefingHtml(): string {
+    const summary = historyView?.content ?? bullets.join(' · ')
+    const recRows = recs.map(r => `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">${r.title}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555">${r.description}</td></tr>`).join('')
+    return `<html><body style="font-family:sans-serif;padding:24px;color:#111">
+      <h1 style="font-size:22px">Daily Briefing — ${historyView ? fmtDate(historyView.date) : todayStr}</h1>
+      ${summary ? `<p style="background:#f0faf5;border-left:4px solid #7FB897;padding:12px 16px;color:#333">${summary}</p>` : ''}
+      ${recRows ? `<table style="width:100%;border-collapse:collapse;margin-top:12px"><thead><tr><th style="text-align:left;padding:8px 12px">Recommendation</th><th style="text-align:left;padding:8px 12px">Detail</th></tr></thead><tbody>${recRows}</tbody></table>` : ''}
+    </body></html>`
+  }
+
   const prioColor = (p: string) => ({ high: '#f87171', medium: '#fbbf24', low: G }[p] ?? G)
   const catIcon = (c: string) => ({ customers: '👥', revenue: '💰', stock: '📦', reviews: '⭐', marketing: '📣', compliance: '⚠️' }[c] ?? '💡')
 
@@ -372,6 +387,12 @@ export default function DailyBriefingPage() {
               style={{ padding: '8px 16px', borderRadius: 10, border: `1px solid ${G}`, background: 'transparent', color: G, fontSize: 13, cursor: refreshing ? 'wait' : 'pointer', opacity: refreshing ? 0.6 : 1 }}>
               {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
+            {!loading && (bullets.length > 0 || historyView?.content) && (
+              <SaveToFilesButton
+                sourceKind="daily_briefing" title={'Daily Briefing — ' + (historyView ? fmtDate(historyView.date) : todayStr)}
+                grounding="derived" html={buildBriefingHtml()}
+                style={{ padding: '8px 16px', borderRadius: 10, border: BORDER, background: CARD, color: 'rgba(255,255,255,0.7)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }} />
+            )}
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 
 interface DayData { date: string; revenue: number; transactions: number }
 interface ProductStat { name: string; revenue: number; quantitySold: number }
@@ -185,10 +186,19 @@ export default function WeeklyReportsPage() {
               <p style={{ fontSize: 11, color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Week of</p>
               <h1 style={{ fontSize: 28, fontWeight: 600, fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', margin: '4px 0 6px' }}>{weekRange(selected.week_starting)}</h1>
               {selected.pdf_url && (
-                <a href={selected.pdf_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'inline-block', marginTop: 4, padding: '6px 14px', borderRadius: 8, background: 'rgba(45,82,64,0.3)', color: C.green, fontSize: 11, fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(127,184,151,0.2)' }}>
-                  ⬇ Download PDF
-                </a>
+                <>
+                  <a href={selected.pdf_url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-block', marginTop: 4, padding: '6px 14px', borderRadius: 8, background: 'rgba(45,82,64,0.3)', color: C.green, fontSize: 11, fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(127,184,151,0.2)' }}>
+                    ⬇ Download PDF
+                  </a>
+                  {/* CANOPY-REPORTS-AS-FILES-1 — reuses this record's own already-generated pdf_url
+                      (produced by generateWeeklyPDF, a separate pipeline from Ask Aria's
+                      deliverables but equally real) rather than regenerating anything. grounded
+                      'derived': an AI narrative/recommendations layered over real revenue numbers. */}
+                  <SaveToFilesButton
+                    sourceKind="weekly_report" sourceId={selected.id} title={'Weekly Report — ' + weekRange(selected.week_starting)} grounding="derived"
+                    style={{ display: 'inline-block', marginTop: 4, marginLeft: 8, padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', color: C.text, fontSize: 11, fontWeight: 700, border: '1px solid ' + C.border, cursor: 'pointer', fontFamily: 'inherit' }} />
+                </>
               )}
               {selected.email_sent_at && (
                 <span style={{ marginLeft: 10, fontSize: 11, color: C.dim }}>📧 Sent {new Date(selected.email_sent_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
