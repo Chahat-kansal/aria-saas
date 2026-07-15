@@ -6,11 +6,14 @@ import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
-import { toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { addDaysYmd } from '@/lib/date-au'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendSlackMessage, getSlackAccessToken } from '@/lib/integrations/slack'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
+import type { ParallelTask } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
+import { getRevenueSnapshot } from '@/lib/aria/revenue-snapshot'
+import { safeBriefingContent, suppressUpbeatCloser } from '@/lib/aria/briefing-guard'
 
 interface BriefingBusinessWithSlack extends BriefingBusiness {
   slack_connected?: boolean
@@ -70,19 +73,18 @@ async function generateMorning(
   biz: BriefingBusinessWithSlack,
   today: string
 ) {
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yday = yesterday.toISOString().slice(0, 10)
+  // BRIEF-INTEGRITY-1: UTC-safe calendar-date math (was mixing server-local-time Date mutation with
+  // a UTC toISOString() re-serialize — a genuine source of off-by-one-day drift depending on the
+  // cron host's local timezone). addDaysYmd operates purely on the YYYY-MM-DD string.
+  const yday = addDaysYmd(today, -1)
 
   const now = Date.now()
   const sevenDaysAgo = new Date(now - 7 * 86_400_000).toISOString()
-  const thirtyFiveDaysAgo = new Date(now - 35 * 86_400_000).toISOString()
-  const twentyEightDaysAgo = new Date(now - 28 * 86_400_000).toISOString()
   const sevenDaysAgoWeekStart = new Date(now - 14 * 86_400_000).toISOString()
 
   // ── All data fetches in parallel ─────────────────────────────────────────
   const [
-    { data: sales },
+    revenueSnapshot,
     { data: salesBaseline },
     { data: thisWeekItems },
     { data: lastWeekItems },
@@ -90,15 +92,17 @@ async function generateMorning(
     { data: marketScan },
     { data: topAction },
     { data: priorBriefings },
+    { data: recentWins },
   ] = await Promise.all([
-    // Yesterday sales
-    supabaseAdmin.from('pos_sales').select('total_amount')
-      .eq('business_id', biz.id).neq('status', 'voided')
-      .gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)), // TZ-1: AEST-bounded day, was Z-pinned
+    // BRIEF-INTEGRITY-1: canonical revenue snapshot — the ONE source of "yesterday's revenue" for
+    // this whole run (legacy bullets below, the LLM prompt context, and the ground_truth log all
+    // read from this same value; buildBriefingTasks' own sales_summary task independently calls the
+    // same function for the same date, so the two numbers can no longer disagree).
+    getRevenueSnapshot(biz.id, yday),
     // 28-35 day baseline for daily average
     supabaseAdmin.from('pos_sales').select('total_amount, created_at')
-      .eq('business_id', biz.id).neq('status', 'voided')
-      .gte('created_at', thirtyFiveDaysAgo).lte('created_at', twentyEightDaysAgo),
+      .eq('business_id', biz.id).eq('status', 'completed')
+      .gte('created_at', new Date(now - 35 * 86_400_000).toISOString()).lte('created_at', new Date(now - 28 * 86_400_000).toISOString()),
     // This week product sales (last 7d) for movers
     supabaseAdmin.from('pos_sale_items').select('product_name, line_total')
       .eq('business_id', biz.id).gte('created_at', sevenDaysAgo),
@@ -116,15 +120,23 @@ async function generateMorning(
     supabaseAdmin.from('aria_actions').select('title, recommendation, category, priority')
       .eq('business_id', biz.id).eq('status', 'pending')
       .order('priority', { ascending: true }).limit(1).maybeSingle(),
-    // Last 3 briefings for anti-repetition
-    supabaseAdmin.from('aria_daily_briefings').select('briefing_date, content')
+    // Last 3 briefings for anti-repetition — ground_truth read alongside content so the dedup
+    // context below quotes the CANONICAL number for that day, never a re-parse of old text.
+    supabaseAdmin.from('aria_daily_briefings').select('briefing_date, content, ground_truth')
       .eq('business_id', biz.id).neq('briefing_date', today).not('content', 'is', null)
       .order('briefing_date', { ascending: false }).limit(3),
+    // RECENT WINS: top 3 positive autopilot outcomes from last 30 days (moved up so it can feed the
+    // LLM prompt, same as every other context block below — was previously fetched only after the
+    // LLM call and glued onto the output instead of shown to the model).
+    supabaseAdmin.from('aria_autopilot_actions').select('title')
+      .eq('business_id', biz.id).eq('outcome', 'positive')
+      .gte('created_at', new Date(now - 30 * 86_400_000).toISOString())
+      .order('created_at', { ascending: false }).limit(3),
   ])
 
   // ── Revenue vs baseline ───────────────────────────────────────────────────
-  const revenue = (sales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
-  const txCount = (sales ?? []).length
+  const revenue = revenueSnapshot.revenue
+  const txCount = revenueSnapshot.transaction_count
   const baselineDays = (salesBaseline ?? []).reduce((acc: Map<string, number>, row) => {
     const d = String(row.created_at).slice(0, 10)
     acc.set(d, (acc.get(d) ?? 0) + Number(row.total_amount ?? 0))
@@ -180,10 +192,39 @@ async function generateMorning(
   // ── AU RSS headlines ──────────────────────────────────────────────────────
   const rssHeadlines = await fetchAURssHeadlines()
 
-  // ── Anti-repetition: first line of each prior briefing ───────────────────
-  const priorLeads = (priorBriefings ?? [])
-    .map(b => String(b.content ?? '').split('\n')[0]?.slice(0, 120))
-    .filter(Boolean)
+  // ── Anti-repetition context: canonical ground_truth revenue (not scraped text) + opening theme ──
+  // BRIEF-INTEGRITY-1: previously "first line of prior content" accidentally captured whatever raw
+  // scaffolding used to open that day's content (including old revenue figures) — now content is
+  // guaranteed clean model prose (see the safeBriefingContent guard below), and the revenue figure
+  // quoted here comes from that day's own logged ground_truth snapshot, never a re-parse.
+  const priorContext = (priorBriefings ?? []).map(b => {
+    const gt = b.ground_truth as { revenue?: number } | null
+    const theme = String(b.content ?? '').split('\n')[0]?.slice(0, 120)
+    const revStr = gt?.revenue != null ? `revenue $${gt.revenue.toFixed(2)}` : null
+    return [b.briefing_date, revStr, theme ? `opened: "${theme}"` : null].filter(Boolean).join(', ')
+  }).filter(Boolean)
+
+  // Monday only: weekly labour cost summary — computed here (not after the LLM call) so it can
+  // actually be shown to the model instead of glued onto its output afterward.
+  let weeklyLabourSection: string | null = null
+  if (new Date(today + 'T12:00:00Z').getUTCDay() === 1) {
+    const [{ data: weekTs }, { data: weekSales }] = await Promise.all([
+      supabaseAdmin.from('pos_timesheets').select('hours_worked, total_pay_cents, pay_rate_cents')
+        .eq('business_id', biz.id).gte('clock_in', sevenDaysAgo).limit(2000),
+      supabaseAdmin.from('pos_sales').select('total_amount')
+        .eq('business_id', biz.id).eq('status', 'completed').gte('created_at', sevenDaysAgo).limit(5000),
+    ])
+    const weekLabourCents = (weekTs ?? []).reduce((s, t) => {
+      return s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0)))
+    }, 0)
+    const weekLabourDollars = weekLabourCents / 100
+    const weekRevenue = (weekSales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+    const weekLabourPct = weekRevenue > 0 ? (weekLabourDollars / weekRevenue * 100) : null
+    if (weekLabourDollars > 0 || weekRevenue > 0) {
+      const pctStr = weekLabourPct != null ? ` (${weekLabourPct.toFixed(1)}% of revenue${weekLabourPct > 30 ? ' — above 30% benchmark' : weekLabourPct < 20 ? ' — well within benchmark' : ' — within benchmark'})` : ''
+      weeklyLabourSection = `Weekly labour review (last 7 days): Labour cost A$${weekLabourDollars.toFixed(2)}, Revenue A$${weekRevenue.toFixed(2)}${pctStr}.`
+    }
+  }
 
   // ── Build the legacy insights bullets (Slack + pos_daily_briefings) ───────
   const marketCtx = marketScan
@@ -233,103 +274,81 @@ async function generateMorning(
   }
 
   // ── Structured parallel briefing → aria_daily_briefings (source of truth) ─
+  // BRIEF-INTEGRITY-1: every context block below used to be built as a raw label string and glued
+  // onto parallelResult.merged AFTER the LLM already ran — the model never saw any of it, and the
+  // raw labels (including "TODAY'S RECOMMENDATION (max 1):" / "DO NOT open with the same theme as
+  // these prior briefings:") were stored and shown to the owner verbatim. These are now fed INTO
+  // the LLM as extra parallel tasks instead, so the model can synthesize them into real prose —
+  // realizing the original "inject before the merged output" intent properly, with no information
+  // lost. The stored content is ONLY ever parallelResult.merged (post-guard), never concatenated.
   try {
-    const tasks = buildBriefingTasks(biz.id, 'retail')
-    const parallelResult = await runParallelAriaAgents(biz.id, tasks, 'starter')
+    const extraTasks: ParallelTask[] = []
 
-    // Build structured context sections to inject before the merged parallel output
-    const revenueSection = [
-      `REVENUE: Yesterday $${revenue.toFixed(2)} (${txCount} transactions).`,
-      baselineDailyAvg ? `28-35d daily average: $${baselineDailyAvg.toFixed(2)} — yesterday was ${Number(vsPrior) >= 0 ? '+' : ''}${vsPrior}% vs prior window.` : null,
-      `Daily target: $${TARGET_DAILY.toFixed(2)} — yesterday was ${Number(vsTarget) >= 0 ? '+' : ''}${vsTarget}% vs target.`,
+    const revenueLine = [
+      `Yesterday revenue: $${revenue.toFixed(2)} (${txCount} transactions).`,
+      baselineDailyAvg ? `28-35 day daily average: $${baselineDailyAvg.toFixed(2)} (yesterday was ${Number(vsPrior) >= 0 ? '+' : ''}${vsPrior}% vs that window).` : null,
+      `Daily target: $${TARGET_DAILY.toFixed(2)} (yesterday was ${Number(vsTarget) >= 0 ? '+' : ''}${vsTarget}% vs target).`,
     ].filter(Boolean).join(' ')
+    extraTasks.push({ key: 'revenue_context', label: 'Revenue context', priority: 'high', fn: async () => revenueLine })
 
-    const stockSection = (lowStock ?? []).length > 0
-      ? `STOCK ALERTS: ${(lowStock ?? []).map(p => `${p.name} (${p.stock_quantity} left)`).join(', ')} — consider reordering.`
-      : null
-
-    const moversSection = (topMover && topMover.delta > 0)
-      ? `MOVERS: ${topMover.name} up $${topMover.delta.toFixed(0)} vs last week.${(bottomMover && bottomMover.delta < -20 && bottomMover.name !== topMover.name) ? ` ${bottomMover.name} down $${Math.abs(bottomMover.delta).toFixed(0)}.` : ''}`
-      : null
-
-    const weatherSection = weatherStr ? `TOMORROW'S WEATHER: ${weatherStr}${biz.city ? ` in ${biz.city}` : ''}.` : null
-
-    const rssSection = rssHeadlines.length > 0
-      ? `AU BUSINESS NEWS: ${rssHeadlines.join(' | ')}`
-      : null
-
-    const recommendationSection = topAction
-      ? `TODAY'S RECOMMENDATION (max 1): [${(topAction.priority as string).toUpperCase()}] ${topAction.title} — ${topAction.recommendation}`
-      : null
-
-    const antiRepeatNote = priorLeads.length > 0
-      ? `DO NOT open with the same theme as these prior briefings: ${priorLeads.join(' | ')}`
-      : null
-
-    // RECENT WINS: top 3 positive autopilot outcomes from last 30 days
-    const thirtyDaysAgoIso = new Date(now - 30 * 86_400_000).toISOString()
-    const { data: recentWins } = await supabaseAdmin
-      .from('aria_autopilot_actions')
-      .select('title')
-      .eq('business_id', biz.id)
-      .eq('outcome', 'positive')
-      .gte('created_at', thirtyDaysAgoIso)
-      .order('created_at', { ascending: false })
-      .limit(3)
-    const recentWinsSection = recentWins && recentWins.length > 0
-      ? `RECENT WINS (recommendations that worked): ${(recentWins as { title: string | null }[]).map(w => w.title ?? '').filter(Boolean).join(' | ')}`
-      : null
-
-    // Monday only: weekly labour cost summary in briefing
-    let weeklyLabourSection: string | null = null
-    if (new Date(today + 'T12:00:00Z').getUTCDay() === 1) {
-      const [{ data: weekTs }, { data: weekSales }] = await Promise.all([
-        supabaseAdmin
-          .from('pos_timesheets')
-          .select('hours_worked, total_pay_cents, pay_rate_cents')
-          .eq('business_id', biz.id)
-          .gte('clock_in', sevenDaysAgo)
-          .limit(2000),
-        supabaseAdmin
-          .from('pos_sales')
-          .select('total_amount')
-          .eq('business_id', biz.id)
-          .gte('created_at', sevenDaysAgo)
-          .neq('status', 'voided')
-          .limit(5000),
-      ])
-      const weekLabourCents = (weekTs ?? []).reduce((s, t) => {
-        return s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0)))
-      }, 0)
-      const weekLabourDollars = weekLabourCents / 100
-      const weekRevenue = (weekSales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
-      const weekLabourPct = weekRevenue > 0 ? (weekLabourDollars / weekRevenue * 100) : null
-      if (weekLabourDollars > 0 || weekRevenue > 0) {
-        const pctStr = weekLabourPct != null ? ` (${weekLabourPct.toFixed(1)}% of revenue${weekLabourPct > 30 ? ' — ⚠ above 30% benchmark' : weekLabourPct < 20 ? ' — well within benchmark' : ' — within benchmark'})` : ''
-        weeklyLabourSection = `WEEKLY LABOUR REVIEW (last 7 days): Labour cost A$${weekLabourDollars.toFixed(2)}, Revenue A$${weekRevenue.toFixed(2)}${pctStr}.`
-      }
+    if ((lowStock ?? []).length > 0) {
+      extraTasks.push({
+        key: 'stock_alerts', label: 'Stock alerts', priority: 'high',
+        fn: async () => `${(lowStock ?? []).length} item(s) at or below reorder point: ${(lowStock ?? []).map(p => `${p.name} (${p.stock_quantity} left)`).join(', ')}.`,
+      })
     }
 
-    const structuredPrefix = [
-      revenueSection,
-      stockSection,
-      moversSection,
-      recentWinsSection,
-      weeklyLabourSection,
-      weatherSection,
-      rssSection,
-      recommendationSection,
-      antiRepeatNote,
-    ].filter(Boolean).join('\n')
+    if (topMover && topMover.delta > 0) {
+      extraTasks.push({
+        key: 'movers', label: 'Product movers', priority: 'medium',
+        fn: async () => `${topMover.name} up $${topMover.delta.toFixed(0)} vs last week.${(bottomMover && bottomMover.delta < -20 && bottomMover.name !== topMover.name) ? ` ${bottomMover.name} down $${Math.abs(bottomMover.delta).toFixed(0)}.` : ''}`,
+      })
+    }
 
-    const enrichedContent = structuredPrefix + '\n\n' + parallelResult.merged
+    if (recentWins && recentWins.length > 0) {
+      const titles = (recentWins as { title: string | null }[]).map(w => w.title ?? '').filter(Boolean)
+      if (titles.length > 0) extraTasks.push({ key: 'recent_wins', label: 'Recent wins (recommendations that worked)', priority: 'low', fn: async () => titles.join(' | ') })
+    }
+
+    if (weeklyLabourSection) extraTasks.push({ key: 'weekly_labour', label: 'Weekly labour review', priority: 'medium', fn: async () => weeklyLabourSection! })
+
+    if (weatherStr) extraTasks.push({ key: 'weather', label: "Tomorrow's weather", priority: 'low', fn: async () => `${weatherStr}${biz.city ? ` in ${biz.city}` : ''}.` })
+
+    if (rssHeadlines.length > 0) extraTasks.push({ key: 'au_news', label: 'AU business news', priority: 'low', fn: async () => rssHeadlines.join(' | ') })
+
+    const hasHighAlert = topAction?.priority === 'high'
+    if (topAction) {
+      extraTasks.push({
+        key: 'today_recommendation', label: "Today's recommendation (max one, weave in naturally)", priority: 'high',
+        fn: async () => `[${(topAction.priority as string).toUpperCase()}] ${topAction.title} — ${topAction.recommendation}`,
+      })
+    }
+
+    if (priorContext.length > 0) {
+      extraTasks.push({
+        key: 'anti_repetition', label: 'Prior briefings — vary today’s opening theme, do not repeat', priority: 'low',
+        fn: async () => priorContext.join(' | '),
+      })
+    }
+
+    const tasks = [...buildBriefingTasks(biz.id, 'retail'), ...extraTasks]
+    const parallelResult = await runParallelAriaAgents(biz.id, tasks, 'starter')
+
+    // BRIEF-INTEGRITY-1 part 4 — single-narrative: code-level backstop for MERGE_SYSTEM rule 8, in
+    // case the model still closes on an upbeat note despite the prompt instruction.
+    const toned = suppressUpbeatCloser(parallelResult.merged, hasHighAlert)
+
+    // BRIEF-INTEGRITY-1 part 1 — the hard guard. Only ever stores real model output or the static
+    // honest fallback; a scaffold-marker match (or empty/failed generation) never reaches storage.
+    const finalContent = safeBriefingContent(toned)
 
     await supabaseAdmin.from('aria_daily_briefings').upsert({
       business_id: biz.id,
       briefing_date: today,
-      content: enrichedContent,
+      content: finalContent,
       source: 'parallel',
       generated_at: new Date().toISOString(),
+      ground_truth: revenueSnapshot,
     }, { onConflict: 'business_id,briefing_date' })
   } catch (err) {
     console.error('[generate-briefings] parallel briefing failed:', (err as Error).message)
@@ -340,15 +359,8 @@ async function generateEvening(
   biz: BriefingBusiness,
   today: string
 ) {
-  const { data: sales } = await supabaseAdmin
-    .from('pos_sales')
-    .select('total_amount, served_by, created_at')
-    .eq('business_id', biz.id)
-    .neq('status', 'voided')
-    .gte('created_at', toAESTStart(today)) // TZ-1: AEST-bounded today, was Z-pinned
-
-  const revenue = (sales ?? []).reduce((s, r) => s + (r.total_amount ?? 0), 0)
-  const txCount = (sales ?? []).length
+  // BRIEF-INTEGRITY-1: canonical snapshot, same function generateMorning/parallel-tasks use.
+  const { revenue, transaction_count: txCount } = await getRevenueSnapshot(biz.id, today)
 
   const { bullets } = await generateInsight({
     business_id: biz.id,

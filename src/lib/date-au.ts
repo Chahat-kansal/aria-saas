@@ -65,7 +65,7 @@ function auDateOf(shifted: Date): string {
 }
 
 // Add/subtract whole days to a YYYY-MM-DD (UTC-safe calendar math).
-function addDaysYmd(ymd: string, days: number): string {
+export function addDaysYmd(ymd: string, days: number): string {
   const dt = new Date(`${ymd}T00:00:00.000Z`);
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);

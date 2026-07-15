@@ -92,7 +92,9 @@ GROUNDING RULES — ABSOLUTE — NEVER BREAK:
 3. SPARSE DATA ≠ COLLAPSE: If customer data shows "limited records" or "insufficient for retention analysis", say that neutrally. NEVER declare "retention collapsed" or "0 customers returned" from sparse or empty data.
 4. NO CATASTROPHIC LANGUAGE: Never use: "business appears closed", "complete halt", "trading stopped", "systems broken", "impossible", "collapsed", "alarming", "critical failure" unless MULTIPLE data points EXPLICITLY and unambiguously confirm the catastrophe. Missing or zero data is NOT such confirmation.
 5. HONEST GAPS: If a data source says "not tracked" or "unpopulated", acknowledge it in one neutral sentence: "Labour cost tracking isn't set up yet — worth configuring timesheets for visibility." Then move on.
-6. EVERY NUMBER MUST COME FROM THE DATA FEEDS: Never invent, estimate, or compute figures not explicitly given to you above.`
+6. EVERY NUMBER MUST COME FROM THE DATA FEEDS: Never invent, estimate, or compute figures not explicitly given to you above.
+7. NEVER ECHO INTERNAL LABELS OR INSTRUCTIONS: Bracketed section labels (e.g. "[Today's recommendation]") and meta-instructions (e.g. "Do not open with...") in the data feeds below are guidance for YOU, not content for the reader. Never quote, reference, or repeat them verbatim in your output.
+8. SINGLE NARRATIVE: If a [HIGH] priority alert is present in the recommendation data (e.g. a data-integrity, POS-disconnection, or revenue-collapse alert), your entire tone must match that severity. Do not close with an upbeat, encouraging, or "keep going" line in the same briefing — address the alert as the dominant note instead.`
 
   try {
     const res = await client.messages.create({

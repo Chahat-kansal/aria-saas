@@ -12,6 +12,8 @@ import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
 import { trackCron } from '@/app/api/cron/_lib/track-cron'
 import { isAnthropicUnreachable, recordAnthropicFailure, recordTotalOutage } from '@/lib/aria/circuit-breaker'
 import { callGemini } from '@/lib/aria/providers/gemini'
+import { getRevenueSnapshot } from '@/lib/aria/revenue-snapshot'
+import { safeBriefingContent } from '@/lib/aria/briefing-guard'
 
 // AI-ROUTER-FAILOVER-1 — the Anthropic Batches API has no per-item Gemini
 // equivalent, so a submitBatch() outage used to fail every business's
@@ -48,9 +50,10 @@ async function fallbackToGeminiPerBusiness(requests: Array<{ custom_id: string; 
     })
 
     const usedGemini = g.success && !!g.raw.trim()
-    const content = usedGemini
-      ? g.raw.trim()
-      : "Aria's morning briefing is catching up today — your dashboard numbers are live and unaffected."
+    // BRIEF-INTEGRITY-1 part 1 — guard applies here too ("no exceptions"): even though this path
+    // already had a sane static fallback, route both branches through the same hard check as every
+    // other write to this column.
+    const content = safeBriefingContent(usedGemini ? g.raw.trim() : null)
 
     const { error } = await supabaseAdmin.from('aria_daily_briefings').upsert({
       business_id: req.custom_id, briefing_date: today, content,
@@ -133,17 +136,18 @@ function buildMarketPricesPromptBlock(market: MarketCtx | null, industry: string
 }
 
 async function buildBriefingContext(businessId: string) {
-  // TZ-1: yesterday = yesterday's AEST calendar date, bounded with +10:00 instants
-  // (businesses.timezone is selected at the call site but date-au has no TZ param — AEST assumed, multi-TZ later)
+  // BRIEF-INTEGRITY-1: yesterday's revenue/transactions now come from the same canonical
+  // getRevenueSnapshot() every other briefing/advisor path uses — was an independent AEST-bounded
+  // query here (correct boundaries, but a second implementation of the same computation).
   const yday = new Date(nowAEST().getTime() - 86400000).toISOString().slice(0, 10)
   const yStart = toAESTStart(yday)
   const yEnd   = toAESTEnd(yday)
   // WEEK-1: "Week so far" = calendar week, Monday 00:00 AEST → now (was rolling 7 days — AUDIT-1 finding #3 mislabel)
   const weekAgo = toAESTStart(startOfWeekAEST().toISOString().slice(0, 10))
 
-  const [{ data: ySales }, { data: wSales }, { data: stock }, { data: items }] = await Promise.all([
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', yStart).lte('created_at', yEnd),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', weekAgo),
+  const [snapshot, { data: wSales }, { data: stock }, { data: items }] = await Promise.all([
+    getRevenueSnapshot(businessId, yday),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status', 'completed').gte('created_at', weekAgo),
     supabaseAdmin.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', businessId).eq('is_active', true).limit(20),
     supabaseAdmin.from('pos_sale_items').select('product_name,quantity').eq('business_id', businessId).gte('created_at', yStart).lte('created_at', yEnd),
   ])
@@ -155,8 +159,8 @@ async function buildBriefingContext(businessId: string) {
   const topProduct = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'no sales'
 
   return {
-    yesterdayRevenue: (ySales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0).toFixed(2),
-    yesterdayTransactions: (ySales ?? []).length,
+    yesterdayRevenue: snapshot.revenue.toFixed(2),
+    yesterdayTransactions: snapshot.transaction_count,
     weekRevenue: (wSales ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0).toFixed(2),
     topProduct,
     lowStock: (stock ?? []).filter(p => (p.stock_quantity ?? 0) < (p.low_stock_threshold ?? 5)).slice(0, 3).map(p => p.name),

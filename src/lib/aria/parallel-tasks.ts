@@ -1,4 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, addDaysYmd } from '@/lib/date-au'
+import { getRevenueSnapshot } from './revenue-snapshot'
 import type { ParallelTask } from './parallel-orchestrator'
 
 function fmt(n: number | null | undefined) {
@@ -12,19 +14,25 @@ export function buildBriefingTasks(businessId: string, _industry: string): Paral
       label: 'Sales summary',
       priority: 'high',
       fn: async () => {
-        const today = new Date().toISOString().split('T')[0]
-        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+        // BRIEF-INTEGRITY-1: today/yesterday now go through the same canonical getRevenueSnapshot()
+        // that generate-briefings.ts uses for its own "yesterday revenue" figure in the same run —
+        // this was the confirmed root cause of the two numbers disagreeing within a single briefing
+        // (this task did raw-UTC boundaries; generate-briefings.ts did AEST boundaries). The 7-day
+        // rolling total below is a trailing window, not a calendar-day boundary, so it's unaffected
+        // by the TZ bug and left as-is.
+        const todayYmd = todayAEST()
+        const yesterdayYmd = addDaysYmd(todayYmd, -1)
         const week7 = new Date(Date.now() - 7 * 86400000).toISOString()
-        const [todayRes, yestRes, week7Res] = await Promise.all([
-          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', today),
-          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', yesterday).lt('created_at', today),
-          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', week7),
+        const [todaySnap, yestSnap, week7Res] = await Promise.all([
+          getRevenueSnapshot(businessId, todayYmd),
+          getRevenueSnapshot(businessId, yesterdayYmd),
+          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status', 'completed').gte('created_at', week7),
         ])
-        const todayRev = (todayRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
-        const yestRev = (yestRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
+        const todayRev = todaySnap.revenue
+        const yestRev = yestSnap.revenue
         const week7Rev = (week7Res.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount || 0), 0)
         const week7Count = week7Res.data?.length ?? 0
-        const todayCount = todayRes.data?.length ?? 0
+        const todayCount = todaySnap.transaction_count
         // GROUNDING: A quiet today must be judged against the 7-day trend, not reported as a closure
         const todayNote = todayRev === 0 && week7Rev > 0
           ? 'Today: $0.00 so far (' + todayCount + ' transactions — in-progress day, 7-day trend is healthy)'

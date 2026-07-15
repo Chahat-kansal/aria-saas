@@ -7,6 +7,7 @@ import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { pollBatchResults } from '@/lib/aria-batch'
 import { computeBatchCostCents } from '@/lib/aria/cost'
+import { safeBriefingContent } from '@/lib/aria/briefing-guard'
 
 type BatchResult = {
   custom_id: string
@@ -67,10 +68,13 @@ export async function GET(req: NextRequest) {
         if (r.result?.type === 'succeeded') {
           const text = r.result.message?.content?.find(b => b.type === 'text')?.text ?? ''
           if (text && r.custom_id) {
+            // BRIEF-INTEGRITY-1 part 1 — this write previously had ZERO validation between "what the
+            // batch API returned" and "what gets stored". A malformed/refusal response that echoed
+            // prompt text would have reached the owner verbatim. Same guard as every other write path.
             await supabaseAdmin.from('aria_daily_briefings').upsert({
               business_id: r.custom_id,
               briefing_date: new Date().toISOString().split('T')[0],
-              content: text,
+              content: safeBriefingContent(text),
               generated_at: new Date().toISOString(),
               source: 'batch_api',
             }, { onConflict: 'business_id,briefing_date' })
