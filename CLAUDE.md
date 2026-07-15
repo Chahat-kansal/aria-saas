@@ -109,7 +109,16 @@ AnimatedBg, FlyToCart, CursorGlow, pos-sfx.ts, aria-voice-guide.ts
 
 Confirmed column/table traps — use the CORRECT name:
 - staff_members: first_name + last_name (NO `name`)
-- pos_sales: total_amount (NO `total`); status filter `!= 'voided'`
+- pos_sales: total_amount (NO `total`); revenue/"real sales" queries: status filter
+  `= 'completed'` (NOT `!= 'voided'` — corrected 2026-07-16, BRIEF-INTEGRITY-2, live-data
+  confirmed. `!= 'voided'` silently counts `draft` rows (held/parked carts — see
+  pos/sales/draft/*, explicitly not-yet-real revenue until promoted) as revenue, and includes
+  `refunded` rows (a separate row with a NEGATIVE total_amount, linked via original_sale_id —
+  see return-engine.ts — an existing distinct "gross vs net" concept per
+  reconciliation-agent.ts, not something to blend into one revenue figure by filter alone).
+  Use `src/lib/aria/revenue-snapshot.ts`'s `getRevenueSnapshot()` for any AEST-day-boundary
+  revenue figure instead of re-querying pos_sales directly — one canonical implementation,
+  not a filter to get right by hand at every call site.)
 - pos_sale_items: line_total (NO `total_price`)
 - pos_timesheets (NOT pos_timesheet_sessions); hours_worked (NO `total_minutes`)
 - pos_inventory_transfers (NOT pos_stock_transfers)

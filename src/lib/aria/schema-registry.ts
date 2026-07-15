@@ -49,7 +49,12 @@ export const SCHEMA_REGISTRY: Record<string, RegistryEntry> = {
     canonical_table: 'pos_sales',
     canonical_column: 'total_amount (SUM)',
     canonical_query_description:
-      "SELECT SUM(total_amount) FROM pos_sales WHERE business_id AND status = 'completed' (status != 'voided' is also safe)",
+      "SELECT SUM(total_amount) FROM pos_sales WHERE business_id AND status = 'completed'",
+    // BRIEF-INTEGRITY-2 (2026-07-16): status != 'voided' is NOT safe — it silently counts
+    // 'draft' rows (held/parked carts, not real revenue until promoted) and 'refunded' rows
+    // (a separate, negative-amount row; gross vs net is a distinct concept, not something a
+    // single filter should blend). Prefer src/lib/aria/revenue-snapshot.ts's
+    // getRevenueSnapshot() over hand-rolling this query for any day-boundary figure.
     banned_sources: [],
     caveat: null,
     completeness_check: null,
