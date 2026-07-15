@@ -342,14 +342,17 @@ async function generateMorning(
     // honest fallback; a scaffold-marker match (or empty/failed generation) never reaches storage.
     const finalContent = safeBriefingContent(toned)
 
+    // BRIEF-INTEGRITY-2 — pipeline is part of the unique key now, so this write can no longer
+    // silently overwrite (or be overwritten by) the batch/onboarding pipelines' rows for the same day.
     await supabaseAdmin.from('aria_daily_briefings').upsert({
       business_id: biz.id,
       briefing_date: today,
       content: finalContent,
       source: 'parallel',
+      pipeline: 'parallel',
       generated_at: new Date().toISOString(),
       ground_truth: revenueSnapshot,
-    }, { onConflict: 'business_id,briefing_date' })
+    }, { onConflict: 'business_id,briefing_date,pipeline' })
   } catch (err) {
     console.error('[generate-briefings] parallel briefing failed:', (err as Error).message)
   }

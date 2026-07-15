@@ -55,10 +55,13 @@ async function fallbackToGeminiPerBusiness(requests: Array<{ custom_id: string; 
     // other write to this column.
     const content = safeBriefingContent(usedGemini ? g.raw.trim() : null)
 
+    // BRIEF-INTEGRITY-2 — pipeline is part of the unique key now, so this write can no longer
+    // silently overwrite (or be overwritten by) the parallel/onboarding pipelines' rows for the same day.
     const { error } = await supabaseAdmin.from('aria_daily_briefings').upsert({
       business_id: req.custom_id, briefing_date: today, content,
       generated_at: new Date().toISOString(), source: usedGemini ? 'gemini_fallback' : 'template_fallback',
-    }, { onConflict: 'business_id,briefing_date' })
+      pipeline: 'batch',
+    }, { onConflict: 'business_id,briefing_date,pipeline' })
 
     if (error) { writeErrors++; console.error('[daily-briefing-submit] gemini fallback upsert failed', { business_id: req.custom_id, error: error.message }) }
     else if (usedGemini) gemini++

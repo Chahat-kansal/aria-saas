@@ -63,3 +63,27 @@ export function suppressUpbeatCloser(text: string, hasHighAlert: boolean): strin
   }
   return sentences.join(' ').trim() || text
 }
+
+// BRIEF-INTEGRITY-2 — aria_daily_briefings can now hold up to 3 rows per (business_id,
+// briefing_date), one per writing pipeline (migration 20260716000001_brief_integrity_2_pipeline_
+// discriminator.sql — was a single silently-overwritten row before this). This is the ONE place
+// that decides which row is canonical when more than one exists for the same day, so every read
+// site (the dashboard cache-gate API route, the briefing history list) agrees with the others
+// instead of each guessing independently.
+//
+// Precedence: parallel (generate-briefings.ts) is the richer, per-business-timezone-triggered
+// pipeline — real business context (stock, movers, weekly labour, weather, AU news) plus the full
+// BRIEF-INTEGRITY-1 guard chain and canonical revenue snapshot. batch (the Batch API pipeline,
+// including its Gemini/template fallbacks) is a simpler single-prompt narrative — still real and
+// guarded, second preference. onboarding is a one-time placeholder welcome message — lowest
+// preference, only relevant before either real pipeline has produced anything for that business.
+export type BriefingPipeline = 'parallel' | 'batch' | 'onboarding'
+export const PIPELINE_PRECEDENCE: BriefingPipeline[] = ['parallel', 'batch', 'onboarding']
+
+export function pickCanonicalBriefing<T extends { pipeline: string }>(rows: T[]): T | null {
+  for (const p of PIPELINE_PRECEDENCE) {
+    const row = rows.find((r) => r.pipeline === p)
+    if (row) return row
+  }
+  return rows[0] ?? null
+}

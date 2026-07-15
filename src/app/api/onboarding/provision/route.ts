@@ -313,9 +313,12 @@ async function runProvision(
     if (!existing || existing === 0) {
       const ownerName = (stepData.owner_name as string) || 'there'
       const text = `Welcome aboard, ${ownerName} — Aria is now live for ${bizName}. Check your dashboard for today's insights and let's get started.`
+      // BRIEF-INTEGRITY-2 — pipeline is part of the unique key now; the `existing` check above
+      // (any pipeline, any row for today) still correctly guards against seeding a placeholder
+      // welcome message over a real same-day briefing.
       await supabaseAdmin.from('aria_daily_briefings').upsert(
-        { business_id: bizId, briefing_date: today, content: text, generated_at: new Date().toISOString(), source: 'onboarding_template' },
-        { onConflict: 'business_id,briefing_date' }
+        { business_id: bizId, briefing_date: today, content: text, generated_at: new Date().toISOString(), source: 'onboarding_template', pipeline: 'onboarding' },
+        { onConflict: 'business_id,briefing_date,pipeline' }
       )
     }
     steps[3].status = 'done'

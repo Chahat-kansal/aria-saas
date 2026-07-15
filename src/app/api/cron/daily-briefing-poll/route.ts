@@ -71,13 +71,17 @@ export async function GET(req: NextRequest) {
             // BRIEF-INTEGRITY-1 part 1 — this write previously had ZERO validation between "what the
             // batch API returned" and "what gets stored". A malformed/refusal response that echoed
             // prompt text would have reached the owner verbatim. Same guard as every other write path.
+            // BRIEF-INTEGRITY-2 — pipeline is part of the unique key now, so this write can no
+            // longer silently overwrite (or be overwritten by) the parallel/onboarding pipelines'
+            // rows for the same day.
             await supabaseAdmin.from('aria_daily_briefings').upsert({
               business_id: r.custom_id,
               briefing_date: new Date().toISOString().split('T')[0],
               content: safeBriefingContent(text),
               generated_at: new Date().toISOString(),
               source: 'batch_api',
-            }, { onConflict: 'business_id,briefing_date' })
+              pipeline: 'batch',
+            }, { onConflict: 'business_id,briefing_date,pipeline' })
             const usage = r.result.message?.usage
             if (usage) await logBatchCall(r.custom_id, 'daily_briefing_batch', usage.input_tokens ?? 0, usage.output_tokens ?? 0)
             processed++

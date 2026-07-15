@@ -15,6 +15,7 @@ import { runAriaCouncil, insertCouncilRun } from '@/lib/aria/council'
 import type { CouncilOutput } from '@/lib/aria/council'
 import { runOrchestrator } from '@/lib/aria/agents/orchestrator'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
+import { pickCanonicalBriefing } from '@/lib/aria/briefing-guard'
 
 // ── Briefing recommendation builder ───────────────────────────────────────────
 // Maps the council's structured brain outputs into the modal's Recommendation type.
@@ -125,13 +126,17 @@ async function _GET(req: Request) {
   //    rather than running the full council on every page load.
   if (!forceRefresh) {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: business.timezone || 'Australia/Melbourne' })
-    const { data: cached } = await supabaseAdmin
+    // BRIEF-INTEGRITY-2 — up to 3 rows can now exist for the same (business_id, briefing_date), one
+    // per writing pipeline (was a single row with a silent-overwrite race before this). .maybeSingle()
+    // would throw once more than one row matches; pickCanonicalBriefing() picks the same row every
+    // other read site would pick, deterministically.
+    const { data: cachedRows } = await supabaseAdmin
       .from('aria_daily_briefings')
-      .select('content, generated_at')
+      .select('content, generated_at, pipeline')
       .eq('business_id', businessId)
       .eq('briefing_date', todayStr)
       .not('content', 'is', null)
-      .maybeSingle()
+    const cached = pickCanonicalBriefing(cachedRows ?? [])
     if (cached?.content) {
       return NextResponse.json({
         briefing: cached.content as string,

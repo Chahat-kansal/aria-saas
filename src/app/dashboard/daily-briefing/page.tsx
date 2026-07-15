@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useBusiness } from '@/components/providers/BusinessProvider'
 import { supabase } from '@/lib/supabase'
+import { pickCanonicalBriefing } from '@/lib/aria/briefing-guard'
 
 interface Rec {
   id: string
@@ -166,14 +167,29 @@ export default function DailyBriefingPage() {
   useEffect(() => {
     if (!business?.id) return
     fetchBriefing()
+    // BRIEF-INTEGRITY-2 — up to 3 rows can now exist per calendar day (one per writing pipeline),
+    // so this fetches enough rows to cover 7 days across all pipelines, then dedupes to one row per
+    // date via the same pickCanonicalBriefing() precedence every other read site uses.
     supabase
       .from('aria_daily_briefings')
-      .select('id, briefing_date, generated_at, content, source')
+      .select('id, briefing_date, generated_at, content, source, pipeline')
       .eq('business_id', business.id)
       .order('briefing_date', { ascending: false })
-      .limit(7)
-      .then(({ data }: { data: Array<{ id: string; briefing_date: string; generated_at: string; content: string | null; source: string | null }> | null }) => {
-        if (data) setHistory(data.map(row => ({ id: row.id, date: row.briefing_date, generated_at: row.generated_at, content: row.content })))
+      .limit(21)
+      .then(({ data }: { data: Array<{ id: string; briefing_date: string; generated_at: string; content: string | null; source: string | null; pipeline: string }> | null }) => {
+        if (!data) return
+        const byDate = new Map<string, typeof data>()
+        for (const row of data) {
+          const arr = byDate.get(row.briefing_date) ?? []
+          arr.push(row)
+          byDate.set(row.briefing_date, arr)
+        }
+        const deduped = [...byDate.values()]
+          .map(rows => pickCanonicalBriefing(rows))
+          .filter((row): row is NonNullable<typeof row> => row !== null)
+          .sort((a, b) => b.briefing_date.localeCompare(a.briefing_date))
+          .slice(0, 7)
+        setHistory(deduped.map(row => ({ id: row.id, date: row.briefing_date, generated_at: row.generated_at, content: row.content })))
       })
   }, [business?.id, fetchBriefing])
 
