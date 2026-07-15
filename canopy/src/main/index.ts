@@ -40,17 +40,20 @@ function registerCanopyIpc(): void {
 
   ipcMain.handle('canopy:verify-pin', async (_e, businessId: string, pin: string) => verifyCanopyPin(businessId, pin))
 
-  ipcMain.handle('canopy:open-app', (_e, kind: 'ariaos' | 'pos') => {
-    openAppWindow(kind)
+  // CANOPY-UNIVERSAL-SEARCH-1 — `kind` widened from the literal 'ariaos'|'pos' union to string, and
+  // an optional {route, title} added, both purely additive: the two existing dock callers pass
+  // neither and keep resolving through the fixed APP_PATH lookup in windows.ts exactly as before.
+  ipcMain.handle('canopy:open-app', (_e, kind: string, opts?: { route?: string; title?: string }) => {
+    openAppWindow(kind, opts)
     return true
   })
 
-  ipcMain.handle('canopy:close-app', (_e, kind: 'ariaos' | 'pos') => {
+  ipcMain.handle('canopy:close-app', (_e, kind: string) => {
     closeAppWindow(kind)
     return true
   })
 
-  ipcMain.handle('canopy:is-app-open', (_e, kind: 'ariaos' | 'pos') => isAppWindowOpen(kind))
+  ipcMain.handle('canopy:is-app-open', (_e, kind: string) => isAppWindowOpen(kind))
 
   ipcMain.handle('canopy:sign-out', async () => {
     await signOutOfMachine()

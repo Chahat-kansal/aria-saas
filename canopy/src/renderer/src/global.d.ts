@@ -36,12 +36,12 @@ export interface CanopyAPI {
   getHealth: (businessId: string) => Promise<HealthQuick | null>
   getTodaySales: () => Promise<TodaySales>
   verifyPin: (businessId: string, pin: string) => Promise<CanopyPinResult>
-  openApp: (kind: 'ariaos' | 'pos') => Promise<boolean>
-  closeApp: (kind: 'ariaos' | 'pos') => Promise<boolean>
-  isAppOpen: (kind: 'ariaos' | 'pos') => Promise<boolean>
+  openApp: (kind: string, opts?: { route?: string; title?: string }) => Promise<boolean>
+  closeApp: (kind: string) => Promise<boolean>
+  isAppOpen: (kind: string) => Promise<boolean>
   signOut: () => Promise<boolean>
   exitApp: () => Promise<boolean>
-  onAppClosed: (cb: (kind: 'ariaos' | 'pos') => void) => () => void
+  onAppClosed: (cb: (kind: string) => void) => () => void
 }
 
 declare global {

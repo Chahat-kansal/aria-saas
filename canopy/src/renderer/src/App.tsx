@@ -77,6 +77,45 @@ const ALL_APPS: App[] = [
   { id: 'store',     label: 'App Store', aria: false, glyph: 'bag',       badge: '#4a4f45', fg: '#eef2ff' },
 ]
 
+// CANOPY-UNIVERSAL-SEARCH-1 — a searchable feature registry, deliberately separate from ALL_APPS.
+// The dock stays exactly as it was (17 fixed apps, several of them still showing sample/mock
+// content in an in-Canopy Win — see the Win definitions below); this registry is a second,
+// growable list of REAL AriaOS dashboard pages, reachable only via search, that always open the
+// actual live page (deep-linked via openFeature below), never a mock. Starter set pulled from the
+// real src/app/dashboard/ sub-pages (each id below has a confirmed page.tsx); adding another
+// feature later is a one-line data row here, not a UI build — the whole point of the registry
+// pattern. Owner-only, matching every other business-intelligence surface in this app (dock/
+// launcher already restrict staff to STAFF_VISIBLE; these are all owner-level pages).
+interface AriaFeature { id: string; label: string; route: string }
+const ARIA_FEATURES: AriaFeature[] = [
+  { id: 'feat-reviews',        label: 'Reviews',                route: '/dashboard/reviews' },
+  { id: 'feat-profit-leaks',   label: 'Profit Leaks',            route: '/dashboard/profit-leaks' },
+  { id: 'feat-competitors',    label: 'Competitor Tracking',     route: '/dashboard/competitors' },
+  { id: 'feat-churn',          label: 'Churn Prediction',        route: '/dashboard/churn' },
+  { id: 'feat-compliance',     label: 'Compliance Monitoring',   route: '/dashboard/compliance' },
+  { id: 'feat-quote-builder',  label: 'Quote Generator',         route: '/dashboard/quote-builder' },
+  { id: 'feat-bookings',       label: 'Bookings',                route: '/dashboard/bookings' },
+  { id: 'feat-customers-seg',  label: 'Customer Segments',       route: '/dashboard/customers' },
+  { id: 'feat-weekly-reports', label: 'Weekly Reports',          route: '/dashboard/weekly-reports' },
+  { id: 'feat-ask-aria',       label: 'Ask Aria',                route: '/dashboard/ask-aria' },
+  { id: 'feat-loyalty',        label: 'Loyalty Program',         route: '/dashboard/loyalty' },
+  { id: 'feat-promotions',     label: 'Promotions',              route: '/dashboard/promotions' },
+  { id: 'feat-gift-cards',     label: 'Gift Cards',              route: '/dashboard/gift-cards' },
+  { id: 'feat-staff',          label: 'Staff',                   route: '/dashboard/staff' },
+  { id: 'feat-invoices',       label: 'Invoices',                route: '/dashboard/invoices' },
+  { id: 'feat-cash-flow',      label: 'Cash Flow',               route: '/dashboard/cash-flow' },
+  { id: 'feat-dynamic-pricing',label: 'Dynamic Pricing',         route: '/dashboard/dynamic-pricing' },
+  { id: 'feat-missed-demand',  label: 'Missed Demand',           route: '/dashboard/missed-demand' },
+  { id: 'feat-reorder',        label: 'Reorder Suggestions',     route: '/dashboard/reorder' },
+  { id: 'feat-slow-day',       label: 'Slow Day Predictor',      route: '/dashboard/slow-day' },
+  { id: 'feat-hypotheses',     label: 'Growth Hypotheses',       route: '/dashboard/hypotheses' },
+  { id: 'feat-autopilot',      label: 'Autopilot',               route: '/dashboard/autopilot' },
+  { id: 'feat-stocktake',      label: 'Stocktake',               route: '/dashboard/stocktake' },
+  { id: 'feat-winback',        label: 'Winback Campaigns',       route: '/dashboard/winback' },
+  { id: 'feat-shift-reports',  label: 'Shift Reports',           route: '/dashboard/shift-reports' },
+  { id: 'feat-integrations',   label: 'Integrations',            route: '/dashboard/integrations' },
+]
+
 // Real cropped logo icons (design/icon-sprite-sheet.png, 5x3 grid) — Aria-native apps only. xero and
 // store have no sprite crop (third-party/store, not brand-iconed) and fall back to the SVG glyph.
 // Served from Vite's public/ dir (src/renderer/public/icons/) as plain relative string paths rather
@@ -188,6 +227,9 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [wins, setWins] = useState<string[]>([])
   const [launcherOpen, setLauncherOpen] = useState(false)
+  // CANOPY-UNIVERSAL-SEARCH-1 — the launcher's search bar was decorative (a static label, no real
+  // <input>) until now; this is the actual query state it filters ALL_APPS and ARIA_FEATURES by.
+  const [searchQuery, setSearchQuery] = useState('')
   const [locked, setLocked] = useState(false)
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState(false)
@@ -256,12 +298,26 @@ export default function App() {
     if (app?.real) window.canopyAPI.openApp(app.real)
     setWins((w) => [...w.filter((x) => x !== id), id])
     setLauncherOpen(false)
+    setSearchQuery('')
   }, [])
 
   const close = useCallback((id: string) => {
     const app = ALL_APPS.find((a) => a.id === id)
     if (app?.real) window.canopyAPI.closeApp(app.real)
     setWins((w) => w.filter((x) => x !== id))
+  }, [])
+
+  // CANOPY-UNIVERSAL-SEARCH-1 — opens a real AriaOS feature page as a real window, using the exact
+  // same mechanism as AriaOS/POS (openApp -> the main-process WebContentsView pane). Deliberately
+  // separate from `open()` above rather than folding features into ALL_APPS/id lookup: features
+  // have no dock icon, no `wins`-tracked in-Canopy Win, and no running-dot indicator to maintain —
+  // this is a pure deep-link, not a dock app. Passing `route`/`title` explicitly is what lets
+  // openApp (extended, additively, in main/windows.ts) open an arbitrary page instead of only the
+  // two fixed 'ariaos'/'pos' kinds; existing callers that omit these two fields are unaffected.
+  const openFeature = useCallback((feature: AriaFeature) => {
+    window.canopyAPI.openApp(feature.id, { route: feature.route, title: feature.label })
+    setLauncherOpen(false)
+    setSearchQuery('')
   }, [])
 
   const pi = useRef(0)
@@ -523,23 +579,60 @@ export default function App() {
         </div>
       )}
 
-      {launcherOpen && (
-        <div onClick={() => setLauncherOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 140 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: 440, background: P.surface, border: `1px solid ${P.line}`, borderRadius: 14, padding: 14, boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: P.raised, border: `1px solid ${P.line}`, borderRadius: 10, padding: '10px 13px', marginBottom: 10 }}>
-              <span style={{ color: P.faint }}>⌕</span><span style={{ color: P.dim, fontSize: 13 }}>Ask Aria, or open an app…</span>
-            </div>
-            {(role === 'owner' ? ALL_APPS : ALL_APPS.filter((a) => STAFF_VISIBLE.includes(a.id))).map((a) => (
-              <div key={a.id} onClick={() => open(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 8px', borderRadius: 8, cursor: 'pointer' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = P.raised)} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <AppLogo app={a} s={30} radius={8} />
-                <span style={{ fontSize: 13 }}>{a.label}</span>
-                {a.aria && <span style={{ marginLeft: 'auto', fontSize: 8.5, color: A.sage, letterSpacing: '.08em' }}>ARIAOS</span>}
+      {launcherOpen && (() => {
+        // CANOPY-UNIVERSAL-SEARCH-1 — the search bar below now actually filters: dock apps by the
+        // existing ALL_APPS list (unchanged behaviour when the query is empty — same full list as
+        // before), plus, once there's a query, real AriaOS feature pages from ARIA_FEATURES.
+        // Features are owner-only (matches every other business-intelligence surface in this app)
+        // and only ever surface as search RESULTS, never as a permanent always-visible list, so the
+        // default (no-query) launcher is pixel-identical to before this sprint.
+        const q = searchQuery.trim().toLowerCase()
+        const appResults = (role === 'owner' ? ALL_APPS : ALL_APPS.filter((a) => STAFF_VISIBLE.includes(a.id)))
+          .filter((a) => !q || a.label.toLowerCase().includes(q))
+        const featureResults = role === 'owner' && q
+          ? ARIA_FEATURES.filter((f) => f.label.toLowerCase().includes(q))
+          : []
+        return (
+          <div onClick={() => { setLauncherOpen(false); setSearchQuery('') }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 140 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: 440, maxHeight: '60vh', overflowY: 'auto', background: P.surface, border: `1px solid ${P.line}`, borderRadius: 14, padding: 14, boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: P.raised, border: `1px solid ${P.line}`, borderRadius: 10, padding: '10px 13px', marginBottom: 10, position: 'sticky', top: 0 }}>
+                <span style={{ color: P.faint }}>⌕</span>
+                <input autoFocus value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Ask Aria, or open an app…"
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: P.ink, fontSize: 13, fontFamily: sans }} />
               </div>
-            ))}
+              {appResults.map((a) => (
+                <div key={a.id} onClick={() => open(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 8px', borderRadius: 8, cursor: 'pointer' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = P.raised)} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <AppLogo app={a} s={30} radius={8} />
+                  <span style={{ fontSize: 13 }}>{a.label}</span>
+                  {a.aria && <span style={{ marginLeft: 'auto', fontSize: 8.5, color: A.sage, letterSpacing: '.08em' }}>ARIAOS</span>}
+                </div>
+              ))}
+              {featureResults.length > 0 && (
+                <>
+                  <div style={{ fontSize: 9.5, color: P.faint, letterSpacing: '.08em', margin: '10px 8px 4px', textTransform: 'uppercase' }}>AriaOS features</div>
+                  {featureResults.map((f) => (
+                    <div key={f.id} onClick={() => openFeature(f)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 8px', borderRadius: 8, cursor: 'pointer' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = P.raised)} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                      <div style={{ width: 30, height: 30, borderRadius: 8, background: A.card, border: `1px solid ${A.line}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                        <G id="chart" s={15} />
+                      </div>
+                      <span style={{ fontSize: 13 }}>{f.label}</span>
+                      {/* Distinct from dock apps' "ARIAOS" tag (which marks first-party branding) — this
+                          marks the result TYPE, so a feature never reads as if it were a dock app. */}
+                      <span style={{ marginLeft: 'auto', fontSize: 8.5, color: P.faint, letterSpacing: '.08em' }}>ARIAOS FEATURE</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {q && appResults.length === 0 && featureResults.length === 0 && (
+                <div style={{ fontSize: 12, color: P.faint, padding: '10px 8px' }}>No matches for "{searchQuery}".</div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* AriaOS + POS are real separate BrowserWindows (SHELL-1 scope, unchanged) — no in-page Win. */}
 

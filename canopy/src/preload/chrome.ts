@@ -19,10 +19,17 @@ import { ipcRenderer } from 'electron'
 
 const KIND = (() => {
   const arg = process.argv.find((a) => a.startsWith('--canopy-app-kind='))
-  return (arg ? arg.split('=')[1] : 'ariaos') as 'ariaos' | 'pos'
+  return arg ? arg.split('=')[1] : 'ariaos'
 })()
 
-const TITLE = KIND === 'pos' ? 'POS' : 'AriaOS'
+// CANOPY-UNIVERSAL-SEARCH-1 — an explicit title (any AriaOS feature opened via search, e.g.
+// "Reviews") wins; falls back to the original ariaos/pos-only inference for the two dock callers
+// that never pass one, so their chrome bar text is unchanged.
+const TITLE = (() => {
+  const arg = process.argv.find((a) => a.startsWith('--canopy-app-title='))
+  if (arg) return decodeURIComponent(arg.split('=')[1])
+  return KIND === 'pos' ? 'POS' : 'AriaOS'
+})()
 const BAR_HEIGHT = 34
 
 function injectChrome(): void {

@@ -92,7 +92,11 @@ export function returnToLogin(): void {
   void canopyWindow.loadURL(`${PRODUCTION_URL}/login?redirectTo=%2Fdashboard`)
 }
 
-type AppWindowKind = 'ariaos' | 'pos'
+// CANOPY-UNIVERSAL-SEARCH-1 — loosened from the literal `'ariaos' | 'pos'` union to a plain string.
+// AriaOS/POS still use those two exact kinds unchanged; any AriaOS feature route opened via search
+// gets its own kind (the feature's own registry id from App.tsx), so each one gets its own reusable
+// pane in `appPanes` below without colliding with each other or with ariaos/pos.
+type AppWindowKind = string
 
 // CANOPY-CONTAINMENT-1 — AriaOS/POS panes, keyed by kind. Replaces the old ariaosWindow/posWindow
 // separate-BrowserWindow variables with the WebContentsView instances layered into
@@ -104,7 +108,7 @@ function paneBounds(win: BrowserWindow): Rectangle {
   return { x: 0, y: 0, width, height }
 }
 
-const APP_PATH: Record<AppWindowKind, string> = {
+const APP_PATH: Record<string, string> = {
   ariaos: '/dashboard',
   pos: '/pos/terminal',
 }
@@ -122,8 +126,15 @@ const APP_PATH: Record<AppWindowKind, string> = {
  * (traffic-light dots, centered title) is the same injected chrome preload script as before, now
  * attached to the pane's own webContents instead of a separate window's — its drag-region/DOM-inject
  * mechanism is unchanged by this migration.
+ *
+ * CANOPY-UNIVERSAL-SEARCH-1 — `opts.route`/`opts.title` are additive: every existing call site
+ * (AriaOS/POS, via the dock or the launcher) omits them and keeps resolving the route from the
+ * fixed APP_PATH lookup exactly as before. Passing them is what lets the universal-search launcher
+ * open an arbitrary real AriaOS feature page (any `src/app/dashboard/**` route) through this exact
+ * same reliable-pane mechanism instead of a bespoke one — same real login, same real data, same
+ * chrome, same containment.
  */
-export function openAppWindow(kind: AppWindowKind): void {
+export function openAppWindow(kind: AppWindowKind, opts?: { route?: string; title?: string }): void {
   const canopy = canopyWindow
   if (!canopy || canopy.isDestroyed()) return
 
@@ -135,19 +146,25 @@ export function openAppWindow(kind: AppWindowKind): void {
     return
   }
 
+  const route = opts?.route ?? APP_PATH[kind]
+  if (!route) return // unknown kind with no explicit route — nothing to open
+
+  const preloadArgs = [`--canopy-app-kind=${kind}`]
+  if (opts?.title) preloadArgs.push(`--canopy-app-title=${encodeURIComponent(opts.title)}`)
+
   const view = new WebContentsView({
     webPreferences: {
       preload: join(__dirname, `../preload/chrome.js`),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      additionalArguments: [`--canopy-app-kind=${kind}`],
+      additionalArguments: preloadArgs,
     },
   })
   view.setBackgroundColor('#0a0a0a')
   view.setBounds(paneBounds(canopy))
   denyPopupsOpenExternally(view.webContents)
-  void view.webContents.loadURL(`${PRODUCTION_URL}${APP_PATH[kind]}`)
+  void view.webContents.loadURL(`${PRODUCTION_URL}${route}`)
 
   canopy.contentView.addChildView(view)
   appPanes[kind] = view
