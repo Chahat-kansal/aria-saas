@@ -83,6 +83,17 @@ export interface CreateSaleParams {
   directDepositRef?: string | null
   /** Explicit session override; else resolved from the business's open cash session. */
   sessionId?: string | null
+  /** Additive — place-order's freeform pickup identity (no pos_customers row required to have
+   * these on the sale row itself); every existing caller omits these and is unaffected. */
+  customerName?: string | null
+  customerPhone?: string | null
+  pickupTime?: string | null
+  /** Additive — online orders already have their own deliberately-gated KDS trigger
+   * (fireKdsForOrder, fired only once the merchant accepts AND, for card payments, only once
+   * Stripe confirms). Set true so createSale's own (ungated) KDS firing doesn't show the kitchen
+   * an order that hasn't been accepted or paid for yet. Every other caller omits this and is
+   * unaffected. */
+  skipKds?: boolean
 }
 
 export interface CreateSaleResult {
@@ -204,6 +215,15 @@ export async function createSale(
     idempotency_key: params.idempotencyKey ?? null,
   }
   if (params.source) salePayload.source = params.source
+  // PLACE-ORDER-FIX-1 — order_type was already accepted as a param (used for the KDS tableLabel
+  // fallback below) but never actually written onto the pos_sales row itself, silently dropping it
+  // for every caller. pos/sale/route.ts has forwarded a real order_type here since before this
+  // service existed; place-order's online-order marker depends on it too (column defaults to
+  // 'takeaway' otherwise, per its DB default) — write it through.
+  if (params.orderType) salePayload.order_type = params.orderType
+  if (params.customerName) salePayload.customer_name = params.customerName
+  if (params.customerPhone) salePayload.customer_phone = params.customerPhone
+  if (params.pickupTime) salePayload.pickup_time = params.pickupTime
   if (params.synced) { salePayload.synced_from_offline = true; salePayload.offline_queued_at = params.synced.queuedAt }
   if (params.giftCard?.code) {
     salePayload.gift_card_code = String(params.giftCard.code).toUpperCase().trim()
@@ -340,11 +360,13 @@ export async function createSale(
     try {
       const { data: biz } = await supabase.from('businesses').select('industry').eq('id', businessId).maybeSingle()
       if (biz?.industry !== 'cafe') return
-      await supabase.from('pos_kds_orders').insert({
-        business_id: businessId, sale_id: sale.id, table_number: tableLabel,
-        items: items.map(i => ({ name: i.product_name, qty: i.quantity, modifiers: i.modifiers ?? [] })),
-        status: 'new', priority: 1, notes: params.notes ?? null, created_at: new Date().toISOString(),
-      })
+      if (!params.skipKds) {
+        await supabase.from('pos_kds_orders').insert({
+          business_id: businessId, sale_id: sale.id, table_number: tableLabel,
+          items: items.map(i => ({ name: i.product_name, qty: i.quantity, modifiers: i.modifiers ?? [] })),
+          status: 'new', priority: 1, notes: params.notes ?? null, created_at: new Date().toISOString(),
+        })
+      }
       for (const item of items) {
         const { data: recipe } = await supabase.from('recipes')
           .select('id, serves, recipe_ingredients(product_id, quantity)')
@@ -365,6 +387,7 @@ export async function createSale(
   // this was built from; consolidated onto the one shared helper.
   waitUntil((async () => {
     try {
+      if (params.skipKds) return
       const result = await fireKdsTickets(supabase, { business_id: businessId, outlet_id: params.outletId ?? null, sale_id: sale.id, table_label: tableLabel })
       if (result.errors.length > 0) {
         logger.error('createSale fireKdsTickets failed', { businessId, saleId: sale.id, errors: result.errors })

@@ -10,6 +10,7 @@ import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { linkOrCreateMembership } from '@/lib/loyalty/membership'
 import { normalisePhone } from '@/lib/clicksend'
 import { getCxSession } from '@/lib/cx/get-cx-session'
+import { createSale, type CreateSaleItem } from '@/lib/pos/create-sale'
 
 function adminClient() {
   return createClient(
@@ -152,6 +153,7 @@ export async function POST(req: Request, { params }: { params: { business_id: st
 
   const orderId = (order as { id: string }).id
   const bid = business_id
+  const isCardPayment = (body.payment_method ?? '').startsWith('pay_online')
 
   let earnCustomerId: string | null = null
   let earnSaleId: string | null = null
@@ -193,41 +195,65 @@ export async function POST(req: Request, { params }: { params: { business_id: st
         { phone: customerPhone, email: session.email ?? null },
         customerName,
       )
-
-      // Idempotency: reuse existing sale if this order_number was already processed.
-      const { data: existingSale } = await sb.from('pos_sales')
-        .select('id').eq('business_id', bid).eq('idempotency_key', orderNumber).maybeSingle()
-      let saleId: string | null = (existingSale as { id: string } | null)?.id ?? null
-
-      if (!saleId) {
-        const normPhone = customerPhone ? normalisePhone(customerPhone) : null
-        const { data: sale, error: saleErr } = await sb.from('pos_sales').insert({
-          business_id: bid,
-          customer_id: customerId,
-          total_amount: subtotal,
-          source: 'online_order',
-          order_type: 'online_order',
-          status: 'completed',
-          idempotency_key: orderNumber,
-          customer_name: customerName,
-          customer_phone: normPhone,
-          notes: body.notes ?? null,
-          pickup_time: body.pickup_time ? new Date(body.pickup_time).toISOString() : null,
-        }).select('id').single()
-
-        if (saleErr && !/duplicate|unique/i.test(saleErr.message)) {
-          throw new Error('[place-order] pos_sales insert: ' + saleErr.message)
-        }
-        saleId = (sale as { id: string } | null)?.id ?? null
-      }
-
-      if (saleId) {
-        earnSaleId = saleId
-        await sb.from('pos_online_orders')
-          .update({ customer_id: customerId, sale_id: saleId })
-          .eq('id', orderId)
-      }
     }
+
+    // PLACE-ORDER-FIX-1 (BUG-HUNT-1 Part A #1/#2/#3) — this used to insert pos_sales directly by
+    // hand and stop there: no pos_sale_items row was ever created (poisoning
+    // online-orders/[id]'s accept-flow guard, `if (ord && !ord.sale_id)`, permanently false since
+    // sale_id was stamped here first), no stock decrement, base-earn-only loyalty. Route through
+    // the same createSale() service every in-store checkout uses so an online order is a real,
+    // fully-populated sale from the moment it's placed — its own idempotency check
+    // (idempotencyKey = orderNumber) replaces the manual existing-sale lookup this route used to
+    // do by hand. skipKds:true preserves the existing, deliberate KDS timing for online orders —
+    // fireKdsForOrder (below, in online-orders/[id].ts) only fires once the merchant accepts and,
+    // for card payments, only once Stripe confirms; createSale's own KDS firing has no such gate.
+    const normPhone = customerPhone ? normalisePhone(customerPhone) : null
+    const saleItems: CreateSaleItem[] = verifiedItems.map(item => {
+      const modsCents = (item.modifiers ?? []).reduce((ms, m) => ms + (m.price_cents ?? 0), 0)
+      return {
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        line_total: +(item.quantity * (item.unit_price + modsCents / 100)).toFixed(2),
+        modifiers: item.modifiers,
+        item_notes: item.note ?? null,
+      }
+    })
+
+    const saleResult = await createSale(sb, {
+      businessId: bid,
+      userId: session.identity_id,
+      items: saleItems,
+      customerId,
+      // pos_sales.payment_method has a DB CHECK constraint (cash/card/eftpos/split/gift_card/
+      // other) — caught live in local verification: 'pay_on_pickup' isn't a valid payment
+      // *method* (it's a fulfillment timing, not a tender type), so createSale failed with a
+      // constraint violation and silently fell into the catch-log-and-continue path below. 'other'
+      // is the correct valid value for "not captured as a specific tender here".
+      paymentMethod: isCardPayment ? 'card' : 'other',
+      subtotal,
+      taxAmount: 0,
+      totalAmount: subtotal,
+      notes: body.notes ?? body.special_instructions ?? null,
+      orderType: 'online_order',
+      source: 'online_order',
+      idempotencyKey: orderNumber,
+      customerName,
+      customerPhone: normPhone,
+      pickupTime: body.pickup_time ? new Date(body.pickup_time).toISOString() : null,
+      skipKds: true,
+    })
+
+    if (saleResult.error || !saleResult.sale) {
+      throw new Error('[place-order] createSale failed: ' + (saleResult.error ?? 'unknown'))
+    }
+
+    const saleId = (saleResult.sale as { id: string }).id
+    earnSaleId = saleId
+    await sb.from('pos_online_orders')
+      .update({ customer_id: customerId, sale_id: saleId })
+      .eq('id', orderId)
   } catch (e) {
     void sb.from('activity_log').insert({
       business_id: bid,
@@ -238,7 +264,6 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     })
   }
 
-  const isCardPayment = (body.payment_method ?? '').startsWith('pay_online')
   let stripeClientSecret: string | null = null
 
   if (isCardPayment) {
