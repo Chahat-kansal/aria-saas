@@ -114,13 +114,33 @@ const GLYPH: Record<string, JSX.Element> = {
 const G = ({ id, s = 17 }: { id: string; s?: number }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">{GLYPH[id]}</svg>
 )
+// CANOPY-POLISH-1 item 3 — investigated before fixing: rendered a real screenshot comparison
+// (object-fit cover vs contain at production size, plus a raw-pixel scan of the PNGs themselves).
+// object-fit/image-rendering were NOT the cause — no visible difference between cover/contain, and
+// the 256px+ source has far more resolution than a 30-34px render needs. The actual defect is in
+// the source PNGs: design/icon-sprite-sheet.png has no alpha channel at all (flat RGB), so the
+// auto-crop's background-color-threshold alpha synthesis couldn't separate each icon's own soft
+// drop-shadow (rendered against the sheet's light canvas) from true transparency — the result is a
+// soft, partly fully-opaque, near-white halo baked into the outer ~15% margin of every icon,
+// invisible on the sheet's own light background but visibly "washed out" against the dock's dark
+// background. Recoloring the baked-in pixels (alpha decontamination) was tried and rejected — it's
+// numerically unstable at low alpha and risks new, unverifiable artifacts across 15 files. This
+// zoom-crop is CSS-only, fully reversible, and verified via rendered screenshots across 6
+// differently-shaped icons: it trims exactly the halo margin with zero glyph clipping.
+const ICON_ZOOM = 1.32
+const ICON_ZOOM_OFFSET_PCT = (ICON_ZOOM - 1) * 50 // centers the zoomed image within its frame
+
 // Real logo PNG when the sprite has one; falls back to the programmatic colored-glyph badge otherwise.
 const AppLogo = ({ app, s = 34, radius = 10 }: { app: App; s?: number; radius?: number }) => {
   const icon = APP_ICONS[app.id]
   if (icon) {
     return (
-      <img src={icon} alt={app.label} width={s} height={s}
-        style={{ borderRadius: radius, flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,.35)', objectFit: 'cover' }} />
+      <div style={{ width: s, height: s, borderRadius: radius, overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,.35)' }}>
+        <img src={icon} alt={app.label} style={{
+          width: `${ICON_ZOOM * 100}%`, height: `${ICON_ZOOM * 100}%`, objectFit: 'cover', display: 'block',
+          marginLeft: `-${ICON_ZOOM_OFFSET_PCT}%`, marginTop: `-${ICON_ZOOM_OFFSET_PCT}%`,
+        }} />
+      </div>
     )
   }
   return (
