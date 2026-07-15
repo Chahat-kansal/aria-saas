@@ -55,6 +55,7 @@ import type { AppliedDiscount } from '@/lib/pos/discount-engine';
 import CartLineMenu from '@/components/pos/CartLineMenu';
 import { ScanGoRedeemModal } from '@/components/pos/ScanGoRedeemModal';
 import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
+import { useToast } from '@/components/pos/Toast';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -180,6 +181,7 @@ export default function TerminalPage() {
   const [lowStockDismissed, setLowStockDismissed] = useState(false);
   const [recentSales,    setRecentSales]    = useState<RecentSale[]>([]);
   const [showMobileBanner, setShowMobileBanner] = useState(false);
+  const { showToast, ToastContainer } = useToast();
 
   /* ── Clock In/Out ─────────────────────────────────────────────── */
   const [showClockModal,  setShowClockModal]  = useState(false);
@@ -1628,37 +1630,69 @@ export default function TerminalPage() {
             table_label: capturedCustomerDetails?.name ?? null,
           }),
         }).catch(() => {});
-        // Loyalty earn (non-blocking)
+        // SECURITY-CRITICAL-2 item 1 — the four money-moving calls below (loyalty earn, loyalty
+        // redeem, store-credit spend, split-payment records) used to be fire-and-forget with only
+        // a `.catch(() => {})` network-error guard: an HTTP error response (4xx/5xx) is not a
+        // rejected promise, so a failed deduction/credit was swallowed identically to a dropped
+        // network call, leaving the customer's real balance out of sync with what the receipt
+        // already showed — invisibly. Each call is now awaited and its response checked; any
+        // failure is pushed into `moneyMoveFailures` and surfaced as a persistent error toast plus
+        // a console.error, naming the exact manual correction staff need to make, instead of
+        // vanishing. The sale itself is already committed by this point, so these stay
+        // best-effort (we don't roll back a shown receipt) — the fix is making failure visible and
+        // actionable, not making it impossible.
+        const saleLabel = d.sale.sale_number ?? d.sale.id;
+        const moneyMoveFailures: string[] = [];
+
+        // Loyalty earn
         if (customerSnapshot?.id && capturedBusinessId) {
-          fetch('/api/loyalty/earn', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sale_id: d.sale.id, customer_id: customerSnapshot.id, business_id: capturedBusinessId, sale_total: capturedTotal }),
-          }).catch(() => {});
+          try {
+            const er = await fetch('/api/loyalty/earn', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sale_id: d.sale.id, customer_id: customerSnapshot.id, business_id: capturedBusinessId, sale_total: capturedTotal }),
+            });
+            if (!er.ok) moneyMoveFailures.push(`Loyalty points were NOT credited for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}. Credit manually if needed.`);
+          } catch { moneyMoveFailures.push(`Loyalty points were NOT credited for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}. Credit manually if needed.`); }
         }
         // Loyalty redemption — deducted ONLY after sale confirmed (void-safe: no sale_id = no deduction)
         if (capturedPendingRedemption && customerSnapshot?.id) {
-          fetch('/api/pos/loyalty/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              customer_id: customerSnapshot.id,
-              sale_id: d.sale.id,
-              type: 'redeem',
-              points_delta: capturedPendingRedemption.points_delta,
-              stamps_delta: capturedPendingRedemption.stamps_delta,
-              reward_redeemed: capturedPendingRedemption.reward_redeemed,
-            }),
-          }).catch(() => {});
+          try {
+            const rr = await fetch('/api/pos/loyalty/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customer_id: customerSnapshot.id,
+                sale_id: d.sale.id,
+                type: 'redeem',
+                points_delta: capturedPendingRedemption.points_delta,
+                stamps_delta: capturedPendingRedemption.stamps_delta,
+                reward_redeemed: capturedPendingRedemption.reward_redeemed,
+              }),
+            });
+            if (!rr.ok) moneyMoveFailures.push(`Reward redemption was NOT deducted for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}. They can redeem it again unless corrected manually.`);
+          } catch { moneyMoveFailures.push(`Reward redemption was NOT deducted for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}. They can redeem it again unless corrected manually.`); }
         }
         // Preload (store credit) spend — deduct after sale committed so we have the sale_id
         if (capturedPayMethod === 'preload' && customerSnapshot?.id) {
-          fetch('/api/loyalty/preload/spend', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer_id: customerSnapshot.id, amount: capturedTotal, sale_id: d.sale.id }),
-          }).catch(() => {});
+          try {
+            const pr = await fetch('/api/loyalty/preload/spend', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customer_id: customerSnapshot.id, amount: capturedTotal, sale_id: d.sale.id }),
+            });
+            if (!pr.ok) moneyMoveFailures.push(`Store credit was NOT deducted for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}, $${capturedTotal.toFixed(2)}. Correct their balance manually.`);
+          } catch { moneyMoveFailures.push(`Store credit was NOT deducted for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}, $${capturedTotal.toFixed(2)}. Correct their balance manually.`); }
         }
-        // Split payments (non-blocking)
+        // Split payments
         if (capturedPayMethod === 'split') {
-          Promise.all([
-            capturedSplitCash > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'cash', amount_cents: Math.round(capturedSplitCash * 100) }) }),
-            capturedSplitCardAmt > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'card', amount_cents: Math.round(capturedSplitCardAmt * 100) }) }),
-          ]).catch(() => {});
+          const splitCalls: Array<{ label: string; req: Promise<Response> }> = [];
+          if (capturedSplitCash > 0) splitCalls.push({ label: 'cash', req: fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'cash', amount_cents: Math.round(capturedSplitCash * 100) }) }) });
+          if (capturedSplitCardAmt > 0) splitCalls.push({ label: 'card', req: fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'card', amount_cents: Math.round(capturedSplitCardAmt * 100) }) }) });
+          const results = await Promise.allSettled(splitCalls.map(c => c.req));
+          results.forEach((res, i) => {
+            const ok = res.status === 'fulfilled' && res.value.ok;
+            if (!ok) moneyMoveFailures.push(`Split payment (${splitCalls[i].label}) was NOT recorded for sale ${saleLabel} — till reconciliation will be short unless corrected manually.`);
+          });
+        }
+
+        if (moneyMoveFailures.length) {
+          console.error('[POS money-move] failed:', moneyMoveFailures);
+          moneyMoveFailures.forEach(msg => showToast(msg, 'error'));
         }
         // Commission (non-blocking)
         if (capturedServedBy && capturedBusinessId) {
@@ -1735,6 +1769,7 @@ export default function TerminalPage() {
 
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100dvh', background: 'var(--terminal-bg-canvas)', position: 'relative' }}>
+      <ToastContainer />
       <POSAriaInsight page="terminal" businessId={businessId} />
       {showCafeSetup && (
         <CafeSetupModal

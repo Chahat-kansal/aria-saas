@@ -1,17 +1,22 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface ToastProps {
   message: string;
   type?: 'success' | 'error' | 'info';
   onDismiss: () => void;
+  /** SECURITY-CRITICAL-2 — errors that report a failed money-movement call must stay on screen
+   * until a staff member actively dismisses them; a 3s auto-timeout is how these failures were
+   * going unnoticed in practice even after being surfaced. */
+  persistent?: boolean;
 }
 
-export default function Toast({ message, type = 'success', onDismiss }: ToastProps) {
+export default function Toast({ message, type = 'success', onDismiss, persistent = false }: ToastProps) {
   useEffect(() => {
+    if (persistent) return;
     const timer = setTimeout(onDismiss, 3000);
     return () => clearTimeout(timer);
-  }, [onDismiss]);
+  }, [onDismiss, persistent]);
 
   const colors = {
     success: { border: 'rgba(34,197,94,0.3)', text: '#22C55E' },
@@ -49,18 +54,21 @@ export default function Toast({ message, type = 'success', onDismiss }: ToastPro
 }
 
 export function useToast() {
-  const [toasts, setToasts] = useState<Array<{id: number; message: string; type: 'success'|'error'|'info'}>>([]);
+  const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success'|'error'|'info'; persistent?: boolean}>>([]);
+  const idCounter = useRef(0);
 
-  const showToast = (message: string, type: 'success'|'error'|'info' = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
+  // persistent defaults to (type === 'error') so callers reporting a failed money-movement call
+  // don't have to remember to opt in — see Toast's doc comment above.
+  const showToast = (message: string, type: 'success'|'error'|'info' = 'success', persistent?: boolean) => {
+    const id = `${Date.now()}-${idCounter.current++}`;
+    setToasts(prev => [...prev, { id, message, type, persistent: persistent ?? type === 'error' }]);
   };
 
-  const dismissToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
 
   const ToastContainer = () => (
     <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />)}
+      {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} persistent={t.persistent} onDismiss={() => dismissToast(t.id)} />)}
     </div>
   );
 
