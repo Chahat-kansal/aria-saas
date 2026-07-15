@@ -27,8 +27,13 @@ async function _POST(req: Request) {
   const { data: orig } = await supabase.from('pos_sales').select('*').eq('id', sale_id).eq('business_id', bid).maybeSingle();
   if (!orig) return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
 
+  // SECURITY-CRITICAL-1 — sale_id above is already verified to belong to bid; scoping this query by
+  // that SAME sale_id (not just the client-supplied item ids) is what stops a caller from supplying
+  // another tenant's sale_item_id and having it accepted as if it belonged to their own verified sale.
+  // Without this, claim_return_qty (business-id-blind, id-only) would mutate a foreign tenant's real
+  // sale-item row and this route would fabricate a refund from it (BUG-HUNT-1 Tier 0.2).
   const itemIds = items.map((i: { sale_item_id: string }) => i.sale_item_id);
-  const { data: origItems } = await supabase.from('pos_sale_items').select('*').in('id', itemIds);
+  const { data: origItems } = await supabase.from('pos_sale_items').select('*').eq('sale_id', sale_id).in('id', itemIds);
   if (!origItems?.length) return NextResponse.json({ error: 'Items not found' }, { status: 404 });
 
   // BUGFIX-POS-RACES-5 FIX 3 — atomically claim the returnable quantity on each original line BEFORE refunding.
