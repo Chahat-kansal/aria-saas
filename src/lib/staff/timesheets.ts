@@ -137,6 +137,11 @@ export async function clockOut(
     clock_out: clockOutTime,
     break_minutes: breakMinutes,
     total_pay_cents: totalPayCents,
+    // PAYROLL-HOURS-FIX-1 — hours_worked is a real, separately-read DB column
+    // (buildPayrollRun() in lib/staff/payroll.ts reads it directly, not
+    // recomputed from clock_in/clock_out); it must be written here at the
+    // same time as total_pay_cents so the two figures can never drift apart.
+    hours_worked: hours,
     status: 'pending',
     updated_at: new Date().toISOString(),
   }).eq('id', String((ts as { id: string }).id))
