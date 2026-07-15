@@ -3,12 +3,19 @@
 // first, no exceptions — this is what makes "raw prompt scaffolding reaches a real business owner"
 // structurally impossible regardless of which pipeline (parallel / batch_api / gemini_fallback)
 // produced the text.
+//
+// AI-OUTPUT-INTEGRITY-1 — the underlying empty/scaffold-check-then-fallback logic is now the
+// generic src/lib/aria/ai-output-guard.ts (safeAIOutput/hasScaffoldMarkers), so every other AI
+// write/return path in the app gets the same guard, not just this one table. This file keeps its
+// own exports (SCAFFOLD_MARKERS, hasScaffoldMarkers, safeBriefingContent) unchanged for existing
+// callers — they now delegate to the generic guard with the briefing-specific marker set.
+import { safeAIOutput, hasScaffoldMarkers as hasGenericScaffoldMarkers } from './ai-output-guard'
 
 // The exact scaffold markers confirmed leaking in production (BRIEF-INTEGRITY-1 diagnosis).
 export const SCAFFOLD_MARKERS = ['DO NOT open', 'max 1)', 'prior briefings']
 
 export function hasScaffoldMarkers(text: string): boolean {
-  return SCAFFOLD_MARKERS.some((m) => text.includes(m))
+  return hasGenericScaffoldMarkers(text, SCAFFOLD_MARKERS)
 }
 
 export const BRIEFING_FALLBACK =
@@ -16,14 +23,7 @@ export const BRIEFING_FALLBACK =
 
 // Never returns raw/empty/scaffold-contaminated text — the fallback line, or nothing else.
 export function safeBriefingContent(text: string | null | undefined): string {
-  if (!text) return BRIEFING_FALLBACK
-  const trimmed = text.trim()
-  if (!trimmed) return BRIEFING_FALLBACK
-  if (hasScaffoldMarkers(trimmed)) {
-    console.error('[briefing-guard] scaffold marker matched — refusing to store/send raw text, using fallback')
-    return BRIEFING_FALLBACK
-  }
-  return trimmed
+  return safeAIOutput(text, BRIEFING_FALLBACK, { markers: SCAFFOLD_MARKERS, label: 'briefing' })
 }
 
 // Common upbeat/encouraging closing phrases. Checked only against the final 1-2 sentences (a
