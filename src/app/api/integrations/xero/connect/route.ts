@@ -3,8 +3,11 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
+import { issueOAuthState } from '@/lib/integrations/oauth-state'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.ariaos.site'
+const XERO_KEY = 'xero' as const
 
 export async function GET(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -25,13 +28,21 @@ export async function GET(req: Request) {
       .single()
     if (!biz) return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=no_business`)
     business_id = biz.id as string
+  } else {
+    // SECURITY-CRITICAL-1 — a client-supplied business_id was previously trusted with no ownership
+    // check at all before being embedded in the (also unsigned) OAuth state. Same fix as
+    // CONNECTOR-VAULT-1a's Slack/Shopify migration.
+    const denied = await verifyBusinessAccess(user.id, business_id)
+    if (denied) return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=unauthorized`)
   }
 
   if (!process.env.XERO_CLIENT_ID) {
     return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=xero_not_configured`)
   }
 
-  const state = Buffer.from(JSON.stringify({ business_id })).toString('base64url')
+  // SECURITY-CRITICAL-1 — signed, server-issued, single-use, expiring state (was unsigned base64url
+  // JSON, decoded and trusted blindly on the way back in the callback).
+  const state = await issueOAuthState(business_id, XERO_KEY)
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.XERO_CLIENT_ID,

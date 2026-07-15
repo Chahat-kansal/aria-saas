@@ -3,8 +3,11 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { redeemOAuthState } from '@/lib/integrations/oauth-state'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.ariaos.site'
+const XERO_KEY = 'xero' as const
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -15,13 +18,16 @@ export async function GET(req: Request) {
   if (errorParam) return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=${errorParam}`)
   if (!code || !state) return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=missing_params`)
 
-  let business_id: string
-  try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString()) as { business_id: string }
-    business_id = decoded.business_id
-  } catch {
-    return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=invalid_state`)
-  }
+  // SECURITY-CRITICAL-1 — state is now a random token looked up server-side (never decoded/trusted),
+  // checked for expiry, and re-verified against the CURRENT session's business access — not just
+  // whatever business_id was embedded in the client-supplied value. This was BUG-HUNT-1's Tier 0.1:
+  // an unsigned, decoded business_id let an attacker link their own Xero account to a victim's
+  // business by editing the state param before hitting this callback.
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const redeemed = await redeemOAuthState(state, XERO_KEY, user?.id)
+  if (!redeemed) return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=invalid_state`)
+  const business_id = redeemed.businessId
 
   if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET) {
     return NextResponse.redirect(`${BASE_URL}/dashboard/integrations?error=xero_not_configured`)
