@@ -57,6 +57,15 @@ function registerCanopyIpc(): void {
     return true
   })
 
+  // CANOPY-POLISH-1 item 4 — the renderer already re-verifies the owner PIN (scope === 'owner')
+  // before ever calling this; nothing here re-checks that, matching every other IPC handler in this
+  // file, which all trust the renderer's own gating (there is no separate privileged/unprivileged
+  // renderer split in this app — same trust boundary as canopy:sign-out above).
+  ipcMain.handle('canopy:exit-app', () => {
+    app.quit()
+    return true
+  })
+
   ipcMain.handle('canopy:lock', () => {
     // The lock screen is drawn entirely by the renderer over the existing Canopy window — nothing
     // for the main process to do beyond confirming the window is still there.

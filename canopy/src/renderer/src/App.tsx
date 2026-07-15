@@ -193,6 +193,14 @@ export default function App() {
   const [pinError, setPinError] = useState(false)
   const [justUnlocked, setJustUnlocked] = useState(false)
   const [role, setRole] = useState<'owner' | 'staff'>('owner')
+  // CANOPY-POLISH-1 item 4 — Exit Canopy is deliberately gated behind a FRESH owner PIN entry, not
+  // just the ambient `role === 'owner'` state (which the Settings window's own visibility already
+  // requires to reach this button at all — STAFF_VISIBLE never includes 'settings'). Same reasoning
+  // as the lock screen itself: quitting a kiosk-mode business register is significant enough to
+  // warrant a deliberate re-authentication step, not a single tap.
+  const [exitConfirm, setExitConfirm] = useState(false)
+  const [exitPin, setExitPin] = useState('')
+  const [exitPinError, setExitPinError] = useState(false)
   const [clock, setClock] = useState('')
   const [business, setBusiness] = useState<CurrentBusiness | null>(null)
   const [feed, setFeed] = useState<ActivityItem[]>([])
@@ -274,6 +282,27 @@ export default function App() {
         } else {
           setPinError(true)
           setTimeout(() => { setPin(''); setPinError(false) }, 420)
+        }
+      })
+    }
+  }
+
+  const xi = useRef(0)
+  const pressExitPin = (d: string) => {
+    const next = (exitPin + d).slice(0, 4)
+    setExitPin(next)
+    if (next.length === 4) {
+      xi.current += 1
+      const attempt = xi.current
+      if (!business) { setTimeout(() => setExitPin(''), 200); return }
+      window.canopyAPI.verifyPin(business.id, next).then((result) => {
+        if (attempt !== xi.current) return
+        // Owner scope specifically — a valid STAFF pin must not be able to quit the kiosk app.
+        if (result.valid && result.scope === 'owner') {
+          window.canopyAPI.exitApp()
+        } else {
+          setExitPinError(true)
+          setTimeout(() => { setExitPin(''); setExitPinError(false) }, 420)
         }
       })
     }
@@ -389,6 +418,35 @@ export default function App() {
             ))}
           </div>
           <div style={{ fontSize: 10.5, color: P.faint, marginTop: 22, textAlign: 'center', maxWidth: 220, lineHeight: 1.5 }}>Owner and staff both unlock with their own PIN — the machine recognizes which by the code itself, never by a button.</div>
+        </div>
+      )}
+
+      {/* CANOPY-POLISH-1 item 4 — Exit Canopy confirmation. Reuses the lock screen's PIN-pad
+          pattern but is its own separate flow: entering a PIN here never unlocks/changes `role`,
+          it only ever calls exitApp() on a verified OWNER pin, or shakes/rejects otherwise
+          (including a valid STAFF pin — quitting the kiosk is owner-only). Cancelable, unlike the
+          lock screen, since this sits on top of an already-unlocked owner session. */}
+      {exitConfirm && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(245,243,236,.97)', zIndex: 210, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => { setExitConfirm(false); setExitPin('') }} style={{ position: 'absolute', top: 20, right: 24, fontSize: 12, color: P.dim, cursor: 'pointer', padding: '6px 10px', borderRadius: 6 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = P.ink)} onMouseLeave={(e) => (e.currentTarget.style.color = P.dim)}>Cancel</div>
+          <div style={{ width: 74, height: 74, borderRadius: '50%', background: 'rgba(209,69,59,.1)', display: 'grid', placeItems: 'center', marginBottom: 8 }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={P.red} strokeWidth="1.8"><path d="M9 4.5H6.5A1.8 1.8 0 0 0 4.7 6.3v11.4A1.8 1.8 0 0 0 6.5 19.5H9" /><path d="M15 8l4 4-4 4" /><path d="M19 12H9" /></svg>
+          </div>
+          <div style={{ color: P.ink, fontSize: 16, fontWeight: 600 }}>Exit Canopy</div>
+          <div style={{ color: P.dim, fontSize: 11.5, marginTop: 3, marginBottom: 22 }}>Enter the owner PIN to quit — this closes the register.</div>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 26, animation: exitPinError ? 'shake .3s' : undefined }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} style={{ width: 13, height: 13, borderRadius: 99, border: `1.5px solid ${exitPinError ? P.red : P.line}`, background: i < exitPin.length ? (exitPinError ? P.red : P.red) : 'transparent' }} />
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 62px)', gap: 12 }}>
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((d, i) => d === '' ? <div key={i} /> : (
+              <button key={i} onClick={() => (d === '⌫' ? setExitPin((p) => p.slice(0, -1)) : pressExitPin(d))} style={{
+                width: 62, height: 62, borderRadius: '50%', border: `1px solid ${P.line}`, background: P.raised, color: P.ink, fontSize: 18, cursor: 'pointer', fontFamily: sans,
+              }}>{d}</button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -601,7 +659,13 @@ export default function App() {
             <span style={{ color: 'rgba(22,36,28,.7)' }}>{n}</span><span style={{ color: 'rgba(22,36,28,.45)', fontSize: 11 }}>{s}</span>
           </div>
         ))}
-        <button onClick={() => setLocked(true)} style={{ marginTop: 14, padding: '9px 16px', border: `1px solid ${A.line}`, borderRadius: 8, background: 'transparent', color: A.sage, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: sans }}>Lock this machine</button>
+        <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          <button onClick={() => setLocked(true)} style={{ padding: '9px 16px', border: `1px solid ${A.line}`, borderRadius: 8, background: 'transparent', color: A.sage, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: sans }}>Lock this machine</button>
+          {/* CANOPY-POLISH-1 item 4 — this button only ever opens the owner-PIN confirmation above;
+              it never quits directly. Settings itself is already owner-only (STAFF_VISIBLE never
+              includes 'settings'), and exitApp() is still gated a second time behind a fresh PIN. */}
+          <button onClick={() => setExitConfirm(true)} style={{ padding: '9px 16px', border: `1px solid rgba(209,69,59,.3)`, borderRadius: 8, background: 'transparent', color: P.red, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: sans }}>Exit Canopy</button>
+        </div>
       </Win>
 
       <Win id="store" title="App Store" w={520} h={420} x={280} y={70}>

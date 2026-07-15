@@ -40,6 +40,7 @@ export interface CanopyAPI {
   closeApp: (kind: 'ariaos' | 'pos') => Promise<boolean>
   isAppOpen: (kind: 'ariaos' | 'pos') => Promise<boolean>
   signOut: () => Promise<boolean>
+  exitApp: () => Promise<boolean>
   onAppClosed: (cb: (kind: 'ariaos' | 'pos') => void) => () => void
 }
 

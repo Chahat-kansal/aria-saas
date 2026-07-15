@@ -14,6 +14,7 @@ const api = {
   closeApp: (kind: 'ariaos' | 'pos') => ipcRenderer.invoke('canopy:close-app', kind),
   isAppOpen: (kind: 'ariaos' | 'pos') => ipcRenderer.invoke('canopy:is-app-open', kind),
   signOut: () => ipcRenderer.invoke('canopy:sign-out'),
+  exitApp: () => ipcRenderer.invoke('canopy:exit-app'),
   onAppClosed: (cb: (kind: 'ariaos' | 'pos') => void) => {
     const listener = (_e: unknown, kind: 'ariaos' | 'pos') => cb(kind)
     ipcRenderer.on('canopy:app-closed', listener)
