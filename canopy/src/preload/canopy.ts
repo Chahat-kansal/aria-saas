@@ -26,6 +26,8 @@ const api = {
   },
   // CANOPY-REPORTS-AS-FILES-1 — real per-business saved reports for the Files app (item 2).
   getSavedReports: () => ipcRenderer.invoke('canopy:get-saved-reports'),
+  // CANOPY-REPORTS-AS-FILES-1 — Windows-side export via native save dialog (item 4).
+  exportReport: (pdfUrl: string, suggestedName: string) => ipcRenderer.invoke('canopy:export-report', pdfUrl, suggestedName),
 }
 
 contextBridge.exposeInMainWorld('canopyAPI', api)

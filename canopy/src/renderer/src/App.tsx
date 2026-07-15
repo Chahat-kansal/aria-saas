@@ -261,6 +261,9 @@ export default function App() {
   // above, nothing on the default desktop needs this.
   const [savedReports, setSavedReports] = useState<SavedReport[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
+  // CANOPY-REPORTS-AS-FILES-1 — per-report export-in-progress/result status shown under each row
+  // (item 4), keyed by report id since multiple exports could be triggered independently.
+  const [exportStatus, setExportStatus] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const t = setInterval(() => setBoot((p) => Math.min(100, p + 5)), 46)
@@ -316,6 +319,23 @@ export default function App() {
     }).finally(() => { if (!cancelled) setReportsLoading(false) })
     return () => { cancelled = true }
   }, [ready, business, wins])
+
+  // CANOPY-REPORTS-AS-FILES-1 item 4 — real Windows-side export via the main process's native save
+  // dialog + net.fetch/writeFile (src/main/export.ts); the PDF's own URL is already public (Vercel
+  // Blob), so the renderer just hands it and a sanitized filename to the main process.
+  const exportReport = useCallback((r: SavedReport) => {
+    const suggestedName = r.title.replace(/[\\/:*?"<>|]/g, '_') + '.pdf'
+    setExportStatus((s) => ({ ...s, [r.id]: 'Exporting…' }))
+    window.canopyAPI.exportReport(r.pdf_url, suggestedName).then((res) => {
+      if (res.canceled) {
+        setExportStatus((s) => { const n = { ...s }; delete n[r.id]; return n })
+      } else if (res.ok) {
+        setExportStatus((s) => ({ ...s, [r.id]: 'Saved to Windows — ' + (res.path ?? suggestedName) }))
+      } else {
+        setExportStatus((s) => ({ ...s, [r.id]: '⚠ ' + (res.error ?? 'Export failed') }))
+      }
+    })
+  }, [])
 
   useEffect(() => window.canopyAPI.onAppClosed((kind) => setWins((w) => w.filter((id) => id !== kind))), [])
 
@@ -765,6 +785,7 @@ export default function App() {
         {savedReports.map((r) => {
           const kindLabel = FILE_SOURCE_LABEL[r.source_kind] ?? r.source_kind
           const groundColor = FILE_GROUNDING_COLOR[r.grounding] ?? A.sage
+          const status = exportStatus[r.id]
           return (
             <div key={r.id} style={{ padding: '10px 0', borderBottom: `1px solid ${A.line}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -778,7 +799,13 @@ export default function App() {
                     Generated {new Date(r.generated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </div>
                 </div>
+                <button onClick={() => exportReport(r)} style={{ flexShrink: 0, fontSize: 10.5, padding: '5px 10px', borderRadius: 7, border: `1px solid ${A.line}`, background: 'transparent', color: A.sage, fontWeight: 700, cursor: 'pointer', fontFamily: sans }}>
+                  Export
+                </button>
               </div>
+              {status && (
+                <div style={{ fontSize: 10, color: status.startsWith('⚠') ? P.red : A.sage, marginTop: 4 }}>{status}</div>
+              )}
             </div>
           )
         })}

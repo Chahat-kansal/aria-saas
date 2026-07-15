@@ -42,6 +42,13 @@ export interface SavedReport {
   created_at: string
 }
 
+export interface ExportReportResult {
+  ok: boolean
+  canceled?: boolean
+  path?: string
+  error?: string
+}
+
 export interface CanopyAPI {
   getBusiness: () => Promise<CurrentBusiness | null>
   getActivity: (businessId: string) => Promise<ActivityItem[]>
@@ -55,6 +62,7 @@ export interface CanopyAPI {
   exitApp: () => Promise<boolean>
   onAppClosed: (cb: (kind: string) => void) => () => void
   getSavedReports: () => Promise<SavedReport[]>
+  exportReport: (pdfUrl: string, suggestedName: string) => Promise<ExportReportResult>
 }
 
 declare global {

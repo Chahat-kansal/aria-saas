@@ -8,6 +8,7 @@ import {
   fetchCurrentBusiness, fetchRecentActivity, fetchHealthQuick, fetchTodaySales, verifyCanopyPin,
   fetchSavedReports,
 } from './api'
+import { exportReportToWindows } from './export'
 
 app.whenReady().then(() => {
   // SHELL-1 — kiosk mode holds the window fullscreen with no OS chrome visible underneath;
@@ -78,4 +79,8 @@ function registerCanopyIpc(): void {
 
   // CANOPY-REPORTS-AS-FILES-1 — Files app's real data (item 2).
   ipcMain.handle('canopy:get-saved-reports', async () => fetchSavedReports())
+
+  // CANOPY-REPORTS-AS-FILES-1 — real Windows-side export via native save dialog (item 4).
+  ipcMain.handle('canopy:export-report', async (_e, pdfUrl: string, suggestedName: string) =>
+    exportReportToWindows(getCanopyWindow(), pdfUrl, suggestedName))
 }
