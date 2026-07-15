@@ -21,6 +21,18 @@ const sans = "'Outfit', system-ui, sans-serif"
 const ariaSerif = "'Cormorant Garamond', serif"
 const num: React.CSSProperties = { fontVariantNumeric: 'tabular-nums' }
 
+// CANOPY-POLISH-1 item 2 — the dock's own real footprint, computed from its actual CSS values
+// below (icon 32 + item gap 3 + ~11px label line + 9px/7px top/bottom padding), not a guessed
+// constant. DOCK_CLEARANCE is the one shared source of truth both the dock's own `bottom` offset
+// and the feed panel's `bottom` anchor derive from, so they can never drift out of sync with each
+// other the way the feed panel's old fixed `top: 570` could (and did) drift out of sync with the
+// dock's real position — anchoring the feed panel's bottom edge here means its available height is
+// always `100vh - DOCK_CLEARANCE - <its own top>`, recomputed by the browser at every window size,
+// so it can never overlap the dock regardless of actual screen resolution.
+const DOCK_BOTTOM_OFFSET = 16
+const DOCK_CONTENT_HEIGHT = 32 /* icon */ + 3 /* gap */ + 11 /* label line */ + 9 + 7 /* padding */
+const DOCK_CLEARANCE = DOCK_BOTTOM_OFFSET + DOCK_CONTENT_HEIGHT + 20 /* breathing room above the dock */
+
 const AMark = ({ s = 18 }: { s?: number }) => (
   <svg width={s} height={s} viewBox="0 0 100 100" fill="none">
     <defs>
@@ -371,7 +383,14 @@ export default function App() {
         ))}
       </div>}
 
-      {role === 'owner' && <div style={{ position: 'absolute', left: 20, top: 570, width: 258, animation: 'rise .4s ease' }}>
+      {/* CANOPY-POLISH-1 item 2 — was `top: 570` with no lower bound, so its content could grow
+          straight into the dock's space once desktop icons pushed everything below them and the
+          real screen was shorter than whatever this was eyeballed against. `bottom: DOCK_CLEARANCE`
+          (the dock's own real, computed footprint — see the constant's definition above) reserves
+          the dock's space on every window size, and overflowY:'auto' means if content ever DID
+          exceed the resulting height, it scrolls inside this panel instead of pushing into the
+          dock — it can no longer collide with the dock, full stop, regardless of resolution. */}
+      {role === 'owner' && <div style={{ position: 'absolute', left: 20, top: 570, bottom: DOCK_CLEARANCE, width: 258, overflowY: 'auto', animation: 'rise .4s ease' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: P.surface, border: `1px solid ${P.line}`, borderRadius: 12, padding: '8px 11px' }}>
           <div style={{ width: 26, height: 26, borderRadius: 7, background: P.surface, border: `1px solid ${P.line}`, display: 'grid', placeItems: 'center', animation: 'pulseRing 3s infinite' }}><AMark s={15} /></div>
           <div style={{ fontSize: 11.5, fontWeight: 600 }}>Aria is watching the business</div>
@@ -583,7 +602,7 @@ export default function App() {
           against clipping on an unusually narrow window, not meant to be visibly used at real
           fullscreen width. */}
       <div className="dock-scroll" style={{
-        position: 'absolute', left: '50%', bottom: 16, transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10,
+        position: 'absolute', left: '50%', bottom: DOCK_BOTTOM_OFFSET, transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10,
         background: 'rgba(28,30,26,.55)', backdropFilter: 'blur(22px) saturate(1.6)', WebkitBackdropFilter: 'blur(22px) saturate(1.6)',
         border: '1px solid rgba(255,255,255,.14)', boxShadow: '0 12px 34px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.08)',
         borderRadius: 20, padding: '9px 14px 7px', maxWidth: '92vw', overflowX: 'auto',
