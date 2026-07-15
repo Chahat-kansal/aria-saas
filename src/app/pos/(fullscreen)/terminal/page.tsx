@@ -1854,9 +1854,26 @@ export default function TerminalPage() {
                   {' '}· {expiryPrompt.existing_batch.quantity_remaining} units remaining
                 </p>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => {
-                    fetch(`/api/pos/product-batches/${expiryPrompt.existing_batch!.id}/decrement`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qty: 1 }) }).catch(() => {})
+                  <button onClick={async () => {
+                    // SECURITY-CRITICAL-2 item 2 — this was fire-and-forget with a network-error-only
+                    // catch (an HTTP error response was swallowed identically to a dropped call), the
+                    // client-side half of the same fragile pattern INVENTORY-DECREMENT-FIX-1 removed
+                    // for pos_outlet_inventory. The server route now does a reliable atomic decrement
+                    // (decrement_numeric RPC); this call is awaited and a failure surfaces a
+                    // persistent error toast instead of leaving quantity_remaining silently stale.
+                    const batchId = expiryPrompt.existing_batch!.id
+                    const productName = expiryPrompt.product_name
                     setExpiryPrompt(null)
+                    try {
+                      const r = await fetch(`/api/pos/product-batches/${batchId}/decrement`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qty: 1 }) })
+                      if (!r.ok) {
+                        console.error('[batch-decrement] failed:', r.status)
+                        showToast(`Batch quantity was NOT updated for ${productName} — correct it manually in Inventory > Batches.`, 'error')
+                      }
+                    } catch (e) {
+                      console.error('[batch-decrement] failed:', e)
+                      showToast(`Batch quantity was NOT updated for ${productName} — correct it manually in Inventory > Batches.`, 'error')
+                    }
                   }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: 'var(--success,#65B179)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Confirmed</button>
                   <button onClick={() => setExpiryPrompt(null)} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Skip</button>
                 </div>
