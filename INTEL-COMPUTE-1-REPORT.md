@@ -611,3 +611,107 @@ Roughly ~40 Bucket A sites remain, plus ~14 Bucket B duplicates. Ranked by blast
   `getInventory`) — shadowed by static routes at the same URL, worth deleting rather than fixing.
 - `rDeadStock` vs `pos/dead-stock/route.ts` — a third parallel "dead stock" implementation exists at
   `inventory-insight/route.ts`, also canonical; not consolidated into one this pass.
+
+---
+
+# INTEL-COMPUTE-3 — Second Remainder Migration Batch
+
+Run back-to-back with INTEL-COMPUTE-2 on the same remainder list. Every "High priority" site listed
+above was migrated this batch, plus one additional real finding surfaced along the way
+(`compliance/bas/route.ts` was already fixed in INTEL-COMPUTE-2; this batch's `pos-bas-export`
+disclosure fix is separate and distinct).
+
+## Compliance verification: wholesale B2B exemption handling (explicit ask this sprint)
+
+Checked whether a real GST exemption has actually been mischarged, not just whether the mechanism
+was structurally capable of it. Confirmed live (Supabase project `nxfzippunqvqsvkmwtjv`): **zero
+products across the entire database currently use a non-GST tax code** (no `GST_FREE`/`EXPORT`/
+`INPUT_TAXED`/`WET`/`LCT` product exists yet), and the one real `wholesale_order_items` row (Acai
+Bowl, Sip Café) is correctly configured as standard 10% GST — prepared/ready-to-eat food is
+legitimately taxable under Australian GST law, not misclassified. **No real dollar mischarge has
+occurred to date.** The bug was purely structural — `items/route.ts` didn't even select the
+product's `tax_code_id`, so a real exemption would have been silently overtaxed the instant one
+existed. Fixed: `items/route.ts` now resolves the real tax code per line; `totals/route.ts` sums
+each item's real resolved GST instead of a blanket rate. Verified no regression on the one real row.
+
+## This batch — ~20 sites migrated across 17 commits
+
+1. **Wholesale B2B** (`orders/[id]/items/route.ts`, `.../totals/route.ts`) — real per-product tax
+   code resolution replacing the flat-10% blanket rate (see compliance verification above).
+2. **`pos-print.ts`** — receipt printer now prefers the real persisted `tax_amount` over a flat
+   10%-inclusive estimate; `SaleData` interface extended to carry it.
+3. **`pos/history/page.tsx`** — Financials panel now uses the already-fetched `tax_amount` instead
+   of ignoring it and recomputing a flat estimate.
+4. **`Receipt.tsx`** — both templates' "Subtotal" line now reconciles to the real tax breakdown
+   shown right below it (was always flat-10%, even when a real per-code breakdown was displayed).
+5. **`pos-bas-export/route.ts`** — no-breakdown sales are now disclosed (count + value) rather than
+   silently trusted as 100% GST; surfaced as a visible warning on `/pos/reports/bas`.
+6. **`first-insight/route.ts`** — onboarding banner redacted against real business data (bypassed
+   `grounded.ts` entirely).
+7. **`weekly-report/route.ts`** — revenue filter fixed (`neq('voided')` → `completed` + AEST
+   boundary) and its AI narrative redacted against real figures.
+8. **`council.ts`** — extended the existing GROUNDING-TEETH-V2 guard (previously applied only to
+   the 4 individual advisor brains) to the final synthesis step (`final_briefing`) — this directly
+   covers `weekly-ai.ts`'s `executive_summary`/`high_confidence_insights`, which are sourced from
+   this same synthesis output.
+9. **`pos-end-of-day/route.ts`** — "today's revenue" was scoped by `session_id` alone with no date
+   filter (real sessions confirmed open for 14+ and 31+ days), comparing a possibly-multi-week sum
+   against a genuine 7-day average; added the real AEST calendar-day boundary. `debrief` grounded.
+10. **`pos/reports/closures/route.ts` + `.../cashier/route.ts`** — filter/boundary fixes, same
+    pattern as `commission`/`sales` (fixed in INTEL-COMPUTE-2).
+11. **`pos-chat`'s `cards[].value`/`chart.values`** — wired in audit-only flag mode (never mutates,
+    so no risk of corrupting the JSON the UI renders) — the one field in this route with zero guard
+    of any kind. An active correction fix remains future work.
+12. **`pos/reports/[type]/route.ts`** — fixed the 3 genuinely live sub-handlers (`getDashboard`,
+    `getAdvanced`, `getBriefing`); the other 4 sub-handlers are confirmed dead code (shadowed by
+    static sibling routes), left untouched.
+13. **Ask Aria chain** (`get-business-context.ts`, `ask/facts-packet.ts`, `ask/route.ts`) — all 4
+    near-duplicate "same week last month"/comparison implementations fixed to `status='completed'`
+    (17 total query sites across the 3 files).
+14. **`roster.ts`** — Sunday penalty multiplier aligned to `payroll.ts`'s real rate (was 1.50x vs
+    the real payroll engine's 2.00x — a 25% understatement in the cost preview).
+15. **`send-scheduled-reports.ts`** — filter + AEST boundary fixed for both report loops (emailed
+    externally, same pattern as `shared/[token]/page.tsx` fixed last sprint).
+
+## VERIFY (complete)
+
+Every fix above carries its own before/after evidence in its commit message. The wholesale B2B
+compliance check (this sprint's explicit ask) is detailed above with a concrete verdict: structural
+bug, zero real mischarge to date, now fixed at the root. `tsc`/full build green throughout this
+batch; all commits tagged `fix(intel):` on `main`.
+
+## Remaining Bucket A count, ranked for the next batch
+
+Down from ~40 to roughly **~20 confirmed Bucket A sites** remaining, plus the same ~14 Bucket B
+duplicates (unchanged — none were touched this batch).
+
+**High priority (not yet fixed):**
+- `LivePulseRail.tsx`, `slow-day/page.tsx`, `cash-flow/page.tsx` — boundary bugs; status-filter bugs
+  currently silent by data coincidence rather than fixed.
+- `signal-engine.ts`'s remaining AOV signals (`revenue_velocity_24h/7d`, `avg_basket_trend`,
+  `new_vs_returning`) and `top_product_growth`'s 0%→100%-fabrication-on-no-baseline sentinel
+  (confirmed firing live today on real data — "Banana Bread Slice").
+- `flash-revenue-agent.ts`'s 4 trigger checks (confirmed live 31-day-window divergence),
+  `pos/shift-reports/route.ts`'s compounding refund-clamp bug (dormant — no negative `total_amount`
+  rows exist anywhere yet), `business-health-quick/route.ts`'s no-filter-at-all site (confirmed
+  historically produced a materially wrong drop % on real past data), `pos-insight/route.ts`'s UTC
+  day cutover (confirmed $24/2-txn divergence on a real historical date).
+- `clv-agent.ts`, `loyalty-intelligence.ts` — filter bugs, low $ impact today (draft/refunded rows
+  for this business have no linked `customer_id`/near-zero volume share).
+- GST-exempt product toggles (`tax_rate=0`/`gst_exempt`) — still fully dead fields, never read by
+  the tax engine at point-of-sale.
+- `create-sale.ts`'s blanket-10%-fallback — the *mechanism* was fixed in INTEL-COMPUTE-2 (now
+  resolves the product's own `tax_code_id`), but the absolute-last-resort flat-10% path (when
+  neither the line nor the product has any tax code at all) still exists by design, matching every
+  other "never crash" fallback in this codebase — not a further action item, noted for completeness.
+
+**Lower priority / Bucket B (unchanged, not touched this batch):**
+- `finance/overview/route.ts` vs `get-business-context.ts`'s COGS/net-margin duplicate.
+- `[type]/route.ts`'s dead sibling sub-handlers (`getCashier`/`getCommission`/`getClosures`/
+  `getInventory`) — shadowed, worth deleting rather than fixing.
+- `rDeadStock` vs `pos/dead-stock/route.ts` vs `inventory-insight/route.ts` — 3 parallel dead-stock
+  implementations, 2 canonical, not consolidated.
+- `ask/facts-packet.ts` and the other 3 Ask Aria chain files: 3 of 4 sites hardcode the Melbourne
+  timezone rather than reading the business's actual configured timezone (a latent divergence for
+  any non-Melbourne business, not exposed for this Melbourne-based business) — the filter bug was
+  fixed this batch; the timezone-hardcoding sub-issue was not.
