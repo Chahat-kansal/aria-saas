@@ -65,6 +65,12 @@ async function _POST(req: NextRequest) {
 
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
+  // SECURITY-CRITICAL-3 — business_id was previously trusted with zero ownership check, reaching
+  // supabaseAdmin writes (reel_usage_log, social_posts) with no tenant scoping at all. Verify the
+  // caller actually owns it before anything below uses it.
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   if (!is_admin) {
     const { data: prefs } = await supabase.from('social_preferences')
       .select('reels_enabled').eq('business_id', business_id).maybeSingle()
@@ -83,7 +89,10 @@ async function _POST(req: NextRequest) {
 
   let post: any = null
   if (post_id) {
-    const { data } = await supabase.from('social_posts').select('*').eq('id', post_id).maybeSingle()
+    // SECURITY-CRITICAL-3 — scoped by the now-verified business_id, not id alone; a foreign post_id
+    // simply yields no row (post stays null) instead of leaking/being usable at all.
+    const { data } = await supabase.from('social_posts').select('*').eq('id', post_id).eq('business_id', business_id).maybeSingle()
+    if (!data) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     post = data
   }
 
@@ -117,7 +126,7 @@ async function _POST(req: NextRequest) {
     jobBody.medias = [{ value: startFrameJobId, role: 'start_image' }]
   }
 
-  // Update social_posts metadata now (fal_request_id set via PATCH after browser gets job_id)
+  // Update social_posts metadata now (fal_request_id set once the server has the job_id, below)
   if (post_id) {
     try {
       await supabaseAdmin.from('social_posts').update({
@@ -127,7 +136,7 @@ async function _POST(req: NextRequest) {
         reel_cost_aud: estimatedCost,
         post_type: 'reel',
         ...(influencer_id ? { influencer_id } : {}),
-      }).eq('id', post_id)
+      }).eq('id', post_id).eq('business_id', business_id)
     } catch (e) { console.error('[silent-catch]', e) }
   }
 
@@ -146,13 +155,39 @@ async function _POST(req: NextRequest) {
     })
   } catch (e) { console.error('[silent-catch]', e) }
 
-  // Return credentials to browser — Vercel IPs are blocked by Higgsfield (522),
-  // so the browser calls Higgsfield directly then PATCHes back the job_id.
-  const rawKey = process.env.HIGGSFIELD_API_KEY!.replace(/^Bearer\s+/i, '').replace(/^Key\s+/i, '')
+  // SECURITY-CRITICAL-3 — this used to return the raw HIGGSFIELD_API_KEY to the browser (with the
+  // request payload) so the browser could call Higgsfield directly, worked around an old report of
+  // Vercel IPs getting a 522 from Higgsfield's generate endpoint. That workaround leaked a live,
+  // shared third-party credential to every authenticated user of every tenant — any business owner
+  // could extract it and use it off-platform, billed to this platform's own Higgsfield account.
+  // The key must never leave the server. hgPost() (defined above, already used correctly by the
+  // GET handler below for status polling) makes this exact call server-side instead.
+  let hgResult: { id?: string; job_id?: string; request_id?: string; [k: string]: unknown }
+  try {
+    hgResult = await hgPost('/v1/video/generate', jobBody)
+  } catch (e) {
+    const msg = (e as Error).message
+    return NextResponse.json({ error: 'Higgsfield generation request failed: ' + msg }, { status: 502 })
+  }
+  const jobId = hgResult.id ?? hgResult.job_id ?? hgResult.request_id ?? null
+  if (!jobId) {
+    return NextResponse.json({ error: 'Higgsfield did not return a job id: ' + JSON.stringify(hgResult).slice(0, 200) }, { status: 502 })
+  }
+
+  // Persist the job id immediately — previously done via a separate browser PATCH once it had
+  // called Higgsfield itself; now the server already has it.
+  if (post_id) {
+    try { await supabaseAdmin.from('social_posts').update({ fal_request_id: jobId }).eq('id', post_id).eq('business_id', business_id) } catch (e) { console.error('[silent-catch]', e) }
+    try {
+      await supabaseAdmin.from('reel_usage_log')
+        .update({ fal_request_id: jobId, status: 'processing' })
+        .eq('social_post_id', post_id).eq('business_id', business_id)
+        .is('fal_request_id', null)
+    } catch (e) { console.error('[silent-catch]', e) }
+  }
+
   return NextResponse.json({
-    hf_key: rawKey,
-    hf_endpoint: 'https://api.higgsfield.ai/v1/video/generate',
-    payload: jobBody,
+    job_id: jobId,
     post_id: post_id || null,
     business_id,
     model_id: 'kling3_0',
@@ -170,11 +205,18 @@ async function _PATCH(req: NextRequest) {
   if (!job_id) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
 
   if (post_id) {
-    try { await supabaseAdmin.from('social_posts').update({ fal_request_id: job_id }).eq('id', post_id) } catch (e) { console.error('[silent-catch]', e) }
+    // SECURITY-CRITICAL-3 — this handler previously updated by post_id alone via supabaseAdmin,
+    // zero business check. Verify the post belongs to a business the caller owns before any write.
+    const { data: post } = await supabase.from('social_posts').select('business_id').eq('id', post_id).maybeSingle()
+    if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', post.business_id).eq('user_id', user.id).maybeSingle()
+    if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    try { await supabaseAdmin.from('social_posts').update({ fal_request_id: job_id }).eq('id', post_id).eq('business_id', post.business_id) } catch (e) { console.error('[silent-catch]', e) }
     try {
       await supabaseAdmin.from('reel_usage_log')
         .update({ fal_request_id: job_id, status: 'processing' })
-        .eq('social_post_id', post_id)
+        .eq('social_post_id', post_id).eq('business_id', post.business_id)
         .is('fal_request_id', null)
     } catch (e) { console.error('[silent-catch]', e) }
   }
@@ -189,10 +231,21 @@ async function _GET(req: NextRequest) {
 
   const jobId = req.nextUrl.searchParams.get('fal_request_id') || req.nextUrl.searchParams.get('job_id')
   const postId = req.nextUrl.searchParams.get('post_id')
-  const businessId = req.nextUrl.searchParams.get('business_id')
 
   if (!jobId) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
   if (!process.env.HIGGSFIELD_API_KEY) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
+
+  // SECURITY-CRITICAL-3 — the completed/failed branches below write to social_posts/reel_usage_log
+  // by post_id/job_id alone via supabaseAdmin with zero business check. Verify post_id belongs to a
+  // business the caller owns up front; the two write branches only fire when this succeeded.
+  let verifiedBusinessId: string | null = null
+  if (postId) {
+    const { data: post } = await supabase.from('social_posts').select('business_id').eq('id', postId).maybeSingle()
+    if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', post.business_id).eq('user_id', user.id).maybeSingle()
+    if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    verifiedBusinessId = post.business_id
+  }
 
   try {
     const result = await hgGet('/v1/video/' + jobId)
@@ -215,16 +268,18 @@ async function _GET(req: NextRequest) {
         }
       }
 
-      if (postId) {
-        try { await supabaseAdmin.from('social_posts').update({ video_url: finalUrl, post_type: 'reel' }).eq('id', postId) } catch (e) { console.error('[silent-catch]', e) }
-        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId) } catch (e) { console.error('[silent-catch]', e) }
+      if (postId && verifiedBusinessId) {
+        try { await supabaseAdmin.from('social_posts').update({ video_url: finalUrl, post_type: 'reel' }).eq('id', postId).eq('business_id', verifiedBusinessId) } catch (e) { console.error('[silent-catch]', e) }
+        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId).eq('business_id', verifiedBusinessId) } catch (e) { console.error('[silent-catch]', e) }
       }
 
       return NextResponse.json({ status: 'COMPLETED', video_url: finalUrl })
     }
 
     if (status === 'failed' || status === 'error') {
-      try { await supabaseAdmin.from('reel_usage_log').update({ status: 'failed' }).eq('fal_request_id', jobId) } catch (e) { console.error('[silent-catch]', e) }
+      if (verifiedBusinessId) {
+        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'failed' }).eq('fal_request_id', jobId).eq('business_id', verifiedBusinessId) } catch (e) { console.error('[silent-catch]', e) }
+      }
       return NextResponse.json({ status: 'FAILED', error: result.error || 'Generation failed' })
     }
 
