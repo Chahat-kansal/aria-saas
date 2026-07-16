@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { runAriaCouncil, insertCouncilRun, type CouncilOutput } from '@/lib/aria/council'
+import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
 import type { WeeklyReportData } from './weekly-data'
 
 export interface PromoRecommendation {
@@ -154,6 +155,22 @@ export async function generateWeeklyNarrative(
       if (Array.isArray(parsed)) { promoRecs = parsed.slice(0, 3); promoSuccess = true }
     }
   } catch (e) { console.error('[weekly-ai] promo call failed:', (e as Error).message) }
+
+  // INTEL-COMPUTE-2 — expected_impact is free text the model can shape as a numeric claim (e.g.
+  // "+15% revenue lift") with nothing checking it against real data, and this pipeline calls the
+  // Anthropic SDK directly rather than through grounded.ts's 5 guarded entry points, so it inherits
+  // no guard automatically. Redact (not strip — keeps the sentence, drops just the bad token) any
+  // $/%/count in expected_impact that isn't grounded in this week's real promoContext figures,
+  // before the emailed PDF (weekly-pdf.ts) renders it verbatim.
+  if (promoRecs.length) {
+    const allowed = numbersIn(promoContext)
+    for (const rec of promoRecs) {
+      if (!rec.expected_impact) continue
+      rec.expected_impact = (await guardOutput(rec.expected_impact, allowed, {
+        mode: 'redact', businessId: business.id, surface: 'weekly-ai/expected_impact',
+      })).text
+    }
+  }
 
   void (async () => {
     try {
