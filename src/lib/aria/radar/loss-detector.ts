@@ -79,11 +79,14 @@ async function detectSlowPeriods(businessId: string, _since: string): Promise<Lo
 
 async function detectMarginLeaks(businessId: string, since: string): Promise<LossSignal | null> {
   // Get recent sale IDs (limit 400 to keep .in() tractable)
+  // INTEL-CONTRACT-1 VERIFY finding — same recurring bug class as INTEL-COMPUTE-2/3/4:
+  // neq('status','voided') admits draft (unsent/in-progress) and refunded rows into the margin-leak
+  // calculation. Fixed to the canonical status='completed' filter.
   const { data: recentSales } = await supabaseAdmin
     .from('pos_sales')
     .select('id')
     .eq('business_id', businessId)
-    .neq('status', 'voided')
+    .eq('status', 'completed')
     .gte('created_at', since)
     .limit(400)
 
