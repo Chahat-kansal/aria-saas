@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 import BankTab from './BankTab'
+import { toAESTWallClock } from '@/lib/date-au'
 
 interface BankAccount { id: string; account_name: string | null; institution_name: string | null; balance: number | null; last_synced_at: string | null }
 interface BankStatus { connected: boolean; accounts: BankAccount[]; total_balance: number }
@@ -92,13 +93,21 @@ export default function CashFlowPage() {
       const salesData = await salesRes.json() as { sales?: Array<{ created_at: string; total_amount: number; status: string }> }
       const sales = (salesData.sales ?? []).filter(s => s.status !== 'voided')
 
+      // INTEL-COMPUTE-4 — /api/pos/sales now defaults to status='completed' server-side (fixed in
+      // INTEL-COMPUTE-2), so the client-side `!== 'voided'` filter above is redundant but harmless.
+      // The real remaining bug: date/day-of-week extraction via raw created_at.split('T')[0] +
+      // new Date(d).getDay() (UTC), misattributing AEST-morning sales to the wrong day -- directly
+      // undermines dowAvg, the day-of-week baseline this forecast's revenue projection is built on.
       const revenueByDate: Record<string, number> = {}
+      const dowByDate: Record<string, number> = {}
       for (const s of sales) {
-        const d = s.created_at?.split('T')[0]
-        if (d) revenueByDate[d] = (revenueByDate[d] ?? 0) + Number(s.total_amount ?? 0)
+        const shifted = toAESTWallClock(s.created_at)
+        const d = shifted.toISOString().split('T')[0]
+        revenueByDate[d] = (revenueByDate[d] ?? 0) + Number(s.total_amount ?? 0)
+        dowByDate[d] = shifted.getUTCDay()
       }
       const dowAvg: number[] = [0, 1, 2, 3, 4, 5, 6].map(dow => {
-        const entries = Object.entries(revenueByDate).filter(([d]) => new Date(d).getDay() === dow)
+        const entries = Object.entries(revenueByDate).filter(([d]) => dowByDate[d] === dow)
         if (!entries.length) return 0
         return entries.reduce((s, [, v]) => s + v, 0) / entries.length
       })
@@ -162,10 +171,11 @@ export default function CashFlowPage() {
         const lyRes = await fetch('/api/pos/sales?business_id=' + business!.id + '&limit=500&from=' + lyStart.toISOString() + '&to=' + lyEnd.toISOString())
         const lyData = await lyRes.json() as { sales?: Array<{ created_at: string; total_amount: number; status: string }> }
         const lySales = (lyData.sales ?? []).filter(s => s.status !== 'voided')
+        // INTEL-COMPUTE-4 — was raw new Date(...).toISOString() (UTC), same misattribution bug.
         const lyByDay: Record<string, number> = {}
         for (const s of lySales) {
-          const d = new Date(s.created_at)
-          d.setFullYear(d.getFullYear() + 1)
+          const d = toAESTWallClock(s.created_at)
+          d.setUTCFullYear(d.getUTCFullYear() + 1)
           const key = d.toISOString().split('T')[0]
           lyByDay[key] = (lyByDay[key] ?? 0) + (s.total_amount ?? 0)
         }
