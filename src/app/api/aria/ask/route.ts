@@ -881,9 +881,13 @@ Rules:
           const gtSwlmEnd = new Date(gtThisMon.getTime() - 21 * 86400000).toISOString()
           const gt56dAgo = new Date(Date.now() - 56 * 86400000).toISOString()
           const gt30dAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+          // INTEL-COMPUTE-3 — the 4 pos_sales queries below (today/week/last-week/same-week-last-
+          // month, feeding available_ground_truth — the block the model is told is "SAFE TO CITE")
+          // used neq('voided'), admitting draft/refunded rows. status='completed' matches
+          // getRevenueSnapshot()'s canonical rule (gt56d just below already used it correctly).
           const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights, gtOpenLoops, gtBenchmark, gtHypotheses] = await Promise.all([
-            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).neq('status', 'voided'),
-            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).neq('status', 'voided'),
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).eq('status', 'completed'),
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).eq('status', 'completed'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
             // AUTOPILOT-FIX-1 PART 1: payment-coverage DENOMINATOR is completed sales only — draft/pending/
             // cancelled legitimately have no payment record. The old neq('voided') denominator counted them,
@@ -892,8 +896,8 @@ Rules:
             // numerator: payments on COMPLETED sales only (matches the denominator)
             supabaseAdmin.from('pos_sale_payments').select('sale_id, pos_sales!inner(business_id, created_at, status)').eq('pos_sales.business_id', bid).gte('pos_sales.created_at', gtWeekAgo).eq('pos_sales.status', 'completed').limit(5000),
             // V2 Part 3 new anchors
-            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtLastWeekStart).lt('created_at', gtWeekStart).neq('status', 'voided'),
-            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtSwlmStart).lt('created_at', gtSwlmEnd).neq('status', 'voided'),
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtLastWeekStart).lt('created_at', gtWeekStart).eq('status', 'completed'),
+            supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtSwlmStart).lt('created_at', gtSwlmEnd).eq('status', 'completed'),
             supabaseAdmin.from('pos_sales').select('total_amount, created_at').eq('business_id', bid).gte('created_at', gt56dAgo).eq('status', 'completed'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid),
             supabaseAdmin.from('pos_customers').select('total_spent').eq('business_id', bid).order('total_spent', { ascending: false }).limit(5),
@@ -1197,10 +1201,12 @@ Rules:
     const swlmThisMonIso = toAESTStart(swlmMonShifted.toISOString().slice(0, 10))
     const d35str = new Date(new Date(swlmThisMonIso).getTime() - 28 * 86400000).toISOString()
     const d28str = new Date(new Date(swlmThisMonIso).getTime() - 21 * 86400000).toISOString()
+    // INTEL-COMPUTE-3 — was neq('voided'), admitting draft/refunded rows into weeklyTrackingBlock's
+    // same-week-last-month figure. status='completed' matches getRevenueSnapshot()'s canonical rule.
     const [{ data: bizTarget }, { data: swlmRows }] = await Promise.all([
       supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', bid).maybeSingle(),
       supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid)
-        .gte('created_at', d35str).lt('created_at', d28str).neq('status', 'voided'),
+        .gte('created_at', d35str).lt('created_at', d28str).eq('status', 'completed'),
     ])
     const wTarget = bizTarget?.weekly_revenue_target ? Number(bizTarget.weekly_revenue_target) : null
     const swlmRev = (swlmRows ?? []).reduce(
