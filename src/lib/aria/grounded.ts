@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from './providers/anthropic'
 import { safeAIOutput } from './ai-output-guard'
+import { guardOutput, numbersIn } from './ground-guard'
 import type { AgentKey, AgentRole } from './types'
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
 
@@ -28,6 +29,25 @@ function withGrounding(systemPrompt: string, groundTruth?: Record<string, unknow
     ? `\n\nREAL DATA (the only source of truth for this task — do not use anything outside it):\n${typeof groundTruth === 'string' ? groundTruth : JSON.stringify(groundTruth).slice(0, 6000)}`
     : ''
   return systemPrompt + ANTI_HALLUCINATION + truthBlock
+}
+
+// INTEL-COMPUTE-1 — structural numeric guard, wired into all 5 entry points below so every caller
+// (existing and future) is checked by construction, not opt-in per route the way ground-guard.ts's
+// guardOutput() was before this. JSON-shaped entry points run it in 'flag' mode (audit-only, via
+// guardOutput's own aria_ai_calls log — never mutates, so a JSON response can never be corrupted by a
+// guard pass) since the model may legitimately restate a real ground-truth figure inside a JSON field
+// and flag mode still logs when a figure DOESN'T match. runCustomerFacingCopy is plain prose, so it
+// actively redacts (never lets an ungrounded $/%/count figure reach a real customer).
+function groundTruthValues(groundTruth?: Record<string, unknown> | string): number[] {
+  if (!groundTruth) return []
+  return numbersIn(typeof groundTruth === 'string' ? groundTruth : JSON.stringify(groundTruth))
+}
+
+async function auditUngroundedNumbers(text: string, groundTruth: Record<string, unknown> | string | undefined, businessId: string | undefined, surface: string): Promise<void> {
+  if (!groundTruth || !text) return
+  try {
+    await guardOutput(text, groundTruthValues(groundTruth), { mode: 'flag', businessId, surface })
+  } catch { /* non-fatal — audit only, never blocks the response */ }
 }
 
 interface BaseParams {
@@ -74,6 +94,7 @@ export async function runGroundedAnalysis<T = Record<string, unknown>>(
   // before it's ever parsed into structured data, so a leaked internal-prompt artifact can't
   // survive into `data` the way BRIEF-INTEGRITY-1's raw prose glue-on did for briefings.
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/analysis/${params.agentKey}` })
+  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/analysis/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
@@ -99,7 +120,12 @@ export async function runCustomerFacingCopy(
     systemPrompt: withGrounding(params.systemPrompt, params.groundTruth) + '\n\nThis text goes DIRECTLY to a customer — no markdown, no placeholders, no internal jargon, no mention of AI/prompts/systems. Plain, warm, Australian English prose only.',
     userPrompt: params.userPrompt,
   }, params.fallback)
-  const guarded = safeAIOutput(resp.raw, '', { label: `grounded/customer-facing/${params.agentKey}` })
+  let guarded = safeAIOutput(resp.raw, '', { label: `grounded/customer-facing/${params.agentKey}` })
+  if (params.groundTruth && guarded) {
+    guarded = (await guardOutput(guarded, groundTruthValues(params.groundTruth), {
+      mode: 'redact', businessId: params.businessId, surface: `grounded/customer-facing/${params.agentKey}`,
+    }).catch(() => ({ text: guarded }))).text
+  }
   const safe = resp.success && guarded.length > 0
   return { data: safe ? guarded : params.fallback, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, safe }
 }
@@ -141,6 +167,7 @@ export async function runActionPlanner<T = Record<string, unknown>>(
       executeTool: params.executeTool,
     })
     const guardedLoop = safeAIOutput(loop.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
+    await auditUngroundedNumbers(guardedLoop, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
     const cleaned = guardedLoop.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
     const data = cleaned ? parseLLMJsonOr<T>(cleaned, params.fallback, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : params.fallback
     if (params.auditLog && loop.success) await writeActionAudit(params.businessId, params.auditLog)
@@ -158,6 +185,7 @@ export async function runActionPlanner<T = Record<string, unknown>>(
     userPrompt: params.userPrompt,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
+  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : resp.data
   if (params.auditLog && resp.success) await writeActionAudit(params.businessId, params.auditLog)
@@ -202,6 +230,7 @@ export async function runBackgroundAgent<T = Record<string, unknown>>(
     userPrompt: params.userPrompt,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/background/${params.agentKey}` })
+  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/background/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/background/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
@@ -230,6 +259,7 @@ export async function runVisionOrMedia<T = Record<string, unknown>>(
     imageMimeType: params.imageMimeType,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/vision/${params.agentKey}` })
+  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/vision/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/vision/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }

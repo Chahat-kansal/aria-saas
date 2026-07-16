@@ -102,6 +102,12 @@ async function _POST(req: Request) {
   const avgVariance = Math.round(allVariances.reduce((a,b) => a+b, 0) / allVariances.length)
   const shortSessions = allVariances.filter(v => v < -200).length
   const totalShortage = allVariances.filter(v => v < 0).reduce((a,b) => a+b, 0)
+  // INTEL-COMPUTE-1 — estimated_annual_impact_cents used to be a bare model-invented integer, no
+  // ground truth behind it at all. Computed here instead: the real 90-day cumulative shortage
+  // (totalShortage, already code-computed above) linearly annualised — a "derived" figure, not
+  // "verified", since it extrapolates from a 90-day sample. The model is only ever asked to narrate
+  // it, never to produce the number itself.
+  const estimatedAnnualImpactCents = Math.round(Math.abs(totalShortage) / 90 * 365)
 
   // Build structured data for Claude
   const analysisData = {
@@ -141,12 +147,13 @@ ${dowSummary.map(d => `  ${d.day}: avg ${d.avg > 0 ? '+' : ''}A$${(Math.abs(d.av
 
 ${staffSummary.length > 0 ? 'Staff variance correlation:\n' + staffSummary.map(s => `  ${s.name}: avg ${s.avg > 0 ? '+' : ''}A$${(Math.abs(s.avg)/100).toFixed(2)} across ${s.count} closes (${Math.round(s.negRate*100)}% short)`).join('\n') : 'No staff pattern data available.'}
 
+Estimated annual impact of this pattern (ALREADY COMPUTED — cite this exact figure, do not calculate your own): A$${(estimatedAnnualImpactCents / 100).toLocaleString('en-AU', { maximumFractionDigits: 0 })}/year
+
 Write your insight in this exact JSON format:
 {
   "title": "Short headline (max 8 words)",
-  "body": "2-3 sentence specific finding with numbers. Tell them what to do about it.",
-  "priority": "urgent|important|routine",
-  "estimated_annual_impact_cents": <integer, annual cost of this pattern>
+  "body": "2-3 sentence specific finding with numbers. Tell them what to do about it. May cite the estimated annual impact figure above but must not restate a different number for it.",
+  "priority": "urgent|important|routine"
 }
 
 Only output the JSON. No markdown, no explanation.`,
@@ -179,8 +186,8 @@ Only output the JSON. No markdown, no explanation.`,
         title: parsed.title ?? 'Cash variance pattern detected',
         description: insight,
         action_data: { type: 'cash_variance_analysis', data: analysisData },
-        estimated_impact: parsed.estimated_annual_impact_cents > 0
-          ? 'A$' + Math.round(parsed.estimated_annual_impact_cents / 100).toLocaleString() + '/year recoverable'
+        estimated_impact: estimatedAnnualImpactCents > 0
+          ? 'A$' + Math.round(estimatedAnnualImpactCents / 100).toLocaleString() + '/year recoverable'
           : null,
         status: 'pending',
       })
@@ -190,7 +197,7 @@ Only output the JSON. No markdown, no explanation.`,
       insight,
       priority,
       title: parsed.title,
-      estimated_impact_cents: parsed.estimated_annual_impact_cents,
+      estimated_impact_cents: estimatedAnnualImpactCents,
       analysis: analysisData,
     })
   } catch {
@@ -199,7 +206,7 @@ Only output the JSON. No markdown, no explanation.`,
     const fallback = worstDay && worstDay.negCount >= 2
       ? `Your ${worstDay.day} closes average ${worstDay.avg < 0 ? '-' : '+'}A$${(Math.abs(worstDay.avg)/100).toFixed(2)} variance. Over ${shortSessions} nights short in 90 days — add a double-count procedure on ${worstDay.day} closes.`
       : `${shortSessions} of ${sessions.length} cash-ups were short in the last 90 days. Total cumulative shortage: A$${(Math.abs(totalShortage)/100).toFixed(2)}.`
-    return NextResponse.json({ insight: fallback, priority: 'routine', analysis: analysisData })
+    return NextResponse.json({ insight: fallback, priority: 'routine', estimated_impact_cents: estimatedAnnualImpactCents, analysis: analysisData })
   }
 }
 
