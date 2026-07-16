@@ -654,6 +654,13 @@ async function _POST(req: Request) {
       maxTokens: 1500,
       fallback: [],
       shape: 'array',
+      // INTEL-COMPUTE-2 — groundTruth was never passed to this call, so grounded.ts's structural
+      // numeric guard (wired into runGroundedAnalysis last sprint) never executed at all — not even
+      // in its audit-only 'flag' mode — despite this route nominally "going through" the canonical
+      // entry point. recommendations[].metric (e.g. "A$2,340") had zero numeric check on it. Passing
+      // the full real context object here (not just the 3000-char slice in userPrompt below) lets
+      // the guard actually run.
+      groundTruth: context as Record<string, unknown>,
       systemPrompt: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:
