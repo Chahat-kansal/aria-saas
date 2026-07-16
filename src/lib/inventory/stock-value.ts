@@ -88,7 +88,10 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
         cost_grounding: resolved.grounding,
         value_at_cost: Math.round(onHand * resolved.cost * 100) / 100, price, value_at_retail: retailVal,
         margin_pct: price > 0 ? Math.round(((price - resolved.cost) / price) * 1000) / 10 : null,
-        margin_grounding: price > 0 ? 'derived' : null,
+        // INTEL-TRUTH-1 — a margin is only as trustworthy as the cost it's computed over: folding in
+        // resolved.grounding (not just a bare 'derived') means a margin over a catalogue-tier
+        // (estimated) cost is itself reported as estimated, not falsely upgraded to derived.
+        margin_grounding: price > 0 ? worstGrounding([resolved.grounding, 'derived']) : null,
       })
     } else {
       unknown++
@@ -114,6 +117,7 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
   // Blended margin over the COSTED portion only (so it's a real number, never inflated by unknowns).
   const costedRetail = products.filter(p => p.unit_cost != null).reduce((s, p) => s + p.value_at_retail, 0)
   const marginPct = costedRetail > 0 ? Math.round(((costedRetail - atCostR) / costedRetail) * 1000) / 10 : null
+  const atCostGrounding = worstGrounding(products.map(p => p.cost_grounding))
 
   return {
     outlet_id: outletId,
@@ -126,8 +130,10 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
     unknown_cost_products: unknownProducts,
     margin_incomplete: unknown > 0,
     margin_pct: marginPct,
-    margin_grounding: marginPct != null ? 'derived' : null,
-    at_cost_grounding: worstGrounding(products.map(p => p.cost_grounding)),
+    // INTEL-TRUTH-1 — same reasoning as the per-row fix above: the blended margin is only as
+    // trustworthy as at_cost's own weakest input, not unconditionally 'derived'.
+    margin_grounding: marginPct != null ? worstGrounding([atCostGrounding, 'derived']) : null,
+    at_cost_grounding: atCostGrounding,
     products,
   }
 }
