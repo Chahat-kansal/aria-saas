@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { generateInsight } from '@/lib/aria-insights';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -26,13 +27,16 @@ async function _GET(req: Request) {
   const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
 
   const [{ data: sales }, { data: rules }] = await Promise.all([
+    // INTEL-COMPUTE-2 — was .neq('status','voided') (admits draft/refunded rows into real staff
+    // commission payouts) with a naive UTC boundary (no AEST awareness). status='completed' is the
+    // same canonical filter getRevenueSnapshot() uses; toAESTStart/toAESTEnd give the real local day.
     supabase
       .from('pos_sales')
       .select('total_amount, served_by')
       .eq('business_id', bid)
-      .neq('status', 'voided')
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`)
+      .eq('status', 'completed')
+      .gte('created_at', toAESTStart(from))
+      .lte('created_at', toAESTEnd(to))
       .limit(5000),
     supabase
       .from('pos_commission_rules')
