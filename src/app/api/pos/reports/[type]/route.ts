@@ -91,10 +91,12 @@ async function getDashboard(
   const fromISO = toAESTStart(from);
   const toISO   = toAESTEnd(to);
 
+  // INTEL-COMPUTE-3 — was neq('voided'), admitted draft/refunded rows. status='completed' matches
+  // getRevenueSnapshot()'s canonical rule. Live handler — feeds /pos/reports/sales's dashboard tab.
   let q = supabase.from('pos_sales')
     .select('id,total_amount,tax_amount,discount_amount,payment_method,created_at,outlet_id,served_by,pos_customers(name)')
     .eq('business_id', bid)
-    .neq('status', 'voided')
+    .eq('status', 'completed')
     .gte('created_at', fromISO)
     .lte('created_at', toISO);
   if (outletId) q = q.eq('outlet_id', outletId);
@@ -487,7 +489,9 @@ async function getAdvanced(
     if (!includeDeleted) q = q.eq('is_active', true);
     const { data: prods } = await q.limit(500);
 
-    const { data: salesIds } = await supabase.from('pos_sales').select('id').eq('business_id', bid).gte('created_at', fromISO).lte('created_at', toISO).limit(1000);
+    // INTEL-COMPUTE-3 — had NO status filter at all (worse than neq('voided')) — draft, voided, and
+    // refunded sales all leaked into this product-level revenue/profit report.
+    const { data: salesIds } = await supabase.from('pos_sales').select('id').eq('business_id', bid).eq('status', 'completed').gte('created_at', fromISO).lte('created_at', toISO).limit(1000);
     const { data: si } = await supabase.from('pos_sale_items')
       .select('product_id,quantity,line_total,discount_percent')
       .in('sale_id', (salesIds ?? []).map((s: { id: string }) => s.id))
@@ -552,8 +556,10 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
 
   if (cached) return NextResponse.json({ bullets: cached.bullets, generated_at: new Date().toISOString() });
 
+  // INTEL-COMPUTE-3 — was neq('voided'), admitted draft/refunded rows. Live handler — feeds the
+  // cached daily-briefing bullets on /pos/reports's landing page.
   const from7d = buildDateRange('week').from;
-  const { data: salesW } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).neq('status', 'voided').gte('created_at', from7d).limit(500);
+  const { data: salesW } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).eq('status', 'completed').gte('created_at', from7d).limit(500);
   const revenue7d = ((salesW ?? []) as Array<{ total_amount: number }>).reduce((s, r) => s + (r.total_amount ?? 0), 0);
 
   const { data: lowStock } = await supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', bid).eq('is_active', true).lt('stock_quantity', 5).limit(5);
