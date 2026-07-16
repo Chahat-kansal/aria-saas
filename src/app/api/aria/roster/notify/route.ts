@@ -45,9 +45,15 @@ async function _POST(req: Request) {
   const staffIds = Object.keys(perStaff);
   if (staffIds.length === 0) return NextResponse.json({ ok: true, sent: 0, message: 'No shifts to notify' });
 
+  // SECURITY-CRITICAL-4 (B.1.2) — staffIds come from roster.shifts, a client-writable JSON blob
+  // (aria/roster PATCH lets the owner submit an edited shifts array with no per-entry staff_id
+  // validation). Without this filter, supabaseAdmin (no RLS backstop) would resolve phone/email
+  // for ANY staff_id across the whole platform and text them — scoping both lookups to this
+  // roster's own business_id means a foreign staff_id in the shifts blob simply resolves to no
+  // contact info, so no cross-tenant PII read and no SMS ever reaches someone outside this business.
   const [posUsers, staffMembers] = await Promise.all([
-    supabaseAdmin.from('pos_users').select('id, name, phone').in('id', staffIds),
-    supabaseAdmin.from('staff_members').select('id, first_name, last_name, phone, mobile, personal_email, work_email').in('id', staffIds),
+    supabaseAdmin.from('pos_users').select('id, name, phone').eq('business_id', bid).in('id', staffIds),
+    supabaseAdmin.from('staff_members').select('id, first_name, last_name, phone, mobile, personal_email, work_email').eq('business_id', bid).in('id', staffIds),
   ]);
 
   const contactMap: Record<string, { phone: string | null; email: string | null; name: string }> = {};
