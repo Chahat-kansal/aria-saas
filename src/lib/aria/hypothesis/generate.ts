@@ -131,7 +131,7 @@ ${(memories as Array<{ content: string }>).map(m => `- ${m.content}`).join('\n')
 PAST PERFORMANCE BY CATEGORY (advice weight):
 ${weightLines.join('\n')}
 
-Generate up to 5 hypotheses. Avoid categories with weight < 0.7 (previous suggestions backfired). Favour categories with weight > 1.2 (track record of working). Return JSON array only.`
+Generate up to 5 hypotheses. Avoid categories with weight <= 0.8 (previous suggestions backfired). Favour categories with weight > 1.2 (track record of working). Return JSON array only.`
 
   return { prompt, evidence_payload }
 }
