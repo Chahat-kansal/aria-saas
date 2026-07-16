@@ -27,6 +27,7 @@ export default function InventoryPage() {
   // stock_quantity (which inflated the total to A$234,523 and depended on the overlay staying in place).
   const [stockAtCost, setStockAtCost] = useState<number | null>(null)
   const [onHandMap, setOnHandMap] = useState<Record<string, number>>({})
+  const [resolvedCostMap, setResolvedCostMap] = useState<Record<string, number | null>>({})
   const [adjustForm, setAdjustForm] = useState({ product_id: '', qty: 0, reason: 'counted' })
   const [adjustMsg, setAdjustMsg] = useState('')
 
@@ -45,8 +46,13 @@ export default function InventoryPage() {
     fetch('/api/pos/inventory/cost').then(r => r.json()).then(d => {
       setStockAtCost(d?.stock_value?.at_cost ?? null)
       const m: Record<string, number> = {}
-      for (const p of (d?.stock_value?.products ?? []) as Array<{ id: string; units: number }>) m[p.id] = Number(p.units) || 0
+      const cm: Record<string, number | null> = {}
+      for (const p of (d?.stock_value?.products ?? []) as Array<{ id: string; units: number; unit_cost: number | null }>) {
+        m[p.id] = Number(p.units) || 0
+        cm[p.id] = p.unit_cost
+      }
       setOnHandMap(m)
+      setResolvedCostMap(cm)
     }).catch(() => {})
   }, [])
 
@@ -138,15 +144,21 @@ export default function InventoryPage() {
                   {filtered.slice(0, 200).map(p => {
                     const onHand = onHandOf(p.id)
                     const low = p.low_stock_threshold != null && onHand <= Number(p.low_stock_threshold)
-                    const value = onHand * Number(p.cost_price ?? 0)
+                    // INTEL-COMPUTE-2 — was onHand * raw cost_price, silently disagreeing with this
+                    // same page's own Valuation tab below for any product priced via outlet
+                    // item_cost/last_item_cost rather than the catalogue cost_price. resolvedCostMap
+                    // comes from the same /api/pos/inventory/cost -> computeStockValue() call the
+                    // Valuation tab uses, so both tabs now show the identical resolved cost.
+                    const resolvedCost = resolvedCostMap[p.id]
+                    const value = resolvedCost != null ? onHand * resolvedCost : null
                     return (
                       <tr key={p.id} style={{ borderTop: '1px solid ' + C.border }}>
                         <td style={{ padding: '8px 14px', fontWeight: 600 }}>{p.name}</td>
                         <td style={{ padding: '8px 14px', color: C.dim, fontFamily: 'monospace', fontSize: 11 }}>{p.sku ?? '—'}</td>
                         <td style={{ padding: '8px 14px', color: low ? C.red : C.text, fontWeight: low ? 700 : 400 }}>{onHand}{low && <span style={{ marginLeft: 6, fontSize: 9, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.12)', color: C.red, fontWeight: 700 }}>LOW</span>}</td>
                         <td style={{ padding: '8px 14px', color: C.dim }}>{p.low_stock_threshold ?? '—'}</td>
-                        <td style={{ padding: '8px 14px', color: C.dim }}>A${Number(p.cost_price ?? 0).toFixed(2)}</td>
-                        <td style={{ padding: '8px 14px', color: C.green, fontWeight: 600 }}>A${value.toFixed(2)}</td>
+                        <td style={{ padding: '8px 14px', color: C.dim }}>{resolvedCost != null ? `A$${resolvedCost.toFixed(2)}` : '—'}</td>
+                        <td style={{ padding: '8px 14px', color: C.green, fontWeight: 600 }}>{value != null ? `A$${value.toFixed(2)}` : '—'}</td>
                       </tr>
                     )
                   })}
