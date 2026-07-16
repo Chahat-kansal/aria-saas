@@ -10,13 +10,18 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { business_id, notes } = await req.json();
+  const { notes } = await req.json();
 
   const { data: session } = await supabase.from('mobile_inventory_sessions')
     .select('*').eq('id', params.id).maybeSingle();
   if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-  const bid = business_id || session.business_id;
+  // SECURITY-CRITICAL-3 — bid used to be a client-supplied business_id that could override the
+  // session's real owner, checked only against "attacker owns *some* business," never that it
+  // matched session.business_id. bid is now always the session's own, authoritative value — the
+  // ownership check below correctly rejects whenever the session belongs to a different business,
+  // regardless of anything the client sends.
+  const bid = session.business_id;
   const { data: biz } = await supabase.from('businesses').select('id')
     .eq('id', bid).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -74,13 +79,15 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
     });
   }
 
-  // Mark session as completed
+  // Mark session as completed. bid is now always session.business_id (see above), but the
+  // explicit filter here is defense-in-depth against a future refactor reintroducing a
+  // client-controlled override on this specific write.
   await supabase.from('mobile_inventory_sessions').update({
     status: 'completed',
     completed_at: new Date().toISOString(),
     submitted_by: user.email,
     notes: notes || session.notes,
-  }).eq('id', params.id);
+  }).eq('id', params.id).eq('business_id', bid);
 
   return NextResponse.json({ ok: true, type: session.session_type, items_processed: items.length });
 }

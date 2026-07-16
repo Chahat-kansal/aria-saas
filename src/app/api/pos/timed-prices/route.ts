@@ -91,6 +91,11 @@ async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // SECURITY-CRITICAL-3 — this handler didn't even fetch bid (unlike GET/POST above in this same
+  // file), letting any authenticated user silently overwrite another business's live scheduled
+  // pricing by guessing its id.
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   const body = await req.json();
@@ -98,7 +103,8 @@ async function _PATCH(req: Request) {
   for (const k of ['timed_price', 'discount_pct', 'days_of_week', 'start_time', 'end_time', 'label', 'is_active', 'category_id']) {
     if (body[k] !== undefined) patch[k] = body[k];
   }
-  await supabase.from('scheduled_price_changes').update(patch).eq('id', id);
+  const { error } = await supabase.from('scheduled_price_changes').update(patch).eq('id', id).eq('business_id', bid);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
 
@@ -106,9 +112,12 @@ async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-  await supabase.from('scheduled_price_changes').delete().eq('id', id);
+  const { error } = await supabase.from('scheduled_price_changes').delete().eq('id', id).eq('business_id', bid);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
 

@@ -232,13 +232,25 @@ async function _POST(req: Request) {
   }
 
   // ── 11. Update pos_products ───────────────────────────────────────────────
+  // SECURITY-CRITICAL-3 — businessId was verified in step 4, but productId (a separate
+  // client-supplied field) was never cross-checked against it before this admin-client write —
+  // any authenticated user could overwrite another business's product image. The credit for this
+  // generation has already been deducted against the caller's own verified businessId regardless
+  // (steps 5-10), so a foreign productId only fails to attach, it can't be used to dodge payment.
   if (body.productId) {
+    const { data: prod } = await sb.from('pos_products').select('id').eq('id', body.productId).eq('business_id', body.businessId).maybeSingle()
+    if (!prod) {
+      return NextResponse.json({
+        error: 'Product not found for this business — image was generated but not attached.',
+        image_url, image_thumb_url,
+      }, { status: 404 })
+    }
     await sb.from('pos_products').update({
       image_url,
       image_thumb_url,
       image_source: 'ai',
       updated_at: new Date().toISOString(),
-    }).eq('id', body.productId)
+    }).eq('id', body.productId).eq('business_id', body.businessId)
   }
 
   return NextResponse.json({

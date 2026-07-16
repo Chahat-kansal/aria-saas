@@ -81,6 +81,14 @@ async function _PATCH(req: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
+  // SECURITY-CRITICAL-3 — this handler had zero business check at all (unlike GET/POST above in
+  // this same file), letting any authenticated user PATCH any business's session by guessing its
+  // id. Verify ownership before any update.
+  const { data: existing } = await supabase.from('mobile_inventory_sessions').select('business_id').eq('id', id).maybeSingle();
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', existing.business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
   const { scanned_items, status, notes } = await req.json();
   const updates: Record<string, any> = {};
   if (scanned_items !== undefined) updates.scanned_items = scanned_items;
@@ -89,7 +97,7 @@ async function _PATCH(req: Request) {
   if (status === 'completed') updates.completed_at = new Date().toISOString();
 
   const { data: session, error } = await supabase.from('mobile_inventory_sessions')
-    .update(updates).eq('id', id).select().single();
+    .update(updates).eq('id', id).eq('business_id', existing.business_id).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ session });
