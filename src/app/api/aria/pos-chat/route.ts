@@ -125,6 +125,12 @@ async function _POST(req: Request) {
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
 
+  // INTEL-COMPUTE-1 — every pos_sales query below used to filter `!= 'voided'`, which silently
+  // counts 'draft' (held/parked cart) rows as revenue and includes negative-total 'refunded' rows —
+  // the exact RULE 6 anti-pattern getRevenueSnapshot() was built to fix elsewhere. This is Aria's
+  // live owner-facing chat — the single highest-traffic surface for this bug class — so it's fixed
+  // here directly rather than filed to the remainder list. `status = 'completed'` is the only filter
+  // that returns real, finished sales.
   const [
     { data: todaySales },
     { data: yesterdaySales },
@@ -142,32 +148,32 @@ async function _POST(req: Request) {
     supabase.from('pos_sales')
       .select('id,total_amount,payment_method,created_at,served_by')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', todayStart.toISOString())
       .limit(200),
     supabase.from('pos_sales')
       .select('id,total_amount')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', yesterdayStart.toISOString())
       .lt('created_at', todayStart.toISOString())
       .limit(200),
     supabase.from('pos_sales')
       .select('total_amount')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', weekStart.toISOString())
       .limit(500),
     supabase.from('pos_sales')
       .select('total_amount')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', monthStart.toISOString())
       .limit(500),
     supabase.from('pos_sales')
       .select('total_amount')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', lastMonthStart.toISOString())
       .lte('created_at', lastMonthEnd.toISOString())
       .limit(500),
@@ -193,13 +199,13 @@ async function _POST(req: Request) {
     supabase.from('pos_sales')
       .select('total_amount,created_at')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', thirtyDaysAgo.toISOString())
       .limit(1000),
     supabase.from('pos_sales')
       .select('customer_id,created_at')
       .eq('business_id', biz.id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', thirtyDaysAgo.toISOString())
       .not('customer_id', 'is', null)
       .limit(1000),
@@ -429,6 +435,17 @@ TONE: Direct, specific, Australian English, A$ always.`
     structured = parseLLMJsonOr<typeof _fallback>(raw, _fallback, 'aria/pos-chat')
   } catch {
     structured = _fallback
+  }
+
+  // INTEL-COMPUTE-1 — the owner-facing `message` prose is the one field here most likely to be read
+  // and acted on directly, and the model is free-texting it despite ctx already containing every real
+  // figure. Redact (not strip — keeps the sentence, just removes the bad token) any $/%/count that
+  // doesn't match a real number from ctx, rather than let a hallucinated figure reach the owner.
+  if (structured.message) {
+    const { guardOutput, numbersIn } = await import('@/lib/aria/ground-guard')
+    structured.message = (await guardOutput(structured.message, numbersIn(ctx), {
+      mode: 'redact', ignorePercent: false, businessId: biz.id, surface: 'pos-chat/message',
+    })).text
   }
 
   // Auto-create draft order for low stock if action requests it
