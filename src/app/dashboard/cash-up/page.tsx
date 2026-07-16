@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
 
 interface CashSession {
   id: string
@@ -153,14 +154,18 @@ export default function CashUpPage() {
     if (!business?.id) return
     setLoading(true)
     try {
-      const today = new Date().toISOString().split('T')[0]
+      // INTEL-COMPUTE-2 — was new Date().toISOString().split('T')[0] + 'T00:00:00' (browser-UTC
+      // calendar date, no offset) — every sale between AEST midnight and ~10am was silently excluded
+      // from "today's" cash breakdown (confirmed live: $6-$149.50/day of real completed revenue sits
+      // in that dropped window for this business). todayAEST()/toAESTStart() give the real local day.
+      const today = todayAEST()
       const [openRes, histRes, salesRes] = await Promise.all([
         // GET open session with payment totals — /api/pos/sessions?status=open
         fetch('/api/pos/sessions?status=open').then(r => r.json()),
         // GET history — /api/pos/sessions?history=true
         fetch('/api/pos/sessions?history=true').then(r => r.json()),
         // Today's sales for the cash breakdown
-        fetch('/api/pos/sales?business_id=' + business.id + '&limit=1000&since=' + today + 'T00:00:00').then(r => r.json()),
+        fetch('/api/pos/sales?business_id=' + business.id + '&limit=1000&since=' + encodeURIComponent(toAESTStart(today))).then(r => r.json()),
       ])
       setOpenSession(openRes.session ?? null)
       setSessions(histRes.sessions ?? [])

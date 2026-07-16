@@ -37,12 +37,20 @@ async function _GET(req: Request) {
   const session_id = searchParams.get('session_id');
   const since = searchParams.get('since');
   const q = searchParams.get('q');
+  // INTEL-COMPUTE-2 — was neq('draft'), which still admits voided AND refunded rows into every
+  // caller of this shared endpoint (RetailDashboard/RevenueChart, cash-flow, slow-day, cash-up's
+  // till reconciliation, etc.) — confirmed live: a $0-real-trade day with one $25 voided sale
+  // returned $25.00/1 txn here instead of the correct $0.00/0 txns, a phantom "expected cash"
+  // figure a till reconciliation compares against a real physical count. status='completed' is the
+  // canonical default; `status` param is an explicit opt-out for any caller that genuinely needs a
+  // different status (e.g. an audit view), not exercised by any current caller.
+  const statusParam = searchParams.get('status');
 
   let query = supabase
     .from('pos_sales')
     .select('*, pos_customers(name), pos_sale_items(quantity, unit_price, pos_products(name))')
     .eq('business_id', bid)
-    .neq('status', 'draft')
+    .eq('status', statusParam ?? 'completed')
     .order('created_at', { ascending: false })
     .limit(limit);
 
