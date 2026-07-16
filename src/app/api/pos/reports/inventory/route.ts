@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -36,14 +37,35 @@ async function _GET(req: Request) {
     const { data: products, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (products ?? []).map(p => ({
-      ...p,
-      stock_value: ((p.stock_quantity ?? 0) * (p.cost_price ?? 0)),
-      status: !p.track_stock ? 'untracked'
-        : (p.stock_quantity ?? 0) <= 0 ? 'out'
-        : (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 5) ? 'low'
-        : 'ok',
-    }));
+    // INTEL-COMPUTE-2 — was stock_quantity * cost_price, the stale/unmaintained column pair behind
+    // the recurring "parallel warehouse stack" incident. Now sums real pos_outlet_inventory.items_on_hand
+    // across outlets and resolves cost via the canonical resolveCostBatch() (outlet actual → last
+    // receipt → PO history → catalogue, never fabricated) — the same pattern business-data.ts's
+    // getBusinessItems() and warehouse/kpis/route.ts already use. status (out/low/ok) now uses the
+    // same real on-hand quantity, not the stale column.
+    const [{ data: outletInv }, costMap] = await Promise.all([
+      supabase.from('pos_outlet_inventory').select('product_id, items_on_hand').eq('business_id', bid),
+      resolveCostBatch(supabase, bid, null),
+    ]);
+    const stockByProduct = new Map<string, number>();
+    for (const row of outletInv ?? []) {
+      const pid = row.product_id as string;
+      stockByProduct.set(pid, (stockByProduct.get(pid) ?? 0) + (Number(row.items_on_hand) || 0));
+    }
+
+    const rows = (products ?? []).map(p => {
+      const onHand = stockByProduct.get(p.id) ?? 0;
+      const resolved = costMap.get(p.id);
+      const cost = resolved?.cost ?? 0;
+      return {
+        ...p,
+        stock_value: onHand * cost,
+        status: !p.track_stock ? 'untracked'
+          : onHand <= 0 ? 'out'
+          : onHand <= (p.low_stock_threshold ?? 5) ? 'low'
+          : 'ok',
+      };
+    });
 
     const total_stock_value = rows.reduce((s, p) => s + p.stock_value, 0);
     const low_count  = rows.filter(p => p.status === 'low').length;
