@@ -1,29 +1,18 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+// CANON-RAIL-1 beachhead — business_id now resolved by withBusinessContext (the rail), replacing
+// this file's own local getBid(). Same resolution order, plus resolveOwnerBusinessId()'s
+// re-validation that the active business is still owned/active (see with-error-capture.ts).
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
   const { data: bookings } = await supabaseAdmin
     .from('bookings')
@@ -67,4 +56,4 @@ async function _GET() {
   return NextResponse.json({ insight })
 }
 
-export const GET = withErrorCapture('aria/booking-insights', _GET)
+export const GET = withBusinessContext('aria/booking-insights', _GET)

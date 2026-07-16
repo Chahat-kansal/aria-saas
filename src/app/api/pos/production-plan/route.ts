@@ -2,10 +2,14 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 55
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 
+// CANON-RAIL-1 beachhead — GET keeps its own local getBid(): its no-business response is
+// `{ plans: [] }` (200), not the standard `{ error: 'No business' }` (400) withBusinessContext
+// returns, so migrating it would change behavior. POST/PATCH below already use the standard
+// shape and move onto the rail. Extend-never-remove: this local helper stays for GET's sake.
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
   if (a?.business_id) return a.business_id as string
@@ -26,12 +30,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ plans: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json()
 
   if (body.ai_generate) {
@@ -159,16 +158,11 @@ If NO items are producible (e.g. a liquor store selling only packaged goods), re
   return NextResponse.json({ plan: data })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+// SECURITY-CRITICAL-4 (1.4) fixed this by scoping the update to business_id, not just the
+// client-supplied body.id. CANON-RAIL-1 subsumes that manual fix: withBusinessContext now
+// resolves+verifies business_id before this handler ever runs, on the canonical resolver.
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json()
-  // SECURITY-CRITICAL-4 (1.4) — was scoped by client-supplied body.id alone via supabaseAdmin
-  // (no RLS backstop), letting any authenticated user overwrite another business's production
-  // plan row. Scoping by business_id too means a foreign id simply matches zero rows.
   const { data, error } = await supabaseAdmin.from('pos_production_plans')
     .update({ actual_qty: body.actual_qty, notes: body.notes, updated_at: new Date().toISOString() })
     .eq('id', body.id).eq('business_id', bid).select().maybeSingle()
@@ -178,5 +172,5 @@ async function _PATCH(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/production-plan', _GET)
-export const POST = withErrorCapture('pos/production-plan', _POST)
-export const PATCH = withErrorCapture('pos/production-plan', _PATCH)
+export const POST = withBusinessContext('pos/production-plan', _POST)
+export const PATCH = withBusinessContext('pos/production-plan', _PATCH)

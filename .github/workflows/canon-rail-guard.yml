@@ -1,0 +1,36 @@
+name: Canon Rail Guard
+
+# CANON-RAIL-1 — the forcing mechanism ARIA-ARCHAEOLOGY-1 found missing from every prior fix
+# (getRevenueSnapshot, get-bid.ts, resolveOwnerBusinessId.ts, ComputeResult/Provenance all built a
+# correct helper and stopped there; adoption never exceeded ~9-15% because nothing enforced it).
+# This blocks a PR from ADDING a new inline getBid()/getBusinessId()/getBiz(), a new
+# .neq('status','voided'), or a new hand-rolled revenue sum — scoped to only the lines the PR adds,
+# never the ~329 pre-existing instances (that migration is a separate, later sprint).
+#
+# scripts/canon-rail-guard.ts does the actual diff-scan; see that file's header comment for the
+# exact patterns blocked and why. No Supabase/Vercel secrets needed — this is a pure git-diff scan.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**/*.ts'
+      - 'src/**/*.tsx'
+      - 'scripts/canon-rail-guard.ts'
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run canon-rail guard (new violations only — pre-existing code is grandfathered)
+        run: npx tsx scripts/canon-rail-guard.ts --base=origin/${{ github.base_ref }}

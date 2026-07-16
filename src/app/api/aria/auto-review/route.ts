@@ -3,26 +3,14 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { sendSMS } from '@/lib/clicksend'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+// CANON-RAIL-1 beachhead — business_id now resolved by withBusinessContext (the rail), replacing
+// this file's own local getBid().
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { sale_id?: string; customer_id?: string; force?: boolean }
   const { data: biz } = await supabaseAdmin.from('businesses').select('name,industry,google_business_url,review_auto_send,review_send_delay_hours').eq('id', bid).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
@@ -77,4 +65,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: sendStatus === 'sent', send_status: sendStatus, error: errorMsg || null })
 }
 
-export const POST = withErrorCapture('aria/auto-review', _POST)
+export const POST = withBusinessContext('aria/auto-review', _POST)

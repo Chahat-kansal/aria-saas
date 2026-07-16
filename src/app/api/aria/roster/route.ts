@@ -6,7 +6,7 @@ import { startOfWeekAEST } from '@/lib/date-au';
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseLLMJsonOr } from '@/lib/ai-json';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
@@ -15,6 +15,10 @@ import { logAICallSafe } from '@/lib/aria/log-ai-call'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// CANON-RAIL-1 beachhead — GET keeps its own local getBid(): its no-business response is
+// `{ rosters: [] }` (200), not the standard `{ error: 'No business' }` (400) withBusinessContext
+// returns, so migrating it would change behavior. POST/PATCH/DELETE below already use the
+// standard shape and move onto the rail. Extend-never-remove: this local helper stays for GET.
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from("user_active_business").select("business_id").eq("user_id", userId).maybeSingle();
   if (active?.business_id) return active.business_id as string;
@@ -35,13 +39,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ rosters: data ?? [] });
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}));
   // WEEK-1: default week_starting = this week's Monday in AEST (was server-TZ Monday)
   const weekStarting: string = body.week_starting ?? startOfWeekAEST().toISOString().slice(0, 10);
@@ -248,13 +246,7 @@ Return ONLY a valid JSON object with this exact structure:
   return NextResponse.json({ roster, shifts, reasoning, warnings, total_hours: totalHours, total_cost_cents: totalCostCents });
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
-
+async function _PATCH(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -274,12 +266,7 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ roster: data });
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
+async function _DELETE(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -289,6 +276,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('aria/roster', _GET)
-export const POST = withErrorCapture('aria/roster', _POST)
-export const PATCH = withErrorCapture('aria/roster', _PATCH)
-export const DELETE = withErrorCapture('aria/roster', _DELETE)
+export const POST = withBusinessContext('aria/roster', _POST)
+export const PATCH = withBusinessContext('aria/roster', _PATCH)
+export const DELETE = withBusinessContext('aria/roster', _DELETE)

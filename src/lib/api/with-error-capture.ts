@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { logger } from '@/lib/observability/logger'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { resolveOwnerBusinessId } from '@/lib/community/resolveOwnerBusinessId'
 
 type RouteHandler = (req: any, context?: any) => Promise<Response> | Response
 
@@ -49,4 +51,49 @@ export function withErrorCapture(
       )
     }
   }
+}
+
+// CANON-RAIL-1 — the enforcement rail for business-context resolution (ARIA-ARCHAEOLOGY-1's
+// top-ranked fix). The report found 6 independently-invented business-id resolvers and 329 files
+// still inlining their own copy of the ~5-line "check user_active_business, fall back to the
+// oldest owned business" pattern, because every prior fix was an importable helper (9-15% real
+// adoption) rather than something riding a wrapper routes already have to use. withErrorCapture
+// itself sits at 78.5% adoption — not because it's better documented, but because it's required.
+// This function composes withErrorCapture (100% of its error-capture/logging/Sentry behavior is
+// reused unmodified, not duplicated) and additionally resolves + owns the standard
+// unauthorized/no-business responses, so a migrated route gets the canonical businessId by using
+// the wrapper it already imports — not by remembering a second import.
+//
+// Canonical resolver choice: resolveOwnerBusinessId() (src/lib/community/resolveOwnerBusinessId.ts,
+// ARCH-F1-RESOLVE-BID), NOT get-bid.ts. Both check user_active_business first and fall back to the
+// oldest active business — but only resolveOwnerBusinessId() re-validates that the active-business
+// row still EXISTS, is OWNED by this user, and is ACTIVE before trusting it (get-bid.ts trusts
+// user_active_business.business_id directly). That re-validation closes a stale/foreign-row class
+// of bug get-bid.ts still has, so it is the more-correct of the two to make canonical — adoption
+// count (33 files for get-bid.ts vs 18 for resolveOwnerBusinessId.ts) does not override correctness
+// when picking what every future route will inherit through this wrapper.
+//
+// withErrorCapture itself is untouched above — existing callers get byte-identical behavior.
+export interface BusinessContext {
+  supabase: ReturnType<typeof createServerSupabaseClient>
+  userId: string
+  businessId: string
+}
+
+type BusinessRouteHandler = (req: any, context: any, biz: BusinessContext) => Promise<Response> | Response
+
+export function withBusinessContext(
+  routeName: string,
+  handler: BusinessRouteHandler,
+): RouteHandler {
+  return withErrorCapture(routeName, async (req, context) => {
+    const supabase = createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const businessId = await resolveOwnerBusinessId(supabase, user.id)
+    if (!businessId) return NextResponse.json({ error: 'No business' }, { status: 400 })
+
+    return handler(req, context, { supabase, userId: user.id, businessId })
+  })
 }
