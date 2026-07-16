@@ -9,6 +9,7 @@ import { LiveRevenueTicker, ThreeWayRevenue, HourlyHeatmap, StaffOnShift, AIActi
 import { CustomerSurfaces } from '@/components/dashboard/CustomerSurfaces';
 import { AriaWinsBar } from './AriaWinsBar';
 import { FirstInsightBanner } from './FirstInsightBanner';
+import { TruthBadge } from '@/components/ui';
 
 interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
@@ -334,7 +335,10 @@ export function RetailDashboard({ business }: { business: Business }) {
           <>
             {/* TODAY */}
             <div className="rounded-xl p-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.4)] mb-2">Revenue today</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.4)]">Revenue today</p>
+                <TruthBadge grounding="verified" />
+              </div>
               <div className="flex items-end gap-3 mb-1">
                 <span className="text-3xl font-bold text-white">A${todayRevenue.toFixed(0)}</span>
                 <TrendBadge pct={vsYesterday} />
@@ -352,7 +356,10 @@ export function RetailDashboard({ business }: { business: Business }) {
 
             {/* THIS WEEK */}
             <div className="rounded-xl p-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.4)] mb-2">Revenue this week</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.4)]">Revenue this week</p>
+                <TruthBadge grounding="verified" />
+              </div>
               <div className="flex items-end gap-3 mb-2">
                 <span className="text-3xl font-bold text-white">A${weekRevenue.toFixed(0)}</span>
                 <TrendBadge pct={vsLastWeek} />

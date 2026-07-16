@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import type { AgentCouncilSession, AgentCouncilProposal } from '@/lib/agents/types'
+import { TruthBadge } from '@/components/ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1534,8 +1535,15 @@ export default function AgentsPage() {
         <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>💎 Customer Intelligence</h3>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>CLV tiers · minimum effective offers · intervention queue</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>💎 Customer Intelligence</h3>
+                {/* INTEL-TRUTH-1 — every $/count figure in this panel (predicted_annual_revenue,
+                    avg_clv_*, at_risk_annual_revenue, if_rising_stars_add_1_visit) is a BG/NBD
+                    forecast, not a database fact. One honest label at the panel level reads better
+                    than repeating "estimate" on every single number in the widget. */}
+                <TruthBadge grounding="estimated" />
+              </div>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>CLV tiers · minimum effective offers · intervention queue — predicted figures, not confirmed</p>
             </div>
             <button onClick={() => bid && fetch('/api/agents/clv/trigger', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) }).then(() => void loadClvData())} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.3)', background: 'transparent', color: '#8B5CF6', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
               Run CLV analysis

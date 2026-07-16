@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { TruthBadge } from '@/components/ui'
 
 // INV-COST-1 — rich inventory-value surface (Stripe/Linear-grade). Hero (cost⇄retail + margin +
 // completeness) · ranked breakdown with provenance · cost-source legend · missing-cost callout with
@@ -7,8 +8,11 @@ import { useState, useEffect, useCallback } from 'react'
 // from items_on_hand × resolved cost; unknown-cost products are flagged, never counted as $0.
 
 type Source = 'outlet' | 'last_delivery' | 'catalogue' | 'unknown'
-interface Row { id: string; name: string; units: number; unit_cost: number | null; cost_source: Source; value_at_cost: number | null; price: number; value_at_retail: number; margin_pct: number | null }
-interface Valuation { at_cost: number; at_retail: number; products_total: number; products_valued: number; products_unknown_cost: number; units_on_hand: number; margin_pct: number | null; margin_incomplete: boolean; products: Row[] }
+// INTEL-TRUTH-1 — grounding fields are additive on the API response (computeStockValue's return
+// shape), null when the underlying figure is unknown/not applicable.
+type Grounding = 'verified' | 'derived' | 'estimated'
+interface Row { id: string; name: string; units: number; unit_cost: number | null; cost_source: Source; cost_grounding: Grounding | null; value_at_cost: number | null; price: number; value_at_retail: number; margin_pct: number | null; margin_grounding: Grounding | null }
+interface Valuation { at_cost: number; at_retail: number; products_total: number; products_valued: number; products_unknown_cost: number; units_on_hand: number; margin_pct: number | null; margin_grounding: Grounding | null; at_cost_grounding: Grounding | null; margin_incomplete: boolean; products: Row[] }
 interface Missing { id: string; name: string; price: number }
 interface Payload { stock_value: Valuation; missing_costs: Missing[] }
 
@@ -139,11 +143,17 @@ export default function InventoryValuePanel() {
       <div style={{ padding: 22, borderRadius: 16, background: `linear-gradient(135deg, ${C.forest}38, ${C.surface})`, border: '1px solid ' + C.border }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Inventory value · at {mode}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Inventory value · at {mode}</p>
+              <TruthBadge grounding={mode === 'cost' ? sv.at_cost_grounding : 'verified'} />
+            </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 46, lineHeight: 1, fontFamily: DISPLAY, fontStyle: 'italic', fontWeight: 600, color: mode === 'cost' ? C.gold : C.green }}>{money(heroValue)}</span>
               {sv.margin_pct != null && (
-                <span style={{ fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 999, color: C.green, background: C.green + '1a', border: `1px solid ${C.green}40` }}>{sv.margin_pct}% margin</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 999, color: C.green, background: C.green + '1a', border: `1px solid ${C.green}40` }}>
+                  {sv.margin_pct}% margin
+                  <TruthBadge grounding={sv.margin_grounding} />
+                </span>
               )}
             </div>
             <p style={{ fontSize: 12, color: C.dim, marginTop: 8 }}>

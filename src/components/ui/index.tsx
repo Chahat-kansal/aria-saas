@@ -88,6 +88,36 @@ export function Badge({ variant = 'default', className = '', children }: { varia
   );
 }
 
+// ── TruthBadge ──────────────────────────────────────────────────────────────
+// INTEL-TRUTH-1 — Business Truth typing (verified/derived/estimated), surfaced consistently
+// wherever a figure is shown to the owner. Deliberately asymmetric: verified/derived are a near-
+// silent dot (a settled or calculated real fact doesn't need to shout about itself); estimated is
+// the one that must never blend in, so it alone carries a short text label — a forecast should
+// always read honestly as a forecast, not just differ by a color someone might not notice.
+// Inline-styled (not Tailwind classNames) so it renders identically in every consumer regardless of
+// whether that file uses Tailwind utility classes or raw style objects, matching this codebase's mix.
+export type TruthGrounding = 'verified' | 'derived' | 'estimated';
+
+const TRUTH_CONFIG: Record<TruthGrounding, { dot: string; label: string | null; textColor: string; title: string }> = {
+  verified: { dot: '#7FB897', label: null, textColor: 'rgba(255,255,255,0.35)', title: 'Verified — a real figure from your data, no assumptions' },
+  derived: { dot: '#8AA9C9', label: null, textColor: 'rgba(255,255,255,0.35)', title: 'Calculated from real, verified figures' },
+  estimated: { dot: '#E8A33D', label: 'estimate', textColor: '#E8A33D', title: 'Estimated — a forecast or projection, not a confirmed figure' },
+};
+
+export function TruthBadge({ grounding, style }: { grounding: TruthGrounding | null | undefined; style?: React.CSSProperties }) {
+  if (!grounding) return null;
+  const c = TRUTH_CONFIG[grounding];
+  return (
+    <span
+      title={c.title}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: c.textColor, whiteSpace: 'nowrap', ...style }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, flexShrink: 0 }} />
+      {c.label && <span style={{ textTransform: 'uppercase' }}>{c.label}</span>}
+    </span>
+  );
+}
+
 // ── Skeleton ──────────────────────────────────────────────────────────────
 
 export function Skeleton({ className = '' }: { className?: string }) {
