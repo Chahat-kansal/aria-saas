@@ -153,18 +153,22 @@ export async function buildFactsPacket(
   // uses a different current window (last_week / last_year / last_month MTD).
   const currentIsCalendarWeek = currentStart === calWeekStartIso
 
+  // INTEL-COMPUTE-3 — all 3 pos_sales queries below used neq('voided') (admitted draft/refunded
+  // rows) — one of 4 near-duplicate "same week last month"/intent-grounded-comparison
+  // implementations in the Ask Aria chain (see get-business-context.ts, ask/route.ts, both fixed
+  // alongside this one). status='completed' is the canonical filter getRevenueSnapshot() uses.
   const [bizResult, currentResult, compResult, calWeekResult] = await Promise.all([
     supabaseAdmin.from('businesses').select('weekly_revenue_target').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId)
-      .gte('created_at', currentStart).lt('created_at', currentEnd).neq('status', 'voided'),
+      .gte('created_at', currentStart).lt('created_at', currentEnd).eq('status', 'completed'),
     pair?.comparison
       ? supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId)
-          .gte('created_at', pair.comparison.start).lt('created_at', pair.comparison.end).neq('status', 'voided')
+          .gte('created_at', pair.comparison.start).lt('created_at', pair.comparison.end).eq('status', 'completed')
       : Promise.resolve({ data: null, error: null }),
     currentIsCalendarWeek
       ? Promise.resolve({ data: null, error: null })
       : supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId)
-          .gte('created_at', calWeekStartIso).neq('status', 'voided'),
+          .gte('created_at', calWeekStartIso).eq('status', 'completed'),
   ])
 
   const rawTarget = bizResult.data?.weekly_revenue_target
