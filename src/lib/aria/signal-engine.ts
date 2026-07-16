@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
+import { toAESTWallClock } from '@/lib/date-au'
 
 export type Signal = {
   signal_type: string
@@ -47,10 +48,12 @@ async function cashflowSignals(businessId: string): Promise<Signal[]> {
   const iso = (ms: number) => new Date(ms).toISOString()
 
   // revenue_velocity_24h
+  // INTEL-COMPUTE-4 — every query in this function used neq('voided'), admitting draft/refunded
+  // rows. status='completed' matches getRevenueSnapshot()'s canonical rule.
   try {
     const [r24, hist] = await Promise.all([
-      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 24*3600*1000)),
-      supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 15*24*3600*1000)).lt('created_at', iso(now - 24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 15*24*3600*1000)).lt('created_at', iso(now - 24*3600*1000)),
     ])
     const rev24 = sumAmount(r24.data)
     const txn24 = (r24.data ?? []).length
@@ -68,8 +71,8 @@ async function cashflowSignals(businessId: string): Promise<Signal[]> {
   // revenue_velocity_7d
   try {
     const [w1, w2] = await Promise.all([
-      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 7*24*3600*1000)),
-      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
     ])
     const r7 = sumAmount(w1.data), r14 = sumAmount(w2.data)
     const pct = r14 > 0 ? ((r7 - r14) / r14) * 100 : 0
@@ -79,8 +82,8 @@ async function cashflowSignals(businessId: string): Promise<Signal[]> {
   // payment_method_drift
   try {
     const [wk, bl] = await Promise.all([
-      supabaseAdmin.from('pos_sales').select('payment_method').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 7*24*3600*1000)),
-      supabaseAdmin.from('pos_sales').select('payment_method').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('payment_method').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('payment_method').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
     ])
     const countMethod = (rows: Array<{ payment_method?: string | null }> | null) => {
       const c: Record<string, number> = {}
@@ -179,10 +182,11 @@ async function customerSignals(businessId: string): Promise<Signal[]> {
   } catch { /* defensive */ }
 
   // avg_basket_trend
+  // INTEL-COMPUTE-4 — was neq('voided'), admitting draft/refunded rows.
   try {
     const [wk, bl] = await Promise.all([
-      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 7*24*3600*1000)),
-      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
     ])
     const wkAvg = (wk.data ?? []).length > 0 ? sumAmount(wk.data) / (wk.data ?? []).length : 0
     const blAvg = (bl.data ?? []).length > 0 ? sumAmount(bl.data) / (bl.data ?? []).length : 0
@@ -191,8 +195,9 @@ async function customerSignals(businessId: string): Promise<Signal[]> {
   } catch { /* defensive */ }
 
   // new_vs_returning (approx: sales with vs without customer_id)
+  // INTEL-COMPUTE-4 — was neq('voided'), admitting draft/refunded rows.
   try {
-    const { data: sales } = await supabaseAdmin.from('pos_sales').select('customer_id').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 7*24*3600*1000))
+    const { data: sales } = await supabaseAdmin.from('pos_sales').select('customer_id').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 7*24*3600*1000))
     const total = (sales ?? []).length
     const withCustomer = (sales ?? []).filter(s => s.customer_id).length
     if (total > 0) signals.push({ signal_type: 'new_vs_returning', payload: { total_sales: total, linked_to_customer: withCustomer, loyalty_capture_rate: Math.round((withCustomer / total) * 100) }, severity: withCustomer / total < 0.2 ? 'watch' : 'info', expires_in_min: 120 })
@@ -209,14 +214,16 @@ async function salesSignals(businessId: string): Promise<Signal[]> {
   const iso = (ms: number) => new Date(ms).toISOString()
 
   // day_of_week_pattern
+  // INTEL-COMPUTE-4 — was neq('voided') (admitted draft/refunded rows) and new Date().getDay()
+  // (server-local/UTC day-of-week), misattributing AEST-morning sales to the wrong day.
   try {
     const [thisWeek, prior4] = await Promise.all([
-      supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 7*24*3600*1000)),
-      supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).neq('status','voided').gte('created_at', iso(now - 35*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 7*24*3600*1000)),
+      supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).eq('status','completed').gte('created_at', iso(now - 35*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)),
     ])
     const byDay = (rows: Array<{ total_amount?: number | null; created_at: string }> | null) => {
       const d: Record<number, number> = {}
-      for (const r of rows ?? []) { const dow = new Date(r.created_at).getDay(); d[dow] = (d[dow] ?? 0) + Number(r.total_amount ?? 0) }
+      for (const r of rows ?? []) { const dow = toAESTWallClock(r.created_at).getUTCDay(); d[dow] = (d[dow] ?? 0) + Number(r.total_amount ?? 0) }
       return d
     }
     const wkDay = byDay(thisWeek.data), prDay = byDay(prior4.data)
@@ -232,10 +239,15 @@ async function salesSignals(businessId: string): Promise<Signal[]> {
   } catch { /* defensive */ }
 
   // top_product_growth
+  // INTEL-COMPUTE-4 — two bugs: (1) no status join at all — pos_sale_items has no status column of
+  // its own, so draft/voided/refunded sale items were all included with zero way to exclude them;
+  // (2) `base > 0 ? ... : 100` fabricated a flat "100% growth" whenever there was no prior-period
+  // baseline (confirmed firing live on real data — a product selling for the first time in 7 years
+  // reports a specific, invented 100% growth figure instead of "no baseline to compare against").
   try {
     const [wk, bl] = await Promise.all([
-      supabaseAdmin.from('pos_sale_items').select('product_name,quantity').eq('business_id', businessId).gte('created_at', iso(now - 7*24*3600*1000)).limit(500),
-      supabaseAdmin.from('pos_sale_items').select('product_name,quantity').eq('business_id', businessId).gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)).limit(500),
+      supabaseAdmin.from('pos_sale_items').select('product_name,quantity,pos_sales!inner(status)').eq('business_id', businessId).eq('pos_sales.status', 'completed').gte('created_at', iso(now - 7*24*3600*1000)).limit(500),
+      supabaseAdmin.from('pos_sale_items').select('product_name,quantity,pos_sales!inner(status)').eq('business_id', businessId).eq('pos_sales.status', 'completed').gte('created_at', iso(now - 14*24*3600*1000)).lt('created_at', iso(now - 7*24*3600*1000)).limit(500),
     ])
     const agg = (rows: Array<{ product_name?: string | null; quantity?: number | null }> | null) => {
       const m: Record<string, number> = {}
@@ -245,9 +257,16 @@ async function salesSignals(businessId: string): Promise<Signal[]> {
     const wkAgg = agg(wk.data), blAgg = agg(bl.data)
     const growth = Object.entries(wkAgg).map(([name, qty]) => {
       const base = blAgg[name] ?? 0
-      const pct = base > 0 ? ((qty - base) / base) * 100 : 100
-      return { name, qty_this_week: qty, qty_prior_week: base, growth_pct: pct }
-    }).sort((a, b) => b.growth_pct - a.growth_pct).slice(0, 5)
+      const pct = base > 0 ? ((qty - base) / base) * 100 : null
+      return { name, qty_this_week: qty, qty_prior_week: base, growth_pct: pct, insufficient_baseline: base === 0 }
+    }).sort((a, b) => {
+      // Real percentage-growth items rank first (descending); no-baseline items (nothing to
+      // compare against) sort to the end rather than being falsely treated as "infinite growth".
+      if (a.growth_pct == null && b.growth_pct == null) return 0
+      if (a.growth_pct == null) return 1
+      if (b.growth_pct == null) return -1
+      return b.growth_pct - a.growth_pct
+    }).slice(0, 5)
     if (growth.length) signals.push({ signal_type: 'top_product_growth', payload: { top_growers: growth }, severity: 'info', expires_in_min: 120 })
   } catch { /* defensive */ }
 
