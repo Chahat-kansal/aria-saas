@@ -53,24 +53,29 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     salesThisCalWeekRaw,
     goalCtxRaw,
   ] = await Promise.allSettled([
+    // INTEL-COMPUTE-3 — every pos_sales query below used to be neq('voided'), admitting draft
+    // (held/parked cart) and refunded rows into every revenue figure Ask Aria's context is built
+    // from (7d/30d/90d, last-year comparisons, same-week-last-month, this-calendar-week, and the
+    // labour-percentage block further down). status='completed' is the canonical filter
+    // getRevenueSnapshot() uses.
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
-      .eq('business_id', businessId).gte('created_at', d7).neq('status', 'voided'),
+      .eq('business_id', businessId).gte('created_at', d7).eq('status', 'completed'),
     db.from('pos_sales').select('total_amount')
-      .eq('business_id', businessId).gte('created_at', d30).neq('status', 'voided'),
+      .eq('business_id', businessId).gte('created_at', d30).eq('status', 'completed'),
     db.from('pos_sales').select('total_amount')
-      .eq('business_id', businessId).gte('created_at', d90).neq('status', 'voided'),
-    db.from('pos_sales').select('total_amount')
-      .eq('business_id', businessId)
-      .gte('created_at', ly7start).lte('created_at', ly7end).neq('status', 'voided'),
+      .eq('business_id', businessId).gte('created_at', d90).eq('status', 'completed'),
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
-      .gte('created_at', ly30start).lte('created_at', ly30end).neq('status', 'voided'),
+      .gte('created_at', ly7start).lte('created_at', ly7end).eq('status', 'completed'),
+    db.from('pos_sales').select('total_amount')
+      .eq('business_id', businessId)
+      .gte('created_at', ly30start).lte('created_at', ly30end).eq('status', 'completed'),
     // SKU aggregation from sale_items — line_total canonical (RULE 6, product_sales registry domain)
     db.from('pos_sale_items').select(`product_name, ${CANONICAL_COLS.PRODUCT_UNITS}, ${CANONICAL_COLS.PRODUCT_REVENUE}`)
       .in('sale_id',
         (await db.from('pos_sales').select('id')
-          .eq('business_id', businessId).gte('created_at', d7).neq('status', 'voided')
+          .eq('business_id', businessId).gte('created_at', d7).eq('status', 'completed')
         ).data?.map((s: any) => s.id) ?? []
       ),
     db.from('pos_customers').select('id, name, total_spent, last_visit, visit_count')
@@ -113,7 +118,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     // SWLM-1: "Same week last month" — calendar week 4 weeks ago (Mon AEST → Mon AEST)
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
-      .gte('created_at', d35).lt('created_at', d28).neq('status', 'voided'),
+      .gte('created_at', d35).lt('created_at', d28).eq('status', 'completed'),
     // CANONICAL recommendations (aria_actions). See THREE-TABLE NOTE in return JSON below.
     db.from('aria_actions')
       .select('id, title, category, priority, recommendation, expected_impact, created_at', { count: 'exact' })
@@ -125,7 +130,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', toAESTStart(startOfWeekAEST(tz).toISOString().slice(0, 10), tz))
-      .neq('status', 'voided'),
+      .eq('status', 'completed'),
     // I2 GOAL-AWARE: full goal trajectory (status/projection/pace/reasoning) — runs in parallel.
     computeGoalContext(businessId),
   ])
@@ -418,7 +423,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         const since7 = new Date(Date.now() - 7 * 86400000).toISOString()
         const [tsRes, salesRes] = await Promise.all([
           db.from('pos_timesheets').select('hours_worked, total_pay_cents, pay_rate_cents').eq('business_id', businessId).gte('clock_in', since7).limit(2000),
-          db.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', since7).neq('status', 'voided').limit(5000),
+          db.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', since7).eq('status', 'completed').limit(5000),
         ])
         const ts = (tsRes.data ?? []) as Array<{ hours_worked: number | null; total_pay_cents: number | null; pay_rate_cents: number | null }>
         const labourCents = ts.reduce((s, t) => s + Number(t.total_pay_cents ?? (Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0))), 0)
