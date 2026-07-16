@@ -975,8 +975,12 @@ export async function runAriaCouncil(
   // GROUNDING-TEETH-V2 Part 2: clean each advisor's observations/recommendations of numbers that
   // don't trace to the CLEAN anchors BEFORE they enter the synthesis input. Fixes the V1 root cause —
   // an advisor inventing "$480/month" no longer feeds that number into the corpus the synthesis cites.
+  // INTEL-COMPUTE-3 — v2Anchors hoisted to function scope: it was only ever applied to the 4
+  // individual brain outputs, never to the FINAL synthesis (final_briefing) that's actually what the
+  // owner reads — the one step downstream of the brains that could still recombine/round/invent a
+  // number was the one step with zero guard. Reused (not recomputed) at the synthesis result below.
+  let v2Anchors: number[] = []
   try {
-    let v2Anchors: number[] = []
     try {
       const agt = (safeParseJSON(businessContext) ?? {}) as { available_ground_truth?: { _anchor_values?: number[] } }
       v2Anchors = Array.isArray(agt.available_ground_truth?._anchor_values)
@@ -1110,8 +1114,24 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
       }
     }
 
+    // INTEL-COMPUTE-3 — same guard already applied to each brain's observations/recommendations
+    // above, now also applied to the synthesis's final_briefing — the step the owner actually reads.
+    let finalBriefing = typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200)
+    if (v2Anchors.length > 0 && finalBriefing) {
+      const guarded = stripUngroundedNumbers(finalBriefing, v2Anchors)
+      if (guarded.stripped.length > 0) {
+        finalBriefing = guarded.healedText
+        await logAICallSafe({
+          business_id: businessId, agent_key: 'synthesis_guard', provider: 'other', role: 'other',
+          success: true, request_summary: guarded.stripped.join(' | ').slice(0, 100),
+          response_summary: `synthesis:stripped:${guarded.stripped.length}`,
+          learning_signal: 'guard_fired:synthesis_fabrication_stripped',
+        })
+      }
+    }
+
     const councilResult: CouncilOutput = {
-      final_briefing: typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200),
+      final_briefing: finalBriefing,
       honesty_flags: quality.missing_critical.map(m => 'LOW_DATA: ' + m),
       data_quality_score: quality.overall_score,
       synthesis_model: synthesisModel,
