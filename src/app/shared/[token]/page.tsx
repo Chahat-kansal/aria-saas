@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { ReadOnlyProvider } from '@/contexts/ReadOnlyContext'
+import { todayAEST, addDaysYmd, toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 async function getSharedData(token: string) {
   const { data: link } = await supabaseAdmin
@@ -15,17 +16,20 @@ async function getSharedData(token: string) {
     last_accessed_at: new Date().toISOString(),
   }).eq('id', link.id)
 
+  // INTEL-COMPUTE-2 — this PUBLIC-facing page (no auth beyond the token) used neq('voided')
+  // (admitted draft/refunded rows) and a hardcoded UTC day boundary for "yesterday" — the same
+  // canonical status='completed' + AEST boundary rule getRevenueSnapshot() uses, applied here since
+  // an external viewer has no way to know the figure is wrong.
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-  const yday = yesterday.toISOString().slice(0, 10)
+  const yday = addDaysYmd(todayAEST(), -1)
 
   const [bizRes, ytdRes, monthRes] = await Promise.all([
     supabaseAdmin.from('businesses').select('id, name, trading_name, city, industry')
       .eq('id', link.business_id as string).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', link.business_id as string)
-      .neq('status', 'voided').gte('created_at', `${yday}T00:00:00Z`).lte('created_at', `${yday}T23:59:59Z`),
+      .eq('status', 'completed').gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', link.business_id as string)
-      .neq('status', 'voided').gte('created_at', thirtyDaysAgo),
+      .eq('status', 'completed').gte('created_at', thirtyDaysAgo),
   ])
 
   const ytdSales = ytdRes.data ?? []
