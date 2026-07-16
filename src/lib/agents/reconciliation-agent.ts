@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { BaseAgent } from './base-agent'
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
+import { todayAEST, addDaysYmd, toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 // IQR outlier fence: flag values above Q3 + 1.5×IQR or z-score > 2.5
 function iqrFence(values: number[]): { lo: number; hi: number; mean: number; stdDev: number } {
@@ -25,8 +26,10 @@ export class ReconciliationAgent extends BaseAgent {
     const decisions: AgentDecisionInput[] = []
     const errors: Error[] = []
 
-    const yesterday = targetDate ?? new Date(Date.now() - 86400000)
-    const dateStr = yesterday.toISOString().slice(0, 10)
+    // INTEL-COMPUTE-2 — was `new Date(Date.now() - 86400000)`, a UTC calendar-day "yesterday" that
+    // drifts from the real AEST trading day for up to 10-11h of every 24 (worse during AEDT).
+    const yesterday = targetDate ?? new Date(toAESTStart(addDaysYmd(todayAEST(), -1)))
+    const dateStr = targetDate ? targetDate.toISOString().slice(0, 10) : addDaysYmd(todayAEST(), -1)
 
     try {
       const settings = await this.getSettings(business_id)
@@ -99,15 +102,17 @@ export class ReconciliationAgent extends BaseAgent {
 
   private async dailyReconciliation(business_id: string, date: Date, dateStr: string): Promise<AgentDecisionInput[]> {
     const decisions: AgentDecisionInput[] = []
-    const dayStart = new Date(dateStr + 'T00:00:00.000Z').toISOString()
-    const dayEnd = new Date(dateStr + 'T23:59:59.999Z').toISOString()
+    // INTEL-COMPUTE-2 — was a hardcoded UTC day boundary; toAESTStart/toAESTEnd give the real local
+    // trading day, the same canonical boundary getRevenueSnapshot() uses.
+    const dayStart = toAESTStart(dateStr)
+    const dayEnd = toAESTEnd(dateStr)
 
     // POS sales totals for the day
     const { data: sales } = await supabaseAdmin
       .from('pos_sales')
       .select('id,total_amount,payment_method')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed') // INTEL-COMPUTE-2 — was neq('voided'), admitted draft/refunded
       .gte('created_at', dayStart)
       .lte('created_at', dayEnd)
 
@@ -431,8 +436,12 @@ export class ReconciliationAgent extends BaseAgent {
   }
 
   async generateMonthlyPL(business_id: string, month: number, year: number): Promise<void> {
-    const monthStart = new Date(year, month - 1, 1)
-    const monthEnd = new Date(year, month, 1)
+    // INTEL-COMPUTE-2 — was `new Date(year, month-1, 1)`, server-local (UTC on Vercel) construction,
+    // not AEST. toAESTStart() on explicit YYYY-MM-01 strings gives the real local month boundary.
+    const nextMonth = month === 12 ? 1 : month + 1
+    const nextMonthYear = month === 12 ? year + 1 : year
+    const monthStart = new Date(toAESTStart(`${year}-${String(month).padStart(2, '0')}-01`))
+    const monthEnd = new Date(toAESTStart(`${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-01`))
 
     // Revenue
     const { data: sales } = await supabaseAdmin
@@ -443,7 +452,9 @@ export class ReconciliationAgent extends BaseAgent {
       .lt('created_at', monthEnd.toISOString())
 
     const allSales = sales ?? []
-    const gross_revenue = allSales.filter(s => s.status !== 'voided' && s.status !== 'refunded').reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
+    // INTEL-COMPUTE-2 — was `!== 'voided' && !== 'refunded'`, which still admitted 'draft' rows.
+    // 'completed' is the only status that represents real, finished sales.
+    const gross_revenue = allSales.filter(s => s.status === 'completed').reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
     const refunds_total = allSales.filter(s => s.status === 'refunded').reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
     const net_revenue = gross_revenue - refunds_total
 
