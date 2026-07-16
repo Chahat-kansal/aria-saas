@@ -10,6 +10,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { todayAEST, addDaysYmd, toAESTStart } from '@/lib/date-au'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -31,15 +32,25 @@ async function _POST(req: Request) {
 
   const { data: biz } = await supabase.from('businesses').select('name').eq('id', business_id).single();
 
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-  const lastWeekSameDay = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  // INTEL-COMPUTE-4 — today/yesterday/lastWeekSameDay were UTC calendar dates, so the "today" window
+  // was off by AEST's whole UTC offset (a 9am AEST sale is still "yesterday" in UTC). The nested
+  // pos_sales id lookup for topProductRes also had no status filter, letting voided/refunded/draft
+  // sale_ids leak into "top product today".
+  const today = todayAEST();
+  const yesterday = addDaysYmd(today, -1);
+  const lastWeekSameDay = addDaysYmd(today, -7);
+  const sixDaysAgo = addDaysYmd(today, -6);
+
+  const todayStart = toAESTStart(today);
+  const yesterdayStart = toAESTStart(yesterday);
+  const lastWeekStart = toAESTStart(lastWeekSameDay);
+  const sixDaysAgoStart = toAESTStart(sixDaysAgo);
 
   const [todayRes, yesterdayRes, lastWeekRes, topProductRes] = await Promise.all([
-    supabase.from('pos_sales').select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', `${today}T00:00:00`),
-    supabase.from('pos_sales').select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${today}T00:00:00`),
-    supabase.from('pos_sales').select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', `${lastWeekSameDay}T00:00:00`).lt('created_at', `${new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0]}T00:00:00`),
-    supabase.from('pos_sale_items').select('product_name, quantity').gte('created_at', `${today}T00:00:00`).in('sale_id', (await supabase.from('pos_sales').select('id').eq('business_id', business_id).gte('created_at', `${today}T00:00:00`)).data?.map((s: any) => s.id) ?? []),
+    supabase.from('pos_sales').select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', todayStart),
+    supabase.from('pos_sales').select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', yesterdayStart).lt('created_at', todayStart),
+    supabase.from('pos_sales').select('total_amount').eq('business_id', business_id).eq('status', 'completed').gte('created_at', lastWeekStart).lt('created_at', sixDaysAgoStart),
+    supabase.from('pos_sale_items').select('product_name, quantity').gte('created_at', todayStart).in('sale_id', (await supabase.from('pos_sales').select('id').eq('business_id', business_id).eq('status', 'completed').gte('created_at', todayStart)).data?.map((s: any) => s.id) ?? []),
   ]);
 
   const todayRev = (todayRes.data ?? []).reduce((s, x) => s + (x.total_amount ?? 0), 0);
