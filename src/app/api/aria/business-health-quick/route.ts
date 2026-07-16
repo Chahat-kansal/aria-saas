@@ -84,8 +84,11 @@ export const GET = withErrorCapture('aria/business-health-quick', async (req: Re
       (async () => { try { const r = await supabase.from('pos_customers').select('last_visit').eq('business_id', businessId); return { data: r.data as CustomerRow[] | null, error: r.error }; } catch { return emptyData<CustomerRow>(); } })(),
       (async () => { try { const r = await supabase.from('reviews').select('id', { count: 'exact', head: true }).eq('business_id', businessId).is('response', null); return r.count ?? 0; } catch { return 0; } })(),
       (async () => { try { const r = await supabase.from('staff_members').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'active').lte('visa_expiry_date', thirtyDaysFromNow); return r.count ?? 0; } catch { return 0; } })(),
-      (async () => { try { const r = await supabase.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', sevenDaysAgo); return { data: r.data as SaleRow[] | null, error: r.error }; } catch { return emptyData<SaleRow>(); } })(),
-      (async () => { try { const r = await supabase.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', fourteenDaysAgo).lt('created_at', sevenDaysAgo); return { data: r.data as SaleRow[] | null, error: r.error }; } catch { return emptyData<SaleRow>(); } })(),
+      // INTEL-COMPUTE-4 — both revenue-trend queries had NO status filter at all (worse than
+      // neq('voided')) -- draft/voided/refunded all summed into "revenue". status='completed'
+      // matches getRevenueSnapshot()'s canonical rule.
+      (async () => { try { const r = await supabase.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status', 'completed').gte('created_at', sevenDaysAgo); return { data: r.data as SaleRow[] | null, error: r.error }; } catch { return emptyData<SaleRow>(); } })(),
+      (async () => { try { const r = await supabase.from('pos_sales').select('total_amount').eq('business_id', businessId).eq('status', 'completed').gte('created_at', fourteenDaysAgo).lt('created_at', sevenDaysAgo); return { data: r.data as SaleRow[] | null, error: r.error }; } catch { return emptyData<SaleRow>(); } })(),
     ]);
 
   // --- Check 1: Out-of-stock products (deduct 10 each, max -30) ---
