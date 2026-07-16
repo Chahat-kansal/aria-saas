@@ -5,6 +5,8 @@ import { useBusiness } from '@/components/providers/BusinessProvider'
 import { supabase } from '@/lib/supabase'
 import { pickCanonicalBriefing } from '@/lib/aria/briefing-guard'
 import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
+import { AriaWhyPanel } from '@/components/dashboard/AriaWhyPanel'
+import type { AriaIntelligenceContract } from '@/lib/aria/contract'
 
 interface Rec {
   id: string
@@ -78,6 +80,7 @@ interface BriefingResponse {
   no_data?: boolean
   no_data_message?: string
   weather_forecast?: WeatherDay[]
+  contract?: AriaIntelligenceContract | null
 }
 
 interface HistoryEntry {
@@ -423,6 +426,7 @@ export default function DailyBriefingPage() {
               {briefing.cached ? ' · cached' : ''}
             </div>
           )}
+          {!loading && !historyView && <AriaWhyPanel contract={briefing?.contract} />}
         </div>
 
         {/* Weather this week */}
