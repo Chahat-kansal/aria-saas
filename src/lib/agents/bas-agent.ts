@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 import { BaseAgent } from './base-agent'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 // ATO quarter definitions
 export interface BasQuarter {
@@ -68,8 +69,12 @@ export class BasAgent extends BaseAgent {
     const paygRate = Number(config.payg_withholding_rate ?? 0.19)
     const superRate = Number(config.super_guarantee_rate ?? 0.115)
     const superRatePct = Math.round(superRate * 1000) / 10
-    const startStr = period_start.toISOString()
-    const endStr = new Date(period_end.getTime() + 86399000).toISOString() // include end of day
+    // INTEL-COMPUTE-2 — period_start/period_end's CALENDAR DATE (extracted below) is correct; only
+    // their time-of-day was wrong (raw .toISOString() treats the quarter boundary as UTC midnight,
+    // not AEST midnight). toAESTStart/toAESTEnd reinterpret the same calendar date as the real local
+    // quarter boundary, the same canonical rule getRevenueSnapshot() uses.
+    const startStr = toAESTStart(period_start.toISOString().slice(0, 10))
+    const endStr = toAESTEnd(period_end.toISOString().slice(0, 10))
 
     // Determine quarter label
     const q = (() => {
@@ -93,13 +98,16 @@ export class BasAgent extends BaseAgent {
     })()
 
     // STEP 1: G1 Total sales
+    // INTEL-COMPUTE-2 — was neq('voided'), which admits draft (held/parked cart) and refunded rows
+    // into the actual BAS G1 figure lodged with the ATO. completed is the only real, finished-sale
+    // status.
     const { data: salesData } = await supabaseAdmin
       .from('pos_sales')
       .select('total_amount')
       .eq('business_id', business_id)
       .gte('created_at', startStr)
       .lte('created_at', endStr)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
 
     const g1TotalSales = (salesData ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
 
@@ -109,7 +117,7 @@ export class BasAgent extends BaseAgent {
       .select('line_total, product_id, pos_sales!inner(created_at, business_id, status)')
       .gte('pos_sales.created_at', startStr)
       .lte('pos_sales.created_at', endStr)
-      .neq('pos_sales.status', 'voided')
+      .eq('pos_sales.status', 'completed') // INTEL-COMPUTE-2 — was neq('voided'), admitted draft/refunded
       .eq('pos_sales.business_id', business_id)
 
     // Get all product classifications for business
