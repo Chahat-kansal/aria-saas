@@ -661,6 +661,11 @@ async function _POST(req: Request) {
       // the full real context object here (not just the 3000-char slice in userPrompt below) lets
       // the guard actually run.
       groundTruth: context as Record<string, unknown>,
+      // INTEL-TRUTH-1 — weather_forecast/external_context.weather_next_3_days figures are a real
+      // external forecast (Open-Meteo), textbook Grounding==='estimated': genuine uncertainty, not a
+      // database fact. Wires runGroundedAnalysis's estimate-honesty check so the model can't state a
+      // forecast temperature as if it were a confirmed fact.
+      estimatedValues: (weatherForecast7Day as Array<{ maxTemp?: number }>).map(d => d.maxTemp).filter((n): n is number => Number.isFinite(n)),
       systemPrompt: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:

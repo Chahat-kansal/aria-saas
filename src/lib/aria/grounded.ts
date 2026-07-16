@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from './providers/anthropic'
 import { safeAIOutput } from './ai-output-guard'
-import { guardOutput, numbersIn } from './ground-guard'
+import { guardOutput, numbersIn, checkEstimateHonesty } from './ground-guard'
 import type { AgentKey, AgentRole } from './types'
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
 
@@ -24,11 +24,21 @@ ANTI-HALLUCINATION (non-negotiable):
 - Absence of data is not zero and is not "none" — if something wasn't provided, don't claim a value for it either way.
 - If the data given doesn't support answering part of the request, say so plainly rather than filling the gap with a plausible-sounding guess.`
 
-function withGrounding(systemPrompt: string, groundTruth?: Record<string, unknown> | string): string {
+// INTEL-TRUTH-1 — figures the caller has typed as Grounding==='estimated' (a forecast/projection,
+// e.g. a CLV prediction or a churn score) get an explicit honesty instruction: they must be framed
+// as estimates, never stated as if they were a settled, verified fact. This is the prompt-side half
+// of the enforcement; checkEstimateHonesty() below is the output-side check.
+function estimateHonestyInstruction(estimatedValues?: number[]): string {
+  if (!estimatedValues?.length) return ''
+  const list = [...new Set(estimatedValues)].slice(0, 30).join(', ')
+  return `\n\nESTIMATE HONESTY (non-negotiable): the following figures in REAL DATA are ESTIMATES, FORECASTS, or PROJECTIONS — not confirmed facts: ${list}. Whenever you state one of these, use clear estimate language ("estimated", "projected", "approximately", "likely", "forecast") — never present it as a settled or guaranteed fact.`
+}
+
+function withGrounding(systemPrompt: string, groundTruth?: Record<string, unknown> | string, estimatedValues?: number[]): string {
   const truthBlock = groundTruth
     ? `\n\nREAL DATA (the only source of truth for this task — do not use anything outside it):\n${typeof groundTruth === 'string' ? groundTruth : JSON.stringify(groundTruth).slice(0, 6000)}`
     : ''
-  return systemPrompt + ANTI_HALLUCINATION + truthBlock
+  return systemPrompt + ANTI_HALLUCINATION + truthBlock + estimateHonestyInstruction(estimatedValues)
 }
 
 // INTEL-COMPUTE-1 — structural numeric guard, wired into all 5 entry points below so every caller
@@ -50,6 +60,15 @@ async function auditUngroundedNumbers(text: string, groundTruth: Record<string, 
   } catch { /* non-fatal — audit only, never blocks the response */ }
 }
 
+// INTEL-TRUTH-1 — JSON-shaped entry points run this in audit-only 'flag' mode (same reasoning as
+// auditUngroundedNumbers above: mutating a JSON response risks corrupting UI-rendered structure).
+async function auditEstimateHonesty(text: string, estimatedValues: number[] | undefined, businessId: string | undefined, surface: string): Promise<void> {
+  if (!estimatedValues?.length || !text) return
+  try {
+    await checkEstimateHonesty(text, estimatedValues, { mode: 'flag', businessId, surface })
+  } catch { /* non-fatal — audit only, never blocks the response */ }
+}
+
 interface BaseParams {
   model?: 'haiku' | 'sonnet' | 'opus'
   systemPrompt: string
@@ -60,6 +79,11 @@ interface BaseParams {
   role: AgentRole
   /** Real business data to inject as an explicit "only source of truth" block — RULE9 grounding. */
   groundTruth?: Record<string, unknown> | string
+  /** INTEL-TRUTH-1 — the subset of numeric values within groundTruth that are Grounding==='estimated'
+   * (forecasts/projections, e.g. a CLV prediction or churn score) rather than verified/derived facts.
+   * Wired into the prompt as an explicit honesty instruction and checked against the model's output
+   * so an estimate is never presented as if it were a settled fact. */
+  estimatedValues?: number[]
   timeoutMs?: number
 }
 
@@ -87,7 +111,7 @@ export async function runGroundedAnalysis<T = Record<string, unknown>>(
     businessId: params.businessId,
     maxTokens: params.maxTokens ?? 1500,
     timeoutMs: params.timeoutMs,
-    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth),
+    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth, params.estimatedValues),
     userPrompt: params.userPrompt,
   }, params.fallback)
   // AI-OUTPUT-INTEGRITY-1 — route the model's raw text through the shared scaffold/empty guard
@@ -95,6 +119,7 @@ export async function runGroundedAnalysis<T = Record<string, unknown>>(
   // survive into `data` the way BRIEF-INTEGRITY-1's raw prose glue-on did for briefings.
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/analysis/${params.agentKey}` })
   await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/analysis/${params.agentKey}`)
+  await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/analysis/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
@@ -117,12 +142,19 @@ export async function runCustomerFacingCopy(
     businessId: params.businessId,
     maxTokens: params.maxTokens ?? 600,
     timeoutMs: params.timeoutMs,
-    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth) + '\n\nThis text goes DIRECTLY to a customer — no markdown, no placeholders, no internal jargon, no mention of AI/prompts/systems. Plain, warm, Australian English prose only.',
+    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth, params.estimatedValues) + '\n\nThis text goes DIRECTLY to a customer — no markdown, no placeholders, no internal jargon, no mention of AI/prompts/systems. Plain, warm, Australian English prose only.',
     userPrompt: params.userPrompt,
   }, params.fallback)
   let guarded = safeAIOutput(resp.raw, '', { label: `grounded/customer-facing/${params.agentKey}` })
   if (params.groundTruth && guarded) {
     guarded = (await guardOutput(guarded, groundTruthValues(params.groundTruth), {
+      mode: 'redact', businessId: params.businessId, surface: `grounded/customer-facing/${params.agentKey}`,
+    }).catch(() => ({ text: guarded }))).text
+  }
+  // INTEL-TRUTH-1 — prose is redact-safe (unlike JSON, stripping a bare number here can't corrupt a
+  // rendered structure), so an unhedged estimate is actively stripped rather than only flagged.
+  if (params.estimatedValues?.length && guarded) {
+    guarded = (await checkEstimateHonesty(guarded, params.estimatedValues, {
       mode: 'redact', businessId: params.businessId, surface: `grounded/customer-facing/${params.agentKey}`,
     }).catch(() => ({ text: guarded }))).text
   }
@@ -151,7 +183,7 @@ interface AuditEntry {
 export async function runActionPlanner<T = Record<string, unknown>>(
   params: BaseParams & { fallback: T; shape?: 'object' | 'array'; tools?: Tool[]; executeTool?: (name: string, input: unknown) => Promise<unknown>; auditLog?: AuditEntry },
 ): Promise<GroundedResult<T> | (ToolLoopResult & { data: T })> {
-  const groundedSystem = withGrounding(params.systemPrompt, params.groundTruth) + '\n\nThis output will be acted on AUTOMATICALLY, with no human review before it takes effect — be conservative, and prefer no action over a guessed one.'
+  const groundedSystem = withGrounding(params.systemPrompt, params.groundTruth, params.estimatedValues) + '\n\nThis output will be acted on AUTOMATICALLY, with no human review before it takes effect — be conservative, and prefer no action over a guessed one.'
 
   if (params.tools?.length && params.executeTool) {
     const loop = await callAnthropicWithTools({
@@ -168,6 +200,7 @@ export async function runActionPlanner<T = Record<string, unknown>>(
     })
     const guardedLoop = safeAIOutput(loop.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
     await auditUngroundedNumbers(guardedLoop, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
+    await auditEstimateHonesty(guardedLoop, params.estimatedValues, params.businessId, `grounded/action-planner/${params.agentKey}`)
     const cleaned = guardedLoop.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
     const data = cleaned ? parseLLMJsonOr<T>(cleaned, params.fallback, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : params.fallback
     if (params.auditLog && loop.success) await writeActionAudit(params.businessId, params.auditLog)
@@ -186,6 +219,7 @@ export async function runActionPlanner<T = Record<string, unknown>>(
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
   await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
+  await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/action-planner/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : resp.data
   if (params.auditLog && resp.success) await writeActionAudit(params.businessId, params.auditLog)
@@ -226,11 +260,12 @@ export async function runBackgroundAgent<T = Record<string, unknown>>(
     businessId: params.businessId,
     maxTokens: params.maxTokens ?? 1200,
     timeoutMs: params.timeoutMs,
-    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth),
+    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth, params.estimatedValues),
     userPrompt: params.userPrompt,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/background/${params.agentKey}` })
   await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/background/${params.agentKey}`)
+  await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/background/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/background/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
@@ -253,13 +288,14 @@ export async function runVisionOrMedia<T = Record<string, unknown>>(
     businessId: params.businessId,
     maxTokens: params.maxTokens ?? 1500,
     timeoutMs: params.timeoutMs,
-    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth),
+    systemPrompt: withGrounding(params.systemPrompt, params.groundTruth, params.estimatedValues),
     userPrompt: params.userPrompt,
     imageBase64: params.imageBase64,
     imageMimeType: params.imageMimeType,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/vision/${params.agentKey}` })
   await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/vision/${params.agentKey}`)
+  await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/vision/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/vision/${params.agentKey}`, params.shape ?? 'object') : resp.data
   return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }

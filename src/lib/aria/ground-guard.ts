@@ -54,6 +54,75 @@ async function logGuard(businessId: string, surface: string, mode: string, count
   } catch { /* non-fatal */ }
 }
 
+// INTEL-TRUTH-1 — a SEPARATE honesty axis from "is this number real" above: a number can be a
+// perfectly grounded, real allowed value yet still misrepresent its own certainty if it's an
+// ESTIMATE (a forecast/projection — Grounding==='estimated') stated as a settled fact with no hedge
+// language nearby. Checked ONLY against values the caller explicitly marks as estimated — stating a
+// verified fact plainly is correct, not a violation, so this never touches verified/derived numbers.
+const ESTIMATE_LANGUAGE_RE = /\b(estimat\w*|project\w*|forecast\w*|predict\w*|approx\w*|around|roughly|about|expect\w*|likely|anticipat\w*|could|may|might)\b|~/i
+const ESTIMATE_CONTEXT_CHARS = 45
+
+export interface EstimateHonestyResult {
+  text: string          // healed text (redact mode strips unhedged estimate mentions)
+  ok: boolean           // true when every estimated value that appears is hedged
+  violations: number[]  // estimated values stated with no nearby hedge language
+}
+
+export interface EstimateHonestyOptions {
+  mode?: 'flag' | 'redact' // redact = delete the bare number (safe for prose); flag = report only (safe for JSON, never mutates)
+  businessId?: string
+  surface?: string
+  log?: boolean
+}
+
+async function logEstimateHonesty(businessId: string, surface: string, mode: string, violations: number[]): Promise<void> {
+  try {
+    await supabaseAdmin.from('aria_ai_calls').insert({
+      business_id: businessId, agent_key: 'estimate_honesty_guard', provider: 'other', model_id: 'none', role: 'other',
+      success: true, request_summary: surface.slice(0, 200), response_summary: `${mode}:${violations.length}`,
+      learning_signal: `guard_fired:estimate_honesty:${surface}:${violations.slice(0, 5).join(',')}`.slice(0, 300),
+    })
+  } catch { /* non-fatal */ }
+}
+
+/**
+ * For each value in `estimatedValues` that appears (as a grounded $/%/count token) in `text`, check
+ * the ~45 characters immediately before it for hedge language ("estimated", "projected",
+ * "approximately", "likely", ...). A match with none nearby is a violation — an estimate presented
+ * as if it were a settled fact, exactly the conflation Business Truth typing exists to prevent.
+ */
+export async function checkEstimateHonesty(text: string, estimatedValues: number[], opts: EstimateHonestyOptions = {}): Promise<EstimateHonestyResult> {
+  const { mode = 'flag', businessId, surface = 'estimate_honesty', log = true } = opts
+  if (!text || !text.trim()) return { text, ok: true, violations: [] }
+  const allowed = (estimatedValues ?? []).filter(n => Number.isFinite(n))
+  if (!allowed.length) return { text, ok: true, violations: [] }
+
+  const violations: number[] = []
+  const cuts: Array<[number, number]> = []
+  const re = new RegExp(RISKY_NUMERIC_RE.source, 'gi')
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const tok = m[0]
+    const v = parseFloat(tok.replace(/[^0-9.]/g, ''))
+    if (!Number.isFinite(v) || !grounded(v, allowed)) continue
+    const context = text.slice(Math.max(0, m.index - ESTIMATE_CONTEXT_CHARS), m.index)
+    if (!ESTIMATE_LANGUAGE_RE.test(context)) {
+      violations.push(v)
+      if (mode === 'redact') cuts.push([m.index, m.index + tok.length])
+    }
+  }
+
+  let healed = text
+  if (mode === 'redact' && cuts.length) {
+    for (const [s, e] of cuts.sort((a, b) => b[0] - a[0])) healed = healed.slice(0, s) + healed.slice(e)
+    healed = healed.replace(/\s{2,}/g, ' ').replace(/\s+([.,!?])/g, '$1').trim()
+  }
+
+  const ok = violations.length === 0
+  if (!ok && log && businessId) await logEstimateHonesty(businessId, surface, mode, violations)
+  return { text: healed, ok, violations }
+}
+
 /**
  * Validate `text` against the caller's REAL figures. Any $/% (or count) not within 2% of an allowed value
  * is ungrounded. `mode` decides the repair: drop the sentence ('strip'), delete just the token ('redact'),
