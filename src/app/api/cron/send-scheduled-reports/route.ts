@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { todayAEST, addDaysYmd, toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 function computeNextSend(freq: string, dayOfWeek: number | null, dayOfMonth: number | null, hourAest: number): Date {
   const now = new Date()
@@ -204,16 +205,19 @@ export async function GET(req: Request) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site'
   let sent = 0
+  // INTEL-COMPUTE-3 — was server-local (UTC) yesterday, feeding both report loops below. Real
+  // AEST calendar date via date-au.ts.
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-  const yday = yesterday.toISOString().slice(0, 10)
+  const yday = addDaysYmd(todayAEST(), -1)
 
   for (const report of due) {
     try {
       const [bizRes, ytdRes, monthRes] = await Promise.all([
         supabaseAdmin.from('businesses').select('id, name, trading_name, city').eq('id', report.business_id as string).maybeSingle(),
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).neq('status', 'voided').gte('created_at', `${yday}T00:00:00Z`).lte('created_at', `${yday}T23:59:59Z`),
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).neq('status', 'voided').gte('created_at', thirtyDaysAgo),
+        // INTEL-COMPUTE-3 — was neq('voided') + hardcoded UTC boundary. status='completed' +
+        // toAESTStart/toAESTEnd matches getRevenueSnapshot()'s canonical rule.
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).eq('status', 'completed').gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).eq('status', 'completed').gte('created_at', thirtyDaysAgo),
       ])
 
       const biz = bizRes.data
@@ -314,8 +318,9 @@ export async function GET(req: Request) {
 
       const [bizRes, ytdRes, monthRes] = await Promise.all([
         supabaseAdmin.from('businesses').select('id, name, trading_name, city').eq('id', String(sched.business_id)).maybeSingle(),
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).neq('status', 'voided').gte('created_at', `${yday}T00:00:00Z`).lte('created_at', `${yday}T23:59:59Z`),
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).neq('status', 'voided').gte('created_at', thirtyDaysAgo),
+        // INTEL-COMPUTE-3 — same fix as the scheduled_pdf_reports loop above.
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).eq('status', 'completed').gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).eq('status', 'completed').gte('created_at', thirtyDaysAgo),
       ])
 
       const biz = bizRes.data
