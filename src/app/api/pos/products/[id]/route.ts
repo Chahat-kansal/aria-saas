@@ -96,10 +96,23 @@ async function _PATCH(req: NextRequest, { params }: Params) {
   // ── update_classifications ──────────────────────────────────────
   if (action === 'update_classifications') {
     const UUID_COLS = new Set(['category_id', 'brand_id', 'family_id'])
-    const allowed = ['category_id', 'brand_id', 'family_id', 'container_type']
+    const allowed = ['category_id', 'brand_id', 'family_id', 'container_type', 'tax_rate']
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
     for (const k of allowed) {
       if (k in body) payload[k] = UUID_COLS.has(k) ? toNullableUuid(body[k]) : body[k]
+    }
+    // INTEL-COMPUTE-4 — tax_rate was previously dropped by this whitelist entirely (never reached
+    // the DB), and even when persisted directly it's a display-only legacy field: computeTax() in
+    // create-sale.ts only ever resolves tax_code_id. The ClassificationsTab "GST rate" dropdown is
+    // the ONLY UI a merchant has for a product's GST treatment, so a saved tax_rate must also
+    // resolve the matching system pos_tax_codes row for this business and set tax_code_id, or the
+    // dropdown silently does nothing at the register.
+    if ('tax_rate' in body) {
+      const rate = Number(body.tax_rate)
+      const code = rate === 0 ? 'GST_FREE' : 'GST'
+      const { data: taxCode } = await supabase.from('pos_tax_codes')
+        .select('id').eq('business_id', bid).eq('code', code).eq('is_active', true).maybeSingle()
+      if (taxCode?.id) payload.tax_code_id = taxCode.id
     }
     const { error } = await supabase.from('pos_products').update(payload).eq('id', id).eq('business_id', bid)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -282,6 +295,16 @@ async function _PATCH(req: NextRequest, { params }: Params) {
     if (key in body) updatePayload[key] = LEGACY_UUID_COLS.has(key) ? toNullableUuid(body[key]) : body[key]
   }
   if ('active' in body) updatePayload.is_active = !!body.active
+  // INTEL-COMPUTE-4 — same tax_code_id resolution as update_classifications above: this legacy
+  // fallback is what ProductWizard.tsx's step-3 "GST rate" field actually PATCHes through (no
+  // ?action= param), and tax_rate alone is display-only to computeTax() in create-sale.ts.
+  if ('tax_rate' in body) {
+    const rate = Number(body.tax_rate)
+    const code = rate === 0 ? 'GST_FREE' : 'GST'
+    const { data: taxCode } = await supabase.from('pos_tax_codes')
+      .select('id').eq('business_id', bid).eq('code', code).eq('is_active', true).maybeSingle()
+    if (taxCode?.id) updatePayload.tax_code_id = taxCode.id
+  }
   if ('track_inventory' in body) updatePayload.track_stock = !!body.track_inventory
 
   const { data: product, error } = await supabase.from('pos_products').update(updatePayload).eq('id', id).eq('business_id', bid).select().single()

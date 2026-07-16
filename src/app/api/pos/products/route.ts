@@ -157,6 +157,18 @@ async function _POST(req: Request) {
     .maybeSingle();
   if (recentDup) return NextResponse.json({ product: recentDup, duplicate: true });
 
+  // INTEL-COMPUTE-4 — tax_rate/gst_exempt are display-only legacy fields; computeTax() in
+  // create-sale.ts only ever resolves tax_code_id. Resolve it here from the business's system
+  // GST/GST_FREE codes whenever a caller doesn't send tax_code_id directly (e.g. ProductWizard's
+  // "GST rate" field), so a product created as GST-exempt is actually taxed as GST-exempt.
+  let resolvedTaxCodeId = body.tax_code_id || null
+  if (!resolvedTaxCodeId) {
+    const impliedExempt = !!body.gst_exempt || Number(body.tax_rate) === 0
+    const { data: taxCode } = await supabase.from('pos_tax_codes')
+      .select('id').eq('business_id', bid).eq('code', impliedExempt ? 'GST_FREE' : 'GST').eq('is_active', true).maybeSingle()
+    if (taxCode?.id) resolvedTaxCodeId = taxCode.id
+  }
+
   // Explicit allowlist — only confirmed pos_products columns.
   // Unknown fields from callers are silently dropped here rather than
   // letting Supabase reject them with a 500.
@@ -170,7 +182,7 @@ async function _POST(req: Request) {
     cost_price: body.cost_price != null ? (parseFloat(String(body.cost_price)) || null) : (body.cost != null ? parseFloat(String(body.cost)) || null : null),
     cost: body.cost != null ? parseFloat(String(body.cost)) || null : null,
     tax_rate: parseFloat(String(body.tax_rate ?? 10)) || 10,
-    tax_code_id: body.tax_code_id || null,
+    tax_code_id: resolvedTaxCodeId,
     additional_tax_code_ids: Array.isArray(body.additional_tax_code_ids) ? body.additional_tax_code_ids : [],
     stock_quantity: parseInt(String(body.stock_quantity ?? 0)) || 0,
     low_stock_threshold: body.low_stock_threshold != null ? parseInt(String(body.low_stock_threshold)) || null : (body.reorder_point != null ? parseInt(String(body.reorder_point)) || null : null),
@@ -319,6 +331,15 @@ async function _PATCH(req: Request) {
   }
   // Alias handling
   if ('active' in body) updates.is_active = !!body.active;
+
+  // INTEL-COMPUTE-4 — same tax_code_id resolution as the POST handler above and
+  // [id]/route.ts's update_classifications/legacy-fallback handlers.
+  if ('tax_rate' in body && !('tax_code_id' in body)) {
+    const impliedExempt = !!body.gst_exempt || Number(body.tax_rate) === 0
+    const { data: taxCode } = await supabase.from('pos_tax_codes')
+      .select('id').eq('business_id', bid).eq('code', impliedExempt ? 'GST_FREE' : 'GST').eq('is_active', true).maybeSingle()
+    if (taxCode?.id) updates.tax_code_id = taxCode.id
+  }
 
   // Image URL format guard — reject non-image extensions on edit too
   if (updates.image_url && typeof updates.image_url === 'string' && !isAllowedImageUrl(updates.image_url)) {
