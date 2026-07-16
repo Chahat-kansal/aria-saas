@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 export type Signal = {
   signal_type: string
@@ -134,9 +135,22 @@ async function inventorySignals(businessId: string): Promise<Signal[]> {
   } catch { /* defensive */ }
 
   // price_margin_health
+  // INTEL-COMPUTE-2 — was reading pos_products.cost (a live column that is 0/unset for every
+  // product in the entire database, confirmed live — every margin site elsewhere in this codebase
+  // reads cost_price, or resolves cost via resolveCost()'s outlet/PO/catalogue chain). The `cost > 0`
+  // gate then unconditionally excluded every product, so this signal could never fire for ANY
+  // tenant regardless of real margin health. Now resolves cost via the canonical resolveCostBatch(),
+  // matching every other margin site.
   try {
-    const { data: prods } = await supabaseAdmin.from('pos_products').select('name,price,cost').eq('business_id', businessId).eq('is_active', true).not('cost', 'is', null).not('price', 'is', null)
-    const lowMargin = (prods ?? []).filter(p => p.price > 0 && p.cost > 0 && (p.price - p.cost) / p.price < 0.2).map(p => ({ name: p.name, price: p.price, cost: p.cost, margin_pct: Math.round(((p.price - p.cost) / p.price) * 1000) / 10 })).slice(0, 10)
+    const [{ data: prods }, costMap] = await Promise.all([
+      supabaseAdmin.from('pos_products').select('id,name,price').eq('business_id', businessId).eq('is_active', true).not('price', 'is', null),
+      resolveCostBatch(supabaseAdmin, businessId, null),
+    ])
+    const lowMargin = (prods ?? [])
+      .map(p => ({ name: p.name, price: Number(p.price) || 0, cost: costMap.get(p.id)?.cost ?? null }))
+      .filter(p => p.price > 0 && p.cost != null && p.cost > 0 && (p.price - p.cost) / p.price < 0.2)
+      .map(p => ({ name: p.name, price: p.price, cost: p.cost, margin_pct: Math.round(((p.price - (p.cost as number)) / p.price) * 1000) / 10 }))
+      .slice(0, 10)
     if (lowMargin.length) signals.push({ signal_type: 'price_margin_health', payload: { low_margin_products: lowMargin, count: lowMargin.length }, severity: lowMargin.length > 3 ? 'alert' : 'watch', expires_in_min: 360 })
   } catch { /* defensive */ }
 
