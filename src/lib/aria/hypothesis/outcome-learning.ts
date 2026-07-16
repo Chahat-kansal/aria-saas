@@ -212,11 +212,17 @@ async function snapshotBaseline(businessId: string, category: string): Promise<n
         .eq('is_active', true)
       return count ?? 0
     }
+    // INTEL-OUTCOME-2 Part 3 — same recurring bug class fixed repeatedly across
+    // INTEL-COMPUTE-2/3/4/CONTRACT-1: neq('status','voided') admits draft (unsent/in-progress) and
+    // refunded rows into the revenue baseline/verdict this function computes. Every verdict
+    // runOutcomeChecks has ever written (so far, exactly one) was measured against this contaminated
+    // figure. Fixed to the canonical status='completed' filter — the same real-money boundary as
+    // getRevenueSnapshot() and every other revenue site in this codebase.
     const { data } = await supabaseAdmin
       .from('pos_sales')
       .select('total_amount')
       .eq('business_id', businessId)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', since)
     return (data ?? []).reduce((s, r) => s + Math.round(Number((r as Record<string,unknown>).total_amount || 0) * 100), 0)
   } catch {
