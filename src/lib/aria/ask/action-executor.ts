@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { PlannedAction } from './action-planner'
 import { buildPromotionRow, normalisePromoKind } from './promotion-writer'
 import { adjustOutletStock, setOutletStock, resolveOutletId } from '@/lib/inventory/outlet-stock'
+import { onActionExecuted } from '@/lib/aria/hypothesis/outcome-learning'
 
 // ASK-ARIA-CONSOLIDATE-2 (RC2/RC6): executor-level safety thresholds. These are the BACKSTOP — a mass write or
 // an absurd quantity must be explicitly confirmed (payload.confirm_mass) before it executes, so prompt-injection
@@ -745,6 +746,19 @@ async function runAction(
       },
     }).select('id').single()
     if (actionInsertErr) console.error('[action-executor] aria_actions insert failed:', actionInsertErr.message)
+
+    // INTEL-OUTCOME-2 Part 2 — the decision here IS the fact that this action executed
+    // successfully (Ask Aria collapses recommend+decide into one chat message; there is no separate
+    // approve step for this path). Writing that decision back onto the recommendation means creating
+    // its linked aria_outcomes row now, at the only decision point this path ever has — mirroring
+    // exactly what I4-VERIFY wired into the PATCH-route and auto-execute paths, but for the path that
+    // has produced 100% of this business's real executed actions and was the only one never wired.
+    // onActionExecuted never throws (it catches and logs its own errors), so awaiting it here cannot
+    // break the chat response even if outcome-tracking fails.
+    const newActionId = (actionRow as { id: string } | null)?.id
+    if (newActionId) {
+      await onActionExecuted(newActionId, businessId)
+    }
 
     return {
       ok: true,
