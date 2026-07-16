@@ -1,12 +1,20 @@
+import { resolveCostFor } from '@/lib/inventory/resolve-cost'
+
 type SB = ReturnType<typeof import('@/lib/supabase-server').createServerSupabaseClient>
 
 /**
  * Resolves the best available unit cost for a product in this order:
  * 1. Market price (open_market_low) if available and > 0
  * 2. Last purchase price passed in from caller
- * 3. Product cost_price from pos_products (passed in or fetched)
- * 4. Product price * 0.6 (estimated 40% margin) as last resort
- * 5. 0 only if nothing else available — never crashes
+ * 3. Product cost_price passed in from caller
+ * 4. The canonical resolver (resolve-cost.ts): outlet item_cost → last_item_cost →
+ *    purchase-order confirmed/last price → pos_products.cost_price
+ * 5. 0 only if nothing else available — never crashes, never fabricates
+ *
+ * INTEL-COMPUTE-1 — this used to fall back to `price * 0.6` (a fabricated 40%-margin guess) between
+ * tiers 4 and 5, contradicting resolve-cost.ts's own "never fabricate" contract one directory over.
+ * Tier 4 now delegates to that canonical resolver instead of re-querying pos_purchase_order_lines/
+ * pos_products independently, so there is exactly one place PO-history cost resolution happens.
  */
 export async function resolveUnitCost(
   supabase: SB,
@@ -30,39 +38,13 @@ export async function resolveUnitCost(
   // 3. Product cost_price passed in
   if (o.productCostPrice && o.productCostPrice > 0) return o.productCostPrice
 
-  // 4. Fetch from DB
+  // 4. Canonical resolver — outlet cost, PO history, catalogue cost_price, in that order
   try {
-    const { data: lastLine } = await supabase
-      .from('pos_purchase_order_lines')
-      .select('confirmed_price, last_purchase_price')
-      .eq('product_id', productId)
-      .eq('business_id', businessId)
-      .not('confirmed_price', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (lastLine?.confirmed_price && (lastLine.confirmed_price as number) > 0) {
-      return lastLine.confirmed_price as number
-    }
-    if (lastLine?.last_purchase_price && (lastLine.last_purchase_price as number) > 0) {
-      return lastLine.last_purchase_price as number
-    }
-
-    const { data: product } = await supabase
-      .from('pos_products')
-      .select('cost_price, price')
-      .eq('id', productId)
-      .maybeSingle()
-
-    if (product?.cost_price && (product.cost_price as number) > 0) {
-      return product.cost_price as number
-    }
-    if (product?.price && (product.price as number) > 0) {
-      return (product.price as number) * 0.6
-    }
+    const resolved = await resolveCostFor(supabase, businessId, productId, null)
+    if (resolved.cost != null) return resolved.cost
   } catch (e) { console.error('[non-fatal]', e) }
 
+  // 5. Nothing resolvable anywhere — 0, not a fabricated estimate
   return 0
 }
 

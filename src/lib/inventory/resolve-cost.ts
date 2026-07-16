@@ -6,14 +6,23 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // say where the number came from ("from last delivery" vs "catalogue" vs "unknown").
 //
 // Resolution order (documented + locked):
-//   1. pos_outlet_inventory.item_cost      (per-outlet actual)       if > 0
-//   2. pos_outlet_inventory.last_item_cost (per-outlet last receipt) if > 0
-//   3. pos_products.cost_price             (business-level catalogue) if > 0
-//   4. else NULL → 'unknown'
+//   1. pos_outlet_inventory.item_cost                 (per-outlet actual)         if > 0
+//   2. pos_outlet_inventory.last_item_cost             (per-outlet last receipt)  if > 0
+//   3. pos_purchase_order_lines.confirmed_price        (latest confirmed PO)      if > 0
+//   4. pos_purchase_order_lines.last_purchase_price    (latest PO line's last price) if > 0
+//   5. pos_products.cost_price                         (business-level catalogue) if > 0
+//   6. else NULL → 'unknown'
+//
+// INTEL-COMPUTE-1 — tiers 3/4 (purchase-order history) were previously only checked by a separate,
+// divergent resolver (src/lib/orders/resolve-unit-cost.ts's resolveUnitCost) that, once PO history
+// came up empty too, fabricated a cost as `price * 0.6` rather than reporting unknown. That resolver
+// now delegates here instead of reimplementing its own chain — this is the one place a "real cost"
+// can come from PO history, and it never fabricates.
 
 // Provenance labels are owner-facing: 'outlet' (per-outlet actual item_cost), 'last_delivery'
-// (last receipt cost), 'catalogue' (business-level cost_price), 'unknown' (no resolvable cost).
-export type CostSource = 'outlet' | 'last_delivery' | 'catalogue' | 'unknown'
+// (last receipt cost), 'purchase_order' (latest confirmed/last PO line price), 'catalogue'
+// (business-level cost_price), 'unknown' (no resolvable cost).
+export type CostSource = 'outlet' | 'last_delivery' | 'purchase_order' | 'catalogue' | 'unknown'
 export interface ResolvedCost { cost: number | null; source: CostSource }
 
 function pos(n: unknown): number | null {
@@ -22,14 +31,27 @@ function pos(n: unknown): number | null {
 }
 
 /** Pure resolver over already-fetched values. */
-export function resolveCost(input: { item_cost?: unknown; last_item_cost?: unknown; cost_price?: unknown }): ResolvedCost {
+export function resolveCost(input: { item_cost?: unknown; last_item_cost?: unknown; po_confirmed_price?: unknown; po_last_purchase_price?: unknown; cost_price?: unknown }): ResolvedCost {
   const ic = pos(input.item_cost)
   if (ic != null) return { cost: ic, source: 'outlet' }
   const lic = pos(input.last_item_cost)
   if (lic != null) return { cost: lic, source: 'last_delivery' }
+  const pc = pos(input.po_confirmed_price)
+  if (pc != null) return { cost: pc, source: 'purchase_order' }
+  const plp = pos(input.po_last_purchase_price)
+  if (plp != null) return { cost: plp, source: 'purchase_order' }
   const cp = pos(input.cost_price)
   if (cp != null) return { cost: cp, source: 'catalogue' }
   return { cost: null, source: 'unknown' }
+}
+
+/** Latest PO line price for a product, only queried when outlet/catalogue costs are both unknown. */
+async function latestPoLinePrice(supabase: SupabaseClient, businessId: string, productId: string): Promise<{ po_confirmed_price?: unknown; po_last_purchase_price?: unknown }> {
+  const { data: line } = await supabase.from('pos_purchase_order_lines')
+    .select('confirmed_price, last_purchase_price')
+    .eq('business_id', businessId).eq('product_id', productId)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  return { po_confirmed_price: line?.confirmed_price, po_last_purchase_price: line?.last_purchase_price }
 }
 
 /** Resolve one product's current unit cost at an outlet. */
@@ -41,7 +63,10 @@ export async function resolveCostFor(supabase: SupabaseClient, businessId: strin
       .eq('business_id', businessId).eq('product_id', productId).eq('outlet_id', outletId).maybeSingle()
     oi = data ?? {}
   }
-  return resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost, cost_price: prod?.cost_price })
+  const base = resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost, cost_price: prod?.cost_price })
+  if (base.source !== 'unknown') return base
+  const po = await latestPoLinePrice(supabase, businessId, productId)
+  return resolveCost({ ...po, cost_price: prod?.cost_price })
 }
 
 /** Batch-resolve cost for every product at an outlet → Map<product_id, ResolvedCost>. */
@@ -54,9 +79,31 @@ export async function resolveCostBatch(supabase: SupabaseClient, businessId: str
     for (const r of inv ?? []) oiMap.set(r.product_id as string, { item_cost: r.item_cost, last_item_cost: r.last_item_cost })
   }
   const out = new Map<string, ResolvedCost>()
+  const stillUnknown: string[] = []
   for (const p of products ?? []) {
     const oi = oiMap.get(p.id as string) ?? {}
-    out.set(p.id as string, resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost, cost_price: p.cost_price }))
+    const resolved = resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost, cost_price: p.cost_price })
+    out.set(p.id as string, resolved)
+    if (resolved.source === 'unknown') stillUnknown.push(p.id as string)
+  }
+  // PO-line fallback only for the subset still unresolved after outlet/catalogue tiers — keeps the
+  // common case (most products already have a catalogue or outlet cost) free of the extra query.
+  if (stillUnknown.length) {
+    const { data: lines } = await supabase.from('pos_purchase_order_lines')
+      .select('product_id, confirmed_price, last_purchase_price, created_at')
+      .eq('business_id', businessId).in('product_id', stillUnknown)
+      .order('created_at', { ascending: false }).limit(5000)
+    const latestByProduct = new Map<string, { confirmed_price?: unknown; last_purchase_price?: unknown }>()
+    for (const l of lines ?? []) {
+      const pid = l.product_id as string
+      if (!latestByProduct.has(pid)) latestByProduct.set(pid, { confirmed_price: l.confirmed_price, last_purchase_price: l.last_purchase_price })
+    }
+    for (const pid of stillUnknown) {
+      const line = latestByProduct.get(pid)
+      if (!line) continue
+      const resolved = resolveCost({ po_confirmed_price: line.confirmed_price, po_last_purchase_price: line.last_purchase_price })
+      if (resolved.source !== 'unknown') out.set(pid, resolved)
+    }
   }
   return out
 }
