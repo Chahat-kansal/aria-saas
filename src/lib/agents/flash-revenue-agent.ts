@@ -7,6 +7,12 @@ import { BaseAgent } from './base-agent';
 import type { AgentType, AgentRunResult } from './types';
 import { CANONICAL_COLS } from '@/lib/aria/schema-registry';
 
+// INTEL-COMPUTE-4 — every pos_sales query in this file's trigger checks (checkRevenueShortfall,
+// checkDeadPeriod, checkBasketSizeDrop, checkLabourOverallocation) used neq('voided'), admitting
+// draft/refunded rows into the baseline this auto-executing agent (mode:'auto' can fire real
+// interventions — discounts, SMS blasts) decides against. status='completed' matches
+// getRevenueSnapshot()'s canonical rule.
+
 interface FiredTrigger {
   type: string;
   data: Record<string, unknown>;
@@ -219,7 +225,7 @@ Return ONLY valid JSON with no markdown.`;
         .from('pos_sales')
         .select('total_amount')
         .eq('business_id', business_id)
-        .neq('status', 'voided')
+        .eq('status', 'completed')
         .gte('created_at', twoHoursAgo);
       revenueIn2hBefore = (baseSales ?? []).reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
     } else {
@@ -351,7 +357,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_sales')
       .select('total_amount')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', oneHourAgo);
 
     const currentRevenue = (currentSales ?? []).reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
@@ -361,7 +367,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_sales')
       .select('total_amount,created_at')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', thirtyOneDaysAgo)
       .lt('created_at', oneHourAgo);
 
@@ -411,7 +417,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_sales')
       .select('created_at')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -520,7 +526,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_sales')
       .select('total_amount,created_at')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', eightyFourDaysAgo);
 
     if (!sales?.length) return null;
@@ -572,7 +578,7 @@ Return ONLY valid JSON with no markdown.`;
         .from('pos_sales')
         .select('total_amount')
         .eq('business_id', business_id)
-        .neq('status', 'voided')
+        .eq('status', 'completed')
         .gte('created_at', midnight.toISOString()),
     ]);
 
@@ -611,7 +617,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_sales')
       .select('total_amount')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', oneHourAgo);
 
     if (!lastHourSales || lastHourSales.length < 3) return null;
@@ -622,7 +628,7 @@ Return ONLY valid JSON with no markdown.`;
       .from('pos_sales')
       .select('total_amount,created_at')
       .eq('business_id', business_id)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', thirtyDaysAgo)
       .lt('created_at', oneHourAgo);
 
