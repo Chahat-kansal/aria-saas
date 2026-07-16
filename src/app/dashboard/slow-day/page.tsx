@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import { toAESTWallClock } from '@/lib/date-au'
 
 interface PromoIdea {
   title: string
@@ -45,19 +46,26 @@ export default function SlowDayPage() {
     if (!business?.id) return
     setLoading(true)
     try {
+      // INTEL-COMPUTE-4 — /api/pos/sales now defaults to status='completed' server-side (fixed in
+      // INTEL-COMPUTE-2), so the client-side `!== 'voided'` filter below is redundant but harmless.
+      // The real remaining bug was day-of-week/date extraction via UTC (dt.toISOString()), which
+      // misattributes AEST-morning sales to the wrong day — the exact bug this feature (finding the
+      // real "slowest day") is most exposed to. Now uses the real AEST calendar date/day-of-week.
       const res = await fetch('/api/pos/sales?business_id=' + business.id + '&limit=1000')
       const d = await res.json() as { sales?: Array<{created_at:string; total_amount:number; status:string}> }
       const sales = (d.sales ?? []).filter(s => s.status !== 'voided')
 
       const byDow: Record<number, number[]> = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]}
       const dailyRevenue: Record<string, number> = {}
+      const dowByDate: Record<string, number> = {}
       for (const s of sales) {
-        const dt = new Date(s.created_at)
-        const dateStr = dt.toISOString().split('T')[0]
+        const shifted = toAESTWallClock(s.created_at)
+        const dateStr = shifted.toISOString().split('T')[0]
         dailyRevenue[dateStr] = (dailyRevenue[dateStr] ?? 0) + Number(s.total_amount ?? 0)
+        dowByDate[dateStr] = shifted.getUTCDay()
       }
       for (const [dateStr, rev] of Object.entries(dailyRevenue)) {
-        const dow = new Date(dateStr).getDay()
+        const dow = dowByDate[dateStr]
         byDow[dow].push(rev)
       }
 
