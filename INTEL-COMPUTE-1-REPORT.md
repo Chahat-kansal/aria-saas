@@ -445,3 +445,169 @@ Same shape as AI-GROUNDING-1's ~145-site remainder — a tracked follow-up list,
   `message` prose field is actively guarded this sprint — a structural fix that safely guards
   numeric JSON fields without risking corruption is future work); `weekly-report`, `pos-end-of-day`,
   `first-insight`, and `daily-briefing`'s `recommendations[].metric` never calling any numeric guard.
+
+---
+
+# INTEL-COMPUTE-2 — First Remainder Migration Batch
+
+## Part 1: Re-examine and split the remainder (complete)
+
+Every site named in "Filed for a future sprint" above was re-examined by 9 parallel read-only
+research passes (one per sub-area), each re-reading current code in full (some sites had already
+shifted since the original filing) and verifying empirically against real production data
+(Supabase project `nxfzippunqvqsvkmwtjv`, business "Sip Café", `ff5055a0-c351-4ada-817a-1804961035f3`)
+wherever feasible, rather than eyeballing the code.
+
+**~80 distinct sites were actually examined** (fewer than the original "~120" estimate on some
+fronts, since several broad groupings like "~90 remaining sites" resolved to a smaller number of
+concrete distinct call sites once fully read — and MORE on others, since the agents also surfaced
+genuinely new bugs not in the original filing, e.g. `pos_purchase_order_lines`-adjacent stock-page
+field mismatches, a schema gap in `labour_demand_forecast`, and a `groundTruth`-wiring gap in
+`daily-briefing`. This mirrors INTEL-COMPUTE-1's own experience that estimates shift once you
+actually read the code, not just grep it.)
+
+**Bucket A (confirmed wrong today): ~66 sites.**
+**Bucket B (correct but could drift): ~14 sites.**
+
+The overwhelming skew toward Bucket A — most of the "duplicated but currently correct" code the
+sprint anticipated turned out to already be actively wrong — is itself a finding: this codebase's
+revenue/margin/GST/stock/labour duplication problem is predominantly a live-bug problem, not a
+latent-drift-risk problem. Standout confirmed-live divergences (full detail per site is in each
+commit message on `main`, `git log --grep intel-compute-2` or the commit list below):
+
+- `labour-optimisation-agent.ts` **wrote a corrupted `actual_revenue` back to the DB nightly** —
+  and DB pre-flight found the write had actually been silently no-op'ing entirely, because
+  production's `labour_demand_forecast` table was missing 5 columns an existing migration file
+  defined but was never applied (the exact "git migration ≠ prod schema" pattern as the
+  CX-AUTH-1a/1b incident). Migration applied live this sprint.
+- `bas-agent.ts` — the *canonical* BAS/compliance agent's own G1 Total Sales was wrong ($9.00
+  divergence, Q4 FY26 — the agent built to police this bug class had it too).
+- `warehouse/kpis/route.ts` — stock value overstated **~20x** ($222,738.60 vs real $11,106.80),
+  reproducing the exact prior incident (documented "$234,523 vs real $11,476") that was never
+  eliminated at the source.
+- `dashboard/warehouse/valuation/page.tsx` and `.../analytics/page.tsx` had a DIFFERENT, deeper bug
+  than the filed one: a field-name mismatch with `/api/warehouse/stock`'s actual response shape,
+  showing **$0** total/category value since each page's creation, not merely a stale-column
+  overstatement.
+- `api/staff/timesheets/route.ts`'s manual-entry route × `payroll.ts`'s penalty engine —
+  double-applied Fair Work day-of-week loading on top of an already-OT-bumped `total_pay_cents`,
+  confirmed ~10% overpayment on a real worked example, feeding the real ABA bank file (dormant only
+  because 0 of 134 real `pos_timesheets` rows have hit this exact path yet).
+- `signal-engine.ts`'s `price_margin_health` read the wrong cost column (`cost`, confirmed 0/unset
+  for every product in the entire database) and was **silently dead for 100% of tenants**.
+- `weekly-data.ts` (feeds the emailed PDF/email) confirmed **41% revenue overstatement** for a real
+  week, while its sibling `weekly-aggregate.ts` (feeds the in-app HTML report) was already correct —
+  the two weekly-report outputs were actively disagreeing.
+- `daily-briefing/route.ts` nominally calls the canonical `grounded.ts` entry point but never
+  passed `groundTruth` — the numeric guard wired in last sprint **never executed at all**, not even
+  in audit-only flag mode, despite the route appearing already "safe."
+
+## Part 2: This batch — 25 sites migrated (complete)
+
+Selected Bucket A first, ranked by blast radius (write-paths and persisted-value bugs first, then
+real-money/compliance figures, then high-visibility dashboards), filling every one of the 25 slots
+from Bucket A since it was far larger than the cap. One commit per site or tight cluster, `tsc`/full
+build green throughout. All commits tagged `fix(intel):` on `main`.
+
+1. **`labour-optimisation-agent.ts`** — filter/AEST-hour fixes across 3 sub-bugs (forecast build,
+   live % monitor, actuals write-back) + the `labour_demand_forecast` schema gap (migration applied
+   live, verified via `information_schema`) + new `toAESTWallClock`/`hourOfDayAEST`/`toAESTHourStart`
+   helpers added to `date-au.ts`.
+2. **`api/staff/timesheets/route.ts`** — stopped double-applying overtime loading; `total_pay_cents`
+   now stores plain hours×rate (matching the PIN clock-in/out contract), `overtime_cents`/
+   `is_overtime` kept as informational-only display fields.
+3. **`weekly-ai.ts`** — `promo_recommendations[].expected_impact` now redact-guarded against real
+   week data (bypassed `grounded.ts` entirely; this pipeline calls the Anthropic SDK directly).
+4. **`pos/reports/commission/route.ts`** — filter + AEST boundary fix (real staff commission payouts).
+5. **`create-sale.ts`** — `computeTax()` now also falls back to the product's own configured
+   `tax_code_id` before the flat-10% last resort (fixes the refund payload in `terminal.tsx` too,
+   since refunds flow through the same `createSale()` path).
+6. **`reconciliation-agent.ts`** — filter/AEST-boundary fixes in `dailyReconciliation()` (UTC→AEST
+   day, `neq`→`eq('completed')`) and `generateMonthlyPL()` (server-local→AEST month boundary, still
+   admitted draft rows).
+7. **`bas-agent.ts`** — G1 Total Sales filter + AEST quarter boundary (the canonical BAS agent's own bug).
+8. **`compliance/bas/route.ts`** — scoped the `business_expenses` 1B-credit fallback to the current
+   quarter (was summing all-time with no period filter at all).
+9. **`cash-up/page.tsx` + `api/pos/sales/route.ts`** — the shared sales endpoint's default status
+   filter fixed for all 12+ consumers; cash-up's own UTC "today" boundary fixed.
+10. **`warehouse/kpis/route.ts`** — migrated to canonical `items_on_hand` × `resolveCostBatch()`.
+11. **`dashboard/warehouse/valuation/page.tsx` + `.../analytics/page.tsx`** — fixed the field-name
+    mismatch with `/api/warehouse/stock`'s real response shape (extended that route with `price`/
+    `category`, which it never returned before).
+12. **`pos/reports/inventory/route.ts`** — migrated to canonical stock valuation.
+13. **`pos/dead-stock/route.ts`** — migrated to canonical stock valuation.
+14. **`dashboard/inventory/page.tsx`** — Overview-tab row value now uses the same resolved cost as
+    the Valuation tab (was raw `cost_price`, silently disagreeing with the same page's other tab).
+15. **`pos/reports/route.ts`** — AEST boundary fix (feeds RetailDashboard's top KPI tiles).
+16. **`pos/reports/sales/route.ts`** — filter + AEST boundary fix (the flagship Sales Report).
+17. **`signal-engine.ts`** — `price_margin_health` migrated to canonical resolved cost.
+18. **`weekly-data.ts`** — every revenue aggregation (day/hour/product/payment-method/prior-week)
+    fixed to `status==='completed'`; base query deliberately left unfiltered since
+    suspicious-transaction detection in the same file needs to see voided/refunded rows.
+19. **`aria/roster/route.ts`** — `pay_rate_cents` now prioritised over the dead `hourly_rate` default.
+20. **`agents/labour/realtime/route.ts`** — same rate-priority fix + its own revenue filter fix.
+21. **`schedule-agent.ts`** — resolves real rates by name-match against `staff_members` (its own
+    `pos_staff` table has no rate column at all) + its sales-history filter fix.
+22. **`shared/[token]/page.tsx`** — filter + AEST boundary fix on this PUBLIC-facing page.
+23. **`ask/files.ts`** — added a status filter to the sales export (previously had none at all).
+24. **`daily-briefing/route.ts`** — wired `groundTruth` into its `runGroundedAnalysis()` call so the
+    structural numeric guard (built last sprint) actually executes.
+
+(24 numbered clusters covering 25 distinct sites, since #11 and #9 each bundle 2 sites sharing one
+root cause.)
+
+## VERIFY (complete)
+
+Every Bucket A fix above carries its own before/after dollar evidence in its commit message,
+measured against real Sip Café production data at the time of the fix — not synthetic fixtures.
+Headline examples: revenue filter/boundary bugs ($9–$149.50-class divergences depending on window),
+the GST/tax mechanism fixes (no live $ divergence yet since this business has no GST-exempt
+products, but the mechanism is now structurally correct rather than coincidentally right), the
+stock-valuation fixes (~20x overstatement corrected), and the labour rate fixes (confirmed $25 vs
+real $35/hr, 28.6% understatement).
+
+## Ranked for the next batch (not migrated this sprint)
+
+Roughly ~40 Bucket A sites remain, plus ~14 Bucket B duplicates. Ranked by blast radius:
+
+**High priority (real-money or high-traffic, not yet fixed):**
+- `terminal.tsx`'s other GST-inclusive-extraction display sites (`pos-print.ts`, `pos/history/page.tsx`
+  Financials panel, `Receipt.tsx`'s "Subtotal excl. tax" line) — all ignore the real persisted
+  `tax_amount`/`tax_breakdown` in favour of a re-derived flat 10% guess.
+- Wholesale B2B (`orders/[id]/totals`, `.../items`, `.../generate-invoice`) — zero per-line
+  exemption support at all, confirmed on a real order.
+- `pos-bas-export/route.ts` — a third ad-hoc BAS calculator, structurally divergent from `bas-agent.ts`.
+- `pos/reports/{closures,cashier}/route.ts` — same filter/boundary bug as `commission`/`sales`,
+  siblings fixed this batch.
+- `[type]/route.ts`'s `getAdvanced` (no filter at all) and `getDashboard`/`getBriefing` sub-handlers.
+- `pos-end-of-day/route.ts` — session-scoped "today" compared against a calendar-day-scoped 7-day
+  average (two different temporal units) AND its `debrief` AI field bypasses `grounded.ts` entirely,
+  emailed unchanged.
+- `weekly-report/route.ts` and `weekly-ai.ts`'s council-sourced `narrative`/`executive_summary`,
+  `pos-chat`'s structured `cards[].value`/`chart.values`, `first-insight`'s `insight` — all bypass
+  `grounded.ts` entirely with zero guard.
+- Ask Aria context/facts-packet chain: `get-business-context.ts`, `ask/facts-packet.ts`,
+  `ask/route.ts`'s `available_ground_truth`/`weeklyTrackingBlock` — 4 independent "same week last
+  month" implementations, one canonical fix would cover all 4.
+- `roster.ts` vs `payroll.ts`'s Sunday multiplier disagreement (1.50x vs 2.00x).
+- `send-scheduled-reports.ts` — same filter/boundary bug, emailed externally.
+
+**Medium priority:**
+- `LivePulseRail.tsx`, `slow-day/page.tsx`, `cash-flow/page.tsx` — boundary bugs, status-filter
+  bugs currently silent by data coincidence rather than fixed.
+- `signal-engine.ts`'s remaining AOV signals (`revenue_velocity_24h/7d`, `avg_basket_trend`,
+  `new_vs_returning`) and `top_product_growth`'s 0%→100%-fabrication-on-no-baseline sentinel
+  (confirmed firing live today).
+- `flash-revenue-agent.ts`'s 4 trigger checks, `pos/shift-reports/route.ts`'s compounding
+  refund-clamp bug, `business-health-quick/route.ts`'s no-filter-at-all site, `pos-insight/route.ts`'s
+  UTC day cutover.
+- `clv-agent.ts`, `loyalty-intelligence.ts` — filter bugs, low $ impact today.
+- GST-exempt product toggles (`tax_rate=0`/`gst_exempt`) — still fully dead fields.
+
+**Lower priority / Bucket B (duplicated, not yet wrong):**
+- `finance/overview/route.ts` vs `get-business-context.ts`'s COGS/net-margin duplicate (byte-identical
+  today; row-limit asymmetry is a latent risk once either business scales past ~2,000 expense rows).
+- `[type]/route.ts`'s dead sibling sub-handlers (`getCashier`/`getCommission`/`getClosures`/
+  `getInventory`) — shadowed by static routes at the same URL, worth deleting rather than fixing.
+- `rDeadStock` vs `pos/dead-stock/route.ts` — a third parallel "dead stock" implementation exists at
+  `inventory-insight/route.ts`, also canonical; not consolidated into one this pass.
