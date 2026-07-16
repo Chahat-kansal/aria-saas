@@ -217,7 +217,19 @@ export async function buildPayrollRun(
     })
   }
 
-  return lines
+  // INTEL-COMPUTE-1 — applyPenaltyRates()/getPenaltyMultiplier() (Fair Work Sunday/Saturday/
+  // public-holiday/evening loadings) were fully built above but never actually called here — every
+  // real payroll run was paying zero statutory penalty loading despite the engine existing.
+  // Applying it now: each line's gross/super/tax/net is recomputed to include the real per-shift
+  // penalty extra, using the exact same timesheet rows already fetched above.
+  const timesheetsForPenalty = (timesheets ?? []).map(t => ({
+    clock_in: String(t.clock_in),
+    clock_out: t.clock_out ? String(t.clock_out) : null,
+    staff_member_id: t.staff_member_id ? String(t.staff_member_id) : null,
+    total_pay_cents: Number(t.total_pay_cents) || 0,
+  }))
+
+  return applyPenaltyRates(lines, timesheetsForPenalty)
 }
 
 // ─── Save Payroll Run ──────────────────────────────────────────────────────

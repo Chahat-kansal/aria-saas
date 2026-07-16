@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { computeHours } from '@/lib/staff/timesheets'
+import { resolveHourlyRateCents } from '@/lib/staff/pay-rates'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -57,8 +58,34 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { staff_id, staff_name } = await req.json();
-  if (!staff_id) return NextResponse.json({ error: 'staff_id required' }, { status: 400 });
+  const body = await req.json();
+  let { staff_id } = body as { staff_id?: string }
+  const { staff_name } = body as { staff_name?: string }
+
+  // INTEL-COMPUTE-1 — the real caller of this route (dashboard/staff/page.tsx's ClockWidget) only
+  // ever sends staff_name, never staff_id — every clock-in attempt through it previously failed
+  // outright with "staff_id required". pos_timesheets.staff_id has no FK constraint (confirmed live
+  // via information_schema), so resolving a real staff_members row by name and using its id is a
+  // safe, additive fix rather than a schema change. This is also what makes it possible to resolve
+  // a REAL pay rate below instead of leaving pay_rate_cents unset (the exact inverse of the
+  // PAYROLL-HOURS-FIX-1 bug: that one produced correct pay/0 hours, this path was producing
+  // 0 pay/correct hours for any shift clocked in here).
+  let resolvedStaffMemberId: string | null = null
+  if (!staff_id) {
+    if (!staff_name?.trim()) return NextResponse.json({ error: 'staff_name or staff_id required' }, { status: 400 });
+    const { data: members } = await supabase.from('staff_members')
+      .select('id, first_name, last_name').eq('business_id', bid).eq('status', 'active')
+    const match = (members ?? []).find(m => `${m.first_name} ${m.last_name}`.trim().toLowerCase() === staff_name.trim().toLowerCase())
+    if (!match) {
+      return NextResponse.json({ error: `No active staff member named "${staff_name.trim()}" found for this business — ask your manager to add you in Staff settings first.` }, { status: 404 });
+    }
+    staff_id = match.id
+    resolvedStaffMemberId = match.id
+  } else {
+    // Caller supplied a real staff_id directly (e.g. a future picker-based caller) — still resolve
+    // its staff_member_id for the rate lookup below if it happens to already be one.
+    resolvedStaffMemberId = staff_id
+  }
 
   // Check for existing open session
   const { data: existing } = await supabase
@@ -71,19 +98,25 @@ async function _POST(req: Request) {
 
   if (existing) return NextResponse.json({ error: 'Staff member already clocked in' }, { status: 409 });
 
+  const payRateCents = resolvedStaffMemberId
+    ? await resolveHourlyRateCents(bid, resolvedStaffMemberId, new Date(), new Date().toTimeString().slice(0, 5))
+    : 0
+
   const { data, error } = await supabase
     .from('pos_timesheets')
     .insert({
       staff_id,
+      staff_member_id: resolvedStaffMemberId,
       staff_name: staff_name ?? null,
       business_id: bid,
       clock_in: new Date().toISOString(),
+      pay_rate_cents: payRateCents,
     })
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ session: data });
+  return NextResponse.json({ session: data, pay_rate_resolved: payRateCents > 0 });
 }
 
 async function _PATCH(req: Request) {
