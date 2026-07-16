@@ -36,11 +36,19 @@ async function _GET(req: Request) {
   let totalLct = 0
   let totalOther = 0
   let gstFreeSales = 0
+  // INTEL-COMPUTE-3 — a no-breakdown sale used to be silently trusted as 100% GST (overstating
+  // 1A the instant a GST-free/WET/LCT sale ever lacks a breakdown, and structurally incapable of
+  // ever counting toward gst_free_sales/G3 no matter what it actually was). Tracked separately here
+  // instead of guessed either way — honest "unclassified", not a fabricated classification.
+  let noBreakdownCount = 0
+  let noBreakdownValue = 0
 
   for (const s of sales ?? []) {
     totalSales += Number(s.total_amount) || 0
     const breakdown = (Array.isArray(s.tax_breakdown) ? s.tax_breakdown : []) as Array<{ code?: string; tax_amount?: number; taxable_amount?: number }>
     if (breakdown.length === 0) {
+      noBreakdownCount++
+      noBreakdownValue += Number(s.tax_amount) || 0
       totalGst += Number(s.tax_amount) || 0
       continue
     }
@@ -70,6 +78,12 @@ async function _GET(req: Request) {
     bas_g1: +totalSales.toFixed(2),
     bas_1a: +(totalGst + totalWet + totalLct + totalOther).toFixed(2),
     bas_g3: +gstFreeSales.toFixed(2),
+    // INTEL-COMPUTE-3 — sales with no stored tax_breakdown are currently counted as standard GST
+    // (matches this business's real data — every sale to date is standard 10% GST, confirmed live)
+    // but that is an assumption, not a verified fact per sale. Surfaced here so the export isn't
+    // silently treating "unknown" as "definitely GST" without disclosure.
+    no_breakdown_sales_count: noBreakdownCount,
+    no_breakdown_sales_value: +noBreakdownValue.toFixed(2),
   })
 }
 

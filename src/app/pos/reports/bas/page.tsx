@@ -13,6 +13,8 @@ interface BasResult {
   bas_g1: number
   bas_1a: number
   bas_g3: number
+  no_breakdown_sales_count: number
+  no_breakdown_sales_value: number
 }
 
 function defaultQuarterRange() {
@@ -109,6 +111,14 @@ export default function BasPage() {
               <tr className="border-t border-[var(--divider)]"><td className="py-2 text-[var(--text-secondary)]">  ↳ Other tax</td><td className="text-right py-2">A${(Number(result.total_other_tax) || 0).toFixed(2)}</td></tr>
             </tbody>
           </table>
+          {result.no_breakdown_sales_count > 0 && (
+            <p className="text-xs text-[var(--amber,#b45309)] mt-3">
+              ⚠ {result.no_breakdown_sales_count} sale{result.no_breakdown_sales_count === 1 ? '' : 's'}
+              (A${result.no_breakdown_sales_value.toFixed(2)} tax) had no per-item tax-code
+              breakdown recorded and were counted as standard GST — verify these weren&apos;t
+              actually GST-free/WET/LCT before lodging.
+            </p>
+          )}
         </div>
       )}
     </div>
