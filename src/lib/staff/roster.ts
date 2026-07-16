@@ -83,10 +83,15 @@ const AU_PUBLIC_HOLIDAYS = new Set([
   '2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-04-25',
   '2026-06-01','2026-11-03','2026-12-25','2026-12-26',
 ])
+// INTEL-COMPUTE-3 — sunday was 1.50 here vs payroll.ts's 2.00 (the REAL payroll engine that feeds
+// the actual ABA bank file) — a roster cost preview showing 1.50x for a Sunday shift understated
+// what the real payroll run will actually charge by 25% for every Sunday hour. Aligned to
+// payroll.ts's rate (Source: Fair Work Commission General Retail Industry Award 2020) so this
+// preview matches what payroll will actually pay.
 const PENALTY_MULTIPLIERS: Record<string, number> = {
   weekday: 1.0,
   saturday: 1.25,
-  sunday: 1.50,
+  sunday: 2.00,
   public_holiday: 2.25,
   overtime_1: 1.50, // first 2h overtime
   overtime_2: 2.00, // beyond 10h
