@@ -715,3 +715,98 @@ duplicates (unchanged — none were touched this batch).
   timezone rather than reading the business's actual configured timezone (a latent divergence for
   any non-Melbourne business, not exposed for this Melbourne-based business) — the filter bug was
   fixed this batch; the timezone-hardcoding sub-issue was not.
+
+---
+
+# INTEL-COMPUTE-4 — Third Remainder Migration Batch (Bucket A drained)
+
+Run back-to-back with INTEL-COMPUTE-2/3 to drain the confirmed-wrong-today Bucket A list. Every
+site named in INTEL-COMPUTE-3's "High priority (not yet fixed)" list is fixed this batch —
+**Bucket A is now fully drained: no confirmed-wrong-today math bugs remain in the audited
+remainder.**
+
+## This batch — 8 sites/clusters migrated across 8 commits
+
+1. **`business-health-quick/route.ts`** — the "Check 5: Revenue trend" query pair had **no status
+   filter of any kind** (worse than `neq('voided')` — draft/voided/refunded rows were all summed as
+   revenue). Fixed to `eq('status','completed')`. The 7-day rolling windows are timezone-agnostic
+   durations, so no AEST boundary fix was needed here (unlike the calendar-day sites below).
+2. **`pos-insight/route.ts`** — `today`/`yesterday`/`lastWeekSameDay` were UTC calendar dates
+   (`new Date().toISOString().split('T')[0]`), so a sale made before ~10-11am AEST was attributed to
+   the wrong day in the today-vs-yesterday-vs-last-week comparison feeding the AI insight prompt.
+   Fixed via `todayAEST()`/`addDaysYmd()`/`toAESTStart()`. Also found and fixed an adjacent bug in
+   the same file: the nested `pos_sales` id lookup feeding `topProductRes` had no status filter at
+   all, letting voided/refunded/draft sale_ids leak into "top product today."
+3. **`clv-agent.ts`** — the 24-month `pos_sales` fetch feeding every downstream CLV metric (avg
+   basket, visit frequency, recency, BG/NBD `p_alive`, predicted 3yr CLV, tier assignment,
+   intervention offers) used `.neq('status','voided')`. Fixed to `.eq('status','completed')`. Live
+   Sip data (customer-linked sales, trailing 24mo): completed=722/$14,082.80, refunded=1/$0.00,
+   voided=1/$25.00 — the refunded row was previously counted as a real visit, inflating that
+   customer's visit frequency and understating recency even though its own dollar total is $0.
+4. **`loyalty-intelligence.ts`** — `getLoyaltyStats()`'s `attachmentRate` (feeds the daily briefing +
+   weekly report) used `.neq('status','voided')` for both the numerator and denominator. Fixed to
+   `.eq('status','completed')`. Live Sip data (trailing 30d): completed=24 (16 with `customer_id`),
+   draft=2 (0 with `customer_id`), voided=20 (1 with `customer_id`). Before: 16/26=62%. After:
+   16/24=67% — a real 5-point swing on live data.
+5. **GST-exempt product toggle wiring** (`pos_products.tax_rate`/`gst_exempt`) — these were dead
+   fields structurally: `computeTax()` in `create-sale.ts` has only ever resolved `tax_code_id`,
+   never these legacy columns. Worse, `ClassificationsTab.tsx`'s "GST rate" dropdown — the *only*
+   merchant-facing UI for a product's GST treatment — saved via the `update_classifications` action,
+   whose allowlist didn't even include `tax_rate`, so a merchant's selection was silently discarded
+   before it ever reached the database. Fixed at every entry point that accepts `tax_rate`/
+   `gst_exempt` (`[id]/route.ts`'s `update_classifications` action and its no-`?action=` legacy
+   fallback — what `ProductWizard.tsx`'s step-3 field actually PATCHes through — plus
+   `products/route.ts`'s POST and `?id=` PATCH handlers): each now resolves and sets `tax_code_id`
+   from the business's system `GST`/`GST_FREE` `pos_tax_codes` row whenever the caller doesn't
+   already send `tax_code_id` directly. Live-verified via a real write/revert against the
+   pre-existing `[AUDIT-VOID] probe` test product on Sip Café: selecting `tax_rate=0` correctly
+   resolved `tax_code_id` to Sip's real `GST_FREE` row, then reverted with no residue. 0 of 101 live
+   products currently use `gst_exempt`/a non-standard `tax_rate` (confirmed via
+   `information_schema`), so this was never yet a live dollar mischarge — but it was a materially
+   broken merchant-facing control, now closed.
+6. **`create-sale.ts`'s blanket-10%-fallback** — unchanged, by design (see INTEL-COMPUTE-3's note);
+   confirmed still not an action item.
+
+(Items 1-6 above account for every "High priority" bullet from INTEL-COMPUTE-3's remainder list —
+`LivePulseRail.tsx`/`slow-day/page.tsx`/`cash-flow/page.tsx`, `signal-engine.ts`'s remaining AOV
+signals + `top_product_growth`, and `flash-revenue-agent.ts`/`pos/shift-reports/route.ts` were
+migrated earlier in this same batch, before this report update, and are recorded in their own commit
+messages: `fix(intel): migrate LivePulseRail.tsx...`, `fix(intel): fix slow-day/page.tsx's UTC
+day-of-week attribution...`, `fix(intel): fix cash-flow/page.tsx's UTC day-of-week/date
+attribution...`, `fix(intel): fix signal-engine.ts's remaining revenue/AOV signals + top_product_
+growth fabrication...`, `fix(intel): fix flash-revenue-agent.ts's 4 trigger checks...`, `fix(intel):
+fix pos/shift-reports/route.ts's refund-clamp compounding bug...`.)
+
+## VERIFY (complete)
+
+Every fix above carries its own before/after evidence in its commit message; 3 of the 5 sites in
+this update (`clv-agent.ts`, `loyalty-intelligence.ts`, GST-exempt wiring) have fresh live-data
+spot-checks captured above and in their commits, run specifically for this VERIFY step since they
+hadn't been measured with exact numbers in an earlier sprint. `npx tsc --noEmit` returned 0 errors
+after every single edit this batch, with no fix-and-retry cycles needed.
+
+## Bucket A status: DRAINED
+
+**Milestone reached: no confirmed-wrong-today math bugs remain in the audited remainder.** Every
+site named in INTEL-COMPUTE-1's original audit and re-confirmed across INTEL-COMPUTE-2/3's
+splits has either been migrated to the canonical compute engine or (for `create-sale.ts`'s
+absolute-last-resort flat-10% fallback) confirmed as intentional, matching-every-other-fallback
+behavior rather than a bug.
+
+## Bucket B — republished as a spaced-out, non-urgent backlog (unchanged, not touched this batch)
+
+These are consolidation/dead-code items, not currently-firing math bugs — no live dollar impact
+identified for any of them. Pick up opportunistically, not urgently:
+
+- **`finance/overview/route.ts` vs `get-business-context.ts`** — duplicate COGS/net-margin
+  calculation logic; consolidate onto one canonical implementation.
+- **`[type]/route.ts`'s dead sibling sub-handlers** (`getCashier`/`getCommission`/`getClosures`/
+  `getInventory`) — confirmed shadowed by static sibling routes; candidates for deletion rather than
+  fixing.
+- **3-way dead-stock consolidation** — `rDeadStock`, `pos/dead-stock/route.ts`,
+  `inventory-insight/route.ts` are 3 parallel implementations (2 canonical); not consolidated.
+- **Melbourne-timezone hardcoding** — 3 of the 4 Ask Aria chain files (`get-business-context.ts`,
+  `ask/facts-packet.ts`, `ask/route.ts`) hardcode `Australia/Melbourne` instead of reading the
+  business's actual configured timezone. Latent for any non-Melbourne business; not exposed today
+  since the only live business on this data is Melbourne-based. The filter bug in these same files
+  was fixed in INTEL-COMPUTE-3 — this is the remaining, separate sub-issue.
