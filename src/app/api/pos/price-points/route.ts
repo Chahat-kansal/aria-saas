@@ -16,12 +16,26 @@ async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBiz(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);
   const product_id = searchParams.get('product_id');
   const outlet_id  = searchParams.get('outlet_id');
 
-  let query = supabase.from('pos_price_points').select('*').order('quantity');
+  // SECURITY-CRITICAL-3 — this previously had no business scoping at all: omitting both query
+  // params returned every tenant's cost/margin/pricing data in one call. pos_price_points has no
+  // business_id column of its own (same as PATCH/DELETE below), so scope via the product
+  // relationship — only ever return rows for products the caller's own business owns.
+  if (product_id) {
+    const { data: prod } = await supabase.from('pos_products').select('id').eq('id', product_id).eq('business_id', bid).maybeSingle();
+    if (!prod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const { data: ownProducts } = await supabase.from('pos_products').select('id').eq('business_id', bid);
+  const ownProductIds = (ownProducts ?? []).map(p => p.id);
+  if (ownProductIds.length === 0) return NextResponse.json({ price_points: [] });
+
+  let query = supabase.from('pos_price_points').select('*').in('product_id', ownProductIds).order('quantity');
   if (product_id) query = query.eq('product_id', product_id);
   if (outlet_id)  query = query.eq('outlet_id', outlet_id);
 
