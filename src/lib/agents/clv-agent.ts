@@ -125,7 +125,7 @@ export class CLVAgent extends BaseAgent {
         .from('pos_sales')
         .select('id,customer_id,created_at,total_amount')
         .eq('business_id', business_id)
-        .neq('status', 'voided')
+        .eq('status', 'completed')
         .gte('created_at', twentyFourMonthsAgo)
         .not('customer_id', 'is', null),
       supabaseAdmin
