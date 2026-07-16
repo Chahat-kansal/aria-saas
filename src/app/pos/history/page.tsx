@@ -283,7 +283,15 @@ export default function HistoryPage() {
               {/* Financials */}
               <div style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Financials</p>
-                {[['Subtotal (excl. GST)', `A$${((selected.total_amount ?? 0) / 1.1).toFixed(2)}`], ['GST (10%)', `A$${((selected.total_amount ?? 0) - (selected.total_amount ?? 0) / 1.1).toFixed(2)}`]].map(([l, v]) => (
+                {(() => {
+                  // INTEL-COMPUTE-3 — this always recomputed a flat 10%-inclusive estimate from
+                  // total_amount, ignoring selected.tax_amount (already fetched, never read) — the
+                  // real persisted figure that reflects the sale's actual tax-code breakdown.
+                  const total = selected.total_amount ?? 0
+                  const gst = selected.tax_amount != null ? selected.tax_amount : total - total / 1.1
+                  const sub = total - gst
+                  return [['Subtotal (excl. GST)', `A$${sub.toFixed(2)}`], ['GST', `A$${gst.toFixed(2)}`]]
+                })().map(([l, v]) => (
                   <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}><span style={{ fontSize: 12, color: C.muted }}>{l}</span><span style={{ fontSize: 12, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{v}</span></div>
                 ))}
                 <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 7, marginTop: 3, display: 'flex', justifyContent: 'space-between' }}>
