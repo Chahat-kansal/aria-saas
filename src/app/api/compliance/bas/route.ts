@@ -83,11 +83,21 @@ async function _GET(req: Request) {
   // bas-agent.ts's generateBasDraft() already uses correctly for both G1 sales and 1B credits on
   // supplier_invoices (src/lib/agents/bas-agent.ts:139,154). The old formula overstated every
   // credit by 10% (a $110 inclusive expense yielded $11 here instead of the correct $10).
+  //
+  // INTEL-COMPUTE-2 — this fallback also had NO period filter at all: it summed ALL-TIME
+  // business_expenses (a different table from bas-agent.ts's period-scoped supplier_invoices) and
+  // used it as this quarter's 1B credits whenever bas_drafts hasn't been populated yet (new
+  // business, or before the quarter's first cron run). Confirmed live: Sip Cafe's all-time
+  // business_expenses = $1,300 -> old fallback = $118.18, vs the canonical bas-agent draft's
+  // period-scoped $0.00 for the current quarter (no supplier invoices this quarter). Scoped to the
+  // current quarter's real period below, matching bas-agent.ts's own window.
   const GST_RATE = 0.10
   const { data: expenses } = await supabaseAdmin
     .from('business_expenses')
     .select('amount')
     .eq('business_id', business_id)
+    .gte('expense_date', q.period_start.toISOString().slice(0, 10))
+    .lte('expense_date', q.period_end.toISOString().slice(0, 10))
 
   const totalExpenses = (expenses ?? []).reduce((s, e) => s + (Number(e.amount) || 0), 0)
   const gstOnExpenses = +(totalExpenses * GST_RATE / (1 + GST_RATE)).toFixed(2)
