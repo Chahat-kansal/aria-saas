@@ -44,17 +44,24 @@ export default function WarehouseAnalyticsPage() {
       const in30d = new Date(now.getTime() + 30 * 86400000);
       const sixtyDaysAgo = new Date(now.getTime() - 60 * 86400000);
 
-      const totalValue = items.reduce((s: number, i: any) => s + (i.stock_quantity ?? 0) * (i.cost_price ?? 0) * 100, 0);
-      const outOfStock = items.filter((i: any) => (i.stock_quantity ?? 0) <= 0).length;
-      const lowStock = items.filter((i: any) => i.track_stock && (i.stock_quantity ?? 0) > 0 && (i.stock_quantity ?? 0) <= (i.low_stock_threshold ?? 0)).length;
+      // INTEL-COMPUTE-2 — this page previously read stock_quantity/cost_price/track_stock, none of
+      // which /api/warehouse/stock has ever returned (confirmed by reading the route: it returns
+      // stock/cost/reorder_point/needs_reorder) — every value computed from the old names silently
+      // resolved via `?? 0`, so "Stock value", "Out of stock", and "Dead stock" have shown $0/100%
+      // wrong since this page's creation. Renamed to match the route's real response shape;
+      // reorder_point/needs_reorder (which the route DOES return) replace the unavailable
+      // low_stock_threshold/track_stock check.
+      const totalValue = items.reduce((s: number, i: any) => s + (i.stock ?? 0) * (i.cost ?? 0) * 100, 0);
+      const outOfStock = items.filter((i: any) => (i.stock ?? 0) <= 0).length;
+      const lowStock = items.filter((i: any) => i.needs_reorder && (i.stock ?? 0) > 0).length;
 
       const expiringLots = lots.filter((l: any) => l.expiry_date && new Date(l.expiry_date) <= in30d && new Date(l.expiry_date) > now);
       const expiryValue = expiringLots.reduce((s: number, l: any) => s + (l.quantity_remaining ?? 0) * (l.unit_cost_cents ?? 0), 0);
 
       // Dead stock: in stock for 60+ days, no movements
       const soldIds = new Set(movements.filter((m: any) => m.movement_type === 'sale').map((m: any) => m.product_id));
-      const deadStock = items.filter((i: any) => (i.stock_quantity ?? 0) > 0 && !soldIds.has(i.id));
-      const deadValue = deadStock.reduce((s: number, i: any) => s + (i.stock_quantity ?? 0) * (i.cost_price ?? 0) * 100, 0);
+      const deadStock = items.filter((i: any) => (i.stock ?? 0) > 0 && !soldIds.has(i.id));
+      const deadValue = deadStock.reduce((s: number, i: any) => s + (i.stock ?? 0) * (i.cost ?? 0) * 100, 0);
 
       setStats({
         total_value_cents: Math.round(totalValue),

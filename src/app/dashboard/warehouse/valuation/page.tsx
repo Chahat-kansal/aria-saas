@@ -2,13 +2,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 
+// INTEL-COMPUTE-2 — this interface previously named fields (stock_quantity, cost_price) that
+// /api/warehouse/stock has never returned (it returns stock/cost/price/category, confirmed by
+// reading the route directly) — every value computed from the old names silently resolved via
+// `?? 0`, so this whole page has shown $0 total/category value since its creation. Renamed to match
+// the endpoint's real response shape (that route was additionally extended this sprint to include
+// price/category, which it didn't return at all before).
 interface StockItem {
   id: string;
   name: string;
   sku: string | null;
   category: string | null;
-  stock_quantity: number;
-  cost_price: number | null;
+  stock: number;
+  cost: number | null;
   price: number | null;
 }
 
@@ -32,8 +38,8 @@ function buildCategoryRows(items: StockItem[]): CategoryRow[] {
   const map = new Map<string, CategoryRow>();
   for (const item of items) {
     const cat = item.category ?? 'Uncategorised';
-    const costVal = (item.cost_price ?? 0) * (item.stock_quantity ?? 0) * 100;
-    const sellVal = (item.price ?? 0) * (item.stock_quantity ?? 0) * 100;
+    const costVal = (item.cost ?? 0) * (item.stock ?? 0) * 100;
+    const sellVal = (item.price ?? 0) * (item.stock ?? 0) * 100;
     if (!map.has(cat)) {
       map.set(cat, { category: cat, skuCount: 0, costValue: 0, sellValue: 0 });
     }
@@ -56,10 +62,10 @@ function downloadCsv(items: StockItem[], rows: CategoryRow[], valuedAt: string) 
   lines.push('Item Detail');
   lines.push('SKU,Name,Category,Stock Qty,Cost Price,Sell Price,Stock Value (Cost),Stock Value (Sell)');
   for (const item of items) {
-    const costVal = (item.cost_price ?? 0) * (item.stock_quantity ?? 0);
-    const sellVal = (item.price ?? 0) * (item.stock_quantity ?? 0);
+    const costVal = (item.cost ?? 0) * (item.stock ?? 0);
+    const sellVal = (item.price ?? 0) * (item.stock ?? 0);
     lines.push(
-      `"${item.sku ?? ''}","${item.name}","${item.category ?? 'Uncategorised'}",${item.stock_quantity},${(item.cost_price ?? 0).toFixed(2)},${(item.price ?? 0).toFixed(2)},${costVal.toFixed(2)},${sellVal.toFixed(2)}`
+      `"${item.sku ?? ''}","${item.name}","${item.category ?? 'Uncategorised'}",${item.stock},${(item.cost ?? 0).toFixed(2)},${(item.price ?? 0).toFixed(2)},${costVal.toFixed(2)},${sellVal.toFixed(2)}`
     );
   }
   lines.push('');
@@ -96,8 +102,8 @@ export default function ValuationPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalCostCents = items.reduce((s, i) => s + (i.cost_price ?? 0) * (i.stock_quantity ?? 0) * 100, 0);
-  const totalSellCents = items.reduce((s, i) => s + (i.price ?? 0) * (i.stock_quantity ?? 0) * 100, 0);
+  const totalCostCents = items.reduce((s, i) => s + (i.cost ?? 0) * (i.stock ?? 0) * 100, 0);
+  const totalSellCents = items.reduce((s, i) => s + (i.price ?? 0) * (i.stock ?? 0) * 100, 0);
   const overallMargin = totalSellCents > 0
     ? `${Math.round(((totalSellCents - totalCostCents) / totalSellCents) * 100)}%`
     : '—';

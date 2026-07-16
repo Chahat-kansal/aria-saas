@@ -62,6 +62,8 @@ async function _GET(req: Request) {
       sku: i.sku ?? null,
       stock: i.currentStock,
       cost: i.costCents / 100,
+      price: i.priceCents / 100,
+      category: i.category,
       value_cents: i.currentStock * i.costCents,
       velocity_30d: vel,
       velocity_rank: velocityRank,
