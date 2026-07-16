@@ -7,6 +7,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -42,9 +44,12 @@ async function _POST(req: Request) {
   const weekEnd = new Date(new Date(weekStart).getTime() + 6 * 86400_000).toISOString().slice(0, 10)
   const prevStart = new Date(new Date(weekStart).getTime() - 7 * 86400_000).toISOString().slice(0, 10)
 
+  // INTEL-COMPUTE-3 — both sales queries used neq('voided') (admitted draft/refunded) with a
+  // hardcoded UTC boundary. status='completed' + toAESTStart/toAESTEnd matches
+  // getRevenueSnapshot()'s canonical rule.
   const [salesQ, prevQ, lowQ, custQ, auditQ, bizQ] = await Promise.all([
-    supabaseAdmin.from('pos_sales').select('total_amount,payment_method,served_by,pos_sale_items(quantity,unit_price,pos_products(name))').eq('business_id', bid).gte('created_at', weekStart + 'T00:00:00Z').lte('created_at', weekEnd + 'T23:59:59Z').neq('status', 'voided'),
-    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', prevStart + 'T00:00:00Z').lt('created_at', weekStart + 'T00:00:00Z').neq('status', 'voided'),
+    supabaseAdmin.from('pos_sales').select('total_amount,payment_method,served_by,pos_sale_items(quantity,unit_price,pos_products(name))').eq('business_id', bid).gte('created_at', toAESTStart(weekStart)).lte('created_at', toAESTEnd(weekEnd)).eq('status', 'completed'),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', toAESTStart(prevStart)).lt('created_at', toAESTStart(weekStart)).eq('status', 'completed'),
     supabaseAdmin.from('pos_products').select('name,stock_quantity').eq('business_id', bid).eq('track_stock', true).lt('stock_quantity', 5).limit(10),
     supabaseAdmin.from('pos_customers').select('id').eq('business_id', bid).gte('created_at', weekStart + 'T00:00:00Z').lte('created_at', weekEnd + 'T23:59:59Z'),
     supabaseAdmin.from('pos_shift_audits').select('total_checks,passed_checks,flagged_items').eq('business_id', bid).gte('shift_date', weekStart).lte('shift_date', weekEnd),
@@ -93,7 +98,12 @@ async function _POST(req: Request) {
       system: 'You are Aria. Write a warm specific weekly business summary for an Australian SMB owner. 3-4 sentences, concrete numbers.',
       messages: [{ role: 'user', content: 'Week ' + weekStart + ' to ' + weekEnd + '. Revenue A$' + thisRev.toFixed(2) + ' (' + (changePct !== null ? (changePct >= 0 ? '+' : '') + changePct + '% vs last week' : 'first week') + '). Transactions: ' + sales.length + '. Top product: ' + (topProducts[0]?.name ?? 'none') + '. New customers: ' + (custQ.data?.length ?? 0) + '. Failed audits: ' + flaggedAudit.length + '.' }],
     })
-    reportData.narrative = msg.content[0].type === 'text' ? msg.content[0].text : ''
+    const raw = msg.content[0].type === 'text' ? msg.content[0].text : ''
+    // INTEL-COMPUTE-3 — bypasses grounded.ts entirely (direct Anthropic SDK), zero guard on the
+    // narrative shown on this dashboard preview. Redact any $/%/count not grounded in the real
+    // figures already given to the model in the prompt above.
+    const allowed = numbersIn(thisRev.toFixed(2) + ' ' + (changePct ?? '') + ' ' + sales.length + ' ' + (custQ.data?.length ?? 0) + ' ' + flaggedAudit.length)
+    reportData.narrative = raw ? (await guardOutput(raw, allowed, { mode: 'redact', businessId: bid, surface: 'weekly-report/narrative' })).text : ''
   } catch { reportData.narrative = 'Your business generated A$' + thisRev.toFixed(2) + ' this week across ' + sales.length + ' transactions.' }
 
   const { data: report, error } = await supabaseAdmin.from('pos_weekly_reports').upsert({
