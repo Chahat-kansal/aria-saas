@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { todayAEST, addDaysYmd, toAESTStart, toAESTHourStart, hourOfDayAEST } from '@/lib/date-au'
 
 export function LivePulseRail({ businessId }: { businessId: string | null }) {
   const [stats, setStats] = useState({
@@ -18,19 +19,24 @@ export function LivePulseRail({ businessId }: { businessId: string | null }) {
     async function fetchPulse() {
       if (!alive || !supabase) return
 
-      const today = new Date().toISOString().split('T')[0]
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-      const currentHour = new Date().getHours()
+      // INTEL-COMPUTE-4 — today/yesterday were browser-UTC calendar dates (no AEST awareness), all
+      // 3 queries used neq('voided') (admitted draft/refunded rows). status='completed' +
+      // toAESTStart/toAESTHourStart matches getRevenueSnapshot()'s canonical rule; currentHour is
+      // now the real AEST hour so the "today so far vs yesterday same hours so far" comparison is
+      // apples-to-apples.
+      const today = todayAEST()
+      const yesterday = addDaysYmd(today, -1)
+      const currentHour = hourOfDayAEST(new Date().toISOString())
 
       // Guard: at hour 0 (midnight) the yesterday window collapses to zero range — skip it
       const yQueryProm = currentHour > 0
-        ? supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${yesterday}T${String(currentHour).padStart(2, '0')}:00:00`).neq('status', 'voided')
+        ? supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', toAESTStart(yesterday)).lt('created_at', toAESTHourStart(yesterday, currentHour)).eq('status', 'completed')
         : Promise.resolve({ data: [] as { total_amount: number }[] })
 
       const [todayRes, yRes, recentRes] = await Promise.allSettled([
-        supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${today}T00:00:00`).neq('status', 'voided'),
+        supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', toAESTStart(today)).eq('status', 'completed'),
         yQueryProm,
-        supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).neq('status', 'voided'),
+        supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).eq('status', 'completed'),
       ])
 
       const todaySales = todayRes.status === 'fulfilled' ? (todayRes.value.data ?? []) : []
