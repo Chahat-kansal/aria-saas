@@ -75,14 +75,22 @@ async function _GET(req: Request) {
     .eq('period_start', q.period_start.toISOString().slice(0, 10))
     .maybeSingle()
 
-  // Fetch business_expenses for 1B GST credits (sum * 0.1 = GST paid on expenses)
+  // Fetch business_expenses for 1B GST credits.
+  // INTEL-COMPUTE-1 — this used to be `totalExpenses * 0.1`, treating amount as GST-EXCLUSIVE and
+  // adding 10% on top. business_expenses.amount is a GST-inclusive dollar figure (the normal
+  // convention for a logged expense — e.g. a $110 supplier invoice is entered as $110, not $100),
+  // so the correct GST-credit extraction is `amount * rate/(1+rate)`, the exact formula
+  // bas-agent.ts's generateBasDraft() already uses correctly for both G1 sales and 1B credits on
+  // supplier_invoices (src/lib/agents/bas-agent.ts:139,154). The old formula overstated every
+  // credit by 10% (a $110 inclusive expense yielded $11 here instead of the correct $10).
+  const GST_RATE = 0.10
   const { data: expenses } = await supabaseAdmin
     .from('business_expenses')
     .select('amount')
     .eq('business_id', business_id)
 
   const totalExpenses = (expenses ?? []).reduce((s, e) => s + (Number(e.amount) || 0), 0)
-  const gstOnExpenses = +(totalExpenses * 0.1).toFixed(2)
+  const gstOnExpenses = +(totalExpenses * GST_RATE / (1 + GST_RATE)).toFixed(2)
 
   // Merge: if draft has field_1b_gst_credits use it, otherwise derive from expenses
   const field1b = draft?.field_1b_gst_credits ?? gstOnExpenses
