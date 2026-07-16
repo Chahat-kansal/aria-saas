@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
+import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -59,7 +60,15 @@ Do not use bullet points. Do not be generic. Tone: confident business partner, n
       max_tokens: 120,
       messages: [{ role: 'user', content: prompt }],
     })
-    const text = msg.content.find(b => b.type === 'text')?.text ?? null
+    let text = msg.content.find(b => b.type === 'text')?.text ?? null
+    // INTEL-COMPUTE-3 — this call bypassed grounded.ts entirely (direct Anthropic SDK, no guard of
+    // any kind), and the model only sees a 20-product/30-sale SAMPLE (not the business's full data)
+    // — real risk of it improvising a plausible-sounding number/day/total it was never given.
+    // Redact any $/%/count not grounded in the real figures actually passed in the prompt.
+    if (text) {
+      const allowed = numbersIn(`${productCount} ${saleCount} ${totalRevenue.toFixed(2)} ${avgBasket.toFixed(2)} ${customers.data?.length ?? 0} ${topProducts}`)
+      text = (await guardOutput(text, allowed, { mode: 'redact', businessId, surface: 'first-insight' })).text
+    }
     return NextResponse.json({ insight: text })
   } catch {
     return NextResponse.json({ insight: null })
