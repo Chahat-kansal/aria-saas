@@ -59,10 +59,21 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   const { product_id, sku, name, description, quantity, unit_price_override } = parsed.data
 
   // Fetch product for auto-pricing
+  // INTEL-COMPUTE-3 — also fetch tax_code_id: gst_amount below used to be a flat line_total*0.10
+  // regardless of the product's real GST treatment. Verified live (project nxfzippunqvqsvkmwtjv):
+  // zero products across the entire database are currently configured with a non-GST tax code, so
+  // no real exemption has actually been mischarged yet — but the mechanism guaranteed a wrong
+  // figure the instant a GST-free/WET/LCT product was wholesaled, since it never even selected
+  // tax_code_id to check.
   let product: Record<string, unknown> | null = null
   if (product_id) {
-    const { data: p } = await supabaseAdmin.from('pos_products').select('id, name, sku, price, cost_price').eq('id', product_id).maybeSingle()
+    const { data: p } = await supabaseAdmin.from('pos_products').select('id, name, sku, price, cost_price, tax_code_id').eq('id', product_id).maybeSingle()
     product = p
+  }
+  let gstRatePct = 10 // default GST if no tax_code_id resolvable (matches prior behaviour)
+  if (product?.tax_code_id) {
+    const { data: taxCode } = await supabaseAdmin.from('pos_tax_codes').select('rate').eq('id', product.tax_code_id as string).maybeSingle()
+    if (taxCode?.rate != null) gstRatePct = Number(taxCode.rate)
   }
 
   // Fetch customer for tier pricing
@@ -78,7 +89,11 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
 
   const retail_price = product ? (Number(product.price) || 0) : unit_price
   const line_total = Math.round(unit_price * quantity * 100) / 100
-  const gst_amount = Math.round(line_total * 0.10 * 100) / 100
+  // INTEL-COMPUTE-3 — resolved gstRatePct (real per-product tax code) replaces the hardcoded 0.10.
+  // wholesale prices are GST-exclusive (totals/route.ts adds GST on top of subtotal), so the correct
+  // extraction is line_total * rate/100, not the inclusive-price rate/(100+rate) formula used
+  // elsewhere for retail POS prices.
+  const gst_amount = Math.round(line_total * (gstRatePct / 100) * 100) / 100
 
   // Get position
   const { count } = await supabaseAdmin

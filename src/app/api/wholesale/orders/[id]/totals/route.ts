@@ -42,10 +42,15 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   // Fetch all items
   const { data: items } = await supabaseAdmin
     .from('wholesale_order_items')
-    .select('line_total')
+    .select('line_total, gst_amount')
     .eq('order_id', params.id)
 
-  const subtotal = (items ?? []).reduce((s: number, i: { line_total: number }) => s + (Number(i.line_total) || 0), 0)
+  const itemRows = items ?? []
+  const subtotal = itemRows.reduce((s: number, i: { line_total: number }) => s + (Number(i.line_total) || 0), 0)
+  // INTEL-COMPUTE-3 — was gst_total = taxable * 0.10, a single blanket rate applied to the whole
+  // order regardless of what each line item's real tax code was (items/route.ts now resolves the
+  // real per-product rate when a line is added). Sum each item's own real gst_amount instead.
+  const itemsGstTotal = itemRows.reduce((s: number, i: { gst_amount?: number }) => s + (Number(i.gst_amount) || 0), 0)
 
   // Fetch customer discount
   let customerDiscountPct = 0
@@ -61,7 +66,11 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   const discount_total = Math.round(subtotal * (customerDiscountPct / 100) * 100) / 100
   const freight = freightOverride != null ? freightOverride : (Number(order.freight) || 0)
   const taxable = subtotal - discount_total + freight
-  const gst_total = Math.round(taxable * 0.10 * 100) / 100
+  // A discount reduces the taxable price of the goods, so it proportionally reduces the GST charged
+  // on them too; freight is a standard taxable supply at 10% regardless of the goods' own tax codes.
+  const discountedItemsGst = Math.round(itemsGstTotal * (1 - customerDiscountPct / 100) * 100) / 100
+  const freightGst = Math.round(freight * 0.10 * 100) / 100
+  const gst_total = Math.round((discountedItemsGst + freightGst) * 100) / 100
   const total = Math.round((taxable + gst_total) * 100) / 100
 
   const { data: updated, error } = await supabaseAdmin
