@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { todayAEST, toAESTStart, toAESTWallClock, toAESTHourStart } from '@/lib/date-au'
 import type { AgentType, AgentRunResult } from './types'
 import { BaseAgent } from './base-agent'
 import { sendSMS } from '@/lib/clicksend'
@@ -200,20 +200,25 @@ export class LabourOptimisationAgent extends BaseAgent {
 
       // STEP 5: Build 14-day hourly forecast
       // Fetch historical POS sales (last 12 weeks)
+      // INTEL-COMPUTE-2 — was `.neq('status','voided')` (admits draft/refunded rows) and bucketed by
+      // server-local/UTC `d.getDay()`/`d.getHours()`, misattributing every sale in the AEST 00:00–10:00
+      // window to the wrong hour AND the wrong day-of-week (a day boundary can fall between the two).
+      // `status='completed'` is the same canonical filter getRevenueSnapshot() uses; toAESTWallClock()
+      // gives the real local day/hour instead of server time.
       const twelveWeeksAgo = new Date(now.getTime() - 84 * 86400000).toISOString()
       const { data: historicalSales } = await supabaseAdmin
         .from('pos_sales')
         .select('total_amount,created_at')
         .eq('business_id', business_id)
         .gte('created_at', twelveWeeksAgo)
-        .neq('status', 'voided')
+        .eq('status', 'completed')
 
       // Build lookup: dow -> hour -> [revenue values]
       const historicalByDowHour: Record<string, number[]> = {}
       for (const sale of historicalSales ?? []) {
-        const d = new Date(sale.created_at)
-        const saleDow = (d.getDay() + 6) % 7
-        const saleHour = d.getHours()
+        const shifted = toAESTWallClock(sale.created_at)
+        const saleDow = (shifted.getUTCDay() + 6) % 7
+        const saleHour = shifted.getUTCHours()
         const key = saleDow + ':' + saleHour
         if (!historicalByDowHour[key]) historicalByDowHour[key] = []
         historicalByDowHour[key].push(Number(sale.total_amount ?? 0))
@@ -481,7 +486,7 @@ export class LabourOptimisationAgent extends BaseAgent {
           .select('total_amount')
           .eq('business_id', business_id)
           .gte('created_at', midnight.toISOString())
-          .neq('status', 'voided'),
+          .eq('status', 'completed'), // INTEL-COMPUTE-2 — was neq('voided'), admitted draft/refunded
       ])
 
       const nowSec = now.getTime() / 1000
@@ -574,10 +579,15 @@ export class LabourOptimisationAgent extends BaseAgent {
         .is('actual_revenue', null)
 
       for (const f of yesterdayForecasts ?? []) {
-        const hourStart = new Date(yesterday + 'T' + String(f.hour_of_day).padStart(2, '0') + ':00:00.000Z')
+        // INTEL-COMPUTE-2 — hour_of_day is the LOCAL (Australia/Sydney-ish, per STEP 2's weather-API
+        // timezone param) hour the forecast loop generated it for, but this used to be read back as a
+        // literal UTC hour (`...T${hour}:00:00.000Z`) — a real ~10h mismatch, not just the status
+        // filter below. toAESTHourStart gives the true UTC instant of that local hour on this date.
+        const hourStartIso = toAESTHourStart(yesterday, f.hour_of_day)
+        const hourStart = new Date(hourStartIso)
         const hourEnd = new Date(hourStart.getTime() + 3600000)
         const [salesRes, tsRes] = await Promise.all([
-          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', business_id).gte('created_at', hourStart.toISOString()).lt('created_at', hourEnd.toISOString()).neq('status', 'voided'),
+          supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', business_id).gte('created_at', hourStart.toISOString()).lt('created_at', hourEnd.toISOString()).eq('status', 'completed'),
           supabaseAdmin.from('pos_timesheets').select('staff_member_id').eq('business_id', business_id).lte('clock_in', hourEnd.toISOString()).or('clock_out.gte.' + hourStart.toISOString() + ',clock_out.is.null'),
         ])
         const actualRevenue = (salesRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount ?? 0), 0)
@@ -590,7 +600,13 @@ export class LabourOptimisationAgent extends BaseAgent {
         if (actualRevenue > 0) {
           update.forecast_accuracy_pct = 0
         }
-        await supabaseAdmin.from('labour_demand_forecast').update(update).eq('id', f.id)
+        // INTEL-COMPUTE-2 — this write previously targeted 4 columns (actual_revenue, actual_staff_count,
+        // actual_labour_cost, forecast_accuracy_pct) that did not exist on the live table (a migration
+        // file defined them but they were never applied to prod — the exact RULE 10 pattern as the
+        // CX-AUTH-1a/1b incident) — every night's actuals-fill silently no-op'd. Columns added live via
+        // migration this sprint (verified through information_schema); error now logged, not swallowed.
+        const { error: updateErr } = await supabaseAdmin.from('labour_demand_forecast').update(update).eq('id', f.id)
+        if (updateErr) console.error('[labour_optimisation] actuals write-back failed:', updateErr.message)
       }
 
       const savedDecisions = await this.saveDecisions(decisions)

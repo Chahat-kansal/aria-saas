@@ -169,3 +169,24 @@ export function thirtyDaysAgoAEST(tz?: string | null): string {
   const zone = resolveZone(tz);
   return wallToUtc(addDaysYmd(auDateOf(shiftedNow(zone)), -30), 0, 0, 0, zone).toISOString();
 }
+
+// INTEL-COMPUTE-2 — shifted Date for an ARBITRARY instant (not just "now"), so callers can extract
+// local wall-clock day-of-week/hour (.getUTCDay()/.getUTCHours()) from e.g. a pos_sales.created_at
+// without falling back to server-local/UTC .getDay()/.getHours(), which shifts every bucket by the
+// zone's offset (the exact bug class labour-optimisation-agent.ts had for its hourly demand model).
+export function toAESTWallClock(iso: string, tz?: string | null): Date {
+  const zone = resolveZone(tz);
+  const at = new Date(iso);
+  return new Date(at.getTime() + offsetMinutes(at, zone) * 60000);
+}
+
+// The local wall-clock HOUR of a UTC instant, DST-aware. Convenience wrapper over toAESTWallClock.
+export function hourOfDayAEST(iso: string, tz?: string | null): number {
+  return toAESTWallClock(iso, tz).getUTCHours();
+}
+
+// TRUE UTC instant of a specific local wall-clock HOUR on a given YYYY-MM-DD, DST-aware — the
+// hour-level sibling of toAESTStart/toAESTEnd (which are day-level only).
+export function toAESTHourStart(ymd: string, hour: number, tz?: string | null): string {
+  return wallToUtc(ymd, hour, 0, 0, resolveZone(tz)).toISOString();
+}
