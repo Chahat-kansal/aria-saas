@@ -60,12 +60,30 @@ export class ScheduleAgent extends BaseAgent {
       const { data: staff } = await this.supabase.from('pos_staff').select('id,name,role').eq('business_id', business_id).eq('is_active', true).limit(50);
       if (!staff?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
+      // INTEL-COMPUTE-2 — pos_staff (PIN-login identities) has no rate column at all, confirmed live
+      // via information_schema — every rate here was hardcoded to 2500 cents regardless of the real
+      // configured rate. pos_staff has no FK to staff_members (the real HR/payroll roster with
+      // pay_rate_cents), so resolve by case-insensitive name match within the business, same pattern
+      // used for the ClockWidget fix. Falls back to 2500 only when no match exists, same as before.
+      const { data: staffMembers } = await this.supabase.from('staff_members')
+        .select('first_name,last_name,pay_rate_cents').eq('business_id', business_id).eq('status', 'active');
+      const rateByName = new Map<string, number>();
+      for (const m of staffMembers ?? []) {
+        const key = `${m.first_name} ${m.last_name}`.trim().toLowerCase();
+        const cents = Number(m.pay_rate_cents);
+        if (key && cents > 0) rateByName.set(key, cents);
+      }
+      const resolvedRateCents = new Map<string, number>();
+      for (const s of staff as StaffRow[]) {
+        resolvedRateCents.set(s.id, rateByName.get((s.name ?? '').trim().toLowerCase()) ?? 2500);
+      }
+
       // 4-week hourly revenue history
       const fourWeeksAgo = new Date(Date.now() - 28 * 86400000).toISOString();
       const { data: salesHistory } = await this.supabase.from('pos_sales')
         .select('created_at,total_amount,outlet_id')
         .eq('business_id', business_id)
-        .neq('status', 'voided')
+        .eq('status', 'completed') // INTEL-COMPUTE-2 — was neq('voided'), admitted draft/refunded
         .gte('created_at', fourWeeksAgo)
         .limit(5000);
 
@@ -115,7 +133,7 @@ export class ScheduleAgent extends BaseAgent {
             // Assign cheapest available staff up to targetStaff
             const available = eligibleStaff
               .filter(s => isStaffAvailable(s, dow, h) && (staffHours[s.id] ?? 0) < (s.max_hours_week ?? 38) && (staffHours[s.id] ?? 0) < 8)
-              .sort((a, b) => (a.hourly_rate_cents ?? 2500) - (b.hourly_rate_cents ?? 2500));
+              .sort((a, b) => (resolvedRateCents.get(a.id) ?? 2500) - (resolvedRateCents.get(b.id) ?? 2500));
 
             const assigned = available.slice(0, targetStaff);
             const dp = getDaypart(h);
@@ -127,7 +145,8 @@ export class ScheduleAgent extends BaseAgent {
             }
             for (const s of assigned) {
               staffHours[s.id] = (staffHours[s.id] ?? 0) + 1;
-              shifts.push({ staff_id: s.id, staff_name: s.name, hour: h, day: dateStr, hourly_rate_cents: 2500, reasoning: `${s.name} assigned — predicted A$${avgRevenue.toFixed(0)} revenue this hour` });
+              const rateCents = resolvedRateCents.get(s.id) ?? 2500;
+              shifts.push({ staff_id: s.id, staff_name: s.name, hour: h, day: dateStr, hourly_rate_cents: rateCents, reasoning: `${s.name} assigned — predicted A$${avgRevenue.toFixed(0)} revenue this hour` });
             }
           }
         }

@@ -75,7 +75,11 @@ async function _POST(req: Request) {
   // Normalise to a stable shape for the prompt + fallback.
   const staff = (staffRows ?? []).map(s => {
     const name = [s.first_name, s.last_name].filter(Boolean).join(" ").trim() || "Staff";
-    const rateCents = s.hourly_rate ? Math.round(Number(s.hourly_rate) * 100) : (s.base_rate_cents ?? s.pay_rate_cents ?? 2500);
+    // INTEL-COMPUTE-2 — was checking hourly_rate FIRST: that column defaults to 25 and nothing in
+    // the app ever writes to it, so this always resolved $25/hr for any business that only
+    // configured the real pay_rate_cents column. pay_rate_cents (cents, correctly populated) now
+    // takes priority; hourly_rate is only used if neither real cents column is set.
+    const rateCents = s.pay_rate_cents ?? s.base_rate_cents ?? (s.hourly_rate ? Math.round(Number(s.hourly_rate) * 100) : 2500);
     return { id: s.id as string, name, role: (s.position as string) ?? "Staff", employment_type: (s.employment_type as string) ?? "casual", rate_cents: rateCents, availability: availByStaff.get(s.id as string) ?? [] };
   });
 

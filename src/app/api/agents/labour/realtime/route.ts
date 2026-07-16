@@ -21,9 +21,11 @@ async function _GET() {
   const now = new Date()
 
   const [activeStaffRes, revTodayRes, settingsRes] = await Promise.all([
+    // INTEL-COMPUTE-2 — joined staff_members(hourly_rate) only, a column that defaults to 25 and
+    // nothing in the app ever writes to. pay_rate_cents (cents, correctly populated) is the real column.
     supabaseAdmin
       .from('pos_timesheets')
-      .select('clock_in,staff_member_id,staff_members(hourly_rate)')
+      .select('clock_in,staff_member_id,staff_members(hourly_rate,pay_rate_cents)')
       .eq('business_id', biz.id)
       .is('clock_out', null),
     supabaseAdmin
@@ -31,7 +33,7 @@ async function _GET() {
       .select('total_amount')
       .eq('business_id', biz.id)
       .gte('created_at', midnight.toISOString())
-      .neq('status', 'voided'),
+      .eq('status', 'completed'), // INTEL-COMPUTE-2 — was neq('voided'), admitted draft/refunded
     supabaseAdmin
       .from('agent_settings')
       .select('config')
@@ -50,8 +52,9 @@ async function _GET() {
   for (const ts of activeStaff) {
     if (!ts.clock_in) continue
     const hoursElapsed = (nowSec - new Date(ts.clock_in).getTime() / 1000) / 3600
-    const rate = Number((ts as { staff_members?: { hourly_rate?: number } }).staff_members?.hourly_rate ?? 25)
-    labourCostSoFar += hoursElapsed * rate
+    const sm = (ts as { staff_members?: { hourly_rate?: number; pay_rate_cents?: number } }).staff_members
+    const rateCents = sm?.pay_rate_cents ?? (sm?.hourly_rate ? Math.round(Number(sm.hourly_rate) * 100) : 2500)
+    labourCostSoFar += hoursElapsed * (rateCents / 100)
   }
   const revenueToday = (revTodayRes.data ?? []).reduce((s: number, r: { total_amount: number }) => s + Number(r.total_amount ?? 0), 0)
   const labourPct = revenueToday > 0 ? (labourCostSoFar / revenueToday) * 100 : 0
