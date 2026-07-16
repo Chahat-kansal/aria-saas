@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -33,14 +34,17 @@ async function _GET(req: Request) {
   const from = searchParams.get('from') ?? new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const to = searchParams.get('to') ?? new Date().toISOString().slice(0, 10);
 
+  // INTEL-COMPUTE-2 — status filter was already canonical; boundary was a naive UTC-day string
+  // (no offset). toAESTStart/toAESTEnd give the real local trading day, the same canonical boundary
+  // getRevenueSnapshot() uses — this feeds RetailDashboard's top-of-page "Revenue today/this week" KPI.
   const { data: sales } = await supabase
     .from('pos_sales')
     .select('id, total_amount, tax_amount, discount_amount, payment_method, created_at, status')
     .eq('business_id', bid)
     .eq('status', 'completed')
     .not('sale_number', 'is', null)
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .gte('created_at', toAESTStart(from))
+    .lte('created_at', toAESTEnd(to))
     .order('created_at');
 
   const rows = sales ?? [];
