@@ -448,6 +448,20 @@ TONE: Direct, specific, Australian English, A$ always.`
     })).text
   }
 
+  // INTEL-COMPUTE-3 — cards[].value/chart.values were the one part of this response with ZERO
+  // guard of any kind (the model hand-transcribes ctx numbers into them, with real risk of
+  // transposition/rounding/invention). Flag-mode only — never mutates the JSON, since a strip/redact
+  // pass here risks corrupting the cards/chart structure the UI renders (a real regression risk
+  // flagged and deliberately deferred last sprint). This makes an ungrounded card/chart figure
+  // auditable (logged to aria_ai_calls) rather than silently unchecked, without that corruption risk.
+  try {
+    const { guardOutput, numbersIn } = await import('@/lib/aria/ground-guard')
+    const structuredNumericText = JSON.stringify({ cards: structured.cards, chart: structured.chart })
+    await guardOutput(structuredNumericText, numbersIn(ctx), {
+      mode: 'flag', businessId: biz.id, surface: 'pos-chat/cards-chart',
+    })
+  } catch { /* audit-only — never blocks the response */ }
+
   // Auto-create draft order for low stock if action requests it
   const actionResults: any[] = []
   for (const action of (structured.actions || [])) {
