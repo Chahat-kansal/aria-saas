@@ -219,9 +219,23 @@ async function _POST(req: Request) {
     // Update post with image URL
     if (post_id && imageUrl) {
       const { supabaseAdmin } = await import('@/lib/supabase-admin')
-      await supabaseAdmin.from('social_posts')
-        .update({ image_url: imageUrl, image_credit: credit })
-        .eq('id', post_id)
+      // SECURITY-CRITICAL-4 (B.1.5) — post_id reached this supabaseAdmin update (no RLS backstop)
+      // with business_id destructured above but never checked. Internal server-to-server calls
+      // (the existing x-internal-call trust boundary, used by the social-suggest async job) are
+      // already-trusted and skip this; a normal authenticated caller must own the post's business.
+      let allowed = isInternal
+      if (!allowed && business_id) {
+        const { data: post } = await supabaseAdmin.from('social_posts').select('business_id').eq('id', post_id).maybeSingle()
+        if (post?.business_id === business_id) {
+          const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user!.id).maybeSingle()
+          allowed = !!biz
+        }
+      }
+      if (allowed) {
+        await supabaseAdmin.from('social_posts')
+          .update({ image_url: imageUrl, image_credit: credit })
+          .eq('id', post_id)
+      }
     }
 
     return NextResponse.json({ image_url: imageUrl, credit, provider })

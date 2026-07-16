@@ -45,6 +45,18 @@ async function _GET(req: Request) {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    // SECURITY-CRITICAL-4 — this route had no tenant concept at all: any authenticated user could
+    // poll any provider:job_id and see its output URL. Neither Runway nor Replicate video creation
+    // is actually wired up anywhere in this codebase (no route ever mints a runway:/replicate:
+    // job_id for a real business), so there is no stored job→business mapping to check a supplied
+    // job_id against yet. Requiring a caller-owned business_id at least closes "any logged-in user,
+    // no matter which business" down to "a real business owner" — full per-job binding needs the
+    // (currently nonexistent) creation flow to persist {business_id, provider, job_id} first.
+    const businessId = new URL(req.url).searchParams.get('business_id')
+    if (!businessId) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', businessId).eq('user_id', user.id).maybeSingle()
+    if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
     const jobId = new URL(req.url).searchParams.get('job_id')
     if (!jobId) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
 

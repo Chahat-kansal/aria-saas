@@ -143,9 +143,19 @@ async function _POST(req: NextRequest) {
   const blob = await put(filename, videoBuffer, { access: 'public', contentType: 'video/mp4' })
 
   // Save to aria_studio_assets if business_id provided
+  // SECURITY-CRITICAL-4 (B.1.3) — body.business_id reached this supabaseAdmin insert (no RLS
+  // backstop) with zero ownership check, letting any authenticated user attribute an asset to
+  // another business. Verify it belongs to the caller first; silently skip the save otherwise
+  // (matches this branch's existing "if body.business_id" opt-in shape — the video itself is
+  // still returned to the caller either way).
+  let ownedBusinessId: string | null = null
   if (body.business_id) {
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', body.business_id).eq('user_id', user.id).maybeSingle()
+    ownedBusinessId = biz?.id ?? null
+  }
+  if (ownedBusinessId) {
     await supabaseAdmin.from('aria_studio_assets').insert({
-      business_id: body.business_id,
+      business_id: ownedBusinessId,
       prompt: scenePrompt,
       enhanced_prompt: scenePrompt,
       style: 'influencer_reel',

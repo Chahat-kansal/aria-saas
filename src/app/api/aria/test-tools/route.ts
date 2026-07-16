@@ -3,11 +3,16 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { isAdminEmail } from '@/lib/admin'
 
 export async function GET() {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized — log into ariaos.site first' }, { status: 401 })
+  // SECURITY-CRITICAL-4 (Tier 3) — any authenticated user (any business) could hit this diagnostic
+  // route, read API-key prefixes, and fire real paid OpenAI/Gemini test calls. Ops-only tool now
+  // requires admin.
+  if (!isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const tests: Record<string, unknown> = {
     env_status: {

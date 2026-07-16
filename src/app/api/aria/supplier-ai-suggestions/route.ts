@@ -44,6 +44,14 @@ async function _PATCH(req: Request) {
   const { id, accepted } = await req.json() as { id: string; accepted: boolean }
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  // SECURITY-CRITICAL-4 (Tier 2) — was a raw id update via supabaseAdmin (no RLS backstop), zero
+  // ownership check, unlike this file's own GET. Fetch the suggestion's business_id first and
+  // verify it belongs to the caller before accepting/rejecting it.
+  const { data: suggestion } = await supabaseAdmin.from('supplier_ai_suggestions').select('business_id').eq('id', id).maybeSingle()
+  if (!suggestion) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', suggestion.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const { error } = await supabaseAdmin
     .from('supplier_ai_suggestions')
     .update({ accepted })

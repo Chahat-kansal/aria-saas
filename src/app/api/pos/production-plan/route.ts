@@ -163,10 +163,17 @@ async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
   const body = await req.json()
-  await supabaseAdmin.from('pos_production_plans')
+  // SECURITY-CRITICAL-4 (1.4) — was scoped by client-supplied body.id alone via supabaseAdmin
+  // (no RLS backstop), letting any authenticated user overwrite another business's production
+  // plan row. Scoping by business_id too means a foreign id simply matches zero rows.
+  const { data, error } = await supabaseAdmin.from('pos_production_plans')
     .update({ actual_qty: body.actual_qty, notes: body.notes, updated_at: new Date().toISOString() })
-    .eq('id', body.id)
+    .eq('id', body.id).eq('business_id', bid).select().maybeSingle()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
 

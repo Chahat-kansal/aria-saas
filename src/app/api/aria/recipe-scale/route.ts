@@ -18,6 +18,11 @@ async function _POST(req: Request) {
   if (!business_id || !target_serves || !Array.isArray(ingredients)) {
     return NextResponse.json({ error: 'business_id, target_serves, ingredients required' }, { status: 400 });
   }
+  // SECURITY-CRITICAL-4 — business_id reached the aria_ai_calls telemetry insert below via
+  // supabaseAdmin (no RLS backstop) with zero ownership check, letting any authenticated user
+  // attribute AI-cost telemetry to another business's cost ledger (RULE 11).
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const factor = target_serves / Math.max(1, current_serves || 1);
   const scaled = ingredients.map((ing: { ingredient_name: string; quantity: number; unit: string }) => ({

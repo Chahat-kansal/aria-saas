@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { isAdminEmail } from '@/lib/admin'
 
 /**
  * POST /api/aria/influencer/publish
@@ -21,6 +22,9 @@ async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // SECURITY-CRITICAL-4 — same admin-only feature as aria/influencer/generate; publishes to the
+  // platform's own @ariaos.au Instagram, not scoped to any one business.
+  if (!isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { post_id } = await req.json()
   if (!post_id) return NextResponse.json({ error: 'post_id required' }, { status: 400 })

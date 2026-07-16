@@ -65,6 +65,11 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const business_id = searchParams.get('business_id')
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+  // SECURITY-CRITICAL-4 (1.7) — business_id was used straight from the query param via
+  // supabaseAdmin (no RLS backstop) with no ownership check, unlike this file's own DELETE
+  // handler. Mirroring DELETE's check here closes the read/auto-seed-insert gap.
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data: watches } = await supabaseAdmin.from('aria_competitor_watches')
     .select('id,competitor_name,competitor_url,is_active')
     .eq('business_id', business_id).order('created_at', { ascending: true })
@@ -150,6 +155,9 @@ async function _POST(req: Request) {
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { business_id, competitor_name, competitor_url } = await req.json()
   if (!business_id || !competitor_name) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  // SECURITY-CRITICAL-4 (1.7) — same ownership check as GET/DELETE, closing the insert gap.
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data } = await supabaseAdmin.from('aria_competitor_watches').insert({
     business_id, competitor_name, competitor_url: competitor_url || null,
     is_active: true, created_at: new Date().toISOString(),

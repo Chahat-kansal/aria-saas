@@ -105,6 +105,13 @@ async function _DELETE(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  // SECURITY-CRITICAL-4 (B.1.4) — was a raw id delete via supabaseAdmin (no RLS backstop), zero
+  // ownership check. Fetch the row's business_id first, verify it belongs to the caller (same
+  // check POST already does), before deleting.
+  const { data: media } = await supabaseAdmin.from('business_media').select('business_id').eq('id', id).maybeSingle()
+  if (!media) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', media.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   await supabaseAdmin.from('business_media').delete().eq('id', id)
   return NextResponse.json({ ok: true })
 }

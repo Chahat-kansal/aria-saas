@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { put } from '@vercel/blob'
+import { isAdminEmail } from '@/lib/admin'
 
 const anthropic = new Anthropic()
 const VEO_MODEL = 'veo-2.0-generate-001'
@@ -86,6 +87,11 @@ async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // SECURITY-CRITICAL-4 (B.1.1) — this is a platform-marketing feature (posts to @ariaos.au's
+  // own Instagram, deliberately reading across ANY business's real revenue/top-product/review
+  // data to feature them) — never business-scoped by design, so the fix is an admin gate
+  // (matching admin/influencer/approve's existing pattern), not a business_id ownership check.
+  if (!isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json().catch(() => ({})) as { business_id?: string; skip_video?: boolean; post_type?: string }
 

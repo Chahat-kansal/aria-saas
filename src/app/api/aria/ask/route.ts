@@ -2269,8 +2269,10 @@ GROUNDING (absolute): every number, name, ranking or count MUST come from a tool
       actionResult = { type: 'escalate', ticket_id: ticket.id }
 
       // Mark conversation as escalated
+      // SECURITY-CRITICAL-4 — the one spot in this file that omitted the .eq('business_id', bid)
+      // scoping every other conversationId read/write in this route already applies.
       if (conversationId) {
-        waitUntil((async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId) } catch (e) { console.error('[non-fatal]', e) } })())
+        waitUntil((async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId).eq('business_id', bid) } catch (e) { console.error('[non-fatal]', e) } })())
       }
     } catch (e) {
       actionResult = { type: 'escalate_error', message: (e as Error).message }

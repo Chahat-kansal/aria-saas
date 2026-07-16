@@ -645,7 +645,8 @@ export default function SocialPage() {
   }
 
   async function pollVideoStatus(postId: string, jobId: string) {
-    const res = await fetch('/api/social/video-status?job_id=' + encodeURIComponent(jobId));
+    if (!bid) return;
+    const res = await fetch('/api/social/video-status?job_id=' + encodeURIComponent(jobId) + '&business_id=' + encodeURIComponent(bid));
     const d = await res.json();
     setVideoStatus(p => ({ ...p, [postId]: d }));
     if (d.status === 'processing') setTimeout(() => pollVideoStatus(postId, jobId), 5000);

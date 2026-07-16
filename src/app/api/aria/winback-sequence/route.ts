@@ -74,6 +74,15 @@ async function _POST(req: Request) {
     .from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // SECURITY-CRITICAL-4 — business_id itself was already ownership-checked above, but
+  // customer_ids (client-supplied) were never verified to belong to that business before being
+  // written into campaign_sends via supabaseAdmin (no RLS backstop) — a foreign customer_id could
+  // ride along in a legitimate owner's own sequence. Filter down to only this business's customers.
+  const { data: ownedCustomers } = await supabaseAdmin
+    .from('pos_customers').select('id').eq('business_id', business_id).in('id', customer_ids)
+  const validCustomerIds = (ownedCustomers ?? []).map(c => c.id as string)
+  if (!validCustomerIds.length) return NextResponse.json({ error: 'No valid customers for this business' }, { status: 400 })
+
   const sequenceName = name ?? `Winback Sequence — ${new Date().toLocaleDateString('en-AU')}`
 
   // sequence_steps is a new column not yet in database.types.ts — cast insert payload
@@ -86,7 +95,7 @@ async function _POST(req: Request) {
       type: 'winback_sequence',
       channel: 'sms',
       status: 'active',
-      recipients_count: customer_ids.length,
+      recipients_count: validCustomerIds.length,
       sequence_steps: steps,
       message: steps[0]?.message ?? null,
     } as any)
@@ -98,7 +107,7 @@ async function _POST(req: Request) {
   }
 
   const now = Date.now()
-  const sends = customer_ids.flatMap(cid =>
+  const sends = validCustomerIds.flatMap(cid =>
     steps.map((step, i) => ({
       campaign_id: campaign.id,
       customer_id: cid,
@@ -116,9 +125,9 @@ async function _POST(req: Request) {
   upsertAriaAction({
     business_id,
     category: 'marketing',
-    title: `Winback sequence created: ${customer_ids.length} customers, ${steps.length} steps`,
+    title: `Winback sequence created: ${validCustomerIds.length} customers, ${steps.length} steps`,
     recommendation: 'Monitor completion rate — customers who return on any earlier step skip remaining sends automatically.',
-    reason: `Sequence "${sequenceName}" targets ${customer_ids.length} lapsed customers across ${steps.length} touchpoints.`,
+    reason: `Sequence "${sequenceName}" targets ${validCustomerIds.length} lapsed customers across ${steps.length} touchpoints.`,
     expected_impact: 'Multi-step sequences recover 12–18% of lapsed customers vs 6–8% for single sends.',
     priority: 'medium',
     status: 'pending',
@@ -130,7 +139,7 @@ async function _POST(req: Request) {
     campaign_id: campaign.id,
     sends_scheduled: sends.length,
     steps: steps.length,
-    customers: customer_ids.length,
+    customers: validCustomerIds.length,
   })
 }
 
