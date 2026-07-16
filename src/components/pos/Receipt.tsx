@@ -230,17 +230,22 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose, wate
         );
 
       case 'totals_block': {
-        const subTotal = items.length > 0
+        const estimatedSubTotal = items.length > 0
           ? items.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0)
           : total;
         const showGst = settings?.receipt_show_gst !== false;
+        // INTEL-COMPUTE-3 — Subtotal always assumed a flat 10%-inclusive split even when the real
+        // tax_breakdown shown right below it reflects a different (multi-code/exempt) reality —
+        // Subtotal + GST wouldn't reconcile to Total the moment a real mixed breakdown exists.
+        // Derive Subtotal from the real gst figure (total-gst) when available.
+        const displaySubTotal = sale.tax_amount != null ? total - gst : estimatedSubTotal / 1.1;
         return (
           <div key={el.id} style={{ ...base, padding: '0 8px' }}>
             {showGst && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10 }}>
                   <span>Subtotal</span>
-                  <span style={{ fontFamily: "'Courier New',monospace" }}>A${(subTotal / 1.1).toFixed(2)}</span>
+                  <span style={{ fontFamily: "'Courier New',monospace" }}>A${displaySubTotal.toFixed(2)}</span>
                 </div>
                 {Array.isArray(sale.tax_breakdown) && sale.tax_breakdown.length > 0 ? (
                   sale.tax_breakdown.map((b) => (
@@ -410,10 +415,14 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, w
   const showLoyalty = settings.receipt_show_loyalty !== false;
   const items       = sale.cartSnapshot ?? [];
 
-  const subTotal = items.length > 0
+  const estimatedSubTotal = items.length > 0
     ? items.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0)
     : total;
-  const gstAmt = sale.tax_amount ?? (subTotal - subTotal / 1.1);
+  const gstAmt = sale.tax_amount ?? (estimatedSubTotal - estimatedSubTotal / 1.1);
+  // INTEL-COMPUTE-3 — "Subtotal (excl. tax)" below always assumed a flat 10%-inclusive split even
+  // when the real tax_breakdown reflects a different (multi-code/exempt) reality. Derive it from
+  // the real gstAmt (total-gst) when available, same fix as the other Receipt template above.
+  const displaySubTotal = sale.tax_amount != null ? total - gstAmt : estimatedSubTotal / 1.1;
 
   function handlePrint() { window.print(); }
 
@@ -541,7 +550,7 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, w
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
                     <span style={{ color: '#666' }}>Subtotal (excl. tax)</span>
-                    <span>A${(subTotal / 1.1).toFixed(2)}</span>
+                    <span>A${displaySubTotal.toFixed(2)}</span>
                   </div>
                   {Array.isArray(sale.tax_breakdown) && sale.tax_breakdown.length > 0 ? (
                     sale.tax_breakdown.map((b) => (
