@@ -32,9 +32,16 @@ async function _POST(req: Request) {
   if (!customer_id) return NextResponse.json({ error: 'customer_id required' }, { status: 400 });
 
   // Fetch customer + recent sales
+  // INTEL-COMPUTE-1 — this query had NO status filter at all (not even the flawed `!= 'voided'`
+  // pattern BRIEF-INTEGRITY-1 fixed elsewhere): draft (held/parked carts) and refunded
+  // (negative-total) rows were being summed into "Total Spend"/"Average Basket" shown to the owner
+  // and fed into the churn-risk prompt below. `status = 'completed'` is the same canonical filter
+  // getRevenueSnapshot() uses — a customer-scoped query can't reuse that function directly (it
+  // needs individual sale rows for the item-level summary, not a business-wide aggregate), but the
+  // rule itself is the same one, not a separate invention.
   const [{ data: customer }, { data: recentSales }] = await Promise.all([
     supabase.from('pos_customers').select('*').eq('id', customer_id).maybeSingle(),
-    supabase.from('pos_sales').select('id, total_amount, created_at, payment_method, pos_sale_items(product_name, quantity, unit_price, line_total)').eq('business_id', bid).eq('customer_id', customer_id).order('created_at', { ascending: false }).limit(20),
+    supabase.from('pos_sales').select('id, total_amount, created_at, payment_method, pos_sale_items(product_name, quantity, unit_price, line_total)').eq('business_id', bid).eq('customer_id', customer_id).eq('status', 'completed').order('created_at', { ascending: false }).limit(20),
   ]);
 
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
@@ -47,6 +54,26 @@ async function _POST(req: Request) {
 
   const totalSpend = (recentSales ?? []).reduce((sum: number, s: any) => sum + (s.total_amount ?? 0), 0);
   const avgBasket = salesSummary.length > 0 ? totalSpend / salesSummary.length : 0;
+
+  // INTEL-COMPUTE-1 — clv_estimate used to be a bare model-invented string ("$X,XXX per year
+  // estimate"), no ground truth behind it at all. Computed here instead, deterministically, from
+  // this customer's own real visit frequency — the model is only ever asked to narrate it, never
+  // to produce the number itself. Fewer than 2 completed sales means no real interval between
+  // visits can be established, so this honestly reports insufficient data rather than fabricating
+  // or zero-defaulting a per-year figure.
+  let clvEstimateCents: number | null = null
+  if ((recentSales ?? []).length >= 2) {
+    const sorted = [...(recentSales ?? [])].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    const spanMs = new Date(sorted[sorted.length - 1].created_at).getTime() - new Date(sorted[0].created_at).getTime()
+    const spanDays = spanMs / 86_400_000
+    if (spanDays > 0) {
+      const visitsPerYear = (sorted.length / spanDays) * 365
+      clvEstimateCents = Math.round(avgBasket * visitsPerYear * 100)
+    }
+  }
+  const clvEstimateDisplay = clvEstimateCents != null
+    ? `A$${(clvEstimateCents / 100).toLocaleString('en-AU', { maximumFractionDigits: 0 })} per year (est.)`
+    : 'Insufficient purchase history to estimate'
 
   try {
     const msg = await trackAICall({ route: 'aria/customer-intel', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'customer-intel' }, () => anthropic.messages.create({
@@ -63,29 +90,31 @@ Visit Count: ${customer.visit_count ?? 0}
 Last Visit: ${customer.last_visit ? new Date(customer.last_visit).toLocaleDateString('en-AU') : 'Unknown'}
 Total Spend: A$${totalSpend.toFixed(2)} across ${salesSummary.length} recent sales
 Average Basket: A$${avgBasket.toFixed(2)}
+Estimated Annual Value (ALREADY COMPUTED — cite this exact figure, do not calculate your own): ${clvEstimateDisplay}
 
 Recent purchases:
 ${salesSummary.slice(0, 10).map(s => `${s.date}: ${s.items} — A$${s.total?.toFixed(2)}`).join('\n')}
 
 Return ONLY valid JSON:
 {
-  "clv_estimate": "$X,XXX per year estimate",
   "churn_risk": "LOW|MEDIUM|HIGH",
   "churn_reason": "one sentence explanation",
   "top_product_affinity": "their most purchased product category",
-  "personalised_offer": "specific offer suggestion e.g. '4-pack Coopers $22 (save $3)'",
+  "personalised_offer": "specific offer suggestion, e.g. a product/category worth featuring — do not invent a specific discount dollar amount",
   "winback_sms": "short SMS draft if HIGH churn risk, else null",
-  "insight": "1-2 sentence business insight about this customer"
+  "insight": "1-2 sentence business insight about this customer, may reference the Estimated Annual Value figure above but must not restate a different number for it"
 }`,
       }],
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const intel = parseLLMJsonOr(raw, { clv_estimate: 'Unknown', churn_risk: 'MEDIUM', churn_reason: 'Insufficient data', top_product_affinity: 'Mixed', personalised_offer: null, winback_sms: null, insight: 'More purchase history needed.' }, 'customer-intel');
-    return NextResponse.json({ intel, customer, total_spend: totalSpend, avg_basket: avgBasket, visit_count: salesSummary.length });
+    const intel = parseLLMJsonOr(raw, { churn_risk: 'MEDIUM', churn_reason: 'Insufficient data', top_product_affinity: 'Mixed', personalised_offer: null, winback_sms: null, insight: 'More purchase history needed.' }, 'customer-intel');
+    // clv_estimate is always the code-computed value above — the model is never the source of
+    // truth for this field, regardless of what it may have echoed back in its JSON.
+    return NextResponse.json({ intel: { ...intel, clv_estimate: clvEstimateDisplay }, customer, total_spend: totalSpend, avg_basket: avgBasket, visit_count: salesSummary.length });
   } catch {
     return NextResponse.json({
-      intel: { clv_estimate: 'Unknown', churn_risk: 'MEDIUM', churn_reason: 'Insufficient data', top_product_affinity: 'Mixed', personalised_offer: null, winback_sms: null, insight: 'More purchase history needed for full analysis.' },
+      intel: { clv_estimate: clvEstimateDisplay, churn_risk: 'MEDIUM', churn_reason: 'Insufficient data', top_product_affinity: 'Mixed', personalised_offer: null, winback_sms: null, insight: 'More purchase history needed for full analysis.' },
       customer, total_spend: totalSpend, avg_basket: avgBasket, visit_count: salesSummary.length,
     });
   }
