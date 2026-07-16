@@ -59,6 +59,11 @@ HARD RULES:
   4. Always set reversible: true for price/stock changes (we store before state).
   5. risk = 'high' if action affects >50 products OR changes prices >20% OR affects all products.
   6. requires_confirmation must always be true.
+  7. Check PAST PERFORMANCE BY CATEGORY in the business context before planning. If the category this
+     action falls under has weight < 0.7 (a real track record of backfiring), be more conservative —
+     prefer a smaller change, a shorter time window, or a narrower scope than you otherwise would, and
+     name the past result in preview[] (e.g. "Note: pricing changes have backfired before — starting
+     smaller than usual"). Weight >= 0.7 needs no special caution.
 
 Return ONLY valid JSON matching this shape:
 {"type":"...","title":"...","description":"...","preview":["..."],"affected_count":0,"payload":{},"estimated_impact":"...","reversible":true,"risk":"low|medium|high","requires_confirmation":true}`
@@ -79,7 +84,7 @@ export async function planAction(
   businessId: string,
   ctx?: PlanContext,
 ): Promise<PlannedAction | null> {
-  const [productsQ, staffQ, categoriesQ] = await Promise.all([
+  const [productsQ, staffQ, categoriesQ, weightsQ] = await Promise.all([
     supabaseAdmin.from('pos_products')
       .select('id,name,category,brand,price,cost_price,stock_quantity,is_active,age_restricted')
       .eq('business_id', businessId).eq('is_active', true).limit(200),
@@ -89,11 +94,27 @@ export async function planAction(
     supabaseAdmin.from('pos_categories')
       .select('id,name')
       .eq('business_id', businessId).order('name'),
+    // INTEL-OUTCOME-2 Part 4 — the LEARN half of the loop. adjustAdviceWeight() (outcome-learning.ts)
+    // already updates this table from real measured outcomes; hypothesis/generate.ts already reads
+    // it into its own prompt. This planner — the thing that actually decides what to DO next time the
+    // owner asks for a price/promo/stock action — never did, so a learned "pricing has backfired
+    // before" weight had no way to change future advice for the one action type that's ever produced
+    // real organic outcomes. Same query shape as hypothesis/generate.ts's existing read.
+    supabaseAdmin.from('aria_advice_weights').select('category,weight,positive_outcomes,negative_outcomes').eq('business_id', businessId),
   ])
 
   const products = productsQ.data ?? []
   const staff = staffQ.data ?? []
   const categories = (categoriesQ.data ?? []) as Array<{ id: string; name: string }>
+  const weights = weightsQ.data ?? []
+
+  // INTEL-OUTCOME-2 Part 4 — same "avoid low weight / favour high weight" framing already proven in
+  // hypothesis/generate.ts's prompt, so a real backfired outcome actually changes what this planner
+  // proposes next time, not just what the nightly hypothesis generator suggests.
+  const weightLines = weights.length > 0
+    ? (weights as Array<{ category: string; weight: number; positive_outcomes: number; negative_outcomes: number }>)
+        .map(w => `${w.category}: weight ${w.weight} (${w.positive_outcomes}+ ${w.negative_outcomes}-)`)
+    : ['no prior outcome data']
 
   const todayISO = new Date().toISOString().slice(0, 10)
   const contextSummary = `Today's date: ${todayISO}
@@ -102,7 +123,8 @@ Total active products: ${products.length}
 Categories: ${[...new Set(products.map((p: Record<string,unknown>) => p.category).filter(Boolean))].join(', ')}
 Brands: ${[...new Set(products.map((p: Record<string,unknown>) => p.brand).filter(Boolean))].slice(0, 10).join(', ')}
 Staff: ${(staff as Array<Record<string,unknown>>).map(s => `${s.first_name} ${s.last_name} (${s.position})`).join(', ')}
-POS Categories (id → name, for apply_category_discount): ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))}${ctx?.lastPromotion ? `
+POS Categories (id → name, for apply_category_discount): ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))}
+PAST PERFORMANCE BY CATEGORY (advice weight — how this business's past actions in each category actually turned out): ${weightLines.join('; ')}${ctx?.lastPromotion ? `
 LAST_PROMOTION (the promo just created/discussed — for "actually make it X"/"change it to X" use update_promotion with this id): ${JSON.stringify(ctx.lastPromotion)}` : ''}${ctx?.recentTurns?.length ? `
 RECENT_CONVERSATION (resolve "it"/"that promo"/"her favourite"/"actually" against this — most recent last):
 ${ctx.recentTurns.slice(-10).join('\n')}` : ''}`
