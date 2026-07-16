@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { CLV_PREDICTION_GROUNDING } from '@/lib/agents/clv-agent';
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -66,6 +67,9 @@ async function _GET(req: Request) {
     total: sorted.length,
     offset,
     limit,
+    // INTEL-TRUTH-1 — every predicted_*/p_alive figure on each customer row is a forecast, not a
+    // database fact. See CLV_PREDICTION_GROUNDING in clv-agent.ts.
+    figure_grounding: CLV_PREDICTION_GROUNDING,
   });
 }
 

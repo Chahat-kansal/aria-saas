@@ -5,6 +5,13 @@ import { sendEmail } from '@/lib/external-apis';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types';
+import type { Grounding } from '@/lib/aria/compute/provenance';
+
+// INTEL-TRUTH-1 — every predicted_*/expected_*/p_alive/churn_probability figure this agent produces
+// is a BG/NBD + Gamma-Gamma probabilistic forecast, categorically 'estimated' by construction (real
+// uncertainty, not a database fact or a deterministic calc over one). Single named export so API
+// routes/UI surfacing these figures reference one constant rather than repeating a magic string.
+export const CLV_PREDICTION_GROUNDING: Grounding = 'estimated';
 
 // BG/NBD model (Fader, Hardie, Lee 2005) with fixed retail priors:
 // r=0.5, alpha=10 (Gamma-Poisson purchase rate); a=0.8, b=2.5 (Beta-Geometric churn)

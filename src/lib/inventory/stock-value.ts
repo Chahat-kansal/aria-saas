@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveCost, type ResolvedCost, type CostSource } from '@/lib/inventory/resolve-cost'
+import type { Grounding } from '@/lib/aria/compute/provenance'
 
 export interface StockValueRow {
   id: string
@@ -7,10 +8,13 @@ export interface StockValueRow {
   units: number
   unit_cost: number | null     // resolved cost (null = unknown)
   cost_source: CostSource      // provenance: outlet | last_delivery | catalogue | unknown
+  cost_grounding: Grounding | null // INTEL-TRUTH-1 — Business Truth type of unit_cost; null when unknown
   value_at_cost: number | null // units × unit_cost (null when cost unknown)
   price: number
   value_at_retail: number      // units × price
   margin_pct: number | null    // (price − cost) / price, null when unknown
+  margin_grounding: Grounding | null // INTEL-TRUTH-1 — always 'derived' when margin_pct is present (a
+                                      // computed ratio, even over a verified cost); null when unknown
 }
 
 // INV-COST-1 — value the on-hand stock at cost and at retail. GROUNDING-TEETH: products whose cost is
@@ -29,7 +33,20 @@ export interface StockValuation {
   unknown_cost_products: Array<{ id: string; name: string; units: number }>
   margin_incomplete: boolean   // true when any on-hand product lacks a cost
   margin_pct: number | null    // blended (at_retail − at_cost) / at_retail over costed stock; null if none costed
+  margin_grounding: Grounding | null // INTEL-TRUTH-1 — always 'derived' when margin_pct is present
+  at_cost_grounding: Grounding | null // INTEL-TRUTH-1 — worst (least-grounded) tier across all costed
+                                       // products; a sum is only as trustworthy as its weakest input.
+                                       // null when no product on hand has a resolvable cost at all.
   products: StockValueRow[]    // per-product breakdown, ranked by on-hand value (costed first, then retail)
+}
+
+// INTEL-TRUTH-1 — 'estimated' is weaker than 'derived' is weaker than 'verified'. Used to fold a set
+// of per-item groundings into one honest aggregate grounding for a sum/total.
+const WEAKNESS: Record<Grounding, number> = { verified: 0, derived: 1, estimated: 2 }
+function worstGrounding(groundings: Array<Grounding | null>): Grounding | null {
+  const real = groundings.filter((g): g is Grounding => g != null)
+  if (real.length === 0) return null
+  return real.reduce((worst, g) => (WEAKNESS[g] > WEAKNESS[worst] ? g : worst))
 }
 
 interface Row {
@@ -68,15 +85,17 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
       valued++
       products.push({
         id: r.product_id, name, units: onHand, unit_cost: resolved.cost, cost_source: resolved.source,
+        cost_grounding: resolved.grounding,
         value_at_cost: Math.round(onHand * resolved.cost * 100) / 100, price, value_at_retail: retailVal,
         margin_pct: price > 0 ? Math.round(((price - resolved.cost) / price) * 1000) / 10 : null,
+        margin_grounding: price > 0 ? 'derived' : null,
       })
     } else {
       unknown++
       unknownProducts.push({ id: r.product_id, name, units: onHand })
       products.push({
-        id: r.product_id, name, units: onHand, unit_cost: null, cost_source: 'unknown',
-        value_at_cost: null, price, value_at_retail: retailVal, margin_pct: null,
+        id: r.product_id, name, units: onHand, unit_cost: null, cost_source: 'unknown', cost_grounding: null,
+        value_at_cost: null, price, value_at_retail: retailVal, margin_pct: null, margin_grounding: null,
       })
     }
   }
@@ -107,6 +126,8 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
     unknown_cost_products: unknownProducts,
     margin_incomplete: unknown > 0,
     margin_pct: marginPct,
+    margin_grounding: marginPct != null ? 'derived' : null,
+    at_cost_grounding: worstGrounding(products.map(p => p.cost_grounding)),
     products,
   }
 }

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Grounding } from '@/lib/aria/compute/provenance'
 
 // INV-COST-1 — one trustworthy "current unit cost" per (product, outlet). GROUNDING-TEETH: a cost is only
 // ever a REAL number from one of the known sources; an absent/zero cost is reported as `unknown` (NULL),
@@ -23,7 +24,22 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // (last receipt cost), 'purchase_order' (latest confirmed/last PO line price), 'catalogue'
 // (business-level cost_price), 'unknown' (no resolvable cost).
 export type CostSource = 'outlet' | 'last_delivery' | 'purchase_order' | 'catalogue' | 'unknown'
-export interface ResolvedCost { cost: number | null; source: CostSource }
+export interface ResolvedCost { cost: number | null; source: CostSource; grounding: Grounding | null }
+
+// INTEL-TRUTH-1 — maps each resolution tier to a Business Truth type. 'outlet' is today's actual
+// per-outlet cost (verified). 'last_delivery'/'purchase_order' are real recorded prices, but using
+// them as the CURRENT cost assumes nothing has changed since (one step removed — derived).
+// 'catalogue' (pos_products.cost_price) is a manually-maintained reference figure not tied to any
+// specific transaction — the weakest tier before giving up, matching provenance.ts's own worked
+// example for 'estimated' ("a resolved cost falling back to an estimate"). 'unknown' has no cost at
+// all, so it carries no grounding — callers must handle null explicitly, never default it.
+const SOURCE_GROUNDING: Record<CostSource, Grounding | null> = {
+  outlet: 'verified',
+  last_delivery: 'derived',
+  purchase_order: 'derived',
+  catalogue: 'estimated',
+  unknown: null,
+}
 
 function pos(n: unknown): number | null {
   const v = Number(n)
@@ -33,16 +49,16 @@ function pos(n: unknown): number | null {
 /** Pure resolver over already-fetched values. */
 export function resolveCost(input: { item_cost?: unknown; last_item_cost?: unknown; po_confirmed_price?: unknown; po_last_purchase_price?: unknown; cost_price?: unknown }): ResolvedCost {
   const ic = pos(input.item_cost)
-  if (ic != null) return { cost: ic, source: 'outlet' }
+  if (ic != null) return { cost: ic, source: 'outlet', grounding: SOURCE_GROUNDING.outlet }
   const lic = pos(input.last_item_cost)
-  if (lic != null) return { cost: lic, source: 'last_delivery' }
+  if (lic != null) return { cost: lic, source: 'last_delivery', grounding: SOURCE_GROUNDING.last_delivery }
   const pc = pos(input.po_confirmed_price)
-  if (pc != null) return { cost: pc, source: 'purchase_order' }
+  if (pc != null) return { cost: pc, source: 'purchase_order', grounding: SOURCE_GROUNDING.purchase_order }
   const plp = pos(input.po_last_purchase_price)
-  if (plp != null) return { cost: plp, source: 'purchase_order' }
+  if (plp != null) return { cost: plp, source: 'purchase_order', grounding: SOURCE_GROUNDING.purchase_order }
   const cp = pos(input.cost_price)
-  if (cp != null) return { cost: cp, source: 'catalogue' }
-  return { cost: null, source: 'unknown' }
+  if (cp != null) return { cost: cp, source: 'catalogue', grounding: SOURCE_GROUNDING.catalogue }
+  return { cost: null, source: 'unknown', grounding: null }
 }
 
 /** Latest PO line price for a product, only queried when outlet/catalogue costs are both unknown. */

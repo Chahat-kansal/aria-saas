@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { CLV_PREDICTION_GROUNDING } from '@/lib/agents/clv-agent';
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -52,6 +53,9 @@ async function _GET(req: Request) {
   return NextResponse.json({
     portfolio: portfolio ?? null,
     top_opportunities: dedupedOpportunities,
+    // INTEL-TRUTH-1 — every predicted_*/at_risk_annual_revenue/avg_clv_* figure in `portfolio` and
+    // `top_opportunities` is a forecast, not a database fact. See CLV_PREDICTION_GROUNDING.
+    figure_grounding: CLV_PREDICTION_GROUNDING,
   });
 }
 

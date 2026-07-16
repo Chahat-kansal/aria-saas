@@ -1,6 +1,6 @@
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { makeProvenance, type ComputeResult } from './compute/provenance'
+import { makeProvenance, type ComputeResult, type Provenance } from './compute/provenance'
 
 export interface RevenueSnapshot {
   business_id: string
@@ -10,6 +10,10 @@ export interface RevenueSnapshot {
   window_start: string
   window_end: string
   computed_at: string
+  // INTEL-TRUTH-1 — always 'verified': a direct sum of real completed-sale rows, no assumption or
+  // fallback involved. Additive field — existing callers destructuring .revenue/.transaction_count
+  // etc. are unaffected.
+  provenance: Provenance
 }
 
 // BRIEF-INTEGRITY-1 — the ONE canonical "revenue for a calendar day" computation. Every advisor and
@@ -49,6 +53,7 @@ export async function getRevenueSnapshot(businessId: string, dateStr: string): P
     window_start,
     window_end,
     computed_at: new Date().toISOString(),
+    provenance: makeProvenance('getRevenueSnapshot', '1.0.0', { businessId, dateStr }, "status='completed', AEST calendar-day boundary, direct sum", 'verified'),
   }
 }
 
@@ -67,6 +72,8 @@ export interface RangeRevenueSnapshot {
   window_start: string
   window_end: string
   computed_at: string
+  // INTEL-TRUTH-1 — see RevenueSnapshot.provenance; same rule, always 'verified'.
+  provenance: Provenance
 }
 
 export async function getRevenueForRange(
@@ -99,6 +106,7 @@ export async function getRevenueForRange(
     window_start,
     window_end,
     computed_at: new Date().toISOString(),
+    provenance: makeProvenance('getRevenueForRange', '1.0.0', { businessId, startDate, endDate }, "status='completed', AEST boundaries, direct sum", 'verified'),
   }
 }
 
