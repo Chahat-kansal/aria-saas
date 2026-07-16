@@ -53,11 +53,19 @@ async function _POST(req: Request) {
   const breakType = (body as any).break_type === 'paid' ? 'paid' : 'unpaid'
   const paidBreakMins = breakType === 'paid' ? 0 : breakMins
   const hours = body.clock_out ? computeHours(body.clock_in, body.clock_out, paidBreakMins) : 0
-  const regularHours = Math.min(hours, 8)
   const overtimeHours = Math.max(0, hours - 8)
-  const regularPay = Math.round(regularHours * payRateCents)
+  // INTEL-COMPUTE-2 — total_pay_cents used to be regularPay + (overtimeHours*rate*1.5), a flat
+  // hours-based OT bump baked directly into the stored per-shift pay. buildPayrollRun() then feeds
+  // this same total_pay_cents into applyPenaltyRates(), which adds Fair Work's day-of-week/public-
+  // holiday/evening LOADING on top of it as `total_pay_cents * (multiplier-1)` — the two stack,
+  // compounding rather than replacing (confirmed: a 10h Sunday shift entered here would be double-
+  // loaded, ~10% overpaid, in a real payroll run/ABA file). The canonical PIN clock-in/out flow
+  // (lib/staff/timesheets.ts) stores plain hours*rate with no OT bump for exactly this reason — this
+  // route now matches that contract. overtime_cents/is_overtime are kept as informational-only
+  // fields (this shift's own timesheet page/export still shows the OT amount) but are no longer
+  // folded into the total_pay_cents that payroll aggregation and penalty-loading operate on.
+  const totalPayCents = Math.round(hours * payRateCents)
   const overtimePay = Math.round(overtimeHours * payRateCents * 1.5)
-  const totalPayCents = regularPay + overtimePay
 
   const { data, error } = await supabaseAdmin.from('pos_timesheets').insert({
     business_id: bid,
