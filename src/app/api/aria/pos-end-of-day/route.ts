@@ -9,6 +9,8 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { todayAEST, toAESTStart } from '@/lib/date-au'
+import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -54,12 +56,19 @@ async function _POST(req: Request) {
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
-  // Fetch today's completed sales for this session
+  // Fetch today's completed sales for this session.
+  // INTEL-COMPUTE-3 — was scoped by session_id alone, no date filter at all. Real sessions in this
+  // system are sometimes left open for days/weeks (confirmed live: a 14-day and a 31-day-open
+  // session both exist), so "today's revenue" could silently sum an entire multi-week period,
+  // then get compared against sevenDayAvg (a genuine single-calendar-day average) below — comparing
+  // two different temporal units. Added the real AEST calendar-day boundary alongside session_id.
+  const todayStartIso = toAESTStart(todayAEST());
   const { data: sales } = await supabase
     .from('pos_sales')
     .select('id, total_amount, created_at')
     .eq('session_id', session_id)
-    .eq('status', 'completed');
+    .eq('status', 'completed')
+    .gte('created_at', todayStartIso);
 
   const todaySales = sales ?? [];
   const todayRevenue = todaySales.reduce((sum, s) => sum + (s.total_amount as number ?? 0), 0);
@@ -99,7 +108,7 @@ async function _POST(req: Request) {
   }
 
   // Fetch 7-day average (exclude today)
-  const today = new Date().toISOString().split('T')[0];
+  // INTEL-COMPUTE-3 — was a hardcoded UTC day boundary; toAESTStart gives the real local trading day.
   const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
   const { data: historicSales } = await supabase
     .from('pos_sales')
@@ -107,7 +116,7 @@ async function _POST(req: Request) {
     .eq('business_id', business_id)
     .eq('status', 'completed')
     .gte('created_at', eightDaysAgo)
-    .lt('created_at', `${today}T00:00:00.000Z`);
+    .lt('created_at', todayStartIso);
 
   let sevenDayAvg = 0;
   if (historicSales && historicSales.length > 0) {
@@ -149,6 +158,14 @@ await trackAICall({ route: 'aria/pos-end-of-day', model: 'claude-sonnet-4-5-2025
       .filter((b) => b.type === 'text')
       .map((b) => (b as { type: 'text'; text: string }).text)
       .join('');
+    // INTEL-COMPUTE-3 — this call bypasses grounded.ts entirely (direct Anthropic SDK, trackAICall
+    // only adds cost logging), zero numeric guard, and debrief is emailed unchanged to the owner
+    // (pos-end-of-day/email/route.ts embeds it verbatim). Redact any $/%/count not grounded in the
+    // real stats already computed above.
+    if (debrief) {
+      const allowed = numbersIn(`${stats.today_revenue} ${sevenDayAvg.toFixed(2)} ${vsAvgPct ?? ''} ${stats.today_count} ${stats.avg_basket}`)
+      debrief = (await guardOutput(debrief, allowed, { mode: 'redact', businessId: business_id, surface: 'pos-end-of-day/debrief' })).text
+    }
   } catch {
     // AI failure — still return stats
     debrief = null;
