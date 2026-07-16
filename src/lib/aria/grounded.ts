@@ -3,6 +3,7 @@ import { parseLLMJsonOr } from '@/lib/ai-json'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from './providers/anthropic'
 import { safeAIOutput } from './ai-output-guard'
 import { guardOutput, numbersIn, checkEstimateHonesty } from './ground-guard'
+import { buildContract, type ContractFigure, type RecommendedAction, type AriaIntelligenceContract } from './contract'
 import type { AgentKey, AgentRole } from './types'
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
 
@@ -53,11 +54,15 @@ function groundTruthValues(groundTruth?: Record<string, unknown> | string): numb
   return numbersIn(typeof groundTruth === 'string' ? groundTruth : JSON.stringify(groundTruth))
 }
 
-async function auditUngroundedNumbers(text: string, groundTruth: Record<string, unknown> | string | undefined, businessId: string | undefined, surface: string): Promise<void> {
-  if (!groundTruth || !text) return
+// INTEL-CONTRACT-1 — now returns the flagged (ungrounded) values instead of discarding them, so
+// callers can surface them as the contract's uncertainties[] — the same guard pass, just no longer
+// throwing away information the contract needs.
+async function auditUngroundedNumbers(text: string, groundTruth: Record<string, unknown> | string | undefined, businessId: string | undefined, surface: string): Promise<number[]> {
+  if (!groundTruth || !text) return []
   try {
-    await guardOutput(text, groundTruthValues(groundTruth), { mode: 'flag', businessId, surface })
-  } catch { /* non-fatal — audit only, never blocks the response */ }
+    const result = await guardOutput(text, groundTruthValues(groundTruth), { mode: 'flag', businessId, surface })
+    return result.flagged
+  } catch { return [] /* non-fatal — audit only, never blocks the response */ }
 }
 
 // INTEL-TRUTH-1 — JSON-shaped entry points run this in audit-only 'flag' mode (same reasoning as
@@ -85,6 +90,11 @@ interface BaseParams {
    * so an estimate is never presented as if it were a settled fact. */
   estimatedValues?: number[]
   timeoutMs?: number
+  /** INTEL-CONTRACT-1 — the real compute-engine figures backing this response, already truth-typed
+   * by INTEL-TRUTH-1 (each carries its own Provenance/Grounding). Never computed here — the caller
+   * is the one who called the compute engine and knows what backs their prompt's ground truth. */
+  contractFigures?: ContractFigure[]
+  recommendedActions?: RecommendedAction[]
 }
 
 export interface GroundedResult<T> {
@@ -94,6 +104,10 @@ export interface GroundedResult<T> {
   cost_cents: number
   latency_ms: number
   provider: 'anthropic' | 'google' | 'none'
+  /** INTEL-CONTRACT-1 — the Aria Intelligence Contract retained behind this response: the same
+   * facts/calculations/assumptions/confidence/provenance the UI's default prose view doesn't show,
+   * available for an owner-facing "how Aria knows this" panel or any downstream audit consumer. */
+  contract: AriaIntelligenceContract
 }
 
 /**
@@ -118,11 +132,12 @@ export async function runGroundedAnalysis<T = Record<string, unknown>>(
   // before it's ever parsed into structured data, so a leaked internal-prompt artifact can't
   // survive into `data` the way BRIEF-INTEGRITY-1's raw prose glue-on did for briefings.
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/analysis/${params.agentKey}` })
-  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/analysis/${params.agentKey}`)
+  const ungrounded = await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/analysis/${params.agentKey}`)
   await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/analysis/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/${params.agentKey}`, params.shape ?? 'object') : resp.data
-  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
+  const contract = buildContract({ answer: guarded, figures: params.contractFigures, recommendedActions: params.recommendedActions, ungroundedValues: ungrounded })
+  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, contract }
 }
 
 /**
@@ -159,7 +174,9 @@ export async function runCustomerFacingCopy(
     }).catch(() => ({ text: guarded }))).text
   }
   const safe = resp.success && guarded.length > 0
-  return { data: safe ? guarded : params.fallback, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, safe }
+  const finalText = safe ? guarded : params.fallback
+  const contract = buildContract({ answer: finalText, figures: params.contractFigures, recommendedActions: params.recommendedActions })
+  return { data: finalText, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, safe, contract }
 }
 
 interface AuditEntry {
@@ -199,12 +216,13 @@ export async function runActionPlanner<T = Record<string, unknown>>(
       executeTool: params.executeTool,
     })
     const guardedLoop = safeAIOutput(loop.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
-    await auditUngroundedNumbers(guardedLoop, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
+    const ungroundedLoop = await auditUngroundedNumbers(guardedLoop, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
     await auditEstimateHonesty(guardedLoop, params.estimatedValues, params.businessId, `grounded/action-planner/${params.agentKey}`)
     const cleaned = guardedLoop.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
     const data = cleaned ? parseLLMJsonOr<T>(cleaned, params.fallback, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : params.fallback
     if (params.auditLog && loop.success) await writeActionAudit(params.businessId, params.auditLog)
-    return { ...loop, data }
+    const contractLoop = buildContract({ answer: guardedLoop, figures: params.contractFigures, recommendedActions: params.recommendedActions, ungroundedValues: ungroundedLoop, actionAlreadyExecuted: !!(params.auditLog && loop.success) })
+    return { ...loop, data, contract: contractLoop }
   }
 
   const resp = await callAnthropic<T>({
@@ -218,12 +236,13 @@ export async function runActionPlanner<T = Record<string, unknown>>(
     userPrompt: params.userPrompt,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/action-planner/${params.agentKey}` })
-  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
+  const ungrounded = await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/action-planner/${params.agentKey}`)
   await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/action-planner/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/action-planner/${params.agentKey}`, params.shape ?? 'object') : resp.data
   if (params.auditLog && resp.success) await writeActionAudit(params.businessId, params.auditLog)
-  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
+  const contract = buildContract({ answer: guarded, figures: params.contractFigures, recommendedActions: params.recommendedActions, ungroundedValues: ungrounded, actionAlreadyExecuted: !!(params.auditLog && resp.success) })
+  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, contract }
 }
 
 async function writeActionAudit(businessId: string | undefined, entry: AuditEntry): Promise<void> {
@@ -264,11 +283,12 @@ export async function runBackgroundAgent<T = Record<string, unknown>>(
     userPrompt: params.userPrompt,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/background/${params.agentKey}` })
-  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/background/${params.agentKey}`)
+  const ungrounded = await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/background/${params.agentKey}`)
   await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/background/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/background/${params.agentKey}`, params.shape ?? 'object') : resp.data
-  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
+  const contract = buildContract({ answer: guarded, figures: params.contractFigures, recommendedActions: params.recommendedActions, ungroundedValues: ungrounded })
+  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, contract }
 }
 
 /**
@@ -294,9 +314,10 @@ export async function runVisionOrMedia<T = Record<string, unknown>>(
     imageMimeType: params.imageMimeType,
   }, params.fallback)
   const guarded = safeAIOutput(resp.raw, '', { label: `grounded/vision/${params.agentKey}` })
-  await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/vision/${params.agentKey}`)
+  const ungrounded = await auditUngroundedNumbers(guarded, params.groundTruth, params.businessId, `grounded/vision/${params.agentKey}`)
   await auditEstimateHonesty(guarded, params.estimatedValues, params.businessId, `grounded/vision/${params.agentKey}`)
   const cleaned = guarded.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
   const data = cleaned ? parseLLMJsonOr<T>(cleaned, resp.data, `grounded/vision/${params.agentKey}`, params.shape ?? 'object') : resp.data
-  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider }
+  const contract = buildContract({ answer: guarded, figures: params.contractFigures, recommendedActions: params.recommendedActions, ungroundedValues: ungrounded })
+  return { data, raw: resp.raw, success: resp.success, cost_cents: resp.cost_cents, latency_ms: resp.latency_ms, provider: resp.provider, contract }
 }

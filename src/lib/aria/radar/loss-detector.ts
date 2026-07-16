@@ -1,6 +1,14 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
 import { computeSlowDay } from '@/lib/aria/slow-day'
+import type { Grounding } from '@/lib/aria/compute/provenance'
+
+// INTEL-CONTRACT-1 — every signal here (`estimated_monthly_loss_aud` — the field name says it
+// itself) is a projection extrapolated from real sales/customer/review data, never a settled fact.
+// Categorically 'estimated' for all 5 signal types, matching the CLV_PREDICTION_GROUNDING pattern
+// from INTEL-TRUTH-1's clv-agent.ts — a single named constant, not a per-row DB column, since it's
+// true by construction for anything this module produces.
+export const LOSS_SIGNAL_GROUNDING: Grounding = 'estimated'
 
 export interface LossSignal {
   id: string

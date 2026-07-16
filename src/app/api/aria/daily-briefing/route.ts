@@ -10,8 +10,10 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { runGroundedAnalysis } from '@/lib/aria/grounded'
 import { geminiFlash } from '@/lib/gemini'
 import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
-import { detectLosses } from '@/lib/aria/radar/loss-detector'
+import { detectLosses, LOSS_SIGNAL_GROUNDING, type LossSignal } from '@/lib/aria/radar/loss-detector'
 import { computeSlowDay } from '@/lib/aria/slow-day'
+import { makeProvenance } from '@/lib/aria/compute/provenance'
+import type { ContractFigure, RecommendedAction, AriaIntelligenceContract } from '@/lib/aria/contract'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -171,7 +173,7 @@ async function _POST(req: Request) {
   if (!shouldRefresh) {
     const { data: cached } = await supabase
       .from('daily_briefings')
-      .select('recommendations, generated_at, data_snapshot, dismissed_at, remind_at')
+      .select('recommendations, generated_at, data_snapshot, dismissed_at, remind_at, contract')
       .eq('business_id', business_id)
       .eq('date', today)
       .maybeSingle();
@@ -186,6 +188,9 @@ async function _POST(req: Request) {
           generated_at: cached.generated_at,
           data_snapshot: cached.data_snapshot,
           radar_items: cachedRadar,
+          // INTEL-CONTRACT-1 — retained even on the cache-hit path, so a "how Aria knows this" view
+          // works whether or not this request happened to regenerate the briefing.
+          contract: cached.contract ?? null,
           cached: true,
         });
       }
@@ -636,9 +641,24 @@ async function _POST(req: Request) {
   };
 
   let recommendations: unknown[] = [];
+  // INTEL-CONTRACT-1 — retained even though the UI only ever renders recommendations[]'s prose.
+  let contract: AriaIntelligenceContract | null = null;
   try {
     const dataStr = typeof context === 'string' ? context : JSON.stringify(context)
     const todayDate = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })
+
+    // INTEL-CONTRACT-1 — radarSignals (loss-detector.ts's real profit-leak/margin-leak/slow-period
+    // findings) become the Aria Intelligence Contract's calculations[] for this response: real
+    // figures, already truth-typed 'estimated' (LOSS_SIGNAL_GROUNDING), referenced here rather than
+    // recomputed. Signals carrying a propose-only action become recommendedActions.
+    const contractFigures: ContractFigure[] = (radarSignals as LossSignal[]).map(sig => ({
+      label: sig.title,
+      value: sig.estimated_monthly_loss_aud,
+      provenance: makeProvenance('detectLosses', '1.0.0', { business_id, signal_type: sig.type }, sig.insight, LOSS_SIGNAL_GROUNDING),
+    }))
+    const recommendedActions: RecommendedAction[] = (radarSignals as LossSignal[])
+      .filter(sig => sig.act_label)
+      .map(sig => ({ label: sig.act_label as string, action_type: sig.type, payload: sig.payload }))
 
     // AI-ROUTER-FAILOVER-1 — this used to call the Anthropic SDK directly, bypassing every circuit
     // breaker/fallback in the app: an outage here silently shipped an empty briefing.
@@ -666,6 +686,11 @@ async function _POST(req: Request) {
       // database fact. Wires runGroundedAnalysis's estimate-honesty check so the model can't state a
       // forecast temperature as if it were a confirmed fact.
       estimatedValues: (weatherForecast7Day as Array<{ maxTemp?: number }>).map(d => d.maxTemp).filter((n): n is number => Number.isFinite(n)),
+      // INTEL-CONTRACT-1 — real profit-leak/margin-leak/slow-period findings backing this response,
+      // already truth-typed 'estimated' by loss-detector.ts — retained in the Aria Intelligence
+      // Contract even though the UI only ever sees the rendered briefing cards' prose.
+      contractFigures,
+      recommendedActions,
       systemPrompt: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:
@@ -692,6 +717,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
     })
 
     recommendations = resp.data
+    contract = resp.contract
 
     // Both Anthropic and Gemini failed (rare double-outage) — we already know
     // there IS actionable data (hasActionableData gated above this block), so
@@ -710,6 +736,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
     date: today,
     recommendations,
     data_snapshot: context,
+    contract,
     generated_at: new Date().toISOString(),
     dismissed_at: null,
     remind_at: null,
@@ -745,6 +772,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
     generated_at: new Date().toISOString(),
     data_snapshot: context,
     radar_items: radarSignals,
+    contract,
     cached: false,
   });
 }
