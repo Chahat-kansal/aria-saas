@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
 import { thirtyDaysAgoAEST } from '@/lib/date-au';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -28,11 +29,25 @@ async function _GET(req: Request) {
   const days = parseInt(searchParams.get('days') ?? '60');
   const cutoff = new Date(Date.now() - days * 86400000).toISOString();
 
-  // Get products with stock
-  const { data: products } = await supabase.from('pos_products')
-    .select('id,name,sku,stock_quantity,cost_price,price')
-    .eq('business_id', bid).eq('is_active', true)
-    .gt('stock_quantity', 0).limit(1000);
+  // INTEL-COMPUTE-2 — was stock_quantity * cost_price, the stale/unmaintained column pair behind the
+  // recurring "parallel warehouse stack" incident. Now sums real pos_outlet_inventory.items_on_hand
+  // across outlets and resolves cost via the canonical resolveCostBatch(), matching business-data.ts/
+  // warehouse/kpis/route.ts/pos/reports/inventory/route.ts. The stale-column pre-filter is gone
+  // (can't push a real-stock filter into this query since it now comes from a separate table), so
+  // products are fetched unfiltered and the on-hand>0 check happens in JS below.
+  const [{ data: allProducts }, { data: outletInv }, costMap] = await Promise.all([
+    supabase.from('pos_products').select('id,name,sku,price').eq('business_id', bid).eq('is_active', true).limit(2000),
+    supabase.from('pos_outlet_inventory').select('product_id, items_on_hand').eq('business_id', bid),
+    resolveCostBatch(supabase, bid, null),
+  ]);
+  const stockByProduct = new Map<string, number>();
+  for (const row of outletInv ?? []) {
+    const pid = row.product_id as string;
+    stockByProduct.set(pid, (stockByProduct.get(pid) ?? 0) + (Number(row.items_on_hand) || 0));
+  }
+  const products = (allProducts ?? [])
+    .map(p => ({ ...p, stock_quantity: stockByProduct.get(p.id) ?? 0, cost_price: costMap.get(p.id)?.cost ?? 0 }))
+    .filter(p => p.stock_quantity > 0);
 
   if (!products?.length) return NextResponse.json({ items: [] });
 
