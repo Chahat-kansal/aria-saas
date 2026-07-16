@@ -4,6 +4,7 @@
  * Returns normalized types regardless of whether the business uses Square or AriaPOS.
  */
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost';
 
 export type DataSource = 'square' | 'aria_pos' | 'shopfront' | 'csv_import';
 
@@ -103,20 +104,43 @@ export async function getBusinessItems(
     .eq('is_active', true)
     .order('name');
 
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    externalId: r.id,
-    name: r.name,
-    category: null,
-    priceCents: Math.round((r.price ?? 0) * 100),
-    costCents: Math.round((r.cost_price ?? 0) * 100),
-    currentStock: r.stock_quantity ?? 0,
-    reorderPoint: r.low_stock_threshold ?? 0,
-    sku: r.sku ?? null,
-    unit: 'unit',
-    imageUrl: r.image_url ?? null,
-    isActive: r.is_active ?? true,
-  }));
+  // INTEL-COMPUTE-1 — pos_products.stock_quantity/cost_price are legacy, unmaintained columns
+  // (RULE 6): the real current stock lives per-outlet on pos_outlet_inventory.items_on_hand, and the
+  // real cost cascade (outlet actual → last receipt → PO history → catalogue) is resolve-cost.ts's
+  // resolveCostBatch — the same canonical resolver stock-value.ts's computeStockValue() already uses
+  // correctly. This was the exact "parallel warehouse stack valuing stock on stale stock_quantity ×
+  // cost_price" bug the audit found reimplemented at 6+ warehouse routes/pages — business-data.ts is
+  // the single highest-leverage fix since every AI feature reads items through getBusinessItems().
+  // stock_quantity is kept only as a last-resort fallback for businesses with no outlet-inventory
+  // rows at all — a lesser-quality real source, never a fabricated one.
+  const [{ data: inv }, costMap] = await Promise.all([
+    supabase.from('pos_outlet_inventory').select('product_id, items_on_hand').eq('business_id', businessId),
+    resolveCostBatch(supabase, businessId, null),
+  ]);
+  const stockByProduct = new Map<string, number>();
+  for (const row of inv ?? []) {
+    const pid = row.product_id as string;
+    stockByProduct.set(pid, (stockByProduct.get(pid) ?? 0) + (Number(row.items_on_hand) || 0));
+  }
+
+  return (data ?? []).map((r) => {
+    const resolved = costMap.get(r.id);
+    const costCents = resolved?.cost != null ? Math.round(resolved.cost * 100) : Math.round((r.cost_price ?? 0) * 100);
+    return {
+      id: r.id,
+      externalId: r.id,
+      name: r.name,
+      category: null,
+      priceCents: Math.round((r.price ?? 0) * 100),
+      costCents,
+      currentStock: stockByProduct.get(r.id) ?? (r.stock_quantity ?? 0),
+      reorderPoint: r.low_stock_threshold ?? 0,
+      sku: r.sku ?? null,
+      unit: 'unit',
+      imageUrl: r.image_url ?? null,
+      isActive: r.is_active ?? true,
+    };
+  });
 }
 
 export async function getBusinessSales(
