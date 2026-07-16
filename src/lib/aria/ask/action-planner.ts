@@ -60,10 +60,11 @@ HARD RULES:
   5. risk = 'high' if action affects >50 products OR changes prices >20% OR affects all products.
   6. requires_confirmation must always be true.
   7. Check PAST PERFORMANCE BY CATEGORY in the business context before planning. If the category this
-     action falls under has weight < 0.7 (a real track record of backfiring), be more conservative —
-     prefer a smaller change, a shorter time window, or a narrower scope than you otherwise would, and
-     name the past result in preview[] (e.g. "Note: pricing changes have backfired before — starting
-     smaller than usual"). Weight >= 0.7 needs no special caution.
+     action falls under has weight <= 0.8 (a real track record of backfiring — the neutral starting
+     weight is 1.0), be more conservative — prefer a smaller change, a shorter time window, or a
+     narrower scope than you otherwise would, and name the past result in preview[] (e.g. "Note:
+     pricing changes have backfired before — starting smaller than usual"). Weight > 0.8 needs no
+     special caution.
 
 Return ONLY valid JSON matching this shape:
 {"type":"...","title":"...","description":"...","preview":["..."],"affected_count":0,"payload":{},"estimated_impact":"...","reversible":true,"risk":"low|medium|high","requires_confirmation":true}`
