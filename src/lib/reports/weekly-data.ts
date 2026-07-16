@@ -148,6 +148,11 @@ export async function gatherWeeklyData(
   const priorStartUtc = priorStart.toISOString()
 
   // Parallel batch 1: current-week sales, shifts, prior-week totals, product costs
+  // INTEL-COMPUTE-2 — this query is DELIBERATELY unfiltered by status: the suspicious-transaction
+  // detection below (VOID_AFTER_HOURS, REFUND_NO_MATCH) needs to see voided/refunded rows, not just
+  // completed ones. The bug was every REVENUE aggregation below using `status !== 'voided'` (still
+  // admitting draft/refunded) instead of `status === 'completed'` — fixed at each aggregation site,
+  // not here, so the fraud-detection rules keep seeing the full row set.
   const [salesRes, shiftsRes, priorRes, productsRes] = await Promise.all([
     supabaseAdmin
       .from('pos_sales')
@@ -164,11 +169,13 @@ export async function gatherWeeklyData(
       .lte('shift_start', weekEndUtc)
       .order('shift_start'),
 
+    // INTEL-COMPUTE-2 — was neq('voided'), admitting draft/refunded rows into the prior-week
+    // comparison baseline. status='completed' matches getRevenueSnapshot()'s canonical rule.
     supabaseAdmin
       .from('pos_sales')
       .select('total_amount')
       .eq('business_id', businessId)
-      .neq('status', 'voided')
+      .eq('status', 'completed')
       .gte('created_at', priorStartUtc)
       .lt('created_at', weekStartUtc),
 
@@ -182,8 +189,10 @@ export async function gatherWeeklyData(
 
   const sales: SaleRow[] = (salesRes.data ?? []) as SaleRow[]
 
-  // pos_sale_items has NO business_id — must join through pos_sales via sale_id
-  const saleIds = sales.filter(s => s.status !== 'voided').map(s => s.id)
+  // pos_sale_items has NO business_id — must join through pos_sales via sale_id.
+  // INTEL-COMPUTE-2 — was `!== 'voided'` (admitted draft/refunded line items into top-products
+  // revenue/COGS below); `=== 'completed'` is the canonical filter.
+  const saleIds = sales.filter(s => s.status === 'completed').map(s => s.id)
 
   const { data: itemsRaw } = saleIds.length > 0
     ? await supabaseAdmin
@@ -197,7 +206,7 @@ export async function gatherWeeklyData(
   // ── 1. Revenue by day ─────────────────────────────────────────────────────
   const dayMap = new Map<string, { revenue: number; count: number }>()
   for (const s of sales) {
-    if (s.status === 'voided') continue
+    if (s.status !== 'completed') continue // INTEL-COMPUTE-2 — was `=== 'voided'` (still admitted draft/refunded)
     const d = tzDate(s.created_at, timezone)
     const cur = dayMap.get(d) ?? { revenue: 0, count: 0 }
     cur.revenue += Number(s.total_amount) || 0
@@ -221,7 +230,7 @@ export async function gatherWeeklyData(
   // ── 2. Hourly buckets ─────────────────────────────────────────────────────
   const hourMap = new Map<string, { revenue: number; count: number }>()
   for (const s of sales) {
-    if (s.status === 'voided') continue
+    if (s.status !== 'completed') continue // INTEL-COMPUTE-2 — was `=== 'voided'` (still admitted draft/refunded)
     const key = `${tzDow(s.created_at, timezone)}-${tzHour(s.created_at, timezone)}`
     const cur = hourMap.get(key) ?? { revenue: 0, count: 0 }
     cur.revenue += Number(s.total_amount) || 0
@@ -254,7 +263,7 @@ export async function gatherWeeklyData(
   // ── 4. Payment methods ────────────────────────────────────────────────────
   const pmMap = new Map<string, { count: number; total: number }>()
   for (const s of sales) {
-    if (s.status === 'voided') continue
+    if (s.status !== 'completed') continue // INTEL-COMPUTE-2 — was `=== 'voided'` (still admitted draft/refunded)
     const method = (s.payment_method ?? 'unknown').toLowerCase()
     const cur = pmMap.get(method) ?? { count: 0, total: 0 }
     cur.count++
