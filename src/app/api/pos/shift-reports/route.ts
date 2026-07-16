@@ -74,20 +74,26 @@ async function _POST(req: Request) {
     .select('id,total_amount,payment_method,status,created_at,served_by,pos_sale_items(quantity,unit_price,pos_products(name))')
     .eq('business_id', bid).eq('session_id', body.session_id)
 
-  const validSales = (sales ?? []).filter((s: any) => s.status !== 'voided')
+  // INTEL-COMPUTE-4 — validSales (`status !== 'voided'`) still admitted draft/refunded rows. The
+  // Math.max(0, ...) clamps zeroed a refund's contribution to the NUMERATOR but validSales.length
+  // (the denominator) still counted it — a real transaction that contributed $0 revenue mechanically
+  // dragged avgBasket down. status='completed' matches getRevenueSnapshot()'s canonical rule and, since
+  // completed sales are never negative, makes the Math.max(0, ...) clamps unnecessary (kept as a
+  // no-op safety net, not removed, per extend-never-remove).
+  const completedSales = (sales ?? []).filter((s: any) => s.status === 'completed')
   const voidedSales = (sales ?? []).filter((s: any) => s.status === 'voided')
-  const refunds = validSales.filter((s: any) => (s.total_amount ?? 0) < 0)
-  const totalRevenue = validSales.reduce((s: number, x: any) => s + Math.max(0, Number(x.total_amount ?? 0)), 0)
-  const avgBasket = validSales.length > 0 ? totalRevenue / validSales.length : 0
+  const refundedSales = (sales ?? []).filter((s: any) => s.status === 'refunded')
+  const totalRevenue = completedSales.reduce((s: number, x: any) => s + Math.max(0, Number(x.total_amount ?? 0)), 0)
+  const avgBasket = completedSales.length > 0 ? totalRevenue / completedSales.length : 0
 
   const payBreakdown: Record<string, number> = {}
-  for (const s of validSales) {
+  for (const s of completedSales) {
     const m = String(s.payment_method ?? 'cash')
     payBreakdown[m] = (payBreakdown[m] ?? 0) + Math.max(0, Number(s.total_amount ?? 0))
   }
 
   const productMap: Record<string, { name: string; qty: number; revenue: number }> = {}
-  for (const s of validSales) {
+  for (const s of completedSales) {
     for (const item of (s.pos_sale_items ?? []) as any[]) {
       const name = item.pos_products?.name ?? 'Unknown'
       if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0 }
@@ -110,22 +116,22 @@ async function _POST(req: Request) {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 200,
       system: 'You are Aria. Write a 2-3 sentence end-of-shift summary for a business owner. Be specific and warm. Under 50 words.',
-      messages: [{ role: 'user', content: `${validSales.length} transactions, A$${totalRevenue.toFixed(2)} revenue, avg A$${avgBasket.toFixed(2)}. Voids: ${voidedSales.length}. Refunds: ${refunds.length}. Cash variance: ${(varianceCents/100).toFixed(2)}. Top: ${topProducts[0]?.name ?? 'none'}.` }],
+      messages: [{ role: 'user', content: `${completedSales.length} transactions, A$${totalRevenue.toFixed(2)} revenue, avg A$${avgBasket.toFixed(2)}. Voids: ${voidedSales.length}. Refunds: ${refundedSales.length}. Cash variance: ${(varianceCents/100).toFixed(2)}. Top: ${topProducts[0]?.name ?? 'none'}.` }],
     })
     ariaSummary = msg.content[0].type === 'text' ? msg.content[0].text : ''
-  } catch { ariaSummary = `${validSales.length} transactions totalling A$${totalRevenue.toFixed(2)}.` }
+  } catch { ariaSummary = `${completedSales.length} transactions totalling A$${totalRevenue.toFixed(2)}.` }
 
   const { data: report, error } = await supabaseAdmin.from('pos_shift_reports').insert({
     business_id: bid, session_id: body.session_id,
     cashier_name: String(session.closed_by ?? session.opened_by ?? ''),
     shift_start: shiftStart, shift_end: shiftEnd,
-    total_transactions: validSales.length, total_revenue: +totalRevenue.toFixed(2), avg_basket: +avgBasket.toFixed(2),
-    total_refunds: refunds.length, total_refund_value: +Math.abs(refunds.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0)).toFixed(2),
+    total_transactions: completedSales.length, total_revenue: +totalRevenue.toFixed(2), avg_basket: +avgBasket.toFixed(2),
+    total_refunds: refundedSales.length, total_refund_value: +Math.abs(refundedSales.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0)).toFixed(2),
     total_voids: voidedSales.length,
     opening_float: Number(session.opening_float ?? 0), closing_float: Number(session.closing_float ?? 0),
     variance_cents: varianceCents, top_products: topProducts, payment_breakdown: payBreakdown,
     staff_on_shift: staffOnShift, aria_summary: ariaSummary,
-    report_data: { session_id: body.session_id, shift_start: shiftStart, shift_end: shiftEnd, total_transactions: validSales.length, total_revenue: +totalRevenue.toFixed(2) },
+    report_data: { session_id: body.session_id, shift_start: shiftStart, shift_end: shiftEnd, total_transactions: completedSales.length, total_revenue: +totalRevenue.toFixed(2) },
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
