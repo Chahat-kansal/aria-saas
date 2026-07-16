@@ -103,8 +103,18 @@ export interface CreateSaleResult {
   voided: boolean
 }
 
-/** Builds the tax breakdown from real tax codes when the items carry a tax_code_id; falls back
- * to the caller-supplied flat tax_amount otherwise (unchanged from pos/sale's existing behaviour). */
+/** Builds the tax breakdown from real tax codes when the items (or their underlying products)
+ * carry a tax_code_id; falls back to the caller-supplied flat tax_amount otherwise (unchanged from
+ * pos/sale's existing behaviour).
+ *
+ * INTEL-COMPUTE-2 — previously ONLY looked at the line item's own tax_code_id, which the terminal
+ * doesn't always attach per line (confirmed live: dozens of real historical pos_sale_items rows
+ * have tax_code_id IS NULL) — every such sale fell straight through to createSale()'s flat-10%
+ * fallback, with zero exemption awareness, and that flat figure was PERSISTED to pos_sales.tax_amount
+ * (real money, not a display estimate). Now also falls back to the product's own configured
+ * pos_products.tax_code_id before giving up — the same real tax-code system, just resolved one
+ * level further, so a product actually configured as GST-free/WET/LCT gets taxed correctly even
+ * when the terminal didn't stamp its tax_code_id onto this specific line. */
 async function computeTax(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   businessId: string,
@@ -112,6 +122,7 @@ async function computeTax(
   customerId: string | null | undefined,
   items: CreateSaleItem[],
   taxAmount: number,
+  productTaxCodeMap: Record<string, string | null | undefined>,
 ): Promise<{ total: number; breakdown: unknown[] }> {
   let computedTaxTotal = taxAmount
   let computedTaxBreakdown: unknown[] = []
@@ -129,7 +140,7 @@ async function computeTax(
       unit_price: Number(i.unit_price) || 0,
       line_subtotal: (Number(i.unit_price) || 0) * (Number(i.quantity) || 0),
       discount_amount: 0,
-      tax_code_id: i.tax_code_id ?? null,
+      tax_code_id: i.tax_code_id ?? productTaxCodeMap[i.product_id] ?? null,
       additional_tax_code_ids: [],
     }))
     if (taxLines.some(l => l.tax_code_id)) {
@@ -160,9 +171,10 @@ export async function createSale(
 
   const productIds = items.map(i => i.product_id)
   const { data: dbProducts } = await supabase.from('pos_products')
-    .select('id, name, track_stock, stock_quantity, is_active').in('id', productIds).eq('business_id', businessId)
+    .select('id, name, track_stock, stock_quantity, is_active, tax_code_id').in('id', productIds).eq('business_id', businessId)
   if (!dbProducts) return { sale: null, error: 'Failed to fetch products', status: 500, voided: false }
   const productMap = Object.fromEntries(dbProducts.map(p => [p.id, p]))
+  const productTaxCodeMap: Record<string, string | null | undefined> = Object.fromEntries(dbProducts.map(p => [p.id, p.tax_code_id]))
   for (const item of items) {
     const p = productMap[item.product_id]
     if (!p) return { sale: null, error: `Product not found: ${item.product_id}`, status: 400, voided: false }
@@ -176,7 +188,7 @@ export async function createSale(
   const saleNumber = `POS-${String((count ?? 0) + 1).padStart(4, '0')}`
 
   const { total: computedTaxTotal, breakdown: computedTaxBreakdown } = await computeTax(
-    supabase, businessId, params.outletId, params.customerId, items, params.taxAmount ?? 0,
+    supabase, businessId, params.outletId, params.customerId, items, params.taxAmount ?? 0, productTaxCodeMap,
   )
 
   const { data: openSession } = params.sessionId
@@ -197,6 +209,10 @@ export async function createSale(
     session_id: openSession?.id || null,
     payment_method: params.paymentMethod ?? 'cash',
     subtotal: +Number(params.subtotal ?? 0).toFixed(2),
+    // INTEL-COMPUTE-2 — the flat subtotal*0.1 fallback is now only reached when NEITHER the line
+    // item NOR its underlying product has any tax_code_id at all (computeTax() above now checks
+    // both) — a genuinely tax-code-unconfigured product, not the common case of a per-line
+    // tax_code_id simply not being stamped on this specific sale.
     tax_amount: +(computedTaxTotal || Number(params.taxAmount) || Math.round(Number(params.subtotal) * 0.1 * 100) / 100).toFixed(2),
     tax_breakdown: computedTaxBreakdown,
     discount_amount: +Number(params.discountAmount ?? 0).toFixed(2),
