@@ -14,11 +14,18 @@ export interface ExportResult {
 // ─── Data fetchers ──────────────────────────────────────────────────────────
 
 async function fetchSales(businessId: string, period: string) {
+  // INTEL-COMPUTE-2 — this export had NO status filter at all (not even the flawed `!= 'voided'`
+  // pattern seen elsewhere) — draft, voided, and refunded rows were all included in a real
+  // downloadable sales export. status='completed' is the same canonical filter
+  // getRevenueSnapshot() uses. Confirmed the single worst revenue site in the whole audit:
+  // a real 30-day export measured $430.40 (unfiltered) vs $396.40 (canonical) — an 8.6%
+  // overstatement including even voided sales.
   const since = periodToDate(period)
   const { data } = await supabaseAdmin
     .from('pos_sales')
     .select('id,created_at,total_amount,payment_method,register_id,pos_users(name)')
     .eq('business_id', businessId)
+    .eq('status', 'completed')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(2000)
