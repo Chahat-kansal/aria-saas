@@ -11,6 +11,13 @@ interface SaleData {
   payment_method?: string
   cash_tendered?: number
   change_given?: number
+  // INTEL-COMPUTE-3 — this printer never read the sale's real persisted tax figures at all
+  // (structurally incapable of reflecting them), always recomputing a flat 10%-inclusive estimate
+  // from the client cart snapshot regardless of whether the real sale had a GST-free/WET/LCT
+  // breakdown. The caller (terminal.tsx) already passes the real pos_sales row (which does carry
+  // these columns) as `sale` — these fields were just never declared/read.
+  tax_amount?: number
+  tax_breakdown?: Array<{ tax_amount?: number }> | null
   cartSnapshot?: Array<{
     product?: { name: string }
     label?: string
@@ -27,10 +34,15 @@ interface Comp { type: string; config: Record<string, unknown> }
 function compToHTML(comp: Comp, sale: SaleData, businessName: string): string {
   const total  = sale.total_amount ?? 0
   const items  = sale.cartSnapshot ?? []
-  const sub    = items.length > 0
+  const estimatedSub = items.length > 0
     ? items.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0)
     : total
-  const gst    = sub - sub / 1.1
+  // INTEL-COMPUTE-3 — prefer the real persisted tax_amount (reflects the sale's actual tax-code
+  // breakdown, including any GST-free/WET/LCT line) over the flat 10%-inclusive estimate, which is
+  // only used as a last resort when no real figure is available (e.g. a pre-sale preview). When the
+  // real figure is used, subtotal is derived as total-gst so Subtotal+GST reconciles to TOTAL exactly.
+  const gst    = sale.tax_amount != null ? sale.tax_amount : estimatedSub - estimatedSub / 1.1
+  const sub    = sale.tax_amount != null ? total - gst : estimatedSub
   const date   = sale.created_at ? new Date(sale.created_at) : new Date()
   const ds     = date.toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   const ref    = sale.sale_number ?? (sale.id ? `#${String(sale.id).slice(-6).toUpperCase()}` : '#------')
