@@ -22,8 +22,8 @@ export async function getLoyaltyStats(db: SupabaseClient, businessId: string): P
     db.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since),
     db.from('pos_loyalty_transactions').select('id', { count: 'exact', head: true }).eq('business_id', businessId).not('reward_redeemed', 'is', null).gte('created_at', since),
     db.from('pos_customers').select('points_balance, loyalty_points').eq('business_id', businessId).limit(2000),
-    db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).neq('status', 'voided').gte('created_at', since),
-    db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).neq('status', 'voided').gte('created_at', since).not('customer_id', 'is', null),
+    db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'completed').gte('created_at', since),
+    db.from('pos_sales').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'completed').gte('created_at', since).not('customer_id', 'is', null),
     db.from('loyalty_checkins').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since7d),
   ])
 
