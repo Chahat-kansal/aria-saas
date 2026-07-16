@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { generateInsight } from '@/lib/aria-insights';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -25,12 +26,13 @@ async function _GET(req: Request) {
   const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
 
+  // INTEL-COMPUTE-3 — naive UTC boundary (no offset) fixed to AEST via toAESTStart/toAESTEnd.
   const { data: sales, error } = await supabase
     .from('pos_sales')
     .select('total_amount, payment_method, status, served_by, discount_amount')
     .eq('business_id', bid)
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .gte('created_at', toAESTStart(from))
+    .lte('created_at', toAESTEnd(to))
     .limit(2000);
 
   let saleRows: Array<{ total_amount: number; payment_method: string; status: string; served_by?: string | null; discount_amount?: number | null }> = [];
@@ -39,8 +41,8 @@ async function _GET(req: Request) {
       .from('pos_sales')
       .select('total_amount, payment_method, status, discount_amount')
       .eq('business_id', bid)
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`)
+      .gte('created_at', toAESTStart(from))
+      .lte('created_at', toAESTEnd(to))
       .limit(2000);
     saleRows = fallback ?? [];
   } else {
@@ -52,8 +54,8 @@ async function _GET(req: Request) {
     .from('pos_action_log')
     .select('action_type, user_id')
     .eq('business_id', bid)
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .gte('created_at', toAESTStart(from))
+    .lte('created_at', toAESTEnd(to))
     .in('action_type', ['void', 'refund', 'no_sale_open', 'discount_apply'])
     .limit(2000);
   const actionLog = actionLogRaw ?? [];
@@ -66,8 +68,10 @@ async function _GET(req: Request) {
   for (const s of saleRows) {
     const key = (s as any).served_by ?? 'Unknown';
     const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
+    // INTEL-COMPUTE-3 — was `!== 'voided' && !== 'refunded'`, which still counted draft (held/
+    // parked cart) rows as a cashier's revenue. status === 'completed' is the canonical filter.
     const amt = s.total_amount ?? 0;
-    if (amt >= 0 && s.status !== 'voided' && s.status !== 'refunded') {
+    if (s.status === 'completed') {
       e.sales += amt;
       e.transactions += 1;
     } else if (s.status === 'refunded') {

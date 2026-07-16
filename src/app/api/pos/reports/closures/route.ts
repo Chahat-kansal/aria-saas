@@ -32,10 +32,13 @@ async function _GET(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     // Compute per-session sales totals from actual sales (not NULL session columns)
+    // INTEL-COMPUTE-3 — was neq('voided'), which still admits draft/refunded rows into a till
+    // reconciliation figure (the exact class of bug the cash-up/pos-sales fix addressed last
+    // sprint). status='completed' is the canonical filter.
     const sessionIds = (sessions ?? []).map(s => s.id);
     const { data: salesData } = sessionIds.length > 0 ? await supabase
       .from('pos_sales').select('session_id, payment_method, total_amount')
-      .in('session_id', sessionIds).neq('status', 'voided') : { data: [] };
+      .in('session_id', sessionIds).eq('status', 'completed') : { data: [] };
 
     const salesMap: Record<string, { cash: number; card: number; total: number; count: number }> = {};
     for (const sale of salesData ?? []) {
