@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -26,15 +27,17 @@ async function _GET(req: Request) {
   const reportType = searchParams.get('report_type') ?? 'outlet';
   const sessionId  = searchParams.get('session_id') ?? null;
 
-  // Build base query
+  // INTEL-COMPUTE-2 — was neq('voided') (admits draft/refunded rows into the flagship Sales Report)
+  // with a naive UTC-day boundary. status='completed' + toAESTStart/toAESTEnd is the same canonical
+  // rule getRevenueSnapshot() uses.
   let query = supabase
     .from('pos_sales')
     .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id, served_by')
     .eq('business_id', bid)
     .not('sale_number', 'is', null)
-    .neq('status', 'voided')
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .eq('status', 'completed')
+    .gte('created_at', toAESTStart(from))
+    .lte('created_at', toAESTEnd(to))
     .order('created_at', { ascending: false })
     .limit(500);
 
@@ -51,8 +54,9 @@ async function _GET(req: Request) {
       .from('pos_sales')
       .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id')
       .eq('business_id', bid)
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`)
+      .eq('status', 'completed')
+      .gte('created_at', toAESTStart(from))
+      .lte('created_at', toAESTEnd(to))
       .order('created_at', { ascending: false })
       .limit(500);
     if (sessionId) fb = (fb as any).eq('session_id', sessionId);
@@ -60,7 +64,7 @@ async function _GET(req: Request) {
     return fallback ?? [];
   })() : (sales ?? []);
 
-  // Include ALL statuses — filter out obviously invalid records
+  // Both queries above already filter to status='completed' — this just drops obviously invalid records
   const valid = rows.filter(s => (s.total_amount ?? 0) !== 0 || s.status !== null);
 
   const total_revenue_cents = Math.round(valid.reduce((s, r) => s + (r.total_amount ?? 0), 0) * 100);
