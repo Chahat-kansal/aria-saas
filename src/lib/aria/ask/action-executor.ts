@@ -55,8 +55,30 @@ export interface ExecutionResult {
   requires_mass_confirm?: boolean
   affected_preview?: number
   action_log_id?: string
+  // INTEL-OUTCOME-2 Part 1 — the aria_actions row's own id, so the caller (and onActionExecuted,
+  // wired in Part 2) can reference this specific recommendation later. Previously this insert never
+  // returned its id at all, so nothing downstream could ever link an outcome to it.
+  aria_action_id?: string
   rollback_available: boolean
   rollback_expires_at?: string
+}
+
+// INTEL-OUTCOME-2 Part 1 — every action type here was previously recorded with a hardcoded
+// category:'sales' regardless of what it actually did (a stock adjustment, a roster draft, and a
+// price change were all indistinguishable to advice_weights/hypothesis generation, which key
+// entirely off category). Real category per action.type, so a recommendation is durably captured in
+// a way that can be MEANINGFULLY matched to a decision and an outcome, not just matched by id.
+const CATEGORY_BY_ACTION_TYPE: Record<PlannedAction['type'], string> = {
+  bulk_price_update: 'sales',
+  create_promotion: 'sales',
+  apply_category_discount: 'sales',
+  update_promotion: 'sales',
+  mark_products: 'inventory',
+  adjust_stock: 'inventory',
+  set_low_stock_threshold: 'inventory',
+  create_roster: 'staffing',
+  create_invoice: 'invoicing',
+  approve_po_draft: 'inventory',
 }
 
 // ── ASK-ARIA-FORTRESS failsafes ─────────────────────────────────────────────────────────────────────────
@@ -700,9 +722,12 @@ async function runAction(
     // Write to aria_actions for Brain panel visibility
     const impactNumeric = action.estimated_impact.replace(/[^0-9.]/g, '').slice(0, 10) || '0'
     const impactText = (Number(impactNumeric) || 0).toFixed(2)
-    await supabase.from('aria_actions').insert({
+    // INTEL-OUTCOME-2 Part 1 — .select('id').single() so the caller gets this row's real id back
+    // (previously discarded, so nothing downstream could ever reference this specific recommendation
+    // again — the durable-capture gap INTEL-OUTCOME-1 identified as the highest-leverage fix).
+    const { data: actionRow, error: actionInsertErr } = await supabase.from('aria_actions').insert({
       business_id: businessId,
-      category: 'sales',
+      category: CATEGORY_BY_ACTION_TYPE[action.type] ?? 'sales',
       title: action.title,
       recommendation: action.description,
       expected_impact: impactText,
@@ -718,11 +743,13 @@ async function runAction(
         affected_count: affectedCount,
         log_id: (logEntry as { id: string } | null)?.id ?? null,
       },
-    })
+    }).select('id').single()
+    if (actionInsertErr) console.error('[action-executor] aria_actions insert failed:', actionInsertErr.message)
 
     return {
       ok: true,
       affected_count: affectedCount,
+      aria_action_id: (actionRow as { id: string } | null)?.id,
       failed_count: failedCount > 0 ? failedCount : undefined,
       warning: failedCount > 0 ? `${affectedCount} updated, ${failedCount} failed.` : undefined,
       action_log_id: (logEntry as { id: string } | null)?.id,
