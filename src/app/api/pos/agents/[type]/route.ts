@@ -7,7 +7,7 @@ import { runAgent } from '@/lib/agents/orchestrator';
 import Anthropic from '@anthropic-ai/sdk';
 import type { AgentType } from '@/lib/agents/types';
 import { track } from '@/lib/analytics';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ type: string }> };
 type Supa = ReturnType<typeof createServerSupabaseClient>;
@@ -183,16 +183,10 @@ async function _GET(req: Request, { params }: Params) {
   }
 }
 
-async function _POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params, { supabase, userId, businessId: bid }: BusinessContext) {
   const reqId = Math.random().toString(36).slice(2, 10);
   try {
     const { type } = await params;
-    const supabase = createServerSupabaseClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const bid = await getBid(supabase, user.id);
-    if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
     let body: Record<string, unknown>;
     try {
@@ -284,7 +278,7 @@ async function _POST(req: Request, { params }: Params) {
 
       await supabase.from('agent_decisions').update({
         status: executionResult.success ? 'approved' : 'failed',
-        reviewed_by: user.id,
+        reviewed_by: userId,
         reviewed_at: new Date().toISOString(),
         executed_at: executionResult.success ? new Date().toISOString() : null,
       }).eq('id', decisionId);
@@ -294,7 +288,7 @@ async function _POST(req: Request, { params }: Params) {
     }
 
     if (action === 'reject') {
-      await supabase.from('agent_decisions').update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() }).eq('id', decision_id as string).eq('business_id', bid);
+      await supabase.from('agent_decisions').update({ status: 'rejected', reviewed_by: userId, reviewed_at: new Date().toISOString() }).eq('id', decision_id as string).eq('business_id', bid);
       const { data: dec } = await supabase.from('agent_decisions').select('agent_type').eq('id', decision_id as string).single();
       try { track('agent_decision_rejected', { agent_type: dec?.agent_type, reason: body.reason }); } catch { /* analytics is optional */ }
       return NextResponse.json({ ok: true });
@@ -345,4 +339,4 @@ async function _POST(req: Request, { params }: Params) {
 }
 
 export const GET = withErrorCapture('pos/agents/[type]', _GET)
-export const POST = withErrorCapture('pos/agents/[type]', _POST)
+export const POST = withBusinessContext('pos/agents/[type]', _POST)

@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface ExpenseInput { label: string; amount: number | string }
 
@@ -30,13 +30,7 @@ async function _GET() {
   return NextResponse.json({ expenses: data ?? [] });
 }
 
-async function _PUT(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _PUT(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}));
   const incoming = Array.isArray(body.expenses) ? body.expenses as ExpenseInput[] : [];
 
@@ -61,4 +55,4 @@ async function _PUT(req: Request) {
 }
 
 export const GET = withErrorCapture('business-expenses', _GET);
-export const PUT = withErrorCapture('business-expenses', _PUT);
+export const PUT = withBusinessContext('business-expenses', _PUT);

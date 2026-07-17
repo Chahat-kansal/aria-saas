@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -24,13 +24,7 @@ async function _GET(_req: Request) {
   return NextResponse.json({ schedules: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as {
     name?: string; report_type?: string; send_at_hour?: number
     send_on_days?: number[]; recipients?: string[]
@@ -52,13 +46,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ schedule: data })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { id?: string; is_active?: boolean }
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   await supabaseAdmin.from('aria_scheduled_reports').update({ is_active: body.is_active }).eq('id', body.id).eq('business_id', bid)
@@ -66,5 +54,5 @@ async function _PATCH(req: Request) {
 }
 
 export const GET = withErrorCapture('aria/intelligence/schedules:GET', _GET)
-export const POST = withErrorCapture('aria/intelligence/schedules:POST', _POST)
-export const PATCH = withErrorCapture('aria/intelligence/schedules:PATCH', _PATCH)
+export const POST = withBusinessContext('aria/intelligence/schedules:POST', _POST)
+export const PATCH = withBusinessContext('aria/intelligence/schedules:PATCH', _PATCH)

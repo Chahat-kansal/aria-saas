@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -23,12 +23,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ logs: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { recipient, subject, email_type, status } = await req.json()
   const { data, error: e } = await supabase.from('email_log').insert({ business_id: bid, recipient, subject, email_type, status: status ?? 'sent' }).select().single()
   if (e) return NextResponse.json({ error: e.message }, { status: 500 })
@@ -36,4 +31,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/email-log', _GET)
-export const POST = withErrorCapture('pos/email-log', _POST)
+export const POST = withBusinessContext('pos/email-log', _POST)

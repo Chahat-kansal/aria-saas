@@ -5,7 +5,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -236,13 +236,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ assets: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as {
     action?: string
     prompt?: string; style?: string; format?: string; folder?: string; tags?: string[]
@@ -312,13 +306,7 @@ Rules:
   return NextResponse.json({ asset, url: result.url, provider: result.provider, ok: true })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { id: string; folder?: string; tags?: string[]; name?: string; favourite?: boolean }
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -333,12 +321,7 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ asset: data, ok: true })
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _DELETE(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -348,6 +331,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('aria/studio', _GET)
-export const POST = withErrorCapture('aria/studio', _POST)
-export const PATCH = withErrorCapture('aria/studio', _PATCH)
-export const DELETE = withErrorCapture('aria/studio', _DELETE)
+export const POST = withBusinessContext('aria/studio', _POST)
+export const PATCH = withBusinessContext('aria/studio', _PATCH)
+export const DELETE = withBusinessContext('aria/studio', _DELETE)

@@ -5,7 +5,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
@@ -27,13 +27,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ reports: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { week_start?: string }
   const now = new Date()
   const dow = now.getDay(); const daysToMon = dow === 0 ? 6 : dow - 1
@@ -116,4 +110,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('aria/weekly-report', _GET)
-export const POST = withErrorCapture('aria/weekly-report', _POST)
+export const POST = withBusinessContext('aria/weekly-report', _POST)

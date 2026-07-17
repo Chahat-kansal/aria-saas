@@ -6,7 +6,7 @@ import { parseLLMJsonOr } from '@/lib/ai-json';
 import { NextResponse } from "next/server";
 import { checkRateLimit } from '@/lib/rate-limit';
 import Anthropic from "@anthropic-ai/sdk";
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { CANONICAL_COLS } from '@/lib/aria/schema-registry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
@@ -158,13 +158,7 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
   return NextResponse.json({ actions, count: actions.length });
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
-
+async function _PATCH(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -182,4 +176,4 @@ async function _PATCH(req: Request) {
 
 export const GET = withErrorCapture('aria/autopilot', _GET)
 export const POST = withErrorCapture('aria/autopilot', _POST)
-export const PATCH = withErrorCapture('aria/autopilot', _PATCH)
+export const PATCH = withBusinessContext('aria/autopilot', _PATCH)

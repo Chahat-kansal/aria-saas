@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -35,13 +35,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ sessions, active_session })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const body = await req.json()
   const { opening_float, register_id, outlet_id, notes } = body
 
@@ -55,8 +49,8 @@ async function _POST(req: Request) {
     business_id: bid,
     register_id: register_id ?? null,
     outlet_id: outlet_id ?? null,
-    opened_by: user.id,
-    opened_by_user_id: user.id,
+    opened_by: userId,
+    opened_by_user_id: userId,
     opened_at: new Date().toISOString(),
     opening_float: Number(opening_float) || 0,
     status: 'open',
@@ -69,4 +63,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/cash-sessions', _GET)
-export const POST = withErrorCapture('pos/cash-sessions', _POST)
+export const POST = withBusinessContext('pos/cash-sessions', _POST)

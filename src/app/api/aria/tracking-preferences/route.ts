@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -29,14 +29,7 @@ async function _GET() {
 
 export const GET = withErrorCapture('aria/tracking-preferences', _GET)
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { category, is_tracking, paused_reason } = await req.json()
   if (!category) return NextResponse.json({ error: 'category required' }, { status: 400 })
 
@@ -62,4 +55,4 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('aria/tracking-preferences', _PATCH)
+export const PATCH = withBusinessContext('aria/tracking-preferences', _PATCH)

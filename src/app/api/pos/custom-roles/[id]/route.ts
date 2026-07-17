@@ -1,25 +1,12 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }
 
-async function _PATCH(req: Request, { params }: Params) {
+async function _PATCH(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = await params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
   const { data: existing } = await supabase.from('pos_custom_roles').select('id, business_id, is_system').eq('id', id).maybeSingle()
   if (!existing || existing.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (existing.is_system) return NextResponse.json({ error: 'Cannot edit system role' }, { status: 400 })
@@ -34,13 +21,8 @@ async function _PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ role: data })
 }
 
-async function _DELETE(_req: Request, { params }: Params) {
+async function _DELETE(_req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = await params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
   const { data: role } = await supabase.from('pos_custom_roles').select('role_key, is_system, business_id').eq('id', id).maybeSingle()
   if (!role || role.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (role.is_system) return NextResponse.json({ error: 'Cannot delete system role' }, { status: 400 })
@@ -50,5 +32,5 @@ async function _DELETE(_req: Request, { params }: Params) {
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('pos/custom-roles/[id]', _PATCH)
-export const DELETE = withErrorCapture('pos/custom-roles/[id]', _DELETE)
+export const PATCH = withBusinessContext('pos/custom-roles/[id]', _PATCH)
+export const DELETE = withBusinessContext('pos/custom-roles/[id]', _DELETE)

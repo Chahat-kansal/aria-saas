@@ -1,27 +1,13 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { computeExpectedCashCents, computeVarianceCents, classifyVariance } from '@/lib/pos/cash-session-engine'
 
 type Params = { params: { id: string } }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(_req: Request, { params }: Params) {
+async function _GET(_req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const { data: session, error } = await supabase.from('pos_cash_sessions').select('*').eq('id', id).eq('business_id', bid).maybeSingle()
   if (error?.code === '42P01') return NextResponse.json({ session: null, sales: [] })
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -35,14 +21,8 @@ async function _GET(_req: Request, { params }: Params) {
   return NextResponse.json({ session, sales: sales ?? [] })
 }
 
-async function _PATCH(req: Request, { params }: Params) {
+async function _PATCH(req: Request, { params }: Params, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const { data: session, error: sessErr } = await supabase.from('pos_cash_sessions').select('*').eq('id', id).eq('business_id', bid).maybeSingle()
   if (sessErr?.code === '42P01') return NextResponse.json({ error: 'Cash sessions table not created' }, { status: 503 })
   if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
@@ -51,7 +31,7 @@ async function _PATCH(req: Request, { params }: Params) {
   const body = await req.json()
   const actual_cash_cents = Math.round(Number(body.actual_cash_cents) || 0)
   const closure_note = String(body.closure_note ?? '').slice(0, 500)
-  const closed_by = String(body.closed_by_name ?? user.id).slice(0, 200)
+  const closed_by = String(body.closed_by_name ?? userId).slice(0, 200)
 
   // Compute totals from sales in this session
   const { data: sessionSales } = await supabase.from('pos_sales')
@@ -98,7 +78,7 @@ async function _PATCH(req: Request, { params }: Params) {
         category: 'cashflow',
         event_type: 'cash_variance',
         data: { session_id: id, variance_cents, classification, total_cash_sales },
-        triggered_by: user.id,
+        triggered_by: userId,
       })
     } catch (e) { console.error('[non-fatal]', e) }
   }
@@ -106,5 +86,5 @@ async function _PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ ok: true, variance_cents, classification, expected_cash_cents })
 }
 
-export const GET = withErrorCapture('pos/cash-sessions/[id]', _GET)
-export const PATCH = withErrorCapture('pos/cash-sessions/[id]', _PATCH)
+export const GET = withBusinessContext('pos/cash-sessions/[id]', _GET)
+export const PATCH = withBusinessContext('pos/cash-sessions/[id]', _PATCH)

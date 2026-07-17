@@ -5,7 +5,7 @@ export const maxDuration = 20
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -79,13 +79,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ suggestion })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { id: string; decision: 'approved' | 'rejected'; cashier_name?: string }
   if (!body.id || !body.decision) return NextResponse.json({ error: 'id and decision required' }, { status: 400 })
 
@@ -99,4 +93,4 @@ async function _PATCH(req: Request) {
 }
 
 export const POST = withErrorCapture('pos/display-suggestions', _POST)
-export const PATCH = withErrorCapture('pos/display-suggestions', _PATCH)
+export const PATCH = withBusinessContext('pos/display-suggestions', _PATCH)

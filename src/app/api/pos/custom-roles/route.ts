@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -22,12 +22,7 @@ async function _GET() {
   return NextResponse.json({ roles: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json()
   const role_key = String(body.role_key ?? '').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 40)
   if (!role_key) return NextResponse.json({ error: 'role_key required' }, { status: 400 })
@@ -53,4 +48,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/custom-roles', _GET)
-export const POST = withErrorCapture('pos/custom-roles', _POST)
+export const POST = withBusinessContext('pos/custom-roles', _POST)

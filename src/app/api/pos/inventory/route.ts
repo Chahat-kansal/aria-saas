@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -33,14 +33,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ ok: true, data: data ?? [] })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const { product_id, outlet_id, adjustment, reason } = await req.json()
   if (!product_id || !outlet_id || adjustment === undefined) {
     return NextResponse.json({ error: 'product_id, outlet_id, adjustment required' }, { status: 400 })
@@ -74,7 +67,7 @@ async function _PATCH(req: Request) {
       business_id: bid, product_id, outlet_id,
       adjustment_qty: adjustment,
       reason: reason ?? null,
-      adjusted_by: user.id,
+      adjusted_by: userId,
       created_at: new Date().toISOString(),
     })
   } catch (e) { console.error('[non-fatal]', e) }
@@ -83,4 +76,4 @@ async function _PATCH(req: Request) {
 }
 
 export const GET   = withErrorCapture('pos/inventory', _GET)
-export const PATCH = withErrorCapture('pos/inventory', _PATCH)
+export const PATCH = withBusinessContext('pos/inventory', _PATCH)

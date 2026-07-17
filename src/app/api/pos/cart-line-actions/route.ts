@@ -1,27 +1,13 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const body = await req.json()
 
   // Resolve pos_user + check permission
-  const { data: posUser } = await supabase.from('pos_users').select('id, role, permissions').eq('business_id', bid).eq('auth_user_id', user.id).maybeSingle()
+  const { data: posUser } = await supabase.from('pos_users').select('id, role, permissions').eq('business_id', bid).eq('auth_user_id', userId).maybeSingle()
   const canOverride = !!(posUser?.permissions as Record<string, unknown> | null)?.can_override_price
   if (!canOverride) return NextResponse.json({ error: 'Permission denied: can_override_price required' }, { status: 403 })
 
@@ -35,7 +21,7 @@ async function _POST(req: Request) {
     await supabase.from('pos_audit_log').insert({
       business_id: bid,
       action: 'price_override',
-      performed_by: user.id,
+      performed_by: userId,
       sale_id: null,
       amount: newPrice,
       reason_note: String(body.reason ?? '').slice(0, 500),
@@ -61,11 +47,11 @@ async function _POST(req: Request) {
         reason: body.reason,
         pos_user_role: posUser?.role,
       },
-      triggered_by: user.id,
+      triggered_by: userId,
     })
   } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true })
 }
 
-export const POST = withErrorCapture('pos/cart-line-actions', _POST)
+export const POST = withBusinessContext('pos/cart-line-actions', _POST)

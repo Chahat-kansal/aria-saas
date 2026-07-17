@@ -1,22 +1,9 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _GET(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const startsAt = searchParams.get('starts_at')
   const endsAt = searchParams.get('ends_at')
@@ -87,12 +74,7 @@ async function _GET(req: Request) {
   })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const body = await req.json()
   if (!body.period_starts_at || !body.period_ends_at) return NextResponse.json({ error: 'period_starts_at + period_ends_at required' }, { status: 400 })
   const { data, error } = await supabase.from('pos_bas_exports').insert({
@@ -107,11 +89,11 @@ async function _POST(req: Request) {
     gst_free_sales: Number(body.gst_free_sales) || 0,
     export_format: body.export_format ?? 'csv',
     breakdown_jsonb: body.breakdown_jsonb ?? {},
-    generated_by: user.id,
+    generated_by: userId,
   }).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ export: data })
 }
 
-export const GET = withErrorCapture('pos/bas-export', _GET)
-export const POST = withErrorCapture('pos/bas-export', _POST)
+export const GET = withBusinessContext('pos/bas-export', _GET)
+export const POST = withBusinessContext('pos/bas-export', _POST)

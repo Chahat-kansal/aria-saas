@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 function rfmSegment(r: number, f: number, m: number): string {
   if (r >= 4 && f >= 4 && m >= 4) return 'Champions';
@@ -15,23 +14,9 @@ function rfmSegment(r: number, f: number, m: number): string {
   return 'Promising';
 }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
 // Authenticated RFM trigger — runs RFM for the current user's business only.
 // No CRON_SECRET needed; uses session auth instead.
-async function _POST() {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(_req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const now = new Date();
   const twelveMonthsAgo = new Date(now);
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
@@ -106,4 +91,4 @@ async function _POST() {
   return NextResponse.json({ processed: updates.length, segments: segCounts });
 }
 
-export const POST = withErrorCapture('pos/customers/rfm-trigger', _POST)
+export const POST = withBusinessContext('pos/customers/rfm-trigger', _POST)

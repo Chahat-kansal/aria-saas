@@ -2,26 +2,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface SaleRow { id: string; total_amount: number | null; payment_method: string | null; created_at: string; served_by: string | null; status: string | null }
 interface SessionRow { id: string; opened_at: string; opened_by: string | null; opening_float: number | null; status: string | null }
 
-async function _GET() {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _GET(_req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
 
   const [todaySales, openSession, recentSales, posUsersOnline] = await Promise.all([
@@ -68,4 +54,4 @@ async function _GET() {
   });
 }
 
-export const GET = withErrorCapture('pos/dashboard', _GET);
+export const GET = withBusinessContext('pos/dashboard', _GET);

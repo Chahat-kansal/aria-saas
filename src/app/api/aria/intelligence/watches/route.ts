@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -24,13 +24,7 @@ async function _GET(_req: Request) {
   return NextResponse.json({ watches: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { competitor_name?: string; competitor_url?: string; products_to_watch?: string[] }
   if (!body.competitor_name?.trim()) return NextResponse.json({ error: 'competitor_name required' }, { status: 400 })
 
@@ -45,13 +39,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ watch: data })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { id?: string; is_active?: boolean; products_to_watch?: string[] }
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -64,5 +52,5 @@ async function _PATCH(req: Request) {
 }
 
 export const GET = withErrorCapture('aria/intelligence/watches:GET', _GET)
-export const POST = withErrorCapture('aria/intelligence/watches:POST', _POST)
-export const PATCH = withErrorCapture('aria/intelligence/watches:PATCH', _PATCH)
+export const POST = withBusinessContext('aria/intelligence/watches:POST', _POST)
+export const PATCH = withBusinessContext('aria/intelligence/watches:PATCH', _PATCH)

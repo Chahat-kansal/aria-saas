@@ -2,9 +2,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { listMissingCosts } from '@/lib/inventory/resolve-cost'
 import { computeStockValue } from '@/lib/inventory/stock-value'
@@ -13,20 +12,7 @@ import { computeStockValue } from '@/lib/inventory/stock-value'
 // with no resolvable cost). POST = owner sets a REAL cost (business-level cost_price and/or per-outlet
 // item_cost). getBid-scoped. Costs must be > 0 — we never store a fabricated/zero "real" cost.
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const outletId = await resolveOutletId(supabaseAdmin, bid, new URL(req.url).searchParams.get('outlet_id'))
   const [valuation, missing] = await Promise.all([
     computeStockValue(supabaseAdmin, bid, outletId),
@@ -35,13 +21,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ outlet_id: outletId, stock_value: valuation, missing_costs: missing })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as { product_id?: string; cost_price?: number; item_cost?: number; outlet_id?: string }
   if (!body.product_id) return NextResponse.json({ error: 'product_id required' }, { status: 400 })
 
@@ -76,5 +56,5 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture('pos/inventory/cost:get', _GET)
-export const POST = withErrorCapture('pos/inventory/cost:post', _POST)
+export const GET = withBusinessContext('pos/inventory/cost:get', _GET)
+export const POST = withBusinessContext('pos/inventory/cost:post', _POST)

@@ -1,25 +1,10 @@
 export const dynamic = 'force-dynamic'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+async function _GET(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }, { supabase, businessId: bid }: BusinessContext) {
   const { id } = 'then' in params ? await params : params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const { data: customer, error } = await supabase
     .from('pos_customers')
     .select('*')
@@ -51,17 +36,10 @@ async function _GET(_req: Request, { params }: { params: Promise<{ id: string }>
   return NextResponse.json({ customer, sales: sales ?? [], loyalty_transactions: loyaltyTx ?? [] })
 }
 
-export const GET = withErrorCapture('pos/customers/[id]', _GET)
+export const GET = withBusinessContext('pos/customers/[id]', _GET)
 
-async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }, { supabase, businessId: bid }: BusinessContext) {
   const { id } = 'then' in params ? await params : params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const rawBody = await req.json().catch(() => null)
   if (!rawBody || typeof rawBody !== 'object') return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   const body = rawBody as Record<string, unknown>
@@ -76,16 +54,10 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('pos/customers/[id]', _PATCH)
+export const PATCH = withBusinessContext('pos/customers/[id]', _PATCH)
 
-async function _DELETE(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+async function _DELETE(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = 'then' in params ? await params : params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   // Soft-delete: preserve customer data, just hide from active lists
   const { data: existing } = await supabase.from('pos_customers').select('id, name, email, phone').eq('id', id).eq('business_id', bid).maybeSingle()
@@ -100,7 +72,7 @@ async function _DELETE(_req: Request, { params }: { params: Promise<{ id: string
     row_id: id,
     action: 'soft_delete',
     old_data: existing,
-    performed_by: user.id,
+    performed_by: userId,
     business_id: bid,
     reason: 'owner_deleted',
   })).catch(() => {})
@@ -108,4 +80,4 @@ async function _DELETE(_req: Request, { params }: { params: Promise<{ id: string
   return NextResponse.json({ ok: true })
 }
 
-export const DELETE = withErrorCapture('pos/customers/[id]', _DELETE)
+export const DELETE = withBusinessContext('pos/customers/[id]', _DELETE)

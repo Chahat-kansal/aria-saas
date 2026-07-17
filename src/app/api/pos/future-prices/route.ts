@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -36,12 +36,7 @@ async function _GET() {
   return NextResponse.json({ future_prices: data ?? [] });
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { product_id, new_price, effective_date } = await req.json();
   if (!product_id || !new_price || !effective_date) return NextResponse.json({ error: 'product_id, new_price, effective_date required' }, { status: 400 });
   // SECURITY-CRITICAL-1 — verify product_id belongs to bid before scheduling a price change for it,
@@ -56,12 +51,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ future_price: data });
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _DELETE(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -70,5 +60,5 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/future-prices', _GET)
-export const POST = withErrorCapture('pos/future-prices', _POST)
-export const DELETE = withErrorCapture('pos/future-prices', _DELETE)
+export const POST = withBusinessContext('pos/future-prices', _POST)
+export const DELETE = withBusinessContext('pos/future-prices', _DELETE)

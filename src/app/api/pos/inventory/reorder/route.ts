@@ -3,40 +3,21 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { computePar, computeParReadonly, getOrSeedReorderSettings, setProductPar } from '@/lib/inventory/par-levels'
 
 // INV-PAR-1 — owner reorder surface. GET reads par + below-reorder (bootstraps a compute on first use);
 // POST { action } recomputes, saves settings, or applies a per-product override. getBid-scoped.
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   // If no par computed yet (all zero), bootstrap a compute; else read stored.
   const { count: anyPar } = await supabaseAdmin.from('pos_products').select('id', { count: 'exact', head: true }).eq('business_id', bid).gt('reorder_point', 0)
   const result = (anyPar ?? 0) > 0 ? await computeParReadonly(supabaseAdmin, bid) : await computePar(supabaseAdmin, bid)
   return NextResponse.json(result)
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as { action?: string; lead_time_days?: number; buffer_weeks?: number; review_cycle_days?: number; default_reorder_qty?: number; product_id?: string; reorder_point?: number; target_stock?: number; reorder_qty?: number }
 
   if (body.action === 'settings') {
@@ -61,5 +42,5 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true, ...result })
 }
 
-export const GET = withErrorCapture('pos/inventory/reorder:get', _GET)
-export const POST = withErrorCapture('pos/inventory/reorder:post', _POST)
+export const GET = withBusinessContext('pos/inventory/reorder:get', _GET)
+export const POST = withBusinessContext('pos/inventory/reorder:post', _POST)

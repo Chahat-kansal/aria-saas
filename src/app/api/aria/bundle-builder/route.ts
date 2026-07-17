@@ -5,7 +5,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { parseLLMJsonOr } from '@/lib/ai-json'
@@ -48,13 +48,7 @@ async function _GET(req: Request) {
 }
 
 // ── POST — analyse baskets, generate bundle suggestions (status=pending)
-async function _POST() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   // Clear existing pending suggestions from Aria
   await supabaseAdmin.from('product_bundles').delete().eq('business_id', bid).eq('status', 'pending').eq('source', 'aria')
 
@@ -212,13 +206,7 @@ async function _POST() {
 }
 
 // ── PATCH — approve / reject / archive
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { id, action, bundle_name, bundle_pitch, bundle_price } = await req.json() as {
     id?: string
     action?: 'approve' | 'reject' | 'archive'
@@ -242,12 +230,7 @@ async function _PATCH(req: Request) {
 }
 
 // ── DELETE
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _DELETE(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -256,6 +239,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('aria/bundle-builder', _GET)
-export const POST = withErrorCapture('aria/bundle-builder', _POST)
-export const PATCH = withErrorCapture('aria/bundle-builder', _PATCH)
-export const DELETE = withErrorCapture('aria/bundle-builder', _DELETE)
+export const POST = withBusinessContext('aria/bundle-builder', _POST)
+export const PATCH = withBusinessContext('aria/bundle-builder', _PATCH)
+export const DELETE = withBusinessContext('aria/bundle-builder', _DELETE)

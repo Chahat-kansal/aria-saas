@@ -3,17 +3,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 type Category = 'Rent' | 'Wages' | 'Stock' | 'Utilities' | 'Other'
 
@@ -28,14 +20,7 @@ function categorise(description: string | null, basiqCategory: string | null): C
   return 'Other'
 }
 
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const periodParam = searchParams.get('period') ?? '30d'
   const periodDays = periodParam === '7d' ? 7 : periodParam === '90d' ? 90 : 30
@@ -170,4 +155,4 @@ async function _GET(req: Request) {
   })
 }
 
-export const GET = withErrorCapture('pos/cash-flow/analysis', _GET)
+export const GET = withBusinessContext('pos/cash-flow/analysis', _GET)
