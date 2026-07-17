@@ -4,10 +4,9 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 import { computeStockValue } from '@/lib/inventory/stock-value';
 import { resolveOutletId } from '@/lib/inventory/outlet-stock';
 import { guardOutput } from '@/lib/aria/ground-guard';
@@ -20,20 +19,7 @@ interface Product { id: string; name: string; cost_price: number | null; low_sto
 interface Sale { product_id: string; quantity: number | null }
 interface InvRow { product_id: string; items_on_hand: number | null }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
-async function _POST() {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(_req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   // Canonical valuation (items_on_hand × resolved cost), per the resolved outlet — same scope/source as the
   // dashboard value tile and the INV-COST-1 panel, so the prose and the KPI agree.
   const outletId = await resolveOutletId(supabaseAdmin, bid, null);
@@ -139,4 +125,4 @@ What should the owner do? Plain prose, 2-3 sentences, Australian context. Cite o
   });
 }
 
-export const POST = withErrorCapture('aria/inventory-insight', _POST);
+export const POST = withBusinessContext('aria/inventory-insight', _POST);

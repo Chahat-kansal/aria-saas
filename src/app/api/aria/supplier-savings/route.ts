@@ -4,28 +4,14 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 import { guardOutput } from '@/lib/aria/ground-guard';
 
 interface PoItem { product_id: string | null; product_name: string | null; unit_cost_cents: number | null; supplier_id: string | null }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
-async function _POST() {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(_req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   // Build a price-per-product map across suppliers from purchase orders
   const { data: items } = await supabase.from('pos_purchase_order_items')
     .select('product_id, product_name, unit_cost_cents, pos_purchase_orders!inner(business_id, supplier_id, pos_suppliers(name))')
@@ -102,4 +88,4 @@ async function _POST() {
   return NextResponse.json({ opportunities, recommendation });
 }
 
-export const POST = withErrorCapture('aria/supplier-savings', _POST);
+export const POST = withBusinessContext('aria/supplier-savings', _POST);

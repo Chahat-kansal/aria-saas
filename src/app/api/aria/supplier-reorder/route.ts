@@ -4,29 +4,15 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface Product { id: string; name: string; stock_quantity: number | null; low_stock_threshold: number | null; cost_price: number | null; supplier_id: string | null }
 interface SaleItem { product_id: string; quantity: number | null }
 interface DraftLine { product_id: string; product_name: string; current_stock: number; suggested_qty: number; estimated_cost_cents: number; reason: string }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { supplier_id, lead_days } = await req.json();
   if (!supplier_id) return NextResponse.json({ error: 'supplier_id required' }, { status: 400 });
 
@@ -107,4 +93,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ supplier: { id: supplier.id, name: supplier.name }, draft, total_cents: totalCents, ai_note: aiNote });
 }
 
-export const POST = withErrorCapture('aria/supplier-reorder', _POST);
+export const POST = withBusinessContext('aria/supplier-reorder', _POST);

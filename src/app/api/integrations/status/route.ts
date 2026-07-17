@@ -2,25 +2,11 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { isKountaConfigured } from '@/lib/integrations/kounta'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(_req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const [squareConn, shopifyConn, lsXConn, kountaConn] = await Promise.all([
     supabaseAdmin.from('pos_oauth_integrations').select('sync_status:status, last_synced_at:last_sync_at, connected_at:created_at, sync_error:last_error').eq('business_id', bid).eq('integration_key', 'square').maybeSingle(),
     supabase.from('shopify_connections').select('sync_status, last_synced_at, shop_name, store_url, sync_error').eq('business_id', bid).maybeSingle(),
@@ -53,4 +39,4 @@ async function _GET(_req: Request) {
   })
 }
 
-export const GET = withErrorCapture('integrations/status', _GET)
+export const GET = withBusinessContext('integrations/status', _GET)

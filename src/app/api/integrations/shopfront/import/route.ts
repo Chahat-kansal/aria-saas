@@ -1,24 +1,10 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from("user_active_business").select("business_id").eq("user_id", userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from("businesses").select("id").eq("user_id", userId).eq("is_active", true).order("created_at", { ascending: true }).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: "No business" }, { status: 400 });
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}));
   const { access_token } = body;
 
@@ -69,4 +55,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true, imported_products, imported_customers });
 }
 
-export const POST = withErrorCapture('integrations/shopfront/import', _POST)
+export const POST = withBusinessContext('integrations/shopfront/import', _POST)

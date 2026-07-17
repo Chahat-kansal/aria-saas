@@ -2,17 +2,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { skillEnabledForIndustry } from '@/lib/aria/industry-skills'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 // ── Built-in seed skills — auto-created the first time GET is called per business
 const BUILT_IN_SKILLS: Array<{ name: string; icon: string; description: string; system_prompt_addition: string }> = [
@@ -75,13 +67,7 @@ async function ensureBuiltInSeeded(bid: string) {
 }
 
 // GET — list this business's skills, seeding built-ins on first visit
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   await ensureBuiltInSeeded(bid)
   const { data } = await supabaseAdmin.from('aria_skills')
     .select('id, name, icon, description, system_prompt_addition, built_in, enabled, created_at')
@@ -92,13 +78,7 @@ async function _GET() {
 }
 
 // POST — create a custom skill
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as { name?: string; icon?: string; description?: string; system_prompt_addition?: string }
   const name = (body.name ?? '').trim().slice(0, 80)
   const sysAdd = (body.system_prompt_addition ?? '').trim().slice(0, 1000)
@@ -126,13 +106,7 @@ async function _POST(req: Request) {
 }
 
 // PUT — toggle enabled or edit a custom skill
-async function _PUT(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PUT(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as {
     id?: string
     enabled?: boolean
@@ -167,13 +141,7 @@ async function _PUT(req: Request) {
 }
 
 // DELETE — only custom skills (built-ins are protected)
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _DELETE(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -187,7 +155,7 @@ async function _DELETE(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET    = withErrorCapture('aria/skills', _GET)
-export const POST   = withErrorCapture('aria/skills', _POST)
-export const PUT    = withErrorCapture('aria/skills', _PUT)
-export const DELETE = withErrorCapture('aria/skills', _DELETE)
+export const GET    = withBusinessContext('aria/skills', _GET)
+export const POST   = withBusinessContext('aria/skills', _POST)
+export const PUT    = withBusinessContext('aria/skills', _PUT)
+export const DELETE = withBusinessContext('aria/skills', _DELETE)

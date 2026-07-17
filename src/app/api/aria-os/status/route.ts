@@ -2,27 +2,13 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface AiCallRow { agent_key: string | null; model_id: string | null; input_tokens: number | null; output_tokens: number | null; created_at: string }
 interface AutopilotRow { id: string; action_type: string | null; status: string | null; created_at: string; details?: unknown }
 interface MemoryRow { id: string; kind: string | null; content: string | null; topic: string | null; importance: number | null }
 
-async function _GET() {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _GET(_req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const now = Date.now();
   const monthAgo = new Date(now - 30 * 86400_000).toISOString();
   const weekAgo = new Date(now - 7 * 86400_000).toISOString();
@@ -66,4 +52,4 @@ async function _GET() {
   });
 }
 
-export const GET = withErrorCapture('aria-os/status', _GET);
+export const GET = withBusinessContext('aria-os/status', _GET);

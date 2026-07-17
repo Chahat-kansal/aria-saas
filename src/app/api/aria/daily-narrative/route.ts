@@ -1,11 +1,10 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { parseLLMJsonOr } from '@/lib/ai-json'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { ariaInvoke } from '@/lib/aria/invoke'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -29,23 +28,10 @@ RULES (non-negotiable):
 - 3 sentences max total. No emoji. No fluff. Owner-tone, not bot-tone.
 - Respond ONLY with valid JSON: { "headline": "...", "pattern": "...", "action": "..." }`
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
 interface DailyNarrative { headline: string; pattern: string; action: string }
 const FALLBACK: DailyNarrative = { headline: '', pattern: '', action: '' }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}))
   let summary = body.summary
 
@@ -128,4 +114,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ narrative, summary })
 }
 
-export const POST = withErrorCapture('aria/daily-narrative', _POST)
+export const POST = withBusinessContext('aria/daily-narrative', _POST)

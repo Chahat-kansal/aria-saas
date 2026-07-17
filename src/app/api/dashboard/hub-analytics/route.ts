@@ -2,24 +2,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const since = new Date(Date.now() - 7 * 86400000).toISOString()
   const { data } = await supabaseAdmin.from('customer_hub_clicks')
     .select('target').eq('business_id', bid).gte('created_at', since).limit(5000)
@@ -37,4 +23,4 @@ async function _GET() {
   })
 }
 
-export const GET = withErrorCapture('dashboard/hub-analytics', _GET)
+export const GET = withBusinessContext('dashboard/hub-analytics', _GET)

@@ -2,26 +2,12 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 const VALID_STATUSES = new Set(['pending', 'active', 'paused', 'ended'])
 
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { data } = await supabaseAdmin.from('ad_campaigns')
     .select('*').eq('business_id', bid).order('created_at', { ascending: false })
 
@@ -58,13 +44,7 @@ async function _GET() {
   return NextResponse.json({ campaigns, month_revenue_aud: monthRevenue })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as Record<string, unknown>
   if (!body.advertiser_name || !body.ad_title) {
     return NextResponse.json({ error: 'advertiser_name and ad_title required' }, { status: 400 })
@@ -87,13 +67,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true, id: data?.id })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -109,12 +83,7 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _DELETE(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -122,7 +91,7 @@ async function _DELETE(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture('pos/ad-campaigns', _GET)
-export const POST = withErrorCapture('pos/ad-campaigns', _POST)
-export const PATCH = withErrorCapture('pos/ad-campaigns', _PATCH)
-export const DELETE = withErrorCapture('pos/ad-campaigns', _DELETE)
+export const GET = withBusinessContext('pos/ad-campaigns', _GET)
+export const POST = withBusinessContext('pos/ad-campaigns', _POST)
+export const PATCH = withBusinessContext('pos/ad-campaigns', _PATCH)
+export const DELETE = withBusinessContext('pos/ad-campaigns', _DELETE)

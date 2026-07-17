@@ -1,30 +1,15 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { quote_id: string; send?: boolean; draft?: string; subject?: string }
   const { quote_id, send, draft: sendDraft, subject: sendSubject } = body
   if (!quote_id) return NextResponse.json({ error: 'quote_id required' }, { status: 400 })
@@ -102,4 +87,4 @@ Return JSON: {"draft": "...", "win_score": 0}`,
   return NextResponse.json({ draft, subject, win_score: winScore, customer_email: quote.customer_email })
 }
 
-export const POST = withErrorCapture('aria/quote-followup', _POST)
+export const POST = withBusinessContext('aria/quote-followup', _POST)

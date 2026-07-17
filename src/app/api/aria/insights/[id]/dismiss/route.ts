@@ -1,23 +1,9 @@
 export const dynamic = 'force-dynamic'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
-  const { id } = 'then' in params ? await params : params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(_req: Request, context: { params: Promise<{ id: string }> | { id: string } }, { supabase, businessId: bid }: BusinessContext) {
+  const { id } = 'then' in context.params ? await context.params : context.params
 
   const { error } = await supabase
     .from('aria_actions')
@@ -29,4 +15,4 @@ async function _POST(_req: Request, { params }: { params: Promise<{ id: string }
   return NextResponse.json({ ok: true })
 }
 
-export const POST = withErrorCapture('aria/insights/dismiss', _POST)
+export const POST = withBusinessContext('aria/insights/dismiss', _POST)

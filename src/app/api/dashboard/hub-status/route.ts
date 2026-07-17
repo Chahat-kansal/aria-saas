@@ -2,25 +2,11 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 // Which customer-hub cards are configured for the active business (owner view).
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const [{ data: biz }, { data: cfg }] = await Promise.all([
     supabaseAdmin.from('businesses').select('website, booking_link_slug, google_review_link, google_business_url, community_bio, community_verified').eq('id', bid).maybeSingle(),
     supabaseAdmin.from('pos_loyalty_config').select('public_enrol_enabled').eq('business_id', bid).maybeSingle(),
@@ -35,4 +21,4 @@ async function _GET() {
   })
 }
 
-export const GET = withErrorCapture('dashboard/hub-status', _GET)
+export const GET = withBusinessContext('dashboard/hub-status', _GET)

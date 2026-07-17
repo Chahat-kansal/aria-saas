@@ -3,26 +3,12 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { planAction, isConfirmation } from '@/lib/aria/ask/action-planner'
 import { executeAction } from '@/lib/aria/ask/action-executor'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as { message?: string; conversation_id?: string; intent?: string }
   const message = String(body.message ?? '').trim()
   const conversationId = body.conversation_id ? String(body.conversation_id) : null
@@ -62,7 +48,7 @@ async function _POST(req: Request) {
     const parsedPending: PlannedAction = typeof rawPending === 'string'
       ? JSON.parse(rawPending) as PlannedAction
       : rawPending as PlannedAction
-    const result = await executeAction(parsedPending, bid, user.id, conversationId, message)
+    const result = await executeAction(parsedPending, bid, userId, conversationId, message)
 
     await supabase.from('aria_conversations').update({
       pending_action: null,
@@ -85,4 +71,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ error: 'Unknown intent' }, { status: 400 })
 }
 
-export const POST = withErrorCapture('aria/ask/action', _POST)
+export const POST = withBusinessContext('aria/ask/action', _POST)

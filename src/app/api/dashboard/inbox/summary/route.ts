@@ -3,29 +3,15 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { callAnthropic } from '@/lib/aria/providers/anthropic'
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
 interface Summary { headline: string; asks: string[]; loved: string | null; disliked: string | null; faq: string[]; sentiment: string }
 
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const refresh = new URL(req.url).searchParams.get('refresh') === '1'
   const cacheKey = `inbox_summary_${bid}`
   if (!refresh) {
@@ -86,4 +72,4 @@ Note: thumbs up/down feedback is not yet collected, so leave loved/disliked null
   return NextResponse.json({ summary, cached: false })
 }
 
-export const GET = withErrorCapture('dashboard/inbox/summary', _GET)
+export const GET = withBusinessContext('dashboard/inbox/summary', _GET)

@@ -1,24 +1,10 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (a?.business_id) return a.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 // GET — load settings + per-product overrides
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const [{ data: settings }, { data: products }] = await Promise.all([
     supabaseAdmin.from('reorder_settings').select('*').eq('business_id', bid).maybeSingle(),
     supabaseAdmin.from('pos_products')
@@ -30,13 +16,7 @@ async function _GET(req: Request) {
 }
 
 // POST — upsert settings + bulk product overrides
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json()
   const { settings, product_overrides } = body
 
@@ -68,5 +48,5 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture('aria/reorder-settings', _GET)
-export const POST = withErrorCapture('aria/reorder-settings', _POST)
+export const GET = withBusinessContext('aria/reorder-settings', _GET)
+export const POST = withBusinessContext('aria/reorder-settings', _POST)

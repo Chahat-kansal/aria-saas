@@ -3,20 +3,12 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 type Product = {
   id: string
@@ -38,13 +30,7 @@ type Suggestion = {
 }
 
 // ── GET: list pending + recent suggestions
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { data: suggestions } = await supabaseAdmin.from('pricing_suggestions')
     .select('*, pos_products(name, stock_quantity)')
     .eq('business_id', bid)
@@ -58,13 +44,7 @@ async function _GET() {
 }
 
 // ── POST: run the engine, generate fresh suggestions
-async function _POST() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   // Clear stale pending suggestions
   await supabaseAdmin.from('pricing_suggestions').delete().eq('business_id', bid).eq('status', 'pending')
 
@@ -241,13 +221,7 @@ async function _POST() {
 }
 
 // ── PATCH: approve or reject a suggestion
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { id, action } = await req.json() as { id?: string; action?: 'approve' | 'reject' }
   if (!id || !action) return NextResponse.json({ error: 'id and action required' }, { status: 400 })
 
@@ -267,6 +241,6 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture('aria/dynamic-pricing', _GET)
-export const POST = withErrorCapture('aria/dynamic-pricing', _POST)
-export const PATCH = withErrorCapture('aria/dynamic-pricing', _PATCH)
+export const GET = withBusinessContext('aria/dynamic-pricing', _GET)
+export const POST = withBusinessContext('aria/dynamic-pricing', _POST)
+export const PATCH = withBusinessContext('aria/dynamic-pricing', _PATCH)

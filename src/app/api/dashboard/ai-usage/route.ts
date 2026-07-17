@@ -2,9 +2,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 const PLAN_DEFAULTS: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
 
@@ -16,20 +15,7 @@ const FEATURE_LABELS: Record<string, string> = {
 }
 const labelFor = (k: string | null) => FEATURE_LABELS[k ?? ''] ?? (k ?? 'other').replace(/_/g, ' ')
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET() {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(_req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const now = new Date()
   const ym = now.toISOString().slice(0, 7)
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
@@ -68,4 +54,4 @@ async function _GET() {
   })
 }
 
-export const GET = withErrorCapture('dashboard/ai-usage', _GET)
+export const GET = withBusinessContext('dashboard/ai-usage', _GET)

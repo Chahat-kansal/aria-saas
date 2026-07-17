@@ -3,9 +3,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
 import { generateReport, REPORT_LIBRARY, visibleReportLibrary, type ReportType, type Period } from '@/lib/inventory/reports'
 import { renderReportHtml, generateReportPdf } from '@/lib/inventory/report-pdf'
@@ -15,13 +14,6 @@ import { renderReportHtml, generateReportPdf } from '@/lib/inventory/report-pdf'
 // send-scheduled-reports cron renders the inventory PDF + emails it). DELETE = remove a schedule.
 
 const TYPES = new Set(REPORT_LIBRARY.map(r => r.type))
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
 
 function computeNextSend(frequency: string, dayOfWeek: number | null, hourAest: number): string {
   const now = new Date()
@@ -34,13 +26,7 @@ function computeNextSend(frequency: string, dayOfWeek: number | null, hourAest: 
   return next.toISOString()
 }
 
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const sp = new URL(req.url).searchParams
   if (sp.get('schedules') === '1') {
     const { data } = await supabaseAdmin.from('scheduled_pdf_reports')
@@ -61,13 +47,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ library: await visibleReportLibrary(bid), report: data })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { userId, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as { type?: string; period?: string; frequency?: string; day_of_week?: number; send_hour_aest?: number; recipients?: Array<{ name?: string; email: string }> | string[] }
   if (!TYPES.has(body.type as ReportType)) return NextResponse.json({ error: 'valid report type required' }, { status: 400 })
   const recipientsRaw = body.recipients ?? []
@@ -82,7 +62,7 @@ async function _POST(req: Request) {
   const title = REPORT_LIBRARY.find(r => r.type === type)?.title ?? type
 
   const { data, error } = await supabaseAdmin.from('scheduled_pdf_reports').insert({
-    business_id: bid, created_by: user.id,
+    business_id: bid, created_by: userId,
     label: `${title} (${frequency})`,
     page_path: `/inventory/reports?type=${type}&period=${period}`,
     frequency, day_of_week: dayOfWeek, send_hour_aest: hourAest,
@@ -93,12 +73,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true, id: data?.id })
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _DELETE(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const { error } = await supabaseAdmin.from('scheduled_pdf_reports').delete().eq('id', id).eq('business_id', bid)
@@ -106,6 +81,6 @@ async function _DELETE(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture('inventory/reports', _GET)
-export const POST = withErrorCapture('inventory/reports', _POST)
-export const DELETE = withErrorCapture('inventory/reports', _DELETE)
+export const GET = withBusinessContext('inventory/reports', _GET)
+export const POST = withBusinessContext('inventory/reports', _POST)
+export const DELETE = withBusinessContext('inventory/reports', _DELETE)

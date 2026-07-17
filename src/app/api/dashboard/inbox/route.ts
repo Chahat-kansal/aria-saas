@@ -2,16 +2,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 const FILTER_SOURCES: Record<string, string[]> = {
   messages: ['kiosk_chat', 'marketplace_chat', 'kiosk_help_request'],
@@ -20,13 +12,7 @@ const FILTER_SOURCES: Record<string, string[]> = {
   flagged: ['community_report', 'blocked_visitor'],
 }
 
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const source = searchParams.get('source')
   const id = searchParams.get('id')
@@ -108,4 +94,4 @@ async function detail(bid: string, source: string, id: string) {
   }
 }
 
-export const GET = withErrorCapture('dashboard/inbox', _GET)
+export const GET = withBusinessContext('dashboard/inbox', _GET)
