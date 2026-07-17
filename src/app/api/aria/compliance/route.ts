@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 const DEFAULTS: Record<string, { title: string; category: string }[]> = {
   retail: [
@@ -123,10 +123,14 @@ async function _POST(req: Request) {
   return NextResponse.json({ item: data });
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+// CANON-SEC-1 — this handler never called getBid()/any business-scoping at all; the update was
+// scoped by client-supplied id alone. compliance_items carries an RLS ALL policy scoped to
+// business ownership (own_compliance/own_compliance_items), so on the RLS-scoped client a foreign
+// id already matched zero rows — defense-in-depth-only, not a live leak — but explicit scoping is
+// added anyway, matching this codebase's standing convention of not relying on RLS alone. Moving
+// onto withBusinessContext is the fix and the canonicalization in one act; GET/POST keep their
+// existing local getBid() (still used, untouched).
+async function _PATCH(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -135,11 +139,11 @@ async function _PATCH(req: Request) {
     is_completed,
     status: is_completed ? 'completed' : 'pending',
     completed_at: is_completed ? new Date().toISOString() : null,
-  }).eq('id', id);
+  }).eq('id', id).eq('business_id', bid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
 
 export const GET = withErrorCapture('aria/compliance', _GET)
 export const POST = withErrorCapture('aria/compliance', _POST)
-export const PATCH = withErrorCapture('aria/compliance', _PATCH)
+export const PATCH = withBusinessContext('aria/compliance', _PATCH)
