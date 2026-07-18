@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -21,12 +21,7 @@ async function _GET() {
   return NextResponse.json({ policies: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json()
   const { data, error } = await supabase.from('pos_return_policies').upsert({
     business_id: bid,
@@ -41,4 +36,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/return-policies', _GET)
-export const POST = withErrorCapture('pos/return-policies', _POST)
+export const POST = withBusinessContext('pos/return-policies', _POST)

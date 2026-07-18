@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -24,12 +24,7 @@ async function _GET(_req: Request) {
   return NextResponse.json({ changes: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json()
   const { product_id, new_price, reason } = body
   const effectiveDate = body.effective_date ?? body.effective_at
@@ -43,12 +38,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ change: data }, { status: 201 })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _PATCH(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { id, status } = await req.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const { error: e } = await supabase.from('pos_scheduled_price_changes').update({ status: status ?? 'cancelled' }).eq('id', id).eq('business_id', bid)
@@ -67,6 +57,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/scheduled-price-changes', _GET)
-export const POST = withErrorCapture('pos/scheduled-price-changes', _POST)
-export const PATCH = withErrorCapture('pos/scheduled-price-changes', _PATCH)
+export const POST = withBusinessContext('pos/scheduled-price-changes', _POST)
+export const PATCH = withBusinessContext('pos/scheduled-price-changes', _PATCH)
 export const DELETE = withErrorCapture('pos/scheduled-price-changes', _DELETE)

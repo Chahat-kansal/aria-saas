@@ -5,7 +5,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -54,13 +54,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ reports: augmented })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as { session_id?: string }
   if (!body.session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 })
 
@@ -139,4 +133,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/shift-reports', _GET)
-export const POST = withErrorCapture('pos/shift-reports', _POST)
+export const POST = withBusinessContext('pos/shift-reports', _POST)

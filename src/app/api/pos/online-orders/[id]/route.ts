@@ -1,32 +1,18 @@
 export const dynamic = 'force-dynamic'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { notifyReady } from '@/lib/notify-ready'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { waitUntil } from '@vercel/functions'
 import { fireKdsForOrder } from '@/lib/online-orders/fireKdsForOrder'
 import { earnOnSale } from '@/lib/loyalty/earnOnSale'
 import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
 type Params = { params: Promise<{ id: string }> | { id: string } }
 
-async function _PATCH(req: Request, { params }: Params) {
+async function _PATCH(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = 'then' in params ? await params : params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const body = await req.json()
   const now = new Date().toISOString()
 
@@ -275,4 +261,4 @@ async function _PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('pos/online-orders/[id]', _PATCH)
+export const PATCH = withBusinessContext('pos/online-orders/[id]', _PATCH)

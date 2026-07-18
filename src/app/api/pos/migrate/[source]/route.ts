@@ -3,7 +3,7 @@ export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ source: string }> };
 
@@ -16,17 +16,10 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-async function _GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { source } = await params;
   const { searchParams } = new URL(req.url);
   const migrationId = searchParams.get('migration_id');
-
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   if (migrationId) {
     const { data: migration } = await supabase.from('pos_migrations').select('*').eq('id', migrationId).eq('business_id', bid).maybeSingle();
@@ -99,5 +92,5 @@ async function _POST(req: Request, { params }: Params) {
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
 }
 
-export const GET = withErrorCapture('pos/migrate/[source]', _GET)
+export const GET = withBusinessContext('pos/migrate/[source]', _GET)
 export const POST = withErrorCapture('pos/migrate/[source]', _POST)

@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -24,12 +24,7 @@ async function _GET(_req: Request) {
   return NextResponse.json({ changes: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { product_id, new_cost, effective_date } = await req.json()
   if (!product_id || new_cost == null || !effective_date) return NextResponse.json({ error: 'product_id, new_cost, effective_date required' }, { status: 400 })
   const { data, error: e } = await supabase.from('pos_scheduled_cost_changes').insert({ business_id: bid, product_id, new_cost, effective_date }).select().single()
@@ -48,5 +43,5 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/scheduled-cost-changes', _GET)
-export const POST = withErrorCapture('pos/scheduled-cost-changes', _POST)
+export const POST = withBusinessContext('pos/scheduled-cost-changes', _POST)
 export const DELETE = withErrorCapture('pos/scheduled-cost-changes', _DELETE)

@@ -1,27 +1,13 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 import { waitUntil } from '@vercel/functions'
 import { sendSMS } from '@/lib/clicksend'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _PATCH(req: Request, { params }: { params: { id: string } }) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, { params }: { params: { id: string } }, { userId, businessId: bid }: BusinessContext) {
   const { data: ticket } = await supabaseAdmin.from('pos_kds_tickets')
     .select('id, business_id, status, fired_at, bumped_at, prep_time_seconds, station, sale_id')
     .eq('id', params.id).eq('business_id', bid).maybeSingle()
@@ -58,7 +44,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       }
       update.status = 'fired'
       update.recalled_at = now
-      update.recalled_by = user.id
+      update.recalled_by = userId
       update.bumped_at = null
       aria_event = 'ticket_recalled'
       break
@@ -177,4 +163,4 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('pos/kds/tickets/[id]', _PATCH)
+export const PATCH = withBusinessContext('pos/kds/tickets/[id]', _PATCH)

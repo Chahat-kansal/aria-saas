@@ -1,29 +1,14 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 /**
  * GET /api/pos/payments/gift-card?code=XXXX-XXXX
  * Validate a gift card and return its balance before charging.
  */
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _GET(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code')?.toUpperCase().trim();
   if (!code) return NextResponse.json({ error: 'code required' }, { status: 400 });
@@ -63,14 +48,8 @@ async function _GET(req: Request) {
  * Body: { gift_card_code, amount_to_charge, sale_id }
  * Returns: { ok, charged, remaining_balance, new_status }
  */
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
+  const { data: { user } } = await supabase.auth.getUser();
   const { gift_card_code, amount_to_charge, sale_id } = await req.json();
   if (!gift_card_code || !amount_to_charge || !sale_id) {
     return NextResponse.json({ error: 'gift_card_code, amount_to_charge, sale_id required' }, { status: 400 });
@@ -106,7 +85,7 @@ async function _POST(req: Request) {
   const { error: txnErr } = await supabase.from('gift_card_transactions').insert({
     gift_card_id: card.id, business_id: bid, type: 'redeem',
     amount: actualCharge, balance_after: newBalance, sale_id,
-    staff_name: user.email ?? null, created_at: new Date().toISOString(),
+    staff_name: user?.email ?? null, created_at: new Date().toISOString(),
   });
   if (txnErr) {
     if (/duplicate|unique/i.test(txnErr.message)) {
@@ -161,5 +140,5 @@ async function _POST(req: Request) {
   });
 }
 
-export const GET = withErrorCapture('pos/payments/gift-card', _GET)
-export const POST = withErrorCapture('pos/payments/gift-card', _POST)
+export const GET = withBusinessContext('pos/payments/gift-card', _GET)
+export const POST = withBusinessContext('pos/payments/gift-card', _POST)

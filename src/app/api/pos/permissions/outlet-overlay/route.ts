@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -27,12 +27,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ overlays: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { outlet_id, pos_user_id, permission_overlay } = await req.json()
   if (!outlet_id || !pos_user_id) return NextResponse.json({ error: 'outlet_id + pos_user_id required' }, { status: 400 })
   const { data, error } = await supabase.from('pos_outlet_role_permissions').upsert({
@@ -43,4 +38,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/permissions/outlet-overlay', _GET)
-export const POST = withErrorCapture('pos/permissions/outlet-overlay', _POST)
+export const POST = withBusinessContext('pos/permissions/outlet-overlay', _POST)

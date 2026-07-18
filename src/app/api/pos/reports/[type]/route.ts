@@ -5,26 +5,12 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
 import { toAESTStart, toAESTEnd, todayAEST, thirtyDaysAgoAEST, buildDateRange } from '@/lib/date-au';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ type: string }> };
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
-async function _GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { type } = await params;
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
   const { searchParams } = new URL(req.url);
 
   // ── Permission check: view reports ────────────────────────────────
@@ -66,15 +52,8 @@ async function _GET(req: Request, { params }: Params) {
   }
 }
 
-async function _POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { type } = await params;
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
   if (type === 'advanced') {
     const body = await req.json();
     return await getAdvancedPost(supabase, bid, body);
@@ -571,5 +550,5 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
   return NextResponse.json({ bullets: res.bullets, generated_at: new Date().toISOString() });
 }
 
-export const GET = withErrorCapture('pos/reports/[type]', _GET)
-export const POST = withErrorCapture('pos/reports/[type]', _POST)
+export const GET = withBusinessContext('pos/reports/[type]', _GET)
+export const POST = withBusinessContext('pos/reports/[type]', _POST)

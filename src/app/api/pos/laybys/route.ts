@@ -3,7 +3,7 @@ export const maxDuration = 20;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -27,12 +27,7 @@ async function _GET(req: Request) {
 }
 
 // WIRE-5 — layby create. ALL amounts CENTS (pos_laybys = deposit_cents/paid_cents/total_cents).
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}));
   const total_cents = Math.round(Number(body.total_cents ?? 0));
   const deposit_cents = Math.round(Number(body.deposit_cents ?? 0));
@@ -57,12 +52,7 @@ async function _POST(req: Request) {
 
 // PATCH actions: 'pay' (add a payment, CENTS, atomic), 'complete' (convert to a POS sale),
 // or a scoped status/notes update. business_id-scoped (no cross-business writes).
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _PATCH(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}));
   const id = String(body.id ?? '');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -135,5 +125,5 @@ async function _PATCH(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/laybys', _GET)
-export const POST = withErrorCapture('pos/laybys', _POST)
-export const PATCH = withErrorCapture('pos/laybys', _PATCH)
+export const POST = withBusinessContext('pos/laybys', _POST)
+export const PATCH = withBusinessContext('pos/laybys', _PATCH)

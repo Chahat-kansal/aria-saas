@@ -1,27 +1,13 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { reverseEarnOnSale } from '@/lib/loyalty/reverseEarnOnSale'
 
 type Params = { params: { id: string } }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(_req: Request, { params }: Params) {
+async function _GET(_req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const { data: sale } = await supabase.from('pos_sales').select('*').eq('id', id).eq('business_id', bid).maybeSingle()
   if (!sale) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -41,19 +27,13 @@ async function _GET(_req: Request, { params }: Params) {
   })
 }
 
-async function _PATCH(req: Request, { params }: Params) {
+async function _PATCH(req: Request, { params }: Params, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
-  const { data: posUser } = await supabase.from('pos_users').select('id, role, permissions').eq('business_id', bid).eq('auth_user_id', user.id).maybeSingle()
+  const { data: posUser } = await supabase.from('pos_users').select('id, role, permissions').eq('business_id', bid).eq('auth_user_id', userId).maybeSingle()
   const canEdit = !!(posUser?.permissions as Record<string, unknown> | null)?.can_reopen_sale
     || ['manager', 'admin', 'owner'].includes(posUser?.role ?? '')
   if (!canEdit) {
-    const { data: ownsBiz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
+    const { data: ownsBiz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', userId).maybeSingle()
     if (!ownsBiz) return NextResponse.json({ error: 'Permission denied: manager role or can_reopen_sale required' }, { status: 403 })
   }
 
@@ -75,14 +55,14 @@ async function _PATCH(req: Request, { params }: Params) {
   const { error: updateErr } = await supabase.from('pos_sales').update({
     [field_changed]: new_value,
     last_edited_at: new Date().toISOString(),
-    last_edited_by: user.id,
+    last_edited_by: userId,
   }).eq('id', id).eq('business_id', bid)
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
   await supabase.from('pos_sale_edits').insert({
     sale_id: id,
     business_id: bid,
-    edited_by: user.id,
+    edited_by: userId,
     action: 'field_edit',
     field_changed,
     old_value: String(oldValue ?? ''),
@@ -93,19 +73,13 @@ async function _PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ ok: true })
 }
 
-async function _DELETE(req: Request, { params }: Params) {
+async function _DELETE(req: Request, { params }: Params, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
-  const { data: posUser } = await supabase.from('pos_users').select('id, role, permissions').eq('business_id', bid).eq('auth_user_id', user.id).maybeSingle()
+  const { data: posUser } = await supabase.from('pos_users').select('id, role, permissions').eq('business_id', bid).eq('auth_user_id', userId).maybeSingle()
   const canVoid = !!(posUser?.permissions as Record<string, unknown> | null)?.can_void
     || ['manager', 'admin', 'owner'].includes(posUser?.role ?? '')
   if (!canVoid) {
-    const { data: ownsBiz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
+    const { data: ownsBiz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', userId).maybeSingle()
     if (!ownsBiz) return NextResponse.json({ error: 'Permission denied: can_void required' }, { status: 403 })
   }
 
@@ -120,7 +94,7 @@ async function _DELETE(req: Request, { params }: Params) {
   await supabase.from('pos_sales').update({
     status: 'voided',
     last_edited_at: new Date().toISOString(),
-    last_edited_by: user.id,
+    last_edited_by: userId,
   }).eq('id', id).eq('business_id', bid)
 
   // LOYALTY-FINISH — reverse any loyalty points earned on this sale. Never
@@ -132,7 +106,7 @@ async function _DELETE(req: Request, { params }: Params) {
   await supabase.from('pos_sale_edits').insert({
     sale_id: id,
     business_id: bid,
-    edited_by: user.id,
+    edited_by: userId,
     action: 'void',
     field_changed: 'status',
     old_value: sale.status,
@@ -147,13 +121,13 @@ async function _DELETE(req: Request, { params }: Params) {
       category: 'sales',
       event_type: 'sale_void',
       data: { sale_id: id, reason, voided_by_role: posUser?.role ?? 'owner' },
-      triggered_by: user.id,
+      triggered_by: userId,
     })
   } catch (e) { console.error('[non-fatal]', e) }
 
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture('pos/sales-history/[id]', _GET)
-export const PATCH = withErrorCapture('pos/sales-history/[id]', _PATCH)
-export const DELETE = withErrorCapture('pos/sales-history/[id]', _DELETE)
+export const GET = withBusinessContext('pos/sales-history/[id]', _GET)
+export const PATCH = withBusinessContext('pos/sales-history/[id]', _PATCH)
+export const DELETE = withBusinessContext('pos/sales-history/[id]', _DELETE)

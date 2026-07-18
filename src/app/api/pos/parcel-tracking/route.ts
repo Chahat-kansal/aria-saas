@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 
@@ -265,13 +265,7 @@ async function _GET(req: Request) {
 }
 
 // POST — add a parcel (full delivery record)
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json() as {
     tracking_number: string; carrier?: string; label?: string
     direction?: string; notes?: string; reference_type?: string; reference_id?: string
@@ -344,13 +338,7 @@ async function _POST(req: Request) {
 }
 
 // PATCH — refresh tracking, manual status override, or update fields
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, _context: unknown, { userId, businessId: bid }: BusinessContext) {
   const body = await req.json() as {
     id: string; refresh?: boolean
     label?: string; notes?: string; order_reference?: string
@@ -416,7 +404,7 @@ async function _PATCH(req: Request) {
       if (liveData.status === 'delivered' && existing.status !== 'delivered') {
         void supabaseAdmin.from('audit_logs').insert({
           business_id: bid, entity: 'parcel_tracking', entity_id: body.id,
-          action: 'delivered', user_id: user.id,
+          action: 'delivered', user_id: userId,
           details: { tracking_number: existing.tracking_number, carrier: existing.carrier_name },
         })
       }
@@ -432,18 +420,13 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ parcel: data, warning: refreshWarning })
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _DELETE(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { id } = await req.json() as { id: string }
   await supabaseAdmin.from('pos_parcel_tracking').delete().eq('id', id).eq('business_id', bid)
   return NextResponse.json({ ok: true })
 }
 
 export const GET = withErrorCapture('pos/parcel-tracking', _GET)
-export const POST = withErrorCapture('pos/parcel-tracking', _POST)
-export const PATCH = withErrorCapture('pos/parcel-tracking', _PATCH)
-export const DELETE = withErrorCapture('pos/parcel-tracking', _DELETE)
+export const POST = withBusinessContext('pos/parcel-tracking', _POST)
+export const PATCH = withBusinessContext('pos/parcel-tracking', _PATCH)
+export const DELETE = withBusinessContext('pos/parcel-tracking', _DELETE)

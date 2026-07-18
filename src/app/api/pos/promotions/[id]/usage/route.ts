@@ -2,26 +2,12 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }
 
-async function _GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = await params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const { data: promo } = await supabase.from('pos_promotions')
     .select('id, name, current_uses, max_total_uses')
     .eq('id', id).eq('business_id', bid).maybeSingle()
@@ -43,4 +29,4 @@ async function _GET(req: Request, { params }: Params) {
   })
 }
 
-export const GET = withErrorCapture('pos/promotions/[id]/usage', _GET)
+export const GET = withBusinessContext('pos/promotions/[id]/usage', _GET)

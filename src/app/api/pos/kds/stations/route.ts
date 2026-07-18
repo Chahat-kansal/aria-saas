@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { ensureDefaultStations } from '@/lib/pos/kds-stations'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -34,13 +34,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ stations: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}))
   const station_key = String(body.station_key ?? '').trim().toLowerCase().replace(/\s+/g, '_').slice(0, 50)
   const display_name = String(body.display_name ?? '').trim().slice(0, 100)
@@ -68,4 +62,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/kds/stations', _GET)
-export const POST = withErrorCapture('pos/kds/stations', _POST)
+export const POST = withBusinessContext('pos/kds/stations', _POST)

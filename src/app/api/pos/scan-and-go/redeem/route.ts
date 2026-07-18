@@ -2,25 +2,11 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 // Cashier-side: resolve a cart token to its full contents (for the POS sale screen).
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as { token?: string }
   const token = (body.token ?? '').trim().toUpperCase()
   if (!token) return NextResponse.json({ error: 'token required' }, { status: 400 })
@@ -45,4 +31,4 @@ async function _POST(req: Request) {
   })
 }
 
-export const POST = withErrorCapture('pos/scan-and-go/redeem', _POST)
+export const POST = withBusinessContext('pos/scan-and-go/redeem', _POST)

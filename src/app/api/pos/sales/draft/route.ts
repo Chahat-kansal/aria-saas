@@ -3,23 +3,10 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 10
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
+  const { data: { user } } = await supabase.auth.getUser()
   const body = await req.json().catch(() => ({}))
   const { cart_items = [], total_amount = 0, tax_amount = 0, outlet_id, served_by, customer_id } = body
 
@@ -38,7 +25,7 @@ async function _POST(req: Request) {
       subtotal: total_amount - tax_amount,
       tax_amount,
       discount_amount: 0,
-      served_by: served_by ?? user.email ?? 'unknown',
+      served_by: served_by ?? user?.email ?? 'unknown',
       customer_id: customer_id ?? null,
     })
     .select('id')
@@ -69,4 +56,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ sale_id: sale.id, status: 'draft' })
 }
 
-export const POST = withErrorCapture('pos/sales/draft', _POST)
+export const POST = withBusinessContext('pos/sales/draft', _POST)

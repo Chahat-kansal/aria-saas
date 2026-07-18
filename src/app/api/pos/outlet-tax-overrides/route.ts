@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -24,12 +24,7 @@ async function _GET() {
   return NextResponse.json({ overrides: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { outlet_id, tax_code_id, rate_override } = await req.json()
   if (!outlet_id || !tax_code_id) return NextResponse.json({ error: 'outlet_id + tax_code_id required' }, { status: 400 })
   // Ownership check: outlet belongs to this business
@@ -45,4 +40,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/outlet-tax-overrides', _GET)
-export const POST = withErrorCapture('pos/outlet-tax-overrides', _POST)
+export const POST = withBusinessContext('pos/outlet-tax-overrides', _POST)

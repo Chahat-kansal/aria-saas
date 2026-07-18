@@ -1,26 +1,11 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _GET(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
@@ -143,5 +128,5 @@ async function _GET(req: Request) {
   return NextResponse.json({ sales: rows, total_revenue_cents, transaction_count, avg_basket_cents, revenue_by_day, by_payment_method: by_method, grouped_rows, report_type: reportType });
 }
 
-export const GET = withErrorCapture('pos/reports/sales', _GET)
+export const GET = withBusinessContext('pos/reports/sales', _GET)
 

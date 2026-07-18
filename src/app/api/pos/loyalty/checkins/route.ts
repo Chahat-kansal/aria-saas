@@ -2,27 +2,13 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 // GET /api/pos/loyalty/checkins?outlet_id=xxx
 // Returns active (unexpired + unconsumed) check-ins for this outlet.
 // Staff auth required.
-export async function GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const url = new URL(req.url)
   const outletId = url.searchParams.get('outlet_id')
 
@@ -92,14 +78,7 @@ export async function GET(req: Request) {
 }
 
 // POST /api/pos/loyalty/checkins — mark a check-in consumed (POS attaches the customer)
-export async function POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const { checkin_id, sale_id } = await req.json().catch(() => ({})) as { checkin_id?: string; sale_id?: string }
   if (!checkin_id) return NextResponse.json({ error: 'checkin_id required' }, { status: 400 })
 
@@ -120,3 +99,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true })
 }
+
+export const GET = withBusinessContext('pos/loyalty/checkins', _GET)
+export const POST = withBusinessContext('pos/loyalty/checkins', _POST)

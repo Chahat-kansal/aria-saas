@@ -1,23 +1,9 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _PATCH(req: Request, { params }: { params: { id: string } }) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _PATCH(req: Request, { params }: { params: { id: string } }, { supabase, businessId: bid }: BusinessContext) {
   const { data: existing } = await supabase.from('pos_kds_stations').select('id, business_id').eq('id', params.id).maybeSingle()
   if (!existing || existing.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -37,13 +23,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   return NextResponse.json({ station: data })
 }
 
-async function _DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _DELETE(_req: Request, { params }: { params: { id: string } }, { supabase, businessId: bid }: BusinessContext) {
   const { data: existing } = await supabase.from('pos_kds_stations').select('id, business_id').eq('id', params.id).maybeSingle()
   if (!existing || existing.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -52,5 +32,5 @@ async function _DELETE(_req: Request, { params }: { params: { id: string } }) {
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('pos/kds/stations/[id]', _PATCH)
-export const DELETE = withErrorCapture('pos/kds/stations/[id]', _DELETE)
+export const PATCH = withBusinessContext('pos/kds/stations/[id]', _PATCH)
+export const DELETE = withBusinessContext('pos/kds/stations/[id]', _DELETE)

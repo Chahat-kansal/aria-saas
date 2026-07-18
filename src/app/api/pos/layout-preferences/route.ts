@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(
   supabase: ReturnType<typeof createServerSupabaseClient>,
@@ -35,12 +35,7 @@ async function _GET() {
   })
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _PATCH(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const patch: Record<string, unknown> = {
     business_id: bid,
@@ -94,5 +89,5 @@ async function _DELETE() {
 }
 
 export const GET = withErrorCapture('pos/layout-preferences', _GET)
-export const PATCH = withErrorCapture('pos/layout-preferences', _PATCH)
+export const PATCH = withBusinessContext('pos/layout-preferences', _PATCH)
 export const DELETE = withErrorCapture('pos/layout-preferences', _DELETE)

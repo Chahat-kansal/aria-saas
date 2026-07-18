@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -20,13 +20,7 @@ async function _GET() {
   return NextResponse.json({ media: data ?? [] });
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -56,12 +50,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ media: data });
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _DELETE(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -74,5 +63,5 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/media', _GET)
-export const POST = withErrorCapture('pos/media', _POST)
-export const DELETE = withErrorCapture('pos/media', _DELETE)
+export const POST = withBusinessContext('pos/media', _POST)
+export const DELETE = withBusinessContext('pos/media', _DELETE)

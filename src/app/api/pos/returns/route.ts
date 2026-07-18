@@ -2,24 +2,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { processReturn, REASON_CODES, REFUND_METHODS, CONDITIONS, detectReturnAbuse } from '@/lib/pos/return-engine'
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _GET(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url)
   const sale_id = searchParams.get('sale_id')
 
@@ -34,13 +20,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ returns: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({}))
   const { original_sale_id, reason_code, reason_note, refund_method,
     lines, customer_id, pos_user_id, manager_token, exchange_cart } = body
@@ -65,7 +45,7 @@ async function _POST(req: Request) {
   const result = await processReturn(supabase, {
     business_id: bid,
     original_sale_id,
-    performed_by_user_id: user.id,
+    performed_by_user_id: userId,
     pos_user_id: pos_user_id ?? null,
     manager_approved_by: managerApprovedBy,
     reason_code,
@@ -95,5 +75,5 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true, ...result.result }, { status: 201 })
 }
 
-export const GET = withErrorCapture('pos/returns', _GET)
-export const POST = withErrorCapture('pos/returns', _POST)
+export const GET = withBusinessContext('pos/returns', _GET)
+export const POST = withBusinessContext('pos/returns', _POST)

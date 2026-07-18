@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -88,13 +88,7 @@ async function _GET(req: Request) {
 
 export const GET = withErrorCapture('pos/recipes', _GET)
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const {
     name, product_id, description, category, serves, prep_time_minutes,
     cost_cents, sell_price_cents, notes, ingredients, yield_qty, yield_unit,
@@ -165,15 +159,9 @@ async function _POST(req: Request) {
   return NextResponse.json({ recipe })
 }
 
-export const POST = withErrorCapture('pos/recipes', _POST)
+export const POST = withBusinessContext('pos/recipes', _POST)
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _DELETE(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -183,4 +171,4 @@ async function _DELETE(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const DELETE = withErrorCapture('pos/recipes', _DELETE)
+export const DELETE = withBusinessContext('pos/recipes', _DELETE)
