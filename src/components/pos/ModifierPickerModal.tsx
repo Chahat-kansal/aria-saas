@@ -9,13 +9,18 @@ interface Props {
   basePrice: number
   onConfirm: (sel: ModifierSelection[], unitPrice: number, notes: string) => void
   onCancel: () => void
+  // POS-MODIFIER-SPEED-1 — prefetched at POS boot (see terminal/page.tsx's
+  // modifierGroupsCache). When present, skips the fetch entirely — the sheet
+  // renders with real data on the same tick it opens. Undefined (not just an
+  // empty array) means "no prefetch available, fetch for yourself."
+  initialGroups?: ModifierGroup[]
 }
 
-export default function ModifierPickerModal({ productId, productName, basePrice, onConfirm, onCancel }: Props) {
-  const [groups, setGroups] = useState<ModifierGroup[]>([])
-  const [selections, setSelections] = useState<ModifierSelection[]>([])
+export default function ModifierPickerModal({ productId, productName, basePrice, onConfirm, onCancel, initialGroups }: Props) {
+  const [groups, setGroups] = useState<ModifierGroup[]>(initialGroups ?? [])
+  const [selections, setSelections] = useState<ModifierSelection[]>(initialGroups ? defaultSelections(initialGroups) : [])
   const [notes, setNotes] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialGroups === undefined)
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/pos/product-modifier-groups?product_id=${productId}`)
@@ -25,7 +30,12 @@ export default function ModifierPickerModal({ productId, productName, basePrice,
     setSelections(defaultSelections(g))
     setLoading(false)
   }, [productId])
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    // POS-MODIFIER-SPEED-1 — only the fallback (cache-miss) path fetches; the
+    // prefetched path already has real data and must never refetch on open.
+    if (initialGroups === undefined) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load])
 
   function toggleModifier(group: ModifierGroup, modifier: ModifierGroup['modifiers'][number]) {
     setSelections(prev => {
@@ -48,7 +58,38 @@ export default function ModifierPickerModal({ productId, productName, basePrice,
   const errors = validateSelections(groups, selections)
   const unitPrice = computeLineUnitPrice(basePrice, selections)
 
-  if (loading) return null
+  if (loading) {
+    // POS-MODIFIER-SPEED-1 — real skeleton, not a blank screen. Only reachable via
+    // the fallback fetch (cache-miss race at POS boot); the prefetched path never
+    // sets loading=true, so this never blocks a warm-cache tap.
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-[#0e1612] border border-[rgba(127,184,151,0.15)] rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto text-[#E8EDE8]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">Customise {productName}</h2>
+              <div className="h-3 w-40 rounded mt-2 animate-pulse" style={{ background: 'rgba(255,255,255,0.08)' }} />
+            </div>
+          </div>
+          <div className="space-y-5">
+            {[0, 1].map(i => (
+              <div key={i}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="h-4 w-28 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                  <div className="h-3 w-16 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[0, 1, 2, 3].map(j => (
+                    <div key={j} className="h-10 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(127,184,151,0.1)' }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onCancel}>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { OrderType } from '@/components/pos/OrderTypeSelector';
 import type { CustomerDetails } from '@/components/pos/CustomerCaptureModal';
 import type { ConfiguredCartItem } from '@/types/pos-modifiers';
+import type { ModifierGroup as PrefetchedModifierGroup } from '@/lib/pos/modifier-engine';
 import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
@@ -173,6 +174,10 @@ export default function TerminalPage() {
   }, [products]);
   // Pre-loaded modifier cache — eliminates 4-5s API calls on every product tap
   const modifierCache = useRef<Record<string, { hasModifiers: boolean; hasVariants: boolean }>>({});
+  // POS-MODIFIER-SPEED-1 — full modifier group + option data, keyed by product_id,
+  // loaded alongside modifierCache above. Lets the tap handler open the sheet with
+  // real data on the same tick as the tap, zero network.
+  const modifierGroupsCache = useRef<Record<string, PrefetchedModifierGroup[]>>({});
   const [parkedSales,    setParkedSales]    = useState<ParkedSale[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [businessId,     setBusinessId]     = useState<string | null>(null);
@@ -231,6 +236,7 @@ export default function TerminalPage() {
       setParkedSales([]);
       setLowStockItems([]);
       modifierCache.current = {};
+      modifierGroupsCache.current = {};
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('aria_pos_products_cache');
         sessionStorage.removeItem('aria_pos_cart_v1');
@@ -248,9 +254,10 @@ export default function TerminalPage() {
         if (prods.length > 0) {
           const ids = prods.map(p => p.id).join(',');
           fetch('/api/pos/product-modifier-groups/bulk?product_ids=' + ids)
-            .then(r => r.ok ? r.json() : { cache: {} })
-            .then((d: { cache?: Record<string, { hasModifiers: boolean; hasVariants: boolean }> }) => {
+            .then(r => r.ok ? r.json() : { cache: {}, modifierGroups: {} })
+            .then((d: { cache?: Record<string, { hasModifiers: boolean; hasVariants: boolean }>; modifierGroups?: Record<string, PrefetchedModifierGroup[]> }) => {
               if (d.cache) modifierCache.current = d.cache;
+              if (d.modifierGroups) modifierGroupsCache.current = d.modifierGroups;
             })
             .catch(() => {});
         }
@@ -430,7 +437,7 @@ export default function TerminalPage() {
   const [floorPlanEditMode,    setFloorPlanEditMode]    = useState(false);
 
   // Sprint H — cart customisation (modifier picker, price override, line menu)
-  const [modifierPicker, setModifierPicker] = useState<null | { product: Product }>(null);
+  const [modifierPicker, setModifierPicker] = useState<null | { product: Product; prefetchedGroups?: PrefetchedModifierGroup[] }>(null);
   const [priceOverride, setPriceOverride] = useState<null | { index: number; line: CartItem }>(null);
   const [editNotesState, setEditNotesState] = useState<null | { index: number; line: CartItem }>(null);
   const [canOverridePrice, setCanOverridePrice] = useState(false);
@@ -599,9 +606,10 @@ export default function TerminalPage() {
       if (prods.length > 0) {
         const ids = prods.map(p => p.id).join(',')
         fetch(`/api/pos/product-modifier-groups/bulk?product_ids=${ids}`)
-          .then(r => r.ok ? r.json() : { cache: {} })
-          .then((d: { cache?: Record<string, { hasModifiers: boolean; hasVariants: boolean }> }) => {
+          .then(r => r.ok ? r.json() : { cache: {}, modifierGroups: {} })
+          .then((d: { cache?: Record<string, { hasModifiers: boolean; hasVariants: boolean }>; modifierGroups?: Record<string, PrefetchedModifierGroup[]> }) => {
             if (d.cache) modifierCache.current = d.cache;
+            if (d.modifierGroups) modifierGroupsCache.current = d.modifierGroups;
           })
           .catch(() => {});
       }
@@ -1147,6 +1155,9 @@ export default function TerminalPage() {
       if (bundleProduct) { setBundleModal({ product: p, bundleProduct, bundlePrice: p.agent_bundle_price }); return; }
     }
 
+    // POS-MODIFIER-SPEED-1 — tap→sheet-visible timing, dev-only console instrumentation.
+    const __tapT0 = performance.now();
+
     // Check pre-loaded cache — no network needed for most products
     const cached = modifierCache.current[p.id];
     if (cached !== undefined) {
@@ -1159,20 +1170,31 @@ export default function TerminalPage() {
         }).catch(() => {})
         return;
       }
-    }
-
-    // Only fetch if cache says this product HAS modifiers, or cache miss
-    // Sprint H: check pos_product_modifier_groups for ALL industries
-    try {
-      const checkR = await fetch(`/api/pos/product-modifier-groups?product_id=${p.id}`);
-      if (checkR.ok) {
-        const checkD = await checkR.json();
-        if (Array.isArray(checkD.groups) && checkD.groups.length > 0) {
-          setModifierPicker({ product: p });
-          return;
+      if (cached.hasModifiers) {
+        // POS-MODIFIER-SPEED-1 — sheet opens on the SAME tick as the tap: full
+        // modifier data is already sitting in modifierGroupsCache from the boot-time
+        // prefetch, so there's zero network on tap. Sprint H: checked for ALL industries.
+        SFX.tap();
+        setModifierPicker({ product: p, prefetchedGroups: modifierGroupsCache.current[p.id] });
+        if (process.env.NODE_ENV !== 'production') {
+          requestAnimationFrame(() => console.log('[POS perf] tap→sheet-visible:', (performance.now() - __tapT0).toFixed(2), 'ms (warm cache)'));
         }
+        return;
       }
-    } catch { /* fall through to existing logic */ }
+      // cached.hasVariants only (no modifiers) — fall through to cafe/variant checks below.
+      // No network needed here either: cache already told us there are no modifier groups.
+    } else {
+      // POS-MODIFIER-SPEED-1 — total cache miss (race during POS boot): open the sheet
+      // INSTANTLY with a skeleton rather than blocking on a fetch first. ModifierPickerModal
+      // fetches for itself as a fallback and resolves to the truth, including the
+      // "no modifiers for this product" case if that's what it turns out to be.
+      SFX.tap();
+      setModifierPicker({ product: p });
+      if (process.env.NODE_ENV !== 'production') {
+        requestAnimationFrame(() => console.log('[POS perf] tap→sheet-visible:', (performance.now() - __tapT0).toFixed(2), 'ms (cold cache — skeleton shown)'));
+      }
+      return;
+    }
     // Cafe routing — Sprint C: sandwich builder, Sprint A: modifier modal
     if (businessType === 'cafe') {
       // Fall through to modifier modal if groups attached
@@ -4230,6 +4252,7 @@ export default function TerminalPage() {
           productId={modifierPicker.product.id}
           productName={modifierPicker.product.name}
           basePrice={Number(modifierPicker.product.price) || 0}
+          initialGroups={modifierPicker.prefetchedGroups}
           onCancel={() => setModifierPicker(null)}
           onConfirm={(selections, unitPrice, notes) => {
             setCart(c => [...c, {
