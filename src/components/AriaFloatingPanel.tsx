@@ -84,6 +84,12 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
 
   // Conversation history — passed to API for context, never rendered
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+  // TCA-7 — /api/aria/ask stages a write action's pending_action on aria_conversations keyed by
+  // conversation_id, then only executes it once a later turn on the SAME conversation says
+  // "yes"/"confirm"/etc (see isConfirmation() in action-planner.ts). This panel never captured the
+  // id the API returns, so every turn landed on a brand-new conversation — a staged action's
+  // confirmation could never find it, and the write silently never executed.
+  const [conversationId, setConversationId] = useState<string | null>(null)
 
   const inputRef  = useRef<HTMLInputElement>(null)
   const recognRef = useRef<AriaRecog | null>(null)
@@ -130,11 +136,12 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
         body: JSON.stringify({
           message: msg,
           messages: newMessages,
+          conversation_id: conversationId,
           page_context: { route: pathname, page_name: pageName },
         }),
       })
       const brainMs = Date.now() - t0
-      const data = await res.json() as { reply?: string; response?: string; error?: string }
+      const data = await res.json() as { reply?: string; response?: string; error?: string; conversation_id?: string }
 
       if (!res.ok || data.error) {
         setError(data.error ?? 'Something went wrong — try again.')
@@ -142,6 +149,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
         return
       }
 
+      if (data.conversation_id) setConversationId(data.conversation_id)
       markBrainDone(brainMs)
       const raw = (data.reply ?? data.response ?? '').trim()
       const { clean, mood: m, gesture: g } = parseAriaTags(raw)
@@ -158,7 +166,7 @@ export default function AriaFloatingPanel({ onClose }: { onClose: () => void }) 
       setError((e as Error).message ?? 'Network error')
       setPhase('idle')
     }
-  }, [phase, brain, pathname, pageName, messages])
+  }, [phase, brain, pathname, pageName, messages, conversationId])
 
   const startListening = useCallback(() => {
     ensureAudioUnlocked()  // unlock AudioContext on mic button press (user gesture)
