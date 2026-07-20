@@ -10,6 +10,7 @@ import { stripUngroundedNumbers, extractNumbers } from './response-validator'
 import { logAICallSafe } from './log-ai-call'
 import { buildSkillInjection, type EnabledSkill } from './industry-skills'
 import { detectCouncilConflicts, formatConflictsForSynthesis } from './council-conflicts'
+import { computeHealthSignals } from './health-signals'
 
 // Lazy (see supabase-lazy.ts) — module-scope createClient() crashes Next's
 // build-time page-data collection if env vars aren't readable there.
@@ -215,7 +216,8 @@ function buildRiskPrompt(question: string): string {
     '- Every problem must be backed by a number\n' +
     '- Distinguish between structural problems vs one-off blips\n' +
     '- Be precise about severity — not everything is critical\n' +
-    '- Write like a trusted advisor. Say "sales have been quiet" not "revenue collapsed".\n\n' +
+    '- Write like a trusted advisor. Say "sales have been quiet" not "revenue collapsed".\n' +
+    '- SEVERITY CHECK — business_health.pos_health.status (in available_ground_truth) tells you whether low/no activity is a genuine problem or just a quiet period: status="INSUFFICIENT_SAMPLE" means too few sales to draw any conclusion — describe it as quiet/dormant trading, NEVER as "collapse", "failure", or "gone dark". Only status="DEGRADED" supports language about an actual system/data problem.\n\n' +
     THREE_STEP_REASONING +
     'Return ONLY valid JSON:\n' +
     '{"plan":"one sentence","verify_findings":"what the numbers showed","observations":["specific problem with evidence number"],"recommendations":["specific fix with expected impact"],"confidence":"high|medium|low"}'
@@ -339,6 +341,7 @@ const SYNTHESIS_PROMPT_BODY = `GROUNDING RULES — ABSOLUTE — NEVER BREAK:
 1. CUSTOMER COUNT: Use customers.pos_customer_count from the business data as the authoritative POS customer count. If it shows 37, state 37. NEVER default to zero or invent a number. If the field is absent, say "I don't have the POS customer count."
 2. PROMOTIONS: ONLY describe a promotion as "working", "driving results", or "boosting sales" if it appears in promotions.active (status="ACTIVE — live and running now"). If it appears in promotions.scheduled, it is NOT live — describe it ONLY as "scheduled for [date]" or "set up but not yet active." NEVER say a scheduled or inactive promotion is working or producing results, even if a RECENT_ACTION just created it.
 3. FACTUAL CLAIMS: Every count, dollar figure, percentage, or causal statement must come directly from values passed to you in the data. Never infer, estimate, or guess. If a value is missing, say "I don't have that data" — never substitute zero or an assumption.
+3B. SEVERITY: low or zero activity is NOT automatically a crisis. Check business_health.pos_health.status (in available_ground_truth) before using words like "collapse", "failure", "gone dark", or "demands immediate investigation". status="INSUFFICIENT_SAMPLE" means there isn't enough trading data to draw ANY conclusion — describe it as quiet or dormant, not catastrophic. Only status="DEGRADED" supports language about a real system/data problem.
 4. ANSWER THE QUESTION ACTUALLY ASKED — NEVER SILENTLY SUBSTITUTE A DIFFERENT METRIC:
    - If INTENT-GROUNDED FACTS are present above, use comparison_revenue from there first. It is pre-computed for the EXACT comparison period the owner asked about. NEVER substitute revenue_30d or week_tracking figures when intent-grounded facts are available.
    - "same week last month": use INTENT-GROUNDED FACTS comparison_revenue if available (detected_comparison_period=same_week_last_month), else fall back to VERIFIED FIGURES same_week_last_month_revenue. NEVER use revenue_30d or a rolling average.
@@ -347,6 +350,7 @@ const SYNTHESIS_PROMPT_BODY = `GROUNDING RULES — ABSOLUTE — NEVER BREAK:
    - If the owner's question contains TWO parts (e.g., "on track?" AND "same week last month?"), final_briefing must answer BOTH in the opening 2 sentences.
    - NARRATIVE FIRST — ABSOLUTE: final_briefing must contain at least 2 sentences of narrative BEFORE any block references or lists. A response that jumps straight to figures without explaining what they mean fails this rule.
    - NO DUPLICATION: Each dollar amount, percentage, or named period must appear at most ONCE in final_briefing. Never restate the same fact twice, even in different words.
+   - NO DUPLICATION ACROSS BLOCKS: final_briefing's opening sentence IS the headline — do not also emit a "lead" block that restates it. Only use "lead" for a genuinely SECOND standout fact, different from final_briefing's opening sentence.
 
 HOW ARIA RESPONDS:
 - Leads with the single most important insight as a punchy headline with the actual number
@@ -759,11 +763,18 @@ export async function runAriaCouncil(
   }
 
   // Assess quality + recall memories + fetch summaries + learning context in parallel
-  const [quality, memories, recentSummaries, learningContext] = await Promise.all([
+  // BRIEF-FIX-1 (BUG 4) — computeHealthSignals() was already wired into the ask_aria pipeline
+  // (src/app/api/aria/ask/route.ts) but never into this one, despite diagnosticPointer below telling
+  // every brain "the system state is in business_health" — for briefing/weekly_report that field
+  // never actually existed, so brains had no signal to distinguish a dormant/quiet business from a
+  // broken one and defaulted to alarmist language. Fetched here so it can be injected into
+  // cleanContextStr below, making that pointer's claim true for this pipeline too.
+  const [quality, memories, recentSummaries, learningContext, healthSignals] = await Promise.all([
     assessDataQuality(businessId).catch(() => ({ ...FALLBACK_QUALITY })),
     recallMemories(businessId, activeQuestion).catch(() => []),
     fetchRecentSummaries(businessId).catch(() => []),
     getRecentLearningContext(businessId).catch(() => ''),
+    computeHealthSignals(businessId).catch(() => null),
   ])
 
   const memoryBlock = formatMemoriesForPrompt(memories)
@@ -899,6 +910,17 @@ export async function runAriaCouncil(
   try {
     const cleanCtxObj = { ...(safeParseJSON(businessContext) ?? {}) } as Record<string, unknown>
     delete cleanCtxObj.aria_facts_packet
+    // BRIEF-FIX-1 (BUG 4) — the diagnostic fact diagnosticPointer below promises every brain: system
+    // state so a severity claim ("POS broken", "trading has collapsed") stays consistent with reality
+    // instead of being inferred from raw low/zero numbers alone.
+    if (healthSignals) {
+      const existingAgt = (cleanCtxObj.available_ground_truth ?? {}) as Record<string, unknown>
+      cleanCtxObj.available_ground_truth = {
+        ...existingAgt,
+        business_health: healthSignals,
+        diagnostic_facts_note: 'business_health describes verifiable system state (POS health, day-of-week baseline, data freshness). known_unknowns lists what CANNOT be verified — ask the owner about those rather than asserting them. Any asserted cause (e.g. "POS broken", "trading has collapsed") must be consistent with pos_health.status — INSUFFICIENT_SAMPLE means too little data to call it a failure, not evidence of one.',
+      }
+    }
     cleanContextStr = JSON.stringify(cleanCtxObj)
   } catch { /* non-fatal — fall back to raw businessContext */ }
 
@@ -987,7 +1009,16 @@ export async function runAriaCouncil(
         ? agt.available_ground_truth!._anchor_values!
         : extractNumbers(verifiedFiguresBlock) // fallback: numbers from VERIFIED FIGURES if anchors absent
     } catch { v2Anchors = [] }
-    if (v2Anchors.length > 0) {
+    // BRIEF-FIX-1 (BUG 4/1) — health signals' own numbers (hours since last sale, completed_sales_7d,
+    // etc.) are real and verified; merging them in gives a dormant business a few legitimate anchors
+    // to ground short factual statements against, instead of zero.
+    if (healthSignals?._anchor_numbers?.length) v2Anchors = [...new Set([...v2Anchors, ...healthSignals._anchor_numbers])]
+    {
+      // BRIEF-FIX-1 (BUG 1) — used to only run this cleaning pass when v2Anchors.length > 0. A
+      // dormant/thin-data business has zero anchors, which is exactly when an advisor is most likely
+      // to invent a number — that was the one case this guard skipped. stripUngroundedNumbers now
+      // treats zero anchors as "nothing can be grounded" rather than "nothing to check", so it's safe
+      // to always run.
       for (const b of brains) {
         const obs = stripUngroundedNumbers((b.observations ?? []).join('\n'), v2Anchors)
         const rec = stripUngroundedNumbers((b.recommendations ?? []).join('\n'), v2Anchors)
@@ -1117,7 +1148,12 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
     // INTEL-COMPUTE-3 — same guard already applied to each brain's observations/recommendations
     // above, now also applied to the synthesis's final_briefing — the step the owner actually reads.
     let finalBriefing = typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200)
-    if (v2Anchors.length > 0 && finalBriefing) {
+    // BRIEF-FIX-1 (BUG 1) — used to require v2Anchors.length > 0 to run this guard at all, which
+    // skipped the exact case (a dormant/thin-data business with zero real anchors) that produced the
+    // "99.9% below your weekly target of $999,999" fabrication. stripUngroundedNumbers now handles
+    // zero anchors correctly (strips every risky number rather than passing them through), so the gate
+    // is removed — only the fact that there's text to check matters.
+    if (finalBriefing) {
       const guarded = stripUngroundedNumbers(finalBriefing, v2Anchors)
       if (guarded.stripped.length > 0) {
         finalBriefing = guarded.healedText
@@ -1143,7 +1179,23 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
         if (b.type === 'metric_row') return Array.isArray((b as {items?:unknown[]}).items) && (b as {items?:unknown[]}).items!.length > 0
         if (b.type === 'action_list') return Array.isArray((b as {items?:unknown[]}).items) && (b as {items?:unknown[]}).items!.length > 0
         if (b.type === 'council_split') return !!(b as {question?:string}).question && !!(b as {growth?:string}).growth
-        if (b.type === 'lead' || b.type === 'text') return !!(b as {content?:string}).content
+        if (b.type === 'lead') {
+          // BRIEF-FIX-1 (BUG 3) — "lead" is a standalone headline sentence, and final_briefing's
+          // opening sentence is separately instructed to also be a headline (SYNTHESIS_PROMPT_BODY's
+          // "Leads with the single most important insight as a punchy headline"). Nothing stopped the
+          // model writing the same sentence into both, so the owner saw it twice: once rendered as
+          // the card's lead block, once as the first line of the briefing body right below it. Drop
+          // the lead block when it's essentially the same sentence as final_briefing's opening line —
+          // final_briefing already carries it.
+          const content = (b as { content?: string }).content
+          if (!content) return false
+          const norm = (s: string) => s.toLowerCase().replace(/^#{1,6}\s+/, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+          const firstSentence = norm((finalBriefing.split(/(?<=[.!?])\s+/)[0] ?? ''))
+          const leadNorm = norm(content)
+          if (firstSentence && leadNorm && (leadNorm.includes(firstSentence) || firstSentence.includes(leadNorm))) return false
+          return true
+        }
+        if (b.type === 'text') return !!(b as {content?:string}).content
         // Guardrails for new block types — prevent fabricated-zero visuals
         if (b.type === 'kpi_card') {
           const k = b as { label?: unknown; value?: unknown }

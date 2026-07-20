@@ -16,6 +16,7 @@ import type { CouncilOutput } from '@/lib/aria/council'
 import { runOrchestrator } from '@/lib/aria/agents/orchestrator'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { pickCanonicalBriefing } from '@/lib/aria/briefing-guard'
+import { stripMarkdownToPlainText } from '@/lib/aria/markdown-lite'
 
 // ── Briefing recommendation builder ───────────────────────────────────────────
 // Maps the council's structured brain outputs into the modal's Recommendation type.
@@ -49,8 +50,12 @@ function actionForCategory(cat: BriefingRec['category']): Pick<BriefingRec, 'act
   }
 }
 
+// BRIEF-FIX-1 (BUG 2) — title/description are rendered as raw strings (DailyBriefingModal has zero
+// markdown handling), so every string entering a BriefingRec is sanitized to plain text here, once,
+// rather than leaving each renderer to cope with whatever markdown a brain happened to produce.
 function toTitle(text: string): string {
-  const words = text.trim().split(' ')
+  const clean = stripMarkdownToPlainText(text)
+  const words = clean.trim().split(' ')
   return words.slice(0, 7).join(' ').replace(/[,.:;!?]$/, '') + (words.length > 7 ? '…' : '')
 }
 
@@ -59,8 +64,9 @@ function buildBriefingRecs(council: CouncilOutput): BriefingRec[] {
   let idx = 0
 
   // 1. Consensus items — all brains agreed → high priority
-  for (const item of (council.consensus ?? []).slice(0, 3)) {
-    if (!item?.trim()) continue
+  for (const rawItem of (council.consensus ?? []).slice(0, 3)) {
+    if (!rawItem?.trim()) continue
+    const item = stripMarkdownToPlainText(rawItem)
     const cat = detectCategory(item)
     recs.push({ id: 'consensus-' + idx++, priority: 'high', category: cat, title: toTitle(item), description: item, ...actionForCategory(cat), metric: '', metric_label: '', trend: null })
   }
@@ -70,8 +76,9 @@ function buildBriefingRecs(council: CouncilOutput): BriefingRec[] {
   for (const brain of (council.raw_brain_outputs ?? [])) {
     if (!brain?.succeeded) continue
     const cat = brainCatMap[brain.role] ?? 'revenue'
-    for (const rec of (brain.recommendations ?? []).slice(0, 1)) {
-      if (!rec?.trim() || recs.length >= 6) break
+    for (const rawRec of (brain.recommendations ?? []).slice(0, 1)) {
+      if (!rawRec?.trim() || recs.length >= 6) break
+      const rec = stripMarkdownToPlainText(rawRec)
       const detectedCat = detectCategory(rec)
       const finalCat = detectedCat !== 'revenue' ? detectedCat : cat
       const confidence = brain.confidence ?? 'medium'
@@ -80,15 +87,17 @@ function buildBriefingRecs(council: CouncilOutput): BriefingRec[] {
   }
 
   // 3. Contested items — brains disagreed → medium priority, worth a look
-  for (const item of (council.contested ?? []).slice(0, 2)) {
-    if (!item?.trim() || recs.length >= 7) break
+  for (const rawItem of (council.contested ?? []).slice(0, 2)) {
+    if (!rawItem?.trim() || recs.length >= 7) break
+    const item = stripMarkdownToPlainText(rawItem)
     const cat = detectCategory(item)
     recs.push({ id: 'contested-' + idx++, priority: 'medium', category: cat, title: toTitle(item), description: item + ' (Aria advisors are split on this — worth reviewing.)', ...actionForCategory(cat), metric: '', metric_label: '', trend: null })
   }
 
   // 4. Fallback from final_briefing if we still have < 4 cards
   if (recs.length < 4 && council.final_briefing) {
-    const sentences = council.final_briefing.split(/[.!?]\s+/).map(s => s.trim()).filter(s => s.length > 30)
+    const cleanBriefing = stripMarkdownToPlainText(council.final_briefing)
+    const sentences = cleanBriefing.split(/[.!?]\s+/).map(s => s.trim()).filter(s => s.length > 30)
     const cats: BriefingRec['category'][] = ['revenue', 'customers', 'stock', 'marketing']
     for (let i = 0; i < sentences.length && recs.length < 5; i++) {
       const cat = detectCategory(sentences[i]) !== 'revenue' ? detectCategory(sentences[i]) : cats[i % cats.length]

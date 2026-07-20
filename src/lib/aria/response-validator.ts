@@ -44,14 +44,26 @@ export function extractNumbers(corpus: string): number[] {
 // decisions/goals correctly) — never strip a sentence that cites the owner, even with numbers.
 const OWNER_CITATION_RE = /you (mentioned|stated|said|told me|asked|committed|wanted|set)/i
 
+// BRIEF-FIX-1 (BUG 1) — shown when every sentence in the text turned out to be ungrounded (e.g. a
+// dormant business with zero real anchors): the honest answer, never a substitute number.
+const NO_GROUNDED_DATA_FALLBACK = "Aria doesn't have enough verified data yet to state specific figures here."
+
 /**
  * GROUNDING-TEETH-V2 Check 6 core (shared by the synthesis validator AND the per-advisor cleaner).
  * Strips any sentence whose $/% number does NOT match a CLEAN ground-truth anchor within 2% — UNLIKE
  * V1's Check 5, the anchor set here is ONLY the verified live-queried values, never the advisor
  * outputs (which is how V1 let an advisor-invented "$480" self-ground). Surgical, never empties.
+ *
+ * BRIEF-FIX-1 (BUG 1) — zero anchors used to bypass this whole function (`anchorNumbers.length === 0`
+ * returned the text unchanged), which silently disabled the guard for exactly the businesses most
+ * likely to get a hallucinated number: dormant/thin-data ones with nothing real to ground against.
+ * Zero anchors now means every risky number is ungrounded by definition — same loop, no bypass. And
+ * the old "never strip if it leaves nothing" safety valve reverted to the ORIGINAL fabricated text
+ * when everything was risky — backwards, since that's the case with the most fabrication. It now
+ * falls back to an honest "don't have that data" sentence instead.
  */
 export function stripUngroundedNumbers(text: string, anchorNumbers: number[]): { healedText: string; stripped: string[] } {
-  if (!text || !text.trim() || anchorNumbers.length === 0) return { healedText: text, stripped: [] }
+  if (!text || !text.trim()) return { healedText: text, stripped: [] }
   const sentences = text.split(/(?<=[.!?])\s+/)
   const kept: string[] = []
   const stripped: string[] = []
@@ -68,9 +80,9 @@ export function stripUngroundedNumbers(text: string, anchorNumbers: number[]): {
     if (fabricated) stripped.push(sentence)
     else kept.push(sentence)
   }
-  // Safety: never strip if it leaves nothing
-  if (stripped.length === 0 || kept.length === 0) return { healedText: text, stripped: [] }
-  return { healedText: kept.join(' ').trim(), stripped }
+  if (stripped.length === 0) return { healedText: text, stripped: [] }
+  const healedText = kept.length > 0 ? kept.join(' ').trim() : NO_GROUNDED_DATA_FALLBACK
+  return { healedText, stripped }
 }
 
 async function logHeal(businessId: string, healReason: HealReason, success: boolean, signal?: string): Promise<void> {

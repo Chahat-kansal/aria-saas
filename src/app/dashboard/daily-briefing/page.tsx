@@ -7,6 +7,7 @@ import { pickCanonicalBriefing } from '@/lib/aria/briefing-guard'
 import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 import { AriaWhyPanel } from '@/components/dashboard/AriaWhyPanel'
 import type { AriaIntelligenceContract } from '@/lib/aria/contract'
+import { stripMarkdownToPlainText } from '@/lib/aria/markdown-lite'
 
 interface Rec {
   id: string
@@ -351,8 +352,8 @@ export default function DailyBriefingPage() {
   // produces for Ask Aria deliverables, reusing the identical downstream PDF pipeline (see
   // saveReport() in src/lib/aria/canopy-reports.ts) rather than adding a second one.
   function buildBriefingHtml(): string {
-    const summary = historyView?.content ?? bullets.join(' · ')
-    const recRows = recs.map(r => `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">${r.title}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555">${r.description}</td></tr>`).join('')
+    const summary = historyView?.content ? stripMarkdownToPlainText(historyView.content) : bullets.join(' · ')
+    const recRows = recs.map(r => `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">${stripMarkdownToPlainText(r.title)}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555">${stripMarkdownToPlainText(r.description)}</td></tr>`).join('')
     return `<html><body style="font-family:sans-serif;padding:24px;color:#111">
       <h1 style="font-size:22px">Daily Briefing — ${historyView ? fmtDate(historyView.date) : todayStr}</h1>
       ${summary ? `<p style="background:#f0faf5;border-left:4px solid #7FB897;padding:12px 16px;color:#333">${summary}</p>` : ''}
@@ -410,7 +411,7 @@ export default function DailyBriefingPage() {
               <Skel /><Skel w="80%" /><Skel w="60%" />
             </div>
           ) : historyView?.content ? (
-            <p style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(255,255,255,0.85)', margin: 0 }}>{historyView.content}</p>
+            <p style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(255,255,255,0.85)', margin: 0 }}>{stripMarkdownToPlainText(historyView.content)}</p>
           ) : bullets.length > 0 ? (
             <ul style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {bullets.map((b, i) => <li key={i} style={{ fontSize: 14, lineHeight: 1.65, color: 'rgba(255,255,255,0.85)' }}>{b}</li>)}
@@ -615,8 +616,8 @@ export default function DailyBriefingPage() {
                         <span style={{ fontSize: 11, fontWeight: 700, color: prioColor(r.priority), textTransform: 'uppercase', letterSpacing: '0.05em' }}>{r.priority}</span>
                         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>{r.category}</span>
                       </div>
-                      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{r.title}</div>
-                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>{r.description}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{stripMarkdownToPlainText(r.title)}</div>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>{stripMarkdownToPlainText(r.description)}</div>
                       {r.metric && (
                         <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '4px 10px' }}>
                           <span style={{ fontSize: 15, fontWeight: 700, color: r.trend === 'up' ? G : r.trend === 'down' ? '#f87171' : '#fff' }}>{r.metric}</span>

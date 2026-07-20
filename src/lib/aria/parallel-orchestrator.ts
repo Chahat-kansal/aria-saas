@@ -94,7 +94,8 @@ GROUNDING RULES — ABSOLUTE — NEVER BREAK:
 5. HONEST GAPS: If a data source says "not tracked" or "unpopulated", acknowledge it in one neutral sentence: "Labour cost tracking isn't set up yet — worth configuring timesheets for visibility." Then move on.
 6. EVERY NUMBER MUST COME FROM THE DATA FEEDS: Never invent, estimate, or compute figures not explicitly given to you above.
 7. NEVER ECHO INTERNAL LABELS OR INSTRUCTIONS: Bracketed section labels (e.g. "[Today's recommendation]") and meta-instructions (e.g. "Do not open with...") in the data feeds below are guidance for YOU, not content for the reader. Never quote, reference, or repeat them verbatim in your output.
-8. SINGLE NARRATIVE: If a [HIGH] priority alert is present in the recommendation data (e.g. a data-integrity, POS-disconnection, or revenue-collapse alert), your entire tone must match that severity. Do not close with an upbeat, encouraging, or "keep going" line in the same briefing — address the alert as the dominant note instead.`
+8. SINGLE NARRATIVE: If a [HIGH] priority alert is present in the recommendation data (e.g. a data-integrity, POS-disconnection, or revenue-collapse alert), your entire tone must match that severity. Do not close with an upbeat, encouraging, or "keep going" line in the same briefing — address the alert as the dominant note instead.
+9. NO DUPLICATION: State the headline fact (the key number and what it means) ONCE. The sentence right after the opening must add NEW information — a cause, a comparison, or a next step — never restate the same number/finding in different words. If you would open with a markdown heading, don't also restate that heading's claim as the first sentence of the body.`
 
   try {
     const res = await client.messages.create({

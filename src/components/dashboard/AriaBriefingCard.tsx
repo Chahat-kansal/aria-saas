@@ -42,6 +42,15 @@ function parseBriefing(text: string) {
   const result: { type: 'heading' | 'bold' | 'text' | 'br'; content: string }[] = []
   for (const line of text.split('\n')) {
     if (!line.trim()) { result.push({ type: 'br', content: '' }); continue }
+    // BRIEF-FIX-1 (BUG 2) — literal "#"/"##"/"###" markdown headings were falling through to
+    // plain-text rendering (the "#" itself showed up as text). This surface already renders
+    // markdown-lite properly for bold/heading-colon syntax; this extends the same treatment to
+    // ATX-style headings instead of stripping them at the source, so the visual heading survives.
+    const atxHeading = line.match(/^#{1,6}\s+(.+)$/)
+    if (atxHeading) {
+      result.push({ type: 'heading', content: atxHeading[1].trim() })
+      continue
+    }
     const hm = line.match(/^\*\*(.+?):\*\*(.*)$/)
     if (hm) {
       result.push({ type: 'heading', content: hm[1] })

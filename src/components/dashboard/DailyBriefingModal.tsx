@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { stripMarkdownToPlainText } from '@/lib/aria/markdown-lite';
 
 interface Recommendation {
   id: string;
@@ -138,7 +139,10 @@ export function DailyBriefingModal() {
           }
           // Council returned a text briefing — parse into multiple insight cards
           if (councilData?.briefing) {
-            const text: string = councilData.briefing;
+            // BRIEF-FIX-1 (BUG 2) — this path builds cards directly from raw briefing text and
+            // renders title/description with zero markdown handling, bypassing buildBriefingRecs()'s
+            // server-side sanitizing entirely. Same plain-text contract applied here too.
+            const text: string = stripMarkdownToPlainText(councilData.briefing);
             const sentences = text.split('. ').map((s: string) => s.trim()).filter((s: string) => s.length > 20);
             const mid = Math.ceil(sentences.length / 2);
             const cardTexts: string[] = sentences.length <= 2

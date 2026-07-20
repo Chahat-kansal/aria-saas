@@ -14,6 +14,8 @@ import type { ParallelTask } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { getRevenueSnapshot } from '@/lib/aria/revenue-snapshot'
 import { safeBriefingContent, suppressUpbeatCloser } from '@/lib/aria/briefing-guard'
+import { computeHealthSignals } from '@/lib/aria/health-signals'
+import { stripUngroundedNumbers, extractNumbers } from '@/lib/aria/response-validator'
 
 interface BriefingBusinessWithSlack extends BriefingBusiness {
   slack_connected?: boolean
@@ -23,6 +25,7 @@ interface BriefingBusinessWithSlack extends BriefingBusiness {
   lat?: number | null
   lng?: number | null
   city?: string | null
+  weekly_revenue_target?: number | null
 }
 
 // ── AU small-biz RSS headlines (SmartCompany + ABC Business) ──────────────
@@ -145,11 +148,18 @@ async function generateMorning(
   const baselineDailyAvg = baselineDays.size > 0
     ? [...baselineDays.values()].reduce((s, v) => s + v, 0) / baselineDays.size
     : null
-  const TARGET_DAILY = 4_500
   const vsPrior = baselineDailyAvg
     ? ((revenue - baselineDailyAvg) / baselineDailyAvg * 100).toFixed(0)
     : null
-  const vsTarget = ((revenue - TARGET_DAILY) / TARGET_DAILY * 100).toFixed(0)
+  // BRIEF-FIX-1 (BUG 1) — this used to be a hardcoded TARGET_DAILY = 4_500 (=$31,500/week), compared
+  // against and shown to the owner as "your target" regardless of whether they'd ever set one. That's
+  // the exact GROUNDING-TEETH violation the task exists to catch, just sourced from a code constant
+  // instead of a model hallucination: a fabricated target computed against and presented as real.
+  // Only compute/show a target comparison when the owner has actually configured one.
+  const weeklyTarget = biz.weekly_revenue_target && Number(biz.weekly_revenue_target) > 0
+    ? Number(biz.weekly_revenue_target) : null
+  const targetDaily = weeklyTarget != null ? weeklyTarget / 7 : null
+  const vsTarget = targetDaily != null ? ((revenue - targetDaily) / targetDaily * 100).toFixed(0) : null
 
   // ── Product movers (this week vs last week by revenue) ───────────────────
   const thisWeekByProduct = new Map<string, number>()
@@ -287,9 +297,27 @@ async function generateMorning(
     const revenueLine = [
       `Yesterday revenue: $${revenue.toFixed(2)} (${txCount} transactions).`,
       baselineDailyAvg ? `28-35 day daily average: $${baselineDailyAvg.toFixed(2)} (yesterday was ${Number(vsPrior) >= 0 ? '+' : ''}${vsPrior}% vs that window).` : null,
-      `Daily target: $${TARGET_DAILY.toFixed(2)} (yesterday was ${Number(vsTarget) >= 0 ? '+' : ''}${vsTarget}% vs target).`,
+      // BRIEF-FIX-1 (BUG 1) — no owner-configured target → no target line at all. Never substitute a
+      // default and compute a % against it (GROUNDING-TEETH: no invented $/%).
+      targetDaily != null
+        ? `Weekly revenue target: $${weeklyTarget!.toFixed(2)} (daily equivalent $${targetDaily.toFixed(2)}; yesterday was ${Number(vsTarget) >= 0 ? '+' : ''}${vsTarget}% vs that daily equivalent).`
+        : `No weekly revenue target is set for this business — do not mention a target, goal, or "% to target" anywhere in the briefing.`,
     ].filter(Boolean).join(' ')
     extraTasks.push({ key: 'revenue_context', label: 'Revenue context', priority: 'high', fn: async () => revenueLine })
+
+    // BRIEF-FIX-1 (BUG 4) — MERGE_SYSTEM already has explicit anti-catastrophizing rules, yet the
+    // model still wrote "complete collapse in trading activity" for a business with only a handful of
+    // sales — prompt wording alone wasn't reliable. computeHealthSignals()'s pos_health.status is the
+    // concrete, sourced fact ("too small a sample to draw any POS-health conclusion") that gives the
+    // model something specific to defer to instead of inferring severity from raw low numbers.
+    extraTasks.push({
+      key: 'system_state', label: 'System state (POS health)', priority: 'high',
+      fn: async () => {
+        const health = await computeHealthSignals(biz.id).catch(() => null)
+        if (!health) return 'System state unavailable this run — do not assert a cause either way.'
+        return `pos_health.status=${health.pos_health.status}. ${health.pos_health.reasoning} If status is INSUFFICIENT_SAMPLE, describe trading as quiet/dormant — never as a collapse, failure, or system breakage.`
+      },
+    })
 
     if ((lowStock ?? []).length > 0) {
       extraTasks.push({
@@ -338,9 +366,21 @@ async function generateMorning(
     // case the model still closes on an upbeat note despite the prompt instruction.
     const toned = suppressUpbeatCloser(parallelResult.merged, hasHighAlert)
 
+    // BRIEF-FIX-1 (BUG 1) — MERGE_SYSTEM rule 6 says "never invent a figure" (prompt-only), but
+    // nothing enforced it, which is how "$999,999" reached storage. Same guard already applied to the
+    // council pipeline (response-validator.ts): every risky $/%/count must trace to a number the model
+    // was actually given (the task_results text below) within 2% tolerance, or it's stripped.
+    const groundedAnchors = extractNumbers(
+      parallelResult.task_results.map(r => r.result).filter((r): r is string => !!r).join(' ')
+    )
+    const guarded = stripUngroundedNumbers(toned, groundedAnchors)
+    if (guarded.stripped.length > 0) {
+      console.warn('[generate-briefings] fabrication guard fired for', biz.id, '— stripped:', guarded.stripped.length)
+    }
+
     // BRIEF-INTEGRITY-1 part 1 — the hard guard. Only ever stores real model output or the static
     // honest fallback; a scaffold-marker match (or empty/failed generation) never reaches storage.
-    const finalContent = safeBriefingContent(toned)
+    const finalContent = safeBriefingContent(guarded.healedText)
 
     // BRIEF-INTEGRITY-2 — pipeline is part of the unique key now, so this write can no longer
     // silently overwrite (or be overwritten by) the batch/onboarding pipelines' rows for the same day.
@@ -389,7 +429,7 @@ async function _GET(req: NextRequest) {
 
   const { data: bizList, error } = await supabaseAdmin
     .from('businesses')
-    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_channel_id, lat, lng, city')
+    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_channel_id, lat, lng, city, weekly_revenue_target')
     .eq('is_active', true)
     .limit(500)
 
