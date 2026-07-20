@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 // SECURITY-P1 (C-13) — POST/PATCH used to spread the whole request body directly into the DB
 // write, so a client could set any column verbatim (role escalation, PIN tampering on colleagues).
@@ -31,12 +31,7 @@ async function _GET() {
   return NextResponse.json({ staff: data ?? [] });
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _POST(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json();
   if (!body.name) return NextResponse.json({ error: 'name required' }, { status: 400 });
   const { data, error } = await supabase.from('pos_staff').insert({ ...pickStaffFields(body), business_id: bid }).select().single();
@@ -44,12 +39,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ staff_member: data });
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _PATCH(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -59,12 +49,7 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _DELETE(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -73,6 +58,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/staff', _GET)
-export const POST = withErrorCapture('pos/staff', _POST)
-export const PATCH = withErrorCapture('pos/staff', _PATCH)
-export const DELETE = withErrorCapture('pos/staff', _DELETE)
+export const POST = withBusinessContext('pos/staff', _POST)
+export const PATCH = withBusinessContext('pos/staff', _PATCH)
+export const DELETE = withBusinessContext('pos/staff', _DELETE)

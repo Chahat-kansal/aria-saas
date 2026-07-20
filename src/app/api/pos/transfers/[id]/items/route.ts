@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -13,13 +13,8 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 type Params = { params: Promise<{ id: string }> };
 
-async function _POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = await params;
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const { data: transfer } = await supabase.from('pos_inventory_transfers').select('status').eq('id', id).eq('business_id', bid).maybeSingle();
   if (!transfer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (transfer.status !== 'draft') return NextResponse.json({ error: 'Items only editable in draft' }, { status: 400 });
@@ -34,7 +29,7 @@ async function _POST(req: Request, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await supabase.from('pos_transfer_events').insert({
     transfer_id: id, business_id: bid, event_type: 'item_added',
-    from_status: 'draft', to_status: 'draft', actor_user_id: user.id,
+    from_status: 'draft', to_status: 'draft', actor_user_id: userId,
     metadata: { product_id, quantity_requested },
   });
   return NextResponse.json({ item: data });
@@ -61,5 +56,5 @@ async function _DELETE(req: Request, { params }: Params) {
   return NextResponse.json({ ok: true });
 }
 
-export const POST = withErrorCapture('pos/transfers/[id]/items', _POST);
+export const POST = withBusinessContext('pos/transfers/[id]/items', _POST);
 export const DELETE = withErrorCapture('pos/transfers/[id]/items', _DELETE);

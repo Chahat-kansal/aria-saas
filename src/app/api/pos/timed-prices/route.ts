@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -40,12 +40,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ schedules });
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _POST(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json();
 
   if (!Array.isArray(body.days_of_week) || !body.start_time || !body.end_time) {
@@ -87,15 +82,7 @@ async function _POST(req: Request) {
   return NextResponse.json({ schedule: data });
 }
 
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  // SECURITY-CRITICAL-3 — this handler didn't even fetch bid (unlike GET/POST above in this same
-  // file), letting any authenticated user silently overwrite another business's live scheduled
-  // pricing by guessing its id.
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _PATCH(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   const body = await req.json();
@@ -108,12 +95,7 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
-async function _DELETE(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _DELETE(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   const { error } = await supabase.from('scheduled_price_changes').delete().eq('id', id).eq('business_id', bid);
@@ -122,6 +104,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/timed-prices', _GET);
-export const POST = withErrorCapture('pos/timed-prices', _POST);
-export const PATCH = withErrorCapture('pos/timed-prices', _PATCH);
-export const DELETE = withErrorCapture('pos/timed-prices', _DELETE);
+export const POST = withBusinessContext('pos/timed-prices', _POST);
+export const PATCH = withBusinessContext('pos/timed-prices', _PATCH);
+export const DELETE = withBusinessContext('pos/timed-prices', _DELETE);

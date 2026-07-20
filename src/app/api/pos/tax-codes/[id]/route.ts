@@ -1,26 +1,12 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }
 
-async function _PATCH(req: Request, { params }: Params) {
+async function _PATCH(req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = await params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
   const { data: existing } = await supabase.from('pos_tax_codes').select('id, is_system, business_id').eq('id', id).maybeSingle()
   if (!existing || existing.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
@@ -40,13 +26,8 @@ async function _PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ tax_code: data })
 }
 
-async function _DELETE(_req: Request, { params }: Params) {
+async function _DELETE(_req: Request, { params }: Params, { supabase, businessId: bid }: BusinessContext) {
   const { id } = await params
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
   const { data: existing } = await supabase.from('pos_tax_codes').select('is_system, business_id').eq('id', id).maybeSingle()
   if (!existing || existing.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (existing.is_system) return NextResponse.json({ error: 'Cannot delete system tax code — deactivate instead' }, { status: 400 })
@@ -54,5 +35,5 @@ async function _DELETE(_req: Request, { params }: Params) {
   return NextResponse.json({ ok: true })
 }
 
-export const PATCH = withErrorCapture('pos/tax-codes/[id]', _PATCH)
-export const DELETE = withErrorCapture('pos/tax-codes/[id]', _DELETE)
+export const PATCH = withBusinessContext('pos/tax-codes/[id]', _PATCH)
+export const DELETE = withBusinessContext('pos/tax-codes/[id]', _DELETE)

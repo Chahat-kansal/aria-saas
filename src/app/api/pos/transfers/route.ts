@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -56,12 +56,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ transfers: data ?? [] });
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+async function _POST(req: Request, _ctx: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const { from_outlet_id, to_outlet_id, items, notes, expected_arrival_at, cost_method, submit_for_approval } = await req.json();
   if (!from_outlet_id || !to_outlet_id || from_outlet_id === to_outlet_id || !items?.length) {
     return NextResponse.json({ error: 'from_outlet_id, to_outlet_id (different), and items required' }, { status: 400 });
@@ -82,8 +77,8 @@ async function _POST(req: Request) {
     notes: notes ?? null,
     expected_arrival_at: expected_arrival_at ?? null,
     cost_method: cost_method ?? 'fifo',
-    created_by: user.id,
-    requested_by: submit_for_approval ? user.id : null,
+    created_by: userId,
+    requested_by: submit_for_approval ? userId : null,
     requested_at: submit_for_approval ? now : null,
   }).select().single();
   if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 });
@@ -106,7 +101,7 @@ async function _POST(req: Request) {
     transfer_id: transfer.id, business_id: bid,
     event_type: submit_for_approval ? 'requested' : 'created',
     from_status: null, to_status: initialStatus,
-    actor_user_id: user.id,
+    actor_user_id: userId,
     metadata: { items_count: items.length },
   });
 
@@ -114,4 +109,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/transfers', _GET);
-export const POST = withErrorCapture('pos/transfers', _POST);
+export const POST = withBusinessContext('pos/transfers', _POST);

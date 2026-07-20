@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -21,12 +21,7 @@ async function _GET(_req: Request) {
   return NextResponse.json({ rules: data ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+async function _POST(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json()
   const { name, payment_type, amount_type, amount } = body
   if (!name || !payment_type || !amount_type || amount == null) return NextResponse.json({ error: 'All fields required' }, { status: 400 })
@@ -57,6 +52,6 @@ async function _DELETE(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/surcharge-rules', _GET)
-export const POST = withErrorCapture('pos/surcharge-rules', _POST)
+export const POST = withBusinessContext('pos/surcharge-rules', _POST)
 export const PATCH = withErrorCapture('pos/surcharge-rules', _PATCH)
 export const DELETE = withErrorCapture('pos/surcharge-rules', _DELETE)

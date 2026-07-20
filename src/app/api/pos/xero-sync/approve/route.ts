@@ -2,17 +2,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { refreshXeroToken } from '@/lib/integrations/oauth-clients/xero'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 interface JournalLine {
   description: string
@@ -69,14 +61,7 @@ async function pushManualJournal(
   return json?.ManualJournals?.[0]?.ManualJournalID ?? ''
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _ctx: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as {
     preview_id?: string
     approved_items?: string[]
@@ -100,7 +85,7 @@ async function _POST(req: Request) {
     .from('businesses')
     .select('id, xero_access_token, xero_refresh_token, xero_tenant_id')
     .eq('id', bid)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   if (!biz?.xero_access_token) {
@@ -170,4 +155,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ ok: true, xero_journal_id: journalId })
 }
 
-export const POST = withErrorCapture('pos/xero-sync/approve', _POST)
+export const POST = withBusinessContext('pos/xero-sync/approve', _POST)

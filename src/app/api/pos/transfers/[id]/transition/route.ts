@@ -1,27 +1,14 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 import { canTransition, requiredPermissionForTransition, snapshotUnitCost, computeVariance, type TransferStatus, type CostMethod } from '@/lib/pos/transfer-engine';
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
 
 type Params = { params: Promise<{ id: string }> }
 
-async function _POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = await params;
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { to_status, item_updates, cancellation_reason, pos_user_id } = await req.json() as {
     to_status: TransferStatus;
@@ -50,10 +37,10 @@ async function _POST(req: Request, { params }: Params) {
   const now = new Date().toISOString();
   const updates: Record<string, unknown> = { status: to_status };
 
-  if (to_status === 'approved')    { updates.approved_by = user.id;    updates.approved_at = now; }
-  if (to_status === 'in_transit')  { updates.shipped_by = user.id;     updates.shipped_at = now; }
-  if (to_status === 'received')    { updates.received_by = user.id;    updates.received_at = now; }
-  if (to_status === 'reconciled')  { updates.reconciled_by = user.id;  updates.reconciled_at = now; updates.completed_at = now; }
+  if (to_status === 'approved')    { updates.approved_by = userId;    updates.approved_at = now; }
+  if (to_status === 'in_transit')  { updates.shipped_by = userId;     updates.shipped_at = now; }
+  if (to_status === 'received')    { updates.received_by = userId;    updates.received_at = now; }
+  if (to_status === 'reconciled')  { updates.reconciled_by = userId;  updates.reconciled_at = now; updates.completed_at = now; }
   if (to_status === 'cancelled')   { updates.cancellation_reason = cancellation_reason ?? null; updates.completed_at = now; }
 
   if (item_updates?.length) {
@@ -156,7 +143,7 @@ async function _POST(req: Request, { params }: Params) {
     transfer_id: id, business_id: bid,
     event_type: eventTypeMap[to_status] ?? 'created',
     from_status: from, to_status,
-    actor_user_id: user.id, actor_pos_user_id: pos_user_id ?? null,
+    actor_user_id: userId, actor_pos_user_id: pos_user_id ?? null,
     metadata: { cancellation_reason: cancellation_reason ?? null },
   });
 
@@ -184,4 +171,4 @@ async function _POST(req: Request, { params }: Params) {
   return NextResponse.json({ ok: true, status: to_status });
 }
 
-export const POST = withErrorCapture('pos/transfers/[id]/transition', _POST);
+export const POST = withBusinessContext('pos/transfers/[id]/transition', _POST);

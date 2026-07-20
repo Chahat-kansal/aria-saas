@@ -3,7 +3,7 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -12,20 +12,13 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
-
+async function _POST(req: Request, _ctx: unknown, { supabase, userId, businessId: bid }: BusinessContext) {
   const { outlet_id, items } = await req.json();
 
   const variances = (items as Array<{ product_id: string; system_qty: number; counted_qty: number; recount_count: number }>).filter(i => i.counted_qty !== i.system_qty);
 
   const { data: stockTake } = await supabase.from('pos_stock_takes').insert({
-    business_id: bid, outlet_id, started_by: user.id, started_at: new Date().toISOString(),
+    business_id: bid, outlet_id, started_by: userId, started_at: new Date().toISOString(),
     completed_at: new Date().toISOString(), status: 'committed',
     items_counted: items.length, items_with_variance: variances.length,
     total_variance_cents: variances.reduce((s: number, i: any) => s + Math.abs(i.counted_qty - i.system_qty), 0),
@@ -66,4 +59,4 @@ async function _GET() {
 }
 
 export const GET = withErrorCapture('pos/stock-takes', _GET)
-export const POST = withErrorCapture('pos/stock-takes', _POST)
+export const POST = withBusinessContext('pos/stock-takes', _POST)

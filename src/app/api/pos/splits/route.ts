@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -34,13 +34,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ splits: splits ?? [] })
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
+async function _POST(req: Request, _ctx: unknown, { supabase, businessId: bid }: BusinessContext) {
   const body = await req.json()
   const { sale_id, group_id, splits: splitInputs } = body
 
@@ -108,4 +102,4 @@ async function _POST(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/splits', _GET)
-export const POST = withErrorCapture('pos/splits', _POST)
+export const POST = withBusinessContext('pos/splits', _POST)

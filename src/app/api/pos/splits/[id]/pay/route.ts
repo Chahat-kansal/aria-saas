@@ -2,25 +2,12 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 type Ctx = { params: Promise<{ id: string }> | { id: string } }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  return data?.id ?? null
-}
-
-async function _POST(req: Request, ctx: Ctx) {
+async function _POST(req: Request, ctx: Ctx, { supabase, userId, businessId: bid }: BusinessContext) {
   const { id } = 'then' in ctx.params ? await ctx.params : ctx.params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const { data: split } = await supabase.from('pos_sale_splits').select('id, sale_id, total_amount, amount_paid, status').eq('id', id).eq('business_id', bid).maybeSingle()
   if (!split) return NextResponse.json({ error: 'Split not found' }, { status: 404 })
@@ -41,7 +28,7 @@ async function _POST(req: Request, ctx: Ctx) {
     tip_portion: tip_portion ?? null,
     reference: reference ?? null,
     processor: processor ?? null,
-    taken_by: user.id,
+    taken_by: userId,
   })
   if (payErr) return NextResponse.json({ error: payErr.message }, { status: 500 })
 
@@ -73,4 +60,4 @@ async function _POST(req: Request, ctx: Ctx) {
   return NextResponse.json({ ok: true, total_paid: totalPaid })
 }
 
-export const POST = withErrorCapture('pos/splits/[id]/pay', _POST)
+export const POST = withBusinessContext('pos/splits/[id]/pay', _POST)
