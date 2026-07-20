@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { rateLimit, clientIp } from '@/lib/security/rate-limit'
 
 function isValidEmail(s: string) {
   return /^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(s)
@@ -34,6 +35,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
     }
 
+    // WIDGET-PII-LEAK-FIX — a valid kiosk session proves physical presence at this business's
+    // kiosk, not ownership of the typed email, so the lookup below must never surface whose email
+    // it was matched against. Scope a lookup-specific limit on top of the endpoint itself, since a
+    // kiosk session could otherwise be used to probe many emails in a row.
+    const rl = await rateLimit('instore-loyalty:' + clientIp(req) + ':' + business_id, 15, 60)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } })
+    }
+
     const { data: config } = await supabaseAdmin
       .from('instore_kiosk_configs')
       .select('loyalty_enabled, enabled')
@@ -44,27 +54,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Loyalty signup disabled' }, { status: 403 })
     }
 
-    const { data: loyaltyConfig } = await supabaseAdmin
-      .from('pos_loyalty_config')
-      .select('program_type, stamps_to_reward, stamp_reward_text, points_per_dollar, point_value_cents')
-      .eq('business_id', business_id)
-      .maybeSingle()
-
-    const stampsToReward = Number(loyaltyConfig?.stamps_to_reward ?? 10)
-    const programType = loyaltyConfig?.program_type ?? 'points'
-
-    // ── Existing customer? ───────────────────────────────────────────
+    // ── Find-or-create the customer row (still required for correct enrolment/dedup) ──
+    // WIDGET-PII-LEAK-FIX: the response below deliberately does NOT depend on whether `existing`
+    // was found — new and returning callers get the byte-identical response. Surfacing "found vs
+    // not found" (let alone name/points/stamps) is itself an enumeration oracle for someone typing
+    // emails at the kiosk that aren't their own — see the loyalty/[business_id]/balance route's
+    // SECURITY-P1 (C-02) fix for the same principle applied to a verified-session endpoint.
     const { data: existing } = await supabaseAdmin
       .from('pos_customers')
-      .select('id, name, loyalty_points, points_balance, stamps_count, visit_count, total_spent, total_spend')
+      .select('id')
       .eq('business_id', business_id)
       .eq('email', email.toLowerCase().trim())
       .maybeSingle()
 
-    let customer = existing
-    let isNew = false
+    let customerId = existing?.id ?? null
 
-    if (!customer) {
+    if (!customerId) {
       const { data: created, error: insertErr } = await supabaseAdmin.from('pos_customers').insert({
         business_id,
         email: email.toLowerCase().trim(),
@@ -76,51 +81,34 @@ export async function POST(req: Request) {
         // CONSENT-COLLECTION-1: kiosk captures email for loyalty but asks no marketing opt-in —
         // record provenance only; channel consent stays false (DB default) until expressly given.
         consent_source: 'online',
-      }).select('id, name, loyalty_points, points_balance, stamps_count, visit_count, total_spent, total_spend').single()
+      }).select('id').single()
 
       if (insertErr || !created) {
         return NextResponse.json({ error: 'Could not create customer' }, { status: 500 })
       }
-      customer = created
-      isNew = true
+      customerId = created.id
     }
 
     // Link conversation to customer + record email captured
     if (conversation_id) {
       await supabaseAdmin.from('instore_conversations').update({
-        customer_id: customer.id,
+        customer_id: customerId,
         email_captured: email.toLowerCase().trim(),
       }).eq('id', conversation_id).eq('business_id', business_id)
     }
 
-    const points = Number(customer.points_balance ?? customer.loyalty_points ?? 0)
-    const stamps = Number(customer.stamps_count ?? 0)
-    const stampsLeft = Math.max(0, stampsToReward - stamps)
-
-    let welcomeMessage: string
-    if (isNew) {
-      welcomeMessage = `You're in! Welcome to the rewards crew. ${programType === 'stamps' ? `Collect ${stampsToReward} stamps and we'll shout you ${loyaltyConfig?.stamp_reward_text ?? 'a freebie'}.` : 'Start earning points on your next visit.'}`
-    } else {
-      const visits = Number(customer.visit_count ?? 0)
-      const name = customer.name ?? 'mate'
-      if (programType === 'stamps') {
-        welcomeMessage = stampsLeft === 0
-          ? `Welcome back ${name}! You've earned a reward — let staff know to claim it.`
-          : `Welcome back ${name}! You've got ${stamps} stamp${stamps === 1 ? '' : 's'} — ${stampsLeft} more for ${loyaltyConfig?.stamp_reward_text ?? 'a freebie'}.`
-      } else {
-        welcomeMessage = `Welcome back ${name}! You've got ${points} loyalty points${visits > 0 ? ` from ${visits} visit${visits === 1 ? '' : 's'}` : ''}.`
-      }
-    }
+    // Log the lookup/enrol attempt — non-blocking, per WIDGET-PII-LEAK-FIX's audit-trail requirement.
+    void supabaseAdmin.from('activity_log').insert({
+      business_id,
+      action_type: 'instore_loyalty_lookup',
+      description: '[instore/loyalty] kiosk lookup/enrol attempt',
+      metadata: { email: email.toLowerCase().trim(), conversation_id: conversation_id ?? null },
+      created_at: new Date().toISOString(),
+    }).then(({ error }) => { if (error) console.error('[non-fatal] activity_log insert failed', error) })
 
     return NextResponse.json({
       success: true,
-      is_new: isNew,
-      customer_id: customer.id,
-      name: customer.name,
-      points,
-      stamps,
-      stamps_left: stampsLeft,
-      welcome_message: welcomeMessage,
+      welcome_message: "Thanks! You're all set — ask a team member if you'd like to check your rewards balance.",
     })
   } catch (err) {
     console.error('[instore/loyalty] error', err)

@@ -109,20 +109,17 @@ export async function POST(req: Request) {
       return p.name + priceBit + catBit + stockNote
     }).join('\n')
 
-    // ── Optional member lookup if customer pasted an email ────────────
+    // ── No identity lookup from a pasted email (WIDGET-PII-LEAK-FIX / AG-W0) ──────
+    // A kiosk session (checked above) proves the caller is physically at this business's kiosk —
+    // it does NOT prove they own whatever email they typed. This used to query pos_customers by
+    // that raw email and hand back name/points/stamps, letting anyone standing at the kiosk pull a
+    // stranger's loyalty data by typing a guessed email. Enrolment already happens through the
+    // dedicated /api/public/instore/loyalty flow (which no longer echoes identity either); this
+    // chat route just nudges the customer toward it instead of resolving identity itself.
     let memberContext = ''
     const emailMatch = message.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
     if (config?.loyalty_enabled !== false && emailMatch) {
-      const { data: cust } = await supabaseAdmin.from('pos_customers')
-        .select('name, loyalty_points, points_balance, stamps_count')
-        .eq('business_id', business_id)
-        .eq('email', emailMatch[0].toLowerCase().trim())
-        .maybeSingle()
-      if (cust) {
-        const pts = Number(cust.points_balance ?? cust.loyalty_points ?? 0)
-        const stamps = Number(cust.stamps_count ?? 0)
-        memberContext = `RETURNING CUSTOMER: ${cust.name ?? 'this customer'} is enrolled — ${pts} points, ${stamps} stamps. Greet them by name warmly. Never invent any numbers.`
-      }
+      memberContext = 'The customer typed an email. Do not look up, guess, or share any loyalty points/stamps/balance for it in this chat — invite them to check their balance in the loyalty sign-up flow, or ask a staff member.'
     }
 
     // ── Build system prompt ───────────────────────────────────────────

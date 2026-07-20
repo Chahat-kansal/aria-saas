@@ -127,32 +127,18 @@ export async function POST(req: Request) {
       if (top3.length > 0) topSellersContext = 'Top sellers: ' + top3.join(', ')
     } catch (e) { console.error('[non-fatal]', e) }
 
-    // ── Optional membership lookup from visitor message ───────────────────
+    // ── Membership mention — no identity lookup (WIDGET-PII-LEAK-FIX / AG-W0) ─────
+    // This used to query pos_customers directly by whatever email/phone the visitor typed and
+    // hand the result (name, points, tier) back in the chat context — a fully public, unverified
+    // caller could enumerate any customer of this business with no ownership proof at all. A public
+    // widget has no session concept to check ownership against, so the lookup is removed entirely
+    // rather than gated — the model is told to defer to the verified loyalty flow instead.
     let memberContext = ''
     if (config.recognise_members !== false) {
       const emailMatch = message.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
       const phoneMatch = message.match(/(?:\+?61|0)\d{8,9}|\d{10}/)
-      const lookup = emailMatch?.[0] ?? phoneMatch?.[0] ?? null
-      if (lookup) {
-        const { data: cust } = await supabaseAdmin.from('pos_customers')
-          .select('id, name, loyalty_points, points_balance, loyalty_balance, loyalty_tier')
-          .eq('business_id', businessId)
-          .or('email.eq.' + lookup + ',phone.eq.' + lookup)
-          .maybeSingle()
-        if (cust) {
-          const points = Number(cust.points_balance ?? cust.loyalty_points ?? cust.loyalty_balance ?? 0)
-          let perks = ''
-          if (cust.loyalty_tier) {
-            const { data: tier } = await supabaseAdmin.from('loyalty_tiers')
-              .select('tier_name, perks, points_multiplier')
-              .eq('business_id', businessId).eq('tier_name', cust.loyalty_tier).maybeSingle()
-            if (tier?.perks) perks = ' Tier perks: ' + tier.perks + '.'
-            else if (tier?.tier_name) perks = ' ' + tier.tier_name + ' tier.'
-          }
-          memberContext = 'MEMBER LOOKUP: ' + String(cust.name ?? 'Customer').replace(/[<>{}\n\r]/g, '').slice(0, 60) + ' is a verified member with ' + points + ' loyalty points' + (cust.loyalty_tier ? ' (' + cust.loyalty_tier + ' tier)' : '') + '.' + perks + ' Greet them by name, share these real numbers — never invent any.'
-        } else {
-          memberContext = 'MEMBER LOOKUP: No membership found for ' + lookup + '. If asked, invite them to join the loyalty program — it is free.'
-        }
+      if (emailMatch || phoneMatch) {
+        memberContext = 'The visitor shared a contact detail asking about loyalty membership. You cannot look up or share any points, tier, balance, or "member found" status in this chat — invite them to check their balance by signing in to their loyalty account, or ask a staff member if they are in-store. Never guess or invent a membership status.'
       }
     }
 
