@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 import { BookingCard } from './BookingCard'
+import { FloorPlan } from '@/components/pos/FloorPlan'
 import type { Service, Booking, Availability, BusinessHours } from './types'
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: 'var(--text-secondary,#A8B5A8)', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', blue: '#60a5fa', border: 'rgba(127,184,151,0.15)' }
@@ -24,7 +25,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [availability, setAvailability] = useState<Availability[]>([])
-  const [tab, setTab] = useState<'calendar' | 'list' | 'services' | 'availability'>('calendar')
+  const [tab, setTab] = useState<'calendar' | 'list' | 'services' | 'availability' | 'tables'>('calendar')
   const [calView, setCalView] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -50,6 +51,8 @@ export default function BookingsPage() {
   const [bookingsEnabled, setBookingsEnabled] = useState(false)
   const [bookingsToggling, setBookingsToggling] = useState(false)
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([])
+  const [tableMode, setTableMode] = useState<'auto' | 'area' | 'table'>('auto')
+  const [tableModeSaving, setTableModeSaving] = useState(false)
 
   const load = useCallback(async (businessId: string) => {
     const [bkRes, svcRes] = await Promise.all([
@@ -75,6 +78,7 @@ export default function BookingsPage() {
           if (bd.business?.booking_link_slug) { setBizSlug(bd.business.booking_link_slug); setSlugInput(bd.business.booking_link_slug) }
           setBookingsEnabled(!!bd.business?.bookings_enabled)
           setBusinessHours(bd.business_hours ?? [])
+          setTableMode(bd.business?.booking_table_mode ?? 'auto')
         }).catch(() => {})
       } else setLoading(false)
     }).catch(() => setLoading(false))
@@ -118,6 +122,14 @@ export default function BookingsPage() {
       if (next) { await load(bid); await loadAvailability(bid) }
     }
     setBookingsToggling(false)
+  }
+
+  async function saveTableMode(mode: 'auto' | 'area' | 'table') {
+    setTableModeSaving(true)
+    const res = await fetch('/api/pos/business', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_table_mode: mode }) }).catch(() => null)
+    const d = await res?.json().catch(() => ({}))
+    if (d?.business) setTableMode(d.business.booking_table_mode ?? mode)
+    setTableModeSaving(false)
   }
 
   async function addBooking() {
@@ -326,7 +338,7 @@ export default function BookingsPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid ' + C.border }}>
-        {([['calendar', '📅 Calendar'], ['list', '📋 List'], ['services', '🛎 Services'], ['availability', '⚙️ Availability']] as const).map(([t, label]) => (
+        {([['calendar', '📅 Calendar'], ['list', '📋 List'], ['services', '🛎 Services'], ['availability', '⚙️ Availability'], ['tables', '🪑 Tables']] as const).map(([t, label]) => (
           <button key={t} onClick={() => { setTab(t); if (t === 'availability') loadAvailability() }}
             style={{ padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 400, color: tab === t ? C.green : C.muted, borderBottom: '2px solid ' + (tab === t ? C.green : 'transparent'), marginBottom: -1 }}>
             {label}
@@ -531,6 +543,38 @@ export default function BookingsPage() {
               </div>
             ))}
             <button onClick={saveAvailability} disabled={availSaving} style={btnPrimary}>{availSaving ? 'Saving…' : 'Save availability'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* TABLES TAB — FLOOR-1: mode switch + reused FloorPlan canvas, configMode for booking properties */}
+      {tab === 'tables' && (
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>How should guests pick a seat?</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
+            {([
+              ['auto', 'Just a time', 'We seat them — no table choice shown online.'],
+              ['area', 'By area', 'Guests pick a section (e.g. Patio, Window) — we seat them within it.'],
+              ['table', 'By table', 'Guests pick an exact table from a floor plan.'],
+            ] as const).map(([mode, label, desc]) => (
+              <button key={mode} onClick={() => saveTableMode(mode)} disabled={tableModeSaving}
+                style={{
+                  textAlign: 'left', padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                  background: tableMode === mode ? 'rgba(127,184,151,0.12)' : C.card,
+                  border: '1px solid ' + (tableMode === mode ? C.green : C.border),
+                  opacity: tableModeSaving ? 0.6 : 1,
+                }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: tableMode === mode ? C.green : C.text, marginBottom: 3 }}>{label}</p>
+                <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>{desc}</p>
+              </button>
+            ))}
+          </div>
+
+          <p style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+            Tap a table below to mark it guest-selectable and give it a seating area / display name. Same floor plan you use on the terminal.
+          </p>
+          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.border, minHeight: 360 }}>
+            {bid && <FloorPlan businessId={bid} onTableSelect={() => {}} editMode configMode />}
           </div>
         </div>
       )}

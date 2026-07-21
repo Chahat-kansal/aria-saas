@@ -11,6 +11,10 @@ interface PosTable {
   pos_y: number
   shape: 'square' | 'round' | 'rectangle'
   current_sale_id: string | null
+  // FLOOR-1 — owner-editable booking properties, optional since older rows predate them
+  is_guest_selectable?: boolean
+  seating_area?: string | null
+  display_name?: string | null
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -26,14 +30,75 @@ interface Props {
   businessId: string
   onTableSelect: (table: PosTable) => void
   editMode?: boolean
+  // FLOOR-1 — when true, clicking a table opens the booking-properties editor (guest-selectable /
+  // seating_area / display_name) instead of firing onTableSelect's seating flow. Same canvas,
+  // same data, a different click action — the terminal's own usage is untouched (defaults false).
+  configMode?: boolean
 }
 
-export function FloorPlan({ businessId, onTableSelect, editMode = false }: Props) {
+function TableConfigPanel({ table, onClose, onSaved }: {
+  table: PosTable
+  onClose: () => void
+  onSaved: (updated: PosTable) => void
+}) {
+  const [selectable, setSelectable] = useState(!!table.is_guest_selectable)
+  const [area, setArea] = useState(table.seating_area ?? '')
+  const [displayName, setDisplayName] = useState(table.display_name ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    const res = await fetch(`/api/pos/tables/${table.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        is_guest_selectable: selectable,
+        seating_area: area.trim() || null,
+        display_name: displayName.trim() || null,
+      }),
+    })
+    const d = await res.json()
+    setSaving(false)
+    if (d.table) onSaved(d.table)
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#141a16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 20, width: '100%', maxWidth: 340 }}>
+        <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Table {table.name} — booking properties</p>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, cursor: 'pointer' }}>
+          <input type="checkbox" checked={selectable} onChange={e => setSelectable(e.target.checked)} style={{ accentColor: '#7FB897' }} />
+          <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>Guests can pick this table (Table mode)</span>
+        </label>
+
+        <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Seating area (e.g. "Window", "Patio")</label>
+        <input value={area} onChange={e => setArea(e.target.value)} placeholder="Main Floor"
+          style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '8px 10px', color: '#fff', fontSize: 13, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+
+        <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Guest-facing name (optional — "Window 2" reads better than "T7")</label>
+        <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder={table.name}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '8px 10px', color: '#fff', fontSize: 13, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0a1510', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: 13, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function FloorPlan({ businessId, onTableSelect, editMode = false, configMode = false }: Props) {
   const [tables, setTables]       = useState<PosTable[]>([])
   const [loading, setLoading]     = useState(true)
   const [dragging, setDragging]   = useState<string | null>(null)
   const [newName, setNewName]     = useState('')
   const [newSection, setNewSection] = useState('')
+  const [configTable, setConfigTable] = useState<PosTable | null>(null)
   const containerRef              = useRef<HTMLDivElement>(null)
 
   const load = async () => {
@@ -134,7 +199,10 @@ export function FloorPlan({ businessId, onTableSelect, editMode = false }: Props
                   <div key={table.id}
                     draggable={editMode}
                     onDragStart={e => handleDragStart(e, table.id)}
-                    onClick={() => table.status !== 'dirty' && onTableSelect(table)}
+                    onClick={() => {
+                      if (configMode) { setConfigTable(table); return }
+                      if (table.status !== 'dirty') onTableSelect(table)
+                    }}
                     style={{
                       width: table.shape === 'rectangle' ? 110 : 72,
                       height: 72,
@@ -148,13 +216,18 @@ export function FloorPlan({ businessId, onTableSelect, editMode = false }: Props
                       userSelect: 'none',
                     }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color }}>
-                      {table.name}
+                      {table.display_name || table.name}
                     </span>
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
                       {table.seats} seats
                     </span>
-                    {table.status !== 'available' && (
+                    {table.status !== 'available' && !configMode && (
                       <span style={{ fontSize: 9, color, marginTop: 1 }}>{table.status}</span>
+                    )}
+                    {configMode && (
+                      <span style={{ fontSize: 9, color: table.is_guest_selectable ? '#d9f54e' : 'rgba(255,255,255,0.3)', marginTop: 1 }}>
+                        {table.is_guest_selectable ? '● guest-selectable' : '○ owner-only'}
+                      </span>
                     )}
                     {table.status === 'dirty' && (
                       <button onClick={e => markClean(table.id, e)}
@@ -182,6 +255,17 @@ export function FloorPlan({ businessId, onTableSelect, editMode = false }: Props
           </div>
         )}
       </div>
+
+      {configTable && (
+        <TableConfigPanel
+          table={configTable}
+          onClose={() => setConfigTable(null)}
+          onSaved={updated => {
+            setTables(p => p.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+            setConfigTable(null)
+          }}
+        />
+      )}
     </div>
   )
 }

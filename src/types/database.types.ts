@@ -3675,6 +3675,7 @@ export type Database = {
           source: string | null
           status: string | null
           stripe_payment_intent_id: string | null
+          table_id: string | null
           updated_at: string | null
           visitor_email: string | null
           visitor_name: string | null
@@ -3712,6 +3713,7 @@ export type Database = {
           source?: string | null
           status?: string | null
           stripe_payment_intent_id?: string | null
+          table_id?: string | null
           updated_at?: string | null
           visitor_email?: string | null
           visitor_name?: string | null
@@ -3749,6 +3751,7 @@ export type Database = {
           source?: string | null
           status?: string | null
           stripe_payment_intent_id?: string | null
+          table_id?: string | null
           updated_at?: string | null
           visitor_email?: string | null
           visitor_name?: string | null
@@ -3775,6 +3778,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "booking_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "pos_tables"
             referencedColumns: ["id"]
           },
           {
@@ -4384,6 +4394,7 @@ export type Database = {
           biggest_challenge: string | null
           booking_buffer_minutes: number | null
           booking_link_slug: string | null
+          booking_table_mode: string
           bookings_enabled: boolean
           business_model: string | null
           business_state: string | null
@@ -4513,6 +4524,7 @@ export type Database = {
           biggest_challenge?: string | null
           booking_buffer_minutes?: number | null
           booking_link_slug?: string | null
+          booking_table_mode?: string
           bookings_enabled?: boolean
           business_model?: string | null
           business_state?: string | null
@@ -4642,6 +4654,7 @@ export type Database = {
           biggest_challenge?: string | null
           booking_buffer_minutes?: number | null
           booking_link_slug?: string | null
+          booking_table_mode?: string
           bookings_enabled?: boolean
           business_model?: string | null
           business_state?: string | null
@@ -19721,13 +19734,16 @@ export type Database = {
           capacity: number | null
           created_at: string | null
           current_sale_id: string | null
+          display_name: string | null
           id: string
+          is_guest_selectable: boolean
           name: string | null
           notes: string | null
           occupied_since: string | null
           pos_x: number | null
           pos_y: number | null
           seated_at: string | null
+          seating_area: string | null
           seats: number
           section: string | null
           shape: string | null
@@ -19741,13 +19757,16 @@ export type Database = {
           capacity?: number | null
           created_at?: string | null
           current_sale_id?: string | null
+          display_name?: string | null
           id?: string
+          is_guest_selectable?: boolean
           name?: string | null
           notes?: string | null
           occupied_since?: string | null
           pos_x?: number | null
           pos_y?: number | null
           seated_at?: string | null
+          seating_area?: string | null
           seats?: number
           section?: string | null
           shape?: string | null
@@ -19761,13 +19780,16 @@ export type Database = {
           capacity?: number | null
           created_at?: string | null
           current_sale_id?: string | null
+          display_name?: string | null
           id?: string
+          is_guest_selectable?: boolean
           name?: string | null
           notes?: string | null
           occupied_since?: string | null
           pos_x?: number | null
           pos_y?: number | null
           seated_at?: string | null
+          seating_area?: string | null
           seats?: number
           section?: string | null
           shape?: string | null
@@ -28607,6 +28629,67 @@ export type Database = {
       claim_return_qty: {
         Args: { p_item_id: string; p_qty: number }
         Returns: number
+      }
+      confirm_booking_atomic: {
+        Args: {
+          p_booking_date: string
+          p_booking_time: string
+          p_business_id: string
+          p_customer_email: string
+          p_customer_name: string
+          p_customer_phone: string
+          p_duration_minutes: number
+          p_notes: string
+          p_party_size: number
+          p_seating_area?: string
+          p_service_id: string
+          p_source: string
+          p_table_id?: string
+        }
+        Returns: {
+          amount: number | null
+          aria_notes: string | null
+          booking_date: string | null
+          booking_time: string | null
+          booking_token: string | null
+          business_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          confirmed_at: string | null
+          created_at: string | null
+          customer_email: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          deposit_amount: number | null
+          deposit_paid: boolean | null
+          duration_minutes: number | null
+          id: string
+          no_show_score: number | null
+          notes: string | null
+          paid_at: string | null
+          party_size: number | null
+          payment_amount: number | null
+          reminder_sent_at: string | null
+          rescheduled_from: string | null
+          service: string | null
+          service_id: string | null
+          source: string | null
+          status: string | null
+          stripe_payment_intent_id: string | null
+          table_id: string | null
+          updated_at: string | null
+          visitor_email: string | null
+          visitor_name: string | null
+          visitor_phone: string | null
+          widget_conv_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       create_product_draft: {
         Args: {

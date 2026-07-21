@@ -37,19 +37,20 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id,name,created_at,industry,plan,terminal_layout,booking_link_slug,bookings_enabled')
+    .select('id,name,created_at,industry,plan,terminal_layout,booking_link_slug,bookings_enabled,booking_table_mode')
     .eq('id', bid)
     .maybeSingle()
 
   // BOOKINGS-OWNER-CONTROL-1 — the dashboard needs business_hours to derive sensible
   // availability defaults instead of a hardcoded Mon-Fri 9-5 fallback.
-  const { data: hours } = await supabaseAdmin
-    .from('business_hours')
-    .select('day_of_week,open_time,close_time,is_closed')
-    .eq('business_id', bid)
-    .order('day_of_week')
+  // FLOOR-1 — and pos_tables, so the Tables & Seating panel can show guest-selectable/
+  // seating_area/display_name without a second round trip.
+  const [{ data: hours }, { data: tables }] = await Promise.all([
+    supabaseAdmin.from('business_hours').select('day_of_week,open_time,close_time,is_closed').eq('business_id', bid).order('day_of_week'),
+    supabaseAdmin.from('pos_tables').select('id,name,display_name,section,seats,shape,pos_x,pos_y,status,is_guest_selectable,seating_area').eq('business_id', bid).order('section', { nullsFirst: true }).order('name'),
+  ])
 
-  return NextResponse.json({ business: biz ?? null, business_hours: hours ?? [] })
+  return NextResponse.json({ business: biz ?? null, business_hours: hours ?? [], pos_tables: tables ?? [] })
 }
 
 async function _PATCH(request: NextRequest) {
@@ -83,6 +84,9 @@ async function _PATCH(request: NextRequest) {
     updatePayload.bookings_enabled = body.bookings_enabled
     enablingBookings = body.bookings_enabled === true
   }
+  if ('booking_table_mode' in body && ['auto', 'area', 'table'].includes(body.booking_table_mode as string)) {
+    updatePayload.booking_table_mode = body.booking_table_mode
+  }
 
   if (Object.keys(updatePayload).length === 0) {
     return NextResponse.json({ error: 'nothing_to_update' }, { status: 400 })
@@ -92,7 +96,7 @@ async function _PATCH(request: NextRequest) {
     .from('businesses')
     .update(updatePayload)
     .eq('id', bid)
-    .select('id,name,industry,plan,terminal_layout,bookings_enabled')
+    .select('id,name,industry,plan,terminal_layout,bookings_enabled,booking_table_mode')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

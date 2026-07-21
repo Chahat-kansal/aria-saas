@@ -60,13 +60,28 @@ export async function GET(req: Request) {
   }
 
   if (slug) {
-    const { data: biz } = await supabaseAdmin
+    // BOOKINGS-CX-BUILD-1 — the standalone /book/[slug] route param is booking_link_slug; the
+    // [slug]/ CX app's own param matches businesses.slug instead. One shared component mounts in
+    // both places, so this lookup tries both fields rather than assuming they're the same string
+    // (they happen to match for Sip, but nothing guarantees that for every business).
+    const bizSelect = 'id,name,industry,booking_link_slug,bookings_enabled,booking_table_mode'
+    let { data: biz } = await supabaseAdmin
       .from('businesses')
-      .select('id,name,industry,booking_link_slug,bookings_enabled')
+      .select(bizSelect)
       .eq('booking_link_slug', slug)
       .eq('is_active', true)
       .eq('bookings_enabled', true)
       .maybeSingle()
+    if (!biz) {
+      const bySlug = await supabaseAdmin
+        .from('businesses')
+        .select(bizSelect)
+        .eq('slug', slug)
+        .eq('is_active', true)
+        .eq('bookings_enabled', true)
+        .maybeSingle()
+      biz = bySlug.data
+    }
     if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const { data: services } = await supabaseAdmin
       .from('booking_services')
@@ -82,7 +97,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json() as Record<string, unknown>
-  const { business_id, service_id, customer_name, customer_email, customer_phone, booking_date, booking_time, notes, party_size } = body
+  const { business_id, service_id, customer_name, customer_email, customer_phone, booking_date, booking_time, notes, party_size, table_id, seating_area } = body
   if (!business_id || !booking_date || !customer_name) {
     return NextResponse.json({ error: 'business_id, booking_date, customer_name required' }, { status: 400 })
   }
@@ -118,17 +133,29 @@ export async function POST(req: Request) {
     if (svc) duration_minutes = (svc as { duration_minutes: number }).duration_minutes
   }
 
-  const { data, error } = await supabaseAdmin.from('bookings').insert({
-    business_id, service_id: service_id || null,
-    customer_name, customer_email: customer_email || null,
-    customer_phone: customer_phone || null,
-    booking_date, booking_time: booking_time || null,
-    party_size: party_size || 1, duration_minutes,
-    notes: notes || null, status: 'confirmed', source: 'public_form',
-    confirmed_at: new Date().toISOString(),
-  }).select().single()
+  // FLOOR-1 — atomic table assignment + insert in one Postgres function (same discipline as the
+  // sale-path atomics: row-locks candidate tables FOR UPDATE SKIP LOCKED so two concurrent
+  // confirms for the last fitting table can't both win it). Businesses with zero pos_tables rows
+  // configured get byte-identical behaviour to before this migration — see the function body.
+  const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('confirm_booking_atomic', {
+    p_business_id: business_id,
+    p_service_id: service_id || null,
+    p_customer_name: customer_name,
+    p_customer_email: customer_email || null,
+    p_customer_phone: customer_phone || null,
+    p_booking_date: booking_date,
+    p_booking_time: booking_time || null,
+    p_duration_minutes: duration_minutes,
+    p_party_size: party_size || 1,
+    p_notes: notes || null,
+    p_source: 'public_form',
+    p_table_id: table_id || null,
+    p_seating_area: seating_area || null,
+  })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (rpcError) return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  if (!rpcData) return NextResponse.json({ error: 'That time was just taken — please choose another slot.' }, { status: 409 })
+  const data = rpcData
 
   // Owner-facing audit trail — never surfaced to the public caller.
   void supabaseAdmin.from('activity_log').insert({

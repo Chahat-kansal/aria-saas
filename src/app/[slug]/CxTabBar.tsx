@@ -113,19 +113,30 @@ function IconSearchMore({ color = INK }: { color?: string }) {
   )
 }
 
+// BOOKINGS-CX-BUILD-1
+function IconCalendar({ color = INK }: { color?: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <rect x="3" y="4" width="16" height="15" rx="2"/>
+      <path d="M3 9h16M7 2v4M15 2v4"/>
+    </svg>
+  )
+}
+
 // ── Types + constants ─────────────────────────────────────────────────────────
 
 export type CxActiveTab =
   | 'home' | 'menu' | 'rewards' | 'wallet'
   | 'scan' | 'locations' | 'account' | 'history'
   | 'offers' | 'notifications' | 'search' | 'item'
-  | 'onboarding' | 'cart'
+  | 'onboarding' | 'cart' | 'booking'
 
 const MORE_TAB_KEYS: readonly string[] = [
-  'locations', 'account', 'history', 'offers', 'notifications', 'search', 'scan', 'item',
+  'locations', 'account', 'history', 'offers', 'notifications', 'search', 'scan', 'item', 'booking',
 ]
 
 const MORE_ITEMS = [
+  { key: 'booking',       label: 'Book a table',  Icon: IconCalendar    },
   { key: 'locations',     label: 'Locations',     Icon: IconPin         },
   { key: 'account',       label: 'Account',       Icon: IconUser        },
   { key: 'history',       label: 'History',       Icon: IconHistory     },
