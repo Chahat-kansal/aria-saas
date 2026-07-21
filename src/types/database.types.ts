@@ -14,6 +14,225 @@ export type Database = {
   }
   public: {
     Tables: {
+      _dup_customer_merge_log: {
+        Row: {
+          abn: string | null
+          account_balance: number | null
+          account_number: string | null
+          backed_up_at: string | null
+          balance: number | null
+          birthday: string | null
+          business_id: string | null
+          churn_risk_score: number | null
+          churn_risk_updated_at: string | null
+          consent_captured_at: string | null
+          consent_source: string | null
+          created_at: string | null
+          credit_limit_cents: number | null
+          current_balance_cents: number | null
+          custom_fields: Json | null
+          customer_group_id: string | null
+          days_since_visit: number | null
+          deleted_at: string | null
+          email: string | null
+          email_consent: boolean | null
+          email_enc: string | null
+          group_id: string | null
+          group_name: string | null
+          id: string | null
+          last_visit: string | null
+          last_visit_at: string | null
+          lifetime_value_cents: number | null
+          lightspeed_customer_id: string | null
+          loyalty_balance: number | null
+          loyalty_identity_id: string | null
+          loyalty_invite_sent_at: string | null
+          loyalty_invite_token: string | null
+          loyalty_points: number | null
+          loyalty_tier: string | null
+          marketing_consent: boolean | null
+          merged_into: string | null
+          name: string | null
+          name_enc: string | null
+          notes: string | null
+          notes_enc: string | null
+          phone: string | null
+          phone_enc: string | null
+          points_balance: number | null
+          price_list_id: string | null
+          referral_code: string | null
+          review_request_sent_at: string | null
+          rfm_frequency_score: number | null
+          rfm_monetary_score: number | null
+          rfm_recency_score: number | null
+          rfm_score_total: number | null
+          rfm_segment: string | null
+          segment: string | null
+          segment_updated_at: string | null
+          shopify_customer_id: string | null
+          sms_consent: boolean | null
+          source: string | null
+          square_customer_id: string | null
+          stamps_count: number | null
+          tags: string[] | null
+          tax_exempt: boolean | null
+          tax_exempt_certificate: string | null
+          tax_exempt_expires_at: string | null
+          tax_exempt_type: string | null
+          total_lifetime_spend: number | null
+          total_spend: number | null
+          total_spent: number | null
+          updated_at: string | null
+          visit_count: number | null
+          whatsapp_consent: boolean | null
+          whatsapp_opt_in_at: string | null
+        }
+        Insert: {
+          abn?: string | null
+          account_balance?: number | null
+          account_number?: string | null
+          backed_up_at?: string | null
+          balance?: number | null
+          birthday?: string | null
+          business_id?: string | null
+          churn_risk_score?: number | null
+          churn_risk_updated_at?: string | null
+          consent_captured_at?: string | null
+          consent_source?: string | null
+          created_at?: string | null
+          credit_limit_cents?: number | null
+          current_balance_cents?: number | null
+          custom_fields?: Json | null
+          customer_group_id?: string | null
+          days_since_visit?: number | null
+          deleted_at?: string | null
+          email?: string | null
+          email_consent?: boolean | null
+          email_enc?: string | null
+          group_id?: string | null
+          group_name?: string | null
+          id?: string | null
+          last_visit?: string | null
+          last_visit_at?: string | null
+          lifetime_value_cents?: number | null
+          lightspeed_customer_id?: string | null
+          loyalty_balance?: number | null
+          loyalty_identity_id?: string | null
+          loyalty_invite_sent_at?: string | null
+          loyalty_invite_token?: string | null
+          loyalty_points?: number | null
+          loyalty_tier?: string | null
+          marketing_consent?: boolean | null
+          merged_into?: string | null
+          name?: string | null
+          name_enc?: string | null
+          notes?: string | null
+          notes_enc?: string | null
+          phone?: string | null
+          phone_enc?: string | null
+          points_balance?: number | null
+          price_list_id?: string | null
+          referral_code?: string | null
+          review_request_sent_at?: string | null
+          rfm_frequency_score?: number | null
+          rfm_monetary_score?: number | null
+          rfm_recency_score?: number | null
+          rfm_score_total?: number | null
+          rfm_segment?: string | null
+          segment?: string | null
+          segment_updated_at?: string | null
+          shopify_customer_id?: string | null
+          sms_consent?: boolean | null
+          source?: string | null
+          square_customer_id?: string | null
+          stamps_count?: number | null
+          tags?: string[] | null
+          tax_exempt?: boolean | null
+          tax_exempt_certificate?: string | null
+          tax_exempt_expires_at?: string | null
+          tax_exempt_type?: string | null
+          total_lifetime_spend?: number | null
+          total_spend?: number | null
+          total_spent?: number | null
+          updated_at?: string | null
+          visit_count?: number | null
+          whatsapp_consent?: boolean | null
+          whatsapp_opt_in_at?: string | null
+        }
+        Update: {
+          abn?: string | null
+          account_balance?: number | null
+          account_number?: string | null
+          backed_up_at?: string | null
+          balance?: number | null
+          birthday?: string | null
+          business_id?: string | null
+          churn_risk_score?: number | null
+          churn_risk_updated_at?: string | null
+          consent_captured_at?: string | null
+          consent_source?: string | null
+          created_at?: string | null
+          credit_limit_cents?: number | null
+          current_balance_cents?: number | null
+          custom_fields?: Json | null
+          customer_group_id?: string | null
+          days_since_visit?: number | null
+          deleted_at?: string | null
+          email?: string | null
+          email_consent?: boolean | null
+          email_enc?: string | null
+          group_id?: string | null
+          group_name?: string | null
+          id?: string | null
+          last_visit?: string | null
+          last_visit_at?: string | null
+          lifetime_value_cents?: number | null
+          lightspeed_customer_id?: string | null
+          loyalty_balance?: number | null
+          loyalty_identity_id?: string | null
+          loyalty_invite_sent_at?: string | null
+          loyalty_invite_token?: string | null
+          loyalty_points?: number | null
+          loyalty_tier?: string | null
+          marketing_consent?: boolean | null
+          merged_into?: string | null
+          name?: string | null
+          name_enc?: string | null
+          notes?: string | null
+          notes_enc?: string | null
+          phone?: string | null
+          phone_enc?: string | null
+          points_balance?: number | null
+          price_list_id?: string | null
+          referral_code?: string | null
+          review_request_sent_at?: string | null
+          rfm_frequency_score?: number | null
+          rfm_monetary_score?: number | null
+          rfm_recency_score?: number | null
+          rfm_score_total?: number | null
+          rfm_segment?: string | null
+          segment?: string | null
+          segment_updated_at?: string | null
+          shopify_customer_id?: string | null
+          sms_consent?: boolean | null
+          source?: string | null
+          square_customer_id?: string | null
+          stamps_count?: number | null
+          tags?: string[] | null
+          tax_exempt?: boolean | null
+          tax_exempt_certificate?: string | null
+          tax_exempt_expires_at?: string | null
+          tax_exempt_type?: string | null
+          total_lifetime_spend?: number | null
+          total_spend?: number | null
+          total_spent?: number | null
+          updated_at?: string | null
+          visit_count?: number | null
+          whatsapp_consent?: boolean | null
+          whatsapp_opt_in_at?: string | null
+        }
+        Relationships: []
+      }
       activity_log: {
         Row: {
           action_type: string
@@ -907,6 +1126,7 @@ export type Database = {
           id: string
           input_tokens: number | null
           latency_ms: number | null
+          learning_signal: string | null
           model_id: string | null
           model_provider: string | null
           output_tokens: number | null
@@ -928,6 +1148,7 @@ export type Database = {
           id?: string
           input_tokens?: number | null
           latency_ms?: number | null
+          learning_signal?: string | null
           model_id?: string | null
           model_provider?: string | null
           output_tokens?: number | null
@@ -949,6 +1170,7 @@ export type Database = {
           id?: string
           input_tokens?: number | null
           latency_ms?: number | null
+          learning_signal?: string | null
           model_id?: string | null
           model_provider?: string | null
           output_tokens?: number | null
@@ -972,6 +1194,7 @@ export type Database = {
       aria_autopilot_actions: {
         Row: {
           action_data: Json | null
+          action_id: string | null
           action_type: string | null
           agent_type: string | null
           approved_at: string | null
@@ -985,9 +1208,11 @@ export type Database = {
           estimated_impact: string | null
           executed_at: string | null
           expires_at: string | null
+          founder_feedback: string | null
           id: string
           message_sent: string | null
           offer_type: string | null
+          outcome: string | null
           outcome_data: Json | null
           outcome_note: string | null
           outcome_revenue_cents: number | null
@@ -1004,6 +1229,7 @@ export type Database = {
         }
         Insert: {
           action_data?: Json | null
+          action_id?: string | null
           action_type?: string | null
           agent_type?: string | null
           approved_at?: string | null
@@ -1017,9 +1243,11 @@ export type Database = {
           estimated_impact?: string | null
           executed_at?: string | null
           expires_at?: string | null
+          founder_feedback?: string | null
           id?: string
           message_sent?: string | null
           offer_type?: string | null
+          outcome?: string | null
           outcome_data?: Json | null
           outcome_note?: string | null
           outcome_revenue_cents?: number | null
@@ -1036,6 +1264,7 @@ export type Database = {
         }
         Update: {
           action_data?: Json | null
+          action_id?: string | null
           action_type?: string | null
           agent_type?: string | null
           approved_at?: string | null
@@ -1049,9 +1278,11 @@ export type Database = {
           estimated_impact?: string | null
           executed_at?: string | null
           expires_at?: string | null
+          founder_feedback?: string | null
           id?: string
           message_sent?: string | null
           offer_type?: string | null
+          outcome?: string | null
           outcome_data?: Json | null
           outcome_note?: string | null
           outcome_revenue_cents?: number | null
@@ -1067,6 +1298,13 @@ export type Database = {
           triggered_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "aria_autopilot_actions_action_id_fkey"
+            columns: ["action_id"]
+            isOneToOne: false
+            referencedRelation: "aria_actions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "aria_autopilot_actions_business_id_fkey"
             columns: ["business_id"]
@@ -1086,6 +1324,7 @@ export type Database = {
           job_type: string
           results_processed: number | null
           status: string
+          submit_date: string
           submitted_at: string | null
         }
         Insert: {
@@ -1097,6 +1336,7 @@ export type Database = {
           job_type: string
           results_processed?: number | null
           status?: string
+          submit_date?: string
           submitted_at?: string | null
         }
         Update: {
@@ -1108,6 +1348,7 @@ export type Database = {
           job_type?: string
           results_processed?: number | null
           status?: string
+          submit_date?: string
           submitted_at?: string | null
         }
         Relationships: []
@@ -1551,7 +1792,9 @@ export type Database = {
           business_id: string
           content: string
           generated_at: string
+          ground_truth: Json | null
           id: string
+          pipeline: string
           source: string | null
         }
         Insert: {
@@ -1559,7 +1802,9 @@ export type Database = {
           business_id: string
           content: string
           generated_at?: string
+          ground_truth?: Json | null
           id?: string
+          pipeline?: string
           source?: string | null
         }
         Update: {
@@ -1567,7 +1812,9 @@ export type Database = {
           business_id?: string
           content?: string
           generated_at?: string
+          ground_truth?: Json | null
           id?: string
+          pipeline?: string
           source?: string | null
         }
         Relationships: [
@@ -2335,6 +2582,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      aria_provider_incidents: {
+        Row: {
+          alerted_at: string | null
+          created_at: string
+          fallback_provider_used: string | null
+          id: string
+          provider: string
+          resolved_at: string | null
+          started_at: string
+          trigger_error: string | null
+        }
+        Insert: {
+          alerted_at?: string | null
+          created_at?: string
+          fallback_provider_used?: string | null
+          id?: string
+          provider: string
+          resolved_at?: string | null
+          started_at?: string
+          trigger_error?: string | null
+        }
+        Update: {
+          alerted_at?: string | null
+          created_at?: string
+          fallback_provider_used?: string | null
+          id?: string
+          provider?: string
+          resolved_at?: string | null
+          started_at?: string
+          trigger_error?: string | null
+        }
+        Relationships: []
       }
       aria_scheduled_reports: {
         Row: {
@@ -3197,6 +3477,7 @@ export type Database = {
           is_available: boolean | null
           max_bookings_per_day: number | null
           start_time: string | null
+          updated_at: string
         }
         Insert: {
           buffer_minutes?: number | null
@@ -3208,6 +3489,7 @@ export type Database = {
           is_available?: boolean | null
           max_bookings_per_day?: number | null
           start_time?: string | null
+          updated_at?: string
         }
         Update: {
           buffer_minutes?: number | null
@@ -3219,48 +3501,11 @@ export type Database = {
           is_available?: boolean | null
           max_bookings_per_day?: number | null
           start_time?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "booking_availability_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      booking_availability_rules: {
-        Row: {
-          business_id: string | null
-          created_at: string | null
-          day_of_week: number | null
-          end_time: string | null
-          id: string
-          is_available: boolean | null
-          start_time: string | null
-        }
-        Insert: {
-          business_id?: string | null
-          created_at?: string | null
-          day_of_week?: number | null
-          end_time?: string | null
-          id?: string
-          is_available?: boolean | null
-          start_time?: string | null
-        }
-        Update: {
-          business_id?: string | null
-          created_at?: string | null
-          day_of_week?: number | null
-          end_time?: string | null
-          id?: string
-          is_available?: boolean | null
-          start_time?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "booking_availability_rules_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
@@ -3595,6 +3840,41 @@ export type Database = {
             foreignKeyName: "business_aeo_profiles_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_brain_cache: {
+        Row: {
+          business_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          mode: string
+          result: Json
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          mode: string
+          result: Json
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          mode?: string
+          result?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_brain_cache_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
@@ -4089,10 +4369,13 @@ export type Database = {
           abn_verification_method: string | null
           abn_verified: boolean | null
           abn_verified_at: string | null
+          accept_orders: boolean
           access_blocked_reason: string | null
           access_status: string | null
           acn: string | null
           address: string | null
+          ai_budget_alert_sent_date: string | null
+          ai_daily_budget_cents: number | null
           alert_sms_enabled: boolean | null
           auto_review_requests: boolean | null
           basiq_connected: boolean | null
@@ -4101,6 +4384,7 @@ export type Database = {
           biggest_challenge: string | null
           booking_buffer_minutes: number | null
           booking_link_slug: string | null
+          bookings_enabled: boolean
           business_model: string | null
           business_state: string | null
           business_subtype: string | null
@@ -4109,6 +4393,7 @@ export type Database = {
           community_bio: string | null
           community_cover_url: string | null
           community_verified: boolean | null
+          country: string | null
           created_at: string | null
           data_source: string | null
           default_quote_terms: string | null
@@ -4119,6 +4404,7 @@ export type Database = {
           evening_briefing_enabled: boolean | null
           evening_briefing_lead_hours: number | null
           facebook_page_id: string | null
+          formatted_address: string | null
           google_average_rating: number | null
           google_business_url: string | null
           google_place_id: string | null
@@ -4151,12 +4437,14 @@ export type Database = {
           morning_briefing_enabled: boolean | null
           name: string
           onboarding_complete: boolean | null
+          online_ordering_enabled: boolean
           order_min_sales_30d: number | null
           order_stock_threshold: number | null
           owner_name: string | null
           owner_phone: string | null
           parent_account_id: string | null
           phone: string | null
+          place_id: string | null
           plan: string | null
           plan_override_at: string | null
           plan_override_by: string | null
@@ -4175,7 +4463,7 @@ export type Database = {
           slack_connected: boolean | null
           slack_team_id: string | null
           slack_team_name: string | null
-          slug: string | null
+          slug: string
           square_connected: boolean | null
           staff_count: string | null
           stripe_customer_id: string | null
@@ -4210,10 +4498,13 @@ export type Database = {
           abn_verification_method?: string | null
           abn_verified?: boolean | null
           abn_verified_at?: string | null
+          accept_orders?: boolean
           access_blocked_reason?: string | null
           access_status?: string | null
           acn?: string | null
           address?: string | null
+          ai_budget_alert_sent_date?: string | null
+          ai_daily_budget_cents?: number | null
           alert_sms_enabled?: boolean | null
           auto_review_requests?: boolean | null
           basiq_connected?: boolean | null
@@ -4222,6 +4513,7 @@ export type Database = {
           biggest_challenge?: string | null
           booking_buffer_minutes?: number | null
           booking_link_slug?: string | null
+          bookings_enabled?: boolean
           business_model?: string | null
           business_state?: string | null
           business_subtype?: string | null
@@ -4230,6 +4522,7 @@ export type Database = {
           community_bio?: string | null
           community_cover_url?: string | null
           community_verified?: boolean | null
+          country?: string | null
           created_at?: string | null
           data_source?: string | null
           default_quote_terms?: string | null
@@ -4240,6 +4533,7 @@ export type Database = {
           evening_briefing_enabled?: boolean | null
           evening_briefing_lead_hours?: number | null
           facebook_page_id?: string | null
+          formatted_address?: string | null
           google_average_rating?: number | null
           google_business_url?: string | null
           google_place_id?: string | null
@@ -4255,8 +4549,8 @@ export type Database = {
           industry?: string | null
           industry_subtype?: string | null
           internal_notes?: string | null
-          is_internal?: boolean
           is_active?: boolean | null
+          is_internal?: boolean
           lat?: number | null
           legal_name?: string | null
           lng?: number | null
@@ -4272,12 +4566,14 @@ export type Database = {
           morning_briefing_enabled?: boolean | null
           name: string
           onboarding_complete?: boolean | null
+          online_ordering_enabled?: boolean
           order_min_sales_30d?: number | null
           order_stock_threshold?: number | null
           owner_name?: string | null
           owner_phone?: string | null
           parent_account_id?: string | null
           phone?: string | null
+          place_id?: string | null
           plan?: string | null
           plan_override_at?: string | null
           plan_override_by?: string | null
@@ -4296,7 +4592,7 @@ export type Database = {
           slack_connected?: boolean | null
           slack_team_id?: string | null
           slack_team_name?: string | null
-          slug?: string | null
+          slug: string
           square_connected?: boolean | null
           staff_count?: string | null
           stripe_customer_id?: string | null
@@ -4331,10 +4627,13 @@ export type Database = {
           abn_verification_method?: string | null
           abn_verified?: boolean | null
           abn_verified_at?: string | null
+          accept_orders?: boolean
           access_blocked_reason?: string | null
           access_status?: string | null
           acn?: string | null
           address?: string | null
+          ai_budget_alert_sent_date?: string | null
+          ai_daily_budget_cents?: number | null
           alert_sms_enabled?: boolean | null
           auto_review_requests?: boolean | null
           basiq_connected?: boolean | null
@@ -4343,6 +4642,7 @@ export type Database = {
           biggest_challenge?: string | null
           booking_buffer_minutes?: number | null
           booking_link_slug?: string | null
+          bookings_enabled?: boolean
           business_model?: string | null
           business_state?: string | null
           business_subtype?: string | null
@@ -4351,6 +4651,7 @@ export type Database = {
           community_bio?: string | null
           community_cover_url?: string | null
           community_verified?: boolean | null
+          country?: string | null
           created_at?: string | null
           data_source?: string | null
           default_quote_terms?: string | null
@@ -4361,6 +4662,7 @@ export type Database = {
           evening_briefing_enabled?: boolean | null
           evening_briefing_lead_hours?: number | null
           facebook_page_id?: string | null
+          formatted_address?: string | null
           google_average_rating?: number | null
           google_business_url?: string | null
           google_place_id?: string | null
@@ -4375,9 +4677,9 @@ export type Database = {
           id?: string
           industry?: string | null
           industry_subtype?: string | null
-          is_internal?: boolean
           internal_notes?: string | null
           is_active?: boolean | null
+          is_internal?: boolean
           lat?: number | null
           legal_name?: string | null
           lng?: number | null
@@ -4393,12 +4695,14 @@ export type Database = {
           morning_briefing_enabled?: boolean | null
           name?: string
           onboarding_complete?: boolean | null
+          online_ordering_enabled?: boolean
           order_min_sales_30d?: number | null
           order_stock_threshold?: number | null
           owner_name?: string | null
           owner_phone?: string | null
           parent_account_id?: string | null
           phone?: string | null
+          place_id?: string | null
           plan?: string | null
           plan_override_at?: string | null
           plan_override_by?: string | null
@@ -4417,7 +4721,7 @@ export type Database = {
           slack_connected?: boolean | null
           slack_team_id?: string | null
           slack_team_name?: string | null
-          slug?: string | null
+          slug?: string
           square_connected?: boolean | null
           staff_count?: string | null
           stripe_customer_id?: string | null
@@ -4528,6 +4832,8 @@ export type Database = {
           id: string
           scheduled_send_at: string | null
           sent_at: string | null
+          sequence_skip_reason: string | null
+          sequence_step: number | null
           status: string | null
         }
         Insert: {
@@ -4538,6 +4844,8 @@ export type Database = {
           id?: string
           scheduled_send_at?: string | null
           sent_at?: string | null
+          sequence_skip_reason?: string | null
+          sequence_step?: number | null
           status?: string | null
         }
         Update: {
@@ -4548,6 +4856,8 @@ export type Database = {
           id?: string
           scheduled_send_at?: string | null
           sent_at?: string | null
+          sequence_skip_reason?: string | null
+          sequence_step?: number | null
           status?: string | null
         }
         Relationships: [
@@ -4656,6 +4966,7 @@ export type Database = {
           sent_at: string | null
           sent_at_final: string | null
           sent_count: number | null
+          sequence_steps: Json | null
           sms_sent: boolean | null
           status: string | null
           subject: string | null
@@ -4703,6 +5014,7 @@ export type Database = {
           sent_at?: string | null
           sent_at_final?: string | null
           sent_count?: number | null
+          sequence_steps?: Json | null
           sms_sent?: boolean | null
           status?: string | null
           subject?: string | null
@@ -4750,6 +5062,7 @@ export type Database = {
           sent_at?: string | null
           sent_at_final?: string | null
           sent_count?: number | null
+          sequence_steps?: Json | null
           sms_sent?: boolean | null
           status?: string | null
           subject?: string | null
@@ -4772,6 +5085,53 @@ export type Database = {
           },
           {
             foreignKeyName: "campaigns_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      canopy_saved_reports: {
+        Row: {
+          business_id: string
+          created_at: string
+          generated_at: string
+          grounding: string
+          id: string
+          pdf_url: string
+          saved_by: string
+          source_id: string | null
+          source_kind: string
+          title: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          generated_at: string
+          grounding?: string
+          id?: string
+          pdf_url: string
+          saved_by?: string
+          source_id?: string | null
+          source_kind: string
+          title: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          generated_at?: string
+          grounding?: string
+          id?: string
+          pdf_url?: string
+          saved_by?: string
+          source_id?: string | null
+          source_kind?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canopy_saved_reports_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
@@ -4849,6 +5209,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      client_hydration_beacons: {
+        Row: {
+          build_id: string
+          created_at: string
+          id: number
+          path: string
+        }
+        Insert: {
+          build_id: string
+          created_at?: string
+          id?: never
+          path: string
+        }
+        Update: {
+          build_id?: string
+          created_at?: string
+          id?: never
+          path?: string
+        }
+        Relationships: []
       }
       clv_portfolio_summary: {
         Row: {
@@ -5202,29 +5583,83 @@ export type Database = {
           },
         ]
       }
+      community_member_blocks: {
+        Row: {
+          business_id: string
+          created_at: string | null
+          id: string
+          member_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string | null
+          id?: string
+          member_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string | null
+          id?: string
+          member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_member_blocks_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_member_blocks_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "community_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_members: {
         Row: {
+          avatar_url: string | null
+          bio: string | null
           id: string
           joined_at: string | null
           nickname: string | null
+          notif_pref_comments: boolean | null
+          notif_pref_followers: boolean | null
+          notif_pref_likes: boolean | null
+          notif_pref_new_posts: boolean | null
           push_enabled: boolean | null
           push_token: string | null
           session_token: string
           user_id: string | null
         }
         Insert: {
+          avatar_url?: string | null
+          bio?: string | null
           id?: string
           joined_at?: string | null
           nickname?: string | null
+          notif_pref_comments?: boolean | null
+          notif_pref_followers?: boolean | null
+          notif_pref_likes?: boolean | null
+          notif_pref_new_posts?: boolean | null
           push_enabled?: boolean | null
           push_token?: string | null
           session_token: string
           user_id?: string | null
         }
         Update: {
+          avatar_url?: string | null
+          bio?: string | null
           id?: string
           joined_at?: string | null
           nickname?: string | null
+          notif_pref_comments?: boolean | null
+          notif_pref_followers?: boolean | null
+          notif_pref_likes?: boolean | null
+          notif_pref_new_posts?: boolean | null
           push_enabled?: boolean | null
           push_token?: string | null
           session_token?: string
@@ -5302,6 +5737,68 @@ export type Database = {
           },
         ]
       }
+      community_notifications: {
+        Row: {
+          actor_business_id: string | null
+          actor_member_id: string | null
+          created_at: string | null
+          id: string
+          member_id: string
+          post_id: string | null
+          read_at: string | null
+          type: string
+        }
+        Insert: {
+          actor_business_id?: string | null
+          actor_member_id?: string | null
+          created_at?: string | null
+          id?: string
+          member_id: string
+          post_id?: string | null
+          read_at?: string | null
+          type: string
+        }
+        Update: {
+          actor_business_id?: string | null
+          actor_member_id?: string | null
+          created_at?: string | null
+          id?: string
+          member_id?: string
+          post_id?: string | null
+          read_at?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_notifications_actor_business_id_fkey"
+            columns: ["actor_business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_notifications_actor_member_id_fkey"
+            columns: ["actor_member_id"]
+            isOneToOne: false
+            referencedRelation: "community_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_notifications_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "community_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_post_engagement: {
         Row: {
           comment_text: string | null
@@ -5309,6 +5806,7 @@ export type Database = {
           engagement_type: string
           id: string
           member_id: string | null
+          parent_id: string | null
           post_id: string | null
         }
         Insert: {
@@ -5317,6 +5815,7 @@ export type Database = {
           engagement_type: string
           id?: string
           member_id?: string | null
+          parent_id?: string | null
           post_id?: string | null
         }
         Update: {
@@ -5325,6 +5824,7 @@ export type Database = {
           engagement_type?: string
           id?: string
           member_id?: string | null
+          parent_id?: string | null
           post_id?: string | null
         }
         Relationships: [
@@ -5333,6 +5833,13 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "community_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_post_engagement_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "community_post_engagement"
             referencedColumns: ["id"]
           },
           {
@@ -5353,6 +5860,7 @@ export type Database = {
           expires_at: string | null
           id: string
           is_story: boolean | null
+          location_tag: string | null
           media_type: string | null
           media_urls: Json | null
           post_type: string
@@ -5370,6 +5878,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_story?: boolean | null
+          location_tag?: string | null
           media_type?: string | null
           media_urls?: Json | null
           post_type?: string
@@ -5387,6 +5896,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_story?: boolean | null
+          location_tag?: string | null
           media_type?: string | null
           media_urls?: Json | null
           post_type?: string
@@ -5443,6 +5953,44 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "community_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_story_highlights: {
+        Row: {
+          business_id: string
+          cover_url: string | null
+          created_at: string | null
+          display_order: number | null
+          id: string
+          post_ids: string[]
+          title: string
+        }
+        Insert: {
+          business_id: string
+          cover_url?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          id?: string
+          post_ids?: string[]
+          title: string
+        }
+        Update: {
+          business_id?: string
+          cover_url?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          id?: string
+          post_ids?: string[]
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_story_highlights_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -5802,6 +6350,98 @@ export type Database = {
         }
         Relationships: []
       }
+      cost_events: {
+        Row: {
+          amount_usd_cents: number
+          business_id: string | null
+          category: string
+          created_at: string
+          id: string
+          metadata: Json
+          provider: string
+          quantity: number
+          reference_id: string | null
+          unit: string
+        }
+        Insert: {
+          amount_usd_cents: number
+          business_id?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          provider: string
+          quantity?: number
+          reference_id?: string | null
+          unit?: string
+        }
+        Update: {
+          amount_usd_cents?: number
+          business_id?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          provider?: string
+          quantity?: number
+          reference_id?: string | null
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_events_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cost_subscriptions: {
+        Row: {
+          active: boolean
+          amount_usd_cents: number
+          billing_cadence: string
+          category: string
+          created_at: string
+          id: string
+          notes: string | null
+          plan_name: string
+          provider: string
+          renewal_alert_sent_date: string | null
+          renewal_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amount_usd_cents: number
+          billing_cadence: string
+          category: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_name: string
+          provider: string
+          renewal_alert_sent_date?: string | null
+          renewal_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amount_usd_cents?: number
+          billing_cadence?: string
+          category?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_name?: string
+          provider?: string
+          renewal_alert_sent_date?: string | null
+          renewal_date?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       council_cache: {
         Row: {
           business_id: string
@@ -6026,12 +6666,15 @@ export type Database = {
           clv_tier: string | null
           customer_id: string
           days_since_last_visit: number | null
+          expected_next_order_date: string | null
+          expected_purchases_next_90d: number | null
           id: string
           intervention_priority: string | null
           intervention_rationale: string | null
           intervention_responded: boolean | null
           intervention_sent_at: string | null
           months_as_customer: number | null
+          p_alive: number | null
           predicted_3yr_clv: number | null
           predicted_annual_revenue: number | null
           predicted_monthly_revenue: number | null
@@ -6054,12 +6697,15 @@ export type Database = {
           clv_tier?: string | null
           customer_id: string
           days_since_last_visit?: number | null
+          expected_next_order_date?: string | null
+          expected_purchases_next_90d?: number | null
           id?: string
           intervention_priority?: string | null
           intervention_rationale?: string | null
           intervention_responded?: boolean | null
           intervention_sent_at?: string | null
           months_as_customer?: number | null
+          p_alive?: number | null
           predicted_3yr_clv?: number | null
           predicted_annual_revenue?: number | null
           predicted_monthly_revenue?: number | null
@@ -6082,12 +6728,15 @@ export type Database = {
           clv_tier?: string | null
           customer_id?: string
           days_since_last_visit?: number | null
+          expected_next_order_date?: string | null
+          expected_purchases_next_90d?: number | null
           id?: string
           intervention_priority?: string | null
           intervention_rationale?: string | null
           intervention_responded?: boolean | null
           intervention_sent_at?: string | null
           months_as_customer?: number | null
+          p_alive?: number | null
           predicted_3yr_clv?: number | null
           predicted_annual_revenue?: number | null
           predicted_monthly_revenue?: number | null
@@ -6441,10 +7090,179 @@ export type Database = {
           },
         ]
       }
+      cx_favourites: {
+        Row: {
+          business_id: string
+          created_at: string
+          custom_build: Json
+          customer_id: string
+          id: string
+          nickname: string | null
+          product_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          custom_build?: Json
+          customer_id: string
+          id?: string
+          nickname?: string | null
+          product_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          custom_build?: Json
+          customer_id?: string
+          id?: string
+          nickname?: string | null
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cx_favourites_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cx_notifications: {
+        Row: {
+          action_url: string | null
+          body: string | null
+          business_id: string
+          created_at: string
+          customer_id: string
+          id: string
+          read_at: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          action_url?: string | null
+          body?: string | null
+          business_id: string
+          created_at?: string
+          customer_id: string
+          id?: string
+          read_at?: string | null
+          title: string
+          type?: string
+        }
+        Update: {
+          action_url?: string | null
+          body?: string | null
+          business_id?: string
+          created_at?: string
+          customer_id?: string
+          id?: string
+          read_at?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cx_notifications_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cx_otp_codes: {
+        Row: {
+          attempts: number
+          business_id: string
+          code_hash: string
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          phone: string
+        }
+        Insert: {
+          attempts?: number
+          business_id: string
+          code_hash: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          phone: string
+        }
+        Update: {
+          attempts?: number
+          business_id?: string
+          code_hash?: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cx_otp_codes_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cx_sessions: {
+        Row: {
+          business_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          loyalty_identity_id: string
+          revoked_at: string | null
+          token_hash: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          loyalty_identity_id: string
+          revoked_at?: string | null
+          token_hash: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          loyalty_identity_id?: string
+          revoked_at?: string | null
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cx_sessions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cx_sessions_loyalty_identity_id_fkey"
+            columns: ["loyalty_identity_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_identity"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_briefings: {
         Row: {
           business_id: string | null
           content: string | null
+          contract: Json | null
           data_snapshot: Json | null
           date: string
           dismissed_at: string | null
@@ -6457,6 +7275,7 @@ export type Database = {
         Insert: {
           business_id?: string | null
           content?: string | null
+          contract?: Json | null
           data_snapshot?: Json | null
           date?: string
           dismissed_at?: string | null
@@ -6469,6 +7288,7 @@ export type Database = {
         Update: {
           business_id?: string | null
           content?: string | null
+          contract?: Json | null
           data_snapshot?: Json | null
           date?: string
           dismissed_at?: string | null
@@ -6806,6 +7626,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_send_log: {
+        Row: {
+          business_id: string | null
+          category: string
+          consent_ok: boolean | null
+          created_at: string
+          error: string | null
+          id: string
+          resend_id: string | null
+          status: string
+          subject: string | null
+          suppressed: boolean
+          to_email: string
+        }
+        Insert: {
+          business_id?: string | null
+          category?: string
+          consent_ok?: boolean | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          resend_id?: string | null
+          status: string
+          subject?: string | null
+          suppressed?: boolean
+          to_email: string
+        }
+        Update: {
+          business_id?: string | null
+          category?: string
+          consent_ok?: boolean | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          resend_id?: string | null
+          status?: string
+          subject?: string | null
+          suppressed?: boolean
+          to_email?: string
+        }
+        Relationships: []
+      }
+      email_suppression: {
+        Row: {
+          business_id: string | null
+          created_at: string
+          email: string
+          id: string
+          reason: string
+        }
+        Insert: {
+          business_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string
+        }
+        Update: {
+          business_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string
+        }
+        Relationships: []
       }
       encryption_key_versions: {
         Row: {
@@ -7505,6 +8391,54 @@ export type Database = {
           },
         ]
       }
+      industry_benchmarks: {
+        Row: {
+          computed_at: string
+          expires_at: string
+          id: string
+          industry: string
+          mean: number | null
+          metric_name: string
+          metric_period: string
+          p25: number | null
+          p50: number | null
+          p75: number | null
+          p90: number | null
+          period_date: string
+          sample_size: number
+        }
+        Insert: {
+          computed_at?: string
+          expires_at?: string
+          id?: string
+          industry: string
+          mean?: number | null
+          metric_name: string
+          metric_period: string
+          p25?: number | null
+          p50?: number | null
+          p75?: number | null
+          p90?: number | null
+          period_date?: string
+          sample_size: number
+        }
+        Update: {
+          computed_at?: string
+          expires_at?: string
+          id?: string
+          industry?: string
+          mean?: number | null
+          metric_name?: string
+          metric_period?: string
+          p25?: number | null
+          p50?: number | null
+          p75?: number | null
+          p90?: number | null
+          period_date?: string
+          sample_size?: number
+        }
+        Relationships: []
+      }
       instore_conversations: {
         Row: {
           business_id: string | null
@@ -7731,6 +8665,117 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      inventory_review_queue: {
+        Row: {
+          actual_value: number | null
+          business_id: string
+          created_at: string
+          evidence: Json | null
+          expected_value: number | null
+          flag_type: string
+          id: string
+          outlet_id: string | null
+          product_id: string | null
+          raised_by_staff_id: string | null
+          resolution: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          variance: number | null
+        }
+        Insert: {
+          actual_value?: number | null
+          business_id: string
+          created_at?: string
+          evidence?: Json | null
+          expected_value?: number | null
+          flag_type: string
+          id?: string
+          outlet_id?: string | null
+          product_id?: string | null
+          raised_by_staff_id?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          variance?: number | null
+        }
+        Update: {
+          actual_value?: number | null
+          business_id?: string
+          created_at?: string
+          evidence?: Json | null
+          expected_value?: number | null
+          flag_type?: string
+          id?: string
+          outlet_id?: string | null
+          product_id?: string | null
+          raised_by_staff_id?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          variance?: number | null
+        }
+        Relationships: []
+      }
+      inventory_tasks: {
+        Row: {
+          assigned_staff_id: string | null
+          business_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          detail: string | null
+          due_date: string
+          generated_by: string
+          hypothesis: string | null
+          id: string
+          outlet_id: string | null
+          priority: number
+          product_id: string | null
+          status: string
+          task_type: string
+          title: string
+        }
+        Insert: {
+          assigned_staff_id?: string | null
+          business_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          detail?: string | null
+          due_date?: string
+          generated_by?: string
+          hypothesis?: string | null
+          id?: string
+          outlet_id?: string | null
+          priority?: number
+          product_id?: string | null
+          status?: string
+          task_type: string
+          title: string
+        }
+        Update: {
+          assigned_staff_id?: string | null
+          business_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          detail?: string | null
+          due_date?: string
+          generated_by?: string
+          hypothesis?: string | null
+          id?: string
+          outlet_id?: string | null
+          priority?: number
+          product_id?: string | null
+          status?: string
+          task_type?: string
+          title?: string
+        }
+        Relationships: []
       }
       invoice_line_items: {
         Row: {
@@ -7992,46 +9037,67 @@ export type Database = {
       }
       labour_demand_forecast: {
         Row: {
+          actual_labour_cost: number | null
+          actual_revenue: number | null
+          actual_staff_count: number | null
+          actual_transactions: number | null
           adjusted_predicted_revenue: number | null
           business_id: string
           created_at: string
           day_of_week: number | null
           event_adjustment_pct: number | null
+          forecast_accuracy_pct: number | null
           forecast_date: string
           hour_of_day: number
           id: string
           optimal_labour_cost: number | null
+          predicted_basket_avg: number | null
           predicted_revenue: number | null
+          predicted_transactions: number | null
           required_staff_count: number | null
           school_holiday_adjustment_pct: number | null
           weather_adjustment_pct: number | null
         }
         Insert: {
+          actual_labour_cost?: number | null
+          actual_revenue?: number | null
+          actual_staff_count?: number | null
+          actual_transactions?: number | null
           adjusted_predicted_revenue?: number | null
           business_id: string
           created_at?: string
           day_of_week?: number | null
           event_adjustment_pct?: number | null
+          forecast_accuracy_pct?: number | null
           forecast_date: string
           hour_of_day: number
           id?: string
           optimal_labour_cost?: number | null
+          predicted_basket_avg?: number | null
           predicted_revenue?: number | null
+          predicted_transactions?: number | null
           required_staff_count?: number | null
           school_holiday_adjustment_pct?: number | null
           weather_adjustment_pct?: number | null
         }
         Update: {
+          actual_labour_cost?: number | null
+          actual_revenue?: number | null
+          actual_staff_count?: number | null
+          actual_transactions?: number | null
           adjusted_predicted_revenue?: number | null
           business_id?: string
           created_at?: string
           day_of_week?: number | null
           event_adjustment_pct?: number | null
+          forecast_accuracy_pct?: number | null
           forecast_date?: string
           hour_of_day?: number
           id?: string
           optimal_labour_cost?: number | null
+          predicted_basket_avg?: number | null
           predicted_revenue?: number | null
+          predicted_transactions?: number | null
           required_staff_count?: number | null
           school_holiday_adjustment_pct?: number | null
           weather_adjustment_pct?: number | null
@@ -8167,6 +9233,202 @@ export type Database = {
           },
         ]
       }
+      loyalty_card_links: {
+        Row: {
+          brand: string | null
+          business_id: string
+          card_fingerprint: string
+          created_at: string
+          id: string
+          last4: string | null
+          loyalty_identity_id: string
+        }
+        Insert: {
+          brand?: string | null
+          business_id: string
+          card_fingerprint: string
+          created_at?: string
+          id?: string
+          last4?: string | null
+          loyalty_identity_id: string
+        }
+        Update: {
+          brand?: string | null
+          business_id?: string
+          card_fingerprint?: string
+          created_at?: string
+          id?: string
+          last4?: string | null
+          loyalty_identity_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_card_links_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_card_links_loyalty_identity_id_fkey"
+            columns: ["loyalty_identity_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_identity"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_challenges: {
+        Row: {
+          business_id: string
+          completed_at: string | null
+          created_at: string
+          customer_id: string
+          description: string | null
+          expires_at: string | null
+          id: string
+          loyalty_identity_id: string | null
+          progress: number
+          reward_points: number
+          starts_at: string
+          status: string
+          target_count: number
+          target_item: string | null
+          target_metric: string
+          title: string
+        }
+        Insert: {
+          business_id: string
+          completed_at?: string | null
+          created_at?: string
+          customer_id: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          loyalty_identity_id?: string | null
+          progress?: number
+          reward_points: number
+          starts_at?: string
+          status?: string
+          target_count: number
+          target_item?: string | null
+          target_metric: string
+          title: string
+        }
+        Update: {
+          business_id?: string
+          completed_at?: string | null
+          created_at?: string
+          customer_id?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          loyalty_identity_id?: string | null
+          progress?: number
+          reward_points?: number
+          starts_at?: string
+          status?: string
+          target_count?: number
+          target_item?: string | null
+          target_metric?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_challenges_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_challenges_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_challenges_loyalty_identity_id_fkey"
+            columns: ["loyalty_identity_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_identity"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_checkins: {
+        Row: {
+          business_id: string
+          consumed_at: string | null
+          consumed_sale_id: string | null
+          created_at: string
+          customer_id: string | null
+          expires_at: string
+          id: string
+          loyalty_identity_id: string
+          outlet_id: string | null
+        }
+        Insert: {
+          business_id: string
+          consumed_at?: string | null
+          consumed_sale_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          expires_at?: string
+          id?: string
+          loyalty_identity_id: string
+          outlet_id?: string | null
+        }
+        Update: {
+          business_id?: string
+          consumed_at?: string | null
+          consumed_sale_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          expires_at?: string
+          id?: string
+          loyalty_identity_id?: string
+          outlet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_checkins_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_checkins_consumed_sale_id_fkey"
+            columns: ["consumed_sale_id"]
+            isOneToOne: false
+            referencedRelation: "pos_sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_checkins_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_checkins_loyalty_identity_id_fkey"
+            columns: ["loyalty_identity_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_identity"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_checkins_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "pos_outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loyalty_fraud_flags: {
         Row: {
           business_id: string | null
@@ -8212,6 +9474,227 @@ export type Database = {
           },
         ]
       }
+      loyalty_identity: {
+        Row: {
+          created_at: string
+          email: string | null
+          email_verified: boolean
+          failed_pin_attempts: number
+          id: string
+          locked_until: string | null
+          otp_attempts: number
+          otp_expires_at: string | null
+          otp_hash: string | null
+          phone: string | null
+          pin_hash: string | null
+          pin_set_at: string | null
+          redeem_token_consumed_at: string | null
+          redeem_token_expires_at: string | null
+          redeem_token_hash: string | null
+          session_token: string | null
+          short_code: string | null
+          updated_at: string
+          verified_until: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          email_verified?: boolean
+          failed_pin_attempts?: number
+          id?: string
+          locked_until?: string | null
+          otp_attempts?: number
+          otp_expires_at?: string | null
+          otp_hash?: string | null
+          phone?: string | null
+          pin_hash?: string | null
+          pin_set_at?: string | null
+          redeem_token_consumed_at?: string | null
+          redeem_token_expires_at?: string | null
+          redeem_token_hash?: string | null
+          session_token?: string | null
+          short_code?: string | null
+          updated_at?: string
+          verified_until?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          email_verified?: boolean
+          failed_pin_attempts?: number
+          id?: string
+          locked_until?: string | null
+          otp_attempts?: number
+          otp_expires_at?: string | null
+          otp_hash?: string | null
+          phone?: string | null
+          pin_hash?: string | null
+          pin_set_at?: string | null
+          redeem_token_consumed_at?: string | null
+          redeem_token_expires_at?: string | null
+          redeem_token_hash?: string | null
+          session_token?: string | null
+          short_code?: string | null
+          updated_at?: string
+          verified_until?: string | null
+        }
+        Relationships: []
+      }
+      loyalty_lifecycle_log: {
+        Row: {
+          business_id: string
+          channel: string | null
+          customer_id: string
+          id: string
+          kind: string
+          message_status: string | null
+          period_key: string
+          reward_points: number
+          sent_at: string
+        }
+        Insert: {
+          business_id: string
+          channel?: string | null
+          customer_id: string
+          id?: string
+          kind: string
+          message_status?: string | null
+          period_key: string
+          reward_points?: number
+          sent_at?: string
+        }
+        Update: {
+          business_id?: string
+          channel?: string | null
+          customer_id?: string
+          id?: string
+          kind?: string
+          message_status?: string | null
+          period_key?: string
+          reward_points?: number
+          sent_at?: string
+        }
+        Relationships: []
+      }
+      loyalty_offers: {
+        Row: {
+          active: boolean
+          business_id: string
+          created_at: string
+          description: string | null
+          ends_at: string | null
+          id: string
+          image_url: string | null
+          offer_type: string
+          point_cost: number | null
+          starts_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          business_id: string
+          created_at?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          image_url?: string | null
+          offer_type?: string
+          point_cost?: number | null
+          starts_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          business_id?: string
+          created_at?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          image_url?: string | null
+          offer_type?: string
+          point_cost?: number | null
+          starts_at?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_offers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_preload_accounts: {
+        Row: {
+          balance: number
+          business_id: string
+          currency: string
+          customer_id: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          business_id: string
+          currency?: string
+          customer_id: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          business_id?: string
+          currency?: string
+          customer_id?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      loyalty_preload_ledger: {
+        Row: {
+          amount: number
+          balance_after: number
+          business_id: string
+          created_at: string
+          customer_id: string
+          entry_type: string
+          id: string
+          note: string | null
+          sale_id: string | null
+          stripe_payment_intent_id: string | null
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          business_id: string
+          created_at?: string
+          customer_id: string
+          entry_type: string
+          id?: string
+          note?: string | null
+          sale_id?: string | null
+          stripe_payment_intent_id?: string | null
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          business_id?: string
+          created_at?: string
+          customer_id?: string
+          entry_type?: string
+          id?: string
+          note?: string | null
+          sale_id?: string | null
+          stripe_payment_intent_id?: string | null
+        }
+        Relationships: []
+      }
       loyalty_referrals: {
         Row: {
           business_id: string | null
@@ -8222,6 +9705,8 @@ export type Database = {
           referred_points_awarded: number | null
           referrer_customer_id: string | null
           referrer_points_awarded: number | null
+          rewarded_at: string | null
+          status: string
         }
         Insert: {
           business_id?: string | null
@@ -8232,6 +9717,8 @@ export type Database = {
           referred_points_awarded?: number | null
           referrer_customer_id?: string | null
           referrer_points_awarded?: number | null
+          rewarded_at?: string | null
+          status?: string
         }
         Update: {
           business_id?: string | null
@@ -8242,6 +9729,8 @@ export type Database = {
           referred_points_awarded?: number | null
           referrer_customer_id?: string | null
           referrer_points_awarded?: number | null
+          rewarded_at?: string | null
+          status?: string
         }
         Relationships: [
           {
@@ -8270,27 +9759,33 @@ export type Database = {
       loyalty_reward_rules: {
         Row: {
           business_id: string | null
+          config: Json
           created_at: string | null
           id: string
           is_active: boolean | null
           points_value: number | null
           rule_type: string | null
+          threshold_value: number | null
         }
         Insert: {
           business_id?: string | null
+          config?: Json
           created_at?: string | null
           id?: string
           is_active?: boolean | null
           points_value?: number | null
           rule_type?: string | null
+          threshold_value?: number | null
         }
         Update: {
           business_id?: string | null
+          config?: Json
           created_at?: string | null
           id?: string
           is_active?: boolean | null
           points_value?: number | null
           rule_type?: string | null
+          threshold_value?: number | null
         }
         Relationships: [
           {
@@ -8301,6 +9796,115 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      loyalty_rule_awards: {
+        Row: {
+          awarded_at: string
+          business_id: string
+          customer_id: string
+          id: string
+          points_awarded: number
+          rule_id: string
+          sale_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          business_id: string
+          customer_id: string
+          id?: string
+          points_awarded?: number
+          rule_id: string
+          sale_id: string
+        }
+        Update: {
+          awarded_at?: string
+          business_id?: string
+          customer_id?: string
+          id?: string
+          points_awarded?: number
+          rule_id?: string
+          sale_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_rule_awards_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_reward_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_tier_perk_grants: {
+        Row: {
+          business_id: string
+          customer_id: string
+          granted_at: string
+          id: string
+          perk_id: string
+          points_awarded: number
+          sale_id: string
+        }
+        Insert: {
+          business_id: string
+          customer_id: string
+          granted_at?: string
+          id?: string
+          perk_id: string
+          points_awarded?: number
+          sale_id: string
+        }
+        Update: {
+          business_id?: string
+          customer_id?: string
+          granted_at?: string
+          id?: string
+          perk_id?: string
+          points_awarded?: number
+          sale_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_tier_perk_grants_perk_id_fkey"
+            columns: ["perk_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_tier_perks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_tier_perks: {
+        Row: {
+          business_id: string
+          config: Json
+          created_at: string
+          id: string
+          is_active: boolean
+          perk_type: string
+          perk_value: number | null
+          tier: string
+        }
+        Insert: {
+          business_id: string
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          perk_type: string
+          perk_value?: number | null
+          tier: string
+        }
+        Update: {
+          business_id?: string
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          perk_type?: string
+          perk_value?: number | null
+          tier?: string
+        }
+        Relationships: []
       }
       loyalty_tiers: {
         Row: {
@@ -8345,6 +9949,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      loyalty_whatsapp_log: {
+        Row: {
+          business_id: string | null
+          created_at: string
+          customer_id: string | null
+          error: string | null
+          id: string
+          status: string
+          template: string
+          to_number: string
+        }
+        Insert: {
+          business_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          error?: string | null
+          id?: string
+          status: string
+          template: string
+          to_number: string
+        }
+        Update: {
+          business_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          error?: string | null
+          id?: string
+          status?: string
+          template?: string
+          to_number?: string
+        }
+        Relationships: []
       }
       market_price_scans: {
         Row: {
@@ -8510,6 +10147,71 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "pos_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_configs: {
+        Row: {
+          active_from: string | null
+          active_to: string | null
+          background_id: string | null
+          brand_kit: Json | null
+          business_id: string
+          created_at: string
+          days_of_week: number[] | null
+          id: string
+          is_default: boolean
+          is_published: boolean
+          item_overrides: Json | null
+          menu_key: string
+          menu_label: string
+          section_order: Json | null
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          active_from?: string | null
+          active_to?: string | null
+          background_id?: string | null
+          brand_kit?: Json | null
+          business_id: string
+          created_at?: string
+          days_of_week?: number[] | null
+          id?: string
+          is_default?: boolean
+          is_published?: boolean
+          item_overrides?: Json | null
+          menu_key?: string
+          menu_label?: string
+          section_order?: Json | null
+          template_id?: string
+          updated_at?: string
+        }
+        Update: {
+          active_from?: string | null
+          active_to?: string | null
+          background_id?: string | null
+          brand_kit?: Json | null
+          business_id?: string
+          created_at?: string
+          days_of_week?: number[] | null
+          id?: string
+          is_default?: boolean
+          is_published?: boolean
+          item_overrides?: Json | null
+          menu_key?: string
+          menu_label?: string
+          section_order?: Json | null
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_configs_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -8838,6 +10540,47 @@ export type Database = {
           },
         ]
       }
+      onboarding_tour_progress: {
+        Row: {
+          business_id: string
+          completed_at: string | null
+          completed_steps: string[]
+          created_at: string
+          dismissed: boolean
+          id: string
+          step: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          completed_at?: string | null
+          completed_steps?: string[]
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          step?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          completed_at?: string | null
+          completed_steps?: string[]
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          step?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_tour_progress_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_line_items: {
         Row: {
           business_id: string
@@ -9116,6 +10859,57 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_age_checks: {
+        Row: {
+          business_id: string
+          confirmed: boolean
+          created_at: string
+          id: string
+          outlet_id: string | null
+          product_id: string | null
+          product_name: string | null
+          staff_id: string | null
+          staff_name: string | null
+        }
+        Insert: {
+          business_id: string
+          confirmed?: boolean
+          created_at?: string
+          id?: string
+          outlet_id?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          staff_id?: string | null
+          staff_name?: string | null
+        }
+        Update: {
+          business_id?: string
+          confirmed?: boolean
+          created_at?: string
+          id?: string
+          outlet_id?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          staff_id?: string | null
+          staff_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_age_checks_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_age_checks_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "pos_outlets"
             referencedColumns: ["id"]
           },
         ]
@@ -9600,21 +11394,30 @@ export type Database = {
           color: string | null
           created_at: string | null
           id: string
+          is_active: boolean
           name: string
+          ordering_archetype: string | null
+          sort_order: number
         }
         Insert: {
           business_id?: string | null
           color?: string | null
           created_at?: string | null
           id?: string
+          is_active?: boolean
           name: string
+          ordering_archetype?: string | null
+          sort_order?: number
         }
         Update: {
           business_id?: string | null
           color?: string | null
           created_at?: string | null
           id?: string
+          is_active?: boolean
           name?: string
+          ordering_archetype?: string | null
+          sort_order?: number
         }
         Relationships: [
           {
@@ -9843,6 +11646,93 @@ export type Database = {
           },
         ]
       }
+      pos_customer_auth: {
+        Row: {
+          business_id: string
+          created_at: string
+          customer_id: string | null
+          email: string
+          email_verified: boolean
+          failed_pin_attempts: number
+          id: string
+          invite_sent_at: string | null
+          invite_token: string | null
+          locked_until: string | null
+          otp_attempts: number
+          otp_expires_at: string | null
+          otp_hash: string | null
+          pin_hash: string | null
+          pin_set_at: string | null
+          redeem_token_consumed_at: string | null
+          redeem_token_expires_at: string | null
+          redeem_token_hash: string | null
+          session_token: string | null
+          updated_at: string
+          verified_until: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          customer_id?: string | null
+          email: string
+          email_verified?: boolean
+          failed_pin_attempts?: number
+          id?: string
+          invite_sent_at?: string | null
+          invite_token?: string | null
+          locked_until?: string | null
+          otp_attempts?: number
+          otp_expires_at?: string | null
+          otp_hash?: string | null
+          pin_hash?: string | null
+          pin_set_at?: string | null
+          redeem_token_consumed_at?: string | null
+          redeem_token_expires_at?: string | null
+          redeem_token_hash?: string | null
+          session_token?: string | null
+          updated_at?: string
+          verified_until?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          customer_id?: string | null
+          email?: string
+          email_verified?: boolean
+          failed_pin_attempts?: number
+          id?: string
+          invite_sent_at?: string | null
+          invite_token?: string | null
+          locked_until?: string | null
+          otp_attempts?: number
+          otp_expires_at?: string | null
+          otp_hash?: string | null
+          pin_hash?: string | null
+          pin_set_at?: string | null
+          redeem_token_consumed_at?: string | null
+          redeem_token_expires_at?: string | null
+          redeem_token_hash?: string | null
+          session_token?: string | null
+          updated_at?: string
+          verified_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_customer_auth_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_customer_auth_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pos_customer_communications: {
         Row: {
           business_id: string | null
@@ -9987,6 +11877,8 @@ export type Database = {
           business_id: string | null
           churn_risk_score: number | null
           churn_risk_updated_at: string | null
+          consent_captured_at: string | null
+          consent_source: string | null
           created_at: string | null
           credit_limit_cents: number | null
           current_balance_cents: number | null
@@ -9995,6 +11887,8 @@ export type Database = {
           days_since_visit: number | null
           deleted_at: string | null
           email: string | null
+          email_consent: boolean | null
+          email_enc: string | null
           group_id: string | null
           group_name: string | null
           id: string
@@ -10003,12 +11897,19 @@ export type Database = {
           lifetime_value_cents: number | null
           lightspeed_customer_id: string | null
           loyalty_balance: number | null
+          loyalty_identity_id: string | null
+          loyalty_invite_sent_at: string | null
+          loyalty_invite_token: string | null
           loyalty_points: number | null
           loyalty_tier: string | null
           marketing_consent: boolean | null
+          merged_into: string | null
           name: string
+          name_enc: string | null
           notes: string | null
+          notes_enc: string | null
           phone: string | null
+          phone_enc: string | null
           points_balance: number | null
           price_list_id: string | null
           referral_code: string | null
@@ -10021,6 +11922,7 @@ export type Database = {
           segment: string | null
           segment_updated_at: string | null
           shopify_customer_id: string | null
+          sms_consent: boolean | null
           source: string | null
           square_customer_id: string | null
           stamps_count: number | null
@@ -10034,6 +11936,8 @@ export type Database = {
           total_spent: number | null
           updated_at: string | null
           visit_count: number | null
+          whatsapp_consent: boolean
+          whatsapp_opt_in_at: string | null
         }
         Insert: {
           abn?: string | null
@@ -10044,6 +11948,8 @@ export type Database = {
           business_id?: string | null
           churn_risk_score?: number | null
           churn_risk_updated_at?: string | null
+          consent_captured_at?: string | null
+          consent_source?: string | null
           created_at?: string | null
           credit_limit_cents?: number | null
           current_balance_cents?: number | null
@@ -10052,6 +11958,8 @@ export type Database = {
           days_since_visit?: number | null
           deleted_at?: string | null
           email?: string | null
+          email_consent?: boolean | null
+          email_enc?: string | null
           group_id?: string | null
           group_name?: string | null
           id?: string
@@ -10060,12 +11968,19 @@ export type Database = {
           lifetime_value_cents?: number | null
           lightspeed_customer_id?: string | null
           loyalty_balance?: number | null
+          loyalty_identity_id?: string | null
+          loyalty_invite_sent_at?: string | null
+          loyalty_invite_token?: string | null
           loyalty_points?: number | null
           loyalty_tier?: string | null
           marketing_consent?: boolean | null
+          merged_into?: string | null
           name: string
+          name_enc?: string | null
           notes?: string | null
+          notes_enc?: string | null
           phone?: string | null
+          phone_enc?: string | null
           points_balance?: number | null
           price_list_id?: string | null
           referral_code?: string | null
@@ -10078,6 +11993,7 @@ export type Database = {
           segment?: string | null
           segment_updated_at?: string | null
           shopify_customer_id?: string | null
+          sms_consent?: boolean | null
           source?: string | null
           square_customer_id?: string | null
           stamps_count?: number | null
@@ -10091,6 +12007,8 @@ export type Database = {
           total_spent?: number | null
           updated_at?: string | null
           visit_count?: number | null
+          whatsapp_consent?: boolean
+          whatsapp_opt_in_at?: string | null
         }
         Update: {
           abn?: string | null
@@ -10101,6 +12019,8 @@ export type Database = {
           business_id?: string | null
           churn_risk_score?: number | null
           churn_risk_updated_at?: string | null
+          consent_captured_at?: string | null
+          consent_source?: string | null
           created_at?: string | null
           credit_limit_cents?: number | null
           current_balance_cents?: number | null
@@ -10109,6 +12029,8 @@ export type Database = {
           days_since_visit?: number | null
           deleted_at?: string | null
           email?: string | null
+          email_consent?: boolean | null
+          email_enc?: string | null
           group_id?: string | null
           group_name?: string | null
           id?: string
@@ -10117,12 +12039,19 @@ export type Database = {
           lifetime_value_cents?: number | null
           lightspeed_customer_id?: string | null
           loyalty_balance?: number | null
+          loyalty_identity_id?: string | null
+          loyalty_invite_sent_at?: string | null
+          loyalty_invite_token?: string | null
           loyalty_points?: number | null
           loyalty_tier?: string | null
           marketing_consent?: boolean | null
+          merged_into?: string | null
           name?: string
+          name_enc?: string | null
           notes?: string | null
+          notes_enc?: string | null
           phone?: string | null
+          phone_enc?: string | null
           points_balance?: number | null
           price_list_id?: string | null
           referral_code?: string | null
@@ -10135,6 +12064,7 @@ export type Database = {
           segment?: string | null
           segment_updated_at?: string | null
           shopify_customer_id?: string | null
+          sms_consent?: boolean | null
           source?: string | null
           square_customer_id?: string | null
           stamps_count?: number | null
@@ -10148,6 +12078,8 @@ export type Database = {
           total_spent?: number | null
           updated_at?: string | null
           visit_count?: number | null
+          whatsapp_consent?: boolean
+          whatsapp_opt_in_at?: string | null
         }
         Relationships: [
           {
@@ -10162,6 +12094,20 @@ export type Database = {
             columns: ["customer_group_id"]
             isOneToOne: false
             referencedRelation: "pos_customer_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_customers_loyalty_identity_id_fkey"
+            columns: ["loyalty_identity_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_identity"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_customers_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
             referencedColumns: ["id"]
           },
         ]
@@ -10942,6 +12888,7 @@ export type Database = {
           business_id: string
           created_at: string | null
           id: string
+          idempotency_key: string | null
           pack_size: number | null
           product_id: string | null
           stripe_payment_intent_id: string | null
@@ -10953,6 +12900,7 @@ export type Database = {
           business_id: string
           created_at?: string | null
           id?: string
+          idempotency_key?: string | null
           pack_size?: number | null
           product_id?: string | null
           stripe_payment_intent_id?: string | null
@@ -10964,6 +12912,7 @@ export type Database = {
           business_id?: string
           created_at?: string | null
           id?: string
+          idempotency_key?: string | null
           pack_size?: number | null
           product_id?: string | null
           stripe_payment_intent_id?: string | null
@@ -11628,69 +13577,108 @@ export type Database = {
       }
       pos_loyalty_config: {
         Row: {
+          birthday_enabled: boolean
+          birthday_reward_points: number
           birthday_reward_text: string | null
           business_id: string
+          challenge_reward_points: number
+          challenges_enabled: boolean
           created_at: string | null
           enrol_page_slug: string | null
+          fraud_auto_hold: boolean
           point_value_cents: number
           points_expiry_days: number | null
           points_per_dollar: number
+          preload_amounts: Json
+          preload_bonus_amount: number
+          preload_bonus_threshold: number
+          preload_enabled: boolean
           program_enabled: boolean
           program_type: string
           public_enrol_enabled: boolean | null
           referee_bonus_points: number | null
           referral_bonus_points: number | null
+          referrals_enabled: boolean | null
           stamp_reward_text: string
           stamps_to_reward: number
           tier_gold_points: number | null
           tier_platinum_points: number | null
           tier_silver_points: number | null
           updated_at: string | null
+          whatsapp_enabled: boolean
           winback_after_days: number | null
+          winback_enabled: boolean
+          winback_reward_points: number
           winback_reward_text: string | null
         }
         Insert: {
+          birthday_enabled?: boolean
+          birthday_reward_points?: number
           birthday_reward_text?: string | null
           business_id: string
+          challenge_reward_points?: number
+          challenges_enabled?: boolean
           created_at?: string | null
           enrol_page_slug?: string | null
+          fraud_auto_hold?: boolean
           point_value_cents?: number
           points_expiry_days?: number | null
           points_per_dollar?: number
+          preload_amounts?: Json
+          preload_bonus_amount?: number
+          preload_bonus_threshold?: number
+          preload_enabled?: boolean
           program_enabled?: boolean
           program_type?: string
           public_enrol_enabled?: boolean | null
           referee_bonus_points?: number | null
           referral_bonus_points?: number | null
+          referrals_enabled?: boolean | null
           stamp_reward_text?: string
           stamps_to_reward?: number
           tier_gold_points?: number | null
           tier_platinum_points?: number | null
           tier_silver_points?: number | null
           updated_at?: string | null
+          whatsapp_enabled?: boolean
           winback_after_days?: number | null
+          winback_enabled?: boolean
+          winback_reward_points?: number
           winback_reward_text?: string | null
         }
         Update: {
+          birthday_enabled?: boolean
+          birthday_reward_points?: number
           birthday_reward_text?: string | null
           business_id?: string
+          challenge_reward_points?: number
+          challenges_enabled?: boolean
           created_at?: string | null
           enrol_page_slug?: string | null
+          fraud_auto_hold?: boolean
           point_value_cents?: number
           points_expiry_days?: number | null
           points_per_dollar?: number
+          preload_amounts?: Json
+          preload_bonus_amount?: number
+          preload_bonus_threshold?: number
+          preload_enabled?: boolean
           program_enabled?: boolean
           program_type?: string
           public_enrol_enabled?: boolean | null
           referee_bonus_points?: number | null
           referral_bonus_points?: number | null
+          referrals_enabled?: boolean | null
           stamp_reward_text?: string
           stamps_to_reward?: number
           tier_gold_points?: number | null
           tier_platinum_points?: number | null
           tier_silver_points?: number | null
           updated_at?: string | null
+          whatsapp_enabled?: boolean
           winback_after_days?: number | null
+          winback_enabled?: boolean
+          winback_reward_points?: number
           winback_reward_text?: string | null
         }
         Relationships: [
@@ -11987,6 +13975,7 @@ export type Database = {
         Row: {
           allow_quantity: boolean | null
           applies_to_product_ids: string[] | null
+          archetype_slot: string | null
           business_id: string | null
           color: string | null
           created_at: string | null
@@ -12007,6 +13996,7 @@ export type Database = {
         Insert: {
           allow_quantity?: boolean | null
           applies_to_product_ids?: string[] | null
+          archetype_slot?: string | null
           business_id?: string | null
           color?: string | null
           created_at?: string | null
@@ -12027,6 +14017,7 @@ export type Database = {
         Update: {
           allow_quantity?: boolean | null
           applies_to_product_ids?: string[] | null
+          archetype_slot?: string | null
           business_id?: string | null
           color?: string | null
           created_at?: string | null
@@ -12129,6 +14120,7 @@ export type Database = {
       pos_oauth_integrations: {
         Row: {
           access_token_encrypted: string | null
+          auth_state_expires_at: string | null
           auth_state_token: string | null
           business_id: string
           config: Json | null
@@ -12147,6 +14139,7 @@ export type Database = {
         }
         Insert: {
           access_token_encrypted?: string | null
+          auth_state_expires_at?: string | null
           auth_state_token?: string | null
           business_id: string
           config?: Json | null
@@ -12165,6 +14158,7 @@ export type Database = {
         }
         Update: {
           access_token_encrypted?: string | null
+          auth_state_expires_at?: string | null
           auth_state_token?: string | null
           business_id?: string
           config?: Json | null
@@ -12244,6 +14238,7 @@ export type Database = {
           confirmation_email_sent: boolean | null
           created_at: string | null
           customer_email: string | null
+          customer_id: string | null
           customer_name: string
           customer_phone: string | null
           delivery_address: string | null
@@ -12280,6 +14275,7 @@ export type Database = {
           confirmation_email_sent?: boolean | null
           created_at?: string | null
           customer_email?: string | null
+          customer_id?: string | null
           customer_name: string
           customer_phone?: string | null
           delivery_address?: string | null
@@ -12316,6 +14312,7 @@ export type Database = {
           confirmation_email_sent?: boolean | null
           created_at?: string | null
           customer_email?: string | null
+          customer_id?: string | null
           customer_name?: string
           customer_phone?: string | null
           delivery_address?: string | null
@@ -12351,6 +14348,13 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_online_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
             referencedColumns: ["id"]
           },
           {
@@ -12806,23 +14810,31 @@ export type Database = {
           address: string | null
           business_id: string | null
           code: string | null
+          country: string | null
           created_at: string | null
           delivery_enabled: boolean | null
           delivery_fee: number | null
           delivery_radius_km: number | null
+          formatted_address: string | null
           id: string
           is_active: boolean | null
           is_default: boolean | null
           is_global: boolean | null
+          lat: number | null
+          lng: number | null
           min_order_amount: number | null
           name: string
           online_order_throttle_per_15min: number | null
           online_ordering_note: string | null
           phone: string | null
           pickup_ready_estimate_minutes: number | null
+          place_id: string | null
+          postcode: string | null
           prep_time_minutes: number | null
+          state: string | null
           state_code: string | null
           stripe_account_id: string | null
+          suburb: string | null
           tax_inclusive_pricing: boolean
           tax_jurisdiction: string | null
           timezone: string | null
@@ -12833,23 +14845,31 @@ export type Database = {
           address?: string | null
           business_id?: string | null
           code?: string | null
+          country?: string | null
           created_at?: string | null
           delivery_enabled?: boolean | null
           delivery_fee?: number | null
           delivery_radius_km?: number | null
+          formatted_address?: string | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
           is_global?: boolean | null
+          lat?: number | null
+          lng?: number | null
           min_order_amount?: number | null
           name: string
           online_order_throttle_per_15min?: number | null
           online_ordering_note?: string | null
           phone?: string | null
           pickup_ready_estimate_minutes?: number | null
+          place_id?: string | null
+          postcode?: string | null
           prep_time_minutes?: number | null
+          state?: string | null
           state_code?: string | null
           stripe_account_id?: string | null
+          suburb?: string | null
           tax_inclusive_pricing?: boolean
           tax_jurisdiction?: string | null
           timezone?: string | null
@@ -12860,23 +14880,31 @@ export type Database = {
           address?: string | null
           business_id?: string | null
           code?: string | null
+          country?: string | null
           created_at?: string | null
           delivery_enabled?: boolean | null
           delivery_fee?: number | null
           delivery_radius_km?: number | null
+          formatted_address?: string | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
           is_global?: boolean | null
+          lat?: number | null
+          lng?: number | null
           min_order_amount?: number | null
           name?: string
           online_order_throttle_per_15min?: number | null
           online_ordering_note?: string | null
           phone?: string | null
           pickup_ready_estimate_minutes?: number | null
+          place_id?: string | null
+          postcode?: string | null
           prep_time_minutes?: number | null
+          state?: string | null
           state_code?: string | null
           stripe_account_id?: string | null
+          suburb?: string | null
           tax_inclusive_pricing?: boolean
           tax_jurisdiction?: string | null
           timezone?: string | null
@@ -14055,6 +16083,7 @@ export type Database = {
           id: string
           ilg_product_id: string | null
           image_source: string | null
+          image_thumb_url: string | null
           image_url: string | null
           ingredients: string | null
           is_active: boolean | null
@@ -14081,6 +16110,8 @@ export type Database = {
           nutrition_info: Json | null
           online_description: string | null
           online_images: string[] | null
+          ordering_archetype: string | null
+          ordering_mode: string
           performance_tier: string | null
           prep_time_seconds: number | null
           price: number
@@ -14184,6 +16215,7 @@ export type Database = {
           id?: string
           ilg_product_id?: string | null
           image_source?: string | null
+          image_thumb_url?: string | null
           image_url?: string | null
           ingredients?: string | null
           is_active?: boolean | null
@@ -14210,6 +16242,8 @@ export type Database = {
           nutrition_info?: Json | null
           online_description?: string | null
           online_images?: string[] | null
+          ordering_archetype?: string | null
+          ordering_mode?: string
           performance_tier?: string | null
           prep_time_seconds?: number | null
           price?: number
@@ -14313,6 +16347,7 @@ export type Database = {
           id?: string
           ilg_product_id?: string | null
           image_source?: string | null
+          image_thumb_url?: string | null
           image_url?: string | null
           ingredients?: string | null
           is_active?: boolean | null
@@ -14339,6 +16374,8 @@ export type Database = {
           nutrition_info?: Json | null
           online_description?: string | null
           online_images?: string[] | null
+          ordering_archetype?: string | null
+          ordering_mode?: string
           performance_tier?: string | null
           prep_time_seconds?: number | null
           price?: number
@@ -14542,6 +16579,7 @@ export type Database = {
           exclude_discounted: boolean
           get_quantity: number | null
           id: string
+          idempotency_key: string | null
           is_active: boolean | null
           max_total_uses: number | null
           max_uses_per_customer: number | null
@@ -14586,6 +16624,7 @@ export type Database = {
           exclude_discounted?: boolean
           get_quantity?: number | null
           id?: string
+          idempotency_key?: string | null
           is_active?: boolean | null
           max_total_uses?: number | null
           max_uses_per_customer?: number | null
@@ -14630,6 +16669,7 @@ export type Database = {
           exclude_discounted?: boolean
           get_quantity?: number | null
           id?: string
+          idempotency_key?: string | null
           is_active?: boolean | null
           max_total_uses?: number | null
           max_uses_per_customer?: number | null
@@ -16134,6 +18174,7 @@ export type Database = {
           points_earned: number | null
           points_redeemed: number | null
           pos_user_id: string | null
+          receipt_token: string
           register_id: string | null
           sale_completed_at: string | null
           sale_number: string | null
@@ -16152,6 +18193,7 @@ export type Database = {
           tax_breakdown: Json | null
           tax_total: number | null
           total_amount: number
+          void_reason: string | null
           xero_invoice_id: string | null
           xero_synced: boolean | null
         }
@@ -16194,6 +18236,7 @@ export type Database = {
           points_earned?: number | null
           points_redeemed?: number | null
           pos_user_id?: string | null
+          receipt_token?: string
           register_id?: string | null
           sale_completed_at?: string | null
           sale_number?: string | null
@@ -16212,6 +18255,7 @@ export type Database = {
           tax_breakdown?: Json | null
           tax_total?: number | null
           total_amount?: number
+          void_reason?: string | null
           xero_invoice_id?: string | null
           xero_synced?: boolean | null
         }
@@ -16254,6 +18298,7 @@ export type Database = {
           points_earned?: number | null
           points_redeemed?: number | null
           pos_user_id?: string | null
+          receipt_token?: string
           register_id?: string | null
           sale_completed_at?: string | null
           sale_number?: string | null
@@ -16272,6 +18317,7 @@ export type Database = {
           tax_breakdown?: Json | null
           tax_total?: number | null
           total_amount?: number
+          void_reason?: string | null
           xero_invoice_id?: string | null
           xero_synced?: boolean | null
         }
@@ -17239,35 +19285,54 @@ export type Database = {
             referencedRelation: "pos_products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pos_stock_adjustments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "pos_staff"
+            referencedColumns: ["id"]
+          },
         ]
       }
       pos_stock_take_items: {
         Row: {
           counted_at: string | null
+          counted_by: string | null
           counted_qty: number | null
           id: string
           product_id: string
+          product_name: string | null
           recount_count: number | null
           stock_take_id: string
           system_qty: number | null
+          variance_cents: number | null
+          variance_qty: number | null
         }
         Insert: {
           counted_at?: string | null
+          counted_by?: string | null
           counted_qty?: number | null
           id?: string
           product_id: string
+          product_name?: string | null
           recount_count?: number | null
           stock_take_id: string
           system_qty?: number | null
+          variance_cents?: number | null
+          variance_qty?: number | null
         }
         Update: {
           counted_at?: string | null
+          counted_by?: string | null
           counted_qty?: number | null
           id?: string
           product_id?: string
+          product_name?: string | null
           recount_count?: number | null
           stock_take_id?: string
           system_qty?: number | null
+          variance_cents?: number | null
+          variance_qty?: number | null
         }
         Relationships: [
           {
@@ -17283,6 +19348,7 @@ export type Database = {
         Row: {
           business_id: string
           completed_at: string | null
+          count_type: string
           id: string
           items_counted: number | null
           items_with_variance: number | null
@@ -17296,6 +19362,7 @@ export type Database = {
         Insert: {
           business_id: string
           completed_at?: string | null
+          count_type?: string
           id?: string
           items_counted?: number | null
           items_with_variance?: number | null
@@ -17309,6 +19376,7 @@ export type Database = {
         Update: {
           business_id?: string
           completed_at?: string | null
+          count_type?: string
           id?: string
           items_counted?: number | null
           items_with_variance?: number | null
@@ -17867,6 +19935,63 @@ export type Database = {
           },
         ]
       }
+      pos_temperature_logs: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          location: string
+          logged_at: string
+          logged_by: string | null
+          logged_by_name: string | null
+          outlet_id: string | null
+          passed: boolean
+          reading_c: number
+          threshold_c: number | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          location: string
+          logged_at?: string
+          logged_by?: string | null
+          logged_by_name?: string | null
+          outlet_id?: string | null
+          passed: boolean
+          reading_c: number
+          threshold_c?: number | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          location?: string
+          logged_at?: string
+          logged_by?: string | null
+          logged_by_name?: string | null
+          outlet_id?: string | null
+          passed?: boolean
+          reading_c?: number
+          threshold_c?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_temperature_logs_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_temperature_logs_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "pos_outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pos_timesheets: {
         Row: {
           allowances: Json | null
@@ -18171,6 +20296,13 @@ export type Database = {
             referencedRelation: "pos_products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pos_waste_log_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "pos_staff"
+            referencedColumns: ["id"]
+          },
         ]
       }
       pos_weekly_reports: {
@@ -18385,6 +20517,7 @@ export type Database = {
       }
       product_performance_scores: {
         Row: {
+          abc_tier: string | null
           business_id: string
           composite_score: number | null
           halo_avg_copur_margin: number | null
@@ -18410,6 +20543,7 @@ export type Database = {
           velocity_vs_avg: number | null
         }
         Insert: {
+          abc_tier?: string | null
           business_id: string
           composite_score?: number | null
           halo_avg_copur_margin?: number | null
@@ -18435,6 +20569,7 @@ export type Database = {
           velocity_vs_avg?: number | null
         }
         Update: {
+          abc_tier?: string | null
           business_id?: string
           composite_score?: number | null
           halo_avg_copur_margin?: number | null
@@ -18912,6 +21047,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limits: {
+        Row: {
+          bucket_key: string
+          count: number
+          expires_at: string
+        }
+        Insert: {
+          bucket_key: string
+          count?: number
+          expires_at: string
+        }
+        Update: {
+          bucket_key?: string
+          count?: number
+          expires_at?: string
+        }
+        Relationships: []
       }
       receipt_ocr_scans: {
         Row: {
@@ -19681,8 +21834,10 @@ export type Database = {
           created_at: string | null
           default_reorder_qty: number
           id: string
+          lead_time_days: number
           max_stock_trigger: number
           min_velocity_per_day: number
+          review_cycle_days: number
           updated_at: string | null
           velocity_period: string
         }
@@ -19692,8 +21847,10 @@ export type Database = {
           created_at?: string | null
           default_reorder_qty?: number
           id?: string
+          lead_time_days?: number
           max_stock_trigger?: number
           min_velocity_per_day?: number
+          review_cycle_days?: number
           updated_at?: string | null
           velocity_period?: string
         }
@@ -19703,8 +21860,10 @@ export type Database = {
           created_at?: string | null
           default_reorder_qty?: number
           id?: string
+          lead_time_days?: number
           max_stock_trigger?: number
           min_velocity_per_day?: number
+          review_cycle_days?: number
           updated_at?: string | null
           velocity_period?: string
         }
@@ -20741,6 +22900,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sms_send_log: {
+        Row: {
+          body: string | null
+          business_id: string | null
+          category: string
+          clicksend_message_id: string | null
+          consent_ok: boolean | null
+          created_at: string
+          error: string | null
+          id: string
+          status: string
+          suppressed: boolean
+          to_number: string
+        }
+        Insert: {
+          body?: string | null
+          business_id?: string | null
+          category?: string
+          clicksend_message_id?: string | null
+          consent_ok?: boolean | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          status: string
+          suppressed?: boolean
+          to_number: string
+        }
+        Update: {
+          body?: string | null
+          business_id?: string | null
+          category?: string
+          clicksend_message_id?: string | null
+          consent_ok?: boolean | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          status?: string
+          suppressed?: boolean
+          to_number?: string
+        }
+        Relationships: []
+      }
+      sms_suppression: {
+        Row: {
+          business_id: string | null
+          created_at: string
+          id: string
+          phone: string
+          reason: string
+        }
+        Insert: {
+          business_id?: string | null
+          created_at?: string
+          id?: string
+          phone: string
+          reason?: string
+        }
+        Update: {
+          business_id?: string | null
+          created_at?: string
+          id?: string
+          phone?: string
+          reason?: string
+        }
+        Relationships: []
       }
       social_accounts: {
         Row: {
@@ -22340,6 +24565,8 @@ export type Database = {
           personal_leave_balance_days: number | null
           ph_multiplier: number | null
           portal_enabled: boolean
+          portal_otp_expires_at: string | null
+          portal_otp_hash: string | null
           pos_staff_id: string | null
           position: string
           preferred_name: string | null
@@ -22403,6 +24630,8 @@ export type Database = {
           personal_leave_balance_days?: number | null
           ph_multiplier?: number | null
           portal_enabled?: boolean
+          portal_otp_expires_at?: string | null
+          portal_otp_hash?: string | null
           pos_staff_id?: string | null
           position: string
           preferred_name?: string | null
@@ -22466,6 +24695,8 @@ export type Database = {
           personal_leave_balance_days?: number | null
           ph_multiplier?: number | null
           portal_enabled?: boolean
+          portal_otp_expires_at?: string | null
+          portal_otp_hash?: string | null
           pos_staff_id?: string | null
           position?: string
           preferred_name?: string | null
@@ -22621,6 +24852,51 @@ export type Database = {
           },
           {
             foreignKeyName: "staff_pay_rates_staff_member_id_fkey"
+            columns: ["staff_member_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_portal_sessions: {
+        Row: {
+          business_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          revoked_at: string | null
+          staff_member_id: string
+          token_hash: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          revoked_at?: string | null
+          staff_member_id: string
+          token_hash: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          revoked_at?: string | null
+          staff_member_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_portal_sessions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_portal_sessions_staff_member_id_fkey"
             columns: ["staff_member_id"]
             isOneToOne: false
             referencedRelation: "staff_members"
@@ -22852,6 +25128,7 @@ export type Database = {
           new_stock: number
           notes: string | null
           quantity_added: number
+          sale_id: string | null
           scanned_at: string | null
         }
         Insert: {
@@ -22863,6 +25140,7 @@ export type Database = {
           new_stock: number
           notes?: string | null
           quantity_added: number
+          sale_id?: string | null
           scanned_at?: string | null
         }
         Update: {
@@ -22874,6 +25152,7 @@ export type Database = {
           new_stock?: number
           notes?: string | null
           quantity_added?: number
+          sale_id?: string | null
           scanned_at?: string | null
         }
         Relationships: [
@@ -23808,6 +26087,464 @@ export type Database = {
             columns: ["connection_id"]
             isOneToOne: false
             referencedRelation: "third_party_delivery_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_print_batch_items: {
+        Row: {
+          added_at: string
+          batch_id: string
+          business_id: string
+          id: string
+          price_snapshot: number
+          product_id: string
+          promo_label: string | null
+          qty: number
+          was_price_snapshot: number | null
+        }
+        Insert: {
+          added_at?: string
+          batch_id: string
+          business_id: string
+          id?: string
+          price_snapshot: number
+          product_id: string
+          promo_label?: string | null
+          qty?: number
+          was_price_snapshot?: number | null
+        }
+        Update: {
+          added_at?: string
+          batch_id?: string
+          business_id?: string
+          id?: string
+          price_snapshot?: number
+          product_id?: string
+          promo_label?: string | null
+          qty?: number
+          was_price_snapshot?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_print_batch_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_print_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_print_batches: {
+        Row: {
+          business_id: string
+          created_at: string
+          created_by_staff_id: string | null
+          id: string
+          item_count: number
+          name: string
+          outlet_id: string | null
+          printed_at: string | null
+          status: string
+          template_id: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          created_by_staff_id?: string | null
+          id?: string
+          item_count?: number
+          name: string
+          outlet_id?: string | null
+          printed_at?: string | null
+          status?: string
+          template_id?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          created_by_staff_id?: string | null
+          id?: string
+          item_count?: number
+          name?: string
+          outlet_id?: string | null
+          printed_at?: string | null
+          status?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_print_batches_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "pos_shelf_ticket_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_certificates: {
+        Row: {
+          business_id: string
+          cert_number: string
+          course_id: string
+          course_title: string | null
+          enrolment_id: string
+          expires_at: string | null
+          id: string
+          issued_at: string
+          score: number | null
+          skill_id: string | null
+          staff_member_id: string
+          staff_name: string | null
+        }
+        Insert: {
+          business_id: string
+          cert_number: string
+          course_id: string
+          course_title?: string | null
+          enrolment_id: string
+          expires_at?: string | null
+          id?: string
+          issued_at?: string
+          score?: number | null
+          skill_id?: string | null
+          staff_member_id: string
+          staff_name?: string | null
+        }
+        Update: {
+          business_id?: string
+          cert_number?: string
+          course_id?: string
+          course_title?: string | null
+          enrolment_id?: string
+          expires_at?: string | null
+          id?: string
+          issued_at?: string
+          score?: number | null
+          skill_id?: string | null
+          staff_member_id?: string
+          staff_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_certificates_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "training_courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_certificates_enrolment_id_fkey"
+            columns: ["enrolment_id"]
+            isOneToOne: true
+            referencedRelation: "training_enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_certificates_staff_member_id_fkey"
+            columns: ["staff_member_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_courses: {
+        Row: {
+          business_id: string
+          cert_skill_id: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          est_minutes: number | null
+          expires_months: number | null
+          id: string
+          is_mandatory: boolean
+          pass_mark: number
+          role_tags: string[]
+          status: string
+          tier: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          cert_skill_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          est_minutes?: number | null
+          expires_months?: number | null
+          id?: string
+          is_mandatory?: boolean
+          pass_mark?: number
+          role_tags?: string[]
+          status?: string
+          tier?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          cert_skill_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          est_minutes?: number | null
+          expires_months?: number | null
+          id?: string
+          is_mandatory?: boolean
+          pass_mark?: number
+          role_tags?: string[]
+          status?: string
+          tier?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_courses_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_courses_cert_skill_id_fkey"
+            columns: ["cert_skill_id"]
+            isOneToOne: false
+            referencedRelation: "staff_skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_enrolments: {
+        Row: {
+          assigned_at: string
+          business_id: string
+          certified: boolean
+          completed_at: string | null
+          course_id: string
+          due_at: string | null
+          id: string
+          progress_pct: number
+          score: number | null
+          staff_member_id: string
+          status: string
+        }
+        Insert: {
+          assigned_at?: string
+          business_id: string
+          certified?: boolean
+          completed_at?: string | null
+          course_id: string
+          due_at?: string | null
+          id?: string
+          progress_pct?: number
+          score?: number | null
+          staff_member_id: string
+          status?: string
+        }
+        Update: {
+          assigned_at?: string
+          business_id?: string
+          certified?: boolean
+          completed_at?: string | null
+          course_id?: string
+          due_at?: string | null
+          id?: string
+          progress_pct?: number
+          score?: number | null
+          staff_member_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_enrolments_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_enrolments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "training_courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_enrolments_staff_member_id_fkey"
+            columns: ["staff_member_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_lesson_progress: {
+        Row: {
+          business_id: string
+          completed_at: string
+          enrolment_id: string
+          id: string
+          lesson_id: string
+          score: number | null
+        }
+        Insert: {
+          business_id: string
+          completed_at?: string
+          enrolment_id: string
+          id?: string
+          lesson_id: string
+          score?: number | null
+        }
+        Update: {
+          business_id?: string
+          completed_at?: string
+          enrolment_id?: string
+          id?: string
+          lesson_id?: string
+          score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_lesson_progress_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_lesson_progress_enrolment_id_fkey"
+            columns: ["enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "training_enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "training_lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_lessons: {
+        Row: {
+          business_id: string
+          content: string | null
+          course_id: string
+          created_at: string
+          duration_seconds: number | null
+          game_round: string | null
+          id: string
+          recipe_id: string | null
+          sort_order: number
+          title: string | null
+          type: string
+          url: string | null
+        }
+        Insert: {
+          business_id: string
+          content?: string | null
+          course_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          game_round?: string | null
+          id?: string
+          recipe_id?: string | null
+          sort_order?: number
+          title?: string | null
+          type: string
+          url?: string | null
+        }
+        Update: {
+          business_id?: string
+          content?: string | null
+          course_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          game_round?: string | null
+          id?: string
+          recipe_id?: string | null
+          sort_order?: number
+          title?: string | null
+          type?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_lessons_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_lessons_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "training_courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_quiz_questions: {
+        Row: {
+          business_id: string
+          correct: string | null
+          created_at: string
+          id: string
+          lesson_id: string
+          options: Json
+          points: number
+          question: string
+          sort_order: number
+        }
+        Insert: {
+          business_id: string
+          correct?: string | null
+          created_at?: string
+          id?: string
+          lesson_id: string
+          options?: Json
+          points?: number
+          question: string
+          sort_order?: number
+        }
+        Update: {
+          business_id?: string
+          correct?: string | null
+          created_at?: string
+          id?: string
+          lesson_id?: string
+          options?: Json
+          points?: number
+          question?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_quiz_questions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_quiz_questions_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "training_lessons"
             referencedColumns: ["id"]
           },
         ]
@@ -25446,6 +28183,7 @@ export type Database = {
           assistant_role: string | null
           bot_name: string | null
           business_id: string | null
+          chat_token: string | null
           created_at: string | null
           custom_rules: string | null
           delivery_policy: string | null
@@ -25485,6 +28223,7 @@ export type Database = {
           assistant_role?: string | null
           bot_name?: string | null
           business_id?: string | null
+          chat_token?: string | null
           created_at?: string | null
           custom_rules?: string | null
           delivery_policy?: string | null
@@ -25524,6 +28263,7 @@ export type Database = {
           assistant_role?: string | null
           bot_name?: string | null
           business_id?: string | null
+          chat_token?: string | null
           created_at?: string | null
           custom_rules?: string | null
           delivery_policy?: string | null
@@ -25847,8 +28587,27 @@ export type Database = {
           },
         ]
       }
+      v_ai_costs: {
+        Row: {
+          amount_usd_cents: number | null
+          business_id: string | null
+          created_at: string | null
+          id: string | null
+          metadata: Json | null
+          provider: string | null
+          quantity: number | null
+          reference_id: string | null
+          source: string | null
+          unit: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      claim_return_qty: {
+        Args: { p_item_id: string; p_qty: number }
+        Returns: number
+      }
       create_product_draft: {
         Args: {
           p_barcode: string
@@ -25860,6 +28619,25 @@ export type Database = {
         }
         Returns: string
       }
+      credit_image_credits: {
+        Args: {
+          p_amount: number
+          p_business: string
+          p_credits: number
+          p_pack: string
+          p_pi: string
+        }
+        Returns: number
+      }
+      decrement_numeric: {
+        Args: {
+          p_amount: number
+          p_column: string
+          p_id: string
+          p_table: string
+        }
+        Returns: undefined
+      }
       decrement_outlet_inventory: {
         Args: {
           p_business_id: string
@@ -25870,6 +28648,10 @@ export type Database = {
         Returns: undefined
       }
       decrement_paid_credit: { Args: { bid: string }; Returns: undefined }
+      decrement_stock_quantity: {
+        Args: { p_amount: number; p_product_id: string }
+        Returns: number
+      }
       generate_po_number: { Args: { p_business_id: string }; Returns: string }
       generate_wholesale_order_number: { Args: never; Returns: string }
       get_top_products: {
@@ -25891,6 +28673,15 @@ export type Database = {
         Args: { customer_id: string; points: number }
         Returns: undefined
       }
+      increment_numeric: {
+        Args: {
+          p_amount: number
+          p_column: string
+          p_id: string
+          p_table: string
+        }
+        Returns: undefined
+      }
       increment_outlet_inventory: {
         Args: { p_outlet_id: string; p_product_id: string; p_quantity: number }
         Returns: undefined
@@ -25898,6 +28689,60 @@ export type Database = {
       increment_returned_quantity: {
         Args: { p_item_id: string; p_qty: number }
         Returns: undefined
+      }
+      increment_session_totals: {
+        Args: {
+          p_card_delta: number
+          p_cash_delta: number
+          p_session_id: string
+          p_transaction_delta: number
+        }
+        Returns: undefined
+      }
+      loyalty_preload_load: {
+        Args: {
+          p_amount: number
+          p_bonus: number
+          p_business: string
+          p_customer: string
+          p_pi: string
+        }
+        Returns: number
+      }
+      loyalty_preload_refund: {
+        Args: {
+          p_amount: number
+          p_business: string
+          p_customer: string
+          p_note: string
+          p_pi: string
+        }
+        Returns: number
+      }
+      loyalty_preload_spend: {
+        Args: {
+          p_amount: number
+          p_business: string
+          p_customer: string
+          p_sale: string
+        }
+        Returns: number
+      }
+      purge_account_data: { Args: never; Returns: string[] }
+      rate_limit_hit: {
+        Args: { p_key: string; p_limit: number; p_window_sec: number }
+        Returns: {
+          allowed: boolean
+          current_count: number
+          retry_after: number
+        }[]
+      }
+      redeem_gift_card: {
+        Args: { p_bid: string; p_card_id: string; p_charge: number }
+        Returns: {
+          charged: number
+          new_balance: number
+        }[]
       }
       reverse_outlet_inventory: {
         Args: {
@@ -25909,9 +28754,31 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_numeric: {
+        Args: {
+          p_column: string
+          p_id: string
+          p_table: string
+          p_value: number
+        }
+        Returns: number
+      }
       track_aria_spend: {
         Args: { p_business_id: string; p_cost_cents: number; p_kind?: string }
         Returns: undefined
+      }
+      velocity_aggregate: {
+        Args: { p_business: string }
+        Returns: {
+          base_half: number
+          product_id: string
+          product_name: string
+          revenue: number
+          this_half: number
+          units: number
+          win_end: string
+          win_start: string
+        }[]
       }
       wh_drift_count: {
         Args: { p_business_id: string; p_since: string }
