@@ -13,7 +13,8 @@ test.describe('Authentication', () => {
     await page.goto('/login')
     await page.locator('input[type="email"]').fill('invalid@example.com')
     await page.locator('input[type="password"]').fill('wrong-password-xyz-123!')
-    await page.getByRole('button', { name: /sign in/i }).click()
+    // CI-FIX-1 — see helpers/auth.ts: /login has two "Sign in"-named buttons (tab + submit).
+    await page.locator('form').getByRole('button', { name: /sign in/i }).click()
     await expect(page.getByText(/invalid|incorrect|wrong|error|credentials/i)).toBeVisible({
       timeout: 10_000,
     })

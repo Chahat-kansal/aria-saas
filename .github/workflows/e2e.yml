@@ -57,14 +57,25 @@ jobs:
     env:
       NODE_OPTIONS: "--max-old-space-size=6144"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+
+      # CI-FIX-1 — incremental (tsconfig.json) + this cache mean a repeat run only re-checks
+      # files that actually changed since the last cached .tsbuildinfo, instead of a full
+      # from-scratch project check every time.
+      - name: Cache TypeScript incremental build info
+        uses: actions/cache@v4
+        with:
+          path: .tsbuildinfo
+          key: ${{ runner.os }}-tsbuildinfo-${{ hashFiles('package-lock.json', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-tsbuildinfo-
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -80,10 +91,14 @@ jobs:
       TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
       BASE_URL: http://localhost:3000
+      # CI-FIX-1 — job-level so the "Build (TEST env)" step's `npm run build` inherits it too
+      # (GitHub merges job-level env into every step; a step's own env: only overrides the keys
+      # it redeclares). Same 6GB heap the typecheck job already uses.
+      NODE_OPTIONS: "--max-old-space-size=6144"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -161,9 +176,9 @@ jobs:
     if: github.event.client_payload.environment == 'production'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

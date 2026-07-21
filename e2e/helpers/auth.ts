@@ -16,6 +16,10 @@ export async function login(page: Page): Promise<void> {
   await page.goto('/login')
   await page.locator('input[type="email"]').fill(EMAIL)
   await page.locator('input[type="password"]').fill(PASSWORD)
-  await page.getByRole('button', { name: /sign in/i }).click()
+  // CI-FIX-1 — /login (AuthScene.tsx) has TWO elements matching "Sign in": the tab toggle
+  // button and the form's actual submit button, both named identically. Scoped to the form to
+  // avoid Playwright's strict-mode violation (was resolving to 2 elements, failing every e2e
+  // spec that calls login()).
+  await page.locator('form').getByRole('button', { name: /sign in/i }).click()
   await page.waitForURL(/dashboard|onboarding/, { timeout: 25_000 })
 }

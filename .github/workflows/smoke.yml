@@ -39,10 +39,14 @@ jobs:
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: '1x00000000000000000000AA'
       TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA'
       BASE_URL: http://localhost:3000
+      # CI-FIX-1 — job-level (was only set on the "Run smoke suite" step) so every step in this
+      # job inherits the same 6GB heap the e2e.yml jobs use, ahead of playwright.smoke.config.ts's
+      # webServer running `npm run build` inside that step.
+      NODE_OPTIONS: '--max-old-space-size=6144'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -78,12 +82,22 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # CI-FIX-1 — same incremental-build cache as e2e.yml's typecheck job; playwright.smoke.
+      # config.ts's webServer runs `npm run build`, which type-checks as part of the Next.js
+      # build, and benefits from the same .tsbuildinfo (tsconfig.json's incremental: true).
+      - name: Cache TypeScript incremental build info
+        uses: actions/cache@v4
+        with:
+          path: .tsbuildinfo
+          key: ${{ runner.os }}-tsbuildinfo-${{ hashFiles('package-lock.json', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-tsbuildinfo-
+
       # playwright.smoke.config.ts's own webServer runs `npm run build && npm run start` — no
       # separate build step here (reuseExistingServer is false under CI, so it always rebuilds
-      # itself regardless; a second explicit build step would just double the work).
+      # itself regardless; a second explicit build step would just double the work). NODE_OPTIONS
+      # is now set job-level above (was step-scoped here only) so it's inherited automatically.
       - name: Run smoke suite
-        env:
-          NODE_OPTIONS: '--max-old-space-size=6144'
         run: npx playwright test --config=playwright.smoke.config.ts --reporter=github,html
 
       - name: Upload Playwright report
