@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { createClient } from '@supabase/supabase-js'
+import { decryptFieldSafe } from '@/lib/encryption'
 
 // ★ DAILY SCHEDULE (0 3 * * *) = 3am UTC = 1pm Melbourne
 // Vercel Hobby plan — DO NOT change to sub-daily schedule
@@ -45,6 +46,10 @@ export async function GET(req: Request) {
   const connMap = new Map<string, typeof connections>()
   for (const c of connections ?? []) {
     const key = `${c.business_id}:${c.platform}`
+    // SECURITY-RESIDUE-FIX-1 PART 4 — dual-read: decrypts newly-encrypted tokens, passes still-
+    // plaintext ones through unchanged (decryptFieldSafe), so this cron keeps working through the
+    // Meta token-encryption migration with no separate code path.
+    c.access_token = decryptFieldSafe(c.access_token, c.business_id)
     connMap.set(key, c as any)
   }
 

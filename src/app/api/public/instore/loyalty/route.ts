@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rateLimit, clientIp } from '@/lib/security/rate-limit'
+import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 
 function isValidEmail(s: string) {
   return /^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(s)
@@ -81,6 +82,10 @@ export async function POST(req: Request) {
         // CONSENT-COLLECTION-1: kiosk captures email for loyalty but asks no marketing opt-in —
         // record provenance only; channel consent stays false (DB default) until expressly given.
         consent_source: 'online',
+        // SECURITY-RESIDUE-FIX-1 PART 5 — dual-write the encrypted PII columns
+        // (src/lib/aria/customer-pii.ts) — this was one of the 3 busiest public intake routes
+        // never populating them.
+        ...encryptCustomerPII({ email: email.toLowerCase().trim(), name: name?.trim() || null }, business_id),
       }).select('id').single()
 
       if (insertErr || !created) {

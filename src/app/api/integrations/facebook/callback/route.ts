@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { encryptFieldSafe } from '@/lib/encryption'
 
 async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -73,6 +74,11 @@ async function _GET(req: Request) {
     }
 
     const page = pagesData.data[0]
+    // SECURITY-RESIDUE-FIX-1 PART 4 — page.access_token used to be stored raw. Encrypted per-business
+    // via the same AES-256-GCM helper (src/lib/encryption.ts) Square/Slack already use — reads at
+    // every consumer (social/publish, cron/sync-engagement) dual-read via decryptFieldSafe, so this
+    // is a pure write-side hardening with no read-path break.
+    const encryptedPageToken = encryptFieldSafe(page.access_token, biz.id)
 
     // Save Facebook Page connection
     await supabase.from('social_connections').upsert({
@@ -81,7 +87,7 @@ async function _GET(req: Request) {
       platform_account_id:   page.id,
       platform_account_name: page.name,
       platform_page_id:      page.id,
-      access_token:          page.access_token,
+      access_token:          encryptedPageToken,
       token_expires_at:      expiresAt,
       is_active:             true,
       last_synced_at:        new Date().toISOString(),
@@ -100,7 +106,7 @@ async function _GET(req: Request) {
         profile_picture:       ig.profile_picture_url ?? null,
         follower_count:        ig.followers_count ?? 0,
         platform_page_id:      page.id,
-        access_token:          page.access_token,
+        access_token:          encryptedPageToken,
         token_expires_at:      expiresAt,
         is_active:             true,
         last_synced_at:        new Date().toISOString(),

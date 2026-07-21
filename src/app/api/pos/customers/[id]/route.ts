@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
+import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 
 async function _GET(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }, { supabase, businessId: bid }: BusinessContext) {
   const { id } = 'then' in params ? await params : params
@@ -48,6 +49,16 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
   for (const k of SAFE) {
     if (k in body) allowed[k] = body[k]
   }
+  // SECURITY-RESIDUE-FIX-1 PART 5 — this update wrote name/phone/email/notes to their plaintext
+  // columns only, leaving *_enc (src/lib/aria/customer-pii.ts) stale — any reader that ever trusts
+  // ciphertext over plaintext would keep serving the pre-edit value forever. encryptCustomerPII only
+  // emits *_enc for fields actually present in its `src` object, so only PII keys genuinely present
+  // in THIS PATCH body are included below — an untouched field's ciphertext is never clobbered.
+  const piiSrc: Partial<Record<'email' | 'phone' | 'name' | 'notes', string | null>> = {}
+  for (const f of ['email', 'phone', 'name', 'notes'] as const) {
+    if (f in body) piiSrc[f] = body[f] as string | null
+  }
+  Object.assign(allowed, encryptCustomerPII(piiSrc, bid))
 
   const { error } = await supabase.from('pos_customers').update(allowed).eq('id', id).eq('business_id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

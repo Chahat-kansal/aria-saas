@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { encrypt } from '@/lib/integrations/crypto'
+import { encryptFieldSafe } from '@/lib/encryption'
 import { INTEGRATIONS } from '@/lib/integrations/directory'
 import { getXeroAuthorizeUrl, exchangeXeroCode } from '@/lib/integrations/oauth-clients/xero'
 import { getMyobAuthorizeUrl, exchangeMyobCode } from '@/lib/integrations/oauth-clients/myob'
@@ -50,16 +50,13 @@ async function _GET(req: NextRequest) {
         throw new Error(`Unknown integration: ${integration.integration_key}`)
       }
 
-      let encryptedAccess: string | null = null
-      let encryptedRefresh: string | null = null
-      try {
-        encryptedAccess = encrypt(tokens.access_token)
-        encryptedRefresh = encrypt(tokens.refresh_token)
-      } catch {
-        // INTEGRATION_TOKEN_KEY not configured — store raw (not ideal, but graceful)
-        encryptedAccess = tokens.access_token
-        encryptedRefresh = tokens.refresh_token
-      }
+      // SECURITY-RESIDUE-FIX-1 PART 4 — this used to encrypt with a single global
+      // INTEGRATION_TOKEN_KEY, silently falling back to storing the raw plaintext token whenever
+      // that env var wasn't configured. Reuses the same per-business AES-256-GCM helper
+      // (src/lib/encryption.ts) Square/Slack already use — no separate key, no silent plaintext
+      // fallback (ARIA_MASTER_ENCRYPTION_KEY is a required, already-relied-upon secret).
+      const encryptedAccess = encryptFieldSafe(tokens.access_token, integration.business_id as string)
+      const encryptedRefresh = encryptFieldSafe(tokens.refresh_token, integration.business_id as string)
 
       await supabase.from('pos_oauth_integrations').update({
         status: 'connected',

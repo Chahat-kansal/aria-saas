@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 import { normalisePhone } from '@/lib/clicksend'
+import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
@@ -74,6 +75,9 @@ export async function POST(req: Request, { params }: Params) {
       points_balance: 0,
       stamps_count: 0,
       loyalty_points: 0,
+      // SECURITY-RESIDUE-FIX-1 PART 5 — one of the 3 busiest public customer-intake routes never
+      // dual-writing the encrypted PII columns (src/lib/aria/customer-pii.ts).
+      ...encryptCustomerPII({ email: email || null, phone: normPhone, name }, realId),
     }).select().single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -11,6 +11,7 @@ import { linkOrCreateMembership } from '@/lib/loyalty/membership'
 import { normalisePhone } from '@/lib/clicksend'
 import { getCxSession } from '@/lib/cx/get-cx-session'
 import { createSale, type CreateSaleItem } from '@/lib/pos/create-sale'
+import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 
 function adminClient() {
   return createClient(
@@ -174,6 +175,10 @@ export async function POST(req: Request, { params }: { params: { business_id: st
         points_balance: 0,
         stamps_count: 0,
         loyalty_points: 0,
+        // SECURITY-RESIDUE-FIX-1 PART 5 — dual-write the encrypted PII columns
+        // (src/lib/aria/customer-pii.ts) — one of the 3 busiest public intake routes never
+        // populating them.
+        ...encryptCustomerPII({ email: session.email ?? null, phone: normPhone, name: customerName.slice(0, 80) }, bid),
       }).select('id').single()
 
       if (createErr && /duplicate|unique/i.test(createErr.message)) {

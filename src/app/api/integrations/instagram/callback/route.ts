@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { encryptFieldSafe } from '@/lib/encryption'
 
 async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -65,7 +66,9 @@ async function _GET(req: Request) {
       account_handle:        `@${profile.username}`,
       profile_picture:       profile.profile_picture_url ?? null,
       follower_count:        profile.followers_count ?? 0,
-      access_token:          accessToken,
+      // SECURITY-RESIDUE-FIX-1 PART 4 — encrypted per-business (see integrations/facebook/callback
+      // for the identical treatment); reads dual-fallback via decryptFieldSafe.
+      access_token:          encryptFieldSafe(accessToken, biz.id),
       token_expires_at:      new Date(Date.now() + expiresIn * 1000).toISOString(),
       is_active:             true,
       last_synced_at:        new Date().toISOString(),

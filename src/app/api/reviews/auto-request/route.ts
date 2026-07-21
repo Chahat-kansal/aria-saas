@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { sendSMS } from '@/lib/clicksend'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 
 // Called by POS terminal after a sale completes
 // Auto-sends a review request SMS if conditions are met
@@ -12,6 +13,15 @@ export async function POST(req: Request) {
   if (!sale_id || !business_id) {
     return NextResponse.json({ skipped: true, reason: 'missing params' })
   }
+
+  // SECURITY-RESIDUE-FIX-1 PART 3 — same leak class as WIDGET-PII-LEAK-FIX: this route has no
+  // caller authentication at all (it's an internal fire-and-forget call from pos/sales/route.ts,
+  // not a session-scoped one), and on success used to return the customer's real phone and name
+  // directly in the JSON response, plus trigger a real, paid SMS send — anyone who obtains a real
+  // sale_id (e.g. from a receipt link) could replay it here. Response below no longer echoes any
+  // identity-bearing field; a lookup-scoped rate limit and activity_log entry are added too.
+  const rl = await rateLimit(`reviews-auto-request:${clientIp(req)}:${business_id}`, 20, 3600)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
 
   // Get business auto-request settings
   const { data: biz } = await supabaseAdmin
@@ -96,5 +106,14 @@ export async function POST(req: Request) {
     status: 'sent',
   })
 
-  return NextResponse.json({ ok: true, sent_to: phone, customer_name: customer.name })
+  // Owner-facing audit trail — never surfaced to the caller.
+  void supabaseAdmin.from('activity_log').insert({
+    business_id,
+    action_type: 'review_auto_request_sent',
+    description: '[reviews/auto-request] review request SMS sent',
+    metadata: { sale_id, customer_id: customer.id },
+    created_at: new Date().toISOString(),
+  }).then(({ error }) => { if (error) console.error('[non-fatal] activity_log insert failed', error) })
+
+  return NextResponse.json({ ok: true })
 }

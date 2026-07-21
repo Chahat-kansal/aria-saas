@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
+import { decryptFieldSafe } from '@/lib/encryption'
 
 // Instagram requires a clean publicly accessible URL — proxy Pexels/external images to Supabase storage
 async function ensurePublicImageUrl(imageUrl: string, postId: string): Promise<string> {
@@ -52,6 +53,11 @@ async function _POST(req: Request) {
   const { data: conn } = await supabase.from('social_connections').select('*')
     .eq('business_id', business_id).eq('platform', post.platform).maybeSingle();
   if (!conn) return NextResponse.json({ error: `${post.platform} not connected` }, { status: 400 });
+  // SECURITY-RESIDUE-FIX-1 PART 4 — social_connections.access_token is being migrated to
+  // per-business AES-256-GCM (encryptFieldSafe on write); decryptFieldSafe dual-reads both the new
+  // ciphertext and any still-plaintext row untouched by this migration, so every downstream use of
+  // conn.access_token below keeps working through the transition with no separate code path.
+  ;(conn as { access_token: string | null }).access_token = decryptFieldSafe((conn as { access_token: string | null }).access_token, business_id)
 
   const fullCaption = post.caption + (post.hashtags?.length
     ? '\n\n' + (post.hashtags as string[]).map((h: string) => `#${h}`).join(' ')
