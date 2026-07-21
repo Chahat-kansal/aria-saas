@@ -53,6 +53,7 @@ export default function BookingsPage() {
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([])
   const [tableMode, setTableMode] = useState<'auto' | 'area' | 'table'>('auto')
   const [tableModeSaving, setTableModeSaving] = useState(false)
+  const [tableCounts, setTableCounts] = useState({ bookable: 0, guestSelectable: 0, areas: 0 })
 
   const load = useCallback(async (businessId: string) => {
     const [bkRes, svcRes] = await Promise.all([
@@ -73,6 +74,7 @@ export default function BookingsPage() {
         setBid(businessId)
         load(businessId)
         loadAvailability(businessId)
+        loadTableCounts(businessId)
         fetch('/api/aria/booking-insights').then(r => r.json()).then(id => { if (id.insight) setInsight(id.insight) }).catch(() => {})
         fetch('/api/pos/business').then(r => r.json()).then(bd => {
           if (bd.business?.booking_link_slug) { setBizSlug(bd.business.booking_link_slug); setSlugInput(bd.business.booking_link_slug) }
@@ -122,6 +124,21 @@ export default function BookingsPage() {
       if (next) { await load(bid); await loadAvailability(bid) }
     }
     setBookingsToggling(false)
+  }
+
+  // BOOKINGS-TABLE-REGRESSION-1 — a table step that silently disappears (booking_table_mode set
+  // to 'auto', or 'area'/'table' picked with no qualifying tables) previously had no owner-visible
+  // signal at all. This makes what customers actually see impossible to miss.
+  async function loadTableCounts(businessId?: string) {
+    const targetBid = businessId || bid
+    if (!targetBid) return
+    const res = await fetch('/api/pos/tables').catch(() => null)
+    const d = await res?.json().catch(() => ({}))
+    const rows: { element_type?: string; is_guest_selectable?: boolean; seating_area?: string | null }[] = d?.tables ?? []
+    const bookableRows = rows.filter(r => (r.element_type ?? 'table') === 'table')
+    const selectableRows = bookableRows.filter(r => r.is_guest_selectable)
+    const areas = new Set(selectableRows.map(r => r.seating_area).filter(Boolean))
+    setTableCounts({ bookable: bookableRows.length, guestSelectable: selectableRows.length, areas: areas.size })
   }
 
   async function saveTableMode(mode: 'auto' | 'area' | 'table') {
@@ -339,7 +356,7 @@ export default function BookingsPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid ' + C.border }}>
         {([['calendar', '📅 Calendar'], ['list', '📋 List'], ['services', '🛎 Services'], ['availability', '⚙️ Availability'], ['tables', '🪑 Tables']] as const).map(([t, label]) => (
-          <button key={t} onClick={() => { setTab(t); if (t === 'availability') loadAvailability() }}
+          <button key={t} onClick={() => { setTab(t); if (t === 'availability') loadAvailability(); if (t === 'tables') loadTableCounts() }}
             style={{ padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 400, color: tab === t ? C.green : C.muted, borderBottom: '2px solid ' + (tab === t ? C.green : 'transparent'), marginBottom: -1 }}>
             {label}
           </button>
@@ -569,6 +586,22 @@ export default function BookingsPage() {
               </button>
             ))}
           </div>
+
+          {(() => {
+            const willDegrade = (tableMode === 'table' && tableCounts.guestSelectable === 0) || (tableMode === 'area' && tableCounts.areas === 0)
+            const live = willDegrade
+              ? `⚠️ "${tableMode === 'table' ? 'By table' : 'By area'}" is selected, but ${tableMode === 'table' ? 'no tables are marked guest-selectable' : 'no seating areas are configured'} — customers currently see no table step and are auto-seated, same as "Just a time."`
+              : tableMode === 'auto'
+                ? 'Right now: customers book by time only. No table or area step shown.'
+                : tableMode === 'area'
+                  ? `Right now: customers pick from ${tableCounts.areas} seating area${tableCounts.areas === 1 ? '' : 's'} (${tableCounts.guestSelectable} table${tableCounts.guestSelectable === 1 ? '' : 's'} guest-selectable).`
+                  : `Right now: customers pick from ${tableCounts.guestSelectable} of ${tableCounts.bookable} table${tableCounts.bookable === 1 ? '' : 's'} on your floor plan.`
+            return (
+              <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 10, background: willDegrade ? 'rgba(245,158,11,0.08)' : 'rgba(127,184,151,0.08)', border: '1px solid ' + (willDegrade ? 'rgba(245,158,11,0.3)' : C.border) }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: willDegrade ? C.amber : C.green }}>{live}</p>
+              </div>
+            )
+          })()}
 
           <p style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
             Build your room: drag tables into place, resize and rotate them, add non-bookable elements
