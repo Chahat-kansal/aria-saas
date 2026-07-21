@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { requireTurnstile } from '@/lib/security/turnstile'
 import { normalisePhone } from '@/lib/clicksend'
 import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 
@@ -24,6 +25,12 @@ export async function POST(req: Request, { params }: Params) {
 
   const body = await req.json()
   const { name, email, phone, birthday } = body
+
+  // BOOKINGS-PUBLIC-PROTECT-1 — same anonymous-public-form risk class as bookings/public (no
+  // session, no auth); this had rate-limiting but no bot check. Reusing the proven helper, not a
+  // second implementation.
+  const turnstileDenied = await requireTurnstile(body.turnstile_token as string | undefined, clientIp(req))
+  if (turnstileDenied) return turnstileDenied
 
   if (!name || !phone) {
     return NextResponse.json({ error: 'Name and phone required' }, { status: 400 })

@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
+import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { requireTurnstile } from '@/lib/security/turnstile'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
 
@@ -84,6 +86,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'business_id, booking_date, customer_name required' }, { status: 400 })
   }
 
+  // BOOKINGS-PUBLIC-PROTECT-1 — this is the route the live booking page (src/app/book/[slug]/
+  // page.tsx) actually calls. SECURITY-P1 had shipped this exact rate-limit + Turnstile pattern
+  // onto a sibling route (src/app/api/public/bookings/[business_id]/route.ts) that turned out to
+  // have zero live callers — this route, the real one, had neither. Reusing the sibling's proven
+  // helpers, not a second implementation.
+  const ip = clientIp(req)
+  const rl = await rateLimit(`public-booking:${ip}:${business_id}`, 5, 900)
+  if (!rl.allowed) return tooManyRequests(rl.retryAfter)
+
+  const turnstileDenied = await requireTurnstile(body.turnstile_token as string | undefined, ip)
+  if (turnstileDenied) return turnstileDenied
+
   const { data: biz } = await supabaseAdmin
     .from('businesses')
     .select('id,name,booking_link_slug')
@@ -113,6 +127,14 @@ export async function POST(req: Request) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Owner-facing audit trail — never surfaced to the public caller.
+  void supabaseAdmin.from('activity_log').insert({
+    business_id, action_type: 'public_booking_created',
+    description: '[bookings/public] public booking form submission',
+    metadata: { booking_id: data.id, booking_date, service_id: service_id || null },
+    created_at: new Date().toISOString(),
+  }).then(({ error: logErr }) => { if (logErr) console.error('[non-fatal] activity_log insert failed', logErr) })
 
   const b = biz as { name: string; booking_link_slug: string | null }
   const cleaned = { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date }

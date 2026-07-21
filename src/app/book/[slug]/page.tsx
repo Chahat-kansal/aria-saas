@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 
 const L = { bg: '#f0f7f4', card: '#fff', text: '#1a2e22', muted: '#6b7c72', green: '#7FB897', dark: '#2D5240', border: '#d4e8db', red: '#ef4444' }
 
@@ -33,6 +34,7 @@ export default function BookingPage() {
   const [slots, setSlots] = useState<string[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' })
+  const [turnstileToken, setTurnstileToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [booking, setBooking] = useState<Record<string, unknown> | null>(null)
@@ -85,6 +87,7 @@ export default function BookingPage() {
         booking_time: selTime || null,
         notes: form.notes || null,
         party_size: 1,
+        turnstile_token: turnstileToken,
       }),
     })
     const d = await res.json()
@@ -242,6 +245,9 @@ export default function BookingPage() {
               </div>
             ))}
             {error && <p style={{ color: L.red, fontSize: 13, marginBottom: 10 }}>{error}</p>}
+            <div style={{ marginBottom: 12 }}>
+              <TurnstileWidget onToken={setTurnstileToken} theme="light" />
+            </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setStep('time')} style={{ ...btn(false), width: 'auto', padding: '12px 20px' }}>← Back</button>
               <button onClick={submit} disabled={submitting || !form.name} style={{ ...btn(true), opacity: submitting || !form.name ? 0.55 : 1 }}>

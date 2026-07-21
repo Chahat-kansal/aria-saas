@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 
 // Locked Pipel design (prompt 83) — light, ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
 const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#888888', ACCENT = '#d9f54e'
@@ -15,6 +16,7 @@ export default function LoyaltyEnrolPage() {
   const [biz, setBiz] = useState<{ name: string } | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
   const [form, setForm] = useState({ name: '', email: '', phone: '', birthday: '' })
+  const [turnstileToken, setTurnstileToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
@@ -36,7 +38,7 @@ export default function LoyaltyEnrolPage() {
     if (!form.name || !form.phone) { setError('Name and phone are required'); return }
     setSubmitting(true); setError('')
     const r = await fetch(`/api/public/loyalty/${bid}/enrol`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, business_id: bid }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, business_id: bid, turnstile_token: turnstileToken }),
     })
     const d = await r.json()
     if (d.error) setError(d.error); else setDone(true)
@@ -147,6 +149,7 @@ export default function LoyaltyEnrolPage() {
               </div>
             ))}
             {error && <p style={{ color: '#d11', fontSize: 13 }}>{error}</p>}
+            <TurnstileWidget onToken={setTurnstileToken} theme="light" />
             <button onClick={submit} disabled={submitting} style={{ height: 48, borderRadius: 12, border: BORDER, background: ACCENT, color: INK, fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Joining…' : 'Join loyalty programme →'}</button>
             <p style={{ fontSize: 11, color: INK_SOFT, textAlign: 'center', lineHeight: 1.4 }}>By joining you agree to receive SMS updates from {biz.name}. Reply STOP to opt out anytime.</p>
           </div>
