@@ -104,6 +104,7 @@ export async function POST(req: Request) {
     .select('id,name,booking_link_slug')
     .eq('id', business_id as string)
     .eq('is_active', true)
+    .eq('bookings_enabled', true)
     .maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
