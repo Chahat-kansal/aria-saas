@@ -44,7 +44,7 @@ export async function GET(req: Request) {
 
   if (availRes.error) return NextResponse.json({ error: availRes.error.message, slots: [] }, { status: 500 })
   const avail = availRes.data
-  if (!avail?.is_available) return NextResponse.json({ slots: [], _debug: { dow, avail } })
+  if (!avail?.is_available) return NextResponse.json({ slots: [] })
 
   const duration = (svcRes?.data as { duration_minutes: number } | null)?.duration_minutes ?? 60
   const buffer = (avail.buffer_minutes as number) ?? 15
@@ -67,5 +67,5 @@ export async function GET(req: Request) {
     availability.push({ time, available: !conflict })
   }
 
-  return NextResponse.json({ slots, availability, _debug: { dow, avail } })
+  return NextResponse.json({ slots, availability })
 }
