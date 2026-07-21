@@ -127,7 +127,7 @@ const nextConfig = {
             value: [
               "default-src 'self'",
               // Scripts: allow CDNs needed for live preview (React, Babel, Tailwind, etc.)
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cdn.skypack.dev https://esm.sh https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://js.stripe.com https://m.stripe.com https://m.stripe.network https://www.gstatic.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cdn.skypack.dev https://esm.sh https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://js.stripe.com https://m.stripe.com https://m.stripe.network https://www.gstatic.com https://challenges.cloudflare.com",
               // Styles: allow inline + Google Fonts + CDNs
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com https://unpkg.com https://cdnjs.cloudflare.com",
               // Fonts
@@ -139,8 +139,10 @@ const nextConfig = {
               // API connections — Bunny/CF Stream for Go Live; Upstash for Redis; external AI/payment APIs are server-side
               // *.cloudfront.net added for Three.js GLB fetch (already trusted in media-src)
               "connect-src 'self' blob: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com https://*.b-cdn.net https://*.cloudflarestream.com https://videodelivery.net https://video.bunnycdn.com https://*.upstash.io https://api.higgsfield.ai https://queue.fal.run https://v3.fal.media https://v3b.fal.media https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.img.ly https://*.cloudfront.net",
-              // Frames: allow blob + data + any origin for srcdoc previews
-              "frame-src 'self' blob: data: https: http:",
+              // Frames: allow blob + data + any origin for srcdoc previews (Turnstile's widget
+              // iframe is already covered by the https: wildcard below; listed explicitly too so
+              // it doesn't silently break if that wildcard is ever tightened)
+              "frame-src 'self' blob: data: https://challenges.cloudflare.com https: http:",
               // Workers
               "worker-src 'self' blob:",
               "child-src 'self' blob: data:",
