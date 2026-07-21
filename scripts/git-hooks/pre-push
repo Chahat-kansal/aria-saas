@@ -1,0 +1,54 @@
+#!/bin/sh
+# LOCAL-GATE-1 — free local enforcement while GitHub Actions minutes are exhausted.
+#
+# Runs the same two gates the CI workflows run (scripts/canon-rail-guard.ts's diff scan,
+# then `npx tsc --noEmit`), scoped to only what's being pushed — same grandfathering as the
+# CI version (scripts/canon-rail-guard.ts --base=<pre-push remote sha> only scans NEW lines).
+# Deliberately does NOT run next build or the e2e/smoke suites — those stay CI-only (and stay
+# in .github/workflows/ unchanged, resuming free the moment Actions minutes reset); this hook
+# only runs what's fast enough to survive being run on every push (~60s or less on a warm
+# TypeScript incremental cache — see tsconfig.json's "incremental"/"tsBuildInfoFile").
+#
+# Escape hatch (deliberate, use sparingly): `git push --no-verify` skips this hook entirely.
+#
+# Installed automatically by `npm install` (package.json's "prepare" script runs
+# scripts/setup-git-hooks.js, which copies this file to .git/hooks/pre-push) — this file
+# itself is tracked by git; .git/hooks/ is not, which is why the copy step exists at all.
+
+zero="0000000000000000000000000000000000000000"
+guard_failed=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_sha" = "$zero" ]; then
+    continue # deleting a ref — nothing to scan
+  fi
+
+  if [ "$remote_sha" = "$zero" ]; then
+    # Brand-new remote branch — no prior remote state to diff against.
+    base="$(git merge-base main "$local_sha" 2>/dev/null)"
+    [ -z "$base" ] && base="$local_sha^"
+  else
+    base="$remote_sha"
+  fi
+
+  echo "[pre-push] canon-rail-guard: scanning ${base}..${local_sha}"
+  if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsx scripts/canon-rail-guard.ts --base="$base"; then
+    guard_failed=1
+  fi
+done
+
+if [ "$guard_failed" = "1" ]; then
+  echo "[pre-push] BLOCKED — canon-rail-guard found a new violation (see above). Fix it, or"
+  echo "[pre-push] bypass with: git push --no-verify (deliberate escape hatch, not recommended)."
+  exit 1
+fi
+
+echo "[pre-push] typecheck: npx tsc --noEmit"
+if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit; then
+  echo "[pre-push] BLOCKED — tsc found type errors (see above). Fix them, or"
+  echo "[pre-push] bypass with: git push --no-verify (deliberate escape hatch, not recommended)."
+  exit 1
+fi
+
+echo "[pre-push] OK — canon-rail-guard clean, tsc 0 errors."
+exit 0

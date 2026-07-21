@@ -1,0 +1,5 @@
+# LOCAL-GATE-1 — scripts/git-hooks/pre-push is a POSIX shell script executed directly by bash.
+# Without this, Windows checkouts with core.autocrlf=true would convert its line endings to
+# CRLF, which breaks `read -r`/shebang parsing when the script is copied into .git/hooks/pre-push
+# and run. Force LF regardless of the checkout platform's autocrlf setting.
+scripts/git-hooks/pre-push text eol=lf
