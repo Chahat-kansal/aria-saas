@@ -62,9 +62,10 @@ export async function GET(req: Request) {
   if (slug) {
     const { data: biz } = await supabaseAdmin
       .from('businesses')
-      .select('id,name,industry,booking_link_slug')
+      .select('id,name,industry,booking_link_slug,bookings_enabled')
       .eq('booking_link_slug', slug)
       .eq('is_active', true)
+      .eq('bookings_enabled', true)
       .maybeSingle()
     if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const { data: services } = await supabaseAdmin

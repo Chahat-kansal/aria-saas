@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 import { BookingCard } from './BookingCard'
-import type { Service, Booking, Availability } from './types'
+import type { Service, Booking, Availability, BusinessHours } from './types'
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: 'var(--text-secondary,#A8B5A8)', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', blue: '#60a5fa', border: 'rgba(127,184,151,0.15)' }
 const STATUS_COLOR: Record<string, string> = { confirmed: C.green, pending: C.amber, cancelled: C.red, no_show: '#6b7280', completed: C.muted }
@@ -36,6 +36,9 @@ export default function BookingsPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ customer_name: '', customer_email: '', customer_phone: '', booking_date: dateStr(new Date()), booking_time: '12:00', party_size: 2, service_id: '', notes: '' })
   const [svcForm, setSvcForm] = useState({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' })
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null)
+  const [savingService, setSavingService] = useState(false)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
   const [insight, setInsight] = useState<string | null>(null)
   const [insightDismissed, setInsightDismissed] = useState(false)
   const [bizSlug, setBizSlug] = useState('')
@@ -44,6 +47,9 @@ export default function BookingsPage() {
   const [copied, setCopied] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [availSaving, setAvailSaving] = useState(false)
+  const [bookingsEnabled, setBookingsEnabled] = useState(false)
+  const [bookingsToggling, setBookingsToggling] = useState(false)
+  const [businessHours, setBusinessHours] = useState<BusinessHours[]>([])
 
   const load = useCallback(async (businessId: string) => {
     const [bkRes, svcRes] = await Promise.all([
@@ -60,25 +66,58 @@ export default function BookingsPage() {
   useEffect(() => {
     fetch('/api/pos/products').then(r => r.json()).then((d: Record<string, unknown>) => {
       if (d.business_id) {
-        setBid(d.business_id as string)
-        load(d.business_id as string)
+        const businessId = d.business_id as string
+        setBid(businessId)
+        load(businessId)
+        loadAvailability(businessId)
         fetch('/api/aria/booking-insights').then(r => r.json()).then(id => { if (id.insight) setInsight(id.insight) }).catch(() => {})
         fetch('/api/pos/business').then(r => r.json()).then(bd => {
           if (bd.business?.booking_link_slug) { setBizSlug(bd.business.booking_link_slug); setSlugInput(bd.business.booking_link_slug) }
+          setBookingsEnabled(!!bd.business?.bookings_enabled)
+          setBusinessHours(bd.business_hours ?? [])
         }).catch(() => {})
       } else setLoading(false)
     }).catch(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load])
 
-  async function loadAvailability() {
-    if (!bid) return
-    const res = await fetch('/api/bookings/availability-settings?business_id=' + bid).catch(() => null)
+  // BOOKINGS-OWNER-CONTROL-1 — when no availability rows exist yet (new business, or bookings
+  // never configured), derive a sensible display default from business_hours instead of a
+  // hardcoded Mon-Fri 9-5 guess. This is display-only; the real seed happens server-side in
+  // toggleBookings() the moment bookings is switched on, so this never silently loses data.
+  async function loadAvailability(businessId?: string) {
+    const targetBid = businessId || bid
+    if (!targetBid) return
+    const res = await fetch('/api/bookings/availability-settings?business_id=' + targetBid).catch(() => null)
     const d = await res?.json().catch(() => ({}))
-    if (d?.availability) setAvailability(d.availability)
-    else {
-      // Default: Mon-Fri 9am-5pm enabled, Sat-Sun disabled
-      setAvailability(Array.from({ length: 7 }, (_, i) => ({ day_of_week: i, start_time: '09:00', end_time: '17:00', is_available: i >= 1 && i <= 5, buffer_minutes: 15 })))
+    if (d?.availability?.length) { setAvailability(d.availability); return }
+
+    const hoursRes = await fetch('/api/pos/business').then(r => r.json()).catch(() => null)
+    const hours: BusinessHours[] = hoursRes?.business_hours ?? businessHours
+    const byDay = new Map(hours.map(h => [h.day_of_week, h]))
+    setAvailability(Array.from({ length: 7 }, (_, day_of_week) => {
+      const h = byDay.get(day_of_week)
+      return {
+        day_of_week,
+        start_time: h?.open_time ?? '09:00',
+        end_time: h?.close_time ?? '17:00',
+        is_available: h ? !h.is_closed : (day_of_week >= 1 && day_of_week <= 5),
+        buffer_minutes: 15,
+        max_bookings_per_day: null,
+      }
+    }))
+  }
+
+  async function toggleBookings(next: boolean) {
+    setBookingsToggling(true)
+    const res = await fetch('/api/pos/business', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookings_enabled: next }) }).catch(() => null)
+    const d = await res?.json().catch(() => ({}))
+    if (d?.business) {
+      setBookingsEnabled(!!d.business.bookings_enabled)
+      // Onboarding seed may have just created a default service + availability — reload both.
+      if (next) { await load(bid); await loadAvailability(bid) }
     }
+    setBookingsToggling(false)
   }
 
   async function addBooking() {
@@ -115,10 +154,38 @@ export default function BookingsPage() {
     setSlugSaving(false)
   }
 
-  async function addService() {
-    const res = await fetch('/api/bookings/services', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...svcForm, price: parseFloat(svcForm.price) || null, business_id: bid }) })
+  function resetSvcForm() {
+    setEditingServiceId(null)
+    setSvcForm({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' })
+  }
+
+  function startEditService(s: Service) {
+    setEditingServiceId(s.id)
+    setSvcForm({ name: s.name, duration_minutes: s.duration_minutes, price: s.price != null ? String(s.price) : '', max_party_size: s.max_party_size, description: s.description ?? '', color: s.color })
+  }
+
+  async function saveService() {
+    if (!svcForm.name.trim()) return
+    setSavingService(true)
+    const payload = { ...svcForm, price: parseFloat(svcForm.price) || null }
+    if (editingServiceId) {
+      const res = await fetch('/api/bookings/services', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingServiceId, ...payload }) })
+      const d = await res.json()
+      if (d.service) { setServices(p => p.map(s => s.id === editingServiceId ? d.service : s)); resetSvcForm() }
+    } else {
+      const res = await fetch('/api/bookings/services', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, business_id: bid }) })
+      const d = await res.json()
+      if (d.service) { setServices(p => [...p, d.service]); resetSvcForm() }
+    }
+    setSavingService(false)
+  }
+
+  async function archiveService(id: string) {
+    setArchivingId(id)
+    const res = await fetch('/api/bookings/services', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, is_active: false }) })
     const d = await res.json()
-    if (d.service) { setServices(p => [...p, d.service]); setSvcForm({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' }) }
+    if (d.service) setServices(p => p.filter(s => s.id !== id))
+    setArchivingId(null)
   }
 
   async function saveAvailability() {
@@ -171,6 +238,29 @@ export default function BookingsPage() {
           <button onClick={() => setShowAdd(p => !p)} style={btnPrimary}>+ New booking</button>
         </div>
       </div>
+
+      {/* Bookings on/off switch */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: C.card, borderRadius: 12, padding: '12px 16px', marginBottom: 12, border: '1px solid ' + C.border }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600 }}>Online bookings</p>
+          <p style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{bookingsEnabled ? 'Customers can book online at your public link.' : 'Your public booking page is currently switched off.'}</p>
+        </div>
+        <button
+          onClick={() => toggleBookings(!bookingsEnabled)}
+          disabled={bookingsToggling}
+          style={{ position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: bookingsEnabled ? C.green : 'rgba(255,255,255,0.15)', opacity: bookingsToggling ? 0.6 : 1, flexShrink: 0 }}
+        >
+          <span style={{ position: 'absolute', top: 2, left: bookingsEnabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }} />
+        </button>
+      </div>
+
+      {/* Warning: enabled but nothing to actually book */}
+      {bookingsEnabled && availability.length > 0 && availability.every(a => !a.is_available) && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(239,68,68,0.08)', borderRadius: 10, border: '1px solid rgba(239,68,68,0.25)' }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: C.red }}>⚠️ Online bookings are on, but no day has availability configured</p>
+          <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Customers visiting your booking link will see no time slots. Open the Availability tab and turn on at least one day.</p>
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
@@ -361,8 +451,13 @@ export default function BookingsPage() {
                 <p style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{s.duration_minutes} min{s.price ? ` · $${s.price}` : ''}</p>
                 {s.description && <p style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{s.description}</p>}
                 <p style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Max party: {s.max_party_size}</p>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button onClick={() => startEditService(s)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'transparent', color: C.muted, border: '1px solid ' + C.border, cursor: 'pointer' }}>Edit</button>
+                  <button onClick={() => archiveService(s.id)} disabled={archivingId === s.id} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'transparent', color: C.red, border: '1px solid rgba(239,68,68,0.25)', cursor: 'pointer' }}>{archivingId === s.id ? 'Archiving…' : 'Archive'}</button>
+                </div>
               </div>
             ))}
+            {services.length === 0 && <p style={{ color: C.muted, fontSize: 13 }}>No services yet — add one below.</p>}
           </div>
           {/* Booking link */}
           <div style={{ background: C.card, borderRadius: 14, padding: 20, border: '1px solid ' + C.border, marginBottom: 16 }}>
@@ -380,9 +475,9 @@ export default function BookingsPage() {
               </div>
             )}
           </div>
-          {/* Add service form */}
+          {/* Add / edit service form */}
           <div style={{ background: C.card, borderRadius: 14, padding: 20, border: '1px solid ' + C.border }}>
-            <p style={{ fontWeight: 700, marginBottom: 14 }}>Add service</p>
+            <p style={{ fontWeight: 700, marginBottom: 14 }}>{editingServiceId ? 'Edit service' : 'Add service'}</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Service name *</label><input value={svcForm.name} onChange={e => setSvcForm(p => ({ ...p, name: e.target.value }))} style={iStyle} placeholder="e.g. Table reservation" /></div>
               <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Duration (min)</label><input type="number" value={svcForm.duration_minutes} onChange={e => setSvcForm(p => ({ ...p, duration_minutes: parseInt(e.target.value) || 60 }))} style={iStyle} /></div>
@@ -391,7 +486,10 @@ export default function BookingsPage() {
               <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Description</label><input value={svcForm.description} onChange={e => setSvcForm(p => ({ ...p, description: e.target.value }))} style={iStyle} placeholder="Optional" /></div>
               <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Colour</label><input type="color" value={svcForm.color} onChange={e => setSvcForm(p => ({ ...p, color: e.target.value }))} style={{ ...iStyle, padding: 4, height: 38 }} /></div>
             </div>
-            <button onClick={addService} style={{ ...btnPrimary, marginTop: 14 }}>Add service</button>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button onClick={saveService} disabled={savingService} style={btnPrimary}>{savingService ? 'Saving…' : editingServiceId ? 'Save changes' : 'Add service'}</button>
+              {editingServiceId && <button onClick={resetSvcForm} style={{ ...btnPrimary, background: 'transparent', color: C.muted, border: '1px solid ' + C.border }}>Cancel</button>}
+            </div>
           </div>
         </div>
       )}
@@ -423,6 +521,10 @@ export default function BookingsPage() {
                     <div style={{ flex: 1, minWidth: 80 }}>
                       <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Buffer (min)</label>
                       <input type="number" min={0} max={120} value={a.buffer_minutes} onChange={e => setAvailability(p => p.map((x, j) => j === i ? { ...x, buffer_minutes: parseInt(e.target.value) || 0 } : x))} style={{ ...iStyle, width: 70 }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Max bookings/day</label>
+                      <input type="number" min={0} value={a.max_bookings_per_day ?? ''} onChange={e => setAvailability(p => p.map((x, j) => j === i ? { ...x, max_bookings_per_day: e.target.value === '' ? null : parseInt(e.target.value) || 0 } : x))} style={{ ...iStyle, width: 90 }} placeholder="No limit" />
                     </div>
                   </>
                 )}
