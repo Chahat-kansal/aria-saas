@@ -22,6 +22,7 @@ async function _GET(req: Request) {
     .from('pos_tables')
     .select('*')
     .eq('business_id', bid)
+    .is('archived_at', null)
     .order('section', { nullsFirst: true })
     .order('name', { ascending: true });
 
@@ -40,7 +41,9 @@ async function _POST(req: Request) {
   const body = await req.json();
   const { name, section, seats, shape, pos_x, pos_y,
           // legacy field aliases
-          table_number, zone, x_position, y_position } = body;
+          table_number, zone, x_position, y_position,
+          // BOOKINGS-MOCKUP-MATCH layout-editor fields
+          width, height, rotation, element_type, seating_area, display_name, is_guest_selectable } = body;
   const resolvedName = name ?? table_number;
   if (!resolvedName) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
@@ -55,6 +58,13 @@ async function _POST(req: Request) {
       shape: shape ?? 'square',
       pos_x: pos_x ?? x_position ?? 0,
       pos_y: pos_y ?? y_position ?? 0,
+      width: width ?? 72,
+      height: height ?? 72,
+      rotation: rotation ?? 0,
+      element_type: element_type ?? 'table',
+      seating_area: seating_area ?? null,
+      display_name: display_name ?? null,
+      is_guest_selectable: is_guest_selectable ?? false,
       status: 'available',
       business_id: bid,
     })

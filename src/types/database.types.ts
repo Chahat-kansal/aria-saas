@@ -19730,11 +19730,14 @@ export type Database = {
       }
       pos_tables: {
         Row: {
+          archived_at: string | null
           business_id: string | null
           capacity: number | null
           created_at: string | null
           current_sale_id: string | null
           display_name: string | null
+          element_type: string
+          height: number
           id: string
           is_guest_selectable: boolean
           name: string | null
@@ -19742,6 +19745,7 @@ export type Database = {
           occupied_since: string | null
           pos_x: number | null
           pos_y: number | null
+          rotation: number
           seated_at: string | null
           seating_area: string | null
           seats: number
@@ -19750,14 +19754,18 @@ export type Database = {
           status: string | null
           table_number: string | null
           updated_at: string | null
+          width: number
           zone: string | null
         }
         Insert: {
+          archived_at?: string | null
           business_id?: string | null
           capacity?: number | null
           created_at?: string | null
           current_sale_id?: string | null
           display_name?: string | null
+          element_type?: string
+          height?: number
           id?: string
           is_guest_selectable?: boolean
           name?: string | null
@@ -19765,6 +19773,7 @@ export type Database = {
           occupied_since?: string | null
           pos_x?: number | null
           pos_y?: number | null
+          rotation?: number
           seated_at?: string | null
           seating_area?: string | null
           seats?: number
@@ -19773,14 +19782,18 @@ export type Database = {
           status?: string | null
           table_number?: string | null
           updated_at?: string | null
+          width?: number
           zone?: string | null
         }
         Update: {
+          archived_at?: string | null
           business_id?: string | null
           capacity?: number | null
           created_at?: string | null
           current_sale_id?: string | null
           display_name?: string | null
+          element_type?: string
+          height?: number
           id?: string
           is_guest_selectable?: boolean
           name?: string | null
@@ -19788,6 +19801,7 @@ export type Database = {
           occupied_since?: string | null
           pos_x?: number | null
           pos_y?: number | null
+          rotation?: number
           seated_at?: string | null
           seating_area?: string | null
           seats?: number
@@ -19796,6 +19810,7 @@ export type Database = {
           status?: string | null
           table_number?: string | null
           updated_at?: string | null
+          width?: number
           zone?: string | null
         }
         Relationships: [

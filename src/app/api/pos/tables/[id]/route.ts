@@ -48,7 +48,15 @@ async function _DELETE(_req: Request, { params }: Params) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  await supabase.from('pos_tables').delete().eq('id', id).eq('business_id', bid);
+  const { error } = await supabase.from('pos_tables').delete().eq('id', id).eq('business_id', bid);
+  // BOOKINGS-MOCKUP-MATCH — never hard-delete a table with historical bookings (RULE0: don't
+  // lose data). Postgres 23503 = foreign key violation (bookings.table_id references this row).
+  if (error) {
+    if (error.code === '23503') {
+      return NextResponse.json({ error: 'This table has booking history — archive it instead of deleting.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ ok: true });
 }
 

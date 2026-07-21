@@ -571,10 +571,12 @@ export default function BookingsPage() {
           </div>
 
           <p style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
-            Tap a table below to mark it guest-selectable and give it a seating area / display name. Same floor plan you use on the terminal.
+            Build your room: drag tables into place, resize and rotate them, add non-bookable elements
+            like the bar or entrance so the plan reads like the real space. Click a table to set its
+            capacity, shape, seating area, and whether guests can pick it themselves.
           </p>
-          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.border, minHeight: 360 }}>
-            {bid && <FloorPlan businessId={bid} onTableSelect={() => {}} editMode configMode />}
+          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.border, padding: 16, background: '#0a0f0c' }}>
+            {bid && <FloorPlan businessId={bid} onTableSelect={() => {}} layoutMode="canvas" />}
           </div>
         </div>
       )}

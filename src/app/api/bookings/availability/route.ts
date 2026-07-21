@@ -28,8 +28,12 @@ interface PosTableRow {
   shape: string | null
   pos_x: number | null
   pos_y: number | null
+  width: number | null
+  height: number | null
+  rotation: number | null
   seating_area: string | null
   is_guest_selectable: boolean | null
+  element_type: string | null
 }
 
 export async function GET(req: Request) {
@@ -56,8 +60,9 @@ export async function GET(req: Request) {
       .neq('status', 'cancelled'),
     supabaseAdmin.from('businesses').select('booking_table_mode').eq('id', business_id).maybeSingle(),
     supabaseAdmin.from('pos_tables')
-      .select('id,name,display_name,seats,shape,pos_x,pos_y,seating_area,is_guest_selectable')
-      .eq('business_id', business_id),
+      .select('id,name,display_name,seats,shape,pos_x,pos_y,width,height,rotation,seating_area,is_guest_selectable,element_type')
+      .eq('business_id', business_id)
+      .is('archived_at', null),
   ])
 
   if (availRes.error) return NextResponse.json({ error: availRes.error.message, slots: [] }, { status: 500 })
@@ -75,12 +80,14 @@ export async function GET(req: Request) {
     .filter((b): b is { start: number; dur: number; table_id: string | null } => b.start !== null)
 
   const mode = (bizRes.data as { booking_table_mode?: string } | null)?.booking_table_mode ?? 'auto'
-  const allTables = (tablesRes.data ?? []) as PosTableRow[]
+  const allRows = (tablesRes.data ?? []) as PosTableRow[]
+  const bookableTables = allRows.filter(t => (t.element_type ?? 'table') === 'table')
+  const decorativeElements = allRows.filter(t => (t.element_type ?? 'table') !== 'table')
   // FLOOR-1: only tables the mode actually lets a guest reach count toward "table" mode's slot
   // eligibility (a slot the confirm step can't fulfil must never show as bookable). auto/area use
   // any real table with enough seats — the customer never picks a specific one in those modes.
-  const eligibleTables = allTables.filter(t => (t.seats ?? 0) >= partySize && (mode !== 'table' || t.is_guest_selectable))
-  const hasTables = allTables.length > 0
+  const eligibleTables = bookableTables.filter(t => (t.seats ?? 0) >= partySize && (mode !== 'table' || t.is_guest_selectable))
+  const hasTables = bookableTables.length > 0
 
   function tableFreeAt(tableId: string, t: number): boolean {
     return !booked.some(b => {
@@ -119,16 +126,30 @@ export async function GET(req: Request) {
       const freeTables = eligibleTables
         .filter(tb => tableFreeAt(tb.id, t))
         .map(tb => tb.id)
-      const tables = eligibleTables.map(tb => ({
+
+      const toElement = (tb: PosTableRow, free?: boolean) => ({
         id: tb.id,
-        name: tb.display_name || tb.name || 'Table',
-        seats: tb.seats ?? 2,
-        shape: tb.shape ?? 'square',
+        element_type: (tb.element_type ?? 'table') as 'table' | 'bar' | 'counter' | 'kitchen' | 'entrance' | 'wall' | 'plant',
+        name: tb.name || 'Table',
+        display_name: tb.display_name,
+        seats: tb.seats ?? 0,
+        shape: (tb.shape ?? 'square') as 'square' | 'round' | 'rectangle' | 'booth',
         pos_x: tb.pos_x ?? 0,
         pos_y: tb.pos_y ?? 0,
+        width: tb.width ?? 72,
+        height: tb.height ?? 72,
+        rotation: tb.rotation ?? 0,
         seating_area: tb.seating_area,
-        free: freeTables.includes(tb.id),
-      }))
+        free,
+      })
+
+      // Only tables the current mode makes reachable are drawn — a customer in 'table' mode
+      // should never see (or be confused by) an owner-only table on the same canvas.
+      payload.elements = [
+        ...eligibleTables.map(tb => toElement(tb, freeTables.includes(tb.id))),
+        ...decorativeElements.map(tb => toElement(tb)),
+      ]
+
       const areaMap = new Map<string, { area: string; free: number; total: number }>()
       for (const tb of eligibleTables) {
         const area = tb.seating_area || 'General'
@@ -137,7 +158,6 @@ export async function GET(req: Request) {
         if (freeTables.includes(tb.id)) entry.free += 1
         areaMap.set(area, entry)
       }
-      payload.tables = tables
       payload.areas = Array.from(areaMap.values())
       payload.booking_table_mode = mode
     }

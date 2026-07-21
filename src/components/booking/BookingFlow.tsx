@@ -5,11 +5,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import TurnstileWidget from '@/components/security/TurnstileWidget'
 import { CxTabBar } from '@/app/[slug]/CxTabBar'
+import { FloorCanvas, type FloorElement } from './FloorCanvas'
 import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard, pillPrimary, pillOutline, h1Style, shimmerCss } from './tokens'
 
 interface Business { id: string; name: string; booking_link_slug: string | null; booking_table_mode?: 'auto' | 'area' | 'table' }
 interface Service { id: string; name: string; duration_minutes: number; price: number | null; color: string; description: string | null; max_party_size?: number }
-interface TableRow { id: string; name: string; seats: number; shape: string; pos_x: number; pos_y: number; seating_area: string | null; free: boolean }
 interface AreaRow { area: string; free: number; total: number }
 
 type Step = 'service' | 'date' | 'time' | 'table' | 'details' | 'done'
@@ -86,73 +86,45 @@ function SlotGrid({ slots, loading, selected, onSelect }: {
   )
 }
 
-// ── Table/area picker — mode-aware, degrades to nothing (auto) transparently ──
-function TableAreaPicker({ mode, tables, areas, selectedTableId, selectedArea, onPickTable, onPickArea }: {
-  mode: 'area' | 'table'
-  tables: TableRow[]
+// ── Area picker — 'area' mode only; 'table' mode renders FloorCanvas directly (see step==='table' below) ──
+function AreaPicker({ areas, selectedArea, onPickArea }: {
   areas: AreaRow[]
-  selectedTableId: string | null
   selectedArea: string | null
-  onPickTable: (id: string) => void
   onPickArea: (area: string) => void
 }) {
-  if (mode === 'area') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {areas.map(a => {
-          const active = selectedArea === a.area
-          const full = a.free === 0
-          return (
-            <button key={a.area} disabled={full} onClick={() => onPickArea(a.area)}
-              style={{
-                ...glassCard, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '14px 16px', border: active ? '1px solid ' + ACCENT : glassCard.border as string,
-                cursor: full ? 'not-allowed' : 'pointer', opacity: full ? 0.5 : 1, textAlign: 'left',
-              }}>
-              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: INK }}>{a.area}</span>
-              <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 700, color: full ? INK_MUTED : ACCENT_TEXT, background: full ? 'rgba(10,10,10,0.06)' : ACCENT, borderRadius: 100, padding: '4px 10px' }}>
-                {full ? 'Full' : a.free + ' free'}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    )
-  }
-
-  // 'table' mode — floor-plan picker, real x/y/shape from pos_tables
-  const maxX = Math.max(200, ...tables.map(t => t.pos_x + 90))
-  const maxY = Math.max(200, ...tables.map(t => t.pos_y + 90))
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 14, marginBottom: 14, fontSize: 11, color: INK_MUTED, fontFamily: FB }}>
-        <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: ACCENT, marginRight: 5 }} />Available</span>
-        <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: 'rgba(10,10,10,0.15)', marginRight: 5 }} />Taken</span>
-      </div>
-      <div style={{ ...glassCard, position: 'relative', width: '100%', height: Math.min(360, maxY * 0.9), overflow: 'auto', padding: 12 }}>
-        <div style={{ position: 'relative', width: maxX, height: maxY }}>
-          {tables.map(t => {
-            const active = selectedTableId === t.id
-            return (
-              <button key={t.id} disabled={!t.free}
-                onClick={() => onPickTable(t.id)}
-                style={{
-                  position: 'absolute', left: t.pos_x, top: t.pos_y,
-                  width: t.shape === 'rectangle' ? 96 : 64, height: 64,
-                  borderRadius: t.shape === 'round' ? '50%' : 12,
-                  border: '2px solid ' + (active ? ACCENT_TEXT : t.free ? ACCENT : 'rgba(10,10,10,0.18)'),
-                  background: active ? ACCENT : t.free ? 'rgba(217,245,78,0.16)' : 'rgba(10,10,10,0.05)',
-                  color: INK, cursor: t.free ? 'pointer' : 'not-allowed',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: FB, fontSize: 12, fontWeight: 700,
-                }}>
-                {t.name}
-                <span style={{ fontSize: 10, fontWeight: 400, color: INK_MUTED }}>{t.seats} seats</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {areas.map(a => {
+        const active = selectedArea === a.area
+        const full = a.free === 0
+        return (
+          <button key={a.area} disabled={full} onClick={() => onPickArea(a.area)}
+            style={{
+              ...glassCard, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '14px 16px', border: active ? '1px solid ' + ACCENT : glassCard.border as string,
+              cursor: full ? 'not-allowed' : 'pointer', opacity: full ? 0.5 : 1, textAlign: 'left',
+            }}>
+            <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 18, color: INK }}>{a.area}</span>
+            <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 700, color: full ? INK_MUTED : ACCENT_TEXT, background: full ? 'rgba(10,10,10,0.06)' : ACCENT, borderRadius: 100, padding: '4px 10px' }}>
+              {full ? 'Full' : a.free + ' free'}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Summary pill — Screen 2's lime bar (date/time/party as icon+label groups directly on lime fill) ──
+function SummaryPill({ date, time, partySize }: { date: string; time: string; partySize: number }) {
+  return (
+    <div style={{
+      background: ACCENT, borderRadius: 18, padding: '14px 18px', marginBottom: 20,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+    }}>
+      <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: ACCENT_TEXT }}>📅 {date || 'Choose a date'}</span>
+      <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: ACCENT_TEXT }}>🕐 {time || '—'}</span>
+      <span style={{ fontFamily: FB, fontSize: 13, fontWeight: 700, color: ACCENT_TEXT }}>👤 {partySize} {partySize === 1 ? 'person' : 'people'}</span>
     </div>
   )
 }
@@ -174,7 +146,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
   const [selTime, setSelTime] = useState('')
 
   const [tableMode, setTableMode] = useState<'auto' | 'area' | 'table'>('auto')
-  const [tables, setTables] = useState<TableRow[]>([])
+  const [elements, setElements] = useState<FloorElement[]>([])
   const [areas, setAreas] = useState<AreaRow[]>([])
   const [selTableId, setSelTableId] = useState<string | null>(null)
   const [selArea, setSelArea] = useState<string | null>(null)
@@ -205,7 +177,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
   interface AvailabilityResponse {
     slots?: string[]
     availability?: { time: string; available: boolean }[]
-    tables?: TableRow[]
+    elements?: FloorElement[]
     areas?: AreaRow[]
     booking_table_mode?: 'auto' | 'area' | 'table'
   }
@@ -231,14 +203,15 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
     const mode = (biz?.booking_table_mode ?? 'auto')
     if (mode === 'auto') { setStep('details'); return }
     const d = await fetchAvailability(selDate, t)
-    const gotTables = (d?.tables ?? []) as TableRow[]
+    const gotElements = (d?.elements ?? []) as FloorElement[]
     const gotAreas = (d?.areas ?? []) as AreaRow[]
-    setTables(gotTables)
+    setElements(gotElements)
     setAreas(gotAreas)
     setTableMode(mode)
+    const bookableCount = gotElements.filter(e => e.element_type === 'table').length
     // Graceful degrade — no guest-selectable tables/areas configured for this business at all
     // (or none fit this party size): never show a broken/empty picker, just proceed to details.
-    if (mode === 'table' && gotTables.length === 0) { setStep('details'); return }
+    if (mode === 'table' && bookableCount === 0) { setStep('details'); return }
     if (mode === 'area' && gotAreas.length === 0) { setStep('details'); return }
     setStep('table')
   }
@@ -315,57 +288,61 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
 
       {step === 'date' && (
         <div>
-          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Party size</p>
-          <div style={{ ...glassCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', marginBottom: 20 }}>
-            <button onClick={() => setPartySize(p => Math.max(1, p - 1))} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(10,10,10,0.06)', fontSize: 18, cursor: 'pointer', color: INK }}>−</button>
-            <span style={{ fontFamily: FB, fontSize: 16, fontWeight: 700, color: INK }}>{partySize} {partySize === 1 ? 'person' : 'people'}</span>
-            <button onClick={() => setPartySize(p => Math.min(20, p + 1))} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: ACCENT, fontSize: 18, cursor: 'pointer', color: ACCENT_TEXT }}>+</button>
+          <SummaryPill date={selDate ? fmtDate(selDate) : ''} time="" partySize={partySize} />
+
+          {/* Bare calendar — no card, per the mockup: numbers float directly on the page
+              background, only the selected date gets a filled lime circle. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <button onClick={() => setMonthOf(p => new Date(p.getFullYear(), p.getMonth() - 1, 1))} style={{ background: 'none', border: 'none', fontSize: 18, color: INK, cursor: 'pointer', padding: 8 }}>‹</button>
+            <span style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: INK }}>{monthOf.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}</span>
+            <button onClick={() => setMonthOf(p => new Date(p.getFullYear(), p.getMonth() + 1, 1))} style={{ background: 'none', border: 'none', fontSize: 18, color: INK, cursor: 'pointer', padding: 8 }}>›</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 24 }}>
+            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 11, color: INK_MUTED, fontFamily: FB, paddingBottom: 6 }}>{d}</div>)}
+            {(() => {
+              const start = new Date(monthOf.getFullYear(), monthOf.getMonth(), 1)
+              const offset = (start.getDay() + 6) % 7
+              const days: (Date | null)[] = Array(offset).fill(null)
+              const inMonth = new Date(monthOf.getFullYear(), monthOf.getMonth() + 1, 0).getDate()
+              for (let i = 1; i <= inMonth; i++) days.push(new Date(monthOf.getFullYear(), monthOf.getMonth(), i))
+              const today = dateStr(new Date())
+              return days.map((day, i) => {
+                if (!day) return <div key={i} />
+                const ds = dateStr(day)
+                const isPast = ds < today
+                const isSel = ds === selDate
+                return (
+                  <button key={ds} disabled={isPast} onClick={() => setSelDate(ds)}
+                    style={{
+                      aspectRatio: '1', borderRadius: '50%', border: 'none', cursor: isPast ? 'not-allowed' : 'pointer',
+                      background: isSel ? ACCENT : 'transparent', color: isPast ? 'rgba(10,10,10,0.2)' : isSel ? ACCENT_TEXT : INK,
+                      fontFamily: FB, fontSize: 14, fontWeight: isSel ? 700 : 400,
+                    }}>
+                    {day.getDate()}
+                  </button>
+                )
+              })
+            })()}
           </div>
 
-          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Choose a date</p>
-          <div style={{ ...glassCard, padding: 16, marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <button onClick={() => setMonthOf(p => new Date(p.getFullYear(), p.getMonth() - 1, 1))} style={{ background: 'none', border: 'none', fontSize: 16, color: INK, cursor: 'pointer' }}>‹</button>
-              <span style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 16, color: INK }}>{monthOf.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}</span>
-              <button onClick={() => setMonthOf(p => new Date(p.getFullYear(), p.getMonth() + 1, 1))} style={{ background: 'none', border: 'none', fontSize: 16, color: INK, cursor: 'pointer' }}>›</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: INK_MUTED, fontFamily: FB }}>{d}</div>)}
-              {(() => {
-                const start = new Date(monthOf.getFullYear(), monthOf.getMonth(), 1)
-                const offset = (start.getDay() + 6) % 7
-                const days: (Date | null)[] = Array(offset).fill(null)
-                const inMonth = new Date(monthOf.getFullYear(), monthOf.getMonth() + 1, 0).getDate()
-                for (let i = 1; i <= inMonth; i++) days.push(new Date(monthOf.getFullYear(), monthOf.getMonth(), i))
-                const today = dateStr(new Date())
-                return days.map((day, i) => {
-                  if (!day) return <div key={i} />
-                  const ds = dateStr(day)
-                  const isPast = ds < today
-                  const isSel = ds === selDate
-                  return (
-                    <button key={ds} disabled={isPast} onClick={() => setSelDate(ds)}
-                      style={{
-                        aspectRatio: '1', borderRadius: '50%', border: 'none', cursor: isPast ? 'not-allowed' : 'pointer',
-                        background: isSel ? ACCENT : 'transparent', color: isPast ? 'rgba(10,10,10,0.2)' : isSel ? ACCENT_TEXT : INK,
-                        fontFamily: FB, fontSize: 13, fontWeight: isSel ? 700 : 400,
-                      }}>
-                      {day.getDate()}
-                    </button>
-                  )
-                })
-              })()}
-            </div>
+          {/* Party-size stepper — one continuous lime pill, −/+ at the outer edges, per the mockup */}
+          <div style={{
+            background: ACCENT, borderRadius: 100, height: 52, marginBottom: 24,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px',
+          }}>
+            <button onClick={() => setPartySize(p => Math.max(1, p - 1))} style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(10,10,10,0.08)', fontSize: 20, cursor: 'pointer', color: ACCENT_TEXT, fontFamily: FB }}>−</button>
+            <span style={{ fontFamily: FB, fontSize: 15, fontWeight: 700, color: ACCENT_TEXT }}>{partySize} {partySize === 1 ? 'person' : 'people'}</span>
+            <button onClick={() => setPartySize(p => Math.min(20, p + 1))} style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(10,10,10,0.08)', fontSize: 20, cursor: 'pointer', color: ACCENT_TEXT, fontFamily: FB }}>+</button>
           </div>
 
-          <button onClick={() => selDate && setStep('time')} disabled={!selDate} style={{ ...pillPrimary, width: '100%', height: 50, opacity: selDate ? 1 : 0.5 }}>Find a table →</button>
+          <button onClick={() => selDate && setStep('time')} disabled={!selDate} style={{ ...pillPrimary, width: '100%', height: 50, opacity: selDate ? 1 : 0.5 }}>Apply</button>
         </div>
       )}
 
       {step === 'time' && (
         <div>
-          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Choose a time</p>
-          <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, marginBottom: 16 }}>{fmtDate(selDate)} · {partySize} {partySize === 1 ? 'person' : 'people'}</p>
+          <SummaryPill date={fmtDate(selDate)} time="" partySize={partySize} />
+          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Choose a time</p>
           <div style={{ marginBottom: 20 }}>
             <SlotGrid slots={slots} loading={slotsLoading} selected={selTime} onSelect={chooseTime} />
           </div>
@@ -375,18 +352,22 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
 
       {step === 'table' && (
         <div>
-          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
-            {tableMode === 'area' ? 'Choose a seating area' : 'Choose a table'}
+          <SummaryPill date={fmtDate(selDate)} time={fmtTime(selTime)} partySize={partySize} />
+          <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 16 }}>
+            {tableMode === 'area' ? 'Choose a seating area' : 'Table Selection'}
           </p>
-          <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, marginBottom: 16 }}>{fmtDate(selDate)} at {fmtTime(selTime)}</p>
           <div style={{ marginBottom: 20 }}>
-            <TableAreaPicker
-              mode={tableMode === 'table' ? 'table' : 'area'}
-              tables={tables} areas={areas}
-              selectedTableId={selTableId} selectedArea={selArea}
-              onPickTable={id => setSelTableId(id)}
-              onPickArea={area => setSelArea(area)}
-            />
+            {tableMode === 'table' ? (
+              <FloorCanvas
+                elements={elements}
+                selectedId={selTableId}
+                onSelectTable={id => setSelTableId(id)}
+                interactive
+                height={420}
+              />
+            ) : (
+              <AreaPicker areas={areas} selectedArea={selArea} onPickArea={area => setSelArea(area)} />
+            )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setStep('time')} style={{ ...pillOutline, flex: 1, height: 46 }}>← Back</button>
@@ -430,7 +411,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
             <TurnstileWidget onToken={setTurnstileToken} theme="light" />
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setStep(tables.length || areas.length ? 'table' : 'time')} style={{ ...pillOutline, flex: 1, height: 48 }}>← Back</button>
+            <button onClick={() => setStep(elements.length || areas.length ? 'table' : 'time')} style={{ ...pillOutline, flex: 1, height: 48 }}>← Back</button>
             <button onClick={submit} disabled={submitting || !form.name} style={{ ...pillPrimary, flex: 2, height: 48, opacity: submitting || !form.name ? 0.55 : 1 }}>
               {submitting ? 'Confirming…' : 'Confirm booking'}
             </button>
