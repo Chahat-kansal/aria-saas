@@ -42,8 +42,9 @@ export async function GET(req: Request) {
       .neq('status', 'cancelled'),
   ])
 
+  if (availRes.error) return NextResponse.json({ error: availRes.error.message, slots: [] }, { status: 500 })
   const avail = availRes.data
-  if (!avail?.is_available) return NextResponse.json({ slots: [] })
+  if (!avail?.is_available) return NextResponse.json({ slots: [], _debug: { dow, avail } })
 
   const duration = (svcRes?.data as { duration_minutes: number } | null)?.duration_minutes ?? 60
   const buffer = (avail.buffer_minutes as number) ?? 15
@@ -66,5 +67,5 @@ export async function GET(req: Request) {
     availability.push({ time, available: !conflict })
   }
 
-  return NextResponse.json({ slots, availability })
+  return NextResponse.json({ slots, availability, _debug: { dow, avail } })
 }
