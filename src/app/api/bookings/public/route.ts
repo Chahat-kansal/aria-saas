@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 import { requireTurnstile } from '@/lib/security/turnstile'
+import { fmtDateInTz } from '@/components/booking/tokens'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
 
@@ -21,24 +22,28 @@ async function sendResendEmail(to: string, subject: string, html: string, busine
 
 async function sendConfirmationEmail(opts: {
   to: string; customerName: string; businessName: string
-  bookingDate: string; bookingTime: string | null
+  bookingDate: string; bookingTime: string | null; timezone: string
   slug: string | null; token: string
 }) {
   const manageUrl = opts.slug ? APP_URL + '/book/' + opts.slug + '/manage?token=' + opts.token : null
   const cancelUrl = APP_URL + '/book/cancel/' + opts.token
+  // BOOKINGS-POLISH-1 — the same fmtDateInTz used by the booking flow and manage/cancel pages, so
+  // the weekday shown in the email can never disagree with what the customer saw on-screen.
+  const dateLabel = fmtDateInTz(opts.bookingDate, opts.timezone)
   await sendResendEmail(
     opts.to,
     'Booking confirmed — ' + opts.businessName,
-    '<p>Hi ' + opts.customerName + ',</p><p>Your booking at <strong>' + opts.businessName + '</strong> is confirmed.</p><p>📅 ' + opts.bookingDate + (opts.bookingTime ? ' at ' + opts.bookingTime : '') + '</p>' + (manageUrl ? '<p><a href="' + manageUrl + '">Reschedule your booking</a></p>' : '') + '<p><a href="' + cancelUrl + '">Cancel your booking</a></p><p>See you soon!</p>',
+    '<p>Hi ' + opts.customerName + ',</p><p>Your booking at <strong>' + opts.businessName + '</strong> is confirmed.</p><p>📅 ' + dateLabel + (opts.bookingTime ? ' at ' + opts.bookingTime : '') + '</p>' + (manageUrl ? '<p><a href="' + manageUrl + '">Reschedule your booking</a></p>' : '') + '<p><a href="' + cancelUrl + '">Cancel your booking</a></p><p>See you soon!</p>',
     opts.businessName
   )
 }
 
-async function sendCancellationEmail(to: string, customerName: string, businessName: string, bookingDate: string) {
+async function sendCancellationEmail(to: string, customerName: string, businessName: string, bookingDate: string, timezone: string) {
+  const dateLabel = fmtDateInTz(bookingDate, timezone)
   await sendResendEmail(
     to,
     'Booking cancelled — ' + businessName,
-    '<p>Hi ' + customerName + ',</p><p>Your booking at <strong>' + businessName + '</strong> on ' + bookingDate + ' has been cancelled.</p><p>We hope to see you again soon!</p>',
+    '<p>Hi ' + customerName + ',</p><p>Your booking at <strong>' + businessName + '</strong> on ' + dateLabel + ' has been cancelled.</p><p>We hope to see you again soon!</p>',
     businessName
   )
 }
@@ -51,7 +56,7 @@ export async function GET(req: Request) {
   if (token) {
     const { data } = await supabaseAdmin
       .from('bookings')
-      .select('*,booking_services(name,duration_minutes,color,price),businesses(name,booking_link_slug)')
+      .select('*,booking_services(name,duration_minutes,color,price),businesses(name,booking_link_slug,timezone)')
       .eq('booking_token', token)
       .maybeSingle()
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -64,7 +69,7 @@ export async function GET(req: Request) {
     // [slug]/ CX app's own param matches businesses.slug instead. One shared component mounts in
     // both places, so this lookup tries both fields rather than assuming they're the same string
     // (they happen to match for Sip, but nothing guarantees that for every business).
-    const bizSelect = 'id,name,industry,booking_link_slug,bookings_enabled,booking_table_mode'
+    const bizSelect = 'id,name,industry,booking_link_slug,bookings_enabled,booking_table_mode,timezone'
     let { data: biz } = await supabaseAdmin
       .from('businesses')
       .select(bizSelect)
@@ -116,7 +121,7 @@ export async function POST(req: Request) {
 
   const { data: biz } = await supabaseAdmin
     .from('businesses')
-    .select('id,name,booking_link_slug')
+    .select('id,name,booking_link_slug,timezone')
     .eq('id', business_id as string)
     .eq('is_active', true)
     .eq('bookings_enabled', true)
@@ -165,14 +170,14 @@ export async function POST(req: Request) {
     created_at: new Date().toISOString(),
   }).then(({ error: logErr }) => { if (logErr) console.error('[non-fatal] activity_log insert failed', logErr) })
 
-  const b = biz as { name: string; booking_link_slug: string | null }
+  const b = biz as { name: string; booking_link_slug: string | null; timezone: string | null }
   const cleaned = { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date }
 
   if (customer_email && data.booking_token) {
     await sendConfirmationEmail({
       to: customer_email as string, customerName: customer_name as string,
       businessName: b.name, bookingDate: String(booking_date),
-      bookingTime: booking_time as string | null,
+      bookingTime: booking_time as string | null, timezone: b.timezone || 'Australia/Sydney',
       slug: b.booking_link_slug, token: data.booking_token as string,
     })
   }
@@ -187,12 +192,12 @@ export async function PATCH(req: Request) {
 
   const { data: existing } = await supabaseAdmin
     .from('bookings')
-    .select('id,status,booking_time,booking_date,business_id,service_id,customer_email,customer_name,businesses(name,booking_link_slug)')
+    .select('id,status,booking_time,booking_date,business_id,service_id,customer_email,customer_name,businesses(name,booking_link_slug,timezone)')
     .eq('booking_token', token)
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const ex = existing as unknown as { id: string; status: string; booking_time: string | null; booking_date: string | null; business_id: string; service_id: string | null; customer_email: string | null; customer_name: string; businesses: { name: string; booking_link_slug: string | null } | null }
+  const ex = existing as unknown as { id: string; status: string; booking_time: string | null; booking_date: string | null; business_id: string; service_id: string | null; customer_email: string | null; customer_name: string; businesses: { name: string; booking_link_slug: string | null; timezone: string | null } | null }
   if (ex.status === 'cancelled') return NextResponse.json({ error: 'Already cancelled' }, { status: 400 })
 
   const body = await req.json() as Record<string, unknown>
@@ -203,7 +208,7 @@ export async function PATCH(req: Request) {
       status: 'cancelled', cancelled_at: new Date().toISOString(),
       cancellation_reason: (cancellation_reason as string) || 'Customer cancelled',
       updated_at: new Date().toISOString(),
-    }).eq('id', ex.id).select().single()
+    }).eq('id', ex.id).select('*,booking_services(name,duration_minutes,color,price),businesses(name,booking_link_slug,timezone)').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Free the booking slot (best-effort)
@@ -228,7 +233,7 @@ export async function PATCH(req: Request) {
     if (ex.customer_email) {
       const bizName = ex.businesses?.name ?? 'your provider'
       const bookingDate = ex.booking_date ? String(ex.booking_date).slice(0, 10) : ''
-      await sendCancellationEmail(ex.customer_email, ex.customer_name, bizName, bookingDate)
+      await sendCancellationEmail(ex.customer_email, ex.customer_name, bizName, bookingDate, ex.businesses?.timezone || 'Australia/Sydney')
     }
 
     const cleaned = { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date }
@@ -240,7 +245,7 @@ export async function PATCH(req: Request) {
     const { data, error } = await supabaseAdmin.from('bookings').update({
       booking_date, booking_time: booking_time ?? ex.booking_time,
       updated_at: new Date().toISOString(),
-    }).eq('id', ex.id).select().single()
+    }).eq('id', ex.id).select('*,booking_services(name,duration_minutes,color,price),businesses(name,booking_link_slug,timezone)').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const cleaned = { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date }
     return NextResponse.json({ booking: cleaned })

@@ -3,15 +3,14 @@
 // "manage/cancel screens in the same language"). Same logic as before, Pipel palette/type/shape.
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard } from '@/components/booking/tokens'
+import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard, fmtDateInTz } from '@/components/booking/tokens'
 
-function fmtDate(s: string) { return new Date(s + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) }
 function fmtTime(t: string | null) { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'pm' : 'am'}` }
 
 interface Booking {
   id: string; status: string; customer_name: string; booking_date: string; booking_time: string | null
   booking_services: { name: string } | null
-  businesses: { name: string; booking_link_slug: string | null } | null
+  businesses: { name: string; booking_link_slug: string | null; timezone: string | null } | null
 }
 
 export default function CancelPage() {
@@ -56,6 +55,8 @@ export default function CancelPage() {
 
   const bizName = booking.businesses?.name ?? ''
   const slug = booking.businesses?.booking_link_slug ?? null
+  const tz = booking.businesses?.timezone || 'Australia/Sydney'
+  const fmtD = (s: string) => fmtDateInTz(s, tz)
 
   return (
     <div style={{ minHeight: '100dvh', background: BG, fontFamily: FB, padding: '40px 16px' }}>
@@ -84,7 +85,7 @@ export default function CancelPage() {
           <div>
             <div style={{ ...glassCard, padding: '16px 18px', marginBottom: 20 }}>
               {booking.booking_services && <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📋 {booking.booking_services.name}</p>}
-              <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtDate(booking.booking_date)}</p>
+              <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtD(booking.booking_date)}</p>
               {booking.booking_time && <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>🕐 {fmtTime(booking.booking_time)}</p>}
               <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>👤 {booking.customer_name}</p>
               <span style={{ display: 'inline-block', marginTop: 8, fontSize: 11, padding: '3px 10px', borderRadius: 100, background: ACCENT, color: ACCENT_TEXT, fontWeight: 700, textTransform: 'capitalize' }}>{booking.status}</span>

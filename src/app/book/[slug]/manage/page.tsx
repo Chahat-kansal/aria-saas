@@ -3,11 +3,9 @@
 // "manage/cancel screens in the same language"). Same logic as before, Pipel palette/type/shape.
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useParams } from 'next/navigation'
-import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard, pillPrimary, pillOutline } from '@/components/booking/tokens'
+import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard, pillPrimary, pillOutline, localDateStr, fmtDateInTz } from '@/components/booking/tokens'
 
 function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
-function dateStr(d: Date) { return d.toISOString().slice(0, 10) }
-function fmtDate(s: string) { return new Date(s + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) }
 function fmtTime(t: string | null) { if (!t) return ''; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'pm' : 'am'}` }
 
 const dangerBtn: React.CSSProperties = { background: RED, color: '#fff', border: 'none', borderRadius: 100, padding: '12px 20px', cursor: 'pointer', fontSize: 14, fontWeight: 700, fontFamily: FB, width: '100%' }
@@ -16,6 +14,7 @@ interface Booking {
   id: string; business_id: string; status: string; customer_name: string; customer_email: string | null
   booking_date: string; booking_time: string | null; duration_minutes: number
   booking_services: { name: string } | null; booking_token: string
+  businesses?: { timezone: string | null } | null
 }
 
 function ManageContent({ slug }: { slug: string }) {
@@ -75,8 +74,10 @@ function ManageContent({ slug }: { slug: string }) {
     setSubmitting(false)
   }
 
-  const today = dateStr(new Date())
+  const today = localDateStr(new Date())
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekOf, i))
+  const tz = booking?.businesses?.timezone || 'Australia/Sydney'
+  const fmtD = (s: string) => fmtDateInTz(s, tz)
 
   if (!token) return (
     <div style={{ textAlign: 'center', padding: 40 }}>
@@ -108,7 +109,7 @@ function ManageContent({ slug }: { slug: string }) {
       <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(217,245,78,0.20)', border: '2px solid ' + ACCENT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 16px', color: ACCENT_TEXT }}>✓</div>
       <h2 style={{ fontFamily: FD, fontStyle: 'italic', fontSize: 22, color: INK, margin: '0 0 8px' }}>Booking rescheduled!</h2>
       <div style={{ ...glassCard, padding: 20, textAlign: 'left', margin: '20px auto', maxWidth: 340 }}>
-        <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtDate(booking.booking_date)}</p>
+        <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtD(booking.booking_date)}</p>
         {booking.booking_time && <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>🕐 {fmtTime(booking.booking_time)}</p>}
       </div>
     </div>
@@ -119,7 +120,7 @@ function ManageContent({ slug }: { slug: string }) {
       <p style={{ fontSize: 14, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: FB }}>Your booking</p>
       <div style={{ ...glassCard, padding: '14px 18px', marginBottom: 20 }}>
         {booking.booking_services && <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📋 {booking.booking_services.name}</p>}
-        <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtDate(booking.booking_date)}</p>
+        <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtD(booking.booking_date)}</p>
         {booking.booking_time && <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>🕐 {fmtTime(booking.booking_time)}</p>}
         <p style={{ fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>👤 {booking.customer_name}</p>
         <span style={{ display: 'inline-block', marginTop: 8, fontSize: 11, padding: '3px 10px', borderRadius: 100, background: booking.status === 'confirmed' ? ACCENT : 'rgba(239,68,68,0.10)', color: booking.status === 'confirmed' ? ACCENT_TEXT : RED, fontWeight: 700, textTransform: 'capitalize' }}>{booking.status}</span>
@@ -157,7 +158,7 @@ function ManageContent({ slug }: { slug: string }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, marginBottom: 16 }}>
             {weekDays.map(d => {
-              const ds = dateStr(d)
+              const ds = localDateStr(d)
               const isPast = ds < today
               const isSel = ds === newDate
               return (

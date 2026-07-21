@@ -61,6 +61,31 @@ export const h1Style: CSSProperties = {
   lineHeight: 1.1,
 }
 
+// BOOKINGS-POLISH-1 — the day/date mismatch bug: dateStr() previously round-tripped a picked
+// calendar Date through toISOString(), which converts to UTC. For any customer in a positive
+// UTC-offset timezone (all of Australia), that silently shifts the stored date a day earlier
+// than the cell they actually clicked (local midnight on the clicked day = the previous day,
+// afternoon, UTC). This reads the calendar Date's own local Y/M/D fields directly — no timezone
+// conversion at all, so the stored string always matches the cell the customer clicked.
+export function localDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// A booking's calendar day is the venue's day, not whatever timezone the browser (or the
+// server rendering a confirmation email) happens to be in — so weekday/date-of-month are always
+// derived from the SAME instant (noon UTC on the stored Y-M-D, comfortably clear of any date-line
+// edge case) and explicitly formatted in the business's own timezone. Used identically by the
+// booking flow, the manage/cancel pages, and the confirmation email, so all three can never
+// disagree with each other the way "one side UTC, one side local" previously allowed.
+export function fmtDateInTz(dateStr: string, tz: string = 'Australia/Sydney'): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const noonUtc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+  return noonUtc.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })
+}
+
 export function shimmerCss() {
   return `
     @keyframes booking-shimmer { 0% { background-position: -200px 0 } 100% { background-position: 200px 0 } }

@@ -6,17 +6,14 @@ import { useState, useEffect, useCallback } from 'react'
 import TurnstileWidget from '@/components/security/TurnstileWidget'
 import { CxTabBar } from '@/app/[slug]/CxTabBar'
 import { FloorCanvas, type FloorElement } from './FloorCanvas'
-import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard, pillPrimary, pillOutline, h1Style, shimmerCss } from './tokens'
+import { BG, INK, INK_MUTED, ACCENT, ACCENT_TEXT, RED, FD, FB, glassCard, pillPrimary, pillOutline, h1Style, shimmerCss, localDateStr, fmtDateInTz } from './tokens'
 
-interface Business { id: string; name: string; booking_link_slug: string | null; booking_table_mode?: 'auto' | 'area' | 'table' }
+interface Business { id: string; name: string; booking_link_slug: string | null; booking_table_mode?: 'auto' | 'area' | 'table'; timezone?: string | null }
 interface Service { id: string; name: string; duration_minutes: number; price: number | null; color: string; description: string | null; max_party_size?: number }
 interface AreaRow { area: string; free: number; total: number }
 
 type Step = 'service' | 'date' | 'time' | 'table' | 'details' | 'done'
 
-function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
-function dateStr(d: Date) { return d.toISOString().slice(0, 10) }
-function fmtDate(s: string) { return new Date(s + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) }
 function fmtTime(t: string) { const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'pm' : 'am'}` }
 
 // ── Progress dots — matches the pattern already used across the Pipel/CX onboarding flows ──
@@ -138,7 +135,6 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
   const [selService, setSelService] = useState<Service | null>(null)
   const [partySize, setPartySize] = useState(2)
   const [selDate, setSelDate] = useState('')
-  const [weekOf, setWeekOf] = useState<Date>(() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d })
   const [monthOf, setMonthOf] = useState<Date>(() => new Date())
 
   const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([])
@@ -260,6 +256,11 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
 
   if (!biz) return wrap(<p style={{ textAlign: 'center', color: INK_MUTED }}>Loading…</p>)
 
+  // BOOKINGS-POLISH-1 — weekday/date-of-month are always derived from the SAME instant, in the
+  // business's own timezone (not whichever timezone the browser or server happens to be in).
+  const tz = biz.timezone || 'Australia/Sydney'
+  const fmtD = (s: string) => fmtDateInTz(s, tz)
+
   return wrap(
     <div>
       <h1 style={{ ...h1Style, marginBottom: 6 }}>{biz.name}</h1>
@@ -288,7 +289,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
 
       {step === 'date' && (
         <div>
-          <SummaryPill date={selDate ? fmtDate(selDate) : ''} time="" partySize={partySize} />
+          <SummaryPill date={selDate ? fmtD(selDate) : ''} time="" partySize={partySize} />
 
           {/* Bare calendar — no card, per the mockup: numbers float directly on the page
               background, only the selected date gets a filled lime circle. */}
@@ -305,10 +306,10 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
               const days: (Date | null)[] = Array(offset).fill(null)
               const inMonth = new Date(monthOf.getFullYear(), monthOf.getMonth() + 1, 0).getDate()
               for (let i = 1; i <= inMonth; i++) days.push(new Date(monthOf.getFullYear(), monthOf.getMonth(), i))
-              const today = dateStr(new Date())
+              const today = localDateStr(new Date())
               return days.map((day, i) => {
                 if (!day) return <div key={i} />
-                const ds = dateStr(day)
+                const ds = localDateStr(day)
                 const isPast = ds < today
                 const isSel = ds === selDate
                 return (
@@ -341,7 +342,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
 
       {step === 'time' && (
         <div>
-          <SummaryPill date={fmtDate(selDate)} time="" partySize={partySize} />
+          <SummaryPill date={fmtD(selDate)} time="" partySize={partySize} />
           <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Choose a time</p>
           <div style={{ marginBottom: 20 }}>
             <SlotGrid slots={slots} loading={slotsLoading} selected={selTime} onSelect={chooseTime} />
@@ -352,10 +353,33 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
 
       {step === 'table' && (
         <div>
-          <SummaryPill date={fmtDate(selDate)} time={fmtTime(selTime)} partySize={partySize} />
+          <SummaryPill date={fmtD(selDate)} time={fmtTime(selTime)} partySize={partySize} />
           <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 16 }}>
             {tableMode === 'area' ? 'Choose a seating area' : 'Table Selection'}
           </p>
+          {/* Mockup's "Selected place" row — area / table name / capacity, no price (deposits
+              aren't built). Shown once a selection is made. */}
+          {(() => {
+            const selTable = tableMode === 'table' ? elements.find(e => e.id === selTableId) : null
+            const selAreaInfo = tableMode === 'area' ? areas.find(a => a.area === selArea) : null
+            if (!selTable && !selAreaInfo) return null
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontFamily: FB, fontSize: 12, fontWeight: 700, color: INK_MUTED, marginBottom: 6 }}>Selected place</p>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontFamily: FB, fontSize: 13, color: INK }}>
+                  {selTable && (
+                    <>
+                      <span>Area: <strong>{selTable.seating_area || 'General'}</strong></span>
+                      <span>Table: <strong>{selTable.display_name || selTable.name}</strong></span>
+                      <span>Capacity: <strong>{selTable.seats}</strong></span>
+                    </>
+                  )}
+                  {selAreaInfo && <span>Area: <strong>{selAreaInfo.area}</strong></span>}
+                </div>
+              </div>
+            )
+          })()}
+
           <div style={{ marginBottom: 20 }}>
             {tableMode === 'table' ? (
               <FloorCanvas
@@ -386,7 +410,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
           <p style={{ fontFamily: FB, fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Your details</p>
           <div style={{ ...glassCard, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: INK_MUTED, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {selService && <span>📋 {selService.name}</span>}
-            <span>📅 {fmtDate(selDate)}</span>
+            <span>📅 {fmtD(selDate)}</span>
             <span>🕐 {fmtTime(selTime)}</span>
             <span>👥 {partySize}</span>
           </div>
@@ -429,7 +453,7 @@ export function BookingFlow({ slug, withTabBar = false }: { slug: string; withTa
           <div style={{ ...glassCard, padding: 20, textAlign: 'left', marginBottom: 20 }}>
             <p style={{ fontFamily: FD, fontStyle: 'italic', fontWeight: 600, color: INK, marginBottom: 10, fontSize: 17 }}>{biz.name}</p>
             {selService && <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📋 {selService.name}</p>}
-            <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtDate(selDate)}</p>
+            <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>📅 {fmtD(selDate)}</p>
             <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>🕐 {fmtTime(selTime)}</p>
             <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>👥 {partySize}</p>
             <p style={{ fontFamily: FB, fontSize: 13, color: INK_MUTED, margin: '4px 0' }}>👤 {form.name}</p>
