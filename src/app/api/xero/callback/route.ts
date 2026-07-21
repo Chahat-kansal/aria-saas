@@ -2,9 +2,12 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { redeemOAuthState } from '@/lib/integrations/oauth-state'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.ariaos.site'
 const REDIRECT_URI = process.env.XERO_REDIRECT_URI ?? `${BASE_URL}/api/xero/callback`
+const XERO_KEY = 'xero' as const
 
 async function exchangeCode(code: string): Promise<{
   access_token: string; refresh_token: string; expires_in: number
@@ -36,18 +39,32 @@ async function getTenantId(access_token: string): Promise<string | null> {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
-  const businessId = searchParams.get('state')
+  const state = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
   if (errorParam) {
     return NextResponse.redirect(`${BASE_URL}/pos/setup/integrations?error=xero_denied`)
   }
-  if (!code || !businessId) {
+  if (!code || !state) {
     return NextResponse.redirect(`${BASE_URL}/pos/setup/integrations?error=invalid_state`)
   }
   if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET) {
     return NextResponse.redirect(`${BASE_URL}/pos/setup/integrations?error=xero_not_configured`)
   }
+
+  // SECURITY-RESIDUE-FIX-1 PART 1 (SECURITY-CRITICAL-1's fix only reached the sibling
+  // integrations/xero/* pair — this original implementation was a separate file the fix never
+  // touched). state used to be decoded and trusted directly as a business_id with no proof the
+  // caller completing this callback controls that business — an attacker could complete their own
+  // real Xero consent through this same route's own /connect, then hit this callback with someone
+  // else's business_id substituted in, linking the victim's business to the attacker's Xero
+  // tenant. redeemOAuthState looks the token up server-side (never decodes it) and re-checks it
+  // against the CURRENT session's business access.
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const redeemed = await redeemOAuthState(state, XERO_KEY, user?.id)
+  if (!redeemed) return NextResponse.redirect(`${BASE_URL}/pos/setup/integrations?error=invalid_state`)
+  const businessId = redeemed.businessId
 
   try {
     const tokens = await exchangeCode(code)
