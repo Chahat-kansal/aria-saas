@@ -10,8 +10,21 @@ name: Canon Rail Guard
 # scripts/canon-rail-guard.ts does the actual diff-scan; see that file's header comment for the
 # exact patterns blocked and why. No Supabase/Vercel secrets needed — this is a pure git-diff scan.
 
+# SECURITY-RESIDUE-FIX-1 PART 2 — this workflow only ever triggered on pull_request, but this
+# repo's real, CLAUDE.md-mandated workflow is a direct `git push origin main` with no PR step at
+# all (3,300+ commits on main, zero merged PRs, ever, at the time this was found). The guard had
+# therefore never once executed against a real commit despite being "wired into CI". The push
+# trigger below closes that — paths-filtered identically to the existing pull_request trigger so it
+# doesn't run on every commit, only ones touching guarded files.
 on:
   pull_request:
+    paths:
+      - 'src/**/*.ts'
+      - 'src/**/*.tsx'
+      - 'scripts/canon-rail-guard.ts'
+  push:
+    branches:
+      - main
     paths:
       - 'src/**/*.ts'
       - 'src/**/*.tsx'
@@ -32,5 +45,21 @@ jobs:
 
       - run: npm ci
 
+      # github.base_ref only exists for pull_request events — undefined on push, which would make
+      # `--base=origin/` resolve to nothing and silently diff against garbage. On push, diff against
+      # github.event.before (the pre-push SHA) instead, so only the commit(s) just pushed are
+      # scanned — pre-existing repo history stays grandfathered exactly as on pull_request. Falls
+      # back to HEAD^ for the all-zeros "before" SHA a brand-new branch's first push reports.
+      - name: Determine diff base
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "ref=HEAD^" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run canon-rail guard (new violations only — pre-existing code is grandfathered)
-        run: npx tsx scripts/canon-rail-guard.ts --base=origin/${{ github.base_ref }}
+        run: npx tsx scripts/canon-rail-guard.ts --base=${{ steps.base.outputs.ref }}
