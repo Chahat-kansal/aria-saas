@@ -75,9 +75,6 @@ export async function GET(req: Request) {
     .filter((b): b is { start: number; dur: number; table_id: string | null } => b.start !== null)
 
   const mode = (bizRes.data as { booking_table_mode?: string } | null)?.booking_table_mode ?? 'auto'
-  if (searchParams.get('debug') === '1') {
-    return NextResponse.json({ _debug_bizRes: bizRes, _debug_business_id: business_id, _debug_mode: mode })
-  }
   const allTables = (tablesRes.data ?? []) as PosTableRow[]
   // FLOOR-1: only tables the mode actually lets a guest reach count toward "table" mode's slot
   // eligibility (a slot the confirm step can't fulfil must never show as bookable). auto/area use
