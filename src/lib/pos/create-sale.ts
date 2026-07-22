@@ -328,7 +328,7 @@ export async function createSale(
     })())
   }
   await Promise.all(stockOps)
-  await recordSaleMovements(supabase, { businessId, saleId: sale.id, saleNumber, lines: movementLines })
+  await recordSaleMovements(supabase, { businessId, saleId: sale.id, saleNumber, lines: movementLines, outletId: saleOutletId, writtenBy: 'lib/pos/create-sale' })
 
   // Session totals — atomic RPC (avoids the concurrent-sale race a plain read-then-update has).
   if (openSession?.id) {

@@ -73,6 +73,7 @@ async function _PATCH(req: Request, { params }: Params, { supabase, businessId: 
           }
           await recordSaleMovements(supabaseAdmin, {
             businessId: bid, saleId: sale.id, saleNumber: ord.order_number, lines: movementLines,
+            outletId, writtenBy: 'pos/online-orders/[id]:accept',
           })
         }
       }
@@ -243,7 +244,7 @@ async function _PATCH(req: Request, { params }: Params, { supabase, businessId: 
                 })
                 fallbackLines.push({ itemId: item.product_id as string, quantitySold: Number(item.quantity), newStock })
               }
-              await recordSaleMovements(supabaseAdmin, { businessId: earnBid, saleId: earnSaleId, saleNumber: null, lines: fallbackLines })
+              await recordSaleMovements(supabaseAdmin, { businessId: earnBid, saleId: earnSaleId, saleNumber: null, lines: fallbackLines, outletId: fallbackOutletId, writtenBy: 'pos/online-orders/[id]:pickup-fallback' })
             }
           }
         } catch (e) {

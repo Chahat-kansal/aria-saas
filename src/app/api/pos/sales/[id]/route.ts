@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server';
 import { logSaleEdit } from '@/lib/pos/sale-audit';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { reverseEarnOnSale } from '@/lib/loyalty/reverseEarnOnSale';
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { recordSaleMovements, VOID_MOVEMENT_TYPE, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -90,23 +92,30 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       .select('product_id, quantity')
       .eq('sale_id', saleId);
 
+    // INV-DECREMENT-FIX — was routed through reverse_outlet_inventory, which referenced
+    // pos_outlet_inventory.on_hand (real column: items_on_hand) and stock_movements columns that
+    // don't exist; every call threw, was caught by this route's own try/catch, and NEVER actually
+    // restored stock. Rerouted onto the same proven adjustOutletStock()/resolveOutletId() pair
+    // pos/sales/[id]/void/route.ts uses, plus a movement row so the restore isn't silent either.
+    const voidOutletId = await resolveOutletId(supabase, bid, existing.outlet_id ?? null);
+    const voidMovementLines: SaleMovementLine[] = [];
     for (const item of (items ?? [])) {
       if (!item.product_id) continue;
       const { data: prod } = await supabase
         .from('pos_products').select('track_stock').eq('id', item.product_id).maybeSingle();
       if (!prod?.track_stock) continue;
       try {
-        await supabase.rpc('reverse_outlet_inventory', {
-          p_product_id: item.product_id,
-          p_outlet_id: existing.outlet_id ?? null,
-          p_quantity: item.quantity,
-          p_business_id: bid,
-          p_reason: `void:${saleId}`,
-        });
+        await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }); // cache
+        const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: voidOutletId, productId: item.product_id, delta: Math.abs(Number(item.quantity)) }); // canonical
+        voidMovementLines.push({ itemId: item.product_id, quantitySold: Number(item.quantity), newStock: itemsOnHand });
       } catch (err) {
         console.warn('[void] inventory reverse failed:', err);
       }
     }
+    await recordSaleMovements(supabase, {
+      businessId: bid, saleId: saleId, saleNumber: (existing as { sale_number?: string | null }).sale_number ?? null,
+      lines: voidMovementLines, movementType: VOID_MOVEMENT_TYPE, outletId: voidOutletId, writtenBy: 'pos/sales/[id]:action=void',
+    });
 
     await supabase.from('pos_sales').update({
       status: 'voided',

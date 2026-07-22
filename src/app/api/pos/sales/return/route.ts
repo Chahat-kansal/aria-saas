@@ -5,6 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { logSaleEdit } from '@/lib/pos/sale-audit';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { recordSaleMovements, RETURN_MOVEMENT_TYPE, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -97,23 +99,29 @@ async function _POST(req: Request) {
   }));
   await supabase.from('pos_sale_items').insert(refundItemsInsert);
 
-  // Restore inventory via RPC (replaces direct pos_products update)
+  // INV-DECREMENT-FIX — was routed through reverse_outlet_inventory, which referenced
+  // pos_outlet_inventory.on_hand (real column: items_on_hand) and stock_movements columns that
+  // don't exist; every call threw (caught here, logged, swallowed) and NEVER actually restored
+  // stock — claim_return_qty correctly marked the items returned while items_on_hand silently
+  // never moved. Rerouted onto the same proven adjustOutletStock()/resolveOutletId() pair every
+  // other reversal path now uses, plus a movement row so the restore isn't silent either.
+  const returnOutletId = await resolveOutletId(supabase, bid, orig.outlet_id ?? null);
+  const returnMovementLines: SaleMovementLine[] = [];
   for (const ri of refundItems) {
     if (!ri.product_id) continue;
     const { data: prod } = await supabase.from('pos_products').select('track_stock').eq('id', ri.product_id).maybeSingle();
     if (!prod?.track_stock) continue;
     try {
-      await supabase.rpc('reverse_outlet_inventory', {
-        p_product_id: ri.product_id,
-        p_outlet_id: orig.outlet_id ?? null,
-        p_quantity: Math.abs(ri.quantity),
-        p_business_id: bid,
-        p_reason: `return:${sale_id}`,
-      });
+      const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: returnOutletId, productId: ri.product_id, delta: Math.abs(Number(ri.quantity)) });
+      returnMovementLines.push({ itemId: ri.product_id, quantitySold: Math.abs(Number(ri.quantity)), newStock: itemsOnHand });
     } catch (err) {
       console.warn('[return] inventory reverse failed:', err);
     }
   }
+  await recordSaleMovements(supabase, {
+    businessId: bid, saleId: refundSale.id, saleNumber: (refundSale as { sale_number?: string | null }).sale_number ?? saleNumber,
+    lines: returnMovementLines, movementType: RETURN_MOVEMENT_TYPE, outletId: returnOutletId, writtenBy: 'pos/sales/return',
+  });
 
   await logSaleEdit(supabase, {
     sale_id,

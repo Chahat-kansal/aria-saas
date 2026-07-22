@@ -1,4 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { recordSaleMovements, RETURN_MOVEMENT_TYPE, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
 export const REASON_CODES = [
   'changed_mind','faulty_defective','wrong_item','damaged_in_transit',
@@ -268,7 +270,14 @@ export async function processReturn(
     if (claimErr || claimed == null) console.error('[return-engine] returned_quantity claim rejected (over-return guard):', line.original_item_id, claimErr?.message)
   }
 
-  // 11. Restore inventory via existing RPC
+  // 11. Restore inventory — INV-DECREMENT-FIX: was routed through reverse_outlet_inventory, which
+  // referenced pos_outlet_inventory.on_hand (real column: items_on_hand) and stock_movements
+  // columns that don't exist; every call threw (caught here, non-fatal) and NEVER actually restored
+  // stock — step 10's claim_return_qty correctly marked the items returned while items_on_hand
+  // silently never moved. Rerouted onto the proven adjustOutletStock()/resolveOutletId() pair every
+  // other reversal path now uses, plus a movement row so the restore isn't silent either.
+  const returnOutletId = await resolveOutletId(supabase, business_id, origSale.outlet_id ?? null)
+  const returnMovementLines: SaleMovementLine[] = []
   for (const line of lines) {
     if (!line.product_id) continue
     if (!line.restock || !CONDITION_RESTOCKS[line.condition]) continue
@@ -276,14 +285,15 @@ export async function processReturn(
       .select('track_stock').eq('id', line.product_id).maybeSingle()
     if (!prod?.track_stock) continue
     try {
-      await supabase.rpc('reverse_outlet_inventory', {
-        p_product_id: line.product_id,
-        p_outlet_id: origSale.outlet_id ?? null,
-        p_quantity: line.quantity,
-        p_business_id: business_id,
-        p_reason: `return:${returnNumber}`,
-      })
+      const itemsOnHand = await adjustOutletStock(supabase, { businessId: business_id, outletId: returnOutletId, productId: line.product_id, delta: Math.abs(Number(line.quantity)) })
+      returnMovementLines.push({ itemId: line.product_id, quantitySold: Math.abs(Number(line.quantity)), newStock: itemsOnHand })
     } catch (e) { console.error('[non-fatal]', e) }
+  }
+  if (returnMovementLines.length) {
+    await recordSaleMovements(supabase, {
+      businessId: business_id, saleId: returnSaleId ?? returnRecord?.id ?? null, saleNumber: returnNumber,
+      lines: returnMovementLines, movementType: RETURN_MOVEMENT_TYPE, outletId: returnOutletId, writtenBy: 'lib/pos/return-engine',
+    })
   }
 
   // 12. Audit log (Sprint-B-aware — falls back to direct insert if check-permission not yet shipped)

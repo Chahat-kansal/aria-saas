@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { verifyManagerToken } from '@/lib/pos/manager-token'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { recordSaleMovements, REFUND_MOVEMENT_TYPE, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -24,7 +25,18 @@ async function _POST(req: Request, { params }: Params) {
   const { data: original } = await supabase.from('pos_sales').select('*').eq('id', id).eq('business_id', bid).maybeSingle()
   if (!original) return NextResponse.json({ error: 'Sale not found' }, { status: 404 })
 
+  // INV-DECREMENT-FIX — this route has no per-item link to the original sale (unlike
+  // pos/sales/return/route.ts's claim_return_qty guard), so it can't enforce an exact per-line
+  // limit. Guard at the sale level instead: a retry/double-click that would refund past the
+  // original sale's own total is rejected outright, rather than silently double-restocking stock
+  // it already restored on the first, successful call.
+  const { data: priorRefunds } = await supabase.from('pos_sales').select('total_amount').eq('parent_sale_id', id).eq('status', 'refund')
+  let alreadyRefunded = 0
+  for (const r of priorRefunds ?? []) alreadyRefunded += Math.abs(Number(r.total_amount) || 0)
   const refundAmount = amount ?? original.total_amount
+  if (alreadyRefunded + Math.abs(Number(refundAmount) || 0) > Math.abs(Number(original.total_amount) || 0) + 0.01) {
+    return NextResponse.json({ error: 'This sale has already been refunded up to its total — no further refund allowed' }, { status: 409 })
+  }
   // BUGFIX-POS-4 FIX 5 — error-check the refund sale insert; a swallowed error previously returned ok:true with
   // a null refund_sale_id (looked successful while no refund was recorded).
   const { data: refundSale, error: refundErr } = await supabase.from('pos_sales').insert({
@@ -52,10 +64,16 @@ async function _POST(req: Request, { params }: Params) {
     if (refundItemsErr) console.error('[pos/sales/refund] refund items insert failed:', refundItemsErr.message) // BUGFIX-POS-4 FIX 5
     // Restore stock for refunded items — CANONICAL items_on_hand (+ stock_quantity cache). (INV-DECREMENT-FIX phase 2)
     const refundOutletId = await resolveOutletId(supabase, bid, (original as { outlet_id?: string | null }).outlet_id ?? null)
+    const refundMovementLines: SaleMovementLine[] = []
     for (const it of refundItems) {
       await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: it.product_id, p_column: 'stock_quantity', p_amount: Math.abs(it.quantity) }) // cache
-      await adjustOutletStock(supabase, { businessId: bid, outletId: refundOutletId, productId: it.product_id, delta: Math.abs(Number(it.quantity)) }) // canonical
+      const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: refundOutletId, productId: it.product_id, delta: Math.abs(Number(it.quantity)) }) // canonical
+      refundMovementLines.push({ itemId: it.product_id, quantitySold: Math.abs(Number(it.quantity)), newStock: itemsOnHand })
     }
+    await recordSaleMovements(supabase, {
+      businessId: bid, saleId: refundSale.id, saleNumber: (refundSale as { sale_number?: string | null }).sale_number ?? null,
+      lines: refundMovementLines, movementType: REFUND_MOVEMENT_TYPE, outletId: refundOutletId, writtenBy: 'pos/sales/[id]/refund',
+    })
   }
 
   const { error: auditErr } = await supabase.from('pos_audit_log').insert({

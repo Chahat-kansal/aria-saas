@@ -117,7 +117,7 @@ async function _POST(req: Request) {
             const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: outletForStock, productId: it.product_id, delta: -it.quantity }); // canonical
             lines.push({ itemId: it.product_id, quantitySold: it.quantity, newStock: itemsOnHand });
           }
-          await recordSaleMovements(supabase, { businessId: bid, saleId: saleRecord.id, lines });
+          await recordSaleMovements(supabase, { businessId: bid, saleId: saleRecord.id, lines, outletId: outletForStock, writtenBy: 'pos/sync-offline' });
         }
       }
 
