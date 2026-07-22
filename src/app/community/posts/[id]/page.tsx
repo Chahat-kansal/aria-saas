@@ -4,10 +4,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { PostCard, type PostCardData } from '../../PostCard'
+import { LevelChip } from '../../LevelChip'
 import { PALETTE, BORDER, RADIUS, MAX_W, SIGNAL_COLORS } from '../../theme'
 
-interface Reply { id: string; text: string | null; nickname: string; created_at: string; member_id?: string | null }
-interface Comment { id: string; text: string | null; nickname: string; created_at: string; member_id?: string | null; replies?: Reply[] }
+interface Level { level: number; name: string }
+interface Reply { id: string; text: string | null; nickname: string; created_at: string; member_id?: string | null; level?: Level | null }
+interface Comment { id: string; text: string | null; nickname: string; created_at: string; member_id?: string | null; level?: Level | null; replies?: Reply[] }
 
 function fmtRel(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
@@ -139,6 +141,7 @@ export default function PostDetailPage() {
                   {c.member_id
                     ? <Link href={'/community/u/' + c.member_id} style={{ color: PALETTE.ink, textDecoration: 'none' }}>{(c.nickname ?? 'Anonymous').toLowerCase()}</Link>
                     : (c.nickname ?? 'Anonymous').toLowerCase()}
+                  <LevelChip level={c.level} />
                   <span style={{ fontSize: 10, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(c.created_at)}</span>
                 </p>
                 <p style={{ fontSize: 13, margin: '2px 0 2px', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{c.text}</p>
@@ -156,6 +159,7 @@ export default function PostDetailPage() {
                           {r.member_id
                             ? <Link href={'/community/u/' + r.member_id} style={{ color: PALETTE.ink, textDecoration: 'none' }}>{(r.nickname ?? 'Anonymous').toLowerCase()}</Link>
                             : (r.nickname ?? 'Anonymous').toLowerCase()}
+                          <LevelChip level={r.level} />
                           <span style={{ fontSize: 9, fontWeight: 500, color: PALETTE.inkSoft }}>{fmtRel(r.created_at)}</span>
                         </p>
                         <p style={{ fontSize: 12, margin: '1px 0 0', color: PALETTE.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{r.text}</p>

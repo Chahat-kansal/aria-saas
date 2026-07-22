@@ -4,6 +4,9 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { BadgeCheck, ExternalLink, Bell, BellOff, EyeOff, Eye, Loader2, ArrowLeft, MoreHorizontal, X, Phone, MapPin } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS, MAX_W } from '../../theme'
+import { LevelChip } from '../../LevelChip'
+
+interface YourStatus { level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number }
 
 interface BusinessProfile {
   id: string
@@ -34,6 +37,7 @@ interface ProfileResponse {
   recent_posts: RecentPost[]
   highlights: StoryHighlight[]
   b2b_following: Array<{ id: string; name: string | null; logo_url: string | null }>
+  your_status: YourStatus | null
 }
 
 function safeHostname(url: string | null): string | null {
@@ -242,6 +246,31 @@ export default function BusinessProfilePage() {
         <StatCard value={ratingDisplay} label="★ rating" lime />
         <StatCard value={fmtK(stats.post_count)} label="posts" />
       </div>
+
+      {/* CX-GAME-LEAN — your status at this shop. Only rendered when the viewer resolves to a real
+          loyalty customer of this business (see loyalty-link.ts) — never a fabricated L1. */}
+      {profile.your_status && (
+        <Link href={`/community/businesses/${businessId}/leaderboard`} prefetch={false} style={{
+          display: 'block', marginTop: 14, padding: '12px 14px', textDecoration: 'none',
+          background: PALETTE.surface, border: BORDER, borderRadius: RADIUS.lg,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <LevelChip level={{ level: profile.your_status.level, name: profile.your_status.name }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: PALETTE.ink }}>{profile.your_status.lifetimePoints} pts lifetime</span>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: PALETTE.ink }}>leaderboard →</span>
+          </div>
+          <div style={{ height: 5, background: PALETTE.surfaceAlt, borderRadius: 3, marginTop: 8, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.round(profile.your_status.progress * 100)}%`, background: PALETTE.accent }} />
+          </div>
+          <p style={{ fontSize: 10, color: PALETTE.inkSoft, margin: '6px 0 0' }}>
+            {profile.your_status.nextAt != null
+              ? `${profile.your_status.nextAt - profile.your_status.lifetimePoints} pts to the next level`
+              : 'Top level reached'}
+          </p>
+        </Link>
+      )}
 
       {/* CX-OWNER-TRUST-2 — story highlights (owner-curated). Hidden entirely when none exist. */}
       {profile.highlights && profile.highlights.length > 0 && (

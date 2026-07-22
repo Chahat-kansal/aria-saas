@@ -3,6 +3,10 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getCommunityMember } from '@/lib/community/session'
+import { resolveMemberCustomerLink } from '@/lib/community/loyalty-link'
+import { getLifetimePoints } from '@/lib/community/points'
+import { pointsToLevel } from '@/lib/community/levels'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -42,7 +46,24 @@ export async function GET(_req: Request, { params }: Params) {
 
     if (!bizRes.data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+    // CX-GAME-LEAN — "your status at this shop": level + progress + real lifetime points, shown only
+    // when the viewer's community identity resolves to a loyalty customer of THIS business (via the
+    // opportunistic link — see loyalty-link.ts). Viewing this page with both a community session and
+    // a valid cx_session for this business is itself the linking moment. No link → null, never a
+    // fabricated L1 for a non-member.
+    let yourStatus: { level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number } | null = null
+    const member = await getCommunityMember()
+    if (member) {
+      const link = await resolveMemberCustomerLink(member.id, id).catch(() => null)
+      if (link) {
+        const lifetimePoints = await getLifetimePoints(link.customerId)
+        const level = pointsToLevel(lifetimePoints)
+        yourStatus = { ...level, lifetimePoints }
+      }
+    }
+
     return NextResponse.json({
+      your_status: yourStatus,
       business: bizRes.data,
       stats: {
         followers: followCountRes.count ?? 0,

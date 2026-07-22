@@ -6,6 +6,9 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
 import { ensureCommunityMember, getCommunityMember } from '@/lib/community/session'
 import { notifyEngagement } from '@/lib/community/notifications'
+import { batchResolveMemberCustomerLinks } from '@/lib/community/loyalty-link'
+import { getLifetimePointsBatch } from '@/lib/community/points'
+import { pointsToLevel } from '@/lib/community/levels'
 
 const VALID_TYPES = new Set(['like', 'comment', 'save', 'view', 'share'])
 
@@ -68,6 +71,12 @@ export async function POST(req: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       // CX-POLISH-1: notify the post's owner — fire-and-forget, never blocks the comment.
       void notifyEngagement({ postId: body.post_id, businessId: post.business_id, actorMemberId: member.id, kind: 'new_comment' })
+      // CX-GAME-LEAN — opportunistic loyalty link: if this commenter also has a valid cx_session for
+      // this business right now, record it (see loyalty-link.ts). Fire-and-forget, never blocks the comment.
+      void (async () => {
+        const { resolveMemberCustomerLink } = await import('@/lib/community/loyalty-link')
+        await resolveMemberCustomerLink(member.id, post.business_id).catch(() => null)
+      })()
       return NextResponse.json({ ok: true, comment_id: data?.id, created_at: data?.created_at, parent_id: parentId })
     }
 
@@ -154,7 +163,25 @@ export async function GET(req: Request) {
     // (so the feed card's top-3 preview is unchanged); replies are ordered oldest-first within a thread.
     type Row = { id: string; comment_text: string | null; created_at: string; parent_id: string | null; member_id: string | null; community_members: { nickname: string | null } | null }
     const rows = (data ?? []) as unknown as Row[]
-    const mapRow = (c: Row) => ({ id: c.id, text: c.comment_text, nickname: c.community_members?.nickname ?? 'Anonymous', created_at: c.created_at, member_id: c.member_id })
+
+    // CX-GAME-LEAN — level chips beside commenters. Batched: one links query + one points query for
+    // every distinct member_id on this post, regardless of comment/reply count (no N+1). A commenter
+    // with no established loyalty link (see loyalty-link.ts) simply gets no `level` field — never a
+    // fabricated L1 for someone who isn't a known loyalty member of this business.
+    const businessIdForLinks = (postRow as { business_id?: string } | null)?.business_id
+    const memberIds = [...new Set(rows.map(r => r.member_id).filter((x): x is string => !!x))]
+    const linkMap = businessIdForLinks ? await batchResolveMemberCustomerLinks(memberIds, businessIdForLinks) : new Map<string, string>()
+    const customerIds = [...new Set([...linkMap.values()])]
+    const pointsMap = customerIds.length ? await getLifetimePointsBatch(customerIds) : new Map<string, number>()
+    const levelFor = (memberId: string | null) => {
+      if (!memberId) return null
+      const customerId = linkMap.get(memberId)
+      if (!customerId) return null
+      const l = pointsToLevel(pointsMap.get(customerId) ?? 0)
+      return { level: l.level, name: l.name }
+    }
+
+    const mapRow = (c: Row) => ({ id: c.id, text: c.comment_text, nickname: c.community_members?.nickname ?? 'Anonymous', created_at: c.created_at, member_id: c.member_id, level: levelFor(c.member_id) })
     const repliesByParent: Record<string, ReturnType<typeof mapRow>[]> = {}
     for (const r of rows) {
       if (r.parent_id) (repliesByParent[r.parent_id] ??= []).push(mapRow(r))
