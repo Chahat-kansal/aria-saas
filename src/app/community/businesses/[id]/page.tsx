@@ -6,7 +6,10 @@ import { BadgeCheck, ExternalLink, Bell, BellOff, EyeOff, Eye, Loader2, ArrowLef
 import { PALETTE, BORDER, RADIUS, MAX_W } from '../../theme'
 import { LevelChip } from '../../LevelChip'
 
-interface YourStatus { level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number }
+interface YourStatus {
+  level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number
+  unlockedPerkPoints: number | null; upcomingLevelName: string | null; upcomingPerkPoints: number | null
+}
 
 interface BusinessProfile {
   id: string
@@ -269,6 +272,18 @@ export default function BusinessProfilePage() {
               ? `${profile.your_status.nextAt - profile.your_status.lifetimePoints} pts to the next level`
               : 'Top level reached'}
           </p>
+          {/* CX-GAME-2 — real award only: a perk chip appears only once actually issued (never a
+              "you unlocked X" claim before the ledger has really paid it out). */}
+          {profile.your_status.unlockedPerkPoints != null && (
+            <p style={{ fontSize: 10, fontWeight: 700, color: PALETTE.ink, margin: '6px 0 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+              🎁 Level {profile.your_status.level} unlocked — +{profile.your_status.unlockedPerkPoints} bonus points
+            </p>
+          )}
+          {profile.your_status.upcomingLevelName && profile.your_status.upcomingPerkPoints != null && (
+            <p style={{ fontSize: 10, color: PALETTE.inkSoft, margin: '4px 0 0' }}>
+              Next: {profile.your_status.upcomingLevelName} unlocks +{profile.your_status.upcomingPerkPoints} bonus points
+            </p>
+          )}
         </Link>
       )}
 

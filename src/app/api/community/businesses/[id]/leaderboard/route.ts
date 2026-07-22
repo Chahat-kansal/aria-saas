@@ -33,11 +33,30 @@ export async function GET(req: Request, { params }: Params) {
     if (!inTop10) viewerRow = allRows.find(r => r.member_id === member.id) ?? null
   }
 
+  // CX-GAME-2 — trophy marker on real, already-issued weekly awards only (not a live re-derivation
+  // of "who's currently top 3" — a member could be top-3 today without an award existing yet if this
+  // isn't the week-boundary day). Most recent period_start for this business.
+  const trophyMemberIds = new Set<string>()
+  if (period === '7d') {
+    const { data: latestPeriod } = await supabaseAdmin.from('community_leaderboard_awards')
+      .select('period_start').eq('business_id', id).order('period_start', { ascending: false }).limit(1).maybeSingle()
+    if (latestPeriod?.period_start) {
+      const { data: awards } = await supabaseAdmin.from('community_leaderboard_awards')
+        .select('loyalty_identity_id').eq('business_id', id).eq('period_start', latestPeriod.period_start as string)
+      const identityIds = (awards ?? []).map(a => a.loyalty_identity_id as string)
+      if (identityIds.length) {
+        const { data: links } = await supabaseAdmin.from('community_member_loyalty_links')
+          .select('member_id').eq('business_id', id).in('loyalty_identity_id', identityIds)
+        for (const l of links ?? []) trophyMemberIds.add(l.member_id as string)
+      }
+    }
+  }
+
   return NextResponse.json({
     period,
     computed_at: snapshot?.computed_at ?? null,
-    top: top10,
-    viewer: viewerRow,
+    top: top10.map(r => ({ ...r, trophy: trophyMemberIds.has(r.member_id) })),
+    viewer: viewerRow ? { ...viewerRow, trophy: trophyMemberIds.has(viewerRow.member_id) } : null,
     total_ranked: allRows.length,
   })
 }

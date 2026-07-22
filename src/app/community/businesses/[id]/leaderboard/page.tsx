@@ -17,6 +17,7 @@ interface Row {
   score: number
   rank: number
   rankMovement: number | null
+  trophy?: boolean
 }
 interface LeaderboardResponse {
   period: '7d' | '30d' | 'all'
@@ -49,6 +50,9 @@ function LeaderboardRowView({ row, highlight }: { row: Row; highlight?: boolean 
       <span style={{ width: 22, textAlign: 'center', fontSize: 13, fontWeight: 800, color: PALETTE.ink, flexShrink: 0 }}>{row.rank}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: PALETTE.ink, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {/* CX-GAME-2 — trophy on a REAL issued weekly award only (see the API route's join against
+              community_leaderboard_awards) — never a live "you'd currently be top-3" guess. */}
+          {row.trophy && <span aria-label="Won this week's leaderboard reward">🏆</span>}
           {row.display_name}
           <LevelChip level={{ level: row.level, name: '' }} />
           <MovementArrow movement={row.rankMovement} />

@@ -11,6 +11,8 @@ import { computeMovementVelocity, persistMovementVelocity } from '@/lib/inventor
 import { computePar } from '@/lib/inventory/par-levels';
 import { computeLeaderboardSnapshot, persistLeaderboardSnapshot, attachRankMovement, type LeaderboardPeriod, type LeaderboardRow } from '@/lib/community/leaderboard';
 import { sendDailyDigests } from '@/lib/community/digest';
+import { processLevelAwards } from '@/lib/community/level-awards';
+import { processLeaderboardAwards } from '@/lib/community/leaderboard-awards';
 
 export async function GET(req: Request) {
   const denied = verifyCronAuth(req)
@@ -64,6 +66,7 @@ export async function GET(req: Request) {
       if ((followCount ?? 0) > 0) {
         const periods: LeaderboardPeriod[] = ['7d', '30d', 'all'];
         let new30d: LeaderboardRow[] = [];
+        let new7d: LeaderboardRow[] = [];
         for (const period of periods) {
           // Read the about-to-be-overwritten snapshot FIRST — it's the only "previous" available
           // (the table keeps latest-only per spec) — then embed movement into each row before persisting
@@ -75,8 +78,27 @@ export async function GET(req: Request) {
           const rows = attachRankMovement(computed, previousRows);
           await persistLeaderboardSnapshot(supabaseAdmin, biz.id, period, rows);
           if (period === '30d') new30d = rows;
+          if (period === '7d') new7d = rows;
         }
         await sendDailyDigests(supabaseAdmin, biz.id, biz.name ?? 'your community', new30d);
+
+        // CX-GAME-2 — level-up awards, daily, for every linked identity (never unlinked members).
+        try {
+          const levelResult = await processLevelAwards(supabaseAdmin, biz.id);
+          if (levelResult.issued || levelResult.queued || levelResult.errors) {
+            console.log('[menu-engineering cron] level awards', biz.id, JSON.stringify(levelResult));
+          }
+        } catch (err) { console.error('[menu-engineering cron] level awards failed', biz.id, String(err)); }
+
+        // CX-GAME-2 — weekly top-3 leaderboard awards, only on the week-boundary day (Monday UTC),
+        // against this run's freshly-computed 7d snapshot. period_start = today (the boundary date).
+        if (new Date().getUTCDay() === 1) {
+          try {
+            const periodStart = new Date().toISOString().slice(0, 10);
+            const lbResult = await processLeaderboardAwards(supabaseAdmin, biz.id, new7d, periodStart);
+            if (lbResult.issued) console.log('[menu-engineering cron] leaderboard awards', biz.id, lbResult.issued);
+          } catch (err) { console.error('[menu-engineering cron] leaderboard awards failed', biz.id, String(err)); }
+        }
       }
     } catch (err) { console.error('[menu-engineering cron] community leaderboard/digest failed', biz.id, String(err)); }
   }

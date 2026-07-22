@@ -777,3 +777,162 @@ export function ChallengesSection() {
     </div>
   )
 }
+
+// CX-GAME-2 — per-business community level thresholds + perk overrides, and the human-gated bulk
+// backfill approval banner. Perks reference the SAME loyalty_reward_rules rows RewardRulesTab
+// manages — never a parallel reward-definition concept.
+interface LevelThresholdRow { level: number; name: string; min_points: number; perk_reward_rule_id: string | null }
+interface CommunityRewardRule { id: string; rule_type: string; points_value: number; threshold_value?: number | null; config?: Record<string, unknown> | null }
+
+function describeCommunityRule(r: CommunityRewardRule): string {
+  if (r.rule_type === 'spend_threshold') return `Spend ≥ $${(Number(r.threshold_value) || 0).toFixed(2)} → +${r.points_value} pts`
+  if (r.rule_type === 'visit_count') return `Visit #${Math.round(Number(r.threshold_value) || 0)} → +${r.points_value} pts`
+  return `+${r.points_value} pts (${r.rule_type})`
+}
+
+export function CommunityLevelsSection() {
+  const [thresholds, setThresholds] = useState<LevelThresholdRow[]>([])
+  const [rules, setRules] = useState<CommunityRewardRule[]>([])
+  const [isDefault, setIsDefault] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [warning, setWarning] = useState('')
+  const [pending, setPending] = useState<{ id: string; awards_pending: number; identity_count: number } | null>(null)
+  const [queueBusy, setQueueBusy] = useState(false)
+
+  async function load() {
+    const d = await fetch('/api/dashboard/community/level-config').then(r => r.json()).catch(() => ({}))
+    interface RawThreshold { level: number; name: string; min: number; perkRewardRuleId: string | null }
+    setThresholds(((d.thresholds ?? []) as RawThreshold[]).map(t => ({ level: t.level, name: t.name, min_points: t.min, perk_reward_rule_id: t.perkRewardRuleId })))
+    setRules(d.reward_rules ?? [])
+    setIsDefault(d.is_default ?? true)
+    const q = await fetch('/api/dashboard/community/backfill-queue').then(r => r.json()).catch(() => ({}))
+    setPending(q.pending ?? null)
+  }
+  useEffect(() => { load() }, [])
+
+  function updateRow(i: number, patch: Partial<LevelThresholdRow>) {
+    setThresholds(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  }
+  function addRow() {
+    const last = thresholds[thresholds.length - 1]
+    const nextLevel = (last?.level ?? 0) + 1
+    if (nextLevel > 10) return
+    setThresholds(rs => [...rs, { level: nextLevel, name: `Level ${nextLevel}`, min_points: (last?.min_points ?? 0) + 500, perk_reward_rule_id: null }])
+  }
+  function removeRow(i: number) {
+    setThresholds(rs => rs.filter((_, j) => j !== i))
+  }
+
+  async function save() {
+    setSaving(true); setMsg(''); setWarning('')
+    const r = await fetch('/api/dashboard/community/level-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thresholds }) }).then(r => r.json()).catch(() => ({}))
+    setSaving(false)
+    if (r.ok) { setMsg('Saved'); setIsDefault(false); if (r.warning) setWarning(r.warning) } else setMsg(r.error || 'Could not save')
+    setTimeout(() => setMsg(''), 3000)
+  }
+
+  async function resolveBackfill(action: 'approve' | 'reject') {
+    setQueueBusy(true)
+    const r = await fetch(`/api/dashboard/community/backfill-queue?action=${action}`, { method: 'POST' }).then(r => r.json()).catch(() => ({}))
+    setQueueBusy(false)
+    if (r.ok) setPending(null)
+  }
+
+  const sel = { padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12 } as const
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 12 }}>
+      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>🏅 Community levels</p>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
+        {isDefault ? 'Using the default thresholds (Regular/Local/Insider/VIP/Legend) — edit below to customise.' : 'Custom thresholds for this business.'} Levels derive only from real lifetime points earned.
+      </p>
+
+      {pending && (
+        <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(232,198,107,0.1)', border: '1px solid rgba(232,198,107,0.3)', marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: '#E8C66B', marginBottom: 4 }}>⚠️ Bulk level-up backfill pending approval</p>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
+            {pending.awards_pending} level-ups across {pending.identity_count} members would be issued on the first run — too many to auto-issue. Review before approving.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => resolveBackfill('approve')} disabled={queueBusy} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Approve &amp; issue</button>
+            <button onClick={() => resolveBackfill('reject')} disabled={queueBusy} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Dismiss</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 10 }}>
+        {thresholds.map((t, i) => (
+          <div key={i} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.02)' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', width: 20 }}>L{t.level}</span>
+            <input value={t.name} onChange={e => updateRow(i, { name: e.target.value })} style={{ ...sel, width: 100 }} placeholder="Name" />
+            <input type="number" min={0} value={t.min_points} onChange={e => updateRow(i, { min_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} style={{ ...sel, width: 90 }} />
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>pts</span>
+            <select value={t.perk_reward_rule_id ?? ''} onChange={e => updateRow(i, { perk_reward_rule_id: e.target.value || null })} style={{ ...sel, flex: 1, minWidth: 140 }}>
+              <option value="" style={{ color: '#000' }}>No perk</option>
+              {rules.map(r => <option key={r.id} value={r.id} style={{ color: '#000' }}>{describeCommunityRule(r)}</option>)}
+            </select>
+            <button onClick={() => removeRow(i)} style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Remove</button>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button onClick={addRow} disabled={thresholds.length >= 10} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>+ Add level</button>
+        <button onClick={save} disabled={saving || !thresholds.length} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+        {msg && <span style={{ fontSize: 11, color: msg === 'Saved' ? '#7FB897' : '#EF4444' }}>{msg === 'Saved' ? '✓ Saved' : msg}</span>}
+      </div>
+      {warning && <p style={{ fontSize: 11, color: '#E8C66B', marginTop: 8 }}>⚠️ {warning}</p>}
+    </div>
+  )
+}
+
+export function CommunityLeaderboardRewardsSection() {
+  const [config, setConfig] = useState<{ rank1_reward_rule_id: string | null; rank2_reward_rule_id: string | null; rank3_reward_rule_id: string | null }>({ rank1_reward_rule_id: null, rank2_reward_rule_id: null, rank3_reward_rule_id: null })
+  const [rules, setRules] = useState<CommunityRewardRule[]>([])
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function load() {
+    const d = await fetch('/api/dashboard/community/leaderboard-config').then(r => r.json()).catch(() => ({}))
+    if (d.config) setConfig({ rank1_reward_rule_id: d.config.rank1_reward_rule_id, rank2_reward_rule_id: d.config.rank2_reward_rule_id, rank3_reward_rule_id: d.config.rank3_reward_rule_id })
+    setRules(d.reward_rules ?? [])
+  }
+  useEffect(() => { load() }, [])
+
+  async function save() {
+    setSaving(true); setMsg('')
+    const r = await fetch('/api/dashboard/community/leaderboard-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) }).then(r => r.json()).catch(() => ({}))
+    setSaving(false)
+    setMsg(r.ok ? 'Saved' : (r.error || 'Could not save'))
+    setTimeout(() => setMsg(''), 2200)
+  }
+
+  const sel = { padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(127,184,151,0.2)', color: '#fff', fontSize: 12, minWidth: 160 } as const
+  const ranks: Array<{ key: 'rank1_reward_rule_id' | 'rank2_reward_rule_id' | 'rank3_reward_rule_id'; label: string }> = [
+    { key: 'rank1_reward_rule_id', label: '🥇 1st place' },
+    { key: 'rank2_reward_rule_id', label: '🥈 2nd place' },
+    { key: 'rank3_reward_rule_id', label: '🥉 3rd place' },
+  ]
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>🏆 Weekly leaderboard rewards</p>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
+        Optional — off by default. When set, the top 3 on the 7-day community leaderboard are rewarded automatically every Monday.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+        {ranks.map(rk => (
+          <div key={rk.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, width: 90 }}>{rk.label}</span>
+            <select value={config[rk.key] ?? ''} onChange={e => setConfig(c => ({ ...c, [rk.key]: e.target.value || null }))} style={sel}>
+              <option value="" style={{ color: '#000' }}>No reward</option>
+              {rules.map(r => <option key={r.id} value={r.id} style={{ color: '#000' }}>{describeCommunityRule(r)}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      <button onClick={save} disabled={saving} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+      {msg && <span style={{ fontSize: 11, marginLeft: 10, color: msg === 'Saved' ? '#7FB897' : '#EF4444' }}>{msg === 'Saved' ? '✓ Saved' : msg}</span>}
+    </div>
+  )
+}

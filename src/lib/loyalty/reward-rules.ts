@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { awardPointsViaLedger } from '@/lib/loyalty/award-ledger'
 
 // LOY-REWARD-RULES — behaviour-triggered rewards evaluated against REAL sale data. Each active rule is
 // checked against the just-completed sale; on a match it awards points_value through the EXISTING ledger
@@ -7,14 +8,6 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 // against the sale's real total / item categories / the member's real completed-visit count.
 
 interface Rule { id: string; rule_type: string; points_value: number | null; threshold_value: number | null; config: Record<string, unknown> | null; is_active: boolean }
-
-async function awardViaLedger(customerId: string, businessId: string, points: number): Promise<void> {
-  await supabaseAdmin.rpc('increment_loyalty_points', { customer_id: customerId, points })
-  await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customerId, p_column: 'points_balance', p_amount: points })
-  await supabaseAdmin.from('pos_loyalty_transactions').insert({
-    business_id: businessId, customer_id: customerId, sale_id: null, type: 'earn', points_delta: points, created_at: new Date().toISOString(),
-  })
-}
 
 async function qualifies(rule: Rule, ctx: { customerId: string; businessId: string; saleId: string; total: number }): Promise<boolean> {
   const threshold = Number(rule.threshold_value ?? 0)
@@ -69,6 +62,6 @@ export async function evaluateRewardRules(customerId: string, businessId: string
     const { error: claimErr } = await supabaseAdmin.from('loyalty_rule_awards')
       .insert({ rule_id: rule.id, business_id: businessId, customer_id: customerId, sale_id: saleId, points_awarded: points })
     if (claimErr) continue // already awarded for this sale (or insert failed) → skip
-    await awardViaLedger(customerId, businessId, points)
+    await awardPointsViaLedger(customerId, businessId, points)
   }
 }

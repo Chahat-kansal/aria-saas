@@ -6,7 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
 import { resolveMemberCustomerLink } from '@/lib/community/loyalty-link'
 import { getLifetimePoints } from '@/lib/community/points'
-import { pointsToLevel } from '@/lib/community/levels'
+import { pointsToLevel, getLevelThresholds } from '@/lib/community/levels'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -51,14 +51,41 @@ export async function GET(_req: Request, { params }: Params) {
     // opportunistic link — see loyalty-link.ts). Viewing this page with both a community session and
     // a valid cx_session for this business is itself the linking moment. No link → null, never a
     // fabricated L1 for a non-member.
-    let yourStatus: { level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number } | null = null
+    let yourStatus: {
+      level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number
+      unlockedPerkPoints: number | null; upcomingLevelName: string | null; upcomingPerkPoints: number | null
+    } | null = null
     const member = await getCommunityMember()
     if (member) {
       const link = await resolveMemberCustomerLink(member.id, id).catch(() => null)
       if (link) {
-        const lifetimePoints = await getLifetimePoints(link.customerId)
-        const level = pointsToLevel(lifetimePoints)
-        yourStatus = { ...level, lifetimePoints }
+        const [lifetimePoints, thresholds] = await Promise.all([
+          getLifetimePoints(link.customerId),
+          getLevelThresholds(supabaseAdmin, id),
+        ])
+        const level = pointsToLevel(lifetimePoints, thresholds)
+
+        // CX-GAME-2 — real awards only: the most recent level-up's perk (if one was actually issued,
+        // reward_rule_id set + issue_error null), and the next level's perk as a teaser (config only —
+        // never implies it's already been earned).
+        const { data: latestAward } = await supabaseAdmin.from('community_level_awards')
+          .select('level, reward_rule_id, issue_error').eq('business_id', id).eq('loyalty_identity_id', link.loyaltyIdentityId)
+          .order('level', { ascending: false }).limit(1).maybeSingle()
+        let unlockedPerkPoints: number | null = null
+        if (latestAward?.reward_rule_id && !latestAward.issue_error) {
+          const { data: rule } = await supabaseAdmin.from('loyalty_reward_rules').select('points_value').eq('id', latestAward.reward_rule_id).maybeSingle()
+          unlockedPerkPoints = rule?.points_value != null ? Number(rule.points_value) : null
+        }
+
+        let upcomingLevelName: string | null = null
+        let upcomingPerkPoints: number | null = null
+        const nextThreshold = thresholds.find(t => t.min === level.nextAt)
+        if (nextThreshold?.perkRewardRuleId) {
+          const { data: rule } = await supabaseAdmin.from('loyalty_reward_rules').select('points_value').eq('id', nextThreshold.perkRewardRuleId).maybeSingle()
+          if (rule?.points_value != null) { upcomingLevelName = nextThreshold.name; upcomingPerkPoints = Number(rule.points_value) }
+        }
+
+        yourStatus = { ...level, lifetimePoints, unlockedPerkPoints, upcomingLevelName, upcomingPerkPoints }
       }
     }
 

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { awardPointsViaLedger } from '@/lib/loyalty/award-ledger'
 
 // LOY-TIER-PERKS — per-tier benefits. A member's tier is derived from their REAL points_balance against
 // pos_loyalty_config tier_silver/gold/platinum_points (the only tier source; loyalty_tiers is dead).
@@ -39,15 +40,6 @@ export async function getActivePerks(businessId: string, tier: Exclude<Tier, nul
   return (data ?? []) as TierPerk[]
 }
 
-async function awardViaLedger(customerId: string, businessId: string, points: number): Promise<void> {
-  if (points <= 0) return
-  await supabaseAdmin.rpc('increment_loyalty_points', { customer_id: customerId, points })
-  await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customerId, p_column: 'points_balance', p_amount: points })
-  await supabaseAdmin.from('pos_loyalty_transactions').insert({
-    business_id: businessId, customer_id: customerId, sale_id: null, type: 'earn', points_delta: points, created_at: new Date().toISOString(),
-  })
-}
-
 /**
  * Apply the member's tier points_multiplier as BONUS earn on a real sale. The base earn is handled by the
  * untouched earn block in pos/sale; this credits only the extra (base × (multiplier − 1)). Tier is computed
@@ -81,5 +73,5 @@ export async function applyTierEarnPerks(customerId: string, businessId: string,
   const { error } = await supabaseAdmin.from('loyalty_tier_perk_grants')
     .insert({ perk_id: mult.id, business_id: businessId, customer_id: customerId, sale_id: saleId, points_awarded: bonus })
   if (error) return
-  await awardViaLedger(customerId, businessId, bonus)
+  await awardPointsViaLedger(customerId, businessId, bonus)
 }
