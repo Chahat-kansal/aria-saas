@@ -2,13 +2,22 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { pointsToLevel } from '@/lib/community/levels'
 import { getLifetimePointsBatch } from '@/lib/community/points'
 import type { LeaderboardRow } from '@/lib/community/leaderboard'
+import { sendEmail } from '@/lib/external-apis'
 
-// CX-GAME-LEAN — daily digest, email-only (Resend), consent-gated (pos_customers.email_consent,
-// reusing the WHATSAPP sprint's consent-column pattern). Skip-if-nothing-happened: a member with
-// zero points delta AND unchanged rank gets no email — never spam an inactive member. One email/day
-// max by construction (the daily cron calls this once; last_digest_at makes a truthful delta possible
-// even if the cron were ever accidentally re-run same day — see the >last_digest_at filter below,
-// which would correctly compute a 0 delta on a same-day re-run rather than double-counting).
+// CX-GAME-LEAN — daily digest, email-only, consent-gated (pos_customers.email_consent, reusing the
+// WHATSAPP sprint's consent-column pattern). Skip-if-nothing-happened: a member with zero points
+// delta AND unchanged rank gets no email — never spam an inactive member. One email/day max by
+// construction (the daily cron calls this once; last_digest_at makes a truthful delta possible even
+// if the cron were ever accidentally re-run same day — see the >last_digest_at filter below, which
+// would correctly compute a 0 delta on a same-day re-run rather than double-counting).
+//
+// CX-GAME-CLOSEOUT — this originally called Resend directly via a raw fetch(), which meant it had
+// NO unsubscribe footer, NO List-Unsubscribe header, and never checked the email_suppression list —
+// a real gap found in production verification, not caught by tsc/build. Routed through the existing
+// canonical sendEmail() (lib/external-apis.ts) instead: category:'marketing' gets the automatic
+// signed one-click unsubscribe link + footer + suppression check + cost logging, all for free —
+// the exact machinery loyalty-birthday/winback/campaign sends already use. Never build a second
+// email-sending path when one with real compliance handling already exists.
 
 interface DigestCandidate {
   customer_id: string
@@ -24,8 +33,7 @@ export async function sendDailyDigests(
   businessName: string,
   newSnapshot: LeaderboardRow[],
 ): Promise<{ sent: number; skipped: number }> {
-  const resendKey = process.env.RESEND_API_KEY
-  if (!resendKey || !newSnapshot.length) return { sent: 0, skipped: newSnapshot.length }
+  if (!newSnapshot.length) return { sent: 0, skipped: 0 }
 
   const customerIds = newSnapshot.map(r => r.customer_id)
   const { data: customers } = await supabase
@@ -71,24 +79,23 @@ export async function sendDailyDigests(
           ? `You're now #${row.rank} this month (down ${Math.abs(movement)}).`
           : `You're holding steady at #${row.rank} this month.`
 
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: 'Aria <community@ariaos.site>',
-          to: [cust.email],
-          subject: pointsDelta > 0 ? `+${pointsDelta} points at ${businessName}` : `Your ${businessName} community update`,
-          html: `<p>Hi ${first},</p>` +
-            (pointsDelta !== 0 ? `<p>You ${pointsDelta > 0 ? 'earned' : 'used'} <strong>${Math.abs(pointsDelta)} points</strong> at ${businessName} since your last update.</p>` : '') +
-            `<p>${rankLine}</p>` +
-            `<p>Level ${level.level} · ${level.name} — ${progressLine}</p>`,
-        }),
-      })
+    const subject = pointsDelta > 0 ? `+${pointsDelta} points at ${businessName}` : `Your ${businessName} community update`
+    const html = `<p>Hi ${first},</p>` +
+      (pointsDelta !== 0 ? `<p>You ${pointsDelta > 0 ? 'earned' : 'used'} <strong>${Math.abs(pointsDelta)} points</strong> at ${businessName} since your last update.</p>` : '') +
+      `<p>${rankLine}</p>` +
+      `<p>Level ${level.level} · ${level.name} — ${progressLine}</p>`
+
+    // sendEmail (category:'marketing') adds the signed one-click unsubscribe link + footer + List-
+    // Unsubscribe header, checks the email_suppression list, and re-checks email_consent itself —
+    // the same compliance machinery every other consent-gated send in this codebase already uses.
+    const ok = await sendEmail(
+      { to: cust.email, subject, html, from_name: 'Aria' },
+      { category: 'marketing', businessId, customerId: row.customer_id },
+    )
+    if (ok) {
       await supabase.from('pos_customers').update({ last_digest_at: new Date().toISOString() }).eq('id', row.customer_id)
       sent++
-    } catch (e) {
-      console.error('[sendDailyDigests] send failed:', row.customer_id, String(e))
+    } else {
       skipped++
     }
   }
