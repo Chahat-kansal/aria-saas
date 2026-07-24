@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const SECURITY_HEADERS: Record<string, string> = {
   'X-Frame-Options': 'DENY',
@@ -32,6 +33,38 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith('/monitoring')) return NextResponse.next()
+
+  // ── COMMUNITY CAFE-FIRST ENTRY — genuine HTTP redirect for a member linked to exactly one café ──
+  // CX-CLARITY-1 fix: the page-level redirect() in community/page.tsx gets absorbed into the RSC
+  // stream instead of surfacing as a real HTTP 307 on a fresh full-page load — confirmed live, a
+  // plain GET returns 200 with the Discover feed while the RSC payload itself carries a NEXT_REDIRECT
+  // marker (so an in-app/client-side nav still lands correctly, just not a fresh visit — QR code,
+  // bookmark, marketing link). Doing the lookup here guarantees a true redirect for that case.
+  // Isolated in its own try/catch (not the shared auth try below) — a failure here must never
+  // block the page's own fallback rendering, only skip the fast-path redirect.
+  if (pathname === '/community') {
+    try {
+      const token = request.cookies.get('aria_community_session')?.value
+      if (token) {
+        const { data: member } = await supabaseAdmin.from('community_members')
+          .select('id').eq('session_token', token).maybeSingle()
+        if (member) {
+          const { data: links } = await supabaseAdmin.from('community_member_loyalty_links')
+            .select('businesses(slug)').eq('member_id', (member as { id: string }).id)
+          type LinkRow = { businesses: { slug: string | null } | null }
+          const slugs = Array.from(new Set(
+            ((links ?? []) as unknown as LinkRow[]).map(l => l.businesses?.slug).filter((s): s is string => !!s)
+          ))
+          if (slugs.length === 1) {
+            return applySecurityHeaders(NextResponse.redirect(new URL(`/community/${slugs[0]}`, request.url), 307))
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[middleware] community cafe-first lookup failed — falling through to page render:', err)
+    }
+    return applySecurityHeaders(NextResponse.next())
+  }
 
   // ── PUBLIC API ROUTES — rate limit by IP ──────────────────────────────────
   if (pathname.startsWith('/api/public/')) {
@@ -295,6 +328,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/',
+    '/community',
     '/login',
     '/signup',
     '/forgot-password',
