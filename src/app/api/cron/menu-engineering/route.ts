@@ -65,7 +65,6 @@ export async function GET(req: Request) {
         .select('id', { count: 'exact', head: true }).eq('business_id', biz.id).is('unfollowed_at', null);
       if ((followCount ?? 0) > 0) {
         const periods: LeaderboardPeriod[] = ['7d', '30d', 'all'];
-        let new30d: LeaderboardRow[] = [];
         let new7d: LeaderboardRow[] = [];
         for (const period of periods) {
           // Read the about-to-be-overwritten snapshot FIRST — it's the only "previous" available
@@ -77,10 +76,12 @@ export async function GET(req: Request) {
           const computed = await computeLeaderboardSnapshot(supabaseAdmin, biz.id, period);
           const rows = attachRankMovement(computed, previousRows);
           await persistLeaderboardSnapshot(supabaseAdmin, biz.id, period, rows);
-          if (period === '30d') new30d = rows;
           if (period === '7d') new7d = rows;
         }
-        await sendDailyDigests(supabaseAdmin, biz.id, biz.name ?? 'your community', new30d);
+        // CX-GAME-DIGEST-FIX — sendDailyDigests now sources its own rank/movement read from the
+        // just-persisted snapshot (one canonical DB read) instead of taking one as a parameter —
+        // see digest.ts's own doc comment for why.
+        await sendDailyDigests(supabaseAdmin, biz.id, biz.name ?? 'your community');
 
         // CX-GAME-2 — level-up awards, daily, for every linked identity (never unlinked members).
         try {
