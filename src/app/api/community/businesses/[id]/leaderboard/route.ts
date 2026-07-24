@@ -5,16 +5,23 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
 import type { LeaderboardRow, LeaderboardPeriod } from '@/lib/community/leaderboard'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 type Params = { params: Promise<{ id: string }> }
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SLUG_RE = /^[a-z0-9-]+$/
 
 const VALID_PERIODS = new Set(['7d', '30d', 'all'])
 
 // GET ?period=7d|30d|all — top 10 + the viewer's own row pinned below if they exist but are outside
 // the top 10. Reads the persisted snapshot only (no live recompute — that's the daily cron's job).
+// CX-CLARITY-1 — [id] accepts either a real uuid or businesses.slug (resolveBusinessId).
 export async function GET(req: Request, { params }: Params) {
-  const { id } = await params
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const { id: idOrSlug } = await params
+  if (!idOrSlug) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (!UUID_RE.test(idOrSlug) && !SLUG_RE.test(idOrSlug)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const id = await resolveBusinessId(supabaseAdmin, idOrSlug)
+  if (!id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const period = (new URL(req.url).searchParams.get('period') ?? '7d') as LeaderboardPeriod
   if (!VALID_PERIODS.has(period)) return NextResponse.json({ error: 'invalid period' }, { status: 400 })
 

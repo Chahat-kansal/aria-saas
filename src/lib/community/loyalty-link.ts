@@ -13,6 +13,9 @@ import { resolveCxCustomer } from '@/lib/cx/resolve-cx-customer'
 export interface MemberCustomerLink {
   customerId: string
   loyaltyIdentityId: string
+  // CX-CLARITY-1 — whether this member already dismissed the loop-explainer banner for this
+  // business (community_member_loyalty_links.banner_dismissed_at). null on a freshly-created link.
+  bannerDismissed: boolean
 }
 
 /** Resolve (and opportunistically create) the loyalty link for a community member + business.
@@ -20,9 +23,9 @@ export interface MemberCustomerLink {
 export async function resolveMemberCustomerLink(memberId: string, businessId: string): Promise<MemberCustomerLink | null> {
   const { data: existing } = await supabaseAdmin
     .from('community_member_loyalty_links')
-    .select('customer_id, loyalty_identity_id')
+    .select('customer_id, loyalty_identity_id, banner_dismissed_at')
     .eq('member_id', memberId).eq('business_id', businessId).maybeSingle()
-  if (existing) return { customerId: existing.customer_id as string, loyaltyIdentityId: existing.loyalty_identity_id as string }
+  if (existing) return { customerId: existing.customer_id as string, loyaltyIdentityId: existing.loyalty_identity_id as string, bannerDismissed: existing.banner_dismissed_at != null }
 
   const session = await getCxSessionServer(businessId)
   if (!session) return null
@@ -35,7 +38,7 @@ export async function resolveMemberCustomerLink(memberId: string, businessId: st
     loyalty_identity_id: session.identity_id, customer_id: customer.id,
   }).then(() => {}, () => {}) // best-effort; a concurrent link attempt just hits the UNIQUE constraint
 
-  return { customerId: customer.id, loyaltyIdentityId: session.identity_id }
+  return { customerId: customer.id, loyaltyIdentityId: session.identity_id, bannerDismissed: false }
 }
 
 /** Batch-resolve links for many members at once (comments list) — no per-comment cx_session lookup;

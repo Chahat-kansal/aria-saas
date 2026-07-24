@@ -209,7 +209,7 @@ function WhatsNewCard({ post, slug }: { post: HubBusiness['latestPost']; slug: s
   return (
     <div style={{ padding: '0 18px', marginBottom: 22 }}>
       <a
-        href={'/community/businesses/' + slug}
+        href={'/community/' + slug}
         style={{ display: 'flex', gap: 14, background: CARD_DARK, borderRadius: 20, overflow: 'hidden', textDecoration: 'none', alignItems: 'center', padding: 16 }}
       >
         {post.imageUrl && (
@@ -247,7 +247,7 @@ function HubLinks({ biz, onTrack }: { biz: HubBusiness; onTrack: (t: string) => 
   if (has('booking') && biz.bookingSlug)
     cards.push({ target: 'booking', title: 'Book with us', sub: 'Reserve a table or appointment', href: '/book/' + biz.bookingSlug, emoji: '📅' })
   if (has('community'))
-    cards.push({ target: 'community', title: 'Follow on Aria', sub: 'Latest posts & offers', href: '/community/businesses/' + biz.id, emoji: '💬' })
+    cards.push({ target: 'community', title: 'Follow on Aria', sub: 'Latest posts & offers', href: '/community/' + biz.slug, emoji: '💬' })
   if (has('review') && biz.reviewUrl)
     cards.push({ target: 'review', title: 'Leave a review', sub: 'Tell others about your visit', href: biz.reviewUrl, external: true, emoji: '⭐' })
   if (has('website') && biz.website)

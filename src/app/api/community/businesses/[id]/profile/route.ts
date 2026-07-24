@@ -7,20 +7,33 @@ import { getCommunityMember } from '@/lib/community/session'
 import { resolveMemberCustomerLink } from '@/lib/community/loyalty-link'
 import { getLifetimePoints } from '@/lib/community/points'
 import { pointsToLevel, getLevelThresholds } from '@/lib/community/levels'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 type Params = { params: Promise<{ id: string }> }
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SLUG_RE = /^[a-z0-9-]+$/
 
 // Public — extended Facebook/LinkedIn-style business profile:
 // cover, info, follower + post counts, "verified local business" badge,
 // recent posts (Phase 2 published content).
+//
+// CX-CLARITY-1 — the [id] segment now accepts EITHER a real business uuid OR businesses.slug,
+// resolved via the same resolveBusinessId() every CX/booking/public route already uses — the
+// established "accept id or slug" convention in this codebase, not a new one. Every internal query
+// below uses the RESOLVED real uuid, never the raw path param, so a slug can never leak into a
+// column that expects a real FK.
 export async function GET(_req: Request, { params }: Params) {
   try {
-    const { id } = await params
-    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    const { id: idOrSlug } = await params
+    if (!idOrSlug) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    // CX-CLARITY-1 — fail fast on an obviously-malformed slug before spending a query on it.
+    if (!UUID_RE.test(idOrSlug) && !SLUG_RE.test(idOrSlug)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const id = await resolveBusinessId(supabaseAdmin, idOrSlug)
+    if (!id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const [bizRes, followCountRes, postCountRes, recentPostsRes, b2bFollowingRes, b2bFollowersRes, highlightsRes] = await Promise.all([
       supabaseAdmin.from('businesses')
-        .select('id, name, industry, city, suburb, logo_url, website, community_verified, community_bio, community_cover_url, google_rating, phone, address, email')
+        .select('id, slug, name, industry, city, suburb, logo_url, website, community_verified, community_bio, community_cover_url, google_rating, phone, address, email')
         .eq('id', id).maybeSingle(),
       supabaseAdmin.from('community_follows')
         .select('id', { count: 'exact', head: true })
@@ -55,6 +68,7 @@ export async function GET(_req: Request, { params }: Params) {
       level: number; name: string; nextAt: number | null; progress: number; lifetimePoints: number
       unlockedPerkPoints: number | null; upcomingLevelName: string | null; upcomingPerkPoints: number | null
     } | null = null
+    let bannerDismissed = false
     const member = await getCommunityMember()
     if (member) {
       const link = await resolveMemberCustomerLink(member.id, id).catch(() => null)
@@ -86,11 +100,13 @@ export async function GET(_req: Request, { params }: Params) {
         }
 
         yourStatus = { ...level, lifetimePoints, unlockedPerkPoints, upcomingLevelName, upcomingPerkPoints }
+        bannerDismissed = link.bannerDismissed
       }
     }
 
     return NextResponse.json({
       your_status: yourStatus,
+      banner_dismissed: bannerDismissed,
       business: bizRes.data,
       stats: {
         followers: followCountRes.count ?? 0,
