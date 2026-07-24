@@ -1,6 +1,8 @@
 import { permanentRedirect, notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+export const dynamic = 'force-dynamic'
+
 // CX-CLARITY-1 — moved to /community/[slug]/leaderboard. See businesses/[id]/page.tsx's own note.
 type Params = { params: Promise<{ id: string }> }
 
