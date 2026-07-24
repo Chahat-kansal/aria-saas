@@ -43,9 +43,17 @@ export async function sendDailyDigests(
   supabase: SupabaseClient,
   businessId: string,
   businessName: string,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; why?: boolean },
 ): Promise<{ sent: number; skipped: number }> {
   const force = opts?.force ?? false
+  const why = opts?.why ?? false
+  // --why diagnostic logging ONLY — never changes which branch runs or what gets sent. Every skip
+  // point below gets a matching log(...) call right before its `skipped++; continue`/return, so a
+  // confusing "sent:0 skipped:1" always has a printed reason next to it instead of requiring a
+  // fresh SQL trace each time (see CX-GAME-DIGEST-FIX follow-up: a real --force run still skipped
+  // legitimately — delta was genuinely 0 since last_digest_at, rank hadn't moved — and there was no
+  // way to see that from the result alone).
+  const log = (...args: unknown[]) => { if (why) console.log('[digest:why]', ...args) }
 
   // Candidates are every linked member with a consenting email — NOT "whoever made the leaderboard
   // snapshot". A customer who opted out of the leaderboard (or a business with no snapshot yet)
@@ -67,7 +75,8 @@ export async function sendDailyDigests(
     if (c?.email && c.email_consent === true) candidateMap.set(c.id, c)
   }
   const candidates = Array.from(candidateMap.values())
-  if (!candidates.length) return { sent: 0, skipped: 0 }
+  log(`${candidates.length} candidate(s) for business ${businessId}:`, candidates.map(c => ({ id: c.id, email: c.email })))
+  if (!candidates.length) { log('no candidates (no linked member has a consenting email) — nothing to do'); return { sent: 0, skipped: 0 } }
 
   // Canonical rank/movement source — one read of the persisted snapshot, never recomputed here.
   const { data: snapshotRow } = await supabase
@@ -76,6 +85,7 @@ export async function sendDailyDigests(
   const rankByCustomer = new Map(
     (((snapshotRow?.rows as LeaderboardRow[] | undefined) ?? [])).map(r => [r.customer_id, r])
   )
+  log(`${DIGEST_PERIOD} snapshot: ${snapshotRow ? `${rankByCustomer.size} row(s)` : 'no snapshot row for this business'}`)
 
   let sent = 0, skipped = 0
   for (const cust of candidates) {
@@ -83,7 +93,11 @@ export async function sendDailyDigests(
       p_customer_id: cust.id, p_force: force,
     })
     const claim = (claimRows as Array<{ claimed: boolean; previous_last_digest_at: string | null }> | null)?.[0]
-    if (!claim?.claimed) { skipped++; continue }
+    if (!claim?.claimed) {
+      log(cust.email, 'SKIP — already claimed today (last_digest_at is today; rerun with --force to bypass)')
+      skipped++; continue
+    }
+    log(cust.email, `claimed — previous_last_digest_at was ${claim.previous_last_digest_at ?? '(never sent before)'}`)
 
     const since = claim.previous_last_digest_at ?? '1970-01-01T00:00:00.000Z'
     const { data: deltaRows } = await supabase
@@ -92,16 +106,23 @@ export async function sendDailyDigests(
       .eq('business_id', businessId).eq('customer_id', cust.id)
       .gt('created_at', since)
     const pointsDelta = (deltaRows ?? []).reduce((s, r) => s + (Number(r.points_delta) || 0), 0)
+    log(cust.email, `delta since ${since}: ${pointsDelta} pts across ${(deltaRows ?? []).length} transaction(s)`)
 
     // No snapshot row for this customer (opted out of the leaderboard, or the business has none
     // yet) — rank/movement stay null, the rank line is omitted entirely below. Never fabricated.
     const leaderboardRow = rankByCustomer.get(cust.id)
     const movement = leaderboardRow?.rankMovement ?? null
     const rankChanged = movement != null && movement !== 0
+    log(cust.email, leaderboardRow
+      ? `snapshot row: rank #${leaderboardRow.rank}, rankMovement=${movement} (changed=${rankChanged})`
+      : 'no snapshot row for this customer — rank line will be omitted')
 
     // The claim ALREADY prevents a same-day retry regardless of what happens below — accepting a
     // "nothing happened" day still consumes today's slot is intentional, not a bug.
-    if (pointsDelta === 0 && !rankChanged) { skipped++; continue }
+    if (pointsDelta === 0 && !rankChanged) {
+      log(cust.email, 'SKIP — skip-if-nothing-happened: 0 pts delta and rank unchanged since', since)
+      skipped++; continue
+    }
 
     const lifetimeMap = await getLifetimePointsBatch([cust.id])
     const lifetimePoints = lifetimeMap.get(cust.id) ?? 0
@@ -139,8 +160,8 @@ export async function sendDailyDigests(
     // If the send itself fails, the claim above still stands — today's slot is spent either way.
     // Tradeoff accepted deliberately: a missed day (retried tomorrow, delta computed from today's
     // claim onward) is far better than risking the double-send this whole fix exists to prevent.
-    if (ok) sent++
-    else skipped++
+    if (ok) { log(cust.email, 'SENT —', subject); sent++ }
+    else { log(cust.email, 'SKIP — sendEmail() returned false (suppressed, consent re-check failed, or provider error — see its own logs)'); skipped++ }
   }
 
   return { sent, skipped }

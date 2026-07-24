@@ -10,7 +10,12 @@
 // so you can send twice in a row while testing without editing the DB by hand — the real cron never
 // passes this. Every --force send is loud in the log; there is no silent bypass.
 //
-// Usage: npx tsx scripts/send-test-digest.ts [--force]
+// CX-GAME-DIGEST-FIX follow-up — --force bypasses the same-day CLAIM check only, never the
+// skip-if-nothing-happened rule (0 pts delta and unchanged rank still correctly skips — that's the
+// rule working, not a bug). Pass --why to print exactly which of the two independent checks fired
+// for a "sent:0 skipped:1" result, without changing what runs — see digest.ts's own `log()` calls.
+//
+// Usage: npx tsx scripts/send-test-digest.ts [--force] [--why]
 
 import 'dotenv/config'
 import { config as loadEnvLocal } from 'dotenv'
@@ -23,7 +28,9 @@ const SIP_BUSINESS_ID = 'ff5055a0-c351-4ada-817a-1804961035f3'
 
 async function main() {
   const force = process.argv.includes('--force')
+  const whyFlag = process.argv.includes('--why')
   if (force) console.log('--force set: bypassing the same-day claim guard for this run only.')
+  if (whyFlag) console.log('--why set: logging the exact reason for every skip below.')
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,11 +38,11 @@ async function main() {
     { auth: { persistSession: false } },
   )
 
-  const result = await sendDailyDigests(supabase, SIP_BUSINESS_ID, 'Sip Café', { force })
+  const result = await sendDailyDigests(supabase, SIP_BUSINESS_ID, 'Sip Café', { force, why: whyFlag })
   console.log('Result:', JSON.stringify(result))
   console.log(result.sent > 0
     ? 'Sent — check the inbox on the pos_customers row this ran against (email_consent must be true).'
-    : 'Nothing sent — either no consenting recipient, no real delta, or the day is already claimed (rerun with --force to bypass). Check pos_customers.email/email_consent.')
+    : 'Nothing sent — rerun with --why to see the exact reason (already claimed today vs. skip-if-nothing-happened vs. no candidate).')
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
