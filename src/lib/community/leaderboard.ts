@@ -64,10 +64,24 @@ export async function computeLeaderboardSnapshot(
   // 1. Every linked member for this business, excluding opt-outs.
   const { data: links } = await supabase
     .from('community_member_loyalty_links')
-    .select('member_id, customer_id, community_members(nickname), pos_customers(name, leaderboard_opt_out)')
+    .select('member_id, customer_id, linked_at, community_members(nickname), pos_customers(name, leaderboard_opt_out)')
     .eq('business_id', businessId)
-  type LinkRow = { member_id: string; customer_id: string; community_members: { nickname: string | null } | null; pos_customers: { name: string | null; leaderboard_opt_out: boolean | null } | null }
-  const eligible = ((links ?? []) as unknown as LinkRow[]).filter(l => !l.pos_customers?.leaderboard_opt_out)
+    .order('linked_at', { ascending: true })
+  type LinkRow = { member_id: string; customer_id: string; linked_at: string; community_members: { nickname: string | null } | null; pos_customers: { name: string | null; leaderboard_opt_out: boolean | null } | null }
+  const allLinks = ((links ?? []) as unknown as LinkRow[]).filter(l => !l.pos_customers?.leaderboard_opt_out)
+
+  // CX-GAME-DIGEST-FIX follow-up (2026-07-25) — dedupe by customer_id. The same real customer can
+  // have more than one community_member_loyalty_links row (confirmed live: multiple community
+  // sessions/devices opportunistically linking to the same loyalty customer — e.g. Sip's own
+  // persisted snapshots had one real person occupying both rank #1 and #2). Every score signal
+  // below is keyed by customer_id anyway, so duplicate rows are always exact score duplicates —
+  // never a second real competitor. Ordered by linked_at ascending above so the earliest link (the
+  // identity this person actually started with at this business) wins as canonical.
+  const eligibleByCustomer = new Map<string, LinkRow>()
+  for (const l of allLinks) {
+    if (!eligibleByCustomer.has(l.customer_id)) eligibleByCustomer.set(l.customer_id, l)
+  }
+  const eligible = Array.from(eligibleByCustomer.values())
   if (!eligible.length) return []
 
   const customerIds = eligible.map(l => l.customer_id)
