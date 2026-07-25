@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
+import { COMMUNITY_BUSINESS_CARD, getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 import { getCommunityMember } from '@/lib/community/session'
 import { generateColdStartCards, type BizSignal } from '@/lib/community/cold-start-cards'
 
@@ -113,6 +113,11 @@ export async function GET(req: Request) {
       .eq('is_story', false)
       .order('published_at', { ascending: false })
       .limit(limit + 1)
+
+    // SECURITY-P4 follow-up — this is the global cross-business feed; test/fixture businesses
+    // never belong in it, regardless of geo/following filters below.
+    const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+    if (testExcl) q = q.not('business_id', 'in', testExcl)
 
     if (before) q = q.lt('published_at', before)
 

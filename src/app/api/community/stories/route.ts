@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
-import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
+import { COMMUNITY_BUSINESS_CARD, getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 
 // Public — active stories (is_story=true AND expires_at > now AND status=published).
 // One bubble per business showing their most recent active story.
@@ -14,7 +14,7 @@ export async function GET() {
     const member = await getCommunityMember()
     const nowIso = new Date().toISOString()
 
-    const { data: rows, error } = await supabaseAdmin
+    let storyQ = supabaseAdmin
       .from('community_posts')
       .select(`id, business_id, body, media_urls, media_type, published_at, expires_at, ${COMMUNITY_BUSINESS_CARD}`)
       .eq('status', 'published')
@@ -22,6 +22,11 @@ export async function GET() {
       .gt('expires_at', nowIso)
       .order('published_at', { ascending: false })
       .limit(200)
+    // SECURITY-P4 follow-up — cross-business stories row (the "who's active right now" bubble row);
+    // test/fixture businesses never belong in it.
+    const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+    if (testExcl) storyQ = storyQ.not('business_id', 'in', testExcl)
+    const { data: rows, error } = await storyQ
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

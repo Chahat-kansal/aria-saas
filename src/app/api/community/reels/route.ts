@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
-import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
+import { COMMUNITY_BUSINESS_CARD, getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 
 // Public — reels (media_type='reel') across the network. TikTok-style discovery.
 export async function GET(req: Request) {
@@ -22,7 +22,13 @@ export async function GET(req: Request) {
       .eq('media_type', 'reel')
       .order('published_at', { ascending: false })
       .limit(limit + 1)
-    if (businessId) q = q.eq('business_id', businessId)  // network-wide when absent (unchanged)
+    if (businessId) {
+      q = q.eq('business_id', businessId)  // a specific business's own reels — never test-filtered
+    } else {
+      // SECURITY-P4 follow-up — network-wide reels; test/fixture businesses excluded, same as feed.
+      const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+      if (testExcl) q = q.not('business_id', 'in', testExcl)
+    }
     if (before) q = q.lt('published_at', before)
 
     const { data: rows, error } = await q

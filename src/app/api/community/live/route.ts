@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 
 const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID ?? ''
 const CF_TOKEN   = process.env.CLOUDFLARE_STREAM_API_TOKEN ?? ''
@@ -136,10 +137,15 @@ async function _DELETE(req: Request) {
 
 // GET — list active streams
 async function _GET() {
-  const { data } = await supabaseAdmin.from('community_live_streams')
+  let q = supabaseAdmin.from('community_live_streams')
     .select('id,title,started_at,viewer_count,business_id,cf_playback_hls,businesses(name,logo_url)')
     .eq('status', 'active')
     .order('started_at', { ascending: false })
+  // SECURITY-P4 follow-up — cross-business "who's live right now" list; test/fixture businesses
+  // excluded, same as feed.
+  const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+  if (testExcl) q = q.not('business_id', 'in', testExcl)
+  const { data } = await q
   return NextResponse.json({ streams: data ?? [] })
 }
 

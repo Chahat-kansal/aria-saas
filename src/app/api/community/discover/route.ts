@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getCommunityMember } from '@/lib/community/session'
+import { getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 
 // Public — Discover: businesses the visitor doesn't follow yet, ranked by
 // recent activity. If the member already follows some businesses, prioritise
@@ -42,6 +43,11 @@ export async function GET() {
       .neq('onboarding_complete', false)
       .limit(60)
     if (followedIds.length > 0) q = q.not('id', 'in', '(' + followedIds.join(',') + ')')
+    // SECURITY-P4 follow-up — Discover ranks/scores businesses with a follower-count badge, the
+    // closest thing to a cross-business leaderboard this app has; test/fixture businesses must
+    // never be recommended to a real visitor.
+    const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+    if (testExcl) q = q.not('id', 'in', testExcl)
 
     const { data: rows, error } = await q
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

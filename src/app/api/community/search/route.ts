@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
+import { COMMUNITY_BUSINESS_CARD, getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 
 // Public — unified search across businesses + marketplace listings.
 //
@@ -31,22 +31,30 @@ export async function GET(req: Request) {
     const businesses: BusinessRow[] = []
     const listings: ListingRow[] = []
 
+    // SECURITY-P4 follow-up — public cross-business search; test/fixture businesses and their
+    // marketplace listings must never surface to a real searcher.
+    const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+
     if (type === 'all' || type === 'business') {
-      const { data } = await supabaseAdmin.from('businesses')
+      let bq = supabaseAdmin.from('businesses')
         .select('id, name, industry, suburb, city, logo_url, community_verified')
         // Match on name, industry, suburb, city — common search intents
         .or(`name.ilike.${ilike},industry.ilike.${ilike},suburb.ilike.${ilike},city.ilike.${ilike}`)
         .limit(limit)
+      if (testExcl) bq = bq.not('id', 'in', testExcl)
+      const { data } = await bq
       businesses.push(...((data ?? []) as BusinessRow[]))
     }
 
     if (type === 'all' || type === 'listing') {
-      const { data } = await supabaseAdmin.from('marketplace_listings')
+      let lq = supabaseAdmin.from('marketplace_listings')
         .select(`id, business_id, title, description, price, media_urls, category, created_at, ${COMMUNITY_BUSINESS_CARD}`)
         .eq('status', 'active')
         .or(`title.ilike.${ilike},description.ilike.${ilike},category.ilike.${ilike}`)
         .order('created_at', { ascending: false })
         .limit(limit)
+      if (testExcl) lq = lq.not('business_id', 'in', testExcl)
+      const { data } = await lq
       listings.push(...((data ?? []) as unknown as ListingRow[]))
     }
 

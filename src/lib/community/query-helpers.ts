@@ -1,5 +1,27 @@
 // ARCH-CLEANUP-1 — shared community query building blocks (F4 + F5). Zero behavior change.
 
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// SECURITY-P4 follow-up — businesses.is_test marks a fixture/QA business (e.g. the smoke-suite's
+// own test account), not a real one. Cross-business PUBLIC surfaces (global feed/Discover,
+// network-wide search/reels/live streams, any ranking that mixes multiple businesses' data
+// together) must exclude these — a real visitor should never see test content in a feed meant to
+// represent the real network. A test business's OWN direct pages (profile, leaderboard, owner
+// dashboard) are deliberately NOT filtered by this — the smoke suite and manual testing still need
+// those to render normally when visited directly by id/slug.
+export async function getTestBusinessIds(supabase: SupabaseClient): Promise<string[]> {
+  const { data } = await supabase.from('businesses').select('id').eq('is_test', true)
+  return ((data ?? []) as Array<{ id: string }>).map(r => r.id)
+}
+
+/** PostgREST exclusion clause for `.not(col, 'in', excludeIdsClause(ids))` — returns null when
+ * there's nothing to exclude, so callers can skip applying `.not(...)` entirely (an empty `()`
+ * `in` list is not what we want — "exclude nothing" should mean no filter, not a query error). */
+export function excludeIdsClause(ids: string[]): string | null {
+  if (!ids.length) return null
+  return '(' + ids.join(',') + ')'
+}
+
 // F4 — the SUPERSET business-card embed: every column ANY community route currently selects on the
 // `businesses` embed. Using one constant everywhere means no route can silently LOSE a field; a route
 // gaining an unused column (e.g. block now also returns suburb) is intentional and harmless.
