@@ -15,6 +15,13 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'html',
   timeout: 60_000,
   expect: { timeout: 10_000 },
+  // CI-E2E-1 follow-up — logs in ONCE for the whole run (e2e/helpers/global-setup.ts) instead of
+  // e2e/'s and tests/e2e/'s two independent per-test login implementations, which together
+  // exhausted the login endpoint's own rate limit partway through the first real full-suite run.
+  // No global `use.storageState` here deliberately — several specs (api.spec.ts's 401 checks,
+  // community's public-access tests, the marketing site) intentionally test UNAUTHENTICATED
+  // behavior; only login()/authedPage (used by the specs that need a session) reuse the cache.
+  globalSetup: require.resolve('./e2e/helpers/global-setup.ts'),
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',

@@ -33,15 +33,24 @@ test.describe('API health checks', () => {
     expect(new Date(body.timestamp).getFullYear()).toBeGreaterThan(2020)
   })
 
-  test('GET /api/health/deep returns checks object', async ({ request }) => {
-    const res = await request.get('/api/health/deep')
-    // May return 200 or 503 (degraded) — either is acceptable, just must respond
-    expect([200, 503]).toContain(res.status())
+  // CI-E2E-1 follow-up — this asserted the OLD public /api/health/deep contract. AUDIT-CLEANUP-QUICK-1
+  // (see that route's own comment) gated it behind admin auth after finding it pinged live
+  // Anthropic/Redis/Supabase with zero auth, publicly reachable by anyone — a real cost/abuse vector.
+  // The spec was never updated after that fix landed, so it's been failing on a 404 (the gate
+  // correctly denying an unauthenticated caller) ever since. Never revert the gate to make the old
+  // assertion pass — that would reintroduce the exact vulnerability the security fix closed.
+  // /api/healthz is the new intentional public liveness check; verify THAT contract instead, plus
+  // that the deep route's admin gate is actually doing its job.
+  test('GET /api/healthz returns public liveness ok', async ({ request }) => {
+    const res = await request.get('/api/healthz')
+    expect(res.status()).toBe(200)
     const body = await res.json()
-    expect(body.status).toMatch(/ok|degraded/)
-    expect(body.checks).toBeDefined()
-    expect(body.checks.supabase).toBeDefined()
-    expect(typeof body.checks.supabase.ok).toBe('boolean')
+    expect(body.ok).toBe(true)
+  })
+
+  test('GET /api/health/deep denies an unauthenticated caller (admin-gated since AUDIT-CLEANUP-QUICK-1)', async ({ request }) => {
+    const res = await request.get('/api/health/deep', { headers: { Cookie: '' } })
+    expect(res.status()).toBe(404)
   })
 
   test('GET /api/health responds without authentication', async ({ request }) => {
@@ -155,13 +164,8 @@ test.describe('API response shape contracts', () => {
     expect(Object.keys(body)).toEqual(expect.arrayContaining(['status', 'ok', 'timestamp']))
   })
 
-  test('GET /api/health/deep response has checks.supabase.ok field', async ({ request }) => {
-    const res = await request.get('/api/health/deep')
-    const body = await res.json()
-    expect(body.checks?.supabase?.ok).toBeDefined()
-    expect(typeof body.checks.supabase.ok).toBe('boolean')
-    expect(typeof body.checks.supabase.ms).toBe('number')
-  })
+  // Duplicate of the admin-gate assertion in "API health checks" above (both hit the same route,
+  // same unauthenticated-404 outcome) — removed rather than left as a second copy of the same check.
 
   test('protected routes return JSON error body on 401', async ({ request }) => {
     const res = await request.get('/api/pos/products', {

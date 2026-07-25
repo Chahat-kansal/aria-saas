@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { restoreCachedSession } from './session'
 
 // CI-E2E-1 — standardized on TEST_USER_EMAIL/TEST_USER_PASSWORD (matching
 // tests/e2e/fixtures/auth.ts and the existing prod-smoke workflow's secret
@@ -13,6 +14,10 @@ export const hasCredentials = !!(EMAIL && PASSWORD)
 
 /** Login and wait for dashboard URL */
 export async function login(page: Page): Promise<void> {
+  // CI-E2E-1 follow-up — reuse global-setup's cached session (see session.ts) instead of
+  // submitting the login form again; a real login only happens if that cache is missing/stale.
+  if (await restoreCachedSession(page)) return
+
   await page.goto('/login')
   await page.locator('input[type="email"]').fill(EMAIL)
   await page.locator('input[type="password"]').fill(PASSWORD)

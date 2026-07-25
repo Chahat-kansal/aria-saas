@@ -15,6 +15,7 @@ node_modules/
 # SECURITY-P1 (8b) — Playwright storageState files contain live session cookies for the smoke
 # suite's test accounts; never commit these.
 tests/smoke/.auth/
+e2e/.auth/
 .vercel
 
 # Claude Code local skills (dev tooling, not product)

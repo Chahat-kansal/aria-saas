@@ -28,8 +28,12 @@ test.describe('Ask Aria', () => {
     await input.fill('What is the name of my business?')
     await page.keyboard.press('Enter')
 
-    // Response must appear and contain more than whitespace
-    const response = page.locator('[class*="message"], [class*="response"], [class*="chat"]')
+    // CI-E2E-1 follow-up — the old selector ([class*="message"/"response"/"chat"]) never matched
+    // anything: the real message bubble wrapper is `className="msg-reveal group"` (src/app/dashboard/
+    // ask-aria/page.tsx:1307), which contains none of those substrings. Confirmed by reading the
+    // component directly — this was pure selector drift, not Ask Aria failing to respond. .last()
+    // still correctly targets the assistant's reply since messages append user-then-assistant in order.
+    const response = page.locator('.msg-reveal')
       .filter({ hasText: /\S{10,}/ })
       .last()
     await expect(response).toBeVisible({ timeout: 45_000 })
@@ -47,8 +51,10 @@ test.describe('Ask Aria', () => {
     await input.fill('Give me one actionable tip to increase revenue this week.')
     await page.keyboard.press('Enter')
 
-    // Reply must be substantive — at least 50 chars
-    const response = page.locator('[class*="message"], [class*="response"], [class*="chat"]')
+    // Reply must be substantive — at least 50 chars. See the other test's comment for why this
+    // selector targets .msg-reveal (the real message-bubble class) instead of the old, never-
+    // matching [class*="message"/"response"/"chat"].
+    const response = page.locator('.msg-reveal')
       .filter({ hasText: /\S{50,}/ })
       .last()
     await expect(response).toBeVisible({ timeout: 60_000 })
