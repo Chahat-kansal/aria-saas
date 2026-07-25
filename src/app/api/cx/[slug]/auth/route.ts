@@ -8,6 +8,7 @@ import { normalisePhone, sendSMS } from '@/lib/clicksend'
 import { linkOrCreateMembership } from '@/lib/loyalty/membership'
 import { clearCxSessionCookie } from '@/lib/cx/get-cx-session'
 import { limit } from '@/lib/rate-limit'
+import { requireTurnstile } from '@/lib/security/turnstile'
 
 const COOKIE_NAME = 'cx_session'
 const OTP_TTL_MS = 10 * 60 * 1000         // 10 min
@@ -81,6 +82,11 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
         { status: 429, headers: { 'Retry-After': String(ipRl.retryAfter) } },
       )
     }
+
+    // SECURITY-P4 — this route was rate-limited but had zero bot-check, unlike the sibling public
+    // booking/loyalty-enrol forms. Real SMS cost per send; gate it the same way those do.
+    const turnstileDenied = await requireTurnstile(body.turnstile_token as string | undefined, ip)
+    if (turnstileDenied) return turnstileDenied
 
     // Generate code + hash
     const code = String(crypto.randomInt(100000, 1000000))

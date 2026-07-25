@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { getCommunityMember, createCommunityMember, leaveCommunity } from '@/lib/community/session'
+import { limit } from '@/lib/rate-limit'
 
 // GET — return the current member (or null). Does not create.
 export async function GET() {
@@ -24,6 +25,19 @@ export async function GET() {
 // POST — create a new anonymous member (the join action). Optional nickname.
 export async function POST(req: Request) {
   try {
+    // SECURITY-P4 — public, unauthenticated, zero-cost-per-call, but previously had NO rate limit at
+    // all, meaning a script could spam-create unlimited community_members rows. No Turnstile here —
+    // this is a low-stakes "start browsing anonymously" action, not an SMS/email-cost trigger, so a
+    // generous per-IP limit (spam prevention) is the right weight rather than a CAPTCHA on every visit.
+    const ip = (req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown').split(',')[0].trim()
+    const rl = await limit('community-session-create:' + ip, { requests: 20, window: '1 h' })
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: 'Too many requests.' },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+      )
+    }
+
     const body = await req.json().catch(() => ({} as Record<string, unknown>))
     const existing = await getCommunityMember()
     if (existing) {

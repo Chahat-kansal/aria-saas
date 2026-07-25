@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 
 // Locked Pipel design — light ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
 const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#888888', ACCENT = '#d9f54e'
@@ -43,6 +44,7 @@ export default function LoyaltySignInPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
   const [welcome, setWelcome] = useState<string | null>(null)
   const [dash, setDash] = useState<DashData | null>(null)
   const [showAccount, setShowAccount] = useState(false)
@@ -223,7 +225,7 @@ export default function LoyaltySignInPage() {
     if (mode === 'login') { setStep('pin'); return }
     // join / forgot → send a code
     setBusy(true)
-    const { d } = await post({ action: 'send-code', email })
+    const { d } = await post({ action: 'send-code', email, turnstile_token: turnstileToken })
     setBusy(false)
     if (d.error) { setError(d.error); return }
     setInfo(`We've emailed a 6-digit code to ${email}.`); setStep('code')
@@ -695,6 +697,7 @@ export default function LoyaltySignInPage() {
           <label style={{ fontSize: 13, color: INK_SOFT }}>{mode === 'login' ? 'Sign in with your email' : mode === 'join' ? 'Join with your email' : 'Reset your PIN'}</label>
           {mode === 'join' && <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name (optional)" style={inp} />}
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" style={inp} />
+          <TurnstileWidget onToken={setTurnstileToken} theme="light" />
           {error && <p style={{ color: '#d11', fontSize: 13, margin: 0 }}>{error}</p>}
           <button onClick={continueEmail} disabled={busy} style={{ ...btn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Please wait…' : 'Continue →'}</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>

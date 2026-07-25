@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 
 const BG = '#f3efe4'
 const INK = '#0a0a0a'
@@ -34,6 +35,7 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
   const [countdown, setCountdown] = useState(0)
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
@@ -55,7 +57,7 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
       const res  = await fetch('/api/cx/' + slug + '/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', phone: trimPhone }),
+        body: JSON.stringify({ action: 'send', phone: trimPhone, turnstile_token: turnstileToken }),
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (data.ok) {
@@ -100,7 +102,7 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
       const res  = await fetch('/api/cx/' + slug + '/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', phone: phone.trim() }),
+        body: JSON.stringify({ action: 'send', phone: phone.trim(), turnstile_token: turnstileToken }),
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (data.ok) {
@@ -202,6 +204,10 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
               </p>
             )}
 
+            <div style={{ marginBottom: 14 }}>
+              <TurnstileWidget onToken={setTurnstileToken} theme="light" />
+            </div>
+
             <button
               onClick={() => void sendCode()}
               disabled={loading || name.trim().length < 2 || !phone.trim()}
@@ -262,6 +268,12 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
                 Verifying…
               </p>
             )}
+
+            {/* Turnstile tokens are single-use — a fresh widget instance here (vs. reusing the
+                form-step one) is what gives `resend` a valid token instead of a stale/consumed one. */}
+            <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}>
+              <TurnstileWidget onToken={setTurnstileToken} theme="light" />
+            </div>
 
             {/* Resend row */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>

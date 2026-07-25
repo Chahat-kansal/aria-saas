@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import TurnstileWidget from '@/components/security/TurnstileWidget'
 
 // Locked Pipel design — light ink-on-cream, hard 1.5px borders, Cormorant + Outfit.
 const INK = '#0a0a0a', CREAM = '#fafafa', SURFACE = '#ffffff', INK_SOFT = '#888888', ACCENT = '#d9f54e'
@@ -29,6 +30,7 @@ export default function LoyaltyEntryPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
 
   useEffect(() => {
     const browse = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('browse')
@@ -53,7 +55,7 @@ export default function LoyaltyEntryPage() {
     if (channel === 'phone') {
       if (!/^(\+?61|0)?4\d{8}$/.test(phone.replace(/\s/g, ''))) { setError('Enter a valid Australian mobile (04xx xxx xxx).'); return }
       setBusy(true)
-      const { ok, d } = await post({ action: 'send-code', phone })
+      const { ok, d } = await post({ action: 'send-code', phone, turnstile_token: turnstileToken })
       setBusy(false)
       if (!ok || d.error) { setError(d.error || 'Could not send your code.'); return }
       setInfo(`We've texted a 6-digit code to ${phone}.`); setStep('code')
@@ -62,7 +64,7 @@ export default function LoyaltyEntryPage() {
     if (!email.includes('@')) { setError('Enter a valid email.'); return }
     if (mode === 'login') { setStep('pin'); return }
     setBusy(true)
-    const { d } = await post({ action: 'send-code', email })
+    const { d } = await post({ action: 'send-code', email, turnstile_token: turnstileToken })
     setBusy(false)
     if (d.error) { setError(d.error); return }
     setInfo(`We've emailed a 6-digit code to ${email}.`); setStep('code')
@@ -120,6 +122,8 @@ export default function LoyaltyEntryPage() {
               </button>
             ))}
           </div>
+
+          <TurnstileWidget onToken={setTurnstileToken} theme="light" />
 
           {channel === 'phone' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

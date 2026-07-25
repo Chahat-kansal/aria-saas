@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
+import { requireTurnstile } from '@/lib/security/turnstile'
 import { sendEmail, sendSMS } from '@/lib/external-apis'
 import { normalisePhone } from '@/lib/clicksend'
 import {
@@ -141,6 +142,10 @@ export async function POST(req: Request) {
     const rl = await rateLimit(`loy-code:${key}`, 5, 600, { failClosed: true })
     const rlIp = await rateLimit(`loy-code-ip:${ip}`, 20, 600, { failClosed: true })
     if (!rl.allowed || !rlIp.allowed) return tooManyRequests(Math.max(rl.retryAfter, rlIp.retryAfter))
+    // SECURITY-P4 — rate-limited but had zero bot-check, unlike sibling public forms. Real SMS/email
+    // cost per send; gate it the same way booking/loyalty-enrol already do.
+    const turnstileDenied = await requireTurnstile(body.turnstile_token as string | undefined, ip)
+    if (turnstileDenied) return turnstileDenied
     const identity = await ensureIdentityBy(idf)
     const code = genOtp()
     await supabaseAdmin.from('loyalty_identity').update({

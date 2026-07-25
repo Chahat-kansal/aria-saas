@@ -59,11 +59,32 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
+  // SECURITY-P4 — explicit public-safe field allowlist. This route serves an anonymous,
+  // unauthenticated caller (no session required to view a leaderboard) — the previous `{ ...r }`
+  // spread forwarded LeaderboardRow's full shape including customer_id (the raw pos_customers.id
+  // primary key, the same identifier used for loyalty transactions/digest targeting/opt-out flags
+  // elsewhere), letting anyone harvest real internal customer ids for every top-10 member of any
+  // business. member_id (the community's own anonymous identity, not a loyalty/revenue record) is
+  // the only identifier this response should ever carry.
+  const toPublicRow = (r: LeaderboardRow, trophy: boolean) => ({
+    member_id: r.member_id,
+    display_name: r.display_name,
+    level: r.level,
+    visits: r.visits,
+    points: r.points,
+    challenges: r.challenges,
+    referrals: r.referrals,
+    score: r.score,
+    rank: r.rank,
+    rankMovement: r.rankMovement,
+    trophy,
+  })
+
   return NextResponse.json({
     period,
     computed_at: snapshot?.computed_at ?? null,
-    top: top10.map(r => ({ ...r, trophy: trophyMemberIds.has(r.member_id) })),
-    viewer: viewerRow ? { ...viewerRow, trophy: trophyMemberIds.has(viewerRow.member_id) } : null,
+    top: top10.map(r => toPublicRow(r, trophyMemberIds.has(r.member_id))),
+    viewer: viewerRow ? toPublicRow(viewerRow, trophyMemberIds.has(viewerRow.member_id)) : null,
     total_ranked: allRows.length,
   })
 }
