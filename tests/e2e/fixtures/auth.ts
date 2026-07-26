@@ -47,15 +47,18 @@ export const test = base.extend<AuthFixtures>({
     // render any page content. Without it, every /pos/* page shows only the
     // POSUserSelect PIN-entry screen and the actual page component is never
     // mounted — causing all content-specific selectors to fail.
-    // Inject a valid manager user so POSShell renders page content normally.
+    // CI-E2E-1 follow-up (re-run finding) — this used to inject a made-up shape
+    // ({role:'manager', permissions:{}}) that doesn't match any real login path. Now byte-for-byte
+    // the same object POSShell.tsx's own bypassAsOwner() writes (the real "Continue as owner"
+    // button's handler) — see e2e/helpers/global-setup.ts's identical fix for the full story.
     // (global-setup already bakes this in via restoreCachedSession, but re-asserting it here is
     // cheap and idempotent — covers a cache captured before this fix existed.)
     await page.evaluate(() => {
       localStorage.setItem('aria_pos_user', JSON.stringify({
-        id: 'e2e-test-bypass',
-        name: 'E2E Test',
-        role: 'manager',
-        permissions: {},
+        id: 'owner',
+        name: 'Owner',
+        role: 'owner',
+        permissions: { can_apply_discount: true, can_refund: true, max_discount_pct: 100, can_close_register: true, can_override_price: true },
         loginAt: Date.now(),
       }))
     })

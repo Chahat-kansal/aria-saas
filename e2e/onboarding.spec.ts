@@ -33,6 +33,17 @@ test.describe('Onboarding wizard', () => {
 
     const isOnboarding = page.url().includes('/onboarding')
     if (isOnboarding) {
+      // CI-E2E-1 follow-up (re-run finding) — VISUAL_STEPS[0] is 'welcome' (src/app/onboarding/
+      // page.tsx), a pure CTA splash ("Let's set up your {industry}" / "Get started →") with zero
+      // form inputs and no "step N"/"business name" text by design — the actual field-bearing step
+      // ('details') is one click further in. The old assertion never anticipated the welcome screen
+      // existing at all. Click through it (if present) so this test verifies the real first form
+      // step, matching its own "shows at least one step" intent more literally than the welcome
+      // splash did.
+      const getStarted = page.getByRole('button', { name: /get started/i })
+      if (await getStarted.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await getStarted.click()
+      }
       // Wizard visible — must have at least one labeled field or step indicator
       await expect(
         page.locator('input, select, textarea').first()

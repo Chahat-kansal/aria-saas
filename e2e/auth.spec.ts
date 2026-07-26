@@ -23,17 +23,15 @@ test.describe('Authentication', () => {
 
   test('logout redirects to login page', async ({ page }) => {
     await login(page)
-    // Open user menu if needed to find logout
-    const logoutBtn = page
-      .getByRole('button', { name: /log out|sign out/i })
-      .or(page.getByText(/log out|sign out/i))
-    // Some layouts hide it behind a menu — try to open a user menu first
-    const userMenuTrigger = page
-      .getByRole('button', { name: /account|profile|menu/i })
-      .or(page.locator('[data-testid="user-menu"]'))
-    if (await userMenuTrigger.isVisible({ timeout: 2_000 })) {
-      await userMenuTrigger.click()
-    }
+    // CI-E2E-1 follow-up (re-run finding) — the old "try to open a user menu first" fallback
+    // assumed a hidden dropdown that this app doesn't have: src/components/dashboard/Sidebar.tsx
+    // puts sign-out directly in the sidebar as a standalone icon button, always visible, no menu to
+    // open. Worse, its own broad match (/account|profile|menu/i) also matched the ADJACENT real
+    // navigation link (title/aria-label "Account & profile", href="/profile") — clicking it
+    // navigated away to /profile before the test ever found the actual sign-out button. The button
+    // itself is icon-only and now has an explicit aria-label (Sidebar.tsx) rather than relying on
+    // `title` alone, which getByRole's accessible-name computation didn't reliably pick up.
+    const logoutBtn = page.getByRole('button', { name: /log out|sign out/i })
     await expect(logoutBtn.first()).toBeVisible({ timeout: 8_000 })
     await logoutBtn.first().click()
     await expect(page).toHaveURL(/login|^\/$/, { timeout: 15_000 })

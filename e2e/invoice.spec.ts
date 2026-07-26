@@ -42,11 +42,16 @@ test.describe('Invoices', () => {
     ).toBeVisible({ timeout: 10_000 })
   })
 
-  test('invoice form has a send or email action', async ({ page }) => {
+  // CI-E2E-1 follow-up (re-run finding) — this used to open the BLANK new-invoice creation form and
+  // look for a Send button there. Read src/app/dashboard/invoices/page.tsx directly: Send only
+  // renders on an ALREADY-SAVED draft invoice's detail view (`selected.status === 'draft'`), a
+  // genuinely different screen the old test never reached (it never saved anything first). Selects
+  // e2e/helpers/global-setup.ts's seeded draft invoice (invoice_number E2E-TEST-0001) instead.
+  test('an existing draft invoice has a send or email action', async ({ page }) => {
     await page.goto('/dashboard/invoices')
-    const createBtn = page.getByRole('button', { name: '+ New Invoice' })
-    await expect(createBtn).toBeVisible({ timeout: 5_000 })
-    await createBtn.click()
+    const row = page.getByText('E2E-TEST-0001')
+    await expect(row).toBeVisible({ timeout: 10_000 })
+    await row.click()
     await expect(
       page.getByRole('button', { name: /send|email/i })
         .or(page.getByText(/send invoice|email invoice/i))

@@ -606,6 +606,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             <Link
               href="/dashboard/settings"
               title="Business settings"
+              aria-label="Business settings"
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
             >
               <SettingsIcon />
@@ -613,14 +614,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             <Link
               href="/profile"
               title="Account &amp; profile"
+              aria-label="Account & profile"
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
             >
               <ProfileIcon />
             </Link>
+            {/* CI-E2E-1 follow-up (re-run finding) — this icon-only button relied on `title` alone for
+                its accessible name, which isn't reliably picked up by accessible-name computation
+                (Playwright's getByRole included — e2e/auth.spec.ts's logout test couldn't find it, and
+                the adjacent profile link's title="Account & profile" was ALSO matching the test's own
+                "open the user menu first" heuristic, silently navigating away to /profile before ever
+                reaching this button). Explicit aria-label fixes both the test and the real gap for
+                screen-reader users, who have the same "title alone" reliability problem. */}
             <button
               onClick={handleSignOut}
               disabled={signingOut}
               title="Sign out"
+              aria-label="Sign out"
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-red-400 hover:bg-[rgba(239,68,68,0.08)] transition-colors disabled:opacity-40"
             >
               {signingOut ? <Spinner /> : <SignOutIcon />}

@@ -44,6 +44,15 @@ test.describe('Ask Aria', () => {
     expect(text).not.toMatch(/application error|500|crashed/i)
   })
 
+  // CI-E2E-1 follow-up (re-run finding, UNRESOLVED — flagged, not fixed) — this hit the whole
+  // TEST's 60s timeout (playwright.config.ts), not the 60s response-visibility assertion below —
+  // meaning the real response genuinely took longer than 60s end-to-end for this "strategic"
+  // prompt, on a business with almost no history. The simpler prompt in the test above ("business
+  // question…") passed and got a real reply well inside its own 45s budget, ruling out the
+  // .msg-reveal selector fix as the cause — this is a genuine latency finding, not a test bug.
+  // Deliberately NOT silenced by raising the timeout: every real customer starts as a fresh,
+  // sparse-data business, so if analytical/strategic Ask Aria queries are meaningfully slower for
+  // exactly that case, that's launch-relevant and worth its own investigation, not hidden here.
   test('strategic question gets a substantive reply', async ({ page }) => {
     await page.goto('/dashboard/ask-aria')
     const input = page.locator('textarea, input[type="text"]').first()
@@ -73,7 +82,13 @@ test.describe('Ask Aria', () => {
 
   test('page does not show application error on load', async ({ page }) => {
     await page.goto('/dashboard/ask-aria')
-    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+    // CI-E2E-1 follow-up (re-run finding) — 'networkidle' never resolved here even with working
+    // auth (this app has continuous background network activity — analytics, polling — that's a
+    // known Playwright anti-pattern to wait on; see https://playwright.dev/docs/actionability
+    // and onboarding.spec.ts's own .catch(() => {}) on the identical wait). Catching it and relying
+    // on the actual content assertion below is the real check, same as every other spec here.
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
+    await expect(page.locator('body')).toBeVisible()
     await expect(page.getByText(/application error|something went wrong/i)).not.toBeVisible()
   })
 })
@@ -87,7 +102,9 @@ test.describe('Daily Briefing', () => {
 
   test('dashboard shows briefing section (not empty)', async ({ page }) => {
     await page.goto('/dashboard')
-    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+    // CI-E2E-1 follow-up — see the other 'networkidle' fix's comment above for why this is guarded
+    // rather than awaited directly.
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
     // Briefing section must exist and contain readable content
     const briefingSection = page.getByText(/briefing|aria|insight|summary/i).first()
     await expect(briefingSection).toBeVisible({ timeout: 20_000 })
