@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { COMMUNITY_BUSINESS_CARD } from '@/lib/community/query-helpers'
+import { COMMUNITY_BUSINESS_CARD, getTestBusinessIds, excludeIdsClause } from '@/lib/community/query-helpers'
 
 // Public — browse the marketplace. Supports search + category filter + pagination.
 export async function GET(req: Request) {
@@ -19,6 +19,11 @@ export async function GET(req: Request) {
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(limit + 1)
+
+    // LAUNCH-PREP-1 — this is the cross-business marketplace browse; test/fixture businesses'
+    // listings never belong in it, same as the community feed/discover/search.
+    const testExcl = excludeIdsClause(await getTestBusinessIds(supabaseAdmin))
+    if (testExcl) q = q.not('business_id', 'in', testExcl)
 
     if (before) q = q.lt('created_at', before)
     if (category) q = q.eq('category', category)
