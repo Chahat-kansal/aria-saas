@@ -1,4 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+// SECURITY-P5 Tier 2 — decrement_numeric/increment_numeric/set_numeric build their target UPDATE
+// via dynamic SQL (format('update %I set %I = ...', p_table, p_column)) with no auth check inside
+// the function itself; every real caller of this file already verifies the row belongs to the
+// caller's own business before reaching these RPCs (adjustOutletStock/setOutletStock never receive
+// an unverified productId/rowId — see pos/sales/[id]/{route,void,refund}.ts and action-executor.ts).
+// Routing only these 3 RPC calls through supabaseAdmin (not the caller's own request-scoped client)
+// lets EXECUTE be revoked from anon/authenticated at the DB level without changing behavior for any
+// real caller — the authorization boundary was always the route's own business_id check, not the
+// grant, so tightening the grant closes the "call the RPC directly, bypassing the route entirely"
+// gap without touching any authorization logic here.
 
 // INV-DECREMENT-FIX phase 2 — pos_outlet_inventory.items_on_hand is the CANONICAL sellable-stock field
 // (per-outlet, multi-location correct). This is the single place sale/void/refund paths adjust it. The
@@ -52,8 +64,8 @@ export async function adjustOutletStock(
   // INVENTORY-DECREMENT-FIX-1 — this RPC result was never checked; a failure here (e.g. a locked row,
   // a transient RPC error) silently produced a wrong post-adjust items_on_hand with zero visibility.
   const { error: rpcErr } = delta < 0
-    ? await supabase.rpc('decrement_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: Math.abs(delta) })
-    : await supabase.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: delta })
+    ? await supabaseAdmin.rpc('decrement_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: Math.abs(delta) })
+    : await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_amount: delta })
   if (rpcErr) console.error('[adjustOutletStock] numeric RPC failed:', { businessId, productId, outletId, delta, error: rpcErr.message })
   await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', rowId)
   const { data: after } = await supabase.from('pos_outlet_inventory').select('items_on_hand').eq('id', rowId).maybeSingle()
@@ -77,7 +89,7 @@ export async function setOutletStock(
   if (!rowId) return null
   const { data: before } = await supabase.from('pos_outlet_inventory').select('items_on_hand').eq('id', rowId).maybeSingle()
   const previous = before ? Number(before.items_on_hand) || 0 : 0
-  const { data: newVal } = await supabase.rpc('set_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_value: target })
+  const { data: newVal } = await supabaseAdmin.rpc('set_numeric', { p_table: 'pos_outlet_inventory', p_id: rowId, p_column: 'items_on_hand', p_value: target })
   await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', rowId)
   return { previous, new: newVal != null ? Number(newVal) : target }
 }

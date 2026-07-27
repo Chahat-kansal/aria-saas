@@ -321,7 +321,10 @@ export async function createSale(
     const p = productMap[i.product_id]
     if (!p?.track_stock) continue
     stockOps.push((async () => {
-      const { data: cacheStock, error: decErr } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity })
+      // SECURITY-P5 Tier 2 — supabaseAdmin (not the caller's session role) keeps this RPC callable
+      // after EXECUTE is revoked from anon/authenticated at the DB level; businessId/i.product_id
+      // here are already resolved from the caller's own authenticated session upstream.
+      const { data: cacheStock, error: decErr } = await supabaseAdmin.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity })
       if (decErr) logger.error('createSale decrement_stock_quantity failed', { businessId, productId: i.product_id, error: decErr.message })
       const itemsOnHand = await adjustOutletStock(supabase, { businessId, outletId: saleOutletId, productId: i.product_id, delta: -i.quantity })
       movementLines.push({ itemId: i.product_id, quantitySold: i.quantity, newStock: itemsOnHand ?? cacheStock ?? 0 })
@@ -335,7 +338,9 @@ export async function createSale(
     const pm = params.paymentMethod
     const cashAmt = pm === 'cash' ? params.totalAmount : pm === 'split' ? (params.splitCash ?? 0) : 0
     const cardAmt = pm === 'eftpos' || pm === 'card' ? params.totalAmount : pm === 'split' ? (params.splitCard ?? 0) : 0
-    const { error: sessErr } = await supabase.rpc('increment_session_totals', {
+    // SECURITY-P5 Tier 2 — supabaseAdmin keeps this RPC callable after EXECUTE is revoked from
+    // anon/authenticated; openSession.id was resolved for this business's own session upstream.
+    const { error: sessErr } = await supabaseAdmin.rpc('increment_session_totals', {
       p_session_id: openSession.id, p_cash_delta: cashAmt, p_card_delta: cardAmt, p_transaction_delta: 1,
     }).maybeSingle()
     if (sessErr) logger.error('createSale increment_session_totals failed', { businessId, sessionId: openSession.id, error: sessErr.message })

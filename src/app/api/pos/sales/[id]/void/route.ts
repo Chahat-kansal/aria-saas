@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { verifyManagerToken } from '@/lib/pos/manager-token'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
@@ -43,7 +44,10 @@ async function _POST(req: Request, { params }: Params) {
   const voidMovementLines: SaleMovementLine[] = []
   for (const item of items ?? []) {
     if (!item.product_id) continue
-    await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }) // cache
+    // SECURITY-P5 Tier 2 — item.product_id here is read from pos_sale_items scoped to `id`, a sale
+    // already verified to belong to `bid` above; supabaseAdmin (not the caller's session role) keeps
+    // this RPC callable after EXECUTE is revoked from anon/authenticated at the DB level.
+    await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }) // cache
     const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: voidOutletId, productId: item.product_id, delta: Math.abs(Number(item.quantity)) }) // canonical
     voidMovementLines.push({ itemId: item.product_id, quantitySold: Number(item.quantity), newStock: itemsOnHand })
   }

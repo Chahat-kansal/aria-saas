@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { recordSaleMovements } from '@/lib/inventory/record-sale-movement'
@@ -113,7 +114,9 @@ async function _POST(req: Request) {
           const outletForStock = await resolveOutletId(supabase, bid, (sale as { outlet_id?: string | null }).outlet_id ?? null);
           const lines = [];
           for (const it of lineItems) {
-            await supabase.rpc('decrement_stock_quantity', { p_product_id: it.product_id, p_amount: it.quantity }); // cache
+            // SECURITY-P5 Tier 2 — supabaseAdmin keeps this RPC callable after EXECUTE is revoked
+            // from anon/authenticated; bid/it.product_id are already ownership-checked above.
+            await supabaseAdmin.rpc('decrement_stock_quantity', { p_product_id: it.product_id, p_amount: it.quantity }); // cache
             const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: outletForStock, productId: it.product_id, delta: -it.quantity }); // canonical
             lines.push({ itemId: it.product_id, quantitySold: it.quantity, newStock: itemsOnHand });
           }
@@ -124,7 +127,9 @@ async function _POST(req: Request) {
       // Update session totals
       if (sale.session_id) {
         const isCard = sale.payment_method === 'card' || sale.payment_method === 'eftpos';
-        Promise.resolve(supabase.rpc('increment_session_totals', {
+        // SECURITY-P5 Tier 2 — supabaseAdmin keeps this RPC callable after EXECUTE is revoked from
+        // anon/authenticated; sale.session_id belongs to this ownership-checked business.
+        Promise.resolve(supabaseAdmin.rpc('increment_session_totals', {
           p_session_id:        sale.session_id,
           p_cash_delta:        isCard ? 0 : totalDollars,
           p_card_delta:        isCard ? totalDollars : 0,

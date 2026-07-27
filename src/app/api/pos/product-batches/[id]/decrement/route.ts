@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 
 type Params = { params: Promise<{ id: string }> }
@@ -31,7 +32,10 @@ export async function POST(req: Request, { params }: Params) {
   // existing atomic decrement_numeric RPC (floors at 0 inside the same UPDATE, already used by
   // orders/receive's increment_numeric sibling) so this is now a reliable single-statement
   // server-side decrement, not a compute-then-write race.
-  const { error: rpcErr } = await supabase.rpc('decrement_numeric', {
+  // SECURITY-P5 Tier 2 — `batch` above already verified id belongs to bid; supabaseAdmin (not the
+  // caller's session role) keeps this RPC callable after EXECUTE is revoked from anon/authenticated
+  // at the DB level.
+  const { error: rpcErr } = await supabaseAdmin.rpc('decrement_numeric', {
     p_table: 'pos_product_batches', p_id: id, p_column: 'quantity_remaining', p_amount: qty,
   })
   if (rpcErr) {

@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { captureReceiptCost } from '@/lib/inventory/resolve-cost'
@@ -45,7 +46,9 @@ async function _POST(req: Request) {
       const { data: prod } = await supabase.from('pos_products')
         .select('id').eq('id', item.product_id).eq('business_id', bid).maybeSingle();
       if (prod) {
-        await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.received_qty });
+        // SECURITY-P5 Tier 2 — `prod` above already verified item.product_id belongs to bid;
+        // supabaseAdmin keeps this RPC callable after EXECUTE is revoked from anon/authenticated.
+        await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.received_qty });
       }
 
       // 2. Update pos_outlet_inventory.items_on_hand — atomic increment
@@ -54,7 +57,9 @@ async function _POST(req: Request) {
           .select('id')
           .eq('product_id', item.product_id).eq('outlet_id', outlet.id).maybeSingle();
         if (inv) {
-          await supabase.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: inv.id, p_column: 'items_on_hand', p_amount: item.received_qty });
+          // SECURITY-P5 Tier 2 — inv above already scoped to this outlet (itself scoped to bid);
+          // supabaseAdmin keeps this RPC callable after EXECUTE is revoked from anon/authenticated.
+          await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: inv.id, p_column: 'items_on_hand', p_amount: item.received_qty });
           await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', inv.id);
         } else {
           await supabase.from('pos_outlet_inventory').insert({

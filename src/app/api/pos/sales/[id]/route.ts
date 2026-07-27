@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { logSaleEdit } from '@/lib/pos/sale-audit';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -105,7 +106,9 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
         .from('pos_products').select('track_stock').eq('id', item.product_id).maybeSingle();
       if (!prod?.track_stock) continue;
       try {
-        await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }); // cache
+        // SECURITY-P5 Tier 2 — supabaseAdmin (not the caller's session role) keeps this RPC callable
+        // after EXECUTE is revoked from anon/authenticated at the DB level.
+        await supabaseAdmin.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity }); // cache
         const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: voidOutletId, productId: item.product_id, delta: Math.abs(Number(item.quantity)) }); // canonical
         voidMovementLines.push({ itemId: item.product_id, quantitySold: Number(item.quantity), newStock: itemsOnHand });
       } catch (err) {
