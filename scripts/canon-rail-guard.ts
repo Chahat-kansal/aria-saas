@@ -16,6 +16,16 @@
 //      'completed')`, or better, getRevenueSnapshot()/getRevenueForRange() for revenue figures.
 //   3. A hand-rolled revenue sum (`.reduce(` over a `total_amount` field) in a file outside the
 //      canonical compute layer — use getRevenueSnapshot()/getRevenueForRange() instead.
+//   4. SECURITY-P5 — a new/modified supabase/migrations/*.sql file that creates a SECURITY
+//      DEFINER function with no REVOKE anywhere in the same file. Postgres grants EXECUTE to
+//      PUBLIC by default on function creation; this is the exact root cause behind all 24
+//      anon/authenticated-executable DEFINER functions SECURITY-P5 found and closed
+//      (loyalty_preload_*, credit_image_credits, decrement_numeric/increment_numeric's dynamic-
+//      SQL arbitrary-column primitive, create_product_draft's cross-tenant injection gap, etc.
+//      — see supabase/migrations/202607270{1,2,3,4}0000_security_p5_tier*.sql). A migration
+//      that creates a DEFINER function must explicitly REVOKE EXECUTE FROM PUBLIC/anon (and
+//      authenticated, unless the function is genuinely self-guarding via auth.uid()) in the
+//      same file — this rule fails the build if it doesn't, before the gap ever reaches prod.
 //
 // Usage:
 //   npx tsx scripts/canon-rail-guard.ts                  # CI default: diff origin/main...HEAD
@@ -56,10 +66,10 @@ function getDiff(): string {
     // Include brand-new untracked files as additions (git ignores untracked files in a plain
     // `git diff` otherwise) — intent-to-add stages them as empty so the real diff shows as 100% new.
     try { execSync('git add -N .', { stdio: 'ignore' }) } catch { /* best-effort */ }
-    return execSync('git diff --unified=0 -- "*.ts" "*.tsx"', { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64 })
+    return execSync('git diff --unified=0 -- "*.ts" "*.tsx" "supabase/migrations/*.sql"', { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64 })
   }
 
-  return execSync(`git diff --unified=0 ${base}...HEAD -- "*.ts" "*.tsx"`, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64 })
+  return execSync(`git diff --unified=0 ${base}...HEAD -- "*.ts" "*.tsx" "supabase/migrations/*.sql"`, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64 })
 }
 
 function scan(diff: string): Violation[] {
@@ -81,18 +91,22 @@ function scan(diff: string): Violation[] {
       newLineNo = m ? parseInt(m[1], 10) : 0
       continue
     }
+    const isSql = currentFile?.endsWith('.sql') ?? false
+    const isTs = currentFile?.endsWith('.ts') || currentFile?.endsWith('.tsx')
     if (!currentFile || isExempt(currentFile)) continue
-    if (!currentFile.endsWith('.ts') && !currentFile.endsWith('.tsx')) continue
+    if (!isTs && !isSql) continue
     if (raw.startsWith('+') && !raw.startsWith('+++')) {
       const text = raw.slice(1)
 
-      if (/\b(async\s+)?function\s+(getBid|getBusinessId|getBiz)\s*\(/.test(text) ||
-          /\bconst\s+(getBid|getBusinessId|getBiz)\s*[:=]/.test(text)) {
-        violations.push({ file: currentFile, line: newLineNo, rule: 'inline-business-id-resolver', text: text.trim() })
-      }
+      if (isTs) {
+        if (/\b(async\s+)?function\s+(getBid|getBusinessId|getBiz)\s*\(/.test(text) ||
+            /\bconst\s+(getBid|getBusinessId|getBiz)\s*[:=]/.test(text)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'inline-business-id-resolver', text: text.trim() })
+        }
 
-      if (/\.neq\(\s*['"]status['"]\s*,\s*['"]voided['"]\s*\)/.test(text)) {
-        violations.push({ file: currentFile, line: newLineNo, rule: 'neq-voided-filter', text: text.trim() })
+        if (/\.neq\(\s*['"]status['"]\s*,\s*['"]voided['"]\s*\)/.test(text)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'neq-voided-filter', text: text.trim() })
+        }
       }
 
       const arr = addedLinesByFile.get(currentFile) ?? []
@@ -113,6 +127,20 @@ function scan(diff: string): Violation[] {
     const reduceLine = lines.find(l => /\.reduce\(/.test(l.text))
     if (hasTotalAmount && reduceLine) {
       violations.push({ file, line: reduceLine.line, rule: 'ad-hoc-revenue-sum', text: reduceLine.text.trim() })
+    }
+  }
+
+  // Rule 4 — SECURITY-P5: a migration creates a SECURITY DEFINER function but never REVOKEs
+  // EXECUTE in the same file. Postgres grants EXECUTE to PUBLIC by default on function creation,
+  // so "create, forget to revoke" ships wide open by default — this was the root cause of every
+  // finding in SECURITY-P5. Two independent signals (CREATE FUNCTION...SECURITY DEFINER present,
+  // REVOKE absent) in the same file's new lines, same conservative shape as rule 3.
+  for (const [file, lines] of addedLinesByFile) {
+    if (!file.endsWith('.sql')) continue
+    const definerLine = lines.find(l => /security\s+definer/i.test(l.text))
+    const hasRevoke = lines.some(l => /\brevoke\b/i.test(l.text))
+    if (definerLine && !hasRevoke) {
+      violations.push({ file, line: definerLine.line, rule: 'definer-function-missing-revoke', text: definerLine.text.trim() })
     }
   }
 
@@ -140,7 +168,8 @@ function main() {
     console.error(`  ${v.file}:${v.line}  [${v.rule}]\n    ${v.text}\n`)
   }
   console.error('Fix: use withBusinessContext (src/lib/api/with-error-capture.ts) instead of a local getBid/getBusinessId/getBiz;')
-  console.error('use .eq(\'status\',\'completed\') or getRevenueSnapshot()/getRevenueForRange() instead of neq(\'voided\')/a hand-rolled sum.')
+  console.error('use .eq(\'status\',\'completed\') or getRevenueSnapshot()/getRevenueForRange() instead of neq(\'voided\')/a hand-rolled sum;')
+  console.error('add REVOKE EXECUTE ... FROM PUBLIC, anon[, authenticated] in the same migration file as any new SECURITY DEFINER function.')
   process.exit(1)
 }
 

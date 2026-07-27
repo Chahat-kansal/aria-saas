@@ -1,15 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
-
-const getDb = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 interface Order { id: string; order_number: string; customer_name: string; status: string; updated_at: string }
 
+// SECURITY-P5 Tier 4 — reads via /api/public/pickup-display/[outlet_id] (supabaseAdmin, server-
+// side) instead of a direct anon-key Supabase query; see that route's comment for why.
 export default function PickupDisplayPage() {
   const { outlet_id } = useParams<{ outlet_id: string }>()
   const [preparing, setPreparing] = useState<Order[]>([])
@@ -18,24 +14,10 @@ export default function PickupDisplayPage() {
   const [tick,      setTick]      = useState(0)
 
   async function fetchOrders() {
-    const db = getDb()
-    // Get outlet → business name
-    const { data: outlet } = await db.from('pos_outlets').select('business_id').eq('id', outlet_id).maybeSingle()
-    if (outlet?.business_id) {
-      const { data: biz } = await db.from('businesses').select('name').eq('id', outlet.business_id).maybeSingle()
-      if (biz?.name) setBizName(biz.name)
-    }
-
-    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString() // hide collected >5min ago
-    const { data: orders } = await db
-      .from('pos_online_orders')
-      .select('id, order_number, customer_name, status, updated_at')
-      .eq('outlet_id', outlet_id)
-      .in('status', ['confirmed', 'preparing', 'ready', 'collected'])
-      .or(`status.neq.collected,updated_at.gte.${cutoff}`)
-      .order('updated_at', { ascending: true })
-      .limit(30)
-
+    const res = await fetch(`/api/public/pickup-display/${outlet_id}`)
+    if (!res.ok) return
+    const { bizName: name, orders } = await res.json() as { bizName: string; orders: Order[] }
+    if (name) setBizName(name)
     setPreparing((orders ?? []).filter(o => ['confirmed','preparing'].includes(o.status)))
     setReady((orders ?? []).filter(o => o.status === 'ready'))
   }
