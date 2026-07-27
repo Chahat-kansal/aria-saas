@@ -9,6 +9,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { CAFE_CATEGORIES, CAFE_SEED_PRODUCTS } from '@/lib/pos/cafe-seed-products'
 import { seedDefaultTrainingPack } from '@/lib/training/seed-default-pack'
+import { ensureDefaultOutlet } from '@/lib/pos/ensure-default-outlet'
 
 type ProvStep = { step: string; label: string; status: 'pending' | 'running' | 'done' | 'failed'; error?: string }
 
@@ -182,32 +183,16 @@ async function runProvision(
   // a missing outlet already falls back gracefully (CX locations page reads
   // the business's own address when pos_outlets is empty), so a failure here
   // must never abort onboarding the way a categories failure does.
-  if (businessModel !== 'service') {
-    try {
-      const { count: outletCount } = await supabaseAdmin
-        .from('pos_outlets').select('id', { count: 'exact', head: true }).eq('business_id', bizId)
-      if (!outletCount) {
-        const { data: biz } = await supabaseAdmin
-          .from('businesses')
-          .select('name, address, phone')
-          .eq('id', bizId)
-          .maybeSingle()
-        const { data: outlet } = await supabaseAdmin
-          .from('pos_outlets')
-          .insert({
-            business_id: bizId, name: (biz?.name as string) || bizName || 'Main location',
-            address: (biz?.address as string) ?? null, phone: (biz?.phone as string) ?? null,
-            is_default: true, is_active: true,
-          })
-          .select('id').single()
-        if (outlet) {
-          await supabaseAdmin.from('pos_registers').insert({
-            business_id: bizId, outlet_id: outlet.id, name: 'Main Register', is_active: true,
-          })
-        }
-      }
-    } catch (e) { console.error('[non-fatal] default outlet seeding failed for', bizId, e) }
+  //
+  // LAUNCH-PREP-1 — this used to be gated behind `businessModel !== 'service'` (categories/tax
+  // codes below still are, correctly, since a pure-service business has no retail catalog to seed)
+  // but the POS terminal's register-open flow needs a real pos_outlets row regardless of declared
+  // business_model — a service business can still take a walk-in retail sale. Moved to the
+  // canonical ensureDefaultOutlet (src/lib/pos/ensure-default-outlet.ts), now called unconditionally
+  // and shared with settings/locations/route.ts and onboarding/connect/page.tsx's completion paths.
+  await ensureDefaultOutlet(supabaseAdmin, bizId, bizName)
 
+  if (businessModel !== 'service') {
     try {
       const { count: taxCount } = await supabaseAdmin
         .from('pos_tax_codes').select('id', { count: 'exact', head: true }).eq('business_id', bizId)

@@ -42,6 +42,16 @@ export default function ConnectPage() {
           { onConflict: 'user_id' }
         );
 
+        // LAUNCH-PREP-1 — this was the completion path with the widest exposure to the
+        // onboarded-but-outlet-less state (no outlet-creation logic existed here at all). Awaited
+        // (not fire-and-forget) since a working POS terminal on first dashboard load matters more
+        // than shaving one round-trip, but never blocks navigation on failure.
+        await fetch('/api/onboarding/ensure-outlet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: businessId }),
+        }).catch(() => {});
+
         // Seed baseline memories from onboarding fields (fire-and-forget, best-effort)
         fetch('/api/aria/memory/seed-onboarding', {
           method: 'POST',

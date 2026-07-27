@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { generateBusinessIdAndSlug } from '@/lib/slug'
+import { ensureDefaultOutlet } from '@/lib/pos/ensure-default-outlet'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -93,6 +94,12 @@ async function _POST(req: Request) {
   }
 
   if (!newBiz) return NextResponse.json({ error: insertErr?.message ?? 'Failed to create business' }, { status: 500 })
+
+  // LAUNCH-PREP-1 — this route set onboarding_complete: true at insert time above with NO outlet
+  // creation anywhere, meaning every "add another location" business landed in the exact
+  // onboarded-but-outlet-less state the smoke suite found breaking the POS terminal.
+  await ensureDefaultOutlet(supabaseAdmin, newBiz.id, newBiz.name)
+
   return NextResponse.json({ ok: true, business: newBiz }, { status: 201 })
 }
 
