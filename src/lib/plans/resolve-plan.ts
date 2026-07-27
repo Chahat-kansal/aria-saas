@@ -20,6 +20,10 @@ export function normalizePlan(p: string | null | undefined): Plan {
   // tolerate legacy/aliases
   if (v === 'free') return 'starter'
   if (v === 'business' || v === 'premium') return 'pro'
+  // SS-1 — 'autonomous' is a stale label found live only in business_subscriptions.tier (not the
+  // canonical businesses.plan column this function actually reads), sharing pro's $249 AUD price
+  // point in admin/costs/route.ts's PLAN_PRICES_AUD. Treated as an alias, not a distinct tier.
+  if (v === 'autonomous') return 'pro'
   return 'starter'
 }
 
