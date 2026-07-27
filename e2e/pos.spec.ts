@@ -2,8 +2,11 @@ import { test, expect } from '@playwright/test'
 import { login, hasCredentials, EMAIL } from './helpers/auth'
 import { dbAdmin, hasDbAccess, waitFor } from './helpers/supabase'
 import { resolveTestBusinessId, getUserIdByEmail } from './helpers/test-business'
+import { openRegisterIfNeeded } from './helpers/session'
 
-/** Navigate to POS terminal and bypass the "Who's working today?" staff login screen. */
+/** Navigate to POS terminal, bypass the "Who's working today?" staff login screen, and open the
+ * register if it's closed (see session.ts's openRegisterIfNeeded — a fresh business's terminal
+ * starts with no open shift, blocking the product grid/cart entirely until one is opened). */
 async function openPOSTerminal(page: import('@playwright/test').Page): Promise<boolean> {
   await page.goto('/pos/terminal')
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
@@ -14,6 +17,7 @@ async function openPOSTerminal(page: import('@playwright/test').Page): Promise<b
     await bypassBtn.click()
     await page.waitForTimeout(800)
   }
+  await openRegisterIfNeeded(page)
   return true
 }
 

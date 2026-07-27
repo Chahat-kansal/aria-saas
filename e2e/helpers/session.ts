@@ -48,3 +48,19 @@ export async function restoreCachedSession(page: Page): Promise<boolean> {
 
   return !/\/login/.test(page.url())
 }
+
+// CI-E2E-1 follow-up (second re-run finding) — the first fix (outlet seed + correct staff-bypass
+// shape) got both suites past the "Who's working today?" PIN screen, but a page snapshot at the
+// moment of failure (captured via error-context, see /pos.spec.ts's own comment) revealed a THIRD,
+// separate gate underneath: POS terminal shows "Register is closed. Enter your opening float to
+// start trading." with an "Open Register" button (pre-filled float, no typing needed) BEFORE the
+// product grid / .aria-pulse-rail / cart ever render. A fresh business's terminal starts with no
+// open shift, same as it would for a real new customer. Shared since both e2e/pos.spec.ts and
+// tests/e2e/02-terminal.spec.ts hit this identically.
+export async function openRegisterIfNeeded(page: Page): Promise<void> {
+  const openBtn = page.getByRole('button', { name: /open register/i })
+  if (await openBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await openBtn.click()
+    await page.waitForTimeout(800)
+  }
+}

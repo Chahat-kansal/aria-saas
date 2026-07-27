@@ -39,11 +39,22 @@ export default async function globalSetup(config: FullConfig) {
       } else {
         businessId = biz.id as string
 
-        if (biz.onboarding_complete !== true) {
-          const { error } = await dbAdmin.from('businesses').update({ onboarding_complete: true }).eq('id', businessId)
-          if (error) console.error('[e2e/global-setup] Failed to set onboarding_complete:', error.message)
-          else console.log('[e2e/global-setup] onboarding_complete set true for', businessId)
-        }
+        // CI-E2E-1 follow-up (3rd re-run finding) — this was previously a conditional "set true only
+        // if not already true" idempotency check. Between the 2nd and 3rd re-runs, the flag reverted
+        // to false with NO explanation found after real investigation: grepped every write site in
+        // src/ (only 3 exist, all setting it TRUE — onboarding/connect/page.tsx, onboarding/provision/
+        // route.ts, settings/locations/route.ts — none set false), checked every trigger on
+        // `businesses` (only a DELETE guard and an INSERT-time loyalty-config default, neither
+        // touches this column or fires on UPDATE), and confirmed business_onboarding has no row for
+        // this user (so it isn't an autosave from revisiting the wizard either). Left unresolved and
+        // disclosed rather than papered over — but forcing this UNCONDITIONALLY every run (not just
+        // when it's already false) means the test fixture stays correct regardless of whatever the
+        // actual mechanism turns out to be, since login()'s waitForURL(/dashboard|onboarding/)
+        // accepting BOTH is exactly what let this failure mode hide as a "logout button not found"
+        // symptom instead of surfacing directly.
+        const { error } = await dbAdmin.from('businesses').update({ onboarding_complete: true }).eq('id', businessId)
+        if (error) console.error('[e2e/global-setup] Failed to set onboarding_complete:', error.message)
+        else console.log('[e2e/global-setup] onboarding_complete forced true for', businessId)
 
         // CI-E2E-1 follow-up (re-run finding) — the re-run's 4 POS terminal failures (.pos-product-
         // grid, .aria-pulse-rail, the search bar — everything downstream of POSShell's staff-bypass

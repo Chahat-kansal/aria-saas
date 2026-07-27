@@ -14,13 +14,18 @@ test.describe('Invoices', () => {
     await expect(page.getByText(/application error|500/i)).not.toBeVisible()
   })
 
+  // CI-E2E-1 follow-up (3rd re-run finding) — this assumed an HTML <table>, which never existed;
+  // the real list (src/app/dashboard/invoices/page.tsx) is div-based rows with no table markup at
+  // all. It also broke as a SIDE EFFECT of the earlier fix for the "send action" test, which seeds
+  // a real draft invoice — "no invoices yet" no longer shows either, since there now genuinely is
+  // one. Checking the Outstanding/Overdue/Paid-this-month stat cards instead: they render
+  // unconditionally regardless of whether the list is populated or empty, so they're a stable
+  // signal the page actually rendered rather than crashed.
   test('invoice page shows table or empty state', async ({ page }) => {
     await page.goto('/dashboard/invoices')
     await expect(page.locator('body')).toBeVisible()
     await expect(page.getByText(/error|500|crashed/i)).not.toBeVisible()
-    await expect(
-      page.locator('table').or(page.getByText(/no invoices/i))
-    ).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/outstanding/i).first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('create invoice button is accessible', async ({ page }) => {

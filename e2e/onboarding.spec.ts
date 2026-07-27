@@ -44,10 +44,17 @@ test.describe('Onboarding wizard', () => {
       if (await getStarted.isVisible({ timeout: 3_000 }).catch(() => false)) {
         await getStarted.click()
       }
-      // Wizard visible — must have at least one labeled field or step indicator
+      // Wizard visible — must have at least one labeled field or step indicator.
+      // CI-E2E-1 follow-up (3rd re-run finding) — this got past the welcome screen fine (proving
+      // the click-through fix above works — the 'details' step genuinely renders a "Business name"
+      // label AND its input), but hit a Playwright strict-mode violation: .first() on EACH side of
+      // .or() still lets the combined locator resolve to 2 elements (the label text AND the input
+      // both matched, one per side). .first() has to be chained AFTER the .or() to collapse the
+      // union to one element, not before it on each branch.
       await expect(
-        page.locator('input, select, textarea').first()
-          .or(page.getByText(/step \d|business name|what.*type/i).first())
+        page.locator('input, select, textarea')
+          .or(page.getByText(/step \d|business name|what.*type/i))
+          .first()
       ).toBeVisible({ timeout: 10_000 })
     }
     // If redirected to dashboard — test already passed via URL assertion
