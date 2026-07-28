@@ -7,6 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { DOMAINS, listOwnerDecisions, toOwnerDecision, isExpired, auditDecisionAction, verifyStepupToken } from '@/lib/owner-app/decisions'
+import { recordEvent } from '@/lib/moat/recordEvent'
 
 // OWNER-APP PH-1 — the one read+act route the phone app calls. Method-switched (GET list, POST
 // act) per the brief's fn-budget instruction, rather than two separate route files.
@@ -106,6 +107,29 @@ async function _POST(req: Request) {
   await auditDecisionAction({
     business_id, actor_user_id: user.id, decision_id: id,
     verb: action, before_status, after_status,
+  })
+
+  // OWNER-APP PH-2, Part B — the outcome/event spine. latency_seconds is a real, computed figure
+  // (resolved_at - created_at on the same row, both already-real timestamps), never invented.
+  // decided_vs_proposed is always false this sprint — there's no mechanism yet letting the owner
+  // edit amount/kind before approving (a straight accept/decline), so recording anything else
+  // would be a fabricated signal, not a real one.
+  const latencySeconds = Math.round((new Date(now).getTime() - new Date(row.created_at as string).getTime()) / 1000)
+  await recordEvent({
+    business_id,
+    entity_type: 'decision',
+    entity_id: id,
+    event_type: action === 'approve' ? 'approved' : 'declined',
+    domain: (row.domain as string) ?? null,
+    amount_cents: (row.amount_cents as number) ?? null,
+    actor: 'owner',
+    payload_summary: {
+      kind: (row.kind as string) ?? (row.action_type as string) ?? undefined,
+      domain: (row.domain as string) ?? null,
+      amount_cents: (row.amount_cents as number) ?? null,
+      decided_vs_proposed: false,
+      latency_seconds: latencySeconds,
+    },
   })
 
   // EXECUTE HOOK: <kind> — approving here only flips status + audits. Actually paying/publishing/

@@ -5,6 +5,7 @@ export const maxDuration = 300
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateDeliverable } from '@/lib/aria/deliverables'
+import { recordEvent } from '@/lib/moat/recordEvent'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // Fail closed: if CRON_SECRET is unset the route is always blocked (same pattern as verifyCronAuth).
@@ -30,18 +31,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (task.status !== 'queued') return NextResponse.json({ ok: true, status: task.status })
 
   const bid = business_id ?? task.business_id
-  await supabaseAdmin.from('aria_user_tasks').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', task_id)
+  const startedAt = new Date().toISOString()
+  // OWNER-APP PH-2 — steps here are deliberately a single real step, not a fabricated multi-stage
+  // checklist: generateDeliverable() is one opaque async call from this route's perspective, with
+  // no intermediate progress callback. Claiming step-by-step progress this pipeline can't actually
+  // report would violate GROUNDING-TEETH ("real states only, never fake progress"). The Jobs tab's
+  // richer per-step checklist is exercised by dev-seed data demonstrating the UI, not by this real
+  // execution path — flagged in the sprint report, not silently faked here.
+  await supabaseAdmin.from('aria_user_tasks').update({
+    status: 'running', started_at: startedAt, updated_at: startedAt,
+    steps: [{ label: 'Working on your request', state: 'active' }], progress_step: 0,
+  }).eq('id', task_id)
 
   try {
     const { data: bizInfo } = await supabaseAdmin.from('businesses').select('industry, owner_email').eq('id', bid).maybeSingle()
     const industry = (bizInfo as { industry?: string } | null)?.industry ?? 'retail'
     const result = await generateDeliverable(bid, null, task.task_prompt, 'dashboard', industry)
 
+    const completedAt = new Date().toISOString()
     await supabaseAdmin.from('aria_user_tasks').update({
       status: 'done',
       output_id: result.outputId,
-      completed_at: new Date().toISOString(),
+      completed_at: completedAt,
+      updated_at: completedAt,
+      last_run_at: completedAt,
+      steps: [{ label: 'Working on your request', state: 'done' }],
+      progress_step: 1,
     }).eq('id', task_id)
+    await recordEvent({ business_id: bid, entity_type: 'job', entity_id: task_id, event_type: 'job_completed', actor: 'cron' })
 
     if (task.notify_email) {
       const ownerEmail = (bizInfo as { owner_email?: string } | null)?.owner_email
@@ -63,11 +80,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, output_id: result.outputId })
   } catch (err) {
     const msg = (err as Error).message
+    const failedAt = new Date().toISOString()
     await supabaseAdmin.from('aria_user_tasks').update({
       status: 'failed',
       error_message: msg,
-      completed_at: new Date().toISOString(),
+      completed_at: failedAt,
+      updated_at: failedAt,
+      last_run_at: failedAt,
+      steps: [{ label: 'Working on your request', state: 'failed' }],
     }).eq('id', task_id)
+    await recordEvent({ business_id: bid, entity_type: 'job', entity_id: task_id, event_type: 'job_failed', actor: 'cron' })
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 }

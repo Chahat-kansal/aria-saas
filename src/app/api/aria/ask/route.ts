@@ -24,6 +24,7 @@ import { createSupportTicket } from '@/lib/aria/ask/escalate'
 import { generateExport } from '@/lib/aria/ask/files'
 import type { ExportFormat, ExportSubject } from '@/lib/aria/ask/files'
 import { planAction, isConfirmation } from '@/lib/aria/ask/action-planner'
+import { recordEvent } from '@/lib/moat/recordEvent'
 import { executeAction } from '@/lib/aria/ask/action-executor'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import { runAriaCouncil } from '@/lib/aria/council'
@@ -794,6 +795,9 @@ Rules:
       }).select('id').maybeSingle()
       const taskId = taskRow?.id
       if (taskId) {
+        // OWNER-APP PH-2, Part B — job_created event, at the actual creation point (not inside
+        // process-user-task, which only ever sees an already-created row).
+        await recordEvent({ business_id: bid, entity_type: 'job', entity_id: taskId, event_type: 'job_created', actor: 'owner' })
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
         const cronSec = process.env.CRON_SECRET ?? ''
         waitUntil(
