@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateDeliverable } from '@/lib/aria/deliverables'
 import { recordEvent } from '@/lib/moat/recordEvent'
+import { notifyOwner } from '@/lib/push/notifyOwner'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // Fail closed: if CRON_SECRET is unset the route is always blocked (same pattern as verifyCronAuth).
@@ -44,8 +45,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }).eq('id', task_id)
 
   try {
-    const { data: bizInfo } = await supabaseAdmin.from('businesses').select('industry, owner_email').eq('id', bid).maybeSingle()
+    // PH-4 additively selects `slug` here (one query, not a second) so the push deep-link can
+    // address the owner app at /owner/<slug>/jobs.
+    const { data: bizInfo } = await supabaseAdmin.from('businesses').select('industry, owner_email, slug').eq('id', bid).maybeSingle()
     const industry = (bizInfo as { industry?: string } | null)?.industry ?? 'retail'
+    const bizSlug = (bizInfo as { slug?: string } | null)?.slug ?? ''
     const result = await generateDeliverable(bid, null, task.task_prompt, 'dashboard', industry)
 
     const completedAt = new Date().toISOString()
@@ -59,6 +63,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       progress_step: 1,
     }).eq('id', task_id)
     await recordEvent({ business_id: bid, entity_type: 'job', entity_id: task_id, event_type: 'job_completed', actor: 'cron' })
+
+    // OWNER-APP PH-4 — job_done pushes because the owner EXPLICITLY asked for this job (every row
+    // here originates from an owner ask — the Jobs tab, chat, or a standing job they set up), which
+    // is exactly the "done that the owner asked for" case the attention law permits. Job STEPS
+    // never reach this line — progress updates above deliberately have no notify call at all.
+    // Fire-and-forget: never blocks the job from completing.
+    void notifyOwner({
+      business_id: bid, subject_type: 'job', subject_id: task_id, reason: 'job_done',
+      title: 'Aria finished: ' + (task.title as string),
+      body: 'Your deliverable is ready to open.',
+      url: '/owner/' + bizSlug + '/jobs',
+    }).catch(() => {})
 
     if (task.notify_email) {
       const ownerEmail = (bizInfo as { owner_email?: string } | null)?.owner_email
@@ -90,6 +106,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       steps: [{ label: 'Working on your request', state: 'failed' }],
     }).eq('id', task_id)
     await recordEvent({ business_id: bid, entity_type: 'job', entity_id: task_id, event_type: 'job_failed', actor: 'cron' })
+    // OWNER-APP PH-4 — a failed job needs a human: the work the owner delegated did NOT happen, and
+    // only they can decide whether it matters. Re-reads slug here because the failure may have been
+    // thrown before bizInfo was assigned in the try block.
+    void (async () => {
+      const { data: b } = await supabaseAdmin.from('businesses').select('slug').eq('id', bid).maybeSingle()
+      await notifyOwner({
+        business_id: bid, subject_type: 'job', subject_id: task_id, reason: 'job_failed',
+        title: 'A job didn\'t finish',
+        body: (task.title as string) + ' — tap to see what went wrong.',
+        url: '/owner/' + ((b?.slug as string) ?? '') + '/jobs',
+      })
+    })().catch(() => {})
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 }

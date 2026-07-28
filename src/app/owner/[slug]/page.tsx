@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useOwnerBusiness } from './OwnerBusinessContext'
 import { DecisionCard } from '@/components/owner-app/DecisionCard'
 import { DecisionSheet } from '@/components/owner-app/DecisionSheet'
+import { PushOptIn } from '@/components/owner-app/PushOptIn'
 import { INK, SUBTEXT, BORDER, FONT_MONO, formatDollars } from '@/app/owner/theme'
 import type { OwnerDecision } from '@/lib/owner-app/decisions'
 
@@ -100,6 +101,11 @@ export default function OwnerTodayPage() {
           </div>
         ))}
       </div>
+
+      {/* OWNER-APP PH-4 — sits below the fold, after the owner has seen what actually needs them.
+          Push is additive: the waiting-decision count above is always the immediate in-app signal,
+          whether or not notifications are ever enabled. */}
+      <PushOptIn businessId={business.id} />
 
       {openDecision && (
         <DecisionSheet
