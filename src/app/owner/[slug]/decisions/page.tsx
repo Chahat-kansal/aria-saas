@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useOwnerBusiness } from '../OwnerBusinessContext'
 import { DecisionCard } from '@/components/owner-app/DecisionCard'
 import { DecisionSheet } from '@/components/owner-app/DecisionSheet'
@@ -9,6 +10,8 @@ import type { OwnerDecision } from '@/lib/owner-app/decisions'
 
 export default function OwnerDecisionsPage() {
   const business = useOwnerBusiness()
+  const searchParams = useSearchParams()
+  const deepLinkId = searchParams?.get('open') ?? null
   const [domain, setDomain] = useState('all')
   const [decisions, setDecisions] = useState<OwnerDecision[]>([])
   const [handled, setHandled] = useState<OwnerDecision[]>([])
@@ -37,6 +40,16 @@ export default function OwnerDecisionsPage() {
   }, [business.id, domain])
 
   useEffect(() => { load() }, [load])
+
+  // OWNER-APP PH-3 — deep-link from the Aria chat tab's "Open the decision" action
+  // (/owner/[slug]/decisions?open=<id>). Opens the sheet once the list has loaded and the id
+  // genuinely resolves to one of THIS business's waiting decisions — never opens a sheet for an
+  // id that isn't really there.
+  useEffect(() => {
+    if (!deepLinkId || openDecision) return
+    const match = decisions.find(d => d.id === deepLinkId)
+    if (match) setOpenDecision(match)
+  }, [deepLinkId, decisions, openDecision])
 
   return (
     <div style={{ padding: '20px 20px 24px' }}>
