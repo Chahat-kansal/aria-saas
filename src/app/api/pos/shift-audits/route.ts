@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import Anthropic from '@anthropic-ai/sdk'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -73,13 +74,15 @@ async function _POST(req: Request, _context: unknown, { businessId: bid }: Busin
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (flaggedItems.length > 0) {
-    supabaseAdmin.from('aria_autopilot_actions').insert({
-      business_id: bid, category: 'compliance', priority: 'urgent',
+    // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+    void createDecision({
+      business_id: bid, domain: 'compliance', kind: 'shift_audit_failure',
+      category: 'compliance', priority: 'urgent',
       title: `Shift audit: ${flaggedItems.length} failed check${flaggedItems.length > 1 ? 's' : ''}`,
-      description: ariaAssessment,
-      action_data: { flagged_items: flaggedItems, audit_id: audit.id, session_id: body.session_id },
-      estimated_impact: 'Compliance risk', status: 'pending',
-    }).then(() => {}, () => {})
+      subtitle: ariaAssessment,
+      payload: { flagged_items: flaggedItems, audit_id: audit.id, session_id: body.session_id },
+      estimated_impact: 'Compliance risk',
+    }).catch(() => {})
   }
 
   return NextResponse.json({ audit, ok: true }, { status: 201 })

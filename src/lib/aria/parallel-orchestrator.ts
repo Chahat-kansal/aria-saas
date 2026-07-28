@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type ParallelTask = {
@@ -134,13 +135,15 @@ GROUNDING RULES — ABSOLUTE — NEVER BREAK:
   const ACTION_TRIGGERS = /\b(reorder|out of stock|low on|margin drop|slow|missed|opportunity|consider|recommend)\b/gi
   if (ACTION_TRIGGERS.test(merged)) {
     try {
-      await supabaseAdmin.from('aria_autopilot_actions').insert({
+      // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+      await createDecision({
         business_id: businessId,
+        domain: 'growth',
+        kind: 'parallel_review',
         agent_type: 'parallel_review',
         triggered_by: 'parallel_orchestrator',
-        status: 'pending',
         title: 'Parallel briefing insight — review recommended',
-        description: merged.slice(0, 400),
+        subtitle: merged.slice(0, 400),
         action_type: 'review',
         category: 'briefing',
         priority: 'medium',

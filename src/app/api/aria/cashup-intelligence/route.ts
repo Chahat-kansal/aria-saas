@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { guardOutput } from '@/lib/aria/ground-guard'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -167,17 +168,19 @@ Only output the JSON. No markdown, no explanation.`,
 
     // Write to aria_autopilot_actions so it shows up in the autopilot dashboard
     if (insight) {
-      await supabase.from('aria_autopilot_actions').insert({
+      // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+      await createDecision({
         business_id: bid,
+        domain: 'money',
+        kind: 'cash_variance_analysis',
         category: 'cashflow',
         priority,
         title: parsed.title ?? 'Cash variance pattern detected',
-        description: insight,
-        action_data: { type: 'cash_variance_analysis', data: analysisData },
+        subtitle: insight,
+        payload: { type: 'cash_variance_analysis', data: analysisData },
         estimated_impact: estimatedAnnualImpactCents > 0
           ? 'A$' + Math.round(estimatedAnnualImpactCents / 100).toLocaleString() + '/year recoverable'
           : null,
-        status: 'pending',
       })
     }
 

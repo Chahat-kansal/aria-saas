@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const getSupabase = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,16 +79,17 @@ export async function ariaObserve(obs: AriaObservation): Promise<void> {
       rawPriority === 'urgent' || rawPriority === 'critical' || rawPriority === 'high' ? 'urgent'
       : rawPriority === 'medium' || rawPriority === 'important' ? 'important'
       : 'routine'
-    await supabase.from('aria_autopilot_actions').insert({
+    // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+    await createDecision({
       business_id: obs.business_id,
+      domain: 'growth',
+      kind: 'brain_observation',
       category: obs.category,
       priority: mappedPriority,
       title: insight.title,
-      description: insight.description,
-      action_data: { ...obs.data, suggested_action: insight.suggested_action ?? null },
+      subtitle: insight.description,
+      payload: { ...obs.data, suggested_action: insight.suggested_action ?? null },
       estimated_impact: insight.estimated_impact ?? null,
-      status: 'pending',
-      created_at: new Date().toISOString(),
     })
   } catch (e) { console.error('[aria/brain] ariaObserve failed (non-fatal):', e) }
 }

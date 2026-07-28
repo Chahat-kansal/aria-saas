@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 // Queues a reel for Aria Marketer by writing to aria_autopilot_actions.
 // aria_autopilot_actions columns (verified from migration 20260508000000_complete_features.sql):
@@ -35,25 +36,25 @@ async function _POST(req: Request) {
     .eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { error: actionErr } = await supabaseAdmin
-    .from('aria_autopilot_actions')
-    .insert({
-      business_id,
-      category: 'reel_publish',
-      priority: 'routine',
-      title: 'Publish reel to social',
-      description: 'Reel exported and ready to publish' + (best_time_suggestion ? ' — suggested time: ' + best_time_suggestion : ''),
-      action_data: {
-        video_url,
-        caption: caption ?? '',
-        session_id: session_id ?? null,
-        best_time_suggestion: best_time_suggestion ?? null,
-      },
-      estimated_impact: 'Increases reach and engagement',
-      status: 'pending',
-    })
+  // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+  const actionId = await createDecision({
+    business_id,
+    domain: 'growth',
+    kind: 'reel_publish',
+    category: 'reel_publish',
+    priority: 'routine',
+    title: 'Publish reel to social',
+    subtitle: 'Reel exported and ready to publish' + (best_time_suggestion ? ' — suggested time: ' + best_time_suggestion : ''),
+    payload: {
+      video_url,
+      caption: caption ?? '',
+      session_id: session_id ?? null,
+      best_time_suggestion: best_time_suggestion ?? null,
+    },
+    estimated_impact: 'Increases reach and engagement',
+  })
 
-  if (actionErr) {
+  if (!actionId) {
     return NextResponse.json({ error: 'Failed to queue for Aria Marketer' }, { status: 500 })
   }
 

@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { BasAgent, getCurrentQuarter } from '@/lib/agents/bas-agent'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 export async function GET(req: Request) {
   const denied = verifyCronAuth(req)
@@ -43,13 +44,17 @@ export async function GET(req: Request) {
       // 14-day reminder for unlodged BAS
       if (existing && existing.status !== 'lodged' && daysUntilDue <= 14 && daysUntilDue > 0) {
         try {
-          await supabaseAdmin.from('aria_autopilot_actions').insert({
+          // SPINE-1 — same row as before (category/action_type/title/description/status preserved),
+          // now also emitting the 'proposed' moat event + a real-time decision_waiting push.
+          await createDecision({
             business_id: biz.id,
+            domain: 'compliance',
+            kind: 'bas_reminder',
             category: 'compliance',
             action_type: 'bas_reminder',
             title: 'BAS due in ' + Math.round(daysUntilDue) + ' days',
-            description: 'BAS due in ' + Math.round(daysUntilDue) + ' days (' + q.due_date.toISOString().slice(0, 10) + '). Status: ' + existing.status + '. Log in to review.',
-            status: 'pending',
+            subtitle: 'BAS due in ' + Math.round(daysUntilDue) + ' days (' + q.due_date.toISOString().slice(0, 10) + '). Status: ' + existing.status + '. Log in to review.',
+            actor: 'cron',
           })
         } catch (e) { console.error('[non-fatal]', e) }
       }
@@ -67,13 +72,16 @@ export async function GET(req: Request) {
         const daysUntilSuperDue = (new Date(superRow.payment_due_date).getTime() - now.getTime()) / 86400000
         if (daysUntilSuperDue <= 14 && daysUntilSuperDue > 0) {
           try {
-            await supabaseAdmin.from('aria_autopilot_actions').insert({
+            // SPINE-1 — same row, plus 'proposed' event + real-time push.
+            await createDecision({
               business_id: biz.id,
+              domain: 'compliance',
+              kind: 'super_reminder',
               category: 'compliance',
               action_type: 'super_reminder',
               title: 'Super payment due in ' + Math.round(daysUntilSuperDue) + ' days',
-              description: 'Super payment due in ' + Math.round(daysUntilSuperDue) + ' days for ' + superRow.staff_name + ': $' + Number(superRow.super_amount_owed).toFixed(0),
-              status: 'pending',
+              subtitle: 'Super payment due in ' + Math.round(daysUntilSuperDue) + ' days for ' + superRow.staff_name + ': $' + Number(superRow.super_amount_owed).toFixed(0),
+              actor: 'cron',
             })
           } catch (e) { console.error('[non-fatal]', e) }
         }

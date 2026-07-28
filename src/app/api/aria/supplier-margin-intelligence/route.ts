@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { guardOutput } from '@/lib/aria/ground-guard'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -103,13 +104,16 @@ Then respond ONLY in this JSON format:
         return s + Math.max(0, Math.round(priceDiff * 100))
       }, 0)
 
-      await supabase.from('aria_autopilot_actions').insert({
+      // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+      await createDecision({
         business_id: bid,
+        domain: 'supply',
+        kind: 'supplier_margin_analysis',
         category: 'pricing',
         priority: totalRecoverable > 5000 ? 'urgent' : 'important',
         title: 'Supplier price increase — pricing adjustment needed',
-        description: parsed.summary ?? `${atRisk.length} products need sell price review after supplier cost increase.`,
-        action_data: {
+        subtitle: parsed.summary ?? `${atRisk.length} products need sell price review after supplier cost increase.`,
+        payload: {
           type: 'supplier_margin_analysis',
           at_risk_count: atRisk.length,
           recommendations: parsed.recommendations,
@@ -117,7 +121,6 @@ Then respond ONLY in this JSON format:
         estimated_impact: totalRecoverable > 0
           ? 'A$' + Math.round(totalRecoverable/100).toLocaleString() + '/unit uplift available'
           : null,
-        status: 'pending',
       })
     }
 

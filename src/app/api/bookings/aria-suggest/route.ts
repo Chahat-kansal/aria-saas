@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -51,7 +52,9 @@ async function _POST() {
   const insight = ((resp.content[0] as { type: string; text: string }).text ?? '').trim()
 
   waitUntil((async () => { try { await supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, model: 'claude-haiku-4-5-20251001', prompt_summary: 'booking_analysis', response_summary: insight.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch (e) { console.error('[silent-catch]', e) } })())
-  waitUntil((async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, category: 'sales', action_type: 'booking_insight', title: 'Booking analysis', summary: insight.slice(0, 200), confidence: 0.85, status: 'pending' }) } catch (e) { console.error('[silent-catch]', e) } })())
+  // SPINE-1 — identical row (note: writes `summary`, not `description` — preserved exactly), now
+  // also emitting the 'proposed' moat event + real-time push.
+  waitUntil((async () => { try { await createDecision({ business_id: bid, domain: 'growth', kind: 'booking_insight', category: 'sales', action_type: 'booking_insight', title: 'Booking analysis', summary: insight.slice(0, 200), confidence: 0.85 }) } catch (e) { console.error('[silent-catch]', e) } })())
 
   return NextResponse.json({ insight })
 }

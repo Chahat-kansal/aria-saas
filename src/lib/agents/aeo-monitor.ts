@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 interface AeoResult {
   appeared: boolean
@@ -93,13 +94,19 @@ export class AeoMonitor {
     if (reviews < 5) gaps.push('Actively request reviews from your customers — 5+ reviews is the minimum threshold for AI citations')
 
     if (gaps.length > 0) {
-      await supabaseAdmin.from('aria_autopilot_actions').insert({
+      // SPINE-1 — same row PLUS a title. TITLE FIX (approved, disclosed): this site wrote a
+      // 'pending' row with NO title, which renders as a blank card in the PH-1 Decisions tab — a
+      // decision the owner can't read isn't a decision. The title is DERIVED from this row's own
+      // existing description prefix ('AEO Profile Gaps: ...'), not invented (GROUNDING-TEETH).
+      await createDecision({
         business_id,
+        domain: 'growth',
+        kind: 'aeo_profile_gaps',
         agent_type: 'reputation_defence',
         action_type: 'recommendation',
-        description: 'AEO Profile Gaps: ' + gaps.join(' | '),
-        status: 'pending',
-      }).then(() => {}, () => {})
+        title: 'AEO profile gaps',
+        subtitle: 'AEO Profile Gaps: ' + gaps.join(' | '),
+      }).catch(() => {})
     }
   }
 

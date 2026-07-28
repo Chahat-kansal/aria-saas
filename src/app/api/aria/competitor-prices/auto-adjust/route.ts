@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -30,19 +31,22 @@ async function _POST(req: Request) {
   const newMargin = costPrice > 0 ? ((suggested_price - costPrice) / suggested_price * 100).toFixed(1) : null
   const pctChange = ((suggested_price - currentPrice) / Math.max(currentPrice, 0.01) * 100).toFixed(1)
 
-  const { data: action, error: actionErr } = await supabaseAdmin.from('aria_autopilot_actions').insert({
+  // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+  // createDecision returns the id this route already returned to its caller.
+  const actionId = await createDecision({
     business_id,
+    domain: 'money',
+    kind: 'price_adjustment',
     category: 'pricing',
     priority: Math.abs(suggested_price - currentPrice) / Math.max(currentPrice, 0.01) > 0.10 ? 'important' : 'routine',
     title: 'Price adjustment: ' + String(product.name),
-    description: reason || ('Competitor pricing suggests changing ' + String(product.name) + ' from A$' + currentPrice.toFixed(2) + ' to A$' + suggested_price.toFixed(2) + (newMargin ? ' — new margin: ' + newMargin + '%' : '')),
-    action_data: { product_id, product_name: product.name, current_price: currentPrice, suggested_price, new_margin_pct: newMargin },
+    subtitle: reason || ('Competitor pricing suggests changing ' + String(product.name) + ' from A$' + currentPrice.toFixed(2) + ' to A$' + suggested_price.toFixed(2) + (newMargin ? ' — new margin: ' + newMargin + '%' : '')),
+    payload: { product_id, product_name: product.name, current_price: currentPrice, suggested_price, new_margin_pct: newMargin },
     estimated_impact: 'A$' + Math.abs(suggested_price - currentPrice).toFixed(2) + ' price change (' + (suggested_price > currentPrice ? '+' : '') + pctChange + '%)',
-    status: 'pending',
-  }).select('id').single()
+  })
 
-  if (actionErr) return NextResponse.json({ error: actionErr.message }, { status: 500 })
-  return NextResponse.json({ ok: true, action_id: (action as { id: string }).id, current_price: currentPrice, suggested_price })
+  if (!actionId) return NextResponse.json({ error: 'Failed to create price adjustment' }, { status: 500 })
+  return NextResponse.json({ ok: true, action_id: actionId, current_price: currentPrice, suggested_price })
 }
 
 async function _PATCH(req: Request) {

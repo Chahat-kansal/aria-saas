@@ -3,6 +3,7 @@ import { sendSMS } from '@/lib/clicksend'
 import { sendEmail } from '@/lib/external-apis'
 import { BaseAgent } from './base-agent'
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 export class ReputationDefenceAgent extends BaseAgent {
   type: AgentType = 'reputation_defence'
@@ -221,13 +222,21 @@ export class ReputationDefenceAgent extends BaseAgent {
         }
       } catch (e) { console.error('[non-fatal]', e) }
 
-      await supabaseAdmin.from('aria_autopilot_actions').insert({
+      // SPINE-1 — ALERT branch only (the review_request branch below is audit, status 'executed',
+      // deliberately left untouched). Same row PLUS a title. TITLE FIX (approved, disclosed): this
+      // wrote a 'pending' row with NO title, rendering as a blank card in the PH-1 Decisions tab.
+      // The title is DERIVED from this row's own real figures (neg24h, already computed above),
+      // not invented (GROUNDING-TEETH).
+      await createDecision({
         business_id,
+        domain: 'growth',
+        kind: 'review_crisis',
         agent_type: 'reputation_defence',
         action_type: 'alert',
-        description: 'CRISIS: ' + String(neg24h) + ' negative reviews in 24h. Auto-responses paused. Immediate owner attention required.',
-        status: 'pending',
-      }).then(() => {}, () => {})
+        title: 'Review crisis: ' + String(neg24h) + ' negative reviews in 24h',
+        subtitle: 'CRISIS: ' + String(neg24h) + ' negative reviews in 24h. Auto-responses paused. Immediate owner attention required.',
+        priority: 'urgent',
+      }).catch(() => {})
     }
 
     // Weekly velocity

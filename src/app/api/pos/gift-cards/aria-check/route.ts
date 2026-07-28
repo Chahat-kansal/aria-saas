@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -29,7 +30,9 @@ async function _POST(_req: Request) {
   const insight = (resp.content[0] as { type: string; text: string }).text
   waitUntil((async () => { try { await supabase.from('aria_ai_calls').insert({ business_id: biz.id, model: 'claude-haiku-4-5-20251001', prompt_summary: 'gift_card_fraud_check', response_summary: insight.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch (e) { console.error('[silent-catch]', e) } })())
   if (!insight.includes('No issues')) {
-    waitUntil((async () => { try { await supabase.from('aria_autopilot_actions').insert({ business_id: biz.id, category: 'compliance', action_type: 'gift_card_fraud_alert', title: 'Gift card activity alert', summary: insight.slice(0, 200), confidence: 0.8, status: 'pending' }) } catch (e) { console.error('[silent-catch]', e) } })())
+    // SPINE-1 — identical row (writes `summary`, not `description` — preserved), now also emitting
+    // the 'proposed' moat event + real-time push.
+    waitUntil((async () => { try { await createDecision({ business_id: biz.id, domain: 'compliance', kind: 'gift_card_fraud_alert', category: 'compliance', action_type: 'gift_card_fraud_alert', title: 'Gift card activity alert', summary: insight.slice(0, 200), confidence: 0.8 }) } catch (e) { console.error('[silent-catch]', e) } })())
   }
   return NextResponse.json({ ok: true, insight })
 }

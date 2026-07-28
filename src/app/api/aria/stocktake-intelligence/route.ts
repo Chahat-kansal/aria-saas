@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { guardOutput } from '@/lib/aria/ground-guard'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -156,13 +157,16 @@ Respond ONLY in this JSON format:
 
     // Write to autopilot
     if (overallInsight) {
-      await supabase.from('aria_autopilot_actions').insert({
+      // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+      await createDecision({
         business_id: bid,
+        domain: 'supply',
+        kind: 'stocktake_variance_analysis',
         category: 'inventory',
         priority,
         title: parsed.overall_title ?? 'Stocktake variance analysis',
-        description: overallInsight,
-        action_data: {
+        subtitle: overallInsight,
+        payload: {
           type: 'stocktake_variance_analysis',
           stock_take_id: stockTake.id,
           total_cost_impact_cents: totalCostImpact,
@@ -172,7 +176,6 @@ Respond ONLY in this JSON format:
         estimated_impact: totalCostImpact > 0
           ? 'A$' + Math.round(totalCostImpact/100).toLocaleString() + ' cost exposure'
           : null,
-        status: 'pending',
       })
     }
   } catch {

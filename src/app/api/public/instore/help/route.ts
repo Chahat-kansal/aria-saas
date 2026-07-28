@@ -7,6 +7,7 @@ import { sendSMS } from '@/lib/clicksend'
 import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { limit } from '@/lib/rate-limit'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 // KIOSK-INBOX-1 — "Talk to staff" (prompts/81-kiosk-improvements.md, Improvement 4). The
 // dashboard/inbox read side for category='kiosk_help_request' (src/app/api/dashboard/inbox/
@@ -47,15 +48,17 @@ async function _POST(req: Request) {
     ? lastMessages.map(m => (m.role === 'user' ? 'Customer: ' : 'Aria: ') + (m.content ?? '')).join('\n').slice(0, 500)
     : 'Customer requested help at the kiosk (no conversation on file).'
 
-  const { data: action } = await supabaseAdmin.from('aria_autopilot_actions').insert({
+  // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+  const actionId = await createDecision({
     business_id,
+    domain: 'people',
+    kind: 'kiosk_help_request',
     category: 'kiosk_help_request',
     priority: 'important',
     title: 'Customer at kiosk needs help',
-    description,
-    action_data: { conversation_id: conversation_id ?? null },
-    status: 'pending',
-  }).select('id').single()
+    subtitle: description,
+    payload: { conversation_id: conversation_id ?? null },
+  })
 
   const ownerPhone = biz?.owner_phone || biz?.phone
   if (ownerPhone) {
@@ -64,7 +67,7 @@ async function _POST(req: Request) {
     await sendSMS(ownerPhone, smsBody).catch(() => null)
   }
 
-  return NextResponse.json({ ok: true, action_id: action?.id ?? null })
+  return NextResponse.json({ ok: true, action_id: actionId })
 }
 
 export const POST = withErrorCapture('public/instore/help', _POST)

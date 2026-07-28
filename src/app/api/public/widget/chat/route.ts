@@ -7,6 +7,7 @@ import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { limit } from '@/lib/rate-limit'
+import { createDecision } from '@/lib/decisions/createDecision'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -280,15 +281,17 @@ export async function POST(req: Request) {
           await sendSMS(ownerPhone, smsBody)
         }
 
-        await supabaseAdmin.from('aria_autopilot_actions').insert({
+        // SPINE-1 — identical row, now also emitting the 'proposed' moat event + real-time push.
+        await createDecision({
           business_id: businessId,
+          domain: 'growth',
+          kind: 'website_booking',
           category: 'booking',
           priority: 'important',
           title: 'New website booking: ' + apptData.visitor_name,
-          description: apptData.booking_date + ' at ' + apptData.booking_time + (apptData.service ? ' — ' + apptData.service : ''),
-          action_data: { suggested_action: 'Confirm appointment with customer' },
-          status: 'pending',
-        }).then(undefined, () => {})
+          subtitle: apptData.booking_date + ' at ' + apptData.booking_time + (apptData.service ? ' — ' + apptData.service : ''),
+          payload: { suggested_action: 'Confirm appointment with customer' },
+        }).catch(() => {})
       }
     }
 
