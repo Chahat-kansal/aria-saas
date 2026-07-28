@@ -8,7 +8,7 @@ import { trackUsage } from '@/lib/track-usage';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveUnitCost } from '@/lib/orders/resolve-unit-cost'
-import { requireFeature } from '@/lib/features'
+import { requireSection } from '@/lib/billing/enforce'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -21,7 +21,10 @@ async function _POST(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id,name,city,industry')
     .eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const gate = await requireFeature(business_id, 'weekly_orders');  // SS — Growth+ feature
+  // SS-RECONCILE — was requireFeature(business_id, 'weekly_orders') (growth+). Weekly Orders'
+  // nav item lives in the 'Operations' section, starter+ in the confirmed plan matrix — this
+  // loosens from growth+ to starter, never re-tightens (RULE0).
+  const gate = await requireSection(business_id, 'Operations');
   if (gate) return gate;
 
   trackUsage({ business_id, event_type: 'weekly_order' });

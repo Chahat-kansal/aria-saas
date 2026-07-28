@@ -8,7 +8,7 @@ import { parseLLMJsonOr } from '@/lib/ai-json'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { requireFeature } from '@/lib/features'
+import { requireSection } from '@/lib/billing/enforce'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
@@ -28,7 +28,10 @@ async function _POST(req: Request) {
     const { data: biz } = await supabase.from('businesses')
       .select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle()
     if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    const gate = await requireFeature(business_id, 'competitor_analysis')  // SS — Pro feature
+    // SS-RECONCILE — was requireFeature(business_id, 'competitor_analysis') (pro-only). Competitor
+    // watch's nav item lives in the 'Reputation' section, which is growth+ in the confirmed plan
+    // matrix — this loosens from pro to growth, never re-tightens (RULE0).
+    const gate = await requireSection(business_id, 'Reputation')
     if (gate) return gate
 
     // Own product price

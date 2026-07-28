@@ -6,7 +6,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAdminClient, isAdminEmail } from '@/lib/admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { loadCostModelData, computeFullCogsPerBusinessPerDay } from '@/lib/cost-model'
-import { USD_PER_AUD } from '@/lib/fx-rate'
+import { PLANS } from '@/lib/billing/plans'
+import { normalizePlan } from '@/lib/plans/resolve-plan'
 
 // COST-LEDGER-1 — the unified admin cost page's data source.
 //
@@ -23,7 +24,11 @@ import { USD_PER_AUD } from '@/lib/fx-rate'
 
 type Category = 'ai' | 'sms' | 'email' | 'payment_fee' | 'infra' | 'other'
 
-const PLAN_PRICES_AUD: Record<string, number> = { starter: 59, growth: 129, pro: 249, autonomous: 249 }
+// SS-RECONCILE — this used to be a stale, unrelated AUD price table (starter:59/growth:129/
+// pro:249/autonomous:249, last touched pre-SS-1) diverged from the real USD pricing the SS
+// billing batch confirmed ($297/$597/$997). Reads src/lib/billing/plans.ts's PLANS registry
+// directly now — one source for plan price, same as everywhere else in the SS batch — instead of
+// a second, driftable copy plus an AUD->USD FX conversion this route no longer needs.
 
 function ymOf(d: Date) { return d.toISOString().slice(0, 7) }
 function monthStartOf(d: Date) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)) }
@@ -120,8 +125,7 @@ async function _GET(req: Request) {
     const metered = meteredByBusiness.get(b.id as string) ?? 0
     const totalCost = metered + fixedPerBusinessPerMonthCents
     const plan = planOf.get(b.id as string) ?? 'starter'
-    const planPriceAud = PLAN_PRICES_AUD[plan] ?? null
-    const planPriceUsdCents = planPriceAud != null ? Math.round(planPriceAud * 100 * USD_PER_AUD) : null
+    const planPriceUsdCents = Math.round(PLANS[normalizePlan(plan)].price_usd * 100)
     const marginPct = planPriceUsdCents ? Math.round(((planPriceUsdCents - totalCost) / planPriceUsdCents) * 100) : null
     return {
       business_id: b.id, name: b.name, plan,

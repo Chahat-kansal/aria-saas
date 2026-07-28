@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { requireFeature } from '@/lib/features'
+import { requireSection } from '@/lib/billing/enforce'
 
 async function _GET(req: Request) {
   try {
@@ -19,7 +19,10 @@ async function _GET(req: Request) {
 
     const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
     if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const gate = await requireFeature(business_id, 'custom_features');  // SS — Pro feature
+    // SS-RECONCILE — was requireFeature(business_id, 'custom_features') (pro-only). Custom
+    // features' nav item lives in the 'Overview' section, which is starter+ (universal) in the
+    // confirmed plan matrix — this loosens from pro to starter, never re-tightens (RULE0).
+    const gate = await requireSection(business_id, 'Overview');
     if (gate) return gate;
 
     const { data, error } = await supabase

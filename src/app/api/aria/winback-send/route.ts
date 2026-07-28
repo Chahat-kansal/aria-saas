@@ -6,7 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { requireFeature } from '@/lib/features'
+import { requireSection } from '@/lib/billing/enforce'
 import { runCustomerFacingCopy } from '@/lib/aria/grounded'
 
 async function _POST(req: Request) {
@@ -25,7 +25,10 @@ async function _POST(req: Request) {
 
   const { data: biz } = await supabase.from('businesses').select('id, name').eq('id', business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const gate = await requireFeature(business_id, 'winback_sms')  // SS — Growth+ feature
+  // SS-RECONCILE — was requireFeature(business_id, 'winback_sms') (growth+). Customer winback's
+  // nav item lives in the 'Revenue' section, starter+ in the confirmed plan matrix — this loosens
+  // from growth+ to starter, never re-tightens (RULE0).
+  const gate = await requireSection(business_id, 'Revenue')
   if (gate) return gate
 
   const ch: string = channel ?? 'both'

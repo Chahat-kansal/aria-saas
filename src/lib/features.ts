@@ -3,6 +3,18 @@ import { NextResponse } from 'next/server';
 import { getEffectivePlan, type Plan } from '@/lib/plans/resolve-plan';
 import { logAICallSafe } from '@/lib/aria/log-ai-call';
 
+// SS-RECONCILE (2026-07-28) — RETIRED as an entitlement/enforcement mechanism, per founder
+// decision (a): getEntitlement(business_id).sections (src/lib/billing/entitlement.ts) is now the
+// sole entitlement truth; a feature is allowed iff the Sidebar section it lives in is in the
+// business's entitled sections. The 6 routes that called requireFeature() below now call
+// requireSection() (src/lib/billing/enforce.ts) instead — grep requireFeature( across src/app to
+// confirm zero live callers remain. feature_flags itself is untouched and keeps serving the
+// SEPARATE per-business visibility-toggle system (ALL_FEATURES/applyFeatureChoices,
+// src/lib/industry-features*.ts) — that's display ("which enabled features are visible"), never
+// entitlement, and was never in scope to change. The functions below are kept, not deleted
+// (RULE0) — nothing currently calls them, kept in case a narrower per-flag visibility check is
+// ever needed again for something that isn't plan enforcement.
+
 export async function hasFeature(
   business_id: string,
   flag_key: string,

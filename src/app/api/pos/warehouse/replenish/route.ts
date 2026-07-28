@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
-import { requireFeature } from '@/lib/features'
+import { requireSection } from '@/lib/billing/enforce'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -23,7 +23,9 @@ async function _GET(req: Request) {
   if (!bid) return NextResponse.json({ items: [] })
   const denied = await verifyBusinessAccess(user.id, bid)
   if (denied) return denied
-  const gate = await requireFeature(bid, 'warehouse')  // SS — Pro feature
+  // SS-RECONCILE — was requireFeature(bid, 'warehouse') (pro-only). 'Warehouse' is pro in the
+  // confirmed plan matrix too — exact match, no tier change, only the mechanism swaps.
+  const gate = await requireSection(bid, 'Warehouse')
   if (gate) return gate
 
   const { data: products } = await supabase

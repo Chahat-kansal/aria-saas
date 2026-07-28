@@ -8,7 +8,7 @@ import { getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { requireFeature } from '@/lib/features'
+import { requireSection } from '@/lib/billing/enforce'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { geminiVision } from '@/lib/gemini'
@@ -97,7 +97,10 @@ async function _POST(req: Request) {
   const { data: business } = await supabase.from('businesses').select('id, data_source')
     .eq('id', business_id).eq('user_id', user.id).single();
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
-  const gate = await requireFeature(business_id, 'ai_receipt');  // SS — Growth+ feature
+  // SS-RECONCILE — was requireFeature(business_id, 'ai_receipt') (growth+). Receipt scan's nav
+  // item lives in the 'Modules' section, universal across all tiers in the confirmed plan matrix
+  // (it contains AriaPOS itself) — this loosens from growth+ to starter, never re-tightens (RULE0).
+  const gate = await requireSection(business_id, 'Modules');
   if (gate) return gate;
 
   // Convert file to base64
