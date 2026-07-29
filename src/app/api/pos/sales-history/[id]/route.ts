@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { reverseEarnOnSale } from '@/lib/loyalty/reverseEarnOnSale'
+import { recordSaleMovements, VOID_MOVEMENT_TYPE, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 type Params = { params: { id: string } }
 
@@ -102,6 +104,31 @@ async function _DELETE(req: Request, { params }: Params, { supabase, userId, bus
   try {
     await reverseEarnOnSale({ businessId: bid, saleId: id, totalAmount: Number(sale.total_amount ?? 0) })
   } catch (e) { console.error('[pos/sales-history void] loyalty reversal failed:', (e as Error).message) }
+
+  // INV-DECREMENT-VERIFY — SECOND BYPASS FOUND. This void reversed LOYALTY but never reversed
+  // STOCK: goods came back over the counter and the ledger never heard about it. Same shape as the
+  // layby gap, opposite direction. Now funnels through the same shared reversal path
+  // pos/sales/[id]/void already uses — idempotent at the DB
+  // (stock_movements_reversal_line_uniq), so a double-void can't double-restore.
+  try {
+    const { data: voidItems } = await supabase.from('pos_sale_items')
+      .select('product_id, quantity').eq('sale_id', id)
+    const voidLines = (voidItems ?? []).filter(i => i.product_id && Number(i.quantity) > 0)
+    if (voidLines.length > 0) {
+      const voidOutletId = await resolveOutletId(supabase, bid, (sale as { outlet_id?: string | null }).outlet_id ?? null)
+      const movementLines: SaleMovementLine[] = []
+      for (const i of voidLines) {
+        const itemsOnHand = await adjustOutletStock(supabase, {
+          businessId: bid, outletId: voidOutletId, productId: i.product_id as string, delta: Math.abs(Number(i.quantity)),
+        })
+        movementLines.push({ itemId: i.product_id as string, quantitySold: Math.abs(Number(i.quantity)), newStock: itemsOnHand })
+      }
+      await recordSaleMovements(supabase, {
+        businessId: bid, saleId: id, lines: movementLines,
+        movementType: VOID_MOVEMENT_TYPE, outletId: voidOutletId, writtenBy: 'pos/sales-history/[id]:void',
+      })
+    }
+  } catch (e) { console.error('[pos/sales-history void] stock reversal failed:', (e as Error).message) }
 
   await supabase.from('pos_sale_edits').insert({
     sale_id: id,

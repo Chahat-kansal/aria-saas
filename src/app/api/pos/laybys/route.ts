@@ -4,6 +4,8 @@ export const maxDuration = 20;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
+import { recordSaleMovements, type SaleMovementLine } from '@/lib/inventory/record-sale-movement'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -109,6 +111,49 @@ async function _PATCH(req: Request, _context: unknown, { supabase, businessId: b
       await supabase.from('pos_laybys').update({ status: 'active', completed_at: null }).eq('id', id).eq('business_id', bid);
       return NextResponse.json({ error: saleErr?.message ?? 'Could not create sale from layby' }, { status: 500 });
     }
+    // INV-DECREMENT-VERIFY — THE LAST COMPLETED-SALE BYPASS. This path created a pos_sales row with
+    // status='completed' but never wrote sale lines or a stock movement, so goods handed over on a
+    // layby left the shelf without ever leaving the ledger. Every other completed-sale path
+    // (create-sale, sync-offline, online-orders, void, refund, return, return-engine) already
+    // funnels through the shared helpers; this now does too — deliberately NOT a parallel decrement
+    // (the gap existed precisely because this path rolled its own). The layby's items jsonb carries
+    // the real cart captured at layby creation ({product_id, product_name, qty, unit_price} — see
+    // pos/(fullscreen)/terminal/page.tsx), so quantities are real sale data, never inferred.
+    const laybyItems = (Array.isArray(claimed.items) ? claimed.items : []) as Array<{
+      product_id?: string; product_name?: string; qty?: number; unit_price?: number
+    }>;
+    const stockLines = laybyItems.filter(i => i.product_id && Number(i.qty) > 0);
+
+    if (stockLines.length > 0) {
+      // Sale lines first — a completed sale with no lines is why this row was invisible to every
+      // downstream report/velocity/par figure, not just to stock.
+      await supabase.from('pos_sale_items').insert(
+        stockLines.map(i => ({
+          sale_id: sale.id,
+          business_id: bid,
+          product_id: i.product_id,
+          product_name: i.product_name ?? null,
+          quantity: Number(i.qty),
+          unit_price: Number(i.unit_price ?? 0),
+          line_total: Number(i.unit_price ?? 0) * Number(i.qty),
+        })),
+      ).then(() => {}, (e: unknown) => console.error('[pos/laybys] sale items insert failed:', e));
+
+      const laybyOutletId = await resolveOutletId(supabase, bid, null);
+      const movementLines: SaleMovementLine[] = [];
+      for (const i of stockLines) {
+        const itemsOnHand = await adjustOutletStock(supabase, {
+          businessId: bid, outletId: laybyOutletId, productId: i.product_id!, delta: -Number(i.qty),
+        });
+        movementLines.push({ itemId: i.product_id!, quantitySold: Number(i.qty), newStock: itemsOnHand });
+      }
+      // Idempotent at the DB (stock_movements_sale_line_uniq) — a retry can never double-decrement.
+      await recordSaleMovements(supabase, {
+        businessId: bid, saleId: sale.id, saleNumber: sale.sale_number ?? null,
+        lines: movementLines, outletId: laybyOutletId, writtenBy: 'pos/laybys:complete',
+      });
+    }
+
     const { data: done } = await supabase.from('pos_laybys')
       .update({ notes: `${claimed.notes ? claimed.notes + ' · ' : ''}Converted to sale ${sale.sale_number ?? ''}` })
       .eq('id', id).eq('business_id', bid).select('*').single();
