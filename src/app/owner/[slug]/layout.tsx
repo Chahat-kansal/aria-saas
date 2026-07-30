@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { resolveBusinessId } from '@/lib/aria/resolve-business'
+import { resolveBusinessId as resolveBusinessIdWith } from '@/lib/aria/resolve-business'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { resolveMembership } from '@/lib/access/membership'
+
+/** Slug→id via service role: a member cannot read `businesses` under RLS, and this returns an id only. */
+async function resolveBusinessIdAdmin(slug: string) { return resolveBusinessIdWith(supabaseAdmin, slug) }
 import { OwnerHeader } from '@/components/owner-app/Header'
 import { OwnerBottomNav, OwnerHelpButton } from '@/components/owner-app/BottomNav'
 import { OwnerBusinessProvider } from './OwnerBusinessContext'
@@ -22,16 +27,24 @@ export default async function OwnerAppLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const businessId = await resolveBusinessId(supabase, slug)
+  const businessId = await resolveBusinessIdAdmin(slug)
   if (!businessId) redirect('/dashboard')
 
-  const { data: biz } = await supabase
+  // ACCESS-MODEL-1 — the owner app is no longer owner-only: a LINKED MEMBER (manager) may open it.
+  // `businesses` is deliberately NOT RLS-widened, because that row carries billing and identity
+  // fields a manager must never see (stripe_customer_id, stripe_subscription_id, plan,
+  // trial_ends_at, owner_email, ABN). Instead membership is resolved server-side and the member is
+  // handed a BILLING-SAFE PROJECTION — {id, slug, name, suburb} and nothing else. The owner's own
+  // access is unchanged; this only adds a second, narrower door.
+  const membership = await resolveMembership(user.id, businessId)
+  if (!membership) redirect('/dashboard') // neither owner nor linked member — fail closed
+
+  const { data: biz } = await supabaseAdmin
     .from('businesses')
-    .select('id, slug, name, suburb, city')
+    .select('id, slug, name, suburb, city')   // ← the projection: no billing/identity columns
     .eq('id', businessId)
-    .eq('user_id', user.id)
     .maybeSingle()
-  if (!biz) redirect('/dashboard') // not this user's business — fail closed, never leak existence
+  if (!biz) redirect('/dashboard')
 
   const business = {
     id: biz.id as string,

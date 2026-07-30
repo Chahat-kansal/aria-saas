@@ -8,6 +8,8 @@ import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { DOMAINS, listOwnerDecisions, toOwnerDecision, isExpired, auditDecisionAction, verifyStepupToken } from '@/lib/owner-app/decisions'
 import { recordEvent } from '@/lib/moat/recordEvent'
+import { resolveMembership, requireDecisionAction } from '@/lib/access/membership'
+import { maskDecisionsForMember, maskDecisionForMember } from '@/lib/access/mask'
 
 // OWNER-APP PH-1 — the one read+act route the phone app calls. Method-switched (GET list, POST
 // act) per the brief's fn-budget instruction, rather than two separate route files.
@@ -33,7 +35,14 @@ async function _GET(req: Request) {
   const denied = await verifyBusinessAccess(user.id, business_id)
   if (denied) return denied
 
-  const decisions = await listOwnerDecisions(supabase, business_id, { status, domain })
+  // ACCESS-MODEL-1 — RLS already admitted this caller to the rows (owner or linked member).
+  // Masking is the SECOND layer: a member sees the row but not the fields their flags forbid.
+  const membership = await resolveMembership(user.id, business_id)
+  if (!membership) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const decisions = maskDecisionsForMember(
+    await listOwnerDecisions(supabase, business_id, { status, domain }),
+    membership,
+  )
 
   // Live counts per domain (for the Decisions tab's filter-chip badges) — always counts
   // status='pending' (the brief's 'waiting') regardless of the requested status filter, since the
@@ -79,6 +88,17 @@ async function _POST(req: Request) {
   if (row.status !== 'pending' || isExpired({ expires_at: row.expires_at as string | null, status: row.status as string })) {
     return NextResponse.json({ error: 'not_waiting', status: row.status }, { status: 409 })
   }
+
+  // ACCESS-MODEL-1 — THE CAPABILITY GATE, server-side. A manager may act on people/growth/supply/
+  // compliance decisions; a MONEY decision is visible to them read-only and any action is rejected
+  // here regardless of what the UI showed. Runs BEFORE the status flip, so an out-of-role POST
+  // changes nothing. The owner's money step-up below is untouched and still owner-bound.
+  const actingMembership = await resolveMembership(user.id, business_id)
+  const outOfRole = requireDecisionAction(actingMembership, {
+    domain: row.domain as string | null,
+    requires_stepup: row.requires_stepup as boolean | null,
+  })
+  if (outOfRole) return outOfRole
 
   if (row.requires_stepup && action === 'approve') {
     if (!stepup_token || !verifyStepupToken(stepup_token, user.id)) {
@@ -137,7 +157,9 @@ async function _POST(req: Request) {
   // reel_schedule, winback_campaign, purchase_order, food_safety_signoff, ...) is wired in later,
   // per-kind sprints (post PH-1). This is the seam those sprints hook into.
 
-  return NextResponse.json({ decision: toOwnerDecision(updated) })
+  return NextResponse.json({
+    decision: actingMembership ? maskDecisionForMember(toOwnerDecision(updated), actingMembership) : toOwnerDecision(updated),
+  })
 }
 
 export const GET = withErrorCapture('owner/decisions', _GET)
