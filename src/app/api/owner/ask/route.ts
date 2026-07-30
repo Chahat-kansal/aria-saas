@@ -8,6 +8,7 @@ import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { POST as askAria } from '@/app/api/aria/ask/route'
 import { deriveChatActions, buildSuggestedChips } from '@/lib/owner-app/chat'
+import { buildManagerContext } from '@/lib/manager/voice'
 
 // OWNER-APP PH-3 — the phone's Aria tab is a THIN owner-scoped adapter over the EXISTING Ask Aria
 // brain (src/app/api/aria/ask/route.ts), never a second reasoning engine.
@@ -65,12 +66,24 @@ async function _POST(req: Request) {
   // Forward to the existing brain IN-PROCESS (same pattern the cron dispatchers use to call other
   // route handlers directly) — cookies/session flow through the reconstructed Request, so the brain
   // authenticates the same user and applies its own rate limiting, routing, and grounding.
+  // MANAGER-AGENT-1 — the owner is talking to the STORE MANAGER, which speaks for the whole team.
+  // Implemented as CONTEXT prepended to the existing brain's conversation, never a second brain:
+  // the manager already holds what the team produced (manager_reviews / pending decisions /
+  // autonomy_ledger), so handing the brain that real state is all the "voice" requires. Every line
+  // of it is read from real rows — null when there is genuinely nothing to report, in which case
+  // the brain answers exactly as it did before.
+  const managerContext = await buildManagerContext(supabase, business_id)
+  const priorTurns = body.messages ?? []
+  const messagesWithVoice = managerContext
+    ? [{ role: 'assistant' as const, content: managerContext }, ...priorTurns]
+    : priorTurns
+
   const brainReq = new Request(new URL('/api/aria/ask', req.url).toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', cookie: req.headers.get('cookie') ?? '' },
     body: JSON.stringify({
       message: message.trim(),
-      messages: body.messages ?? [],
+      messages: messagesWithVoice,
       conversation_id: body.conversation_id ?? null,
     }),
   })
