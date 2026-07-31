@@ -5,7 +5,8 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { runOutcomeChecks, runAutopilotOutcomeChecks, runHypothesisOutcomeClosure } from '@/lib/aria/hypothesis/outcome-learning'
+import { runOutcomeChecks, runAutopilotOutcomeChecks, runHypothesisOutcomeClosure, learnFromNonDecisions } from '@/lib/aria/hypothesis/outcome-learning'
+import { surfaceHypothesesToDecisions } from '@/lib/aria/hypothesis/surface-to-decisions'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 
 export async function GET(req: Request) {
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
       .in('subscription_status', ['active', 'trialing'])
 
     let totalChecked = 0, totalMemories = 0, totalBackfilled = 0, totalResolved = 0, totalHypClosed = 0
+    let totalSurfaced = 0, totalDeclineLearned = 0, totalExpiryLearned = 0
     const errors: Array<{ business_id: string; error: string }> = []
 
     for (const biz of (businesses ?? [])) {
@@ -45,6 +47,20 @@ export async function GET(req: Request) {
           runAutopilotOutcomeChecks(biz.id),
         ])
         const { closed } = await runHypothesisOutcomeClosure(biz.id)
+
+        // BRAIN-LOOP-1 — the loop's ENTRY and its honest tail, on the cron that already owns this
+        // pass. No new cron and no new function (Vercel cron + function budgets are both capped);
+        // this is exactly where they belong, since both read the same hypothesis rows the closure
+        // above just updated.
+        //   1. learn from what was NOT taken up — declines and surfaced expiries only; the 195
+        //      unknown_surfaced legacy rows are counted and never scored.
+        //   2. THEN surface up to 2/day into the Decisions queue, so today's ranking already
+        //      reflects today's learning rather than lagging a full cycle behind it.
+        const nonDecisions = await learnFromNonDecisions(biz.id)
+        const { surfaced } = await surfaceHypothesesToDecisions(biz.id)
+        totalSurfaced       += surfaced
+        totalDeclineLearned += nonDecisions.declined
+        totalExpiryLearned  += nonDecisions.expired_surfaced
         totalChecked    += checked
         totalMemories   += memories_written
         totalBackfilled += backfilled
@@ -76,7 +92,10 @@ export async function GET(req: Request) {
       response_summary: JSON.stringify({ outcomes_checked: totalChecked, memories_written: totalMemories, autopilot_resolved: totalResolved, hypotheses_closed: totalHypClosed }).slice(0, 200),
     })
 
-    return NextResponse.json({ ok: true, outcomes_checked: totalChecked, memories_written: totalMemories, autopilot_backfilled: totalBackfilled, autopilot_resolved: totalResolved, hypotheses_closed: totalHypClosed })
+    // BRAIN-LOOP-1 — surfaced is reported SEPARATELY from learned. Putting a hypothesis in front of
+    // an owner is not learning from it; conflating the two is how a loop looks alive while producing
+    // nothing (which is exactly the state this sprint found: 240 generated, 0 ever learned from).
+    return NextResponse.json({ ok: true, outcomes_checked: totalChecked, memories_written: totalMemories, autopilot_backfilled: totalBackfilled, autopilot_resolved: totalResolved, hypotheses_closed: totalHypClosed, hypotheses_surfaced: totalSurfaced, learned_from_declines: totalDeclineLearned, learned_from_surfaced_expiries: totalExpiryLearned })
   } catch (e) {
     const msg = (e as Error).message
     await supabaseAdmin.from('cron_logs').update({ status: 'failed', finished_at: new Date().toISOString(), errors: { message: msg } }).eq('id', cronLogId)

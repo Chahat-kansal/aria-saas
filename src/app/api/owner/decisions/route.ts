@@ -10,6 +10,7 @@ import { DOMAINS, listOwnerDecisions, toOwnerDecision, isExpired, auditDecisionA
 import { recordEvent } from '@/lib/moat/recordEvent'
 import { resolveMembership, requireDecisionAction } from '@/lib/access/membership'
 import { maskDecisionsForMember, maskDecisionForMember } from '@/lib/access/mask'
+import { PATCH as hypothesisPatch } from '@/app/api/aria/hypotheses/[id]/route'
 
 // OWNER-APP PH-1 — the one read+act route the phone app calls. Method-switched (GET list, POST
 // act) per the brief's fn-budget instruction, rather than two separate route files.
@@ -151,6 +152,31 @@ async function _POST(req: Request) {
       latency_seconds: latencySeconds,
     },
   })
+
+  // BRAIN-LOOP-1 — if this decision was a surfaced HYPOTHESIS, resolve it through the EXISTING
+  // acceptance path (PATCH /api/aria/hypotheses/[id]) rather than a second handler. That route
+  // creates the aria_actions row and fires onActionApproved() for the baseline snapshot — the step
+  // that finally gives runOutcomeChecks() something to measure. Calling the route in-process is the
+  // same pattern owner/ask uses for the Aria brain; cookies are forwarded so it authenticates the
+  // same owner and applies its own checks. Fire-and-forget: the owner's decision is already
+  // recorded above and must not fail if the hypothesis bridge does.
+  const hypothesisId = (row.action_data as Record<string, unknown> | null)?.hypothesis_id as string | undefined
+  if (hypothesisId) {
+    void (async () => {
+      try {
+        const patchReq = new Request(new URL('/api/aria/hypotheses/' + hypothesisId, req.url).toString(), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', cookie: req.headers.get('cookie') ?? '' },
+          body: JSON.stringify(
+            action === 'approve'
+              ? { status: 'accepted' }
+              : { status: 'rejected', rejection_reason: 'Declined by owner from the Decisions queue' },
+          ),
+        })
+        await hypothesisPatch(patchReq, { params: { id: hypothesisId } })
+      } catch (e) { console.error('[decisions] hypothesis bridge failed (non-fatal):', (e as Error).message) }
+    })()
+  }
 
   // EXECUTE HOOK: <kind> — approving here only flips status + audits. Actually paying/publishing/
   // dispatching per decision `kind` (supplier_bills, pay_run, roster_publish, leave_request,

@@ -454,3 +454,111 @@ export async function adjustAdviceWeight(businessId: string, category: string, v
     console.error('[outcome-learning] adjustAdviceWeight failed:', (e as Error).message)
   }
 }
+
+// ─── BRAIN-LOOP-1 — LEARNING FROM NON-DECISIONS ────────────────────────────────────────────────
+//
+// A hypothesis that was shown and NOT taken up is real information, but it is much weaker
+// information than a measured outcome, and only some non-decisions carry any at all.
+//
+// WHAT COUNTS, AND WHY:
+//   · DECLINED        → weak negative. The owner read it and actively said no. That is a judgement.
+//   · EXPIRED *after* being surfaced → weaker negative. They saw it and let it lapse — but silence
+//     is ambiguous (busy week, wrong moment, meant to and forgot), so it must move the needle less
+//     than an explicit decline.
+//   · EXPIRED with surfaced_status='unknown_surfaced' (the 195 legacy rows) → EXCLUDED FOREVER.
+//     Two browse surfaces existed but nothing recorded whether an owner ever opened them, so we
+//     cannot tell "shown and ignored" from "never displayed". Scoring these would mean inventing a
+//     fact about owner behaviour — exactly what GROUNDING-TEETH forbids. They are not scored now
+//     and never will be; that history is genuinely unrecoverable and is written off, not guessed.
+//   · EXPIRED with surfaced_status NULL → excluded. Never shown = the owner never had a chance to
+//     act. Penalising a category for that would punish Aria for its own failure to surface.
+//
+// MAGNITUDE (deliberately far below a measured outcome):
+//   worked +0.100 / backfired -0.150   ← real money, actually measured
+//   declined        -0.040             ← ~1/4 of a backfire
+//   surfaced expiry -0.020             ← ~1/8 of a backfire
+// So it takes 7+ declines to offset one measured success. Opinion can nudge the ranking; only
+// evidence can move it.
+const NON_DECISION_DELTA = { declined: -0.04, expired_surfaced: -0.02 } as const
+
+/**
+ * Feed declines and surfaced-expiries into advice weights, once each.
+ *
+ * IDEMPOTENCE: outcome_checked_at is the "already learned from" marker. It is otherwise unused for
+ * non-accepted rows (runHypothesisOutcomeClosure only ever touches status='accepted'), so the two
+ * writers operate on disjoint sets and cannot fight.
+ *
+ * HONESTY: outcome_verdict is left NULL. These hypotheses were never tried, so they have no
+ * outcome — recording one would turn "not taken up" into "measured and failed" in every downstream
+ * count. The weight moves; the outcome ledger does not.
+ */
+export async function learnFromNonDecisions(businessId: string): Promise<{
+  declined: number; expired_surfaced: number; excluded_unknown: number; excluded_never_surfaced: number
+}> {
+  const out = { declined: 0, expired_surfaced: 0, excluded_unknown: 0, excluded_never_surfaced: 0 }
+
+  const { data: rows } = await supabaseAdmin
+    .from('aria_hypotheses')
+    .select('id, category, status, surfaced_status')
+    .eq('business_id', businessId)                      // tenant scope: one business's history can
+    .in('status', ['rejected', 'expired'])               // never move another's weights
+    .is('outcome_checked_at', null)
+
+  for (const r of (rows ?? []) as Array<Record<string, unknown>>) {
+    const category = (r.category as string | null) ?? 'general'
+    let delta: number
+
+    if (r.status === 'rejected') {
+      delta = NON_DECISION_DELTA.declined
+      out.declined++
+    } else if (r.surfaced_status === 'surfaced') {
+      delta = NON_DECISION_DELTA.expired_surfaced
+      out.expired_surfaced++
+    } else {
+      // unknown_surfaced (legacy) or NULL (never shown) — counted for honest reporting, never scored.
+      if (r.surfaced_status === 'unknown_surfaced') out.excluded_unknown++
+      else out.excluded_never_surfaced++
+      continue
+    }
+
+    await nudgeAdviceWeight(businessId, category, delta)
+    await supabaseAdmin.from('aria_hypotheses')
+      .update({ outcome_checked_at: new Date().toISOString() })   // outcome_verdict stays NULL
+      .eq('id', r.id as string).eq('business_id', businessId)
+  }
+
+  return out
+}
+
+/**
+ * Move a category weight WITHOUT touching the outcome counters.
+ *
+ * Separate from adjustAdviceWeight() on purpose: positive_outcomes/negative_outcomes/neutral_outcomes
+ * count MEASURED OUTCOMES. Incrementing them for a decline would inflate "Aria's advice was tested N
+ * times" with advice that was never tested at all. Same 0.3–2.0 clamp, so accumulated opinion can
+ * never drive a category past the bounds evidence itself respects.
+ */
+async function nudgeAdviceWeight(businessId: string, category: string, delta: number): Promise<void> {
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from('aria_advice_weights')
+      .select('id,weight')
+      .eq('business_id', businessId).eq('category', category).maybeSingle()
+
+    if (existing) {
+      const e = existing as Record<string, unknown>
+      await supabaseAdmin.from('aria_advice_weights').update({
+        weight: Number(Math.max(0.3, Math.min(2.0, Number(e.weight) + delta)).toFixed(3)),
+        last_updated_at: new Date().toISOString(),
+      }).eq('id', e.id as string)
+    } else {
+      await supabaseAdmin.from('aria_advice_weights').insert({
+        business_id: businessId, category,
+        weight: Number(Math.max(0.3, Math.min(2.0, 1.0 + delta)).toFixed(3)),
+        positive_outcomes: 0, negative_outcomes: 0, neutral_outcomes: 0,
+      })
+    }
+  } catch (e) {
+    console.error('[outcome-learning] nudgeAdviceWeight failed:', (e as Error).message)
+  }
+}
