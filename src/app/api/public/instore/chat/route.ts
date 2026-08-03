@@ -206,13 +206,13 @@ export async function POST(req: Request) {
 
       if (stallDetected) {
         // Don't leak any text to the client — signal to caller for a retry
-        return ' STALL'
+        return '\0STALL'
       }
 
       // Stream ended before we hit the buffer threshold — flush whatever we have
       if (!flushed && buffered) {
         // Final stall check on the short reply too
-        if (STALL_REGEX.test(buffered)) return ' STALL'
+        if (STALL_REGEX.test(buffered)) return '\0STALL'
         controller.enqueue(encoder.encode(sseLine({ type: 'token', text: buffered })))
       }
       return buffered
@@ -224,7 +224,7 @@ export async function POST(req: Request) {
         try {
           replyText = await streamOneReply(controller, systemPrompt)
 
-          if (replyText === ' STALL') {
+          if (replyText === '\0STALL') {
             // Retry with an explicit anti-stall correction in the system prompt
             console.warn('[instore/chat] stall detected, retrying', { business_id })
             await supabaseAdmin.from('aria_ai_calls').insert({
@@ -238,7 +238,7 @@ export async function POST(req: Request) {
             const correctedPrompt = systemPrompt + '\n\nYour previous reply contained a stall phrase. The product catalogue is RIGHT HERE. Answer the customer NOW using the catalogue. Never write "let me check" or "give me a sec".'
             replyText = await streamOneReply(controller, correctedPrompt)
 
-            if (replyText === ' STALL') {
+            if (replyText === '\0STALL') {
               // Second stall — emit a hardcoded helpful fallback
               const fallback = "Honestly, your best bet right now is asking the staff — they'll know."
               controller.enqueue(encoder.encode(sseLine({ type: 'token', text: fallback })))

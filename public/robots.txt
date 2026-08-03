@@ -3,5 +3,7 @@ Allow: /
 Disallow: /api/
 Disallow: /admin/
 Disallow: /pos/
+Disallow: /dashboard/
+Disallow: /onboarding/
 
 Sitemap: https://ariaos.site/sitemap.xml
