@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { listAccounts } from '@/lib/integrations/basiq';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { verifyBusinessAccess } from '@/lib/auth/verify-business-access';
 
 async function syncForBusiness(businessId: string, basiqUserId: string) {
   const accounts = await listAccounts(basiqUserId);
@@ -29,19 +31,36 @@ async function syncForBusiness(businessId: string, basiqUserId: string) {
   }).eq('id', businessId);
 }
 
-// Basiq calls this with ?userId=…&business_id=…  (use redirect_uri set in Basiq dashboard)
+// Basiq calls this with ?business_id=… (redirect_uri set in Basiq dashboard).
+// NOTE: ?userId= is now IGNORED — see SEC-BASIQ-1 below. Still outstanding: real OAuth state
+// (issueOAuthState/redeemOAuthState), which needs the Basiq Dashboard -> Customise UI redirect
+// changed to ...?state={state} and therefore cannot ship from code alone. The exfiltration path is
+// closed by the ownership check regardless; state adds CSRF-binding on top.
 async function _GET(req: Request) {
   const url = new URL(req.url);
   const businessId = url.searchParams.get('business_id') ?? url.searchParams.get('state');
-  const userId = url.searchParams.get('userId');
   if (!businessId) return NextResponse.redirect(new URL('/dashboard/integrations?bank=missing_business', req.url));
 
-  // Resolve basiq user from the businesses row if not provided
-  let basiqUserId = userId;
-  if (!basiqUserId) {
-    const { data: biz } = await supabaseAdmin.from('businesses').select('basiq_user_id').eq('id', businessId).maybeSingle();
-    basiqUserId = (biz?.basiq_user_id as string | null) ?? null;
-  }
+  // SEC-BASIQ-1 — this callback previously trusted BOTH ids from the query string and had no
+  // authentication at all. Because `userId` was also taken from the URL, a crafted link synced
+  // ANOTHER Basiq user's real bank accounts — names, institutions, balances — into a business the
+  // attacker controls, where the dashboard then renders them. That is data EXFILTRATION, not just
+  // pollution, which is why the session check below is not optional.
+  //
+  // Basiq redirects the owner's own browser here, so the session cookie is present on every
+  // legitimate arrival: require it, confirm the session actually owns this business, and take
+  // basiq_user_id from the businesses row so the URL can no longer name whose accounts get pulled.
+  const supabase = createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.redirect(new URL('/login?next=/dashboard/integrations', req.url));
+
+  const denied = await verifyBusinessAccess(user.id, businessId);   // non-null == DENIED
+  if (denied) return NextResponse.redirect(new URL('/dashboard/integrations?bank=forbidden', req.url));
+
+  // NEVER from the query string.
+  const { data: biz } = await supabaseAdmin.from('businesses')
+    .select('basiq_user_id').eq('id', businessId).maybeSingle();
+  const basiqUserId = (biz?.basiq_user_id as string | null) ?? null;
   if (!basiqUserId) return NextResponse.redirect(new URL('/dashboard/integrations?bank=no_basiq_user', req.url));
 
   try {
