@@ -43,3 +43,4 @@ public/menu/_ingest/
 # 11 days and caused this exact sprint's item 2 to chase already-fixed module-not-found warnings)
 build-log.txt
 build.log
+tsc.log

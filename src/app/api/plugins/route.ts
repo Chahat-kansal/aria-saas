@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { SYSTEM_APPEND_SEP } from '@/lib/security/url-guard';
 
 export const maxDuration = 120;
 
@@ -85,7 +86,12 @@ async function _POST(req: Request) {
 
         history.push({ role: 'user', content: message });
 
-        const systemPrompt = system?.trim() || ARIA_SYSTEM;
+        // SEC-PROMPT-1 — a caller-supplied system string used to REPLACE ARIA_SYSTEM, which let
+        // any authenticated user drop every guardrail (including the grounding rules) and drive
+        // the tool set freely. It is now appended, capped, so customisation still works but the
+        // base instructions are always present.
+        const extra = (system ?? '').trim().slice(0, 2000);
+        const systemPrompt = extra ? ARIA_SYSTEM + SYSTEM_APPEND_SEP + extra : ARIA_SYSTEM;
         const tools = canSearch ? [{ type: 'web_search_20250305' as const, name: 'web_search' }] : undefined;
 
         let fullReply = '';

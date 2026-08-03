@@ -1,3 +1,9 @@
+/**
+ * @deprecated DO NOT IMPORT. Superseded by '@/lib/billing/plans' (starter/growth/pro).
+ * These free/$20 tiers are from the chat-app template Aria was built on and describe pricing that
+ * has never been live. Zero importers as of this commit. Kept per RULE 0; guarded by
+ * no-restricted-imports so a mistaken import fails the build.
+ */
 export const PLANS = {
   free: {
     name: 'Free',

@@ -40,6 +40,14 @@ async function _POST(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // SEC-EXEC-1 — this route forwards caller-supplied source to the PUBLIC Judge0 CE instance
+  // (ce.judge0.com), a third party, on a 100 req/day free tier. Auth-gated to signed-in users, so
+  // this is an abuse/cost surface rather than a compromise. Flag-gated so it can be turned off
+  // without removing the route. Default (unset) = current behaviour, unchanged.
+  if (process.env.ARIA_EXECUTE_ENABLED === 'false') {
+    return NextResponse.json({ error: 'Code execution is disabled' }, { status: 503 });
+  }
+
   const { code, language, stdin = '' } = await req.json();
 
   if (!code?.trim()) return NextResponse.json({ error: 'Code required' }, { status: 400 });

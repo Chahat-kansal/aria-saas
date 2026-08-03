@@ -1,4 +1,5 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { guardUrl } from '@/lib/security/url-guard';
 
 type Session = {
   browser: Browser;
@@ -17,6 +18,16 @@ export async function browserOpen(url: string): Promise<{
   url: string;
   title: string;
 }> {
+  // SEC-BROWSER-1 — SSRF guard. See src/lib/security/url-guard.ts.
+  // Placed BEFORE chromium.launch() rather than immediately before page.goto(): a blocked URL must
+  // not cost us a launched browser process that then needs cleaning up.
+  // Throwing (not returning an error object) is deliberate — browserOpen's declared return type has
+  // no error field, and BOTH tool runners already catch and hand the model { error: message }
+  // (chat/route.ts and aria/providers/anthropic.ts). So the model sees a clean tool error either
+  // way, without casting a mismatched shape through `as any`.
+  const guard = guardUrl(url);
+  if (!guard.ok) throw new Error(`Blocked: ${guard.reason}`);
+
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -107,6 +118,12 @@ export async function browserScreenshot(sessionId: string) {
 }
 
 export async function browserEvaluate(sessionId: string, expression: string) {
+  // SEC-BROWSER-1 — arbitrary eval() in a server-side browser context is off unless explicitly
+  // enabled. No production feature depends on it; the flag exists so the capability is recoverable
+  // rather than removed (RULE 0). Absent env var = disabled, which is the fix.
+  if (process.env.ARIA_BROWSER_EVAL_ENABLED !== 'true') {
+    throw new Error('browser_eval is disabled (set ARIA_BROWSER_EVAL_ENABLED=true to enable)');
+  }
   const { page } = getSession(sessionId);
 
   const result = await page.evaluate((expr) => {
@@ -132,6 +149,10 @@ export async function browserClose(sessionId: string) {
 }
 
 export async function browserCheckWebsite(url: string) {
+  // SEC-BROWSER-1 — SSRF guard, before launch for the same reason as browserOpen above.
+  const guard = guardUrl(url);
+  if (!guard.ok) throw new Error(`Blocked: ${guard.reason}`);
+
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],

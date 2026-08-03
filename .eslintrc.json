@@ -3,6 +3,18 @@
   "extends": "next/core-web-vitals",
   "plugins": ["@typescript-eslint"],
   "rules": {
-    "react/no-unescaped-entities": "off"
+    "react/no-unescaped-entities": "off",
+    "no-restricted-imports": ["error", {
+      "paths": [
+        {
+          "name": "@/lib/cron-auth",
+          "message": "Deprecated — returns boolean and inverts auth. Use '@/lib/auth/cron'."
+        },
+        {
+          "name": "@/lib/plans",
+          "message": "Deprecated template pricing. Use '@/lib/billing/plans'."
+        }
+      ]
+    }]
   }
 }
