@@ -2,6 +2,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area, PieChart, Pie, Legend } from 'recharts'
 import { useEffect, useRef, useState } from 'react'
 import type { AskBlock } from '@/lib/aria/ask-types'
+import { sanitizeHtml } from '@/lib/security/sanitize-html'
 
 // Renders Aria's rich reply blocks below the text bubble. Matches the Financial
 // Trust palette (CSS vars) used across /pos/ask — no new look introduced.
@@ -19,6 +20,16 @@ const navBtn: React.CSSProperties = {
   cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', fontWeight: 500,
 }
 
+/**
+ * @deprecated SEC-HTML-1 — DO NOT USE. Superseded by sanitizeHtml() from
+ * '@/lib/security/sanitize-html'. Kept per RULE 0 (extend-never-remove), unreferenced.
+ *
+ * This was a BLOCKLIST and only ever caught two shapes: <script>...</script> pairs and
+ * double-quoted on* handlers. It let through unquoted handlers (<img src=x onerror=alert(1)>),
+ * single-quoted handlers, <svg onload>, javascript: hrefs, <iframe>, <form>, and an unclosed
+ * <script. Retained only as a record of what the guard used to be.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function stripScripts(html: string): string {
   return html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/ on\w+="[^"]*"/gi, '')
 }
@@ -552,7 +563,7 @@ function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onActi
       return (
         <div style={{ background: 'var(--bg-elevated)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--divider)' }}>
           {block.title && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{block.title}</div>}
-          <div style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: stripScripts(block.content) }} />
+          <div style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }} />
         </div>
       )
 

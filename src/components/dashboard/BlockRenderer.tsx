@@ -1,5 +1,6 @@
 'use client'
 import type { AskBlock } from '@/lib/aria/ask-types'
+import { sanitizeHtml } from '@/lib/security/sanitize-html'
 
 interface Props {
   block: AskBlock
@@ -189,7 +190,11 @@ export function BlockRenderer({ block, onChoice }: Props) {
           {block.title}
         </div>
       )}
-      <div style={{ padding: 14 }} dangerouslySetInnerHTML={{ __html: block.content }} />
+      {/* SEC-HTML-1 — raw model-authored HTML went straight into the DOM here with NO guard at
+          all, on three owner-facing surfaces (ask-aria, pos/ask, AriaBriefingCard). Its twin at
+          src/components/aria/BlockRenderer.tsx did guard its equivalent line — same component name,
+          same prop, one protected. Both now use the same allowlist sanitiser. */}
+      <div style={{ padding: 14 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }} />
     </div>
   )
 

@@ -1047,7 +1047,14 @@ export default function AskAriaPage() {
             const lastA = [...messages].reverse().find(m => m.role === 'assistant' && m.content && !m.streaming)
             const raw = lastA ? lastA.content.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/#+\s/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') : `${greeting}, ${business?.owner_name?.split(' ')[0] ?? 'there'}. I have your business data ready.`
             const snippet = (raw.match(/^[^.!?]+[.!?]/)?.[0] ?? raw.slice(0, 160)).trim()
-            const html = snippet.replace(/(\$[\d,.]+)/g, '<span style="color:#2D5240;font-weight:500">$1</span>')
+            // SEC-HTML-2 — ESCAPE FIRST, then add our own markup, so the <span> below is the only
+            // markup in the string. `snippet` is Aria's own output, and this is where the #12 chain
+            // lands: attacker text reaches aria_actions, Aria reads it, and it renders in the
+            // owner's dashboard. Previously nothing escaped it before the wrap. Same order as
+            // Canvas.tsx's markdownToHtml, which is why that one was never a finding.
+            const escaped = snippet
+              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            const html = escaped.replace(/(\$[\d,.]+)/g, '<span style="color:#2D5240;font-weight:500">$1</span>')
             return (
               <div className="aria-left-speech" style={{ background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.9)', backdropFilter: 'blur(16px)', borderRadius: '6px 26px 26px 26px', padding: '14px 18px', boxShadow: '0 10px 30px rgba(45,82,64,0.10), 0 3px 8px rgba(45,82,64,0.06), inset 0 2px 4px rgba(255,255,255,0.9), inset 0 -2px 6px rgba(45,82,64,0.04)', fontSize: 14, lineHeight: 1.65, color: '#2D5240', flexShrink: 0 }}>
                 <span dangerouslySetInnerHTML={{ __html: html }} />
