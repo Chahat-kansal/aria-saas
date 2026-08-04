@@ -22,6 +22,10 @@ interface Promo {
   notes: string | null;
   current_uses?: number | null;
   max_total_uses?: number | null;
+  // PROMO-FORM-PARITY-1
+  stacks_with_others?: boolean | null;
+  trigger_type?: string | null;
+  trigger_config?: { celsius?: number } | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -52,6 +56,10 @@ export default function PromotionsPage() {
   const [form, setForm] = useState({
     name: '',
     promotion_type: 'percentage_discount',
+    // PROMO-FORM-PARITY-1 — both default to the DB defaults: exclusivity OFF, no trigger.
+    stacks_with_others: false,
+    trigger_type: '' as string,
+    trigger_celsius: '10',
     discount_percent: '',
     discount_amount: '',
     bundle_price: '',
@@ -84,7 +92,8 @@ export default function PromotionsPage() {
 
   function openAdd() {
     setEditPromo(null);
-    setForm({ name: '', promotion_type: 'percentage_discount', discount_percent: '', discount_amount: '', bundle_price: '', buy_quantity: '', get_quantity: '', starts_at: '', ends_at: '', active: true, notes: '' });
+    setForm({ name: '', promotion_type: 'percentage_discount', discount_percent: '', discount_amount: '', bundle_price: '', buy_quantity: '', get_quantity: '', starts_at: '', ends_at: '', active: true, notes: '',
+      stacks_with_others: false, trigger_type: '', trigger_celsius: '10' });
     setError(null);
     setShowAdd(true);
   }
@@ -103,6 +112,12 @@ export default function PromotionsPage() {
       ends_at: p.ends_at ? p.ends_at.slice(0, 10) : '',
       active: p.active,
       notes: p.notes ?? '',
+      // PROMO-FORM-PARITY-1 — hydrate from the row. The payload always sends these, so without this
+      // an owner opening Edit on a triggered/exclusive promo and pressing Save would silently strip
+      // both settings — worse than never having exposed them.
+      stacks_with_others: !!p.stacks_with_others,
+      trigger_type: p.trigger_type ?? '',
+      trigger_celsius: p.trigger_config?.celsius != null ? String(p.trigger_config.celsius) : '10',
     });
     setError(null);
     setShowAdd(true);
@@ -123,6 +138,11 @@ export default function PromotionsPage() {
       ends_at: form.ends_at || null,
       active: form.active,
       notes: form.notes || null,
+      // PROMO-FORM-PARITY-1 — this payload is built field-by-field rather than spread from `form`,
+      // so anything not named here is silently dropped no matter what the allowlist permits.
+      stacks_with_others: form.stacks_with_others,
+      trigger_type: form.trigger_type || null,
+      trigger_config: form.trigger_type ? { celsius: Number(form.trigger_celsius) } : null,
     };
 
     const method = editPromo ? 'PATCH' : 'POST';
@@ -376,6 +396,45 @@ export default function PromotionsPage() {
                   <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                     style={iStyle} placeholder="Optional notes" />
                 </div>
+
+                {/* PROMO-FORM-PARITY-1 — an owner reaching Marketing > Promotions could set NEITHER
+                    exclusivity nor a weather trigger, so a tiered temperature ladder (the case the
+                    last three sprints were about) required a manual DB write to be safe. Both
+                    controls are copied from the existing forms rather than reimplemented. */}
+                <div>
+                  <label style={lStyle}>Only when&hellip;</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select
+                      value={form.trigger_type}
+                      onChange={e => setForm(p => ({ ...p, trigger_type: e.target.value }))}
+                      style={{ ...iStyle, width: 'auto', flex: 1 }}>
+                      <option value="">Always</option>
+                      <option value="weather_max_temp_below">Cold day</option>
+                      <option value="weather_max_temp_above">Hot day</option>
+                    </select>
+                    {form.trigger_type ? (
+                      <input type="number" min={-10} max={50} value={form.trigger_celsius}
+                        onChange={e => setForm(p => ({ ...p, trigger_celsius: e.target.value }))}
+                        style={{ ...iStyle, width: 90 }} />
+                    ) : null}
+                    {form.trigger_type ? <span style={{ fontSize: 13, color: C.muted }}>&deg;C</span> : null}
+                  </div>
+                  <p style={{ fontSize: 11, color: C.dim, margin: '4px 0 0' }}>
+                    {form.trigger_type === 'weather_max_temp_below'
+                      ? 'Applies when the day’s maximum is ' + form.trigger_celsius + '°C or below.'
+                      : form.trigger_type === 'weather_max_temp_above'
+                      ? 'Applies when the day’s maximum is ' + form.trigger_celsius + '°C or above.'
+                      : 'Applies whenever the schedule allows.'}
+                  </p>
+                </div>
+
+                {/* Label says what it does AT THE TILL, not the column name. */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.stacks_with_others}
+                    onChange={e => setForm(p => ({ ...p, stacks_with_others: e.target.checked }))}
+                    style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                  <span style={{ fontSize: 13, color: C.text }}>Can be combined with other promotions</span>
+                </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={form.active}
