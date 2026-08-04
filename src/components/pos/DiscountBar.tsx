@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import type { CartItem as EngineCartItem, AppliedDiscount } from '@/lib/pos/discount-engine'
+import { decideManualApply } from '@/lib/pos/manual-discount-policy'
 
 export interface DiscountBarCartItem {
   product_id: string
@@ -36,6 +37,9 @@ const REASONS = ['Staff discount', 'Manager override', 'Customer complaint', 'Da
 export default function DiscountBar({ cart, appliedDiscounts, onApply, onRemove, manualDiscountAmount, onManualDiscount, businessType }: Props) {
   const [autoDiscounts, setAutoDiscounts]   = useState<AppliedDiscount[]>([])
   const [manualDiscounts, setManualDiscounts] = useState<AppliedDiscount[]>([])
+  // PROMO-EXCLUSIVE-UI-1 — one line near the total, never a modal: a modal in a queue gets
+  // dismissed unread. Cleared whenever the cashier changes the applied set.
+  const [notice, setNotice] = useState('')
   const [showPicker,  setShowPicker]  = useState(false)
   const [pickerMode,  setPickerMode]  = useState<'pct' | 'amt' | 'promo' | 'code'>('pct')
   const [inputVal,    setInputVal]    = useState('')
@@ -99,7 +103,36 @@ export default function DiscountBar({ cart, appliedDiscounts, onApply, onRemove,
     setInputVal(''); setShowPicker(false)
   }
 
+  // PROMO-EXCLUSIVE-UI-1 — stacks_with_others is the OWNER'S SAFETY SWITCH and it defaults to off.
+  // PROMO-STACK-1 made it real on the auto path; on this path it did nothing — every eligible promo
+  // got a button and clicking two exclusives applied both.
+  //
+  // Enforcement lives HERE, not in the engine, on purpose: on the manual path the cashier is the one
+  // choosing, so the engine must keep returning every eligible option. Resolving it engine-side would
+  // silently take that choice away (see the note in discount-engine.test.ts).
+  //
+  // Option B of the three considered: show everything, mark the exclusive ones, and SAY what happened.
+  // Not hiding buttons (a cashier who cannot see an option cannot explain it to a customer, and a
+  // vanishing button reads as a bug) and not warn-then-allow (that is today's behaviour with a label).
+  // PROMO-EXCLUSIVE-UI-1 — decision lives in decideManualApply() so the money rule is unit-tested.
+  // Option B of three: show every eligible promo, MARK the exclusive ones, and say what happened.
+  // Not hiding buttons (a cashier who cannot see an option cannot explain it to a customer, and a
+  // vanishing button reads as a bug) and not warn-then-allow (that is today's behaviour with a
+  // label on it, and the flag would still mean nothing).
   function applyPromo(d: AppliedDiscount) {
+    const decision = decideManualApply(appliedDiscounts, d)
+    if (decision.action === 'refuse') {
+      setNotice(decision.notice)     // button stays visible and clickable; the refusal IS the response
+      return
+    }
+    if (decision.action === 'replace') {
+      for (const id of decision.removeIds) onRemove(id)
+      onApply(d)
+      setNotice(decision.notice)
+      setShowPicker(false)
+      return
+    }
+    setNotice('')
     onApply(d)
     setShowPicker(false)
   }
@@ -116,9 +149,14 @@ export default function DiscountBar({ cart, appliedDiscounts, onApply, onRemove,
               background: 'rgba(127,184,151,0.12)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.25)',
             }}>
               {d.promotion_name} −A${d.amount_off.toFixed(2)}
-              <button onClick={() => onRemove(d.promotion_id)} style={{ background: 'none', border: 'none', color: '#7FB897', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+              <button onClick={() => { setNotice(''); onRemove(d.promotion_id) }} style={{ background: 'none', border: 'none', color: '#7FB897', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
             </span>
           ))}
+          {notice && (
+            <div style={{ flexBasis: '100%', fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+              {notice}
+            </div>
+          )}
           {manualDiscountAmount > 0 && (
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: 'rgba(245,158,11,0.1)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.2)' }}>
               Manual −A${manualDiscountAmount.toFixed(2)}
@@ -184,7 +222,12 @@ export default function DiscountBar({ cart, appliedDiscounts, onApply, onRemove,
               ) : manualDiscounts.map(d => (
                 <button key={d.promotion_id} onClick={() => applyPromo(d)}
                   style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--divider)', background: 'var(--bg-base)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{d.promotion_name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {d.promotion_name}
+                    {!d.stacks_with_others && (
+                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, border: '1px solid var(--divider)', color: 'var(--text-secondary)' }}>Exclusive</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 11, color: '#7FB897' }}>−A${d.amount_off.toFixed(2)} · {d.description}</div>
                 </button>
               ))}

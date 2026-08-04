@@ -93,17 +93,30 @@ describe('resolveStacking — the auto path (DiscountBar applies these in a loop
   })
 })
 
-describe('the manual path — RECORDED BEHAVIOUR, not an endorsement', () => {
+describe('the manual path — the engine EXPOSES, the cashier decides', () => {
   const A = (o: Record<string, unknown> = {}) => promo({ id: 'A', name: 'A', promotion_type: MANUAL_TYPE, ...o })
   const B = (o: Record<string, unknown> = {}) => promo({ id: 'B', name: 'B', promotion_type: MANUAL_TYPE, ...o })
 
-  // PROMO-STACK-1 finding, reported and deliberately NOT fixed: resolveStacking is applied only to
-  // result.auto, so stacks_with_others is ignored entirely here. It is not automatic — DiscountBar
-  // renders these as buttons a cashier clicks — but the owner's safety switch does nothing on this
-  // path, and the one promotion that exists in production today is on it. Pinned so that if anyone
-  // changes it, they do so knowingly and this test fails loudly rather than silently drifting.
-  it('returns every eligible promotion, ignoring stacks_with_others (known gap)', () => {
+  // ⚠ THIS ASSERTION CHANGED MEANING IN PROMO-EXCLUSIVE-UI-1 — read before "fixing" it.
+  //
+  // It used to be a RECORD of a gap: manual returned every eligible promotion and stacks_with_others
+  // did nothing, so a cashier could apply two exclusives. That gap is now closed — but NOT here.
+  //
+  // The engine still returns everything, deliberately. On the manual path the cashier is choosing,
+  // so the engine's job is to present every option; running resolveStacking over result.manual would
+  // silently pick a winner and remove that choice. Enforcement lives in decideManualApply()
+  // (manual-discount-policy.ts), covered by manual-discount-policy.test.ts, and is rendered by
+  // DiscountBar.
+  //
+  // So: do NOT "fix" the engine to resolve manual promotions. That would break the cashier's ability
+  // to choose and would not make anything safer — the safety already holds one layer up.
+  it('returns every eligible promotion, so the cashier can see all options', () => {
     expect(applied([A(), B()])).toHaveLength(2)
     expect(applied([A({ stacks_with_others: true }), B({ stacks_with_others: false })])).toHaveLength(2)
+  })
+
+  it('carries stacks_with_others through on each one — the flag the UI enforces on', () => {
+    const out = applied([A({ stacks_with_others: true }), B({ stacks_with_others: false })])
+    expect(out.map(x => x.stacks_with_others).sort()).toEqual([false, true])
   })
 })
