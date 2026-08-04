@@ -53,6 +53,10 @@ const PROMO_FIELDS = [
   'max_uses_per_customer', 'stacks_with_others', 'stack_priority', 'customer_group_id',
   'min_customer_lifetime_spend', 'min_customer_visits', 'max_total_uses', 'current_uses',
   'exclude_discounted', 'idempotency_key',
+  // S-PROMO-RULE-1 — MUST be listed here. PROMO_FIELDS is a strict allowlist applied right
+  // before the DB write, so an omitted column is dropped SILENTLY: the owner sets "Cold day,
+  // 10°C", the form saves happily, and the rule simply never persists.
+  'trigger_type', 'trigger_config',
 ] as const
 
 function normPromoPayload(body: Record<string, unknown>, bid?: string): Record<string, unknown> {

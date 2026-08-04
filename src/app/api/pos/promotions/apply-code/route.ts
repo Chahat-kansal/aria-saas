@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { applyCode, type CartItem, type Customer, type Promotion } from '@/lib/pos/discount-engine'
+import { readWeatherSignal } from '@/lib/promotions/weather-signal'
+import { todayAEST } from '@/lib/date-au'
 
 async function _POST(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { code, cart, customer_id } = await req.json() as { code: string; cart: CartItem[]; customer_id?: string | null }
@@ -9,7 +11,7 @@ async function _POST(req: Request, _context: unknown, { supabase, businessId: bi
 
   const { data: promotions } = await supabase
     .from('pos_promotions')
-    .select('id, name, promotion_type, applies_to, category_id, product_id, product_ids, bundle_price, discount_percent, discount_amount, active_days, active_hour_start, active_hour_end, starts_at, ends_at, requires_code, stacks_with_others, stack_priority, active, min_spend, buy_quantity, get_quantity, customer_group_id, min_customer_lifetime_spend, min_customer_visits, max_total_uses, current_uses, max_uses_per_customer, max_uses_per_day, exclude_discounted')
+    .select('id, name, promotion_type, applies_to, category_id, product_id, product_ids, bundle_price, discount_percent, discount_amount, active_days, active_hour_start, active_hour_end, starts_at, ends_at, requires_code, stacks_with_others, stack_priority, active, min_spend, buy_quantity, get_quantity, customer_group_id, min_customer_lifetime_spend, min_customer_visits, max_total_uses, current_uses, max_uses_per_customer, max_uses_per_day, exclude_discounted, trigger_type, trigger_config')
     .eq('business_id', bid)
     .eq('active', true)
     .not('requires_code', 'is', null)
@@ -43,7 +45,12 @@ async function _POST(req: Request, _context: unknown, { supabase, businessId: bi
     }
   }
 
-  const result = applyCode(code.trim(), cart ?? [], (promotions ?? []) as Promotion[], { now: new Date(), customer, usage })
+  // S-PROMO-RULE-1 — same cached-only, fail-closed read as the auto path.
+  const weather = (promotions ?? []).some(p => p.trigger_type)
+    ? await readWeatherSignal(bid, todayAEST())
+    : null
+
+  const result = applyCode(code.trim(), cart ?? [], (promotions ?? []) as Promotion[], { now: new Date(), customer, usage, weather })
   if (!result.ok) return NextResponse.json({ error: result.error, valid: false }, { status: 400 })
   return NextResponse.json({ discount: result.discount, valid: true })
 }

@@ -16,6 +16,7 @@ import { getRevenueSnapshot } from '@/lib/aria/revenue-snapshot'
 import { safeBriefingContent, suppressUpbeatCloser } from '@/lib/aria/briefing-guard'
 import { computeHealthSignals } from '@/lib/aria/health-signals'
 import { stripUngroundedNumbers, extractNumbers } from '@/lib/aria/response-validator'
+import { refreshWeatherSignal } from '@/lib/promotions/weather-signal'
 
 interface BriefingBusinessWithSlack extends BriefingBusiness {
   slack_connected?: boolean
@@ -195,6 +196,14 @@ async function generateMorning(
   }
 
   // ── Weather (optional, skip on failure) ──────────────────────────────────
+  // S-PROMO-RULE-1 — refresh the promotion weather signal on this existing daily pass. Separate
+  // from fetchWeatherSummary below because that one reads index [1] (TOMORROW, for the briefing
+  // narrative) while a promotion must evaluate against the day it is actually trading. Fire and
+  // forget: the briefing must not fail because a promotion signal could not refresh.
+  if (biz.lat && biz.lng) {
+    void refreshWeatherSignal(biz.id, biz.lat, biz.lng, today).catch(() => {})
+  }
+
   const weatherStr = (biz.lat && biz.lng)
     ? await fetchWeatherSummary(biz.lat, biz.lng)
     : ''

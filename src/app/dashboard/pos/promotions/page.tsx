@@ -6,6 +6,8 @@ interface Promo {
   category_id: string | null; product_id: string | null; product_ids: string[] | null
   discount_percent: number | null; discount_amount: number | null; bundle_price: number | null
   active_days: number[] | null; active_hour_start: number | null; active_hour_end: number | null
+  // S-PROMO-RULE-1 — null trigger_type = "Always", which is every existing promotion.
+  trigger_type?: string | null; trigger_config?: { celsius?: number } | null
   requires_code: string | null; stacks_with_others: boolean; active: boolean
   starts_at: string | null; ends_at: string | null; min_spend: number | null
   buy_quantity: number | null; get_quantity: number | null; notes: string | null
@@ -198,6 +200,45 @@ export default function PromotionsPage() {
               <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Active until (hour)</label>
               <input style={inp} type="number" min={0} max={23} value={form.active_hour_end ?? 23} onChange={e => setForm(f => ({ ...f, active_hour_end: parseInt(e.target.value) }))} />
             </div>
+          </div>
+          {/* S-PROMO-RULE-1 — "Only when…". Default Always, so nothing about existing promotions
+              changes. The plain-words line underneath exists because "weather_max_temp_below / 10"
+              is not a sentence an owner should have to decode. */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 }}>Only when&hellip;</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                style={{ ...inp, background: 'var(--surface-2)' }}
+                value={form.trigger_type ?? ''}
+                onChange={e => {
+                  const v = e.target.value
+                  setForm(f2 => ({
+                    ...f2,
+                    trigger_type: v || null,
+                    trigger_config: v ? { celsius: f2.trigger_config?.celsius ?? 10 } : null,
+                  }))
+                }}
+              >
+                <option value="">Always</option>
+                <option value="weather_max_temp_below">Cold day</option>
+                <option value="weather_max_temp_above">Hot day</option>
+              </select>
+              {form.trigger_type ? (
+                <input
+                  style={{ ...inp, width: 90 }} type="number" min={-10} max={50}
+                  value={form.trigger_config?.celsius ?? 10}
+                  onChange={e => setForm(f2 => ({ ...f2, trigger_config: { celsius: parseInt(e.target.value) } }))}
+                />
+              ) : null}
+              {form.trigger_type ? <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>&deg;C</span> : null}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+              {form.trigger_type === 'weather_max_temp_below'
+                ? 'Applies when the day’s maximum is ' + (form.trigger_config?.celsius ?? 10) + '°C or below.'
+                : form.trigger_type === 'weather_max_temp_above'
+                ? 'Applies when the day’s maximum is ' + (form.trigger_config?.celsius ?? 10) + '°C or above.'
+                : 'Applies whenever the schedule above allows.'}
+            </p>
           </div>
           {error && <p style={{ color: 'var(--destructive)', fontSize: 12, marginBottom: 10 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8 }}>

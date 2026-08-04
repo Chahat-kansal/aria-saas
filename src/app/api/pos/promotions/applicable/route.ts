@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { calculateApplicableDiscounts, type CartItem, type Customer } from '@/lib/pos/discount-engine'
+import { readWeatherSignal } from '@/lib/promotions/weather-signal'
+import { todayAEST } from '@/lib/date-au'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -23,7 +25,7 @@ async function _POST(req: Request) {
 
   const { data: promotions } = await supabase
     .from('pos_promotions')
-    .select('id, name, promotion_type, applies_to, category_id, product_id, product_ids, bundle_price, discount_percent, discount_amount, active_days, active_hour_start, active_hour_end, starts_at, ends_at, requires_code, stacks_with_others, stack_priority, active, min_spend, buy_quantity, get_quantity, customer_group_id, min_customer_lifetime_spend, min_customer_visits, max_total_uses, current_uses, max_uses_per_customer, max_uses_per_day, exclude_discounted')
+    .select('id, name, promotion_type, applies_to, category_id, product_id, product_ids, bundle_price, discount_percent, discount_amount, active_days, active_hour_start, active_hour_end, starts_at, ends_at, requires_code, stacks_with_others, stack_priority, active, min_spend, buy_quantity, get_quantity, customer_group_id, min_customer_lifetime_spend, min_customer_visits, max_total_uses, current_uses, max_uses_per_customer, max_uses_per_day, exclude_discounted, trigger_type, trigger_config')
     .eq('business_id', bid)
     .eq('active', true)
 
@@ -56,7 +58,13 @@ async function _POST(req: Request) {
     }
   }
 
-  const result = calculateApplicableDiscounts(cart, (promotions ?? []) as Parameters<typeof calculateApplicableDiscounts>[1], { now: new Date(), customer, usage })
+  // S-PROMO-RULE-1 — CACHED read only, never a fetch in the cart path. Null (missing/expired) means
+  // any weather-triggered promotion fails closed inside the engine.
+  const weather = (promotions ?? []).some(p => p.trigger_type)
+    ? await readWeatherSignal(bid, todayAEST())
+    : null
+
+  const result = calculateApplicableDiscounts(cart, (promotions ?? []) as Parameters<typeof calculateApplicableDiscounts>[1], { now: new Date(), customer, usage, weather })
   return NextResponse.json(result)
 }
 

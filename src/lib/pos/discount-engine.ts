@@ -51,6 +51,9 @@ export interface Promotion {
   max_total_uses: number | null
   current_uses: number
   max_uses_per_customer: number | null
+  // S-PROMO-RULE-1 — NULL trigger_type means unconditional (every pre-existing promotion).
+  trigger_type?: string | null
+  trigger_config?: Record<string, unknown> | null
   max_uses_per_day: number | null
   exclude_discounted: boolean
 }
@@ -97,6 +100,31 @@ function isActiveNow(promo: Promotion, now: Date): boolean {
   if (promo.active_hour_end !== null && hour >= promo.active_hour_end) return false
 
   return true
+}
+
+/**
+ * S-PROMO-RULE-1 — conditional trigger. Runs AFTER the active/date/day/hour checks and BEFORE any
+ * discount is computed, so it is a filter on an already-valid promotion, never a new discount path.
+ *
+ * FAILS CLOSED. `weather` is the CACHED signal only (aria_signal_cache, refreshed on the daily
+ * cron); the cart path never fetches. A missing or expired signal returns false, so a weather
+ * promotion silently stops rather than discounting on an unverified condition. Discounting because
+ * an API was down is real money out of the till; not discounting is just the promotion not firing.
+ */
+function meetsTriggerConditions(promo: Promotion, weather: { max_temp_c: number } | null): boolean {
+  if (!promo.trigger_type) return true          // unconditional — the default for all 43-column rows
+
+  if (promo.trigger_type === 'weather_max_temp_below' || promo.trigger_type === 'weather_max_temp_above') {
+    if (!weather) return false                  // no signal = condition unproven = do not apply
+    const threshold = Number((promo.trigger_config ?? {}).celsius)
+    if (!Number.isFinite(threshold)) return false   // misconfigured rule must not fire
+    return promo.trigger_type === 'weather_max_temp_below'
+      ? weather.max_temp_c <= threshold
+      : weather.max_temp_c >= threshold
+  }
+
+  // Unknown trigger type (a value added to the CHECK before this code ships) — fail closed.
+  return false
 }
 
 function meetsCustomerConditions(promo: Promotion, customer: Customer | null): boolean {
@@ -233,7 +261,7 @@ export function resolveStacking(applicable: AppliedDiscount[]): AppliedDiscount[
 export function calculateApplicableDiscounts(
   cart: CartItem[],
   promotions: Promotion[],
-  options: { now?: Date; customer?: Customer | null; usage?: UsageStats } = {}
+  options: { now?: Date; customer?: Customer | null; usage?: UsageStats; weather?: { max_temp_c: number } | null } = {}
 ): DiscountResult {
   const result: DiscountResult = { auto: [], manual: [], coupons: [] }
   if (!cart.length || !promotions.length) return result
@@ -244,6 +272,7 @@ export function calculateApplicableDiscounts(
 
   const eligible = promotions.filter(p =>
     isActiveNow(p, now) &&
+    meetsTriggerConditions(p, options.weather ?? null) &&
     meetsCustomerConditions(p, customer) &&
     meetsUsageLimits(p, customer, usage)
   )
@@ -277,7 +306,7 @@ export function applyCode(
   code: string,
   cart: CartItem[],
   promotions: Promotion[],
-  options: { now?: Date; customer?: Customer | null; usage?: UsageStats } = {}
+  options: { now?: Date; customer?: Customer | null; usage?: UsageStats; weather?: { max_temp_c: number } | null } = {}
 ): { ok: true; discount: AppliedDiscount } | { ok: false; error: string } {
   const now = options.now ?? new Date()
   const customer = options.customer ?? null
@@ -286,6 +315,7 @@ export function applyCode(
   const promo = promotions.find(p => p.requires_code?.toUpperCase() === code.toUpperCase())
   if (!promo) return { ok: false, error: 'Invalid code' }
   if (!isActiveNow(promo, now)) return { ok: false, error: 'Code expired or not active now' }
+  if (!meetsTriggerConditions(promo, options.weather ?? null)) return { ok: false, error: 'Conditions for this promotion are not met right now' }
   if (!meetsCustomerConditions(promo, customer)) return { ok: false, error: 'Code requires customer tier or history' }
   if (!meetsUsageLimits(promo, customer, usage)) return { ok: false, error: 'Code usage limit reached' }
   const applied = evalPromo(promo, cart)
