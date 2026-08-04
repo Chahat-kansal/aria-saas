@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -175,7 +176,7 @@ export async function gatherWeeklyData(
       .from('pos_sales')
       .select('total_amount')
       .eq('business_id', businessId)
-      .eq('status', 'completed')
+      .in('status', REPORTABLE_STATUSES)
       .gte('created_at', priorStartUtc)
       .lt('created_at', weekStartUtc),
 

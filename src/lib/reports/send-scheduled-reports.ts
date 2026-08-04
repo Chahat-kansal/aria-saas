@@ -11,6 +11,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, addDaysYmd, toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 function computeNextSend(freq: string, dayOfWeek: number | null, dayOfMonth: number | null, hourAest: number): Date {
   const now = new Date()
@@ -233,8 +234,8 @@ export async function runSendScheduledReports(): Promise<{ ok: true; sent: numbe
         supabaseAdmin.from('businesses').select('id, name, trading_name, city').eq('id', report.business_id as string).maybeSingle(),
         // INTEL-COMPUTE-3 — was neq('voided') + hardcoded UTC boundary. status='completed' +
         // toAESTStart/toAESTEnd matches getRevenueSnapshot()'s canonical rule.
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).eq('status', 'completed').gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).eq('status', 'completed').gte('created_at', thirtyDaysAgo),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).in('status', REPORTABLE_STATUSES).gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', report.business_id as string).in('status', REPORTABLE_STATUSES).gte('created_at', thirtyDaysAgo),
       ])
 
       const biz = bizRes.data
@@ -336,8 +337,8 @@ export async function runSendScheduledReports(): Promise<{ ok: true; sent: numbe
       const [bizRes, ytdRes, monthRes] = await Promise.all([
         supabaseAdmin.from('businesses').select('id, name, trading_name, city').eq('id', String(sched.business_id)).maybeSingle(),
         // INTEL-COMPUTE-3 — same fix as the scheduled_pdf_reports loop above.
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).eq('status', 'completed').gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
-        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).eq('status', 'completed').gte('created_at', thirtyDaysAgo),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).in('status', REPORTABLE_STATUSES).gte('created_at', toAESTStart(yday)).lte('created_at', toAESTEnd(yday)),
+        supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', String(sched.business_id)).in('status', REPORTABLE_STATUSES).gte('created_at', thirtyDaysAgo),
       ])
 
       const biz = bizRes.data

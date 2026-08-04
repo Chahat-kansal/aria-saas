@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { generateInsight } from '@/lib/aria-insights';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -34,7 +35,7 @@ async function _GET(req: Request) {
       .from('pos_sales')
       .select('total_amount, served_by')
       .eq('business_id', bid)
-      .eq('status', 'completed')
+      .in('status', REPORTABLE_STATUSES)
       .gte('created_at', toAESTStart(from))
       .lte('created_at', toAESTEnd(to))
       .limit(5000),

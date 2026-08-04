@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 async function _GET(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   try {
@@ -23,7 +24,7 @@ async function _GET(req: Request, _context: unknown, { supabase, businessId: bid
     const sessionIds = (sessions ?? []).map(s => s.id);
     const { data: salesData } = sessionIds.length > 0 ? await supabase
       .from('pos_sales').select('session_id, payment_method, total_amount')
-      .in('session_id', sessionIds).eq('status', 'completed') : { data: [] };
+      .in('session_id', sessionIds).in('status', REPORTABLE_STATUSES) : { data: [] };
 
     const salesMap: Record<string, { cash: number; card: number; total: number; count: number }> = {};
     for (const sale of salesData ?? []) {

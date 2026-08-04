@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -41,7 +42,7 @@ async function _GET(req: Request) {
     .from('pos_sales')
     .select('id, total_amount, tax_amount, discount_amount, payment_method, created_at, status')
     .eq('business_id', bid)
-    .eq('status', 'completed')
+    .in('status', REPORTABLE_STATUSES)
     .not('sale_number', 'is', null)
     .gte('created_at', toAESTStart(from))
     .lte('created_at', toAESTEnd(to))

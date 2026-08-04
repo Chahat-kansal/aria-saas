@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { toAESTStart, toAESTEnd } from '@/lib/date-au'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 async function _GET(req: Request, _context: unknown, { supabase, businessId: bid }: BusinessContext) {
   const { searchParams } = new URL(req.url);
@@ -20,7 +21,7 @@ async function _GET(req: Request, _context: unknown, { supabase, businessId: bid
     .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id, served_by')
     .eq('business_id', bid)
     .not('sale_number', 'is', null)
-    .eq('status', 'completed')
+    .in('status', REPORTABLE_STATUSES)
     .gte('created_at', toAESTStart(from))
     .lte('created_at', toAESTEnd(to))
     .order('created_at', { ascending: false })
@@ -39,7 +40,7 @@ async function _GET(req: Request, _context: unknown, { supabase, businessId: bid
       .from('pos_sales')
       .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id')
       .eq('business_id', bid)
-      .eq('status', 'completed')
+      .in('status', REPORTABLE_STATUSES)
       .gte('created_at', toAESTStart(from))
       .lte('created_at', toAESTEnd(to))
       .order('created_at', { ascending: false })

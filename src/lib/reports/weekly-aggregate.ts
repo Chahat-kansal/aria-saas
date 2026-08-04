@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 // WBI-1 — weekly report AGGREGATION (write to pos_weekly_reports). Every figure comes from a real
 // query against the canonical sources — revenue from pos_sales status='completed' (DOLLARS), labour
@@ -34,12 +35,12 @@ export async function aggregateWeeklyReport(businessId: string, weekStart: Date)
     // Revenue = pos_sales WHERE status='completed' (DOLLARS)
     supabaseAdmin.from('pos_sales')
       .select('id, total_amount, customer_id')
-      .eq('business_id', businessId).eq('status', 'completed')
+      .eq('business_id', businessId).in('status', REPORTABLE_STATUSES)
       .gte('created_at', weekStartUtc).lt('created_at', weekEndUtc),
     // Prior week completed revenue (for the change %)
     supabaseAdmin.from('pos_sales')
       .select('total_amount')
-      .eq('business_id', businessId).eq('status', 'completed')
+      .eq('business_id', businessId).in('status', REPORTABLE_STATUSES)
       .gte('created_at', priorStartUtc).lt('created_at', weekStartUtc),
     // WIRE-3 labour: pos_timesheets in the week
     supabaseAdmin.from('pos_timesheets')
