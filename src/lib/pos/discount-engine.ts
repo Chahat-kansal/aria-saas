@@ -247,15 +247,40 @@ function baseApplied(promo: Promotion, amountOff: number, description: string): 
  * - When multiple non-stackable applicable, pick the one with highest amount_off
  *   (tiebreak: lower stack_priority number = higher priority).
  */
+/**
+ * PROMO-STACK-1 — resolve which auto-applied promotions actually land on the cart.
+ *
+ * THE INVARIANT: a promotion with stacks_with_others=false can never be combined with ANY other
+ * promotion, in either direction. That flag is the owner's safety switch and it DEFAULTS TO OFF.
+ *
+ * The previous line was `return [...stackable, nonStackable[0]]`, which combined the best
+ * non-stackable WITH every stackable one — measured, not theorised: a stacks=false promo and a
+ * stacks=true promo both applied to the same cart, automatically, in either row order, with no
+ * cashier involved. The flag silently did nothing whenever any stackable promotion was also live,
+ * and S-PROMO-RULE-1 just made overlapping rules easy for owners to create.
+ *
+ * Resolution when both kinds are present: take whichever side discounts MORE. That is the same
+ * "largest amount_off wins" rule the non-stackable sort below already used, extended to the choice
+ * between the two groups — so the customer is never worse off than before, and the owner's
+ * exclusivity flag is honoured. Ties go to the stackable group (more promotions marked as
+ * combinable is the more conservative reading of the owner's intent).
+ */
 export function resolveStacking(applicable: AppliedDiscount[]): AppliedDiscount[] {
   const stackable = applicable.filter(d => d.stacks_with_others)
   const nonStackable = applicable.filter(d => !d.stacks_with_others)
   if (nonStackable.length === 0) return stackable
+
   nonStackable.sort((a, b) => {
     if (b.amount_off !== a.amount_off) return b.amount_off - a.amount_off
     return a.stack_priority - b.stack_priority
   })
-  return [...stackable, nonStackable[0]]
+  const best = nonStackable[0]
+
+  // Exclusive by definition — it goes alone or not at all.
+  if (stackable.length === 0) return [best]
+
+  const stackableTotal = stackable.reduce((sum, d) => sum + d.amount_off, 0)
+  return best.amount_off > stackableTotal ? [best] : stackable
 }
 
 export function calculateApplicableDiscounts(
