@@ -7,6 +7,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { setStaffCookie } from '@/lib/inventory/staff-session'
 import { limit } from '@/lib/rate-limit'
+import { verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
 
 // INV-STAFF-APP-1 — per-staff PIN login. The PIN is checked SERVER-SIDE against pos_staff.pin (never sent
 // to the client) for the resolved business only. On success, an HMAC-signed acting-staff cookie is set.
@@ -32,9 +33,21 @@ async function _POST(req: Request, { params }: Params) {
   }
 
   const { data: staff } = await supabaseAdmin.from('pos_staff')
-    .select('id, name, role, color, pin').eq('id', body.staff_id).eq('business_id', bid).eq('is_active', true).maybeSingle()
-  if (!staff || String(staff.pin ?? '') !== String(body.pin)) {
+    .select('id, name, role, color, pin, pin_hash').eq('id', body.staff_id).eq('business_id', bid).eq('is_active', true).maybeSingle()
+
+  // SEC-PIN-1 — was `String(staff.pin ?? '') !== String(body.pin)`: plaintext, and a `!==` on
+  // strings short-circuits on the first differing character, so it leaked PIN prefixes by timing.
+  // bcrypt.compare does neither. The plaintext branch is a LEGACY FALLBACK for rows not yet
+  // backfilled and must be deleted in SEC-PIN-2 — until it is, #16 is not closed.
+  const ok = staff?.pin_hash
+    ? await verifyStaffPin(String(body.pin), staff.pin_hash as string)
+    : !!staff && String(staff.pin ?? '') === String(body.pin)
+  if (!staff || !ok) {
     return NextResponse.json({ ok: false, error: 'Incorrect PIN' }, { status: 401 })
+  }
+  // Upgrade on the way past: a correct legacy login is the only moment we hold the plaintext PIN.
+  if (!staff.pin_hash) {
+    await upgradeStaffPin(supabaseAdmin, 'pos_staff', staff.id as string, bid, String(body.pin))
   }
 
   await setStaffCookie(bid, staff.id as string, (staff.name as string) ?? 'Staff')

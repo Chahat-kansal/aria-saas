@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { clockOut } from '@/lib/staff/timesheets'
 import { getBid } from '@/lib/auth/get-bid'
+import { pinLookup, verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -18,8 +19,28 @@ async function _POST(req: Request) {
   const pin = String(body.pin ?? '').trim()
   if (!pin) return NextResponse.json({ error: 'PIN required' }, { status: 400 })
 
-  const { data: staff } = await supabase.from('pos_staff')
-    .select('id,name').eq('business_id', bid).eq('pin', pin).maybeSingle()
+  // SEC-PIN-1 — NOT IN THE BRIEF'S SIX, but this is clock-in's other half on the same table via the
+  // same PIN-only flow. Hashing one and leaving the other plaintext would have left a staff member
+  // able to clock in through bcrypt and out through a plaintext compare — and would have broken
+  // clock-out outright the moment SEC-PIN-2 drops the plaintext column.
+  const lookup = pinLookup(bid, pin)
+  const baseSelect = () => supabase.from('pos_staff')
+    .select('id,name,pin,pin_hash').eq('business_id', bid)
+
+  let staff: Record<string, unknown> | null = null
+  if (lookup) {
+    const { data } = await baseSelect().eq('pin_lookup', lookup).maybeSingle()
+    if (data && await verifyStaffPin(pin, (data as Record<string, unknown>).pin_hash as string)) {
+      staff = data as Record<string, unknown>
+    }
+  }
+  if (!staff) {   // LEGACY FALLBACK — remove in SEC-PIN-2
+    const { data } = await baseSelect().eq('pin', pin).maybeSingle()
+    if (data) {
+      staff = data as Record<string, unknown>
+      await upgradeStaffPin(supabase, 'pos_staff', String(staff.id), bid, pin)
+    }
+  }
   if (!staff) return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
 
   const result = await clockOut(bid, String(staff.id), Number(body.break_minutes) || 0)

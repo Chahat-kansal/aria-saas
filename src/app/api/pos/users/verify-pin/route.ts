@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { rateLimit, tooManyRequests } from '@/lib/security/rate-limit'
+import { verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -26,7 +27,7 @@ async function _POST(req: Request) {
 
   const { data: posUser } = await supabase
     .from('pos_users')
-    .select('id, name, role, permissions, pin')
+    .select('id, name, role, permissions, pin, pin_hash')
     .eq('id', user_id)
     .eq('business_id', business_id)
     .eq('is_active', true)
@@ -34,7 +35,14 @@ async function _POST(req: Request) {
 
   if (!posUser) return NextResponse.json({ valid: false, user: null });
 
-  const valid = posUser.pin === pin;
+  // SEC-PIN-1 — was `posUser.pin === pin`: plaintext and non-constant-time. Legacy branch is a
+  // fallback for un-backfilled rows only; remove in SEC-PIN-2.
+  const valid = posUser.pin_hash
+    ? await verifyStaffPin(String(pin), posUser.pin_hash as string)
+    : posUser.pin === pin;
+  if (valid && !posUser.pin_hash) {
+    await upgradeStaffPin(supabase, 'pos_users', posUser.id as string, String(business_id), String(pin));
+  }
 
   if (valid) {
     await supabase.from('pos_users').update({ last_login_at: new Date().toISOString() }).eq('id', user_id);

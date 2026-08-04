@@ -8,6 +8,7 @@ import { rateLimit, tooManyRequests } from '@/lib/security/rate-limit'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 import { signCanopySessionToken } from '@/lib/pos/canopy-session'
 import { getActiveClockIn } from '@/lib/staff/timesheets'
+import { pinLookup, verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
 
 // SHELL-1 — the Canopy desktop shell's PIN lock. NEW route, additive only — does not modify
 // verify-pin (checks one already-known staff member) or manager-verify (manager/owner/admin only,
@@ -32,12 +33,29 @@ async function _POST(req: Request) {
   const denied = await verifyBusinessAccess(user.id, business_id)
   if (denied) return denied
 
-  const { data: staff } = await supabase
+  // SEC-PIN-1 — also not in the brief's six. Canopy's PIN unlock authenticated against BOTH tables
+  // in plaintext. Same two-step as the other Shape B routes: pin_lookup narrows, pin_hash confirms,
+  // plaintext remains only as the un-backfilled fallback (remove in SEC-PIN-2).
+  const canopyLookup = pinLookup(String(business_id), String(pin))
+  const usersBase = () => supabase
     .from('pos_users')
-    .select('id, name, display_name, role')
+    .select('id, name, display_name, role, pin, pin_hash')
     .eq('business_id', business_id)
     .eq('is_active', true)
-    .eq('pin', pin)
+
+  let usersRows: Array<Record<string, unknown>> = []
+  if (canopyLookup) {
+    const { data } = await usersBase().eq('pin_lookup', canopyLookup)
+    for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+      if (await verifyStaffPin(String(pin), r.pin_hash as string)) usersRows.push(r)
+    }
+  }
+  if (usersRows.length === 0) {
+    const { data } = await usersBase().eq('pin', pin)
+    usersRows = (data ?? []) as Array<Record<string, unknown>>
+    if (usersRows[0]) await upgradeStaffPin(supabase, 'pos_users', String(usersRows[0].id), String(business_id), String(pin))
+  }
+  const staff = usersRows
 
   let match = (staff ?? [])[0] as { id: string; name: string; display_name: string | null; role: string } | undefined
   let source: 'pos_users' | 'pos_staff' = 'pos_users'
@@ -49,13 +67,25 @@ async function _POST(req: Request) {
   // pos_users rows). Fall back to it so Canopy's PIN unlock can resolve real staff, not just the
   // owner — without touching pos_users' own existing behavior above at all.
   if (!match) {
-    const { data: posStaff } = await supabase
+    const staffBase = () => supabase
       .from('pos_staff')
-      .select('id, name, role')
+      .select('id, name, role, pin, pin_hash')
       .eq('business_id', business_id)
       .eq('is_active', true)
-      .eq('pin', pin)
-    const posStaffMatch = (posStaff ?? [])[0]
+
+    let posStaff: Array<Record<string, unknown>> = []
+    if (canopyLookup) {
+      const { data } = await staffBase().eq('pin_lookup', canopyLookup)
+      for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+        if (await verifyStaffPin(String(pin), r.pin_hash as string)) posStaff.push(r)
+      }
+    }
+    if (posStaff.length === 0) {   // LEGACY FALLBACK — remove in SEC-PIN-2
+      const { data } = await staffBase().eq('pin', pin)
+      posStaff = (data ?? []) as Array<Record<string, unknown>>
+      if (posStaff[0]) await upgradeStaffPin(supabase, 'pos_staff', String(posStaff[0].id), String(business_id), String(pin))
+    }
+    const posStaffMatch = posStaff[0] as { id: string; name: string; role: string } | undefined
     if (posStaffMatch) {
       match = { id: posStaffMatch.id, name: posStaffMatch.name, display_name: null, role: posStaffMatch.role }
       source = 'pos_staff'

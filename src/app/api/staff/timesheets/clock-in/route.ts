@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { clockIn } from '@/lib/staff/timesheets'
 import { getBid } from '@/lib/auth/get-bid'
+import { pinLookup, verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -25,8 +26,27 @@ async function _POST(req: Request) {
   const pin = String(body.pin ?? '').trim()
   if (!pin) return NextResponse.json({ error: 'PIN required' }, { status: 400 })
 
-  const { data: staff } = await supabase.from('pos_staff')
-    .select('id,name,is_active').eq('business_id', bid).eq('pin', pin).maybeSingle()
+  // SEC-PIN-1 — SHAPE B, same two-step as verify-override: pin_lookup narrows, pin_hash
+  // authenticates. This is the walk-up-and-type-four-digits flow, so there is no staff_id to key on.
+  const lookup = pinLookup(bid, pin)
+  const baseSelect = () => supabase.from('pos_staff')
+    .select('id,name,is_active,pin,pin_hash').eq('business_id', bid)
+
+  let staff: Record<string, unknown> | null = null
+  if (lookup) {
+    const { data } = await baseSelect().eq('pin_lookup', lookup).maybeSingle()
+    if (data && await verifyStaffPin(pin, (data as Record<string, unknown>).pin_hash as string)) {
+      staff = data as Record<string, unknown>
+    }
+  }
+  // LEGACY FALLBACK — see verify-override. Remove in SEC-PIN-2.
+  if (!staff) {
+    const { data } = await baseSelect().eq('pin', pin).maybeSingle()
+    if (data) {
+      staff = data as Record<string, unknown>
+      await upgradeStaffPin(supabase, 'pos_staff', String(staff.id), bid, pin)
+    }
+  }
 
   if (!staff) return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
   if (!staff.is_active) return NextResponse.json({ error: 'Staff account inactive' }, { status: 403 })

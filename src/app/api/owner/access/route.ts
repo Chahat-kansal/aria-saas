@@ -6,6 +6,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveMembership, requireOwner } from '@/lib/access/membership'
+import { randomInt } from 'crypto'
+import { hashStaffPin, pinLookup } from '@/lib/pos/staff-pin'
 
 // ACCESS-MODEL-1 — invite / link / revoke. Managing who can see the business is itself an
 // AUTHORITY action, so every method here is OWNER-ONLY (requireOwner) — a manager can never widen
@@ -100,6 +102,7 @@ async function _POST(req: Request) {
     .select('id').eq('business_id', business_id).eq('auth_user_id', target.id).maybeSingle()
 
   let linkedId: string | null = existing?.id as string ?? null
+  let generatedPin: string | null = null
   let error: { message: string } | null = null
 
   if (linkedId) {
@@ -107,13 +110,22 @@ async function _POST(req: Request) {
       .update({ role, is_active: true }).eq('id', linkedId)
     error = updErr
   } else {
+    // SEC-PIN-1 — was Math.floor(1000 + Math.random() * 9000): Math.random() is not
+    // cryptographically random, and a predictable staff PIN is a predictable till override. Also
+    // writes pin_hash and pin_lookup so members created from now on never need the lazy upgrade.
+    // The plaintext `pin` is still written because the column is NOT NULL until SEC-PIN-2 drops it.
+    const newPin = String(randomInt(1000, 10000))
+    generatedPin = newPin
+    const newLookup = pinLookup(business_id, newPin)
     const { data: inserted, error: insErr } = await supabaseAdmin.from('pos_users').insert({
       business_id,
       auth_user_id: target.id,
       name: target.email ?? email.trim(),
       display_name: target.email ?? email.trim(),
       role,
-      pin: Math.floor(1000 + Math.random() * 9000).toString(), // pos_users.pin is NOT NULL (till model)
+      pin: newPin, // pos_users.pin is NOT NULL (till model)
+      pin_hash: await hashStaffPin(newPin),
+      ...(newLookup ? { pin_lookup: newLookup } : {}),
       is_active: true,
     }).select('id').maybeSingle()
     linkedId = (inserted?.id as string) ?? null
@@ -129,7 +141,11 @@ async function _POST(req: Request) {
     detail: 'Linked ' + email.trim() + ' as ' + role,
   })
 
-  return NextResponse.json({ ok: true, member_id: linked?.id ?? null, role })
+  // SEC-PIN-1 — return the generated PIN ONCE. After SEC-PIN-2 drops the plaintext column it is
+  // unrecoverable, so if the UI does not surface this today that is a follow-up ticket, not a
+  // blocker. Only present when a row was newly created; re-linking an existing member does not
+  // regenerate it.
+  return NextResponse.json({ ok: true, member_id: linked?.id ?? null, role, ...(generatedPin ? { pin: generatedPin } : {}) })
 }
 
 // DELETE /api/owner/access { business_id, pos_user_id } — revoke, effective immediately
