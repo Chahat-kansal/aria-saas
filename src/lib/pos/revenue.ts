@@ -37,6 +37,25 @@ export const GROSS_STATUSES = ['completed'] as const
  */
 export const DEDUCTION_STATUSES = ['refund', 'refunded'] as const
 
+// ── FOLLOW-UP, OWED AFTER REVENUE-RAIL-1 COMMITS 2 AND 3 LAND ────────────────────────────────────
+// Holding both spellings is correct TODAY — dropping either would lose real money from net sales.
+// But it also permanently encodes an inconsistency nobody ever decided on, and every future reader
+// has to relearn that two spellings mean one thing. Correct now, wrong to leave.
+//
+// The work, in order:
+//   1. Pick a winner. 'refunded' is the stronger candidate: it is what the MAIN returns path writes
+//      (return-engine.ts) and what CLAUDE.md RULE 6 already documents by name.
+//   2. Normalise the data: update pos_sales set status = <winner> where status = <loser>.
+//      Live count at the time of writing: 1 row total across both spellings, so this is cheap now
+//      and gets more expensive with every refund processed.
+//   3. Change the two losing writers, then remove the losing spelling from DEDUCTION_STATUSES.
+//      Order matters — remove it from this list LAST, or in-flight rows written by the old code
+//      between deploy and migration drop straight out of net sales.
+//
+// Do NOT do this before commits 2 and 3 are finished: changing what a status MEANS while call sites
+// are still being migrated makes a real regression indistinguishable from the migration.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
 /**
  * Everything else: not yet earned, never earned, or a bookkeeping parent.
  *

@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { buildLabourReport } from './timesheets'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 export interface AttendanceRow {
   staff_member_id: string
@@ -124,7 +125,7 @@ export async function sendWeeklyLabourReport(businessId: string): Promise<boolea
   if (!labourRows.length) return false
 
   const { data: sales } = await supabase.from('pos_sales')
-    .select('total_amount').eq('business_id', businessId).neq('status', 'voided')
+    .select('total_amount').eq('business_id', businessId).in('status', REPORTABLE_STATUSES)
     .gte('created_at', fromDate + 'T00:00:00').lte('created_at', toDate + 'T23:59:59')
   const weekRevenue = (sales ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_amount) || 0), 0)
   const totalLabourCents = labourRows.reduce((s, r) => s + r.total_pay_cents, 0)

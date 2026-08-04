@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -36,7 +37,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
     .eq('business_id', sessionBid)
     .gte('created_at', session.opened_at as string)
     .lte('created_at', endTime)
-    .neq('status', 'voided');
+    .in('status', REPORTABLE_STATUSES);
 
   const saleIds = (sales || []).map((s: any) => s.id);
   const { data: items } = saleIds.length > 0

@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -41,7 +42,7 @@ async function _GET(req: Request) {
       .select('total_amount')
       .eq('business_id', bid)
       .gte('created_at', since)
-      .neq('status', 'voided')
+      .in('status', REPORTABLE_STATUSES)
       .limit(5000),
   ]);
 

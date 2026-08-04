@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
 import { toAESTStart, toAESTEnd, todayAEST, thirtyDaysAgoAEST, buildDateRange } from '@/lib/date-au';
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
+import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
 
 type Params = { params: Promise<{ type: string }> };
 
@@ -249,7 +250,7 @@ async function getCashier(
   const { data: sales } = await supabase.from('pos_sales')
     .select('id,total_amount,served_by,payment_method,created_at')
     .eq('business_id', bid)
-    .neq('status', 'voided')
+    .in('status', REPORTABLE_STATUSES)
     .gte('created_at', fromISO).lte('created_at', toISO)
     .limit(2000);
 
@@ -314,7 +315,7 @@ async function getCommission(
   const toISO   = toAESTEnd(to);
 
   const { data: rules } = await supabase.from('pos_commission_rules').select('*').eq('business_id', bid).is('effective_until', null).limit(50);
-  const { data: sales }  = await supabase.from('pos_sales').select('id,total_amount,served_by,created_at').eq('business_id', bid).neq('status', 'voided').gte('created_at', fromISO).lte('created_at', toISO).limit(2000);
+  const { data: sales }  = await supabase.from('pos_sales').select('id,total_amount,served_by,created_at').eq('business_id', bid).in('status', REPORTABLE_STATUSES).gte('created_at', fromISO).lte('created_at', toISO).limit(2000);
 
   const staffMap = new Map<string, { name: string; total: number }>();
   for (const s of (sales ?? []) as Array<{ id: string; total_amount: number; served_by: string }>) {
@@ -368,7 +369,7 @@ async function getClosures(
   const sessionIds = (sessions ?? []).map((s: Record<string, unknown>) => s.id as string);
   const { data: salesData } = sessionIds.length > 0
     ? await supabase.from('pos_sales').select('session_id, payment_method, total_amount')
-        .in('session_id', sessionIds).neq('status', 'voided')
+        .in('session_id', sessionIds).in('status', REPORTABLE_STATUSES)
     : { data: [] };
 
   const salesMap: Record<string, { cash: number; card: number; total: number; count: number }> = {};
