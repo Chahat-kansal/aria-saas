@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { recoverSaleForOnlineOrder } from '@/lib/pos/recover-online-order-sale'
+import { promoteOnlineSaleToCompleted } from '@/lib/pos/promote-online-sale'
 
 type Params = { params: Promise<{ orderNumber: string }> | { orderNumber: string } }
 
@@ -39,6 +40,13 @@ export async function GET(req: Request, { params }: Params) {
   let saleId = (order.sale_id as string | null) ?? null
   if (!saleId && order.stripe_payment_status === 'succeeded') {
     saleId = await recoverSaleForOnlineOrder(bid, order.id as string)
+  }
+  // FIX-ONLINE-PAY-1 A3 — the sale now EXISTS at placement but starts 'pending' for card orders, so
+  // the miss this recovery was written for has changed shape: the common failure is no longer a
+  // missing sale, it is a sale stuck 'pending' because the webhook never landed. Same trigger
+  // (payment succeeded), same idempotent promotion the webhook uses.
+  if (saleId && order.stripe_payment_status === 'succeeded') {
+    await promoteOnlineSaleToCompleted(order.id as string, bid)
   }
 
   return NextResponse.json({

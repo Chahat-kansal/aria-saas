@@ -10,6 +10,7 @@ import {
   linkCardToIdentity, resolveIdentityByCardFingerprint,
   sendCardLinkedNotice, logCardLinkEvent,
 } from '@/lib/loyalty/card-link'
+import { promoteOnlineSaleToCompleted } from '@/lib/pos/promote-online-sale'
 
 // ORD-PAYMENT webhook — on payment_intent.succeeded:
 //   1. Mark order paid (stripe_payment_status='succeeded', paid_at)
@@ -90,6 +91,13 @@ export async function POST(req: Request) {
     console.error('[stripe-orders webhook] DB update failed:', dbErr.message)
     return NextResponse.json({ error: 'DB update failed' }, { status: 500 })
   }
+
+  // FIX-ONLINE-PAY-1 A3 — money has arrived, so the sale becomes revenue HERE and nowhere earlier.
+  // Guarded .eq('status','pending') so a replayed webhook can never resurrect a sale that has since
+  // been voided or refunded — Stripe retries, and this endpoint is signature-verified but not
+  // once-only. Awaited (not waitUntil) because it is the money write: if it fails we return non-200
+  // and let Stripe retry, exactly as the order update above does.
+  await promoteOnlineSaleToCompleted(orderId, businessId)
 
   // KDS fire — non-blocking via waitUntil so Stripe sees 200 within 30 s.
   // Loyalty earn fires on pickup (status → completed) via online-orders/[id] PATCH.

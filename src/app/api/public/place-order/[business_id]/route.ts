@@ -12,6 +12,7 @@ import { normalisePhone } from '@/lib/clicksend'
 import { getCxSession } from '@/lib/cx/get-cx-session'
 import { createSale, type CreateSaleItem } from '@/lib/pos/create-sale'
 import { encryptCustomerPII } from '@/lib/aria/customer-pii'
+import { onlineSaleInitialStatus } from '@/lib/pos/online-sale-status'
 
 function adminClient() {
   return createClient(
@@ -244,6 +245,9 @@ export async function POST(req: Request, { params }: { params: { business_id: st
       orderType: 'online_order',
       source: 'online_order',
       idempotencyKey: orderNumber,
+      // FIX-ONLINE-PAY-1 A2 — card orders are NOT revenue until Stripe confirms. Cash /
+      // pay-at-counter is unchanged: it never gets a PaymentIntent, so it is complete on placement.
+      status: onlineSaleInitialStatus(isCardPayment),
       customerName,
       customerPhone: normPhone,
       pickupTime: body.pickup_time ? new Date(body.pickup_time).toISOString() : null,

@@ -20,20 +20,36 @@ function PayForm({ onSuccess, onClose, orderNumber, total }: {
   const elements = useElements()
   const [paying, setPaying] = useState(false)
   const [err, setErr] = useState('')
+  // FIX-ONLINE-PAY-1 B2 — useElements() returns an instance as soon as the PROVIDER mounts, even
+  // when the PaymentElement itself failed to load. That is exactly how confirmPayment came to be
+  // called against nothing and threw IntegrationError. Only the element's own ready event proves it
+  // is mounted, and a slow network reaches this state without any Stripe error at all.
+  const [elementReady, setElementReady] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   async function handlePay() {
-    if (!stripe || !elements) return
+    if (!stripe || !elements || !elementReady) return
     setPaying(true); setErr('')
-    const result = await stripe.confirmPayment({ elements, redirect: 'if_required' })
-    if (result.error) {
-      setErr(result.error.message ?? 'Payment failed. Please try another card.')
-      setPaying(false)
-    } else {
+    // FIX-ONLINE-PAY-1 B1 — confirmPayment THREW rather than returning result.error, so
+    // setPaying(false) was never reached and the customer sat on "Processing…" forever, with no way
+    // to tell whether they had paid. The finally is the fix: no throw can leave the button stuck.
+    try {
+      const result = await stripe.confirmPayment({ elements, redirect: 'if_required' })
+      if (result.error) {
+        setErr(result.error.message ?? 'Payment failed. Please try another card.')
+        return
+      }
       onSuccess()
+    } catch (e) {
+      setErr((e as Error)?.message
+        ? 'Payment could not be completed: ' + (e as Error).message
+        : 'Payment could not be completed. Your order is saved but NOT paid — order ' + orderNumber + '.')
+    } finally {
+      setPaying(false)
     }
   }
 
-  const btnDisabled = paying || !stripe
+  const btnDisabled = paying || !stripe || !elementReady || loadFailed
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
@@ -54,14 +70,29 @@ function PayForm({ onSuccess, onClose, orderNumber, total }: {
       <div style={{ fontSize: 11, fontWeight: 600, color: '#2D5240', textAlign: 'center' as const, padding: '6px 12px', background: '#f0f7f2', borderRadius: 8, marginBottom: 4 }}>
         PayID preferred · 0% surcharge · instant confirmation
       </div>
-      <PaymentElement />
+      <PaymentElement
+        onReady={() => setElementReady(true)}
+        onLoadError={() => {
+          // FIX-ONLINE-PAY-1 B3 — the wording must match reality. After Part A the order row EXISTS
+          // and its sale is 'pending', so "your order wasn't placed" would be a lie and "try again"
+          // would invite a second order. Tell them it is saved but unpaid, and give them the number.
+          setLoadFailed(true)
+          setErr('Payment couldn’t load. Your order ' + orderNumber + ' is saved but NOT paid — '
+            + 'please don’t re-order; contact the store to pay, or close this and try again.')
+        }}
+      />
       {err && <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>{err}</p>}
       <button
         onClick={handlePay}
         disabled={btnDisabled}
         style={{ width: '100%', padding: '16px 0', borderRadius: 9999, border: 'none', background: btnDisabled ? BORDER : LIME, color: INK, fontSize: 16, fontWeight: 800, cursor: btnDisabled ? 'not-allowed' : 'pointer', fontFamily: SANS }}
       >
-        {paying ? 'Processing…' : 'Pay now · $' + total.toFixed(2)}
+        {/* FIX-ONLINE-PAY-1 B2/B3 — three honest states. "Loading payment…" is the one that used to
+            be missing: the button read "Pay now" and was clickable while nothing was mounted. */}
+        {loadFailed ? 'Payment unavailable'
+          : paying ? 'Processing…'
+          : !elementReady ? 'Loading payment…'
+          : 'Pay now · $' + total.toFixed(2)}
       </button>
       <p style={{ fontSize: 11, color: MUTED, textAlign: 'center' as const, margin: 0 }}>Secured by Stripe · Card details are encrypted</p>
     </div>

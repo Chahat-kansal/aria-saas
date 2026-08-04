@@ -48,6 +48,15 @@ export interface AppliedDiscountEntry {
 }
 
 export interface CreateSaleParams {
+  /**
+   * FIX-ONLINE-PAY-1 A1 — the status the sale is CREATED in. Defaults to 'completed', so every
+   * pre-existing caller behaves exactly as before. Online CARD orders pass 'pending': the sale row
+   * must exist at placement (the accept flow, KDS gating and pos_sale_items all depend on it —
+   * PLACE-ORDER-FIX-1) but it is not revenue until Stripe confirms.
+   * Permitted by pos_sales_status_check, verified live:
+   *   pending | draft | open | partial_paid | completed | voided | refunded
+   */
+  status?: string
   businessId: string
   userId: string
   items: CreateSaleItem[]
@@ -227,7 +236,7 @@ export async function createSale(
     notes: params.notes ?? null,
     served_by: params.servedBy ?? null,
     age_verified: params.ageVerified ?? false,
-    status: 'completed',
+    status: params.status ?? 'completed',
     idempotency_key: params.idempotencyKey ?? null,
   }
   if (params.source) salePayload.source = params.source
@@ -350,7 +359,12 @@ export async function createSale(
   // all additive and idempotent per (hook, sale). Every caller now gets the complete set instead of
   // pos/sales' base-earn-only subset.
   const customerId = params.customerId
-  if (customerId) {
+  // FIX-ONLINE-PAY-1 A4 — never earn loyalty on a sale that is not yet money. 19 earn rows exist
+  // today against orders nobody paid for. The earn is re-run at promotion time (the Stripe webhook
+  // and order-track recovery); earnOnSale is idempotent — it early-returns when a ledger row already
+  // exists for the sale (earnOnSale.ts:36-47, verified) — so running it there cannot double-award.
+  const earnsNow = (params.status ?? 'completed') === 'completed'
+  if (customerId && earnsNow) {
     const totalAmount = params.totalAmount
     waitUntil((async () => {
       try {
