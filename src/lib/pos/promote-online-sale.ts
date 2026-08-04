@@ -21,7 +21,7 @@ export async function promoteOnlineSaleToCompleted(
   try {
     const { data: order } = await supabaseAdmin
       .from('pos_online_orders')
-      .select('id, sale_id, customer_id, stripe_payment_status')
+      .select('id, sale_id')
       .eq('id', orderId)
       .eq('business_id', businessId)
       .maybeSingle()
@@ -38,36 +38,15 @@ export async function promoteOnlineSaleToCompleted(
       .eq('id', saleId)
       .eq('business_id', businessId)
       .eq('status', 'pending')
-      .select('id, total_amount, customer_id')
+      .select('id')
       .maybeSingle()
 
-    // FIX-ONLINE-PAY-1 A4 — loyalty is earned HERE, not at placement, because a sale created
-    // 'pending' deliberately skipped it (create-sale.ts). Safe to call on every retry: earnOnSale
-    // early-returns when a ledger row already exists for the sale (earnOnSale.ts:36-47, verified
-    // before this was wired in — the sprint asked for that check rather than assuming it).
-    const customerId = (promoted?.customer_id as string | null) ?? (order?.customer_id as string | null) ?? null
-    if (promoted && customerId) {
-      try {
-        const { earnOnSale } = await import('@/lib/loyalty/earnOnSale')
-        await earnOnSale({
-          businessId,
-          customerId,
-          saleId,
-          totalAmount: Number(promoted.total_amount ?? 0),
-        })
-      } catch (e) {
-        // Non-fatal: the money is recorded, and a missing earn is recoverable. Failing the webhook
-        // here would make Stripe retry a payment write that already succeeded.
-        console.error('[promote-online-sale] loyalty earn failed (non-fatal):', (e as Error).message)
-        void supabaseAdmin.from('activity_log').insert({
-          business_id: businessId,
-          action_type: 'loyalty_earn_error',
-          description: '[promote-online-sale] earnOnSale failed: ' + (e as Error).message,
-          metadata: { sale_id: saleId, order_id: orderId },
-          created_at: new Date().toISOString(),
-        })
-      }
-    }
+    // FIX-ONLINE-PAY-A A3 — NO EARN HERE, deliberately. The loyalty earn already exists at
+    // online-orders/[id]/route.ts:213, fired on PICKUP (status -> completed). That call had been a
+    // permanent no-op because createSale earned at placement; now that a pending sale skips the
+    // earn, it does the job it was written for. Adding a second earn path here would move the
+    // moment points are awarded from collection to payment — a semantic change nobody asked for —
+    // and would leave two places to keep in step. The fix was a subtraction, not an addition.
 
     return saleId
   } catch (e) {

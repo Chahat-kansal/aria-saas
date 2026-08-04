@@ -201,6 +201,11 @@ async function _PATCH(req: Request, { params }: Params, { supabase, businessId: 
   }
 
   // ── Loyalty earn — fires once on pickup (status → completed), idempotent via earnOnSale ──
+  // FIX-ONLINE-PAY-A A3 — this was a PERMANENT NO-OP until now: createSale earned at placement, so
+  // earnOnSale's SELECT-first guard (earnOnSale.ts:36-48) always found a row and returned early.
+  // A card order's sale is now created 'pending' and skips the earn, so this call finally does the
+  // job the comment above has always claimed. CASH orders still earn at placement (their sale is
+  // created 'completed'), so for those this remains a no-op — correctly, not accidentally.
   if (newStatus === 'completed' && prevStatus !== 'completed') {
     const earnOrderId = id
     const earnBid = bid
