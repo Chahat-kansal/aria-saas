@@ -57,7 +57,12 @@ export default function StorefrontPage() {
       const d = await r.json()
       if (!r.ok) throw new Error(d.error ?? 'Order failed')
       setPlaced({ order_number: d.order_number, total: d.total })
-    } catch (e) { setErr((e as Error).message) } finally { setPlacing(false) }
+    } catch (e) {
+      // S-ORD-CONFIRM (sibling sweep) — a network throw here is indistinguishable from a
+      // rejected order, and the order may already exist. Never surface a bare retry prompt.
+      const m = (e as Error).message
+      setErr(m && m !== 'Failed to fetch' ? m : 'We lost connection before we could confirm. Your order may already have been placed — please do NOT order again. Check for a confirmation, or ask staff to look up your name.')
+    } finally { setPlacing(false) }
   }
 
   if (loading) return <Centered>Loading store…</Centered>

@@ -106,7 +106,10 @@ export function CartClient({ slug }: { slug: string }) {
       } catch { /* ok */ }
       window.location.href = '/menu/' + slug + '/order/' + (data.order_number ?? '')
     } catch {
-      setOrderError('Something went wrong. Please try again.')
+        // S-ORD-CONFIRM (sibling sweep) — a dropped response is not a failed order. Same bug as
+        // MenuClient: the row may exist and the card may be charged, so "try again" is the one
+        // instruction that can double-charge.
+      setOrderError('We lost connection before we could confirm. Your order may already have been placed — please do NOT order again. Check for a confirmation, or ask staff to look up your name.')
       setPlacing(false)
     }
   }

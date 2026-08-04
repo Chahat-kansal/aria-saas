@@ -1,0 +1,36 @@
+-- S-ORD-CONFIRM — the order record is the source of truth.
+--
+-- order_number had NO INDEX OF ANY KIND while a tracking page polls it every 5-10s. Unique on
+-- (business_id, order_number) rather than plain: order_number is the identifier the customer is
+-- handed and the only key the recovery path in the API route can rely on, so two rows sharing one
+-- within a business would make "which order is mine" unanswerable.
+--
+-- APPLIED WITHOUT `concurrently`: the migration runner wraps statements in a transaction, where
+-- CONCURRENTLY is not permitted. The table is 20 rows, so the brief% own fallback applies.
+--
+-- ── PREFLIGHT (executed, not assumed) ───────────────────────────────────────────────────────────
+--   20 rows, 0 null order_number, 0 null business_id
+--   count(*) - count(distinct (business_id, order_number)) = 0  -> no collisions, index builds clean
+--
+-- ── THE TWO ITEMS THE BRIEF ASKED TO BE DUMPED ──────────────────────────────────────────────────
+-- CHECK constraints on pos_online_orders (the brief listed these as unverified):
+--   pos_online_orders_fulfillment_type_check  CHECK (fulfillment_type IN ('pickup','delivery'))
+--   pos_online_orders_status_check            CHECK (status IN ('pending','accepted','confirmed',
+--                                             'preparing','ready','completed','cancelled',
+--                                             'rejected','archived'))
+--   -> the status vocabulary IS already constrained. The follow-up is therefore NOT "needs a
+--      CHECK" but "the CHECK permits two synonyms" — 'accepted' and 'confirmed' are both legal and
+--      both in live use. Narrowing it is still its own sprint.
+--
+-- RLS on pos_online_orders: ENABLED, with exactly one policy —
+--   biz_online_orders  ALL to public  USING (business_id IN (SELECT id FROM businesses
+--                                            WHERE user_id = auth.uid()))
+--   -> OWNER-ONLY. An anonymous customer cannot read their own order row directly. The public
+--      tracking path is safe only because it goes through server routes using supabaseAdmin
+--      (api/public/order-track/[orderNumber] and the /menu/[slug]/order/[orderNumber] server
+--      component). Any future attempt to have the browser read this table with the anon key will
+--      silently return nothing — which would look exactly like "order not found", i.e. the bug
+--      this sprint exists to remove.
+
+create unique index if not exists pos_online_orders_ordnum_uniq
+  on pos_online_orders (business_id, order_number);

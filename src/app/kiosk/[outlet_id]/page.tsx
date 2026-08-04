@@ -94,7 +94,7 @@ export default function KioskPage() {
           modifiers: i.modifiers.map(m => ({ name: m.name, price_adjustment: m.price_adjustment })),
         })),
       }),
-    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    }).then(r => r.json()).catch(() => ({ error: 'We lost connection before we could confirm. Your order may already have been placed — please do NOT order again. Check for a confirmation, or ask staff to look up your name.' }))   // S-ORD-CONFIRM: never invite a retry
     if (res.ok) {
       setOrderNum(res.order_number); setStep('done'); setCart([])
       setLoyaltyCustomer(null); setLoyaltyCode(''); setLoyaltyError(null)

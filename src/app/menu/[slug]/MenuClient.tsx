@@ -319,8 +319,32 @@ export default function MenuClient({
           ...(i.note ? { note: i.note } : {}),
         })),
       }),
-    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    }).then(r => r.json()).catch(() => ({ error: 'NETWORK_DROPPED' }))
+
+    // S-ORD-CONFIRM — this used to render `{ error: 'Network error' }` as an ordinary checkout
+    // failure. A dropped response is NOT a failed order: the row may already exist, the kitchen may
+    // already have it, and for card payments the intent may already be created. Telling the
+    // customer it failed is what produces the second order and the double charge.
+    //
+    // We cannot recover the order number here — it is generated server-side (place-order:139), so a
+    // response that never arrives takes it with it. What we CAN do is refuse to invite a retry, and
+    // point at the one place that knows the truth.
+    if (res.error === 'NETWORK_DROPPED') {
+      setCheckoutError(
+        'We lost connection before we could confirm. Your order may already have been placed — ' +
+        'please do NOT order again. Check your phone for a confirmation, or ask staff to look up ' +
+        'your name before retrying.',
+      )
+      setOrdering(false)
+      return
+    }
     if (res.error) { setCheckoutError(res.error); setOrdering(false); return }
+
+    // Persist the moment it is known, before anything else can throw. If the customer closes the
+    // tab or the next step fails, the tracking page is still reachable from here.
+    if (res.order_number) {
+      try { sessionStorage.setItem('aria_last_order:' + _slug, String(res.order_number)) } catch { /* private mode */ }
+    }
 
     // Card payment — show Stripe modal to collect card details
     if (res.stripe_client_secret) {
@@ -335,6 +359,11 @@ export default function MenuClient({
 
   function handleStripeSuccess() {
     const orderNumber = stripeModal?.orderNumber ?? ''
+    // S-ORD-CONFIRM — for card orders the number exists before the charge, so a failure AFTER this
+    // point can still be resolved from the order record rather than guessed at.
+    if (orderNumber) {
+      try { sessionStorage.setItem('aria_last_order:' + _slug, orderNumber) } catch { /* private mode */ }
+    }
     setStripeModal(null)
     setOrderDone({ order_number: orderNumber, estimated_ready_minutes: 15, total: cartTotal })
     setCart([]); setShowCart(false); setShowCheckout(false)

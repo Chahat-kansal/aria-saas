@@ -86,6 +86,8 @@ interface Props {
   businessName: string
   slug: string
   initialPickedUpAt: string | null
+  /** S-ORD-CONFIRM — stripe_payment_status from the order ROW, so the first paint is already truthful. */
+  initialPaymentStatus?: string | null
 }
 
 // ── Food emoji helper ─────────────────────────────────────────────────────────
@@ -110,8 +112,11 @@ function itemEmoji(name?: string): string {
 export default function OrderTrackingClient({
   orderId, initialStatus, orderNumber, customerName, total,
   estimatedReadyAt: initialEta, items, fulfillmentType, notes, businessName, slug, initialPickedUpAt,
+  initialPaymentStatus,
 }: Props) {
   const [status, setStatus] = useState(initialStatus)
+  // S-ORD-CONFIRM — 'succeeded' | 'pending' | null(cash). Drives the never-pay-twice banner.
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(initialPaymentStatus ?? null)
   const [eta, setEta] = useState(initialEta)
   const [completedAt, setCompletedAt] = useState<string | null>(initialStatus === 'completed' ? initialPickedUpAt : null)
 
@@ -197,7 +202,9 @@ export default function OrderTrackingClient({
           { cache: 'no-store' }
         )
         if (!res.ok || doneRef.current) return
-        const d = await res.json() as { status?: string; estimated_ready_at?: string | null; picked_up_at?: string | null }
+        const d = await res.json() as { status?: string; estimated_ready_at?: string | null; picked_up_at?: string | null; payment_status?: string | null; has_sale?: boolean }
+        // S-ORD-CONFIRM — payment truth comes from the order row, never from a POST response.
+        if (d.payment_status !== undefined) setPaymentStatus(d.payment_status ?? null)
         if (d.status) {
           const newRank = STATUS_RANK[d.status] ?? -1
           if (newRank >= rankRef.current) {
@@ -245,6 +252,20 @@ export default function OrderTrackingClient({
 
   return (
     <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: SANS, paddingBottom: 40 }}>
+
+      {/* S-ORD-CONFIRM — the order ROW says payment has not settled yet. The customer is here
+          because the order EXISTS, so the one thing this screen must never do is imply they should
+          pay again. Cash orders have payment_status null and never see this. */}
+      {paymentStatus === 'pending' ? (
+        <div style={{
+          margin: '12px 16px 0', padding: '12px 14px', borderRadius: 12,
+          background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.45)',
+          fontSize: 13, lineHeight: 1.5,
+        }}>
+          <strong>Payment is still processing.</strong> Your order is confirmed and we have it —
+          please don&rsquo;t pay again. This updates on its own.
+        </div>
+      ) : null}
 
       {/* Pulse keyframes injected once */}
       <style>{`
