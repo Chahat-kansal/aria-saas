@@ -29,12 +29,13 @@ function fmtTime(t: string): string {
   return m === 0 ? (h12 + suffix) : (h12 + ':' + m.toString().padStart(2, '0') + suffix)
 }
 
-function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 17) return 'afternoon'
-  return 'evening'
-}
+// FIX-HYDRATION-1 — getGreeting() was DELETED from this file, not fixed in place. It computed
+// new Date().getHours() during render with no timezone, so the UTC server said "morning" while the
+// Melbourne browser said "evening" — React #425, and the #418/#423 cascade behind it. The value now
+// arrives as a prop, computed once server-side (src/lib/greeting.ts).
+//
+// Deliberately removed rather than left unused: a timezone-naive helper sitting in a client
+// component is an invitation for the next person to reuse it and reintroduce this exact bug.
 
 // Split last word off name for Cormorant accent
 function splitNameAccent(name: string): [string, string] {
@@ -116,6 +117,8 @@ interface Props {
   initialCategories?: Category[]
   initialProducts?: Product[]
   locationSubtitle?: string | null
+  /** FIX-HYDRATION-1 — computed server-side so both renders emit the same string. */
+  greeting: string
   isOpenNow?: boolean
   closesAt?: string | null
   productModifiers?: Record<string, ModifierGroup[]>
@@ -127,7 +130,7 @@ export default function MenuClient({
   businessId, slug: _slug, businessName, logoUrl: _logoUrl, orderingEnabled, menuUrl,
   sectionOrder: _sectionOrder, itemOverrides, templateId, brandKit, backgroundId,
   initialCategories, initialProducts,
-  locationSubtitle, isOpenNow, closesAt, productModifiers,
+  locationSubtitle, isOpenNow, closesAt, productModifiers, greeting,
 }: Props) {
   // Keep theme for ArchetypeRenderer compatibility — override colors to Pipel
   const baseTheme = deriveTheme(templateId ?? 'editorial', brandKit ?? null, backgroundId ?? null)
@@ -445,7 +448,7 @@ export default function MenuClient({
       <div style={{ padding: '32px 20px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 14, color: MUTED, fontWeight: 500 }}>{'Good ' + getGreeting() + ' 👋'}</div>
+            <div style={{ fontSize: 14, color: MUTED, fontWeight: 500 }}>{'Good ' + greeting + ' 👋'}</div>
             {locationSubtitle && (
               <div style={{ fontSize: 13, color: MUTED, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ fontSize: 12 }}>📍</span>

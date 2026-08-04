@@ -7,6 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 export const dynamic = 'force-dynamic'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import MenuClient from './MenuClient'
+import { currentGreeting } from '@/lib/greeting'
 
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
 type MenuConfig = {
@@ -245,6 +246,7 @@ export default async function MenuPage({ params }: Props) {
         initialCategories={orderedCats}
         initialProducts={(productsRes.data ?? []) as ProdRow[]}
         locationSubtitle={locationSubtitle}
+        greeting={currentGreeting()}
         isOpenNow={isOpenNow}
         closesAt={closesAt}
         productModifiers={productModifiers}

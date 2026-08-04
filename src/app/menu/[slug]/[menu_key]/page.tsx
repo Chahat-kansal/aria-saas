@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import MenuClient from '../MenuClient'
+import { currentGreeting } from '@/lib/greeting'
 
 type ItemOverride = { desc?: string; photo_url?: string; badge?: string; price_override?: number; hidden?: boolean }
 
@@ -184,6 +185,7 @@ export default async function SpecificMenuPage({ params }: Props) {
       isOpenNow={isOpenNow}
       closesAt={closesAt}
       productModifiers={productModifiers}
+      greeting={currentGreeting()}
     />
   )
 }
