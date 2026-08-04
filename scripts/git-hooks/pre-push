@@ -4,6 +4,7 @@
 # Runs the same two gates the CI workflows run (scripts/canon-rail-guard.ts's diff scan,
 # then `npx tsc --noEmit`), scoped to only what's being pushed — same grandfathering as the
 # CI version (scripts/canon-rail-guard.ts --base=<pre-push remote sha> only scans NEW lines).
+# Also runs the Vitest unit suite (INFRA-UNITTEST-1).
 # Deliberately does NOT run next build or the e2e/smoke suites — those stay CI-only (and stay
 # in .github/workflows/ unchanged, resuming free the moment Actions minutes reset); this hook
 # only runs what's fast enough to survive being run on every push (~60s or less on a warm
@@ -50,5 +51,16 @@ if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit; then
   exit 1
 fi
 
-echo "[pre-push] OK — canon-rail-guard clean, tsc 0 errors."
+# INFRA-UNITTEST-1 — unit suite, after tsc. Vitest runs in ~1s on this suite, well inside the
+# "fast enough to run on every push" budget this hook is scoped to. It exists because
+# PROMO-STACK-1's proof that stacks_with_others works was produced by hand and then deleted, so
+# nothing stopped the next edit reintroducing the bug with everything still green.
+echo "[pre-push] unit tests: npm run test:unit"
+if ! npm run test:unit --silent; then
+  echo "[pre-push] BLOCKED — unit tests failed (see above). Fix them, or"
+  echo "[pre-push] bypass with: git push --no-verify (deliberate escape hatch, not recommended)."
+  exit 1
+fi
+
+echo "[pre-push] OK — canon-rail-guard clean, tsc 0 errors, unit tests green."
 exit 0
