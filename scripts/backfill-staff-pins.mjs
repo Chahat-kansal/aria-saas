@@ -11,7 +11,10 @@
  * Needs: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY, STAFF_PIN_PEPPER
  *        — all read from env with NO fallback (see SEC-MANAGER-1: an auth secret never gets a default).
  */
-import 'dotenv/config'
+// This repo keeps secrets in .env.local, not .env — `import 'dotenv/config'` loads .env only and
+// found nothing, so the script refused to run (correctly, but for the wrong reason). Explicit path.
+import { config } from 'dotenv'
+config({ path: '.env.local' })
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import { createHmac } from 'crypto'
