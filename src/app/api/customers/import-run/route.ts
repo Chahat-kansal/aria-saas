@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { normaliseCustomerPhone } from '@/lib/phone'
 
 type CsvRow = Record<string, string>
 
@@ -31,8 +32,15 @@ function mapRow(
 const POS_DIRECT_FIELDS = new Set(['name', 'email', 'phone', 'notes', 'tags'])
 const CONSENT_FIELDS = new Set(['marketing_consent', 'sms_consent', 'email_consent'])
 const CONSENT_TRUTHY = new Set(['true', 'yes', 'y', '1', 'opted in', 'opt-in', 'opt in', 'subscribed'])
-function toPosCustomerRow(mapped: Record<string, unknown>, businessId: string): Record<string, unknown> {
+function toPosCustomerRow(mappedIn: Record<string, unknown>, businessId: string): Record<string, unknown> {
+  let mapped = mappedIn
   const row: Record<string, unknown> = { business_id: businessId, source: 'csv_import' }
+  // CUSTOMER-PHONE-1 — POS_DIRECT_FIELDS copies mapped.phone through verbatim, so a CSV of
+  // 0412... numbers used to import as a parallel set of customers alongside the +61... rows the
+  // rest of the app writes. Normalised here, at the single point every imported row passes through.
+  if (typeof mapped.phone === 'string' && mapped.phone.trim()) {
+    mapped = { ...mapped, phone: normaliseCustomerPhone(mapped.phone) }
+  }
   const custom: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(mapped)) {
     if (POS_DIRECT_FIELDS.has(k)) row[k] = v
@@ -75,7 +83,11 @@ export async function POST(req: Request) {
   const { data: existing } = await supabaseAdmin
     .from('pos_customers').select('email, phone').eq('business_id', businessId).is('deleted_at', null)
   const emails = new Set<string>((existing ?? []).map(c => c.email).filter(Boolean) as string[])
-  const phones = new Set<string>((existing ?? []).map(c => c.phone).filter(Boolean) as string[])
+  // Compare on the normalised form too — otherwise a CSV row normalising to a number already in
+  // the table is not recognised as a duplicate and inserts a second customer.
+  const phones = new Set<string>(
+    ((existing ?? []).map(c => c.phone).filter(Boolean) as string[]).map(p => normaliseCustomerPhone(p)),
+  )
 
   let skipped = 0
   const toInsert: Record<string, unknown>[] = []
@@ -84,7 +96,7 @@ export async function POST(req: Request) {
     const mapped = mapRow(row, mapping)
     if (!mapped) { skipped++; continue }
     const em = mapped.email as string | undefined
-    const ph = mapped.phone as string | undefined
+    const ph = mapped.phone ? normaliseCustomerPhone(mapped.phone as string) : undefined
     if ((em && emails.has(em)) || (ph && phones.has(ph))) { skipped++; continue }
     toInsert.push(toPosCustomerRow(mapped, businessId))
     if (em) emails.add(em)

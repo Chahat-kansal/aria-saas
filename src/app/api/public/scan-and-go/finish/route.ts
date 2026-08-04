@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { hasValidKioskSession } from '@/lib/kiosk/cookie'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { normaliseCustomerPhone } from '@/lib/phone'
 
 // Seal a cart: no more adds, 15-min token window for the cashier to redeem.
 async function _POST(req: Request) {
@@ -21,8 +22,12 @@ async function _POST(req: Request) {
 
   // Optional loyalty link by phone.
   let loyaltyId: string | null = null
+  // CUSTOMER-PHONE-1 — was .eq('phone', body.loyalty_phone.trim()): a raw match against rows that
+  // ARE normalised elsewhere (enrol, place-order, membership all write +61 form). A regular who
+  // typed 0470446388 here after enrolling as +61470446388 matched nothing and silently earned no
+  // points — the loyalty engine failing in exactly the way an owner notices.
   if (body.loyalty_phone) {
-    const { data: cust } = await supabaseAdmin.from('pos_customers').select('id').eq('business_id', bid).eq('phone', body.loyalty_phone.trim()).maybeSingle()
+    const { data: cust } = await supabaseAdmin.from('pos_customers').select('id').eq('business_id', bid).eq('phone', normaliseCustomerPhone(body.loyalty_phone)).maybeSingle()
     loyaltyId = (cust?.id as string) ?? null
   }
 

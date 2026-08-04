@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 import { encryptCustomerPII } from '@/lib/aria/customer-pii'
+import { toE164AU } from '@/lib/phone'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -101,10 +102,15 @@ async function _POST(req: Request) {
   const emailOptIn = !!email_consent;
   const anyOptIn = smsOptIn || emailOptIn;
 
+  // S-PHONE-E164 — normalise BEFORE the duplicate check and the insert. A raw check compared
+  // 0412345678 against a stored +61412345678 and found nothing, so the "duplicate phone" guard
+  // below waved through the exact duplicate it exists to stop.
+  const e164Phone = phone ? (toE164AU(phone) ?? phone) : phone;
+
   // Duplicate phone check
   if (phone) {
     const { data: existingPhone } = await supabase.from('pos_customers')
-      .select('id').eq('business_id', bid).eq('phone', phone).maybeSingle();
+      .select('id').eq('business_id', bid).eq('phone', e164Phone).maybeSingle();
     if (existingPhone) {
       return NextResponse.json({ error: 'customer_exists', customer_id: existingPhone.id, message: 'A customer with that phone number already exists' }, { status: 409 });
     }
@@ -122,10 +128,10 @@ async function _POST(req: Request) {
     .from('pos_customers')
     .insert({
       business_id: bid, name,
-      email: email || null, phone: phone || null,
+      email: email || null, phone: e164Phone || null,
       birthday: birthday || null, notes: notes || null,
       // SEC-4 — dual-write encrypted PII alongside retained plaintext
-      ...encryptCustomerPII({ name, email: email || null, phone: phone || null, notes: notes || null }, bid),
+      ...encryptCustomerPII({ name, email: email || null, phone: e164Phone || null, notes: notes || null }, bid),
       tags: tags ?? [],
       marketing_consent: !!marketing_consent || anyOptIn,
       sms_consent: smsOptIn, email_consent: emailOptIn,

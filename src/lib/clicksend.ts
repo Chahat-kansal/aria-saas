@@ -38,13 +38,12 @@ export interface SendSMSOptions {
 
 const STOP_NOTICE = 'Reply STOP to opt out.'
 
-/** Normalise an AU number to +61 E.164-ish form (shared by send + suppression so they match). */
-export function normalisePhone(to: string): string {
-  let phone = (to ?? '').trim()
-  if (phone.startsWith('0')) phone = '+61' + phone.slice(1)
-  if (!phone.startsWith('+')) phone = '+61' + phone
-  return phone
-}
+// CUSTOMER-PHONE-1 — normalisePhone MOVED to '@/lib/phone' so pos_customers can share the exact
+// same function instead of growing a second copy. Re-exported here unchanged, so every existing
+// importer of '@/lib/clicksend' keeps working and the SMS paths are untouched.
+export { normalisePhone } from '@/lib/phone'
+// Re-export alone does not bind the name locally; suppressNumber() below calls it directly.
+import { normalisePhone, toE164AU } from '@/lib/phone'
 
 /** Add a number to the opt-out list (used by STOP handling in MSG-COMPLIANCE-2 + manual/admin). */
 export async function suppressNumber(
@@ -148,7 +147,9 @@ export async function sendSMS(to: string, body: string, opts: SendSMSOptions = {
           // Best-effort consent resolution by phone when no customerId was supplied.
           const { data: c } = await supabaseAdmin
             .from('pos_customers').select('sms_consent')
-            .eq('business_id', businessId).eq('phone', to).maybeSingle()
+            // S-PHONE-E164 — consent lives on the normalised customer row; a raw match here failed
+            // to find it and fell back to "no consent recorded".
+            .eq('business_id', businessId).eq('phone', toE164AU(to) ?? to).maybeSingle()
           if (c) consentOk = !!c.sms_consent
         }
       } catch (err) {

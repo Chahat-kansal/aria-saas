@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { encryptCustomerPII } from '@/lib/aria/customer-pii'
+import { normaliseCustomerPhone } from '@/lib/phone'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -66,7 +67,7 @@ async function _POST(req: Request) {
           business_id,
           name: sc.name ?? 'Unknown',
           email: sc.email ?? null,
-          phone: sc.phone ?? null,
+          phone: sc.phone ? normaliseCustomerPhone(sc.phone) : null,   // CUSTOMER-PHONE-1
           // SEC-4 — dual-write encrypted PII alongside retained plaintext
           ...encryptCustomerPII({ name: sc.name ?? 'Unknown', email: sc.email ?? null, phone: sc.phone ?? null }, business_id),
           square_customer_id: sc.square_customer_id,

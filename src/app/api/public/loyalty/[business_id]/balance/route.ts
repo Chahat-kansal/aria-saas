@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveBusinessId } from '@/lib/aria/resolve-business'
 import { getCxSession } from '@/lib/cx/get-cx-session'
+import { toE164AU } from '@/lib/phone'
 
 type Params = { params: { business_id: string } }
 
@@ -29,7 +30,9 @@ async function _GET(req: Request, { params }: Params) {
 
   const { data } = await supabaseAdmin.from('pos_customers')
     .select('name, points_balance, loyalty_points, visit_count, total_spent, total_spend')
-    .eq('business_id', realId).eq('phone', phone).maybeSingle()
+    // S-PHONE-E164 — raw match meant a customer enrolled as +61… who typed 0… saw "found: false"
+    // and a zero balance, despite having points.
+    .eq('business_id', realId).eq('phone', toE164AU(phone) ?? phone).maybeSingle()
   if (!data) return NextResponse.json({ found: false })
 
   return NextResponse.json({
