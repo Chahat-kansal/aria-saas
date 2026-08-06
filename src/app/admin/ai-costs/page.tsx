@@ -12,7 +12,12 @@ interface Row { business_id: string; name: string; tier: string; budget: number;
 interface Overview { thisMonthTotal: number; lastMonthTotal: number; pctChange: number | null; top10: Row[]; byAgent: { agent_key: string; cents: number; calls: number }[]; byModel: { model: string; cents: number }[] }
 interface Alerts { overBudget: Row[]; trackingToExceed: Row[]; spikes: { business_id: string; name: string; today: number; dailyAvg: number }[] }
 interface PerBiz { business_id: string; name: string; tier: string; budget: number; sonnet: number; spent: number; pct: number; daily: { date: string; cents: number }[]; byAgent: { agent_key: string; cents: number }[] }
-interface Data { overview: Overview; alerts: Alerts; businesses: { id: string; name: string }[]; perBusiness: PerBiz | null }
+// AI-HEALTH-1
+interface HealthRow {
+  provider: string; total_calls: number; failures: number; failure_rate: number
+  agents_affected: number; top_errors: { message: string; count: number }[]
+}
+interface Data { health?: HealthRow[]; overview: Overview; alerts: Alerts; businesses: { id: string; name: string }[]; perBusiness: PerBiz | null }
 
 type Tab = 'overview' | 'business' | 'alerts'
 
@@ -43,6 +48,8 @@ export default function AdminAiCostsPage() {
   if (!data) return <p style={{ color: 'var(--text-tertiary)' }}>Loading AI costs…</p>
 
   const { overview, alerts } = data
+  const health = data.health ?? []
+  const unhealthy = health.filter(h => h.failures > 0)
   const pb = data.perBusiness
   const filteredBiz = data.businesses.filter(b => b.name?.toLowerCase().includes(query.toLowerCase()))
 
@@ -50,6 +57,41 @@ export default function AdminAiCostsPage() {
     <div>
       <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>AI Costs</h1>
       <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 20 }}>Aria spend per business, agent and model. Source: aria_monthly_spend (trigger-maintained).</p>
+
+      {/* AI-HEALTH-1 — ABOVE spend, deliberately. The only surface reading aria_ai_calls filtered
+          .gt('cost_usd_cents', 0), and a failed call costs $0, so a 48% Anthropic failure rate was
+          invisible here for weeks while every agent degraded. A dashboard that leads with cost is
+          what produced that blind spot. */}
+      {unhealthy.length > 0 && (
+        <div style={{ marginBottom: 22, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.06)', borderRadius: 10, padding: '14px 16px' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#F87171', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Provider health · last 30 days
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {unhealthy.map(h => (
+              <div key={h.provider} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>{h.provider}</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: h.failure_rate > 0.2 ? '#F87171' : 'var(--text-secondary)' }}>
+                    {Math.round(h.failure_rate * 100)}% failing
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                    {h.failures.toLocaleString()} of {h.total_calls.toLocaleString()} calls
+                    {h.agents_affected > 0 ? ' · ' + h.agents_affected + ' agents affected' : ''}
+                  </span>
+                </div>
+                {/* Verbatim, truncated. A generic "provider error" label would hide
+                    "Your credit balance is too low" exactly as well as the cost filter did. */}
+                {h.top_errors.slice(0, 3).map(e => (
+                  <div key={e.message} style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace', paddingLeft: 2 }}>
+                    {e.count.toLocaleString()}× {e.message}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 22, borderBottom: '1px solid rgba(0,229,255,0.1)' }}>
         {(['overview', 'business', 'alerts'] as Tab[]).map(t => (

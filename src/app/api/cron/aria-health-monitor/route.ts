@@ -7,6 +7,7 @@ import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { upsertAriaAction } from '@/lib/aria/upsert-aria-action'
 import { sendAlert } from '@/lib/monitoring/alert'
+import { shouldAlert, alertDedupeKey } from '@/lib/monitoring/ai-health'
 
 // ─── SH-3 types ──────────────────────────────────────────────────────────────
 
@@ -708,9 +709,88 @@ export async function GET(req: Request) {
     })
   }
 
+  // ── AI-HEALTH-1 — provider-level failure alerting ────────────────────────────────────────────
+  // Added to THIS existing daily cron: no new route, no new Vercel function, no new cron entry
+  // (both budgets are full — 22 cron slots, and the function-config globs are at 9).
+  //
+  // The gap it closes: 1,605 of the last 30 days' failures were one Anthropic 400,
+  // "Your credit balance is too low", degrading ask_aria, business_brain_daily, the whole council,
+  // hypothesis_engine and memory_extractor — and nothing anywhere said so, because the only surface
+  // reading aria_ai_calls filtered on cost > 0 and a failed call costs $0.
+  let aiHealthAlerts = 0
+  try {
+    const { data: hcalls } = await supabaseAdmin
+      .from('aria_ai_calls')
+      .select('provider, agent_key, success, error_message')
+      .gte('created_at', since24h)
+      .limit(20000)
+
+    const buckets = new Map<string, { total: number; failures: number; agents: Set<string>; errors: Map<string, number> }>()
+    for (const r of (hcalls ?? []) as Array<{ provider: string | null; agent_key: string | null; success: boolean | null; error_message: string | null }>) {
+      const p = r.provider ?? 'unknown'
+      let b = buckets.get(p)
+      if (!b) { b = { total: 0, failures: 0, agents: new Set(), errors: new Map() }; buckets.set(p, b) }
+      b.total++
+      if (r.success === false) {
+        b.failures++
+        if (r.agent_key) b.agents.add(r.agent_key)
+        const k = (r.error_message ?? 'unknown error').slice(0, 160)
+        b.errors.set(k, (b.errors.get(k) ?? 0) + 1)
+      }
+    }
+
+    const rows = [...buckets.entries()].map(([provider, b]) => ({
+      provider,
+      total_calls: b.total,
+      failures: b.failures,
+      agents_affected: b.agents.size,
+      top_error: [...b.errors.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null,
+    }))
+
+    const todayYmd = new Date().toISOString().slice(0, 10)
+    for (const alert of shouldAlert(rows)) {
+      // DE-DUPE via the existing aria_signal_cache (unique cache_key) — one alert per provider per
+      // day, so a persistent outage does not re-alert on every run. No new table, no new column.
+      const key = alertDedupeKey(alert.provider, todayYmd)
+      const { error: dupeErr } = await supabaseAdmin.from('aria_signal_cache').insert({
+        business_id: null,
+        cache_key: key,
+        signal_type: 'ai_health_alert',
+        payload: { provider: alert.provider, severity: alert.severity, reason: alert.reason },
+        expires_at: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      })
+      if (dupeErr) continue   // unique violation = already alerted for this provider today
+
+      await sendAlert({
+        // AlertPayload uses 'high' | 'normal'; the decision function uses 'high' | 'medium'
+        // because that is the honest distinction it makes (account down vs elevated rate). Mapped
+        // here rather than flattening the decision type to fit the transport.
+        severity: alert.severity === 'high' ? 'high' : 'normal',
+        title: 'AI provider failing: ' + alert.provider,
+        summary: alert.failures + ' of ' + rows.find(r => r.provider === alert.provider)?.total_calls
+          + ' calls failed in 24h (' + Math.round(alert.failureRate * 100) + '%) across '
+          + alert.agentsAffected + ' agents. ' + (alert.reason === 'auth_or_credit'
+            ? 'This is an account-level failure — every agent is degraded until it is resolved.'
+            : 'Elevated failure rate.'),
+        details: {
+          provider: alert.provider,
+          failures: alert.failures,
+          failure_rate: Math.round(alert.failureRate * 100) + '%',
+          agents_affected: alert.agentsAffected,
+          top_error: alert.topError,
+          reason: alert.reason,
+        },
+      })
+      aiHealthAlerts++
+    }
+  } catch (e) {
+    console.error('[aria-health-monitor] AI health check failed (non-fatal):', (e as Error).message)
+  }
+
   return NextResponse.json({
     ok: true,
     period_24h_start: since24h,
+    ai_health_alerts: aiHealthAlerts,
     sh3: {
       agents_scanned:       recentStats.size,
       anomalies_found:      anomalies.length,

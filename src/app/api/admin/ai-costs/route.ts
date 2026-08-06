@@ -36,12 +36,18 @@ async function _GET(req: Request) {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const todayKey = now.toISOString().slice(0, 10)
 
-  const [{ data: thisSpend }, { data: lastSpend }, { data: businesses }, { data: subs }, { data: calls }] = await Promise.all([
+  const [{ data: thisSpend }, { data: lastSpend }, { data: businesses }, { data: subs }, { data: calls }, { data: healthRows }] = await Promise.all([
     db.from('aria_monthly_spend').select('business_id, sonnet_cents, total_cents').eq('year_month', ym),
     db.from('aria_monthly_spend').select('total_cents').eq('year_month', lastYm),
     db.from('businesses').select('id, name'),
     db.from('business_subscriptions').select('business_id, tier, sonnet_monthly_budget_cents').eq('status', 'active'),
     db.from('aria_ai_calls').select('business_id, agent_key, model_id, cost_usd_cents, created_at').gte('created_at', thirtyDaysAgo.toISOString()).gt('cost_usd_cents', 0).limit(10000),
+    // AI-HEALTH-1 — a SECOND query, deliberately alongside the spend one rather than replacing it.
+    // The spend query's .gt('cost_usd_cents', 0) is CORRECT for cost totals and must not move the
+    // numbers this page already reports. But a failed call costs $0, so that same filter made every
+    // failure invisible on the only surface that reads this table — which is how a 48% Anthropic
+    // failure rate ran for weeks unnoticed. No cost filter here, and success is selected.
+    db.from('aria_ai_calls').select('provider, agent_key, success, error_message').gte('created_at', thirtyDaysAgo.toISOString()).limit(20000),
   ])
 
   const nameOf = new Map((businesses ?? []).map(b => [b.id as string, b.name as string]))
@@ -141,7 +147,40 @@ async function _GET(req: Request) {
     }
   }
 
+  // AI-HEALTH-1 — grouped in code from the unfiltered query above. Failure rate is computed over
+  // ALL calls (a failed call costs $0, so any cost filter zeroes this out by construction).
+  type HealthRow = { provider: string | null; agent_key: string | null; success: boolean | null; error_message: string | null }
+  const healthBuckets = new Map<string, { total: number; failures: number; agents: Set<string>; errors: Map<string, number> }>()
+  for (const r of (healthRows ?? []) as HealthRow[]) {
+    const p = r.provider ?? 'unknown'
+    let b = healthBuckets.get(p)
+    if (!b) { b = { total: 0, failures: 0, agents: new Set(), errors: new Map() }; healthBuckets.set(p, b) }
+    b.total++
+    if (r.success === false) {
+      b.failures++
+      if (r.agent_key) b.agents.add(r.agent_key)
+      // Verbatim, truncated — a generic "provider error" label would have hidden
+      // "Your credit balance is too low" just as effectively as the cost filter did.
+      const key = (r.error_message ?? 'unknown error').slice(0, 160)
+      b.errors.set(key, (b.errors.get(key) ?? 0) + 1)
+    }
+  }
+  const health = [...healthBuckets.entries()]
+    .map(([provider, b]) => ({
+      provider,
+      total_calls: b.total,
+      failures: b.failures,
+      failure_rate: b.total > 0 ? b.failures / b.total : 0,
+      agents_affected: b.agents.size,
+      top_errors: [...b.errors.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5)
+        .map(([message, count]) => ({ message, count })),
+    }))
+    .sort((a, b) => b.failure_rate - a.failure_rate)
+
   return NextResponse.json({
+    // Failure rate FIRST, cost second — a dashboard that leads with cost is what produced this
+    // blind spot in the first place.
+    health,
     overview: { thisMonthTotal, lastMonthTotal, pctChange, top10, byAgent, byModel },
     alerts: { overBudget, trackingToExceed, spikes },
     businesses: (businesses ?? []).map(b => ({ id: b.id, name: b.name })),
