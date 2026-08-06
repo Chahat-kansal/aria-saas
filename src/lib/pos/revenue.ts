@@ -2,9 +2,16 @@
 // filters across the app. Two conventions had grown up:
 //
 //   eq('status','completed')   (66 files) — CORRECT, but blind to refunds.
-//   neq('status','voided')     (74 files) — WRONG. Counts the split PARENT and its children (the
-//                                           same money twice), plus unpaid laybys, drafts and
-//                                           pending as though they were takings.
+//   neq('status','voided')     (74 files) — WRONG. Counts unpaid laybys, drafts, pending and the
+//                                           parent of an in-progress split as though they were
+//                                           takings.
+//
+// CORRECTION (FIX-SPLIT-DEAD-ROUTE-1): this header used to say neq('voided') counted "the split
+// PARENT and its children (the same money twice)". That specific double-count never existed — it
+// described api/pos/sales/[id]/split, a route with no caller that could not write its 'split'
+// status past the CHECK anyway. The LIVE split system (api/pos/splits/*) keeps the money in
+// pos_sale_splits and parks the parent at 'open'/'partial_paid', so neq('voided') over-counts it
+// ONCE while unpaid, not twice. The filter is still wrong; the reason is narrower than claimed.
 //
 // So this is not a negotiation between two conventions. One of them is simply right, and the work
 // is migrating the other 74 onto it while adding the refund line both were missing.
@@ -23,57 +30,58 @@ export const GROSS_STATUSES = ['completed'] as const
 /**
  * Statuses that REDUCE net sales and are reported on their own line.
  *
- * BOTH SPELLINGS ARE LIVE — this is not defensive over-inclusion, it is what the code writes:
- *   'refund'    <- api/pos/refund-unlinked/route.ts:26, api/pos/sales/[id]/refund/route.ts:48
- *   'refunded'  <- api/pos/sales/return/route.ts:79, lib/pos/return-engine.ts:148
- * The return-engine path is the MAIN returns flow (see CLAUDE.md RULE 6, which documents 'refunded'
- * rows as a separate row with a negative total_amount linked via original_sale_id). Listing only
- * 'refund' would have silently dropped every engine-processed return from net sales.
+ * ONLY 'refunded' CAN EXIST. Corrected in FIX-SPLIT-DEAD-ROUTE-1 after dumping the constraint:
+ * pos_sales_status_check permits pending|draft|open|partial_paid|completed|voided|refunded.
+ * 'refund' (present tense) is NOT permitted, so a row with it cannot exist no matter what any
+ * writer attempts — which supersedes the note this comment used to carry claiming both spellings
+ * were live. That was wrong: I inferred it from two writers emitting 'refund' without checking the
+ * constraint, and the correct inference is the opposite one — those writers are BROKEN.
  *
- * Dated on the day the refund row was WRITTEN, never backdated to the original sale — matching
- * Square, where a refund never re-opens a closed day's gross and only lowers net for the day it is
- * processed. That falls out of using the refund row's own created_at, so there is nothing to do
- * beyond not special-casing it.
+ * ⚠ STILL OPEN, NOT FIXED HERE: api/pos/refund-unlinked/route.ts:26 and
+ * api/pos/sales/[id]/refund/route.ts:48 both still INSERT status:'refund'. Those inserts violate
+ * the CHECK and fail at runtime — refunds do not record. Live data agrees: zero 'refund' rows ever,
+ * one 'refunded'. Removing the value here is safe precisely BECAUSE it can never exist; it does not
+ * fix the writers, and they need their own sprint.
  */
-export const DEDUCTION_STATUSES = ['refund', 'refunded'] as const
+export const DEDUCTION_STATUSES = ['refunded'] as const
 
-// ── FOLLOW-UP, OWED AFTER REVENUE-RAIL-1 COMMITS 2 AND 3 LAND ────────────────────────────────────
-// Holding both spellings is correct TODAY — dropping either would lose real money from net sales.
-// But it also permanently encodes an inconsistency nobody ever decided on, and every future reader
-// has to relearn that two spellings mean one thing. Correct now, wrong to leave.
-//
-// The work, in order:
-//   1. Pick a winner. 'refunded' is the stronger candidate: it is what the MAIN returns path writes
-//      (return-engine.ts) and what CLAUDE.md RULE 6 already documents by name.
-//   2. Normalise the data: update pos_sales set status = <winner> where status = <loser>.
-//      Live count at the time of writing: 1 row total across both spellings, so this is cheap now
-//      and gets more expensive with every refund processed.
-//   3. Change the two losing writers, then remove the losing spelling from DEDUCTION_STATUSES.
-//      Order matters — remove it from this list LAST, or in-flight rows written by the old code
-//      between deploy and migration drop straight out of net sales.
-//
-// Do NOT do this before commits 2 and 3 are finished: changing what a status MEANS while call sites
-// are still being migrated makes a real regression indistinguishable from the migration.
+// ── THAT FOLLOW-UP IS NOW CLOSED, AND ITS PREMISE WAS WRONG ─────────────────────────────────────
+// This block used to say "holding both spellings is correct TODAY — dropping either would lose real
+// money from net sales", and prescribed a careful three-step migration ending in removing the loser.
+// The careful ordering was unnecessary: 'refund' was never CHECK-permitted, so no row could ever
+// have carried it and nothing could be lost by dropping it. The lesson is the one this file keeps
+// re-learning — check the constraint, not the writers. What writers ATTEMPT and what the database
+// ACCEPTS are different questions, and only the second one determines what a report can see.
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
  * Everything else: not yet earned, never earned, or a bookkeeping parent.
  *
- *   'open'     — an unpaid split child OR a layby. Indistinguishable by status alone (the
- *                distinguisher is parent_sale_id, which splits have and laybys don't) — and it does
- *                not matter, because both follow the same lifecycle: they sit at 'open' until paid,
- *                then move to 'completed' through the normal payment flow. Correctly excluded while
- *                unpaid, correctly counted once paid. Neither needs special handling.
- *   'split'    — the parent of a split cheque. api/pos/sales/[id]/split/route.ts distributes the
- *                total across N children (parent_sale_id set, status 'open') and marks the parent
- *                'split'. THE CHILDREN CARRY THE MONEY, so counting the parent as well is the
- *                double-count that neq('voided') was committing.
+ *   'open'     — what the LIVE split system actually does, plus laybys. splits/route.ts:99 sets the
+ *                PARENT sale to 'open' while its splits are outstanding; the money lives in
+ *                pos_sale_splits until then. splits/[id]/pay/route.ts:52 moves the parent to
+ *                'partial_paid' and finally back to 'completed', and deleting all splits restores
+ *                'completed' (splits/[id]/route.ts:64). So the parent is correctly EXCLUDED while
+ *                its splits are unpaid and correctly counted ONCE, at the end. Laybys share the
+ *                same shape, so neither needs special handling.
+ *   'partial_paid' — the same parent, mid-payment. Listed EXPLICITLY rather than relying on
+ *                classifySale's default: a CHECK-permitted status that reaches the rail only by
+ *                falling through the bottom is one refactor away from being classified wrong.
+ *   'split'    — IMPOSSIBLE. pos_sales_status_check does not permit it, so no row has ever carried
+ *                it (live: 0 rows, ever). Kept for the same reason as 'rewarded': if something ever
+ *                starts writing it, it lands in 'excluded' rather than falling through
+ *                unclassified. The only route that would have written it
+ *                (api/pos/sales/[id]/split) never had a caller and is now a 410 tombstone.
+ *                ⚠ This entry previously described a parent/child double-count as if it had
+ *                happened. It never did — that route never ran. The neq('voided') double-count
+ *                described at the top of this file is real, but it comes from LAYBYS and DRAFTS,
+ *                not from split parents.
  *   'draft'    — a held/parked cart. Explicitly not-yet-real revenue.
  *   'pending'  — not yet settled.
  *   'voided'   — never earned.
  *   'rewarded' — see the guard in classifySale().
  */
-export const EXCLUDED_STATUSES = ['voided', 'draft', 'pending', 'split', 'open', 'rewarded'] as const
+export const EXCLUDED_STATUSES = ['voided', 'draft', 'pending', 'split', 'open', 'partial_paid', 'rewarded'] as const
 
 export function classifySale(status: string | null | undefined): SaleClass {
   if (!status) return 'excluded'

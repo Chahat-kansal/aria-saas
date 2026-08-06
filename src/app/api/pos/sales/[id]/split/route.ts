@@ -1,82 +1,36 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-type Params = { params: Promise<{ id: string }> }
-
-// Split engine: takes a sale and produces N sub-sales with parent_sale_id
-async function _POST(req: Request, { params }: Params) {
-  const { id } = await params
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // splits: Array<{ label: string; item_ids?: string[]; amount?: number }>
-  const { splits } = await req.json()
-  if (!splits?.length) return NextResponse.json({ error: 'splits required' }, { status: 400 })
-
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle()
-  const bid = active?.business_id ?? null
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
-
-  const { data: sale } = await supabase
-    .from('pos_sales').select('*, pos_sale_items(*)').eq('id', id).eq('business_id', bid).maybeSingle()
-  if (!sale) return NextResponse.json({ error: 'Sale not found' }, { status: 404 })
-
-  const allItems = (sale.pos_sale_items ?? []) as Array<{ id: string; product_id: string; product_name: string; quantity: number; unit_price: number; line_total: number }>
-  const total = Number(sale.total_amount ?? 0)
-  const createdSales: string[] = []
-
-  for (let i = 0; i < splits.length; i++) {
-    const split = splits[i]
-    let splitTotal = split.amount ?? total / splits.length
-
-    // Distribute rounding to last check
-    if (i === splits.length - 1) {
-      const alreadyAllocated = splits.slice(0, i).reduce((s: number, s2: { amount?: number }) => s + (s2.amount ?? total / splits.length), 0)
-      splitTotal = Math.max(0, total - alreadyAllocated)
-    }
-
-    // BUGFIX-POS-4 FIX 5 — surface split-check write failures (a swallowed error dropped a check's money silently).
-    const { data: splitSale, error: splitErr } = await supabase.from('pos_sales').insert({
-      business_id: bid,
-      parent_sale_id: id,
-      total_amount: Math.round(splitTotal * 100) / 100,
-      payment_method: sale.payment_method,
-      status: 'open',
-      notes: `${split.label ?? `Check ${i + 1}`} (split from #${id.slice(-6).toUpperCase()})`,
-    }).select('id').single()
-    if (splitErr) console.error('[pos/sales/split] split-check insert failed:', splitErr.message) // BUGFIX-POS-4 FIX 5
-
-    if (splitSale && split.item_ids?.length) {
-      const splitItems = allItems.filter(it => (split.item_ids as string[]).includes(it.id))
-      if (splitItems.length) {
-        const { error: splitItemsErr } = await supabase.from('pos_sale_items').insert(
-          splitItems.map(it => ({
-            sale_id: splitSale.id, product_id: it.product_id, product_name: it.product_name,
-            quantity: it.quantity, unit_price: it.unit_price, business_id: bid,
-          }))
-        )
-        if (splitItemsErr) console.error('[pos/sales/split] split items insert failed:', splitItemsErr.message) // BUGFIX-POS-4 FIX 5
-      }
-    }
-
-    if (splitSale) createdSales.push(splitSale.id)
-  }
-
-  // Mark original as split
-  const { error: splitStatusErr } = await supabase.from('pos_sales').update({ status: 'split', last_edited_at: new Date().toISOString() }).eq('id', id)
-  if (splitStatusErr) console.error('[pos/sales/split] parent status update failed:', splitStatusErr.message) // BUGFIX-POS-4 FIX 5
-
-  const { error: splitAuditErr } = await supabase.from('pos_audit_log').insert({
-    business_id: bid, action: 'split', sale_id: id,
-    performed_by: user.id, amount: total,
-    reason_note: `Split into ${splits.length} checks`,
-  })
-  if (splitAuditErr) console.error('[pos/sales/split] audit log insert failed:', splitAuditErr.message) // BUGFIX-POS-4 FIX 5
-
-  return NextResponse.json({ ok: true, split_sale_ids: createdSales })
+// RETIRED (FIX-SPLIT-DEAD-ROUTE-1, 6 Aug 2026): a second, fictional split system.
+//
+// NO CALLER ANYWHERE IN src/ — verified before retiring, not assumed. The live split flow is
+// SplitModal.tsx:178,217 -> /api/pos/splits/* (12 route files), which stores splits in
+// pos_sale_splits / pos_split_items / pos_split_payments and moves the PARENT sale through
+// completed -> 'open' -> 'partial_paid' -> 'completed'. It never writes parent_sale_id and never
+// writes 'split'.
+//
+// Had this route ever run it would have been wrong three ways:
+//   1. wrote status:'split' at the old :69 — pos_sales_status_check FORBIDS that value, so the
+//      update failed to a console.error while the route still returned ok:true. A silent no-op
+//      reported as success.
+//   2. COPIED pos_sale_items to the children while leaving the originals on the parent — a
+//      product-level double count in every item-based report.
+//   3. left the parent 'completed' at its full amount alongside children carrying partials, so
+//      the money was counted twice at the sale level too.
+//
+// Live data agrees it never ran: status='split' 0 rows, parent_sale_id set 0 rows,
+// pos_audit_log action='split' 0 rows.
+//
+// Kept as a 410 rather than deleted (RULE 0, and the same precedent as twilio/webhook) so anything
+// that finds this path gets a correct signal and a pointer, not a 404 and a guess.
+const GONE = {
+  error: 'gone',
+  message: 'This split endpoint is retired and never had a caller. Use /api/pos/splits/* (see SplitModal).',
 }
 
-export const POST = withErrorCapture('pos/sales/[id]/split', _POST)
+export function POST() {
+  return NextResponse.json(GONE, { status: 410 })
+}
+export function GET() {
+  return NextResponse.json(GONE, { status: 410 })
+}
