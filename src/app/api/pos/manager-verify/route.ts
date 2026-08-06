@@ -5,6 +5,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { signManagerToken } from '@/lib/pos/manager-token'
 import { rateLimit, tooManyRequests } from '@/lib/security/rate-limit'
 import { verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
+import { pickMatchingManager, MAX_MANAGER_CANDIDATES, type ManagerRow } from '@/lib/pos/pick-manager'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -24,29 +25,40 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   // Find staff member with matching PIN
-  const { data: staff } = await supabase
+  // SEC-MGR-1 — was .maybeSingle() over a set that can hold many rows. Fetch the SET; the PIN
+  // cannot go in the WHERE clause because bcrypt hashes are not searchable, so verifying against
+  // each candidate is the only correct shape. Deliberately NOT .limit(1) — see pick-manager.ts.
+  const { data: staffRows } = await supabase
     .from('pos_users')
     .select('id, name, role, pin, pin_hash')
     .eq('business_id', bid)
     .eq('is_active', true)
     .in('role', ['manager', 'owner', 'admin'])
-    .maybeSingle()
 
-  // SEC-PIN-1 (adopted in SEC-PIN-2) — was `staff.pin !== pin`: a plaintext, non-constant-time
-  // compare on the MANAGER OVERRIDE gate, the check that authorises voids, discounts and price
-  // overrides at the till. Six sibling routes adopted verifyStaffPin in SEC-PIN-1; this one and the
-  // PIN-update route did not. Mirrors verify-pin exactly: hash wins when present, the plaintext
-  // branch is a fallback for un-backfilled rows only, and a successful legacy match upgrades.
-  const valid = staff?.pin_hash
-    ? await verifyStaffPin(String(pin), staff.pin_hash as string)
-    : !!staff && staff.pin === pin
-  if (!staff || !valid) {
+  const candidates = (staffRows ?? []) as ManagerRow[]
+  if (candidates.length > MAX_MANAGER_CANDIDATES) {
+    // Reported, not silently truncated: bcrypt is ~100ms per check, so an unbounded set behind an
+    // authorisation endpoint is a latency and cost surface. No café hits this.
+    console.warn('[manager-verify] business ' + bid + ' has ' + candidates.length
+      + ' eligible managers; only the first ' + MAX_MANAGER_CANDIDATES + ' are checked.')
+  }
+
+  // SEC-PIN-1/2 + SEC-MGR-1 — verify against EVERY eligible manager, not one arbitrary row.
+  // The comparison itself is the shared verifyStaffPin, injected rather than reimplemented:
+  // SEC-PIN-2 exists because this file diverged from verify-pin once already.
+  const staff = await pickMatchingManager(candidates, String(pin), verifyStaffPin)
+
+  if (!staff) {
+    // Same 401 whether zero managers exist, one, or twenty and none matched — never leak how many
+    // there are or which was closest.
     return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
   }
   if (!staff.pin_hash) {
-    await upgradeStaffPin(supabase, 'pos_users', staff.id as string, bid, String(pin))
+    await upgradeStaffPin(supabase, 'pos_users', staff.id, bid, String(pin))
   }
 
+  // Token and name are BOTH the matched person's. Previously staff_name came from whichever row
+  // was grabbed, so the name shown to the cashier could belong to someone who did not authorise it.
   const token = signManagerToken(staff.id)
   return NextResponse.json({ ok: true, token, staff_name: staff.name, expires_in: 60 })
 }
