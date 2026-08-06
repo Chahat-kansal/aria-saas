@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { hashStaffPin } from '@/lib/pos/staff-pin'
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -50,7 +51,11 @@ async function _POST(req: Request) {
   const defaultPermissions = ROLE_PERMISSION_DEFAULTS[role] ?? ROLE_PERMISSION_DEFAULTS.cashier
 
   const { data, error } = await supabase.from('pos_users').insert({
-    business_id, name: name.trim(), pin, role,
+    // SEC-PIN-2 — NOT in the brief's two sites; found by the grep-before-done sweep. Creating a user
+    // wrote plaintext only, so every new account started with no hash and depended on the legacy
+    // fallback to log in at all. Harmless today (the fallback works and lazily upgrades), but it is
+    // exactly what would stop SEC-PIN-3 from being able to drop that fallback.
+    business_id, name: name.trim(), pin, pin_hash: await hashStaffPin(String(pin)), role,
     permissions: permissions ?? defaultPermissions,
   }).select('id, business_id, name, role, permissions, is_active, created_at').single();
 

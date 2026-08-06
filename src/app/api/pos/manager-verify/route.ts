@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { signManagerToken } from '@/lib/pos/manager-token'
 import { rateLimit, tooManyRequests } from '@/lib/security/rate-limit'
+import { verifyStaffPin, upgradeStaffPin } from '@/lib/pos/staff-pin'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -25,14 +26,25 @@ async function _POST(req: Request) {
   // Find staff member with matching PIN
   const { data: staff } = await supabase
     .from('pos_users')
-    .select('id, name, role, pin')
+    .select('id, name, role, pin, pin_hash')
     .eq('business_id', bid)
     .eq('is_active', true)
     .in('role', ['manager', 'owner', 'admin'])
     .maybeSingle()
 
-  if (!staff || staff.pin !== pin) {
+  // SEC-PIN-1 (adopted in SEC-PIN-2) — was `staff.pin !== pin`: a plaintext, non-constant-time
+  // compare on the MANAGER OVERRIDE gate, the check that authorises voids, discounts and price
+  // overrides at the till. Six sibling routes adopted verifyStaffPin in SEC-PIN-1; this one and the
+  // PIN-update route did not. Mirrors verify-pin exactly: hash wins when present, the plaintext
+  // branch is a fallback for un-backfilled rows only, and a successful legacy match upgrades.
+  const valid = staff?.pin_hash
+    ? await verifyStaffPin(String(pin), staff.pin_hash as string)
+    : !!staff && staff.pin === pin
+  if (!staff || !valid) {
     return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
+  }
+  if (!staff.pin_hash) {
+    await upgradeStaffPin(supabase, 'pos_users', staff.id as string, bid, String(pin))
   }
 
   const token = signManagerToken(staff.id)

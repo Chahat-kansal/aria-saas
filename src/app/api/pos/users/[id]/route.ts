@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { hashStaffPin } from '@/lib/pos/staff-pin'
 
 async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -23,7 +24,13 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
 
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name.trim();
-  if (pin !== undefined) updates.pin = pin;
+  // SEC-PIN-2 — writing `pin` alone left `pin_hash` STALE. verify-pin prefers the hash when present
+  // (verify-pin/route.ts:40-42, read before writing this), so changing a PIN here kept the OLD PIN
+  // working and rejected the new one. Not just a storage problem — a correctness one.
+  if (pin !== undefined) {
+    updates.pin = pin;
+    updates.pin_hash = await hashStaffPin(String(pin));
+  }
   if (role !== undefined) updates.role = role;
   if (permissions !== undefined) updates.permissions = permissions;
   if (is_active !== undefined) updates.is_active = is_active;
