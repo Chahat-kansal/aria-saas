@@ -31,7 +31,13 @@ async function _POST(req: Request, { params }: Params) {
   // limit. Guard at the sale level instead: a retry/double-click that would refund past the
   // original sale's own total is rejected outright, rather than silently double-restocking stock
   // it already restored on the first, successful call.
-  const { data: priorRefunds } = await supabase.from('pos_sales').select('total_amount').eq('parent_sale_id', id).eq('status', 'refund')
+  // FIX-REFUND-STATUS-1 — this queried status='refund', a value the CHECK forbids, so priorRefunds
+  // was ALWAYS empty, alreadyRefunded was always 0, and the 409 below could never fire. Harmless
+  // only while the insert itself failed; the moment §1 makes refunds work, this is the ONLY thing
+  // between a double-click and a double refund — and because the stock restore below runs AFTER the
+  // insert, it is also the only thing preventing double-restocking. Shipped in the same commit as
+  // the write for exactly that reason.
+  const { data: priorRefunds } = await supabase.from('pos_sales').select('total_amount').eq('parent_sale_id', id).eq('status', 'refunded')
   let alreadyRefunded = 0
   for (const r of priorRefunds ?? []) alreadyRefunded += Math.abs(Number(r.total_amount) || 0)
   const refundAmount = amount ?? original.total_amount
@@ -45,7 +51,11 @@ async function _POST(req: Request, { params }: Params) {
     parent_sale_id: id,
     total_amount: -(Math.abs(refundAmount)),
     payment_method: original.payment_method,
-    status: 'refund',
+    // FIX-REFUND-STATUS-1 — was 'refund'. pos_sales_status_check permits
+    // pending|draft|open|partial_paid|completed|voided|refunded — NOT 'refund' — so this insert
+    // violated the constraint and the route returned 500 'Refund could not be recorded' every time.
+    // Refunds have never been recordable through this path: zero 'refund' rows have ever existed.
+    status: 'refunded',
     notes: `Refund of sale ${id.slice(-6).toUpperCase()}${reason_note ? ': ' + reason_note : ''}`,
   }).select().single()
   if (refundErr || !refundSale) return NextResponse.json({ error: refundErr?.message ?? 'Refund could not be recorded' }, { status: 500 })

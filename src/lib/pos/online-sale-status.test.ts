@@ -83,3 +83,37 @@ describe('the revenue rail only classifies statuses that can actually exist', ()
     expect(classifySale('refunded')).toBe('deduction')
   })
 })
+
+// FIX-REFUND-STATUS-1 §3 — every status the application WRITES must be one the DB accepts.
+//
+// This is the direction that was missing. The rail assertion above checks what we CLASSIFY; this
+// checks what we INSERT. 'refund' passed the first check trivially (it was in no rail list) while
+// being written by two live routes, so every refund returned 500 'Refund could not be recorded'
+// and zero refunds have ever been recorded through either path.
+//
+// Reuses POS_SALE_STATUSES — the single transcription of pos_sales_status_check — deliberately.
+// A second copy of the permitted list is how the two drift apart.
+const STATUSES_THE_CODE_WRITES = [
+  'completed',     // create-sale.ts default; the in-store and cash-order path
+  'pending',       // FIX-ONLINE-PAY-A: card orders, until Stripe confirms
+  'refunded',      // FIX-REFUND-STATUS-1: sales/[id]/refund and refund-unlinked
+  'voided',        // void paths, and create-sale's items-insert rollback
+  'draft',         // held / parked carts
+  'open',          // the live split system parks the parent here while splits are outstanding
+] as const
+
+describe('every status the code writes is accepted by the DB', () => {
+  it.each(STATUSES_THE_CODE_WRITES)('%s is CHECK-permitted', (status) => {
+    expect(
+      (POS_SALE_STATUSES as readonly string[]).includes(status),
+      status + ' is written by application code but pos_sales_status_check rejects it — that insert '
+        + 'fails at runtime, which is exactly how refunds were 100% broken',
+    ).toBe(true)
+  })
+
+  it("'refund' is NOT written anywhere — it was never permitted", () => {
+    // The bug this file now guards: two routes wrote the present-tense spelling for months.
+    expect(STATUSES_THE_CODE_WRITES as readonly string[]).not.toContain('refund')
+    expect(POS_SALE_STATUSES as readonly string[]).not.toContain('refund')
+  })
+})

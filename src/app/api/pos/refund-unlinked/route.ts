@@ -23,7 +23,11 @@ async function _POST(req: Request) {
     business_id: bid,
     total_amount: -(Math.abs(amount)),
     payment_method: payment_method ?? 'cash',
-    status: 'refund',
+    // FIX-REFUND-STATUS-1 — was 'refund'. pos_sales_status_check permits
+    // pending|draft|open|partial_paid|completed|voided|refunded — NOT 'refund' — so this insert
+    // violated the constraint and the route returned 500 'Refund could not be recorded' every time.
+    // Refunds have never been recordable through this path: zero 'refund' rows have ever existed.
+    status: 'refunded',
     notes: reason_note ? `Unlinked refund: ${reason_note}` : 'Unlinked refund',
   }).select('id').single()
   if (refundErr || !refundSale) return NextResponse.json({ error: refundErr?.message ?? 'Refund could not be recorded' }, { status: 500 })
