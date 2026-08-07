@@ -7,7 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { resolveMembership, requireOwner } from '@/lib/access/membership'
 import { randomInt } from 'crypto'
-import { hashStaffPin, pinLookup } from '@/lib/pos/staff-pin'
+import { staffPinColumns, isDuplicatePinError } from '@/lib/pos/staff-pin'
 
 // ACCESS-MODEL-1 — invite / link / revoke. Managing who can see the business is itself an
 // AUTHORITY action, so every method here is OWNER-ONLY (requireOwner) — a manager can never widen
@@ -113,21 +113,31 @@ async function _POST(req: Request) {
     // SEC-PIN-1 — was Math.floor(1000 + Math.random() * 9000): Math.random() is not
     // cryptographically random, and a predictable staff PIN is a predictable till override. Also
     // writes pin_hash and pin_lookup so members created from now on never need the lazy upgrade.
-    // The plaintext `pin` is still written because the column is NOT NULL until SEC-PIN-2 drops it.
-    const newPin = String(randomInt(1000, 10000))
-    generatedPin = newPin
-    const newLookup = pinLookup(business_id, newPin)
-    const { data: inserted, error: insErr } = await supabaseAdmin.from('pos_users').insert({
-      business_id,
-      auth_user_id: target.id,
-      name: target.email ?? email.trim(),
-      display_name: target.email ?? email.trim(),
-      role,
-      pin: newPin, // pos_users.pin is NOT NULL (till model)
-      pin_hash: await hashStaffPin(newPin),
-      ...(newLookup ? { pin_lookup: newLookup } : {}),
-      is_active: true,
-    }).select('id').maybeSingle()
+    // SEC-PIN-3 §1 — the plaintext `pin` is gone. It was only ever written here because
+    // pos_users.pin was NOT NULL (20260503000001_pos_users.sql, "not sensitive — no hashing
+    // needed"); 20260807000001 drops that constraint, so this row is now hash + lookup only.
+    //
+    // RETRY ON COLLISION: pin_lookup is UNIQUE per business, and this PIN is generated rather than
+    // chosen — so an unlucky randomInt can land on a PIN a colleague already has and the insert
+    // fails 23505. That is not something the owner can act on ("try again" is the whole fix), so we
+    // re-roll instead of surfacing it. 5 attempts against a 9,000-value space is ample for a café.
+    let insErr: { message: string; code?: string } | null = null
+    let inserted: { id: unknown } | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const newPin = String(randomInt(1000, 10000))
+      const res = await supabaseAdmin.from('pos_users').insert({
+        business_id,
+        auth_user_id: target.id,
+        name: target.email ?? email.trim(),
+        display_name: target.email ?? email.trim(),
+        role,
+        ...(await staffPinColumns(business_id, newPin)),
+        is_active: true,
+      }).select('id').maybeSingle()
+      insErr = res.error
+      inserted = res.data as { id: unknown } | null
+      if (!isDuplicatePinError(insErr)) { generatedPin = newPin; break }
+    }
     linkedId = (inserted?.id as string) ?? null
     error = insErr
   }
@@ -141,10 +151,11 @@ async function _POST(req: Request) {
     detail: 'Linked ' + email.trim() + ' as ' + role,
   })
 
-  // SEC-PIN-1 — return the generated PIN ONCE. After SEC-PIN-2 drops the plaintext column it is
-  // unrecoverable, so if the UI does not surface this today that is a follow-up ticket, not a
-  // blocker. Only present when a row was newly created; re-linking an existing member does not
-  // regenerate it.
+  // SEC-PIN-1 — return the generated PIN ONCE. SEC-PIN-3 §1 makes that literal rather than
+  // anticipated: nothing writes the plaintext column any more, so this response body is now the ONLY
+  // place this PIN will ever exist in readable form. If the UI does not surface it, the new member
+  // has no way in and the owner must set a fresh PIN from the users page. Only present when a row
+  // was newly created; re-linking an existing member does not regenerate it.
   return NextResponse.json({ ok: true, member_id: linked?.id ?? null, role, ...(generatedPin ? { pin: generatedPin } : {}) })
 }
 

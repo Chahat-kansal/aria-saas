@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { hashStaffPin } from '@/lib/pos/staff-pin'
+import { staffPinColumns, isDuplicatePinError } from '@/lib/pos/staff-pin'
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -55,10 +55,18 @@ async function _POST(req: Request) {
     // wrote plaintext only, so every new account started with no hash and depended on the legacy
     // fallback to log in at all. Harmless today (the fallback works and lazily upgrades), but it is
     // exactly what would stop SEC-PIN-3 from being able to drop that fallback.
-    business_id, name: name.trim(), pin, pin_hash: await hashStaffPin(String(pin)), role,
+    // SEC-PIN-3 §1 — `pin` is gone and pin_lookup is added, both via the one shared helper. The
+    // lookup was missing here: a user created through this route could log in (verify-pin knows
+    // their id) but could never authorise an override, because verify-override finds people by
+    // pin_lookup and fell back to the plaintext column when it was absent.
+    business_id, name: name.trim(), role,
+    ...(await staffPinColumns(String(business_id), String(pin))),
     permissions: permissions ?? defaultPermissions,
   }).select('id, business_id, name, role, permissions, is_active, created_at').single();
 
+  if (isDuplicatePinError(error)) {
+    return NextResponse.json({ error: 'That PIN is already used by someone else here. Pick another.' }, { status: 409 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ user: data }, { status: 201 });
 }

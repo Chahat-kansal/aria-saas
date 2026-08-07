@@ -20,7 +20,10 @@ interface InvStaff {
   role: string
   is_active: boolean
   color: string | null
-  pin: string | null
+  // SEC-PIN-3 §1 — was `pin: string | null`, i.e. every colleague's plaintext PIN, sent to this
+  // browser on page load and used only to render a "PIN set" tick. /api/pos/staff now returns the
+  // tick instead of the credential.
+  has_pin: boolean
   created_at: string | null
 }
 
@@ -37,7 +40,7 @@ function ini(name: string) {
 }
 
 function hasPin(s: InvStaff) {
-  return s.pin != null && String(s.pin).trim().length > 0
+  return s.has_pin === true
 }
 
 function roleLabel(r: string) {

@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { hashStaffPin } from '@/lib/pos/staff-pin'
+import { staffPinColumns, isDuplicatePinError } from '@/lib/pos/staff-pin'
 
 async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -27,9 +27,11 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   // SEC-PIN-2 — writing `pin` alone left `pin_hash` STALE. verify-pin prefers the hash when present
   // (verify-pin/route.ts:40-42, read before writing this), so changing a PIN here kept the OLD PIN
   // working and rejected the new one. Not just a storage problem — a correctness one.
+  // SEC-PIN-3 §1 — `updates.pin` removed; the helper writes pin_hash + pin_lookup. The lookup was
+  // missing here too, so CHANGING a PIN used to leave pin_lookup pointing at the OLD one: the
+  // manager-override screen kept finding the person by their previous PIN.
   if (pin !== undefined) {
-    updates.pin = pin;
-    updates.pin_hash = await hashStaffPin(String(pin));
+    Object.assign(updates, await staffPinColumns(String(business_id), String(pin)));
   }
   if (role !== undefined) updates.role = role;
   if (permissions !== undefined) updates.permissions = permissions;
@@ -44,6 +46,9 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
     .select('id, business_id, name, role, permissions, is_active, last_login_at')
     .single();
 
+  if (isDuplicatePinError(error)) {
+    return NextResponse.json({ error: 'That PIN is already used by someone else here. Pick another.' }, { status: 409 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ user: data });
 }

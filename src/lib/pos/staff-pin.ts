@@ -74,6 +74,63 @@ export function lookupMatches(a: string, b: string): boolean {
 }
 
 /**
+ * SEC-PIN-3 §1 — THE ONE PLACE THAT DECIDES WHAT A PIN WRITE PUTS IN THE DATABASE.
+ *
+ * Every INSERT/UPDATE that sets a staff PIN goes through this. Before SEC-PIN-3 there were four
+ * writers with three different behaviours — two wrote pin + pin_hash, one wrote all three, and
+ * pos/staff wrote plaintext ONLY. A single helper is the only way that stops drifting again.
+ *
+ * BOTH derived columns matter, and for different reasons:
+ *   pin_hash   — authenticates. Every route needs it.
+ *   pin_lookup — FINDS the row. Four routes identify a person from the PIN alone (verify-override,
+ *                clock-in, clock-out, canopy-pin) and bcrypt is salted, so there is no
+ *                `where pin_hash = hash(input)`. A row with a hash but no lookup can log in (its id
+ *                is known) but can never clock in or authorise an override.
+ *
+ * ⚠ WHY PLAINTEXT IS STILL WRITTEN WHEN THE PEPPER IS ABSENT — the deliberate deviation.
+ *
+ * The brief said "remove `pin` from every write, unconditionally". Correct destination, wrong route
+ * if STAFF_PIN_PEPPER is unset in the environment doing the writing: pinLookup() returns null, so
+ * the row would land with a hash, no lookup, AND no plaintext — findable by nothing. A staff member
+ * created that way is silently half-broken, and the breakage only shows up at the till, days later,
+ * as "my PIN doesn't work on the clock-in screen but does on the login screen".
+ *
+ * So: pepper set -> hash + lookup, no plaintext, which is the point of the sprint. Pepper unset ->
+ * hash + lookup-less plaintext, which is EXACTLY today's behaviour and therefore no regression
+ * (RULE 0), plus a loud warning. Same reasoning as pepperOrNull() above: fail-soft where the strict
+ * alternative silently breaks staff, and make the degraded state visible instead of invisible.
+ *
+ * This also gives §2 a precondition it can actually check: `pin is not null and pin_lookup is null`
+ * must be zero rows before the column can be dropped.
+ */
+export interface StaffPinColumns {
+  pin_hash: string
+  pin_lookup?: string
+  /** Present ONLY in the degraded no-pepper path. Its absence is the sprint's deliverable. */
+  pin?: string
+}
+
+export async function staffPinColumns(businessId: string, pin: string): Promise<StaffPinColumns> {
+  const pin_hash = await hashStaffPin(pin)
+  const lookup = pinLookup(businessId, pin)
+  if (lookup) return { pin_hash, pin_lookup: lookup }
+
+  console.warn(
+    '[staff-pin] STAFF_PIN_PEPPER is unset — writing the legacy plaintext pin so PIN-only routes ' +
+    '(override, clock-in/out, canopy) can still find this row. Set the env var and re-save the PIN.',
+  )
+  return { pin_hash, pin }
+}
+
+/** True when a unique-violation on the (business_id, pin_lookup) index caused this error — i.e. the
+ *  chosen PIN is already in use by someone else in the same business. Postgres 23505. Callers turn
+ *  this into a readable 409 instead of leaking a raw constraint name to the screen. */
+export function isDuplicatePinError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false
+  return err.code === '23505' || /pin_lookup_uniq/.test(err.message ?? '')
+}
+
+/**
  * Lazy upgrade: write hash + lookup for a row that authenticated via the legacy plaintext path.
  * Best-effort — a failure here must never fail the login that already succeeded.
  */

@@ -23,7 +23,13 @@ async function _GET(_req: Request, { params }: Params) {
   const [{ data: outlets }, { data: staff }] = await Promise.all([
     supabaseAdmin.from('pos_outlets').select('id, name, is_default, is_global')
       .eq('business_id', bid).eq('is_active', true).order('is_default', { ascending: false }),
-    supabaseAdmin.from('pos_staff').select('id, name, role, color, pin')
+    // SEC-PIN-3 §1 — selects pin_hash, not pin. This endpoint is PUBLIC (it feeds the staff PWA's
+    // login screen before anyone has authenticated), so the plaintext column must not be read here
+    // at all — the has_pin boolean below is the only thing it was ever used for, and pin_hash
+    // answers the same question. Once §1 stops writing plaintext, deriving it from `pin` would also
+    // be WRONG: a newly created staff member with a hash and no plaintext would show as "no PIN"
+    // and the owner would be told to set one they already set.
+    supabaseAdmin.from('pos_staff').select('id, name, role, color, pin_hash')
       .eq('business_id', bid).eq('is_active', true).order('name'),
   ])
 
@@ -31,7 +37,7 @@ async function _GET(_req: Request, { params }: Params) {
     business: { id: biz.id, name: biz.name, slug: biz.slug },
     outlets: (outlets ?? []).map(o => ({ id: o.id, name: o.name, is_default: !!o.is_default })),
     // has_pin: true = staff can log in; false = owner must set a PIN first. PIN itself never leaves the server.
-    staff: (staff ?? []).map(s => ({ id: s.id, name: s.name, role: s.role, color: s.color, has_pin: Boolean(s.pin != null && String(s.pin).trim().length > 0) })),
+    staff: (staff ?? []).map(s => ({ id: s.id, name: s.name, role: s.role, color: s.color, has_pin: s.pin_hash != null })),
   })
 }
 
