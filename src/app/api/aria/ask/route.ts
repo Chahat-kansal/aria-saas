@@ -13,6 +13,7 @@ import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess,
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
 import { findCachedAnswer } from '@/lib/aria/cached-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
+import { slimTools, slimSystemPrompt } from '@/lib/aria/slim-context'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { classifyAriaIntent } from '@/lib/aria/ask/aria-intent'
 import { buildAskAriaContext, type ContextScope } from '@/lib/aria/ask/business-context'
@@ -2010,25 +2011,15 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // strategic ask — shipping ~43k input tokens even for "who is my best customer"). Send a compact grounded
   // prompt + the read-tool subset; strategic/council/action questions keep the rich context. Quality preserved
   // — the model still calls the data tools and names the real figures, just without the kitchen sink.
-  const READ_TOOL_NAMES = new Set(['query_sales', 'query_customers', 'query_inventory', 'compare_periods', 'query_bookings', 'query_online_orders', 'query_business_data', 'get_hourly_sales', 'get_product_sales_detail', 'get_cashier_performance', 'query_bank_balance', 'get_business_profile', 'get_top', 'get_summary', 'get_reviews', 'get_profit_leaks', 'run_calculation'])
+  // PROMPT-CACHE-1 §1 — the slim prompt and tool subset now live in lib/aria/slim-context.ts, VERBATIM,
+  // so they can be measured against Anthropic's minimum cacheable prefix without a live call. Caching on
+  // this path silently stopped on 25 Jun (zero reads AND zero writes across 118 calls) and nothing
+  // surfaced it, because Anthropic does not error on a too-short prefix — it just doesn't cache.
   let effectiveSystemPrompt = systemPrompt
   let effectiveTools = allTools
   if (isDataLookup && !isImageRequest) {
-    effectiveTools = allTools.filter(t => READ_TOOL_NAMES.has((t as { name: string }).name))
-    effectiveSystemPrompt = `You are Aria, the AI business assistant for ${ctx.business_name ?? 'this business'} — an Australian small business. The owner asked a DIRECT DATA LOOKUP.
-
-YOU MUST CALL A DATA TOOL to answer — NEVER reply "I don't have data" or "I can't determine that" without FIRST calling the relevant tool. Map the question to a tool:
-- best/top customer, who spends most, customer spend → call get_top (e.g. {"metric":"customers"}) or query_customers
-- top seller / best-selling / most popular product → call get_top (e.g. {"metric":"products"}) or get_product_sales_detail
-- revenue / sales / takings (today, this week, this month) → call get_summary or query_sales
-- what's low / stock / on hand → call query_inventory
-- reviews / rating → call get_reviews
-- anything else about the business → call query_business_data or the closest read tool
-Call the tool, read its result, then answer.
-
-ANSWER CONCISELY: the name/number they asked for + at most ONE short sentence of context. No advisory, no recommendations, no "what this means"/"next move", no campaign/strategy suggestions unless they explicitly ask for advice. Lead with the answer.
-
-GROUNDING (absolute): every number, name, ranking or count MUST come from a tool result in THIS turn — never invent, estimate, or round. Currency A$ (never USD). Australian spelling. Only say you don't have the data if the tool genuinely returned nothing.`
+    effectiveTools = slimTools()
+    effectiveSystemPrompt = slimSystemPrompt(ctx.business_name)
   }
 
   // ── IMAGE FAST-PATH ──────────────────────────────────────────────────────
