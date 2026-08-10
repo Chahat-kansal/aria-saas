@@ -6,10 +6,20 @@ import { NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { computeLoyaltyDrift, findDrift, describeDrift } from '@/lib/loyalty/reconcile';
 
 async function _GET(req: Request) {
   const denied = verifyCronAuth(req)
   if (denied) return denied
+
+  // ARIA-LOYALTY-FIX-1 §2b — reconcile balances against the ledger, DAILY, here.
+  //
+  // This cron is the right host and needs no new cron entry or function: it already runs daily
+  // (dispatch h04) and it already EXPIRES points, so it is the one job that must not operate on a
+  // balance the ledger cannot explain. Reported, not enforced — see reconcile.ts for why deriving
+  // the balance from the ledger is the right end state and not a safe same-sprint change.
+  const drifted = findDrift(await computeLoyaltyDrift(supabaseAdmin));
+  for (const d of drifted) console.warn('[loyalty-drift] ' + describeDrift(d));
   const { data: businesses } = await supabaseAdmin.from('businesses')
     .select('id, loyalty_points_expiry_months')
     .eq('is_active', true);
@@ -62,7 +72,12 @@ async function _GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, businesses_processed: (businesses ?? []).length, warned, expired });
+  // Drift is surfaced in the RESPONSE as well as the log — a warn line nobody greps is not
+  // visibility, and the cron response is what the ops surface actually reads.
+  return NextResponse.json({
+    ok: true, businesses_processed: (businesses ?? []).length, warned, expired,
+    ledger_drift: drifted.map(describeDrift),
+  });
 }
 
 export const GET = withErrorCapture('cron/loyalty-expiry', _GET);
