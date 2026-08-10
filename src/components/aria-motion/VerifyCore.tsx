@@ -97,6 +97,16 @@ export default function VerifyCore({
   const [code, setCode] = useState('');
   const [revealed, setRevealed] = useState(0);
 
+  // B1 — onSuccessAnimationEnd used to sit in the status effect's dep array. An inline arrow at a
+  // mount site is a NEW function identity on every parent render, so any parent that re-rendered
+  // mid-'verifying' (a timer, a subscription, a resize handler) tore down and restarted the orbit.
+  // Telling every mount site to wrap it in useCallback is a rule that holds until someone forgets,
+  // so the component absorbs it: the latest callback lives in a ref, and the effect no longer
+  // depends on its identity. Assigned during render-commit on EVERY render (no dep array), so a
+  // callback swapped between renders is still the one that fires.
+  const onEndRef = useRef(onSuccessAnimationEnd);
+  useEffect(() => { onEndRef.current = onSuccessAnimationEnd; });
+
   const accentRgb = useMemo(() => hexToRgb(accent), [accent]);
   const errorRgb = useMemo(() => hexToRgb(ERROR_HEX), []);
   const wipe = useMemo(() => `rgba(${hexToRgb(surface)},0.30)`, [surface]);
@@ -463,13 +473,30 @@ export default function VerifyCore({
     // focus is read from a ref inside the loop, so it is deliberately NOT a dep
   }, [length, seedCells, rowX]);
 
+  // B2 — the digit-pop reset timers. Held in a ref, NOT cleaned up per effect run.
+  //
+  // The obvious fix — a cleanup inside the `code` effect — is WRONG, and quietly so: that effect
+  // re-runs on every keystroke, so typing two digits inside 130ms would clear the first digit's
+  // pending reset and leave that cell stuck at 1.16 scale forever. Fast typists only, which is
+  // exactly the kind of bug that ships. These are unmount-scoped, so the cleanup is too.
+  const tscTimers = useRef<number[]>([]);
+  useEffect(() => () => {
+    tscTimers.current.forEach((t) => window.clearTimeout(t));
+    tscTimers.current = [];
+  }, []);
+
   useEffect(() => {
     const s = S.current;
     s.cells.forEach((c, i) => {
       const next = code[i] ?? '';
       if (next && next !== c.d) {
         c.tsc = 1.16;
-        window.setTimeout(() => { c.tsc = 1; }, 130);
+        const id = window.setTimeout(() => {
+          c.tsc = 1;
+          // Drop the fired id so a long session cannot grow this array without bound.
+          tscTimers.current = tscTimers.current.filter((t) => t !== id);
+        }, 130);
+        tscTimers.current.push(id);
         s.shocks.push({ t: 0, sp: 0.028, r0: 34 * s.k, grow: 52 * s.k, o: { ...c.p }, flat: false });
       }
       c.d = next;
@@ -547,7 +574,7 @@ export default function VerifyCore({
       if (status === 'success') {
         if (s.reduce) {
           s.seal = 1; s.check = 1; setRevealed(successLabel.length);
-          onSuccessAnimationEnd?.();
+          onEndRef.current?.();
           return;
         }
         s.phase = 'collapse';
@@ -592,7 +619,7 @@ export default function VerifyCore({
           setRevealed(i);
         }
         await wait(160);
-        if (!cancelled) onSuccessAnimationEnd?.();
+        if (!cancelled) onEndRef.current?.();
         return;
       }
 
@@ -622,7 +649,10 @@ export default function VerifyCore({
       cancelled = true;
       timers.forEach((t) => { window.clearTimeout(t); window.clearInterval(t); });
     };
-  }, [status, rowX, successLabel, onSuccessAnimationEnd]);
+    // B1 — onSuccessAnimationEnd is DELIBERATELY absent from these deps; it is read through
+    // onEndRef at call time. Every other dep is unchanged: status drives the sequence, rowX
+    // repositions cells, and successLabel sets the reveal length.
+  }, [status, rowX, successLabel]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (status === 'verifying' || status === 'success') return;
