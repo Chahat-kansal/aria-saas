@@ -7,6 +7,7 @@ import { SaleCelebration } from '@/components/customer-display/SaleCelebration';
 import { pickCelebrationAnimation } from '@/lib/customer-display/pick-animation';
 import { AdRotator } from '@/components/ads/AdRotator';
 import JourneyPlayer from '@/components/display/JourneyPlayer';
+import { shouldAdoptMode, isDisplayMode, type DisplayMode } from '@/lib/pos/display-mode';
 
 interface CartItem {
   id?: string | number;
@@ -39,7 +40,6 @@ interface DisplayState {
   display_mode?: DisplayMode;
 }
 
-export type DisplayMode = 'classic' | 'journey';
 
 export default function CustomerDisplayPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,6 +50,10 @@ export default function CustomerDisplayPage() {
   // businesses never send a mode at all. Held in its own state rather than read from `state` so a
   // payload that omits the field cannot reset the backdrop mid-service.
   const [displayMode, setDisplayMode] = useState<DisplayMode>('classic');
+  // ARIA-DISPLAY-2C — when the current mode was decided, in Date.now() ms. Both sources stamp with
+  // Date.now() on the SAME machine (the display is a second monitor on the till), so the two are
+  // directly comparable. A payload older than this is a stale echo and must not win.
+  const modeDecidedAt = useRef(0);
   const [phase, setPhase]   = useState<'idle' | 'order' | 'paid'>('idle');
   const [state, setState]   = useState<DisplayState>({ status: 'idle' });
   const [celebration, setCelebration] = useState<{
@@ -104,7 +108,16 @@ export default function CustomerDisplayPage() {
         // ARIA-DISPLAY-2B — only adopt the mode when the payload actually CARRIES it. POSTopNav
         // writes a bare {status:'idle'} payload with no display_mode; treating that as "classic"
         // would snap a journey screen back to the canvas every time the nav resets it.
-        if (s.display_mode === 'classic' || s.display_mode === 'journey') setDisplayMode(s.display_mode);
+        //
+        // ARIA-DISPLAY-2C — ...and only when the payload is NEWER than the last mode we were told
+        // about directly. THIS LINE IS THE BUG DISPLAY-2B SHIPPED: setState above is
+        // timestamp-guarded, but this was not, so it re-applied the payload's mode every 500ms
+        // forever. A mode delivered over the channel was faithfully overwritten by the terminal's
+        // stale cached value within half a second — which is exactly what the failed live walk saw.
+        if (shouldAdoptMode(s.display_mode, s.timestamp, modeDecidedAt.current)) {
+          modeDecidedAt.current = s.timestamp ?? 0;
+          setDisplayMode(s.display_mode as DisplayMode);
+        }
         if (s.status === 'complete') setPhase('paid');
         else if (s.status === 'active' && (s.items?.length ?? (s.cart?.length ?? 0)) > 0) setPhase('order');
         else setPhase('idle');
@@ -160,7 +173,9 @@ export default function CustomerDisplayPage() {
       // steady state and for a screen that loads later; this is only the fast path.
       if (d?.type === 'display_mode') {
         const m = (d as unknown as { mode?: string }).mode;
-        if (m === 'classic' || m === 'journey') setDisplayMode(m);
+        // ARIA-DISPLAY-2C — stamp the decision so the localStorage poll cannot immediately undo it
+        // with an older payload written before the owner flipped the setting.
+        if (isDisplayMode(m)) { modeDecidedAt.current = Date.now(); setDisplayMode(m); }
         return;
       }
       if (d?.type !== 'sale_completed') return;

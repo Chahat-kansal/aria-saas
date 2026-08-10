@@ -767,6 +767,57 @@ export default function TerminalPage() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  /* ── ARIA-DISPLAY-2C — keep display_mode fresh ────────────────────
+     THE BUG THIS FIXES: /api/pos/settings is read exactly once, in the mount-only effect above
+     (:592). The owner flips the display mode in a DIFFERENT window, so this terminal never learns
+     and keeps stamping its stale cached value into every payload — and the display faithfully
+     renders what it is told. The window that needed to learn about the change was the TERMINAL,
+     not the display.
+
+     Event-driven only: a channel message, or the tab regaining focus. Nothing here runs per item,
+     nothing is awaited on the add-item path, and a failure leaves the till exactly as it is. */
+  useEffect(() => {
+    let cancelled = false;
+
+    const reread = () => {
+      fetch('/api/pos/settings')
+        .then(r => r.json())
+        .then(d => { if (!cancelled && d?.settings) setPosSettings(d.settings); })
+        .catch(() => { /* non-fatal: the till must not care that a backdrop setting is stale */ });
+    };
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('aria-pos-display');
+        bc.onmessage = (ev: MessageEvent) => {
+          const d = ev.data as { type?: string; mode?: string } | null;
+          if (d?.type !== 'display_mode') return;
+          // Apply the mode we were handed immediately so the next payload is already correct, and
+          // re-read behind it so the rest of the settings object stays consistent.
+          if (d.mode === 'classic' || d.mode === 'journey') {
+            const mode = d.mode;
+            setPosSettings(prev => ({ ...(prev ?? {}), display_mode: mode } as typeof prev));
+          }
+          reread();
+        };
+      } catch { /* BroadcastChannel unavailable — focus path below still covers it */ }
+    }
+
+    // Safety net for the case the channel cannot cover: this terminal was closed, backgrounded or
+    // asleep when the owner flipped the setting, so the message was never delivered.
+    const onVisible = () => { if (document.visibilityState === 'visible') reread(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    return () => {
+      cancelled = true;
+      if (bc) bc.close();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
+
   /* ── Customer display sync ────────────────────────────────────── */
   useEffect(() => {
     const timer = setTimeout(() => {
