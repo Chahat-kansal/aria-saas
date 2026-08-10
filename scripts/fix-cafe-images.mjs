@@ -2,10 +2,30 @@
 // and update image_url directly in Supabase.
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://nxfzippunqvqsvkmwtjv.supabase.co'
-const SERVICE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54ZnppcHB1bnF2cXN2a213dGp2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Njc2NjA4MywiZXhwIjoyMDkyMzQyMDgzfQ.eKtaDmRCeqkSj2GWv863stK_KRHCu4Qel55yWQtIg2Q'
-const UNSPLASH_KEY = '7Iie40ZZojAQjysmowvo_tUuoOVph1SZsgLdeXzX9Ms'
-const BUSINESS_ID  = 'ff5055a0-c351-4ada-817a-1804961035f3'
+// SPRINT A (secret hygiene) — these four were hardcoded literals. The SERVICE-ROLE key and the
+// Unsplash key are LIVE CREDENTIALS and this file is tracked, so both were committed to git in
+// aa621447 and are in every clone and fork of this repository. A service-role key bypasses RLS
+// entirely: it is full read/write on every table for every business.
+//
+// Rewriting them to env lookups stops the bleeding going FORWARD. It does NOT unpublish them —
+// the only real remediation for a committed credential is ROTATION in the Supabase and Unsplash
+// consoles. See the report attached to this commit.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+const UNSPLASH_KEY = process.env.UNSPLASH_ACCESS_KEY ?? ''
+const BUSINESS_ID  = process.env.BUSINESS_ID ?? 'ff5055a0-c351-4ada-817a-1804961035f3'
+
+// Fail loudly rather than half-running against an empty key — a one-time data script that
+// silently no-ops is worse than one that refuses to start.
+const missing = [
+  ['NEXT_PUBLIC_SUPABASE_URL', SUPABASE_URL],
+  ['SUPABASE_SERVICE_ROLE_KEY', SERVICE_KEY],
+  ['UNSPLASH_ACCESS_KEY', UNSPLASH_KEY],
+].filter(([, v]) => !v).map(([k]) => k)
+if (missing.length) {
+  console.error('[fix-cafe-images] missing required env: ' + missing.join(', '))
+  process.exit(1)
+}
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
