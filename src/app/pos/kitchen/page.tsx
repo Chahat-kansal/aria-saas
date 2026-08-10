@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { SFX } from '@/lib/pos-utils';
 
 interface KDSItem {
   name: string;
@@ -70,7 +71,8 @@ export default function KitchenPage() {
         const newOrders: KDSOrder[] = d.orders ?? [];
         // Sound alert when new orders arrive
         if (newOrders.length > prevCount.current && prevCount.current > 0) {
-          try { new Audio('/pos-sfx/new-order.mp3').play(); } catch (e) { console.warn('[non-fatal]', e) }
+          // ARIA-FIX-ASSETS-1 — see pos-utils SFX.newOrder. The mp3 this replaced never existed.
+          SFX.newOrder();
         }
         prevCount.current = newOrders.length;
         setOrders(newOrders);

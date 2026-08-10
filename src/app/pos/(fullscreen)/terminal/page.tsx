@@ -647,7 +647,10 @@ export default function TerminalPage() {
               if (newOrders.length > 0) {
                 setPendingOnlineOrders(newOrders);
                 setShowOnlineBell(true);
-                try { new Audio('/pos-sfx/new-order.mp3').play(); } catch (e) { console.warn('[non-fatal]', e) }
+                // ARIA-FIX-ASSETS-1 — was new Audio('/pos-sfx/new-order.mp3'), an asset that never
+                // existed in this repo and 404'd in production. Synthesised now: no asset, no CDN,
+                // works offline. The old .catch(...[non-fatal]) is what hid it for months.
+                SFX.newOrder();
               }
             }
           } catch (e) { console.error('[non-fatal]', e) }

@@ -29,6 +29,33 @@ export const SFX = (() => {
     approve: () => { beep(600, 0.1, 0.15, 'sine'); setTimeout(() => beep(800, 0.1, 0.15, 'sine'), 100); setTimeout(() => beep(1000, 0.2, 0.18, 'sine'), 200); },
     error:   () => { beep(220, 0.15, 0.15, 'sawtooth'); setTimeout(() => beep(180, 0.15, 0.12, 'sawtooth'), 160); },
     nav:     () => beep(700, 0.04, 0.06, 'sine'),
+
+    /**
+     * ARIA-FIX-ASSETS-1 — an ONLINE ORDER ARRIVED. Fires at the till (terminal) and the kitchen.
+     *
+     * Replaces `new Audio('/pos-sfx/new-order.mp3').play()`, which 404'd in production for an
+     * unknown period. The rejected promise was caught and logged `[non-fatal]`, and because the
+     * Audio object is never appended to the DOM no error event bubbled anywhere — so the till ran
+     * without its arrival chime and nothing surfaced it.
+     *
+     * SYNTHESISED, NOT SOURCED, deliberately: an oscillator has no asset to deploy, cannot 404,
+     * needs no CDN, and works with the network down — which matters because this is the sound that
+     * says a customer is waiting, at the moment nobody is looking at the screen.
+     *
+     * A rising fourth (G5 -> C6), triangle so it carries across a room without the harshness of
+     * `scan`'s square wave, ~580ms end to end. Deliberately unlike `add` (one short 880Hz sine
+     * blip) and `approve` (three ascending notes) — from across a room this has to be identifiable
+     * as arrival, not as someone touching the screen.
+     *
+     * ⚠ NO MUTE/VOLUME GATE EXISTS. Checked rather than assumed: nothing in this module reads a
+     * setting — every sound above plays at a hardcoded volume unconditionally. So this one matches
+     * its siblings. A global mute would be a real feature and belongs in its own sprint; inventing
+     * one here would mean this chime silently obeys a control the other nine ignore.
+     */
+    newOrder: () => {
+      beep(784, 0.22, 0.20, 'triangle');
+      setTimeout(() => beep(1047, 0.34, 0.22, 'triangle'), 240);
+    },
   };
 })();
 
