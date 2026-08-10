@@ -793,6 +793,11 @@ export default function TerminalPage() {
           total_cents: Math.round(tot * 100),
           customer_name: customer?.name ?? null,
           loyalty_points: customer?.loyalty_points ?? 0,
+          // ARIA-DISPLAY-2B — the display's backdrop choice rides the payload that already exists,
+          // so the setting reaches the screen down the path that is already proven rather than a
+          // second one. pos_settings currently has ZERO rows for every business, so `undefined` is
+          // the NORMAL case today, not an edge case — 'classic' is the real default.
+          display_mode: (posSettings as { display_mode?: string } | undefined)?.display_mode ?? 'classic',
           timestamp: Date.now(),
         });
         localStorage.setItem('aria_display_state', payload);
@@ -800,7 +805,8 @@ export default function TerminalPage() {
       } catch (e) { console.warn('[non-fatal]', e) }
     }, 50);
     return () => clearTimeout(timer);
-  }, [cart, customer, businessName, showReceipt]);
+    // posSettings added so a mode change propagates on the next write without a terminal reload.
+  }, [cart, customer, businessName, showReceipt, posSettings]);
 
   /* ── Barcode scanner ──────────────────────────────────────────── */
   useEffect(() => {

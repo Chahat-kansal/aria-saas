@@ -27,6 +27,11 @@ const SETTINGS_FIELDS = [
   'accepted_payment_methods', 'timezone', 'require_pin_for_refunds', 'manager_approval_discount_pct',
   'business_abn', 'business_address', 'business_phone', 'business_website',
   'abn', 'address', 'phone',
+  // ARIA-DISPLAY-2B — customer display backdrop ('classic' | 'journey'), CHECK-constrained in the
+  // database. THIS LINE IS LOAD-BEARING: a column missing from this allowlist is dropped silently
+  // by pickSettingsFields, so the owner's save appears to succeed and never persists. This repo has
+  // already been bitten by exactly that shape.
+  'display_mode',
 ] as const
 function pickSettingsFields(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}

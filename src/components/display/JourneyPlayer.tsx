@@ -16,6 +16,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CURRENT_LEG, buildPass, isNightIn, type Clip } from '@/lib/display/journey';
 
 const FADE_MS = 800;
+/** ARIA-DISPLAY-2B — "the wake": the journey settling behind an arriving order. Under 400ms, one
+ *  transition, never a hard cut. This is the moment the screen notices the customer. */
+export const WAKE_MS = 340;
 /** A clip that has not produced a frame in this long is treated as stalled and skipped. */
 const STALL_MS = 12_000;
 const CACHE_NAME = 'aria-display-v1';
@@ -25,6 +28,15 @@ export interface JourneyPlayerProps {
   venueName?: string;
   /** IANA timezone for the venue, used only to decide day/night. */
   timeZone?: string;
+
+  // ── ARIA-DISPLAY-2B — background-layer props. ALL DEFAULT TO DISPLAY-1's BEHAVIOUR, so the
+  // standalone /display/[slug] usage is untouched by their existence.
+  /** Hold the current frame. Used while an order is on screen so the journey does not compete. */
+  paused?: boolean;
+  /** Dim + blur behind foreground content. 0 = untouched. */
+  dim?: number;
+  /** Fill the nearest positioned ancestor instead of the viewport, for use as a backdrop. */
+  absolute?: boolean;
 }
 
 /**
@@ -55,7 +67,10 @@ async function resolveSrc(url: string): Promise<{ src: string; revoke: boolean }
   }
 }
 
-export default function JourneyPlayer({ venueName = '', timeZone = 'Australia/Melbourne' }: JourneyPlayerProps) {
+export default function JourneyPlayer({
+  venueName = '', timeZone = 'Australia/Melbourne',
+  paused = false, dim = 0, absolute = false,
+}: JourneyPlayerProps) {
   // Two elements, fixed. A/B crossfade: one visible, one loading the next underneath.
   const vidA = useRef<HTMLVideoElement | null>(null);
   const vidB = useRef<HTMLVideoElement | null>(null);
@@ -177,6 +192,18 @@ export default function JourneyPlayer({ venueName = '', timeZone = 'Australia/Me
     };
   }, []);
 
+  // ARIA-DISPLAY-2B — hold the frame while an order is on screen. Pausing the ELEMENT (rather than
+  // unmounting or hiding) keeps the decoded frame on display, so resuming is instant and the
+  // two-video memory ceiling is unchanged.
+  useEffect(() => {
+    const els = [vidA.current, vidB.current];
+    for (const el of els) {
+      if (!el) continue;
+      if (paused) { try { el.pause(); } catch { /* nothing to pause */ } }
+      else if (!reducedRef.current) { void el.play().catch(() => { /* handled by onError */ }); }
+    }
+  }, [paused]);
+
   const videoStyle = (visible: boolean): React.CSSProperties => ({
     position: 'absolute', inset: 0, width: '100%', height: '100%',
     objectFit: 'cover', opacity: visible ? 1 : 0,
@@ -186,7 +213,9 @@ export default function JourneyPlayer({ venueName = '', timeZone = 'Australia/Me
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, background: '#000', overflow: 'hidden',
+        // absolute when used as a backdrop inside another screen; fixed for the standalone route.
+        position: absolute ? 'absolute' : 'fixed',
+        inset: 0, background: '#000', overflow: 'hidden',
         cursor: 'none', userSelect: 'none',
       }}
     >
@@ -204,6 +233,20 @@ export default function JourneyPlayer({ venueName = '', timeZone = 'Australia/Me
           aria-hidden="true"
         />
       ))}
+
+      {/* ARIA-DISPLAY-2B — scrim for backdrop use. dim=0 renders nothing, so the standalone route is
+          pixel-identical to DISPLAY-1. The blur is on the scrim, not the video, because filtering a
+          playing <video> forces a repaint per frame and is exactly what a cheap tablet cannot afford. */}
+      {dim > 0 ? (
+        <div
+          style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'rgba(5,3,8,' + dim + ')',
+            backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            transition: 'background ' + WAKE_MS + 'ms ease, backdrop-filter ' + WAKE_MS + 'ms ease',
+          }}
+        />
+      ) : null}
 
       {venueName ? (
         <div

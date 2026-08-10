@@ -12,6 +12,7 @@ interface Settings {
   business_address: string; business_phone: string; business_website: string;
   receipt_show_gst: boolean; receipt_show_cashier: boolean; receipt_show_loyalty: boolean;
   low_stock_notify: boolean; loyalty_enabled: boolean; cash_rounding: boolean;
+  display_mode: 'classic' | 'journey';
 }
 
 const SETTING_SECTIONS = [
@@ -29,6 +30,9 @@ const DEFAULT: Settings = {
   business_abn: '', business_address: '', business_phone: '', business_website: '',
   receipt_show_gst: true, receipt_show_cashier: true, receipt_show_loyalty: true,
   low_stock_notify: true, loyalty_enabled: false, cash_rounding: true,
+  // ARIA-DISPLAY-2B — 'classic' so an owner who has never opened this page, and every business
+  // with no pos_settings row at all (which is currently all of them), keeps today's screen.
+  display_mode: 'classic',
 };
 
 export default function SettingsPage() {
@@ -59,6 +63,16 @@ export default function SettingsPage() {
     const { loyalty_enabled, ...posSettingsBody } = form;
     await fetch('/api/pos/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(posSettingsBody) });
     await fetch('/api/loyalty/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ program_enabled: loyalty_enabled }) });
+    // ARIA-DISPLAY-2B — push the backdrop change to an already-open display so nobody has to walk
+    // over and reload the screen. Same-origin BroadcastChannel, the transport the display already
+    // listens on. Fire-and-forget: if no display is open, nothing listens and nothing breaks.
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('aria-pos-display');
+        bc.postMessage({ type: 'display_mode', mode: form.display_mode });
+        bc.close();
+      }
+    } catch { /* non-fatal — the terminal's next payload carries the mode anyway */ }
     setSaving(false); setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   }
@@ -131,6 +145,35 @@ export default function SettingsPage() {
                 <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" {...CHK(k as keyof Settings)} style={{ accentColor: C.violet, width: 14, height: 14 }} />
                   <span style={{ fontSize: 13, color: C.text }}>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* ARIA-DISPLAY-2B — customer display backdrop */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Customer Display</p>
+            <p style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
+              What the customer-facing screen shows behind the order. The order, celebration and greeting are the same either way.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {([
+                ['classic', 'Classic', 'The current animated backdrop.'],
+                ['journey', 'Journey', 'A slow film of the Southern Ocean cliffs. Dims while an order is on screen.'],
+              ] as const).map(([value, label, desc]) => (
+                <label key={value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="display_mode"
+                    value={value}
+                    checked={form.display_mode === value}
+                    onChange={() => setForm(f => ({ ...f, display_mode: value }))}
+                    style={{ accentColor: C.violet, width: 14, height: 14, marginTop: 2 }}
+                  />
+                  <span>
+                    <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{label}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: C.muted }}>{desc}</span>
+                  </span>
                 </label>
               ))}
             </div>

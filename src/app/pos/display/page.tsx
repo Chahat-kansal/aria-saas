@@ -6,6 +6,7 @@ import { CAT_META, fmt } from '@/lib/pos-utils';
 import { SaleCelebration } from '@/components/customer-display/SaleCelebration';
 import { pickCelebrationAnimation } from '@/lib/customer-display/pick-animation';
 import { AdRotator } from '@/components/ads/AdRotator';
+import JourneyPlayer from '@/components/display/JourneyPlayer';
 
 interface CartItem {
   id?: string | number;
@@ -34,13 +35,21 @@ interface DisplayState {
   change_cents?: number;
   loyalty_earned?: number;
   timestamp?: number;
+  /** ARIA-DISPLAY-2B — backdrop choice, carried on the payload the terminal already writes. */
+  display_mode?: DisplayMode;
 }
+
+export type DisplayMode = 'classic' | 'journey';
 
 export default function CustomerDisplayPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef  = useRef<number | null>(null);
   const phaseRef  = useRef<'idle' | 'order' | 'paid'>('idle');
 
+  // ARIA-DISPLAY-2B — 'classic' is the real default: pos_settings has zero rows today, so most
+  // businesses never send a mode at all. Held in its own state rather than read from `state` so a
+  // payload that omits the field cannot reset the backdrop mid-service.
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('classic');
   const [phase, setPhase]   = useState<'idle' | 'order' | 'paid'>('idle');
   const [state, setState]   = useState<DisplayState>({ status: 'idle' });
   const [celebration, setCelebration] = useState<{
@@ -92,6 +101,10 @@ export default function CustomerDisplayPage() {
         if (!raw) return;
         const s: DisplayState = JSON.parse(raw);
         setState(prev => s.timestamp === prev.timestamp ? prev : s);
+        // ARIA-DISPLAY-2B — only adopt the mode when the payload actually CARRIES it. POSTopNav
+        // writes a bare {status:'idle'} payload with no display_mode; treating that as "classic"
+        // would snap a journey screen back to the canvas every time the nav resets it.
+        if (s.display_mode === 'classic' || s.display_mode === 'journey') setDisplayMode(s.display_mode);
         if (s.status === 'complete') setPhase('paid');
         else if (s.status === 'active' && (s.items?.length ?? (s.cart?.length ?? 0)) > 0) setPhase('order');
         else setPhase('idle');
@@ -142,6 +155,14 @@ export default function CustomerDisplayPage() {
     bc.onmessage = (ev: MessageEvent) => {
       const d = ev.data as { type?: string; items?: { name: string; category: string; price: number; quantity: number }[]; customer_name?: string; total?: number; points_earned?: number };
       if (d?.type === 'display_suggestion') { const sd = d as any; setActiveSuggestion({ offer_text: sd.offer_text, discount_pct: sd.discount_pct }); setTimeout(() => setActiveSuggestion(null), 60000); return; }
+      // ARIA-DISPLAY-2B — instant switch. The settings page posts this on save, so the owner does
+      // not have to walk to the screen. The terminal's payload carries the same value for the
+      // steady state and for a screen that loads later; this is only the fast path.
+      if (d?.type === 'display_mode') {
+        const m = (d as unknown as { mode?: string }).mode;
+        if (m === 'classic' || m === 'journey') setDisplayMode(m);
+        return;
+      }
       if (d?.type !== 'sale_completed') return;
       const items = d.items ?? [];
       const animationType = pickCelebrationAnimation(
@@ -326,8 +347,28 @@ export default function CustomerDisplayPage() {
       fontFamily: "'Manrope', system-ui, sans-serif",
       background: '#050308',
     }}>
-      {/* Canvas background */}
+      {/* Canvas background — ALWAYS MOUNTED, in both modes.
+          RULE0: the canvas engine is not removed, replaced or conditionally unmounted. Leaving its
+          mount unconditional is what makes classic provably byte-identical: its effect, its rAF
+          lifecycle and its cleanup are untouched by this sprint. In journey mode it is simply
+          covered by the layer below. */}
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+
+      {/* ── ARIA-DISPLAY-2B — JOURNEY BACKDROP ─────────────────────────────
+          Sits above the canvas (z 1) and below every piece of existing content (z 2), so the order
+          mirror, celebration, ad rotator and greeting all render over it unchanged.
+          The journey PAUSES and dims once an order is on screen — it must not compete with the
+          numbers a customer is checking. */}
+      {displayMode === 'journey' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+          <JourneyPlayer
+            absolute
+            venueName=""
+            paused={phase !== 'idle'}
+            dim={phase === 'idle' ? 0 : 0.55}
+          />
+        </div>
+      )}
 
       {/* Logo */}
       <div style={{ position: 'absolute', top: 20, left: 24, display: 'flex', alignItems: 'center', gap: 9, zIndex: 2 }}>
