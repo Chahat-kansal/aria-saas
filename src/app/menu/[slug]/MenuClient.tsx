@@ -189,11 +189,36 @@ export default function MenuClient({
   const [orderDone,     setOrderDone]     = useState<{ order_number: string; estimated_ready_minutes: number; total: number } | null>(null)
   const [checkoutForm,  setCheckoutForm]  = useState({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' })
   const [checkoutError, setCheckoutError] = useState('')
+  const [needsSignIn, setNeedsSignIn] = useState(false)
   const [stripeModal,   setStripeModal]   = useState<{ clientSecret: string; publishableKey: string; orderNumber: string; total: number } | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [modalMods, setModalMods] = useState<Record<string, string[]>>({})
   const [dietaryFilter, setDietaryFilter] = useState<Set<string>>(new Set())
   const [productNote, setProductNote] = useState('')
+
+  // ARIA-LOYALTY-AUDIT-1 §3 — the cart must survive the sign-in round trip.
+  // The gate below sends the customer to /<slug>/onboarding, which is a full navigation. The cart
+  // was pure React state with NO persistence, so before this it was silently emptied on the way to
+  // sign in and the customer came back to nothing. Linking the gate without this would have been a
+  // worse dead end than the one it replaces: it would look like it worked.
+  const CART_KEY = 'aria_menu_cart:' + _slug
+  const cartHydrated = useRef(false)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CART_KEY)
+      if (saved) setCart(JSON.parse(saved))
+    } catch { /* private mode — the cart simply does not survive, as before */ }
+    cartHydrated.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    // Do not write until the restore above has run, or the empty initial state overwrites it.
+    if (!cartHydrated.current) return
+    try {
+      if (cart.length > 0) sessionStorage.setItem(CART_KEY, JSON.stringify(cart))
+      else sessionStorage.removeItem(CART_KEY)
+    } catch { /* private mode */ }
+  }, [cart, CART_KEY])
 
   useEffect(() => {
     if (!showQr || qrDataUrl) return
@@ -322,7 +347,7 @@ export default function MenuClient({
           ...(i.note ? { note: i.note } : {}),
         })),
       }),
-    }).then(r => r.json()).catch(() => ({ error: 'NETWORK_DROPPED' }))
+    }).then(async r => ({ ...(await r.json()), _status: r.status })).catch(() => ({ error: 'NETWORK_DROPPED', _status: 0 }))
 
     // S-ORD-CONFIRM — this used to render `{ error: 'Network error' }` as an ordinary checkout
     // failure. A dropped response is NOT a failed order: the row may already exist, the kitchen may
@@ -338,6 +363,17 @@ export default function MenuClient({
         'please do NOT order again. Check your phone for a confirmation, or ask staff to look up ' +
         'your name before retrying.',
       )
+      setOrdering(false)
+      return
+    }
+    // ARIA-LOYALTY-AUDIT-1 §3 — THE DEAD END. place-order returns 401 "Sign in to place an order"
+    // when there is no CX session, and this used to render that sentence as plain red text with no
+    // link and no button. The bottom nav is Home/Menu/Orders/Loyalty — none of which is sign-in — so
+    // the customer was told what to do and given no way to do it. A working 6-digit OTP flow has
+    // existed the whole time at /<slug>/onboarding; the gate simply never pointed at it.
+    if (res._status === 401) {
+      setNeedsSignIn(true)
+      setCheckoutError('')
       setOrdering(false)
       return
     }
@@ -1003,6 +1039,31 @@ export default function MenuClient({
             </div>
 
             {checkoutError && <p style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{checkoutError}</p>}
+
+            {/* ARIA-LOYALTY-AUDIT-1 §3 — the way out of the dead end. Sends the customer into the
+                EXISTING 6-digit OTP flow (OnboardingClient + /api/cx/[slug]/auth) and asks it to
+                bring them back here afterwards. No new auth flow, and the cart is already saved to
+                sessionStorage above, so "back to your order" is true rather than aspirational. */}
+            {needsSignIn && (
+              <div style={{ marginBottom: 12, padding: '14px 14px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.04)' }}>
+                <p style={{ fontSize: 13, color: INK, margin: '0 0 4px', fontWeight: 700 }}>
+                  One quick step before you order
+                </p>
+                <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 12px', lineHeight: 1.45 }}>
+                  We&apos;ll text you a 6-digit code to confirm your number. Your order is saved — you&apos;ll come straight back here.
+                </p>
+                <a
+                  href={'/' + _slug + '/onboarding?next=' + encodeURIComponent('/menu/' + _slug)}
+                  style={{
+                    display: 'block', width: '100%', padding: '13px 0', borderRadius: 9999,
+                    background: LIME, color: INK, fontSize: 15, fontWeight: 800,
+                    textAlign: 'center', textDecoration: 'none', fontFamily: SANS,
+                  }}
+                >
+                  Sign in to continue
+                </a>
+              </div>
+            )}
 
             <button
               onClick={placeOrder}

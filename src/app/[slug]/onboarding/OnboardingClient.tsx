@@ -84,7 +84,18 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (data.ok) {
-        window.location.replace('/' + slug)
+        // ARIA-LOYALTY-AUDIT-1 §3 — honour ?next= so the menu's sign-in gate can bring the customer
+        // back to their cart instead of dumping them on the hub with an order they have to rebuild.
+        //
+        // OPEN-REDIRECT GUARD: only a same-origin ABSOLUTE PATH is accepted. A value starting '//'
+        // or '/\' is a protocol-relative URL that browsers resolve to another host, which is how
+        // this exact pattern becomes a phishing hop on a page that just took someone's phone number.
+        let dest = '/' + slug
+        try {
+          const next = new URLSearchParams(window.location.search).get('next')
+          if (next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\')) dest = next
+        } catch { /* fall back to the hub */ }
+        window.location.replace(dest)
       } else {
         setErr(data.error ?? 'Incorrect code. Try again.')
         setDigits(['', '', '', '', '', ''])
