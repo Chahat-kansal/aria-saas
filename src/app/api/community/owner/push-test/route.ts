@@ -21,7 +21,7 @@ async function _POST() {
     title: 'Hello from ' + (biz?.name ?? 'this shop'),
     body: 'This is a test notification. Push is wired up.',
     url: '/community/businesses/' + bid,
-    icon: biz?.logo_url ?? '/icon-192.png',
+    icon: biz?.logo_url ?? '/icons/icon-192.png',
     tag: 'community-test-' + bid,
   })
   return NextResponse.json(result)

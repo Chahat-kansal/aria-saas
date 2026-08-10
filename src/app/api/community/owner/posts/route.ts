@@ -117,7 +117,7 @@ async function _POST(req: Request) {
         title: (biz?.name as string | undefined) ?? 'New post',
         body: (data.title as string | null) ?? (data.body as string | null)?.slice(0, 140) ?? 'New post in your feed',
         url: '/community/businesses/' + bid,
-        icon: (biz?.logo_url as string | undefined) ?? '/icon-192.png',
+        icon: (biz?.logo_url as string | undefined) ?? '/icons/icon-192.png',
         tag: 'community-post-' + data.id,
       })
     } catch (e) { console.warn('[posts] push fan-out failed', (e as Error).message) }
@@ -183,7 +183,7 @@ async function _PATCH(req: Request) {
           title: (biz?.name as string | undefined) ?? 'New post',
           body: (row.title as string | null) ?? (row.body as string | null)?.slice(0, 140) ?? 'New post in your feed',
           url: '/community/businesses/' + bid,
-          icon: (biz?.logo_url as string | undefined) ?? '/icon-192.png',
+          icon: (biz?.logo_url as string | undefined) ?? '/icons/icon-192.png',
           tag: 'community-post-' + row.id,
         })
       }

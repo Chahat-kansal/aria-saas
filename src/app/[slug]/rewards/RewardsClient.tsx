@@ -9,13 +9,22 @@ const INK_MUTED = '#6b7280'
 const FD = "var(--font-display,'Cormorant',Georgia,serif)"
 const FB = "var(--font-body,'Outfit',system-ui,sans-serif)"
 
-const FALLBACKS = [
-  '/cx-lib/hf_20260706_120845_1d9ab7d2-fd10-4eda-aab3-38db43c8f802.png',
-  '/cx-lib/hf_20260706_121030_f6cb2f65-30f9-4367-871e-114e0d655745.png',
-  '/cx-lib/hf_20260706_121035_5e6edb8e-e6d8-4b63-a03a-8cf676871b68.png',
-  '/cx-lib/hf_20260706_121049_6a534cc1-9a81-44eb-a677-60dc6727552a.png',
-  '/cx-lib/hf_20260706_121226_b5c2300a-9c9f-4db4-8761-7c8171e3dec7.png',
-  '/cx-lib/hf_20260706_121303_aa5a43bd-6137-4d0e-bbd7-2d9bf32ec275.png',
+// ARIA-FIX-ASSETS-1 — the six /cx-lib/hf_2026….png fallbacks that used to live here NEVER EXISTED
+// in this repo and returned 404 in production, on a customer-facing screen. Because the card paints
+// them as a CSS `background: url(...)` rather than an <img>, they degraded to a flat #f0ede8 panel
+// instead of a broken-image icon — quieter than it should have been, which is why it survived.
+//
+// Replaced with a drawn placeholder rather than substitute art: nothing to deploy, nothing to 404.
+// STRUCTURED SO REAL ART NEEDS NO CODE CHANGE — rule.image_url still wins whenever it is set, and
+// this is only the absent-image branch. Dropping images into the rewards data replaces these with
+// no edit here.
+const PLACEHOLDER_TINTS: Array<[string, string]> = [
+  ['#e7e2d2', '#cfc7ae'],
+  ['#dfe6d8', '#c2cfb6'],
+  ['#e6ded9', '#cdbdb4'],
+  ['#dde3e6', '#bcc8cf'],
+  ['#e8e3dc', '#d3c8b8'],
+  ['#e2e0e8', '#c6c2d3'],
 ]
 
 export interface RewardRule {
@@ -70,8 +79,10 @@ function RewardCard({ rule, pts, slug, index }: {
   const cost = Number(rule.threshold_value ?? 0)
   const canRedeem = cost > 0 && pts >= cost
   const locked = cost > 0 && pts < cost
-  const imgSrc = rule.image_url ?? FALLBACKS[index % FALLBACKS.length]
+  const imgSrc = rule.image_url          // null -> the drawn placeholder below, never a dead URL
   const redeemUrl = '/' + slug + '/loyalty/redeem?rule=' + rule.id
+  const tint = PLACEHOLDER_TINTS[index % PLACEHOLDER_TINTS.length]
+  const initial = (rule.name ?? '').trim().charAt(0).toUpperCase() || '★'
 
   return (
     <div style={{
@@ -85,11 +96,32 @@ function RewardCard({ rule, pts, slug, index }: {
       filter: locked ? 'grayscale(0.6)' : 'none',
       opacity: locked ? 0.80 : 1,
     }}>
-      <div style={{
-        width: '40%', flexShrink: 0, alignSelf: 'stretch',
-        background: 'url(' + imgSrc + ') center/cover no-repeat #f0ede8',
-        minHeight: 150,
-      }} />
+      {imgSrc ? (
+        <div style={{
+          width: '40%', flexShrink: 0, alignSelf: 'stretch',
+          background: 'url(' + imgSrc + ') center/cover no-repeat #f0ede8',
+          minHeight: 150,
+        }} />
+      ) : (
+        // Drawn, not fetched. A soft diagonal wash in the CX palette with the reward's initial —
+        // reads as intentional artwork rather than a hole where an image failed.
+        <div
+          aria-hidden="true"
+          style={{
+            width: '40%', flexShrink: 0, alignSelf: 'stretch', minHeight: 150,
+            background: 'linear-gradient(145deg, ' + tint[0] + ' 0%, ' + tint[1] + ' 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            position: 'relative', overflow: 'hidden',
+          }}
+        >
+          <span style={{
+            fontFamily: FD, fontStyle: 'italic', fontSize: 46, lineHeight: 1,
+            color: 'rgba(10,10,10,0.20)', userSelect: 'none',
+          }}>
+            {initial}
+          </span>
+        </div>
+      )}
       <div style={{
         flex: 1, minWidth: 0, padding: '15px 14px 14px 14px',
         display: 'flex', flexDirection: 'column',

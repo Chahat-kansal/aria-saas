@@ -142,7 +142,7 @@ async function publishToChannel(
             title: (biz?.name as string | undefined) ?? 'New post',
             body: draft.title ?? draft.body.slice(0, 140),
             url: '/community/businesses/' + draft.business_id,
-            icon: (biz?.logo_url as string | undefined) ?? '/icon-192.png',
+            icon: (biz?.logo_url as string | undefined) ?? '/icons/icon-192.png',
             tag: 'community-post-' + data!.id,
           })
         }
