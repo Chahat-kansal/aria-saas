@@ -7,6 +7,8 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { verifyBusinessAccess } from '@/lib/auth/verify-business-access'
 import { encryptCustomerPII } from '@/lib/aria/customer-pii'
 import { toE164AU } from '@/lib/phone'
+import { linkLoyaltyIdentity } from '@/lib/loyalty/link-identity'
+import { logger } from '@/lib/observability/logger'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -146,6 +148,28 @@ async function _POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // ARIA-LOYALTY-FIX-1 §1 — a customer added at the till now gets a loyalty identity, the same
+  // find-or-create the public enrol route uses. Before this, only self-enrollers and self-sign-ins
+  // ever got one, so counter enrolment — the way cafés actually enrol people — built no loyalty
+  // base: 48 of Sip's 51 customers are unlinked.
+  //
+  // AFTER the insert and fully swallowed: the customer already exists at this point, and a loyalty
+  // bookkeeping failure must never be the reason a cashier cannot add someone mid-sale. Awaited
+  // rather than fire-and-forget because a serverless invocation can end before a floating promise
+  // resolves — two short queries is the right price for the link actually being written.
+  const link = await linkLoyaltyIdentity(supabase, {
+    customerId: customer.id as string,
+    email: email || null,
+    phone: e164Phone || null,
+  });
+  if (link.reason === 'no_contact') {
+    // Name-only record: nothing to identify this person by across venues. Expected, not an error.
+    logger.info('pos/customers created without loyalty identity (no phone or email)', { businessId: bid });
+  } else if (link.reason === 'failed') {
+    logger.warn('pos/customers loyalty identity link failed (non-fatal)', { businessId: bid });
+  }
+
   return NextResponse.json({ customer });
 }
 

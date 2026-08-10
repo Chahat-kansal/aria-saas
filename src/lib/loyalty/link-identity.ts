@@ -1,0 +1,85 @@
+// ARIA-LOYALTY-FIX-1 §1 — find-or-create a loyalty identity and link it to a POS customer.
+//
+// WHY THIS EXISTS: only /api/loyalty/auth (self sign-in) and the public enrol route ever created a
+// loyalty_identity. /api/pos/customers created none — so a café that enrols people AT THE COUNTER,
+// which is how cafés actually enrol people, built no loyalty base at all. 48 of Sip's 51 customers
+// are unlinked.
+//
+// EXTRACTED, NOT DUPLICATED. This is the enrol route's own block (enrol:95-123) lifted verbatim in
+// behaviour; that route now calls this instead of keeping its own copy. One implementation, so the
+// till and the web cannot drift into minting two identities for the same person.
+//
+// loyalty_identity is GLOBAL, not per-business (LOY-NETWORK: one email/phone across every venue),
+// which is why the lookups below carry no business filter. That is deliberate — do not add one.
+
+/**
+ * Structural, not SupabaseClient<...>: the admin client and the per-request server client carry
+ * different generic parameters, and this helper only needs from().select/insert/update.
+ *
+ * Deliberately loose on the RETURN types. PostgREST hands back a thenable builder, not a Promise —
+ * typing these as Promise makes SupabaseClient fail to satisfy the interface, and typing the full
+ * generic chain trips TS2589 "type instantiation is excessively deep". Same trade-off, and the same
+ * reason, as PinUpdatable in lib/pos/staff-pin.ts. The awaits below narrow the shape at the point
+ * of use, which is where it actually matters.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type IdentityDb = { from: (table: string) => any }
+
+type IdRow = { data: { id?: unknown } | null }
+
+export type LinkOutcome =
+  | { identityId: string; created: boolean; reason: 'linked' }
+  | { identityId: null; created: false; reason: 'no_contact' | 'failed' }
+
+/**
+ * Find-or-create the identity for this email/phone and stamp it onto the customer row.
+ *
+ * NEVER THROWS. A cashier is mid-sale when this runs; a loyalty bookkeeping failure must never be
+ * the reason a customer cannot be created. Every path returns an outcome and logs.
+ *
+ * IDEMPOTENT by construction: it looks before it inserts, and re-running for the same person finds
+ * the existing identity rather than minting a second.
+ *
+ * NAME-ONLY CUSTOMERS: the till allows a record with neither phone nor email. There is nothing to
+ * identify such a person by across venues, and loyalty_identity has no other natural key, so this
+ * returns 'no_contact' and links nothing. That is correct rather than lazy — inventing a synthetic
+ * key would make the row unmatchable later, when the same person finally gives a phone number.
+ */
+export async function linkLoyaltyIdentity(
+  db: IdentityDb,
+  input: { customerId: string; email?: string | null; phone?: string | null },
+): Promise<LinkOutcome> {
+  try {
+    const email = typeof input.email === 'string' && input.email.trim() ? input.email.trim().toLowerCase() : ''
+    const phone = typeof input.phone === 'string' && input.phone.trim() ? input.phone.trim() : ''
+    if (!email && !phone) return { identityId: null, created: false, reason: 'no_contact' }
+
+    let identityId: string | null = null
+
+    if (email) {
+      const { data } = await db.from('loyalty_identity').select('id').eq('email', email).maybeSingle() as IdRow
+      if (data?.id) identityId = String(data.id)
+    }
+    if (!identityId && phone) {
+      const { data } = await db.from('loyalty_identity').select('id').eq('phone', phone).maybeSingle() as IdRow
+      if (data?.id) identityId = String(data.id)
+    }
+
+    let created = false
+    if (!identityId) {
+      const insert: Record<string, string> = {}
+      if (email) insert.email = email
+      if (phone) insert.phone = phone
+      const { data } = await db.from('loyalty_identity').insert(insert).select('id').single() as IdRow
+      if (data?.id) { identityId = String(data.id); created = true }
+    }
+
+    if (!identityId) return { identityId: null, created: false, reason: 'failed' }
+
+    await db.from('pos_customers').update({ loyalty_identity_id: identityId }).eq('id', input.customerId)
+    return { identityId, created, reason: 'linked' }
+  } catch (e) {
+    console.error('[link-identity] non-fatal:', (e as Error).message)
+    return { identityId: null, created: false, reason: 'failed' }
+  }
+}

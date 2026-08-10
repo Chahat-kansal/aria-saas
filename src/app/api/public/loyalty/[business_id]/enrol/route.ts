@@ -6,6 +6,7 @@ import { rateLimit, tooManyRequests, clientIp } from '@/lib/security/rate-limit'
 import { requireTurnstile } from '@/lib/security/turnstile'
 import { normalisePhone } from '@/lib/clicksend'
 import { encryptCustomerPII } from '@/lib/aria/customer-pii'
+import { linkLoyaltyIdentity } from '@/lib/loyalty/link-identity'
 
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
@@ -92,36 +93,12 @@ export async function POST(req: Request, { params }: Params) {
     // FIX 3 — LOY-IDENTITY-LINK: find or create a global loyalty_identity so this member
     // is visible to evaluateRewardRules and the cross-business network.
     // db is already service-role (bypasses RLS on loyalty_identity).
-    // Best-effort: failure does not block the enrolment response.
-    try {
-      const identEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : ''
-      const identPhone = normPhone
-
-      let identityId: string | null = null
-
-      if (identEmail) {
-        const { data: byEmail } = await db.from('loyalty_identity').select('id').eq('email', identEmail).maybeSingle()
-        if (byEmail?.id) identityId = byEmail.id as string
-      }
-      if (!identityId && identPhone) {
-        const { data: byPhone } = await db.from('loyalty_identity').select('id').eq('phone', identPhone).maybeSingle()
-        if (byPhone?.id) identityId = byPhone.id as string
-      }
-      if (!identityId) {
-        const idInsert: Record<string, string> = {}
-        if (identEmail) idInsert.email = identEmail
-        if (identPhone) idInsert.phone = identPhone
-        if (Object.keys(idInsert).length > 0) {
-          const { data: created } = await db.from('loyalty_identity').insert(idInsert).select('id').single()
-          if (created?.id) identityId = created.id as string
-        }
-      }
-      if (identityId) {
-        await db.from('pos_customers').update({ loyalty_identity_id: identityId }).eq('id', data.id)
-      }
-    } catch {
-      // Non-fatal — customer is enrolled, identity link will be established on first loyalty login
-    }
+    //
+    // ARIA-LOYALTY-FIX-1 §1 — this block used to live here inline. It moved to
+    // lib/loyalty/link-identity.ts UNCHANGED IN BEHAVIOUR so the till can call the same code, and
+    // so the two paths cannot drift into minting two identities for one person. Still best-effort:
+    // the helper never throws, and a failure does not block the enrolment response.
+    await linkLoyaltyIdentity(db, { customerId: data.id as string, email, phone: normPhone })
   }
 
   // Log every attempt (new + already-enrolled) for the owner's own audit trail — never surfaced
