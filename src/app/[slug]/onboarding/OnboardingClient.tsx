@@ -118,7 +118,21 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
 
   // ── OTP box event handlers ──────────────────────────────────────────────
   const handleInput = (i: number, value: string) => {
-    const digit = value.replace(/\D/g, '').slice(-1)
+    const clean = value.replace(/\D/g, '')
+    // SMS autofill does NOT arrive as a paste. iOS and Android write the WHOLE code into the
+    // focused box and fire a normal `input` event, so handlePaste (a ClipboardEvent handler) never
+    // sees it. Without this branch the old `.slice(-1)` kept only the LAST digit and the other five
+    // boxes stayed empty — autofill would have visibly half-worked. Distributes from the box that
+    // received the value, exactly as handlePaste does from box 0.
+    if (clean.length > 1) {
+      const next = [...digits]
+      clean.split('').forEach((d, k) => { if (i + k < 6) next[i + k] = d })
+      setDigits(next)
+      inputRefs.current[Math.min(i + clean.length, 5)]?.focus()
+      if (next.every(d => d !== '')) void verifyCode(next.join(''))
+      return
+    }
+    const digit = clean.slice(-1)
     const next  = [...digits]
     next[i]     = digit
     setDigits(next)
@@ -238,7 +252,14 @@ export function OnboardingClient({ slug, bizName, logoUrl }: {
                   ref={el => { inputRefs.current[i] = el }}
                   type="text"
                   inputMode="numeric"
-                  maxLength={2}
+                  // Split six-box layout: one-time-code goes on the FIRST box ONLY. Browsers fill
+                  // that field and distribute the rest; setting it on all six makes some browsers
+                  // write the whole code into every box.
+                  autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                  // Box 0 must be able to HOLD the whole code for autofill to land it — maxLength
+                  // truncates an autofilled value the same way it truncates typing. The other five
+                  // keep 2, which is what makes type-over work with the slice(-1) path above.
+                  maxLength={i === 0 ? 6 : 2}
                   value={d}
                   disabled={loading}
                   onChange={e => handleInput(i, e.target.value)}
