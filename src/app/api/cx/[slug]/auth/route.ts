@@ -62,7 +62,11 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   if (action === 'send') {
     const rawPhone = ((body.phone as string) ?? '').trim()
     if (!rawPhone) return NextResponse.json({ error: 'Phone required' }, { status: 400 })
+    // ARIA-PHONE-NORMALISE-1 — an unresolvable number is rejected HERE. Previously it was
+    // blanket-prefixed into a fake '+61…', used as the rate-limit key, written to cx_otp_codes,
+    // and only failed at ClickSend — leaving a code row for a number that could never receive it.
     const phone = normalisePhone(rawPhone)
+    if (!phone) return NextResponse.json({ error: 'Enter a valid Australian mobile number.' }, { status: 400 })
 
     // Rate limits (Upstash sliding window — shared across all instances, fail-closed in prod)
     const ip = getIp(req)

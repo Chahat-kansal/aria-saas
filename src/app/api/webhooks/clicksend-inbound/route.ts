@@ -56,15 +56,22 @@ export async function POST(req: Request) {
   if (!isStop && !isStart) return NextResponse.json({ ok: true, ignored: 'not_keyword' })
 
   // Resolve the business(es) this number belongs to (try normalised + raw stored formats).
+  //
+  // ARIA-PHONE-NORMALISE-1 — `phone` can now be null when the sender is not a resolvable AU number
+  // (an international reply, or a shortcode). The RAW `from` is still matched, so a STOP from such
+  // a number is still honoured against any row stored in that raw form — we simply no longer
+  // fabricate a '+61' variant to also look up, which could only ever have matched a fabricated row.
   const bizIds = new Set<string>()
-  for (const p of [phone, from]) {
+  for (const p of [phone, from].filter((v): v is string => !!v)) {
     const { data } = await supabaseAdmin.from('pos_customers').select('business_id').eq('phone', p)
     for (const c of data ?? []) if (c.business_id) bizIds.add(c.business_id as string)
   }
   const targets: (string | null)[] = bizIds.size ? [...bizIds] : [null]
 
   if (isStop) {
-    for (const b of targets) await suppressNumber(b, phone, 'stop') // idempotent (unique constraint)
+    // Suppress on the RAW sender when it is not a resolvable AU number, so an international STOP
+    // is still honoured. suppressNumber canonicalises internally and no-ops if it cannot.
+    for (const b of targets) await suppressNumber(b, phone ?? from, 'stop') // idempotent (unique constraint)
     return NextResponse.json({ ok: true, action: 'suppressed', businesses: bizIds.size })
   }
 

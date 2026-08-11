@@ -52,10 +52,16 @@ export async function suppressNumber(
   reason: 'stop' | 'manual' | 'bounce' = 'manual',
 ): Promise<void> {
   try {
+    // ARIA-PHONE-NORMALISE-1 — suppression is keyed on the SAME canonical form sendSMS uses, so an
+    // unresolvable number cannot be suppressed (there is nothing to key on) and equally can never
+    // be sent to. Storing a fabricated key here would have created a suppression row that no
+    // future send would ever match.
+    const key = normalisePhone(phone)
+    if (!key) { console.warn('[sms] suppressNumber: unusable phone, nothing to suppress'); return }
     await supabaseAdmin
       .from('sms_suppression')
       .upsert(
-        { business_id: businessId, phone: normalisePhone(phone), reason },
+        { business_id: businessId, phone: key, reason },
         { onConflict: 'business_id,phone' },
       )
   } catch (err) {
@@ -110,7 +116,26 @@ async function logSmsCostEvent(businessId: string | null, messageId: string | nu
 export async function sendSMS(to: string, body: string, opts: SendSMSOptions = {}): Promise<ClickSendResult> {
   const category: SmsCategory = opts.category ?? 'transactional'
   const businessId = opts.businessId ?? null
+
+  // ARIA-PHONE-NORMALISE-1 — refuse locally instead of fabricating a number.
+  //
+  // normalisePhone used to blanket-prefix '+61' onto anything, so `234567u8io` became
+  // `+61234567u8io` and was handed to ClickSend, which rejected it — a send that "happened",
+  // failed at the provider, and cost a request. It now returns null for unresolvable input.
+  //
+  // Logged as a skipped send with an explicit reason rather than thrown: sendSMS is called from
+  // OTP paths, cron jobs and campaign loops, and a throw here would take down the caller for one
+  // bad row. Nothing that was ever deliverable becomes undeliverable — no stored number in any
+  // audited table has the fabricated shape.
   const phone = normalisePhone(to)
+  if (!phone) {
+    await logSend({
+      business_id: businessId, to_number: String(to ?? ''), body, category,
+      consent_ok: null, suppressed: false, clicksend_message_id: null, status: 'skipped',
+      error: 'unusable_phone',
+    })
+    return { ok: false, error: 'unusable_phone' }
+  }
 
   // MARKETING only: append the STOP notice if the body doesn't already carry one.
   let finalBody = body

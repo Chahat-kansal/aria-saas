@@ -10,17 +10,29 @@
 // one implementation and every existing importer of '@/lib/clicksend' is unaffected.
 
 /**
- * Normalise an AU number to +61 E.164-ish form (shared by SMS send + suppression so they match).
+ * ARIA-PHONE-NORMALISE-1 — normalisePhone NOW DELEGATES TO toE164AU. One algorithm, one behaviour.
  *
- * ⚠ Blanket-prefixes anything that is not already '+' or '0'-led, including strings that are not
- * phone numbers at all. Kept EXACTLY as it was — the SMS paths have always behaved this way and
- * changing them is not this sprint's job. For anything touching pos_customers, use toE164AU.
+ * WHAT CHANGED AND WHY: this used to blanket-prefix '+61' onto anything that was not '+' or '0'-led,
+ * INCLUDING strings that are not phone numbers. `234567u8io` became `+61234567u8io`; `1234567878`
+ * became `+611234567878`. Values that look canonical, are not, and were then matched against as
+ * though they were — which is how the same person becomes two identities, and how an SMS is
+ * "delivered" to a number that cannot exist.
+ *
+ * It now returns NULL for anything unresolvable. An absent number is honest; a fabricated one is a
+ * wrong match waiting to happen and it silently breaks SMS.
+ *
+ * ⚠ THE RETURN TYPE CHANGED from `string` to `string | null`. That is deliberate and load-bearing:
+ * it makes the compiler enumerate every caller rather than leaving the null case to be discovered
+ * in production. The name is kept so no import breaks.
+ *
+ * SMS IMPACT, measured rather than assumed: no stored value in pos_customers, loyalty_identity,
+ * cx_otp_codes, sms_suppression, pos_online_orders, pos_sales or bookings has the fabricated
+ * '+61'+garbage shape — every junk value on record is the RAW string as typed. So nothing that was
+ * ever deliverable becomes undeliverable here. What changes is that a send to a junk number is now
+ * refused locally instead of being handed to ClickSend to reject.
  */
-export function normalisePhone(to: string): string {
-  let phone = (to ?? '').trim()
-  if (phone.startsWith('0')) phone = '+61' + phone.slice(1)
-  if (!phone.startsWith('+')) phone = '+61' + phone
-  return phone
+export function normalisePhone(to: string | null | undefined): string | null {
+  return toE164AU(to)
 }
 
 /**

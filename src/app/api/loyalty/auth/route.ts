@@ -41,8 +41,10 @@ type Idf = { kind: 'email'; value: string } | { kind: 'phone'; value: string }
 function resolveIdentifier(body: Record<string, unknown>): { idf: Idf } | { error: string } {
   const rawPhone = typeof body.phone === 'string' ? body.phone.trim() : ''
   if (rawPhone) {
+    // ARIA-PHONE-NORMALISE-1 — null is now the explicit "unresolvable" signal; the regex below
+    // still enforces MOBILE specifically (a valid landline must not be accepted for OTP).
     const phone = normalisePhone(rawPhone)
-    if (!/^\+614\d{8}$/.test(phone)) return { error: 'Enter a valid Australian mobile number.' }
+    if (!phone || !/^\+614\d{8}$/.test(phone)) return { error: 'Enter a valid Australian mobile number.' }
     return { idf: { kind: 'phone', value: phone } }
   }
   const email = normaliseEmail(body.email)

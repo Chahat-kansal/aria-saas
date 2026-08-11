@@ -28,7 +28,9 @@ async function providerSend(to: string, body: string): Promise<WaResult> {
     const res = await fetch('https://rest.clicksend.com/v3/whatsapp/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
       signal: AbortSignal.timeout(10_000),
-      body: JSON.stringify({ messages: [{ from: process.env.CLICKSEND_WHATSAPP_FROM, to: normalisePhone(to), body }] }),
+      // ARIA-PHONE-NORMALISE-1 — `to` is already canonical: sendWhatsApp resolves it once and
+      // refuses unusable numbers before reaching here. Re-normalising was a second chance to differ.
+      body: JSON.stringify({ messages: [{ from: process.env.CLICKSEND_WHATSAPP_FROM, to, body }] }),
     })
     const data = await res.json().catch(() => ({})) as { response_code?: string }
     if (!res.ok || data.response_code !== 'SUCCESS') return { ok: false, status: 'failed', error: `clicksend_wa_${data.response_code ?? res.status}` }
@@ -44,8 +46,16 @@ async function providerSend(to: string, body: string): Promise<WaResult> {
 export async function sendWhatsApp(to: string, body: string, opts: SendWaOptions = {}): Promise<WaResult> {
   const category = opts.category ?? 'transactional'
   const businessId = opts.businessId ?? null
-  const phone = normalisePhone(to)
   const template = opts.template ?? 'message'
+
+  // ARIA-PHONE-NORMALISE-1 — refuse an unusable number locally rather than fabricating a '+61'
+  // one and handing it to the provider. Recorded as a skipped attempt so the audit log still
+  // explains why nothing was sent.
+  const phone = normalisePhone(to)
+  if (!phone) {
+    await logWa({ business_id: businessId, customer_id: opts.customerId ?? null, to_number: String(to ?? ''), template, status: 'skipped', error: 'unusable_phone' })
+    return { ok: false, status: 'skipped', error: 'unusable_phone' }
+  }
 
   if (category === 'marketing') {
     // Opt-out (reuse sms_suppression by phone) + per-member WhatsApp consent.
