@@ -44,3 +44,7 @@ public/menu/_ingest/
 build-log.txt
 build.log
 tsc.log
+
+# ARIA-LOYALTY-BACKFILL-RUN — backfill skip lists contain customer names, phones and emails.
+# Operational output, never source. Must not be committed.
+scripts/out/
