@@ -369,6 +369,26 @@ export default function TerminalPage() {
   const [barcodeLookupHit,  setBarcodeLookupHit]  = useState<GlobalProductHit | null>(null);
   const [barcodeScanning,   setBarcodeScanning]   = useState(false);
 
+  /* ── ARIA-ATTACH-CUSTOMER-1 — scan a customer's loyalty code at the till ──────────────────────
+     The last sale carrying a customer_id was 5 June; every loyalty engine hangs off customerId and
+     none had been handed one. The cause was cost, not discoverability: the manual attach at :2732
+     is four screen interactions (tap 62px field, type >=2 chars, wait for the fetch, tap a result)
+     and a cashier will not pay that during a rush.
+     Scanning the customer's own code is ONE physical action — the same point-and-pull already made
+     for every product — and ZERO screen interactions. Stated as 1, not rounded to 0.
+     Nothing new server-side: /api/pos/loyalty/scan-lookup already accepts a 10-digit short_code,
+     and /[slug]/scan already renders it. This wires up a loop that was already closed at both ends. */
+  const [customerScan, setCustomerScan] = useState<
+    | { kind: 'looking' }
+    | { kind: 'not_found'; code: string }
+    | { kind: 'replace'; incoming: Customer; current: Customer }
+    | null
+  >(null);
+  // Read inside the wedge handler so the latest attachment is visible WITHOUT adding `customer` to
+  // that effect's deps — re-subscribing a global keydown listener on every customer change is the
+  // kind of churn that drops a keystroke mid-scan.
+  const customerRef = useRef<Customer | null>(null);
+
   /* ── Quick access panel ───────────────────────────────────────── */
   const [showQuickPanel,   setShowQuickPanel]   = useState(false);
 
@@ -862,6 +882,75 @@ export default function TerminalPage() {
     // posSettings added so a mode change propagates on the next write without a terminal reload.
   }, [cart, customer, businessName, showReceipt, posSettings]);
 
+  /* ── ARIA-ATTACH-CUSTOMER-1 — scan resolution ─────────────────────────────────────────────────
+     Keep the customer ref current for the wedge handler below. */
+  useEffect(() => { customerRef.current = customer; }, [customer]);
+
+  /** Step 3 of the disambiguation, extracted so the customer branch can fall through to it.
+   *  `wasCustomerShaped` decides which "not found" affordance the cashier sees when BOTH miss. */
+  const globalProductLookup = useCallback((code: string, wasCustomerShaped: boolean) => {
+    setBarcodeLookupHit(null);
+    setBarcodeScanning(true);
+    fetch(`/api/products/barcode-lookup?barcode=${encodeURIComponent(code)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.found && d.product) { setBarcodeLookupHit(d.product as GlobalProductHit); return; }
+        // Neither a customer nor a product. For a 10-digit code the honest message is about the
+        // loyalty code — "Not in your catalogue — add via Products" is actively misleading, and
+        // it is the failure a cashier hits most during setup.
+        if (wasCustomerShaped) setCustomerScan({ kind: 'not_found', code });
+      })
+      .catch(() => { if (wasCustomerShaped) setCustomerScan({ kind: 'not_found', code }); })
+      .finally(() => setBarcodeScanning(false));
+  }, []);
+
+  /** Step 2: a 10-digit code that is not a catalogued product. Resolve it as a customer. */
+  const resolveCustomerScan = useCallback(async (code: string) => {
+    setBarcodeLookupHit(null);
+    setCustomerScan({ kind: 'looking' });
+    let data: Record<string, unknown> | null = null;
+    try {
+      const r = await fetch('/api/pos/loyalty/scan-lookup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      data = await r.json() as Record<string, unknown>;
+    } catch { /* network — treated as a miss below, then falls through to products */ }
+
+    if (!data || data.found !== true) {
+      setCustomerScan(null);
+      globalProductLookup(code, true);   // a 10-digit PRODUCT barcode must still work
+      return;
+    }
+
+    // email/phone deliberately null: scan-lookup does not return them and the till does not need
+    // them to attach. Less PII in terminal state, and none of it can reach the customer display.
+    const incoming: Customer = {
+      id: String(data.customer_id), name: String(data.name ?? 'Customer'),
+      email: null, phone: null,
+      loyalty_points: Number(data.points_balance ?? 0),
+      total_spent: Number(data.total_spent ?? 0),
+      points_balance: Number(data.points_balance ?? 0),
+      stamps_count: Number(data.stamps_count ?? 0),
+      preload_balance: Number(data.preload_balance ?? 0),
+      visit_count: Number(data.visit_count ?? 0),
+    };
+
+    const current = customerRef.current;
+    if (current && current.id !== incoming.id) {
+      // PROMPT, never silent replace. Two customers at a counter and the second holds up a phone is
+      // not a rare case, and points landing on a stranger's account is invisible to both of them.
+      // Ignoring instead would leave a mis-scan uncorrectable except via the four-tap flow this
+      // sprint exists to avoid. The extra tap is paid ONLY in the collision case.
+      setCustomerScan({ kind: 'replace', incoming, current });
+      return;
+    }
+    setCustomerScan(null);
+    if (current && current.id === incoming.id) { SFX.scan(); return; }  // same customer — no-op
+    setCustomer(incoming);
+    SFX.scan();
+  }, [globalProductLookup]);
+
   /* ── Barcode scanner ──────────────────────────────────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -876,20 +965,21 @@ export default function TerminalPage() {
           const t0Bc = performance.now();
           const hit = barcodeMap.get(code);
           console.log('[POS perf] barcode:', (performance.now() - t0Bc).toFixed(2), 'ms');
+          // ARIA-ATTACH-CUSTOMER-1 — three-step disambiguation, in this order deliberately:
+          //   1. a catalogued product WINS OUTRIGHT. Product scanning is untouched on its hot path,
+          //      so a 10-digit SKU that is in the catalogue still rings up as a product.
+          //   2. a miss that is exactly 10 digits -> resolve as a loyalty short_code. Retail
+          //      barcodes are EAN-13/UPC-A/EAN-8/ITF-14 (13/12/8/14), so 10 digits does not collide
+          //      with a standard symbology; the only overlap is a custom 10-digit SKU, which step 1
+          //      already claims.
+          //   3. anything else -> the existing global product lookup, unchanged.
           if (hit && hit.is_active) {
             SFX.scan();
             checkAndAddToCart(hit);
+          } else if (!hit && /^\d{10}$/.test(code)) {
+            void resolveCustomerScan(code);
           } else if (!hit) {
-            // Not in local catalog — try global products / Open Food Facts
-            setBarcodeLookupHit(null);
-            setBarcodeScanning(true);
-            fetch(`/api/products/barcode-lookup?barcode=${encodeURIComponent(code)}`)
-              .then(r => r.json())
-              .then(d => {
-                if (d.found && d.product) setBarcodeLookupHit(d.product as GlobalProductHit);
-              })
-              .catch(() => null)
-              .finally(() => setBarcodeScanning(false));
+            globalProductLookup(code, false);
           }
         }
         return;
@@ -2816,6 +2906,61 @@ export default function TerminalPage() {
           )}
 
           {/* Barcode lookup result */}
+          {/* ARIA-ATTACH-CUSTOMER-1 — customer-scan affordances. Separate from the product ones
+              below on purpose: telling a cashier "Not in your catalogue — add via Products" after
+              they scanned a customer's loyalty code is the confusing failure, and the one that
+              happens most during setup. */}
+          {customerScan && (
+            <div className="px-2 pb-1">
+              {customerScan.kind === 'looking' && (
+                <div className="rounded-lg px-3 py-2 text-xs flex items-center gap-2" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(0,106,255,0.12)', color: 'var(--violet)' }}>
+                  <span className="w-3 h-3 rounded-full border border-t-transparent animate-spin" style={{ borderColor: 'var(--violet)', borderTopColor: 'transparent' }} />
+                  Looking up customer code…
+                </div>
+              )}
+
+              {customerScan.kind === 'not_found' && (
+                <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <p className="text-xs font-medium" style={{ color: '#F59E0B' }}>Customer code not recognised</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(245,158,11,0.7)' }}>
+                    10-digit codes are loyalty codes. {customerScan.code} isn&apos;t registered to a customer here.
+                  </p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(245,158,11,0.5)' }}>
+                    Ask them to open their rewards screen, or add them with + Cust.
+                  </p>
+                  <button onClick={() => setCustomerScan(null)} className="text-[10px] mt-0.5" style={{ color: 'rgba(245,158,11,0.4)' }}>Dismiss</button>
+                </div>
+              )}
+
+              {customerScan.kind === 'replace' && (
+                <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                  <p className="text-xs font-medium" style={{ color: '#F87171' }}>
+                    Replace {customerScan.current.name} with {customerScan.incoming.name} on this sale?
+                  </p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(248,113,113,0.7)' }}>
+                    A customer is already attached. Points go to whoever is attached at checkout.
+                  </p>
+                  <div className="flex gap-2 mt-1.5">
+                    <button
+                      onClick={() => { setCustomer(customerScan.incoming); setPendingRedemption(null); setCustomerScan(null); SFX.scan(); }}
+                      className="text-[11px] px-2.5 py-1 rounded-lg font-semibold"
+                      style={{ background: 'rgba(239,68,68,0.18)', border: '1px solid rgba(239,68,68,0.4)', color: '#F87171', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      onClick={() => setCustomerScan(null)}
+                      className="text-[11px] px-2.5 py-1 rounded-lg"
+                      style={{ background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      Keep {customerScan.current.name}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {(barcodeScanning || barcodeLookupHit) && (
             <div className="mx-3 mb-2 mt-1">
               {barcodeScanning ? (
