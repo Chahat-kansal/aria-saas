@@ -906,16 +906,19 @@ export default function TerminalPage() {
 
   /** Step 2: a 10-digit code that is not a catalogued product. Resolve it as a customer. */
   const resolveCustomerScan = useCallback(async (code: string) => {
+    console.log('[SCAN-DIAG v3] resolveCustomerScan ENTERED', code);   // TEMPORARY
     setBarcodeLookupHit(null);
     setCustomerScan({ kind: 'looking' });
     let data: Record<string, unknown> | null = null;
     try {
+      console.log('[SCAN-DIAG v3] about to fetch scan-lookup');       // TEMPORARY
       const r = await fetch('/api/pos/loyalty/scan-lookup', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       });
       data = await r.json() as Record<string, unknown>;
-    } catch { /* network — treated as a miss below, then falls through to products */ }
+      console.log('[SCAN-DIAG v3] scan-lookup replied', JSON.stringify(data));   // TEMPORARY
+    } catch (e) { console.log('[SCAN-DIAG v3] scan-lookup THREW', (e as Error).message); }
 
     if (!data || data.found !== true) {
       setCustomerScan(null);
@@ -965,6 +968,18 @@ export default function TerminalPage() {
           const t0Bc = performance.now();
           const hit = barcodeMap.get(code);
           console.log('[POS perf] barcode:', (performance.now() - t0Bc).toFixed(2), 'ms');
+          // TEMPORARY DIAGNOSTIC — ARIA-ATTACH-CUSTOMER-1. Remove once the scan path is confirmed.
+          // Two rounds of inference disagreed with observation; this ends it with facts.
+          console.log('[SCAN-DIAG v3]', JSON.stringify({
+            code,
+            codeLen: code.length,
+            hit: hit ? { id: hit.id, name: hit.name, is_active: hit.is_active } : null,
+            tenDigit: /^\d{10}$/.test(code),
+            branch: (hit && hit.is_active) ? 'product'
+                  : (!hit && /^\d{10}$/.test(code)) ? 'customer'
+                  : (!hit) ? 'global_product'
+                  : 'inactive_product_noop',
+          }));
           // ARIA-ATTACH-CUSTOMER-1 — three-step disambiguation, in this order deliberately:
           //   1. a catalogued product WINS OUTRIGHT. Product scanning is untouched on its hot path,
           //      so a 10-digit SKU that is in the catalogue still rings up as a product.
@@ -999,6 +1014,7 @@ export default function TerminalPage() {
         barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ''; }, 150);
       }
     };
+    console.log('[SCAN-DIAG v3] wedge handler ATTACHED (this build has the customer branch)'); // TEMPORARY
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [products, variantModal]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1014,10 +1030,18 @@ export default function TerminalPage() {
       })
       .catch(() => null);
   }, []);
+  // ARIA-ATTACH-CUSTOMER-1 — the HARDWARE path needs the same three steps as the wedge path.
+  //
+  // This callback was product-only, and it attaches with {capture:true} the moment a dedicated
+  // scanner is registered — i.e. exactly when the handheld this feature needs is plugged in. Left
+  // as it was, buying the scanner would have silently switched customer scanning off again.
   useScanner(
     (code) => {
       const hit = barcodeMap.get(code);
-      if (hit && hit.is_active) { SFX.scan(); checkAndAddToCart(hit); }
+      console.log('[SCAN-DIAG v3] HARDWARE path fired', JSON.stringify({ code, hasHit: !!hit })); // TEMPORARY
+      if (hit && hit.is_active) { SFX.scan(); checkAndAddToCart(hit); return; }
+      if (!hit && /^\d{10}$/.test(code)) { void resolveCustomerScan(code); return; }
+      if (!hit) globalProductLookup(code, false);
     },
     { minLength: 4, maxGapMs: 50 },
     hasDedicatedScanner,
