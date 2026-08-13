@@ -8,6 +8,7 @@ import type { ModifierGroup as PrefetchedModifierGroup } from '@/lib/pos/modifie
 import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
+import { feedKey, takeCode, emptyWedge, type WedgeState } from '@/lib/pos/wedge-buffer';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
 import type { ReceiptTemplate, ReceiptSettings } from '@/components/pos/Receipt';
@@ -522,9 +523,10 @@ export default function TerminalPage() {
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const flyRef      = useRef<FlyToCartHandle>(null);
   const cartAnchor  = useRef<HTMLDivElement>(null);
-  const barcodeBuffer = useRef('');
-  const barcodeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const barcodeTs     = useRef<number>(0);
+  // ARIA-ATTACH-CUSTOMER-1 — one buffer, one idle rule, both tested in wedge-buffer.test.ts.
+  // Replaces three refs and a setTimeout that implemented the same idea twice with two different
+  // constants (a 100ms gap check and a 150ms abandon timer).
+  const wedge = useRef<WedgeState>(emptyWedge());
   const quickPanelRef = useRef<HTMLDivElement>(null);
 
   /* ── Apply saved theme on terminal mount ─────────────────────── */
@@ -962,8 +964,12 @@ export default function TerminalPage() {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       const now = Date.now();
       if (e.key === 'Enter') {
-        const code = barcodeBuffer.current.trim();
-        barcodeBuffer.current = '';
+        // ARIA-ATTACH-CUSTOMER-1 — buffer rules live in lib/pos/wedge-buffer.ts so they are tested
+        // rather than argued about. takeCode applies the SAME idle rule as feedKey, which is what
+        // the removed 150ms setTimeout used to do with a different constant.
+        const { code: taken, next } = takeCode(wedge.current, now);
+        wedge.current = next;
+        const code = taken ?? '';
         if (code.length >= 4) {
           const t0Bc = performance.now();
           const hit = barcodeMap.get(code);
@@ -1007,11 +1013,11 @@ export default function TerminalPage() {
       if (e.key === 'F10') { e.preventDefault(); if (cart.length > 0 && registerIsOpen) setTerminalView('checkout'); return; }
       if (e.key === 'Escape') { if (!variantModal) confirmClear(); return; }
       if (e.key.length === 1) {
-        if (now - barcodeTs.current > 100) barcodeBuffer.current = '';
-        barcodeTs.current = now;
-        barcodeBuffer.current += e.key;
-        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
-        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ''; }, 150);
+        // feedKey resets on an idle gap and THEN appends, so the character whose own arrival
+        // triggered the reset is kept. The first keystroke of every scan arrives after an idle gap
+        // by definition — losing it would make a 10-digit customer code nine digits and it would
+        // never reach the customer branch.
+        wedge.current = feedKey(wedge.current, e.key, now);
       }
     };
     console.log('[SCAN-DIAG v3] wedge handler ATTACHED (this build has the customer branch)'); // TEMPORARY
