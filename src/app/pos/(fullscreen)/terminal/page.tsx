@@ -527,6 +527,7 @@ export default function TerminalPage() {
   // Replaces three refs and a setTimeout that implemented the same idea twice with two different
   // constants (a 100ms gap check and a 150ms abandon timer).
   const wedge = useRef<WedgeState>(emptyWedge());
+  const wedgeHandlerSeq = useRef(0);   // TEMPORARY — v4 handler identity
   const quickPanelRef = useRef<HTMLDivElement>(null);
 
   /* ── Apply saved theme on terminal mount ─────────────────────── */
@@ -958,8 +959,19 @@ export default function TerminalPage() {
 
   /* ── Barcode scanner ──────────────────────────────────────────── */
   useEffect(() => {
+    // TEMPORARY DIAGNOSTIC v4 — identify EVERY handler instance and every keystroke it receives,
+    // so "which handler saw which key, in what order" stops being a matter of inference.
+    const hid = ++wedgeHandlerSeq.current;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
+      if (e.key && e.key.length === 1) {
+        console.log('[SCAN-DIAG v4] h#' + hid + ' KEY ' + JSON.stringify({
+          key: e.key,
+          target: target ? (target.tagName ?? String(target)) : String(target),
+          isSearchRef: target === searchRef.current,
+          willFilter: target === searchRef.current || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA',
+        })); // TEMPORARY
+      }
       if (target === searchRef.current) return;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       const now = Date.now();
@@ -1017,12 +1029,20 @@ export default function TerminalPage() {
         // triggered the reset is kept. The first keystroke of every scan arrives after an idle gap
         // by definition — losing it would make a 10-digit customer code nine digits and it would
         // never reach the customer branch.
+        const before = wedge.current;                                   // TEMPORARY
         wedge.current = feedKey(wedge.current, e.key, now);
+        console.log('[SCAN-DIAG v4] h#' + hid + ' FEED ' + JSON.stringify({
+          key: e.key, before: before.buffer, after: wedge.current.buffer,
+          gap: now - before.lastKeyAt,
+        })); // TEMPORARY
       }
     };
-    console.log('[SCAN-DIAG v3] wedge handler ATTACHED (this build has the customer branch)'); // TEMPORARY
+    console.log('[SCAN-DIAG v4] ATTACH handler#' + hid); // TEMPORARY
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      console.log('[SCAN-DIAG v4] DETACH handler#' + hid); // TEMPORARY — proves cleanup ran
+      window.removeEventListener('keydown', onKey);
+    };
   }, [products, variantModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hardware scanner hook — enabled when a dedicated USB/HID scanner is registered
