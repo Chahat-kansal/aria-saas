@@ -28826,6 +28826,85 @@ export type Database = {
         }
         Returns: number
       }
+      merge_pos_customers_atomic: {
+        Args: {
+          p_business_id: string
+          p_performed_by: string
+          p_primary_id: string
+          p_secondary_id: string
+        }
+        Returns: {
+            abn: string | null
+            account_balance: number | null
+            account_number: string | null
+            balance: number | null
+            birthday: string | null
+            business_id: string | null
+            churn_risk_score: number | null
+            churn_risk_updated_at: string | null
+            consent_captured_at: string | null
+            consent_source: string | null
+            created_at: string | null
+            credit_limit_cents: number | null
+            current_balance_cents: number | null
+            custom_fields: Json | null
+            customer_group_id: string | null
+            days_since_visit: number | null
+            deleted_at: string | null
+            email: string | null
+            email_consent: boolean | null
+            email_enc: string | null
+            group_id: string | null
+            group_name: string | null
+            id: string
+            last_visit: string | null
+            last_visit_at: string | null
+            lifetime_value_cents: number | null
+            lightspeed_customer_id: string | null
+            loyalty_balance: number | null
+            loyalty_identity_id: string | null
+            loyalty_invite_sent_at: string | null
+            loyalty_invite_token: string | null
+            loyalty_points: number | null
+            loyalty_tier: string | null
+            marketing_consent: boolean | null
+            merged_into: string | null
+            name: string
+            name_enc: string | null
+            notes: string | null
+            notes_enc: string | null
+            phone: string | null
+            phone_enc: string | null
+            points_balance: number | null
+            price_list_id: string | null
+            referral_code: string | null
+            review_request_sent_at: string | null
+            rfm_frequency_score: number | null
+            rfm_monetary_score: number | null
+            rfm_recency_score: number | null
+            rfm_score_total: number | null
+            rfm_segment: string | null
+            segment: string | null
+            segment_updated_at: string | null
+            shopify_customer_id: string | null
+            sms_consent: boolean | null
+            source: string | null
+            square_customer_id: string | null
+            stamps_count: number | null
+            tags: string[] | null
+            tax_exempt: boolean
+            tax_exempt_certificate: string | null
+            tax_exempt_expires_at: string | null
+            tax_exempt_type: string | null
+            total_lifetime_spend: number | null
+            total_spend: number | null
+            total_spent: number | null
+            updated_at: string | null
+            visit_count: number | null
+            whatsapp_consent: boolean
+            whatsapp_opt_in_at: string | null
+        }
+      }
       purge_account_data: { Args: never; Returns: string[] }
       rate_limit_hit: {
         Args: { p_key: string; p_limit: number; p_window_sec: number }
