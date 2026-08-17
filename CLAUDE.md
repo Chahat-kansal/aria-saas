@@ -3,6 +3,32 @@
 This file is automatically loaded into every Claude Code session. These rules are
 BINDING and override any task instruction that conflicts with them.
 
+**If a paste contradicts this file, this file wins — stop and say so.**
+
+Merged 2026-08-17 (SETUP-0). RULES 0–13 below are the originals, preserved intact; RULES 14–19
+and the two lead sections were folded in from the SETUP-0 standing-rules document. Where the two
+disagreed, the disagreement is recorded in place rather than silently resolved — see RULE 4
+(superseded), RULE 8 (kept), RULE 12 (corrected against live data) and RULE 19 (number collision).
+
+---
+
+## WHAT YOU ARE WORKING ON
+
+Aria OS — an AI business co-owner SaaS for Australian small businesses: **cafés, restaurants,
+retail/liquor**. Warehouse is parked; do not build for it, do not count it as scope.
+
+Next.js (App Router) on Vercel · Supabase Postgres with RLS · Anthropic · Stripe · **ClickSend for
+SMS** · **Resend for email**. Solo founder, browser-only development. One test business:
+Sip Café (`sip-ff5055`, business_id `ff5055a0-c351-4ada-817a-1804961035f3`).
+
+The work is organised as **108 mega-sprints** in a fixed dependency order. You will receive one
+mega-sprint per session. It contains numbered PHASES. **Each phase is its own commit.**
+
+- `pwd` is `C:\Users\kansa\aria-saas-audit`. **NEVER** touch
+  `c:\Users\kansa\Downloads\aria-saas-main\repo-worktree`.
+- **The sale path is sacred.** POS never awaits a network call to complete a sale. No background
+  work may block or slow it.
+
 ---
 
 ## 🚨 MANDATORY COMMIT PROTOCOL — follow for EVERY commit, NO EXCEPTIONS
@@ -19,13 +45,29 @@ commits THREE times — every single time because code was committed/pushed WITH
 5. git log origin/main..HEAD   # MUST be empty. If not empty → push again.
 ```
 
-**COMMIT RULE — ONE COMMIT PER PROMPT (not per task):**
-- ✅ Complete ALL tasks in a prompt, then build ONCE, then make ONE commit
-- ✅ This means one Vercel deploy per prompt, not per task
-- ❌ Never make multiple commits for a single prompt — wastes Vercel build quota
+⚠️ **Step 3's `git add -A` is a known hazard in this repo** — it has swept ~94 junk files and 16 MB
+of binaries into a commit. **Stage explicit paths instead.** There are 22 pre-existing untracked
+files sitting in the tree right now; none of them belong in a commit.
+
+**COMMIT GRANULARITY:**
+- **Inside a mega-sprint: ONE COMMIT PER PHASE.** Never one per file, never one for the whole
+  mega-sprint. (RULE 15.)
+- **Outside a mega-sprint (ad-hoc prompt): ONE COMMIT PER PROMPT.** Complete all tasks in the
+  prompt, then build ONCE, then make ONE commit.
 - ❌ Never commit without running `npm run build` first
 - ❌ Never push a commit that hasn't passed `npm run build`
 - ❌ Never build on top of a commit you haven't verified builds
+
+> The original wording of this rule was "one commit per prompt — multiple commits waste Vercel
+> build quota." The quota rationale is **superseded**: Vercel is on the paid plan (RULE 4). The
+> per-phase rule replaces it inside mega-sprints. Both are recorded so neither gets reinstated
+> from an old paste as if the other never existed.
+
+**COMMITS GO VIA `git push`, SO THE PRE-PUSH HOOK RUNS.** Confirmed 2026-08-17: pushes to this
+repo emit `[pre-push] OK — canon-rail-guard clean, tsc 0 errors, unit tests green`. If a commit
+ever goes through the **GitHub API** instead, the hook does **not** run — no canon rail, no tsc
+gate, no vitest. In that case run all three manually and **state in your report that the hook did
+not run.**
 
 **At the END of every task/session:**
 - Run `npm run build` one final time to confirm the whole thing is green
@@ -49,6 +91,12 @@ not even to fix a build error.
 - ❌ NEVER replace a rich implementation with a simpler one
 - ✅ If refactoring, the result must do EVERYTHING the original did, plus the improvement
 - ✅ Every feature present today must still work tomorrow
+
+**No refactoring, tidying, renaming, deleting, or "improving while I'm here."** Feeling the urge
+is the signal to stop and report it, not to act.
+
+**Use `str_replace` for edits to existing files.** Write a whole file only when creating it, or
+when the file itself is the deliverable and the change is structural — and say so in the report.
 
 **If a task seems to require a downgrade: STOP. Do not proceed. Output:**
 `⚠️ BLOCKED: [task] appears to require downgrading [feature]. Not proceeding per RULE 0. Need guidance.`
@@ -84,17 +132,34 @@ Before EVERY commit:
 ```
 npx tsc --noEmit   # must be zero errors
 npm run build      # must pass
+npx vitest run     # must be green
 ```
 If the build breaks, FIX THE ERROR — never remove the feature causing it (see RULE 0).
 
 ---
 
-## 🔒 RULE 4 — VERCEL CONSTRAINTS
+## 🔒 RULE 4 — VERCEL CONSTRAINTS  *(revised 2026-08-17)*
 
-- vercel.json: keep at 22 function configs max
-- Crons: DAILY MAXIMUM (e.g. "0 9 * * *"). Sub-daily schedules silently break Vercel Pro deploys.
-  (Known issue to fix: parcel-insights is currently "0 */6 * * *" — must go daily)
-- Cron count: verify against plan limit before adding new crons
+**CURRENT — Vercel is on the PAID plan** (confirmed by Chahat 2026-07-29, reconfirmed 2026-08-04):
+- **100 crons per project**
+- **Per-minute cron cadence allowed**
+- **300s function timeout**
+
+**SUPERSEDED — do not reinstate from an old paste:**
+> - ~~vercel.json: keep at 22 function configs max~~
+> - ~~Crons: DAILY MAXIMUM (e.g. "0 9 * * *"). Sub-daily schedules silently break Vercel Pro deploys.~~
+>   - ~~(Known issue to fix: parcel-insights is currently "0 \*/6 \* \* \*" — must go daily)~~
+>     **RESOLVED** — verified 2026-08-17: no `parcel` cron exists in vercel.json at all, and 0 of
+>     the 22 crons are sub-daily. The issue is closed twice over: the cron is gone, and per-minute
+>     cadence is now allowed anyway.
+> - ~~Cron count: verify against plan limit before adding new crons~~
+>
+> Retired 2026-08-17. This was a **free/hobby-plan** constraint. It is kept visible, struck
+> through, because it survived in pastes for weeks after the plan changed and was still being
+> reported against on 2026-08-17 (functions 9/22, crons 22). If a sprint document still carries
+> it, **ignore it and say so in your report.**
+
+Current state for reference: 9 function configs, 22 crons, 0 sub-daily.
 
 ---
 
@@ -133,7 +198,15 @@ Confirmed column/table traps — use the CORRECT name:
 - community_live_streams: cf_stream_uid, cf_playback_hls, cf_whip_url
 - THREE briefing tables (different columns): daily_briefings, aria_daily_briefings, pos_daily_briefings
 - All amounts DOLLARS (numeric) except columns named *_cents
-  (exception: staff_members.pay_rate_cents IS cents)
+  (exception: staff_members.pay_rate_cents IS cents; staff_pay_rates.hourly_rate_cents IS cents)
+- Display amounts with `(Number(x)||0).toFixed(2)`
+
+**GROUNDING-TEETH — no invented dollar or percentage figures, ever.** An honest "unknown" beats a
+plausible number. This has already caused a real bug: a briefing computed every percentage against
+a fabricated $999,999 target.
+
+**ALLERGEN HARD RULE — no model output may answer allergen or dietary-safety questions on any
+surface**, gated or disclaimed or not. Structured owner fields only. Same for prices and stock.
 
 ---
 
@@ -146,6 +219,13 @@ Confirmed column/table traps — use the CORRECT name:
 - Never swallow errors as empty results (no `catch { return [] }`)
 - Every business-data route must verify the user owns the business_id (cross-business leak = critical)
 
+**Incident record (ARIA-MERGE-FIX-1, 2026-08-17):** a sweep of `pos_customers` writes found **14 of
+22 call sites discarded their error**. Two were in `/api/customers/merge`, where the discarded
+error was a `pos_customers_phone_uniq` rejection — the route then soft-deleted the source row
+anyway, so the merged data was never written and the row holding it was gone, and the caller got a
+200. `.maybeSingle()` also ERRORS on >1 row rather than returning the first: `.limit(1)` is
+required, not decorative.
+
 ---
 
 ## 🔒 RULE 8 — AI / MODEL IDs
@@ -155,6 +235,10 @@ Use exactly:
 - claude-sonnet-4-6  ← current Sonnet (model-router smart tasks, MODEL-ROUTER-UPGRADE)
 - claude-sonnet-4-5-20250929  ← still pinned by the core tool-loop provider (providers/anthropic.ts); migrate later
 - claude-opus-4-5-20251101
+
+> A 2026-08-17 paste listed only `claude-sonnet-4-5-20250929` as current Sonnet. **That list is
+> wrong and was rejected** — adopting it would have silently reverted MODEL-ROUTER-UPGRADE. The
+> four IDs above are correct.
 
 Aria Intelligence Rule: every feature should feed data into briefing/business-brain,
 log to aria_ai_calls, and verify aria_autopilot_actions where relevant.
@@ -194,9 +278,31 @@ WHERE tablename = 'target_table' AND indexname = 'new_idx';
 - ❌ Never close a migration sprint without the row count matching expected tables/cols
 - ✅ N rows returned = N objects live in prod. Fewer = apply the missing migration NOW
 
+**Always dump CHECK constraints properly:**
+```sql
+select conname, pg_get_constraintdef(oid) from pg_constraint
+where conrelid='public.<table>'::regclass and contype='c';
+```
+
 **Incident record:** cx_otp_codes + cx_sessions (CX-AUTH-1a) and loyalty_identity.phone
 (20260622000001) were all written to git but never applied to prod. The entire CX-AUTH-1b
 sprint 500'd on every auth request as a result. Applied 2026-07-08 via Supabase MCP.
+
+### 🔒 RULE 10a — YOU DO NOT WRITE SCHEMA  *(added 2026-08-17, composes with RULE 10)*
+
+**This is absolute. It changes who authors DDL; it does NOT replace RULE 10, which is still how a
+migration gets verified once applied.**
+
+- **All DDL is applied by Claude in chat via Supabase MCP**, after the founder approves the SQL.
+  Columns, constraints, indexes, RLS policies, functions, grants — none of it is yours to invent.
+- **You still write DML**: test fixtures, seeded proof rows, rolled-back `DO` blocks. That is how a
+  phase proves itself, and you tear it down afterwards.
+- **You WILL be given the exact migration SQL to commit** into `supabase/migrations/`. Commit it
+  **byte-identical**. Do not reformat, rename, or "clean up" the file. The repo must describe
+  production exactly — `git-migration ≠ prod-schema` drift is a documented recurring failure here.
+- The migration always lands **before** the code that reads it. If you are asked to write code
+  against a column that does not exist yet, **stop and report** — do not create it yourself.
+- Reading the database is encouraged, and required by RULE 10's verification step.
 
 ---
 
@@ -235,6 +341,30 @@ passing on your own machine is necessary but no longer sufficient to declare a s
 Full detail: see `.github/workflows/e2e.yml` header comment for required secrets and
 `e2e/helpers/seed.ts` for the idempotent test-data seed (Sip test business).
 
+### ⚠️ LIVE CI STATE — measured 2026-08-17, not assumed
+
+A 2026-08-17 paste claimed "GitHub Actions is billing-blocked, so nothing catches it server-side
+either." **That is false and has been deleted.** Measured against the GitHub API:
+
+| workflow | state | reality |
+|---|---|---|
+| Canon Rail Guard | active | **green** on every recent `main` push |
+| E2E Tests · `typecheck` job | active | **green** |
+| E2E Tests · `e2e-local` job | active | **RED on 40 of 40** examined `main`/push runs, back to 2026-08-04. No success in that window. |
+| Smoke Suite | active | **0 runs, ever** |
+
+4,628 workflow runs exist on the repo. Actions is running and is not billing-blocked.
+
+**Two things this means, and they are the RULE 12 problem, not a footnote:**
+1. `e2e-local` has been red continuously since at least 2026-08-04. Under this rule as written, no
+   sprint in that window is "done". Either the job is genuinely broken (environment/secrets) and
+   must be fixed, or the rule is being ignored. **Do not declare a sprint done on the strength of
+   RULE 12 until this is resolved** — cite the actual run, not the rule.
+2. **Smoke Suite has never executed.** `smoke.yml` triggers on `pull_request` only, and this repo
+   pushes directly to `main`, so the trigger has never fired. This is failure pattern #1 below in
+   its purest form: it exists, it is `active`, it looks correct, and it does nothing. RULE 13's
+   claim that it "also runs in CI" is therefore **aspirational, not true today.**
+
 ---
 
 ## 🔒 RULE 13 — SMOKE SUITE FOR AUTH/ROUTING/MIDDLEWARE/RLS SPRINTS (from: SECURITY-P1)
@@ -250,6 +380,8 @@ bookings, admin authz, CX public page) — a security change that blocks Sip fai
   `npm run test:smoke` must pass locally, same tier as RULE 3's tsc/build. As of SECURITY-P2
   it also runs in CI (`.github/workflows/smoke.yml`) on every PR touching `src/**` — a red
   smoke check blocks merge same as a red typecheck/e2e-local check.
+  **⚠️ 2026-08-17: the CI half of this has never actually run — 0 runs, PR-only trigger, and this
+  repo pushes straight to `main`. Local is currently the ONLY place this suite executes.**
 - ✅ A new auth-adjacent route or form needs a corresponding assertion added to
   `tests/smoke/owner-flows.spec.ts` (legitimate case) — and to
   `tests/smoke/security-guards.spec.ts` if it adds a new rate limit or Turnstile gate
@@ -265,6 +397,130 @@ reported as already fixed — including a staff-portal OTP/session system that r
 columns (`staff_members.portal_token`/`portal_token_expires_at`) that had never existed in the
 live database at all (no migration ever created them, confirmed via `information_schema`), so
 the feature had been silently non-functional in production, not merely insecure.
+
+---
+
+## 🔒 RULE 14 — PARALLEL SESSIONS: ASSUME YOU ARE NOT ALONE
+
+Several Claude Code sessions may run on this repo at once, on separate branches.
+
+- **Work only on your declared branch and your declared file domain.** Both are stated in your
+  mega-sprint. If your work needs a file outside your domain, **stop and report** — do not take it.
+- **Never assume `main` is what you branched from.** If you merge or rebase, re-run `tsc`, `build`
+  and `vitest` against the combined result. "It was green on my branch" is not evidence after
+  someone else merged.
+- If the canon rail flags something you did not write (a merge can do this, and a **file move** has
+  done it before on byte-identical code), **report it — do not `--no-verify` past it silently.** If
+  a bypass is genuinely correct, say so explicitly in the commit message and in your report.
+
+---
+
+## 🔒 RULE 15 — HOW A MEGA-SPRINT RUNS
+
+**PREFLIGHT — before any phase, for the whole mega-sprint.** Report and STOP:
+- every table any phase touches: columns · CHECKs · FKs · UNIQUE/partial indexes
+- every helper any phase will call: **does it already exist?** Reports in this project
+  systematically *understate* what exists — four confirmed cases.
+- anything that contradicts the mega-sprint document. **The document is a report too.** If the code
+  disagrees with it, the code wins.
+
+**EACH PHASE carries all six:**
+| | |
+|---|---|
+| **SCOPE** | exactly what changes |
+| **NOT-SCOPE** | named exclusions, so nothing gets helpfully added |
+| **VERIFY** | tests, plus **one mutation check** |
+| **SWEEP** | grep for siblings of every change; report a number, including zero |
+| **COMMIT** | one commit; `npx tsc --noEmit` = 0, `npm run build` = 0, `npx vitest run` green **before** it |
+| **GATE** | report; continue only if this phase's own proof passed |
+
+**The mutation check is the point, not a formality.** Revert your fix and confirm the suite goes
+red. **A mutation check that fails to fail is itself the finding** — report it loudly. This has
+happened twice and both times revealed the fix was structurally impossible or the test was
+comparing something to itself.
+
+Where a fix lives in SQL and the guard is a database constraint, a fake-DB unit test proves only
+your model of the bug. Mutate against the real thing — a rolled-back `DO` block that reintroduces
+the original statement order and shows the actual `sqlstate` is stronger evidence, and says so.
+
+**Rules for phases:**
+- A **failed phase halts the mega-sprint.** Do not work around it. Do not continue "around" it.
+- A phase whose work is **already done** reports that and skips. It never invents scope to justify
+  itself.
+- **One commit per phase.** Never one per file. Never one for the whole mega-sprint.
+
+---
+
+## 🔒 RULE 16 — THE FIVE FAILURE PATTERNS OF THIS CODEBASE
+
+Measured from this repo's own history. Check for each one before calling anything done.
+
+1. **"Exists, looks correct, does nothing."** Seven confirmed instances — Canon Guard (0 runs
+   ever), Smoke Suite (0 runs — **re-confirmed 2026-08-17, see RULE 12**), a Deploy workflow that
+   verified nothing in 8s, Turnstile hardened on a route with no callers, a CHECK constraint that
+   made the live booking page unable to book, an RPC referencing a non-existent column so every
+   void silently failed to restore stock. **Prove behaviour, not presence.**
+2. **"Fix landed on the wrong file."** Three instances in one day. **Every fix greps for its own
+   siblings before it is done.**
+3. **"Reports understate what exists."** Four instances — things documented as 0 rows had 2,146;
+   most of a sprint was already built. **Verify against live code and the live database, never
+   against a document.** (2026-08-17 added a fifth: a sprint asked for a unique index that already
+   existed, predicate-for-predicate.)
+4. **"N copies drift."** Six business-id resolvers, 120 revenue filters, three business-health
+   computations, one canonical helper built twice four weeks apart. **Before writing a new helper,
+   search for the three that already exist.** Rail first, then migrate — a new helper alone stalls
+   at 9–15% adoption.
+5. **Measurement errors in your own diagnostics.** A `sed` range that never matched ran to EOF and
+   reported 12 false findings; a normalisation query truncated and manufactured a collision that
+   did not exist; a "non-deterministic resolver" report was produced by a query that omitted the
+   `deleted_at is null` filter the resolver actually applies. **Sanity-check your own query before
+   building a sprint on its output — and retract loudly when it was wrong.**
+
+---
+
+## 🔒 RULE 17 — REPORT FORMAT, EVERY PHASE
+
+```
+PHASE <n> — <name>
+  files changed        (paths, +/- lines)
+  sibling sweep        what you searched for, how many hits, what you did
+  mutation check       what you reverted, how many tests went red
+  gates                tsc · build · vitest · hook ran? y/n
+  commit               sha + message
+  NOT done, and why    scope you declined, and the reason
+  discovered           anything that changes a later mega-sprint
+```
+
+**Say what you did not do.** An honest "mechanism proven at the SQL layer, not exercised through
+the UI" is a good report. A claim of end-to-end verification you did not perform is the worst
+possible outcome — worse than the bug, because it stops anyone looking.
+
+---
+
+## 🔒 RULE 18 — STOP AND ASK: do not decide these yourself
+
+- The code contradicts the mega-sprint document.
+- A phase needs a file outside your declared domain.
+- A phase needs schema you were not given.
+- The sweep finds more instances than the document predicted.
+- A fix would change an existing HTTP response shape, or anything customer-facing.
+- Anything involving **money, customer contact, deletion, or authorisation** where the correct
+  behaviour is not spelled out.
+- You are about to bypass a gate for any reason.
+
+**Erring toward stopping is correct.** A stopped session costs an hour. A wrong assumption that
+ships costs a week of archaeology — and this repo has the history to prove it.
+
+---
+
+## 🔒 RULE 19 — PROMPT AUTHORING: EXTRACT THE FACT, DON'T FORBID THE SYMPTOM
+
+If you are about to write "NEVER say X" into a prompt, **extract the missing fact instead.** A
+prohibition treats the symptom; the model said X because it lacked the fact that makes X wrong.
+
+> ⚠️ **Number collision:** the SETUP-0 source document numbered this "RULE 9". **RULE 9 in this
+> file is FULL-SAAS-DEPTH and predates it.** If a paste refers to "RULE 9 — extract the missing
+> fact", it means this rule, RULE 19. Do not renumber either one.
 
 ---
 
