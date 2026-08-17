@@ -241,3 +241,95 @@ What genuinely enforces on every push right now, verified this sprint:
 - **Canon Rail Guard** in CI — green on every recent `main` push
 - **E2E `typecheck` job** in CI — green
 - **Smoke Suite** — runs as of SETUP-1 Phase 1; first results are new information
+
+---
+
+## 10 · APPENDED 2026-08-17 (Phase 3) — fixture state re-verified, and P2 amended
+
+Appended, not merged into the sections above, so §7's predictions stay where they were written.
+**The artifacts had still not arrived when this was added; Q1 and §6 remain NOT DETERMINED.**
+
+### 10a · Full fixture state, MCP-verified
+
+| | `…0101` Smoke Test Café | `…0001` Sip (E2E Test) |
+|---|---|---|
+| `onboarding_complete` | **true** | **false** |
+| active products | 2 | 2 |
+| outlets | 1 | 0 |
+| **`pos_registers` rows** | **0** | **0** |
+| **open cash sessions** | **1** | **0** |
+
+The open session on `…0101` is `49b90021-3be1-4243-981b-269be1f6360f`, `status = 'open'`,
+**`register_id` IS NULL**, `opened_at` **2026-08-01 03:36:19Z**, `closed_at` null — open for over
+two weeks.
+
+Two refinements to how this was framed when the append was requested, both from the query rather
+than from inference:
+
+1. **It is not a session pointing at a register that does not exist.** `register_id` is NULL, so
+   there is no dangling reference to resolve — the session is register-less, which is a different
+   (and quieter) inconsistency.
+2. **It is not residue from the 26 Jul smoke repair.** It was opened **1 Aug**, five days later.
+   The origin is unconfirmed; a locally-run `npm run test:smoke` that did not reach its cleanup is
+   the most plausible candidate, since the CI smoke suite had never executed at all before
+   `d5df27d2`. Recorded as unconfirmed rather than guessed at.
+
+### 10b · P2 AMENDED — the branch I expected was wrong, and this says so before the artifacts land
+
+**Original P2 (§7):** the POS ×3 cluster fails because `…0101` has 0 registers.
+
+**That mechanism is wrong.** The terminal's gate does not read `pos_registers` at all:
+
+```
+terminal/page.tsx:598   fetch('/api/pos/sessions') -> setRegisterSession(d.openSession ?? null)
+terminal/page.tsx:1945  const registerIsOpen = !!registerSession;
+terminal/page.tsx:1948  if (!registerLoading && !registerIsOpen) -> "Register is closed" gate
+```
+
+The gate is satisfied by an **open cash session**. `register_id` is never consulted by it, and the
+sale path keys off `session_id` (`:1572`), not `register_id`. Having 0 `pos_registers` rows
+therefore does not block the terminal.
+
+**P2, restated as two branches:**
+
+- **Branch A — the gate is satisfied and the POS specs are NOT blocked by it.** The open session
+  makes `registerIsOpen` true, the "Register is closed" screen never renders,
+  `openRegisterIfNeeded` correctly finds no "Open register" button and skips (it is
+  `.catch(() => false)`, so it cannot throw). Any remaining POS failure is for some other reason,
+  and the specs may now **pass outright**.
+- **Branch B — the null `register_id` breaks something downstream**, so the gate passes but the
+  grid or the cart fails anyway.
+
+**I expect Branch A**, and the sharper form of the prediction is this: the POS ×3 failures in the
+27 Jul report **predate the session entirely** (opened 1 Aug). If Branch A holds, an orphaned
+session left open by accident on 1 Aug has been silently *unblocking* the POS specs ever since.
+
+**Which makes it fragile in a way worth naming.** The only thing satisfying the register gate in
+CI is a session nobody manages and nothing recreates. `tests/smoke/owner-flows.spec.ts`'s POS sale
+test is self-cleaning, and `/pos/close` exists — anything that closes `49b90021` re-breaks every
+POS spec, with no seed step to reopen one. That is not a stable fixture; it is a fixture held up
+by residue.
+
+**This is a third gap**, on top of the outlet gap and the onboarding gap in §3b, and all three
+point the same way on sizing.
+
+### 10c · The fixture reconciliation is its own sprint — named here, deliberately not done
+
+**No fixture is touched by SETUP-1.** The work below is a separate, later sprint because these
+five items cannot be changed independently — fixing any one in isolation moves the failure rather
+than removing it, which §3b already demonstrates for `TEST_BUSINESS_ID`:
+
+1. **`e2e/helpers/seed.ts`** — seeds `…0001`, a business nothing resolves to.
+2. **`resolveTestBusinessId`** — "newest business owned by this user" is why creating an unrelated
+   fixture in SECURITY-P4 silently repointed the whole e2e suite. Non-deterministic by design.
+3. **`TEST_BUSINESS_ID`** — unset in both CI jobs; setting it is necessary but not sufficient.
+4. **The missing register** — 0 `pos_registers` rows on both fixtures.
+5. **The orphaned open session** `49b90021` — currently load-bearing by accident (10b).
+
+Plus the two state gaps from §3b: `…0001`'s `onboarding_complete = false` and its zero outlets.
+
+**It cannot be verified in a single run.** Each change alters which business the suites resolve to
+and what state that business is in, so the failure set moves between runs; a green result would
+need several successive runs to distinguish a real fix from a reshuffle. Any DDL or fixture DML in
+that sprint is founder-approved and applied via Supabase MCP under CLAUDE.md RULE 10a, then
+verified live under RULE 10.

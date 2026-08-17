@@ -48,3 +48,8 @@ tsc.log
 # ARIA-LOYALTY-BACKFILL-RUN — backfill skip lists contain customer names, phones and emails.
 # Operational output, never source. Must not be committed.
 scripts/out/
+
+# SETUP-1 — CI artifacts extracted for triage (Playwright reports from GitHub Actions).
+# Never committed: they carry seeded customer data, screenshots and full page HTML.
+/ci-report-e2e-current/
+/ci-report-smoke-current/

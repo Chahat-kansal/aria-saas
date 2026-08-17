@@ -341,6 +341,37 @@ passing on your own machine is necessary but no longer sufficient to declare a s
 Full detail: see `.github/workflows/e2e.yml` header comment for required secrets and
 `e2e/helpers/seed.ts` for the idempotent test-data seed (Sip test business).
 
+### 🔒 RULE 12 AS AMENDED — SETUP-1, 2026-08-17. THIS PARAGRAPH IS THE OPERATIVE ONE.
+
+The rule above describes the intended end state. It does not describe today, and applied literally
+it would mean **no sprint since 10 July has been done** — which is not what has been practised. A
+rule nobody can satisfy stops being a gate and starts being decoration, so it is amended here to
+what actually enforces. This is deliberately an honest amendment rather than an arranged green
+tick; see `docs/aria/CI-TRIAGE-2.md` for the full diagnosis.
+
+**What actually enforces today:**
+
+- **The pre-push hook — canon-rail-guard + `tsc` + unit tests.** Runs on every push, currently
+  green. This is the real gate.
+- **Canon Rail Guard in CI** — green, and genuinely enforcing since its trigger fix
+  (SECURITY-RESIDUE-FIX-1 PART 2).
+- **E2E `typecheck` job in CI** — green.
+
+**What does NOT enforce today:**
+
+- **`e2e-local` — KNOWN-RED. Never green since inception** (`43746e77`, 10 Jul 2026 — the commit
+  that created the job; 200 of 200 `main`/push runs red). Cause: fixture/seed divergence plus
+  stacked eras — see `docs/aria/CI-TRIAGE-2.md`. **It is NOT a gate on "done" until the fixture
+  sprint lands.** Do not treat a red `e2e-local` as a blocker, and do not claim it as evidence of
+  anything either.
+- **Smoke Suite** — runs as of `d5df27d2` (SETUP-1 Phase 1). It had **never executed before that**,
+  so **its first results are NEW INFORMATION, NOT REGRESSIONS.** Do not attribute them to whatever
+  commit happens to surface them.
+
+**What "done" means in the interim:** the **pre-push hook green**, plus **the phase's own proof,
+stated in the report** (RULE 17). Nothing else is currently a gate. When the fixture sprint lands
+and `e2e-local` goes green, this amendment is removed and the rule above resumes in full.
+
 ### ⚠️ LIVE CI STATE — measured 2026-08-17, not assumed
 
 A 2026-08-17 paste claimed "GitHub Actions is billing-blocked, so nothing catches it server-side
