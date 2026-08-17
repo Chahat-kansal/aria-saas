@@ -1,10 +1,23 @@
 name: Smoke Suite
 
 # SECURITY-P2 (item 4) — wires tests/smoke/ (RULE 13, playwright.smoke.config.ts) into CI.
-# Runs on PRs touching src/ only (unlike e2e.yml's typecheck/e2e-local, which run on every
-# push/PR) — the smoke suite specifically proves auth/routing/middleware/RLS changes didn't
-# regress normal owner/admin/customer flows, so it only needs to gate the code that could cause
-# that regression.
+# Runs on pushes to main and on PRs touching src/ (unlike e2e.yml's typecheck/e2e-local, which
+# run on EVERY push/PR regardless of path) — the smoke suite specifically proves auth/routing/
+# middleware/RLS changes didn't regress normal owner/admin/customer flows, so it only needs to
+# gate the code that could cause that regression.
+#
+# SETUP-1 PHASE 1 — THIS WORKFLOW HAD NEVER EXECUTED. NOT ONCE, IN ANY RUN, EVER.
+#
+# It triggered on `pull_request` only, and this repo's real workflow — the one CLAUDE.md mandates —
+# is a direct `git push origin main` with no PR step. The trigger had therefore never fired: 0 runs
+# against 89 for Canon Rail Guard and 2,441 for E2E Tests, confirmed against the Actions API on
+# 2026-08-17. A required check that has never run is not a gate; RULE 13's claim that this "also
+# runs in CI" was aspirational.
+#
+# This is the IDENTICAL defect canon-rail-guard.yml carried and fixed in SECURITY-RESIDUE-FIX-1
+# PART 2 (see that file's header — "the guard had therefore never once executed against a real
+# commit despite being wired into CI"). That fix did not sweep its siblings, so this one sat
+# broken for the same reason for another month. The push trigger below is copied from it.
 #
 # Required GitHub secrets — SAME SIX as e2e.yml (reuse, do not duplicate/rename):
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL,
@@ -15,6 +28,20 @@ name: Smoke Suite
 # (documented at developers.cloudflare.com/turnstile/troubleshooting/testing) and are hardcoded
 # below — never put a real TURNSTILE_SECRET_KEY in CI.
 
+# TRIGGER BLOCK ONLY is copied from canon-rail-guard.yml — paths-filtered push on main, mirroring
+# its pull_request paths exactly, so this runs on the commits that can actually cause the
+# regression rather than on every commit.
+#
+# Canon Rail's "Determine diff base" step is DELIBERATELY NOT copied. That step exists because the
+# guard is a diff scanner: it needs github.base_ref on pull_request and github.event.before on
+# push to know which lines are new. The smoke suite diffs nothing — it builds the app and drives
+# it with Playwright — so a diff base here would be a variable nothing reads.
+#
+# '.github/workflows/smoke.yml' is in both lists, which canon-rail-guard.yml does not do for its
+# own file. Same principle though: canon-rail watches scripts/canon-rail-guard.ts, its own logic.
+# This suite's logic lives in tests/smoke/** and playwright.smoke.config.ts (both already listed)
+# plus this file. It also means a change to the trigger proves itself by firing — which is how
+# this phase demonstrated the fix rather than asserting it.
 on:
   pull_request:
     paths:
@@ -22,6 +49,16 @@ on:
       - 'tests/smoke/**'
       - 'playwright.smoke.config.ts'
       - 'package.json'
+      - '.github/workflows/smoke.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'tests/smoke/**'
+      - 'playwright.smoke.config.ts'
+      - 'package.json'
+      - '.github/workflows/smoke.yml'
 
 jobs:
   smoke:
