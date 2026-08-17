@@ -77,7 +77,10 @@ async function _POST(req: Request, _ctx: unknown, { supabase, userId, businessId
   // 'Owner' rather than a staff name: this route is reached from the owner's dashboard and POS
   // surfaces via withBusinessContext (an authenticated owner session), not from the staff-PIN app.
   // started_by carries the auth user id, exactly as it did before this change.
-  const result = await submitStocktake(supabase, bid, session.id, userId, 'Owner');
+  // 'owner' — reached only through withBusinessContext, i.e. an authenticated owner session on
+  // the dashboard/POS surfaces, never the staff-PIN app. Sub-threshold variances therefore
+  // apply directly (with an attributed row); anything material still routes to review.
+  const result = await submitStocktake(supabase, bid, session.id, userId, 'Owner', 'owner');
 
   return NextResponse.json({
     success: true,

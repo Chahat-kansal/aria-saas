@@ -1,6 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveOutletId } from '@/lib/inventory/outlet-stock'
+import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
 import { resolveCostFor } from '@/lib/inventory/resolve-cost'
+import { decideCountOutcome, THRESHOLD_DISCLOSURE, type CountActor } from '@/lib/inventory/count-policy'
+
+/**
+ * Prefix for the `reason` of a pos_stock_adjustments row created by a stocktake commit, followed by
+ * the session id. pos_stock_adjustments has no reference column; this table's own established
+ * convention is a structured reason prefix (avt.ts matches `recipe_depletion%`, guidance.ts matches
+ * `other:`), so a stocktake-sourced adjustment is queryable the same way.
+ */
+export const STOCKTAKE_ADJUST_REASON_PREFIX = 'stocktake_commit:'
 
 // INV-4 — the counting engine. THE LOCKED PRINCIPLE (extends INV-2): a count produces a VARIANCE (counted vs
 // expected items_on_hand). Variance NEVER auto-corrects stock — every non-zero line files to the OWNER review
@@ -97,11 +106,49 @@ export async function countStocktakeLine(sb: SupabaseClient, businessId: string,
   return { product_id: productId, product_name: productName, expected_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: payload.counted_at, recount_required: recountRequired }
 }
 
-export interface SubmitResult { session_id: string; lines_counted: number; variances: number; total_variance_cents: number; reviews_raised: number; review_ids: string[] }
+export interface SubmitResult {
+  session_id: string; lines_counted: number; variances: number; total_variance_cents: number
+  reviews_raised: number; review_ids: string[]
+  /** INV-BASELINE-1 PHASE 2 — sub-threshold owner lines applied directly, each with an attributed row. */
+  committed: number
+  /** Review rows the DB refused. Non-zero means variances that are neither applied NOR queued. */
+  reviews_failed: number
+  /** Why the threshold is in units and not dollars — for any surface that explains it. */
+  threshold_disclosure: string
+}
 
-/** Submit a session: every non-zero-variance line files to the OWNER review queue (no stock moves). Session →
- *  committed. Idempotent: a re-submit of an already-committed session raises nothing. */
-export async function submitStocktake(sb: SupabaseClient, businessId: string, sessionId: string, staffId: string, staffName: string): Promise<SubmitResult | null> {
+/**
+ * Submit a session. Session → committed. Idempotent: a re-submit of an already-committed session
+ * raises nothing.
+ *
+ * INV-BASELINE-1 PHASE 2 — three changes, all inside this function:
+ *
+ * (a) ATTRIBUTION IS UNCONDITIONAL. Any line that moves stock now writes an attributed
+ *     pos_stock_adjustments row — who, when, why, and which session — before this returns. Nine
+ *     pre-existing rows in that table have no matching ledger entry anywhere (preflight §Q3); this
+ *     is the rail that stops the tenth.
+ *
+ * (b) MATERIALITY DECIDES, NOT ROLE. decideCountOutcome (lib/inventory/count-policy.ts) routes
+ *     staff counts and material owner counts to review, and applies sub-threshold owner counts
+ *     directly. Nothing about "a count never mutates items_on_hand" is being reversed: what changed
+ *     is that an owner completing their own small count now counts as the human witnessing it.
+ *     Staff counts behave exactly as before.
+ *
+ * (c) THE HEADER CAN NO LONGER LIE. It previously wrote "N/M variances routed to owner review"
+ *     from the INTENDED count, with the review inserts unchecked — which is why three committed
+ *     headers claim variance was routed while inventory_review_queue holds zero count_variance rows
+ *     (preflight §Q2). Every insert is now checked and the note is written from what actually
+ *     landed, with failures counted separately and logged.
+ *
+ * NO NEW SESSION STATUS IS NEEDED, and none is invented. The commit/review decision is PER LINE, so
+ * a session can legitimately contain both; 'committed' on the header means the counting session was
+ * submitted, which stays true either way. Per-line outcomes live where they belong — an attributed
+ * pos_stock_adjustments row for applied lines, an inventory_review_queue row for routed ones.
+ */
+export async function submitStocktake(
+  sb: SupabaseClient, businessId: string, sessionId: string, staffId: string, staffName: string,
+  actor: CountActor = 'staff',
+): Promise<SubmitResult | null> {
   // Atomic claim: in_progress → committed (only one submit wins).
   const { data: claimed } = await sb.from('pos_stock_takes')
     .update({ status: 'committed', completed_at: nowIso() })
@@ -132,6 +179,9 @@ export async function submitStocktake(sb: SupabaseClient, businessId: string, se
     }
   }
 
+  let committedCount = 0
+  let reviewsFailed = 0
+
   for (const l of varianceLines) {
     const expected = Number(l.system_qty) || 0
     const countedQ = Number(l.counted_qty) || 0
@@ -140,21 +190,74 @@ export async function submitStocktake(sb: SupabaseClient, businessId: string, se
     const recountRequired = needsRecount(variance, expected)
     const movsDuring = movementCount.get(l.product_id as string) ?? 0
     totalCents += Number(l.variance_cents) || 0
-    const { data: rev } = await sb.from('inventory_review_queue').insert({
+    const productId = l.product_id as string
+    const decision = decideCountOutcome({ varianceQty: variance, systemQty: expected, actor })
+
+    // ── COMMIT: sub-threshold, owner-counted. Move the stock, and ATTRIBUTE IT. ──────────────────
+    if (decision.outcome === 'commit') {
+      // Stock first, attribution second, and the attribution is not conditional on anything: if the
+      // adjust succeeded, a row explaining it MUST exist. adjustOutletStock is the canonical mutator
+      // (atomic numeric RPC, floors at 0) — the same one the sale path uses.
+      const after = await adjustOutletStock(sb, { businessId, outletId, productId, delta: variance })
+      if (after == null) {
+        // The stock did not move, so this line is not applied. Fall through to review rather than
+        // silently dropping it — an unexplained no-op is how the nine orphan adjustments happened.
+        console.error('[stocktake] commit failed to adjust stock, routing to review instead:', { sessionId, productId, variance })
+      } else {
+        // pos_stock_adjustments has no reference/notes column, so the session id rides in `reason`
+        // using the structured-prefix convention this table already uses elsewhere
+        // (avt.ts reads `ilike 'recipe_depletion%'`, guidance.ts reads `startsWith('other:')`).
+        const { error: adjErr } = await sb.from('pos_stock_adjustments').insert({
+          business_id: businessId, product_id: productId, outlet_id: outletId,
+          adjustment_qty: variance, reason: `${STOCKTAKE_ADJUST_REASON_PREFIX}${sessionId}`,
+          adjusted_by: staffName, staff_id: l.counted_by ?? staffId,
+        })
+        if (adjErr) {
+          // Stock moved and the audit row did not. That is exactly the gap this phase exists to
+          // close, so it is loud rather than swallowed.
+          console.error('[stocktake] STOCK MOVED WITHOUT AN ATTRIBUTED ROW:', { sessionId, productId, variance, error: adjErr.message })
+        }
+        committedCount++
+        continue
+      }
+    }
+
+    // ── REVIEW: material, staff-counted, or a commit whose stock move failed. No stock moves. ────
+    const { data: rev, error: revErr } = await sb.from('inventory_review_queue').insert({
       business_id: businessId, outlet_id: outletId, flag_type: 'count_variance', product_id: l.product_id,
       expected_value: expected, actual_value: countedQ, variance,
-      evidence: { expected, counted: countedQ, variance, variance_cents: Number(l.variance_cents) || 0, product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt },
+      evidence: { expected, counted: countedQ, variance, variance_cents: Number(l.variance_cents) || 0, product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt, policy_reason: decision.reason, policy_detail: decision.detail, threshold_disclosure: THRESHOLD_DISCLOSURE },
       raised_by_staff_id: (l.counted_by as string | null) ?? staffId, status: 'open',
     }).select('id').maybeSingle()
-    if (rev?.id) reviewIds.push(rev.id as string)
+    if (rev?.id) {
+      reviewIds.push(rev.id as string)
+    } else {
+      // (c) — the failure that used to be invisible. This variance is now neither applied nor
+      // queued, and the header below must not claim otherwise.
+      reviewsFailed++
+      console.error('[stocktake] review row NOT created — variance is neither applied nor queued:', { sessionId, productId, variance, error: revErr?.message ?? 'insert returned no row' })
+    }
   }
+
+  // (c) — every number here is what ACTUALLY happened, not what was intended. The old note was
+  // built from varianceLines.length regardless of whether a single insert succeeded.
+  const noteParts = [`${claimed.count_type} count — ${counted.length} counted, ${varianceLines.length} with variance`]
+  if (committedCount) noteParts.push(`${committedCount} applied below threshold (attributed)`)
+  if (reviewIds.length) noteParts.push(`${reviewIds.length} routed to owner review`)
+  if (reviewsFailed) noteParts.push(`⚠ ${reviewsFailed} NEITHER applied nor queued — review row failed`)
+  if (!committedCount && !reviewIds.length && !reviewsFailed) noteParts.push('no action required')
 
   await sb.from('pos_stock_takes').update({
     items_counted: counted.length, items_with_variance: varianceLines.length, total_variance_cents: totalCents,
-    notes: `${claimed.count_type} count — ${varianceLines.length}/${counted.length} variances routed to owner review (stock NOT auto-adjusted)`,
+    notes: noteParts.join(' · '),
   }).eq('id', sessionId)
 
-  return { session_id: sessionId, lines_counted: counted.length, variances: varianceLines.length, total_variance_cents: totalCents, reviews_raised: reviewIds.length, review_ids: reviewIds }
+  return {
+    session_id: sessionId, lines_counted: counted.length, variances: varianceLines.length,
+    total_variance_cents: totalCents, reviews_raised: reviewIds.length, review_ids: reviewIds,
+    committed: committedCount, reviews_failed: reviewsFailed,
+    threshold_disclosure: THRESHOLD_DISCLOSURE,
+  }
 }
 
 // ── PART 2 — ABC cycle count ──────────────────────────────────────────────────────────────────────────────

@@ -72,7 +72,9 @@ async function _POST(req: Request, { params }: Params) {
   }
   if (body.action === 'submit') {
     if (!body.session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 })
-    const result = await submitStocktake(supabaseAdmin, bid, body.session_id, acting.staff_id, acting.staff_name)
+    // INV-BASELINE-1 PHASE 2 — 'staff' stated explicitly rather than leaning on the default. Staff
+    // counts ALWAYS route to owner review, however small; this is the staff-PIN app.
+    const result = await submitStocktake(supabaseAdmin, bid, body.session_id, acting.staff_id, acting.staff_name, 'staff')
     return result ? NextResponse.json({ ok: true, result }) : NextResponse.json({ ok: true, idempotent: true, message: 'Session already submitted' })
   }
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
