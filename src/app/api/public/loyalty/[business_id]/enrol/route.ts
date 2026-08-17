@@ -98,7 +98,23 @@ export async function POST(req: Request, { params }: Params) {
     // lib/loyalty/link-identity.ts UNCHANGED IN BEHAVIOUR so the till can call the same code, and
     // so the two paths cannot drift into minting two identities for one person. Still best-effort:
     // the helper never throws, and a failure does not block the enrolment response.
-    await linkLoyaltyIdentity(db, { customerId: data.id as string, email, phone: normPhone })
+    //
+    // ARIA-LOYALTY-CLOSEOUT-1 §1 — the outcome is now READ, but ONLY into the server log.
+    //
+    // THE RESPONSE MUST NOT MOVE. TCA7-ENROL-ORACLE-FIX made both branches byte-identical on
+    // purpose: any observable difference between "already a member" and "not a member" is an
+    // enumeration oracle on a public, unauthenticated route. identity_taken is precisely the signal
+    // an attacker wants — it means this phone/email already belongs to someone here — so it is
+    // logged for the owner and never surfaced to the caller. Do not add it to the response body,
+    // the status code, or a header.
+    const link = await linkLoyaltyIdentity(db, { customerId: data.id as string, email, phone: normPhone })
+    if (link.reason === 'identity_taken') {
+      console.warn('[loyalty/enrol] identity already held by a live customer', {
+        businessId: realId, identityId: link.identityId, heldBy: link.heldByCustomerId,
+      })
+    } else if (link.reason === 'failed') {
+      console.warn('[loyalty/enrol] loyalty identity link failed (non-fatal)', { businessId: realId })
+    }
   }
 
   // Log every attempt (new + already-enrolled) for the owner's own audit trail — never surfaced

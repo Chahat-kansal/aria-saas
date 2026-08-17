@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/auth/cron';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
-import { computeLoyaltyDrift, findDrift, describeDrift } from '@/lib/loyalty/reconcile';
+import { computeLoyaltyDrift, findDrift, describeDrift, computeIdentitySplits, describeSplit } from '@/lib/loyalty/reconcile';
 
 async function _GET(req: Request) {
   const denied = verifyCronAuth(req)
@@ -20,6 +20,18 @@ async function _GET(req: Request) {
   // the balance from the ledger is the right end state and not a safe same-sprint change.
   const drifted = findDrift(await computeLoyaltyDrift(supabaseAdmin));
   for (const d of drifted) console.warn('[loyalty-drift] ' + describeDrift(d));
+
+  // ARIA-LOYALTY-CLOSEOUT-1 §2 — same host, same daily cadence, same output channel as the drift
+  // check above, for the same reason: this cron already runs daily and already touches every
+  // loyalty balance, so it is where a loyalty invariant belongs. No new cron entry, no new Vercel
+  // function (RULE 4: 22-config ceiling, 22 crons already).
+  //
+  // Unlike drift, this one SHOULD always be empty — pos_customers_identity_uniq enforces it in the
+  // database. A non-empty result means the index is gone or was bypassed, which is why the report
+  // distinguishes "checked and clean" from "could not check".
+  const splitReport = await computeIdentitySplits(supabaseAdmin);
+  for (const s of splitReport.splits) console.error('[loyalty-identity-split] ' + describeSplit(s));
+  if (!splitReport.checked) console.error('[loyalty-identity-split] CHECK DID NOT RUN: ' + (splitReport.error ?? 'unknown'));
   const { data: businesses } = await supabaseAdmin.from('businesses')
     .select('id, loyalty_points_expiry_months')
     .eq('is_active', true);
@@ -77,6 +89,10 @@ async function _GET(req: Request) {
   return NextResponse.json({
     ok: true, businesses_processed: (businesses ?? []).length, warned, expired,
     ledger_drift: drifted.map(describeDrift),
+    // checked:false is reported as loudly as a real split — "the guard's alarm did not run" is
+    // itself the finding, and an omitted field would read as all-clear.
+    identity_splits: splitReport.checked ? splitReport.splits.map(describeSplit) : null,
+    identity_split_check: splitReport.checked ? 'ok' : ('failed: ' + (splitReport.error ?? 'unknown')),
   });
 }
 

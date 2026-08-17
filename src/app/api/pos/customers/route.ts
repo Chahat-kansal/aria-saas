@@ -168,6 +168,21 @@ async function _POST(req: Request) {
     logger.info('pos/customers created without loyalty identity (no phone or email)', { businessId: bid });
   } else if (link.reason === 'failed') {
     logger.warn('pos/customers loyalty identity link failed (non-fatal)', { businessId: bid });
+  } else if (link.reason === 'identity_taken') {
+    // ARIA-LOYALTY-CLOSEOUT-1 §1 — pos_customers_identity_uniq rejected the link: this person
+    // already has a live customer row here, reached by a contact detail the duplicate-phone and
+    // duplicate-email guards above did not match (they compare one field each; the identity matches
+    // on email OR phone, so an existing row found by phone blocks a new row given only that email).
+    //
+    // THE CASHIER'S FLOW IS UNAFFECTED, DELIBERATELY. The customer row was already inserted and is
+    // returned exactly as before — a 200 with the customer, same shape, same status. Refusing the
+    // sale over loyalty bookkeeping would be the worse bug, and the row is a real, usable customer
+    // that is merely unlinked. The duplicate is surfaced, not enforced: logged for the owner, and
+    // echoed as loyalty_duplicate_of so a caller CAN offer "use the existing customer" later.
+    logger.warn('pos/customers loyalty identity already held by another live customer', {
+      businessId: bid, identityId: link.identityId, heldBy: link.heldByCustomerId,
+    });
+    return NextResponse.json({ customer, loyalty_duplicate_of: link.heldByCustomerId });
   }
 
   return NextResponse.json({ customer });

@@ -79,8 +79,12 @@ async function main() {
   console.log(`unlinked customers: ${customers.length}`)
   console.log(EXECUTE ? '--- EXECUTING ---' : '--- DRY RUN (no writes) — pass --execute to apply ---')
 
-  const tally = { linked_new: 0, linked_existing: 0, skipped: 0, failed: 0 }
+  const tally = { linked_new: 0, linked_existing: 0, identity_taken: 0, skipped: 0, failed: 0 }
   const skipped: Array<{ id: string; name: string; raw_phone: string | null; email: string | null; reason: string }> = []
+  // Rows the unique index refused because this person already has a live customer row here. A
+  // merge task for the owner, kept separate from `skipped` because the fix is different: skipped
+  // rows need a corrected phone number, these need two records merged.
+  const duplicates: Array<{ id: string; name: string; identity_id: string; held_by: string | null }> = []
 
   for (const c of customers) {
     const label = `${String(c.name ?? '(no name)').slice(0, 28).padEnd(28)} ${String(c.id).slice(0, 8)}`
@@ -113,6 +117,22 @@ async function main() {
     if (out.reason === 'linked') {
       if (out.created) { tally.linked_new++; console.log(`  CREATED  ${label}  -> ${out.identityId}`) }
       else { tally.linked_existing++; console.log(`  MATCHED  ${label}  -> ${out.identityId}`) }
+    } else if (out.reason === 'identity_taken') {
+      // ARIA-LOYALTY-CLOSEOUT-1 §1 — pos_customers_identity_uniq refused the link: another LIVE
+      // customer row in this business already holds the identity for this person's phone/email.
+      //
+      // This is a DUPLICATE CUSTOMER the backfill has surfaced, not a backfill failure, and it is
+      // the owner's call to merge — /api/customers/merge exists for exactly this and soft-deletes
+      // the loser, which then frees the identity. Not merged automatically: choosing which of two
+      // real customer records survives is not a decision a batch script should make silently.
+      //
+      // BEFORE THIS SPRINT this row would have printed MATCHED and been counted as linked_existing,
+      // because the helper discarded the update's error and returned {reason:'linked'} with a real
+      // identityId. The run would have reported 42 links and delivered fewer, with nothing to show
+      // which ones — the whole reason the outcome is now distinct.
+      tally.identity_taken++
+      duplicates.push({ id: String(c.id), name: String(c.name ?? ''), identity_id: out.identityId, held_by: out.heldByCustomerId })
+      console.log(`  DUPLICATE ${label}  identity ${out.identityId} already held by ${out.heldByCustomerId ?? '(unknown row)'}`)
     } else if (out.reason === 'no_contact') {
       // Unreachable given the linkability gate above; kept so a future change to either side is loud.
       tally.skipped++
@@ -127,8 +147,8 @@ async function main() {
   // for the owner (a customer whose phone number needs correcting), not just a statistic.
   try {
     mkdirSync(join('scripts', 'out'), { recursive: true })
-    writeFileSync(SKIP_LIST, JSON.stringify({ generated_at: new Date().toISOString(), mode: EXECUTE ? 'execute' : 'dry-run', skipped }, null, 2))
-    console.log(`\nskip list written: ${SKIP_LIST} (${skipped.length} rows)`)
+    writeFileSync(SKIP_LIST, JSON.stringify({ generated_at: new Date().toISOString(), mode: EXECUTE ? 'execute' : 'dry-run', skipped, duplicates }, null, 2))
+    console.log(`\nskip list written: ${SKIP_LIST} (${skipped.length} skipped, ${duplicates.length} duplicates)`)
   } catch (e) {
     console.error('could not write skip list:', (e as Error).message)
   }
@@ -139,7 +159,14 @@ async function main() {
       .from('pos_customers')
       .select('id', { count: 'exact', head: true })
       .is('loyalty_identity_id', null)
-    console.log(`still unlinked after run: ${count ?? '?'}  (expected to equal the skipped count above)`)
+    // Every row that did NOT get linked is still unlinked, and there are now three ways that
+    // happens. Naming all three keeps this an actual reconciliation rather than a number to nod at:
+    // a mismatch means a row was neither linked nor accounted for.
+    const unaccounted = tally.skipped + tally.identity_taken + tally.failed
+    console.log(`still unlinked after run: ${count ?? '?'}  (expected ${unaccounted} = skipped ${tally.skipped} + identity_taken ${tally.identity_taken} + failed ${tally.failed})`)
+    if (typeof count === 'number' && count !== unaccounted) {
+      console.error(`  MISMATCH: ${count} unlinked rows vs ${unaccounted} accounted for. Investigate before re-running.`)
+    }
   }
 }
 

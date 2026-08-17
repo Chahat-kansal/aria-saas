@@ -29,7 +29,59 @@ type IdRow = { data: { id?: unknown } | null }
 
 export type LinkOutcome =
   | { identityId: string; created: boolean; reason: 'linked' }
-  | { identityId: null; created: false; reason: 'no_contact' | 'failed' }
+  // ARIA-LOYALTY-CLOSEOUT-1 §1 — the link was REJECTED by pos_customers_identity_uniq: another
+  // live customer row in this business already holds this identity. heldByCustomerId is that row,
+  // so the caller can use the customer who already exists rather than failing.
+  | { identityId: string; created: boolean; reason: 'identity_taken'; heldByCustomerId: string | null }
+  | { identityId: string | null; created: false; reason: 'no_contact' | 'failed' }
+
+/** Postgres unique_violation. This is how pos_customers_identity_uniq reaches us through PostgREST. */
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: unknown } | null
+  return String(e?.code ?? '') === '23505'
+}
+
+/**
+ * Which live customer row already holds this identity, in the same business as `customerId`?
+ *
+ * ORDERED IDENTICALLY TO resolve-code.ts (created_at ASC, limit 1) ON PURPOSE. The row named here
+ * must be the same row a scan of this identity resolves to, or the caller would be pointed at a
+ * customer the till then refuses to find. Both filter `deleted_at is null`, which is also the
+ * index's own predicate — three places, one rule.
+ *
+ * Never throws: this runs on an error path that is already non-fatal, and a null holder is strictly
+ * better than turning a handled rejection into an unhandled one.
+ */
+async function findIdentityHolder(
+  db: IdentityDb,
+  identityId: string,
+  customerId: string,
+): Promise<string | null> {
+  try {
+    // The index is scoped (business_id, loyalty_identity_id), so the colliding row is in THIS
+    // customer's business. loyalty_identity itself is global; the customer rows hanging off it are
+    // not, and a sibling venue's row is not a duplicate.
+    const { data: self } = await db
+      .from('pos_customers').select('business_id').eq('id', customerId).maybeSingle() as
+      { data: { business_id?: unknown } | null }
+    const businessId = self?.business_id ? String(self.business_id) : null
+    if (!businessId) return null
+
+    const { data } = await db
+      .from('pos_customers')
+      .select('id')
+      .eq('business_id', businessId)
+      .eq('loyalty_identity_id', identityId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle() as IdRow
+    return data?.id ? String(data.id) : null
+  } catch (e) {
+    console.error('[link-identity] holder lookup failed:', (e as Error).message)
+    return null
+  }
+}
 
 /**
  * Find-or-create the identity for this email/phone and stamp it onto the customer row.
@@ -44,6 +96,14 @@ export type LinkOutcome =
  * identify such a person by across venues, and loyalty_identity has no other natural key, so this
  * returns 'no_contact' and links nothing. That is correct rather than lazy — inventing a synthetic
  * key would make the row unmatchable later, when the same person finally gives a phone number.
+ *
+ * ARIA-LOYALTY-CLOSEOUT-1 §1 — THE UPDATE'S ERROR IS NOW READ.
+ *
+ * It used to be discarded entirely. Every failed link — including one rejected outright by
+ * pos_customers_identity_uniq — was reported as {reason:'linked'} carrying a real identityId, which
+ * is worse than a 500: the caller was told the link succeeded, nothing was logged, nothing
+ * surfaced, and the customer stayed unlinked forever. Silence like that is not resilience; it is a
+ * lost write with a success receipt.
  */
 export async function linkLoyaltyIdentity(
   db: IdentityDb,
@@ -76,7 +136,27 @@ export async function linkLoyaltyIdentity(
 
     if (!identityId) return { identityId: null, created: false, reason: 'failed' }
 
-    await db.from('pos_customers').update({ loyalty_identity_id: identityId }).eq('id', input.customerId)
+    const { error: linkErr } = await db
+      .from('pos_customers')
+      .update({ loyalty_identity_id: identityId })
+      .eq('id', input.customerId) as { error: unknown }
+
+    if (linkErr) {
+      if (isUniqueViolation(linkErr)) {
+        // pos_customers_identity_uniq: (business_id, loyalty_identity_id) WHERE loyalty_identity_id
+        // IS NOT NULL AND deleted_at IS NULL. The database is telling us this person already has a
+        // live customer row in this business — a DUPLICATE CUSTOMER, not a link failure. Hand the
+        // caller the row that already exists so it can use that customer instead.
+        const heldByCustomerId = await findIdentityHolder(db, identityId, input.customerId)
+        console.warn('[link-identity] identity already held by a live customer in this business:', {
+          identityId, attemptedFor: input.customerId, heldByCustomerId,
+        })
+        return { identityId, created, reason: 'identity_taken', heldByCustomerId }
+      }
+      console.error('[link-identity] link update failed:', (linkErr as { message?: string })?.message ?? linkErr)
+      return { identityId, created: false, reason: 'failed' }
+    }
+
     return { identityId, created, reason: 'linked' }
   } catch (e) {
     console.error('[link-identity] non-fatal:', (e as Error).message)
