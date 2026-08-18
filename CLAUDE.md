@@ -555,6 +555,100 @@ prohibition treats the symptom; the model said X because it lacked the fact that
 
 ---
 
+## 🔒 RULE 20 — AUTONOMY BY DEFAULT  *(created 2026-08-18)*
+
+> ⚠️ **Created, not amended.** The instruction that produced this section said "amend RULE 20". No
+> RULE 20 existed — this file ended at RULE 19, and neither "AUTONOMOUS" nor any autonomy rule
+> appeared anywhere in it. Per RULE 15 ("the document is a report too; if the code disagrees with
+> it, the code wins") the scope was adjusted from *amend* to *create*, and the v1 scope line below
+> is preserved struck-through anyway — it never lived in this file, but recording what it said is
+> what stops it being reinstated from an old paste. Nothing was renumbered; no other rule was
+> altered.
+
+**SUPERSEDED 2026-08-18 — do not reinstate from an old paste:**
+> - ~~Autonomous run mode is the default for any sprint marked AUTONOMOUS.~~
+
+**CURRENT — autonomous run mode is the DEFAULT for EVERY sprint in this repo.** A sprint does not
+need to be marked. **The founder is not watching any of them.** The exceptions are the PARK list
+and the HALT list below — nothing else waits for a human.
+
+If a sprint carries its own **DECISION TABLE**, that table wins for the branches it covers. For
+everything else — including a sprint with no table at all — use the **STANDING DECISION TABLE**
+below. **A sprint arriving without a table is normal, not a reason to stop.**
+
+### STANDING DECISION TABLE — applies to every sprint, all 130
+
+These are the branch points that recur across this codebase. Apply literally; do not ask.
+
+| Situation | Decision |
+|---|---|
+| The sprint's premise is contradicted by the code or DB | The code wins. Log the contradiction, adjust scope to what is actually true, continue. If the whole phase becomes meaningless, PARK it and move on. |
+| The work is **already done** | Report and skip. Never invent scope to justify a phase. Reports here systematically understate what exists. |
+| A helper you need **already exists** (possibly 2–3 versions of it) | Use the one the canonical engine uses. Never write a fourth. If it is genuinely unclear which is canonical, PARK and name the candidates. |
+| A fix needs a **schema change** | PARK. DDL is never yours. Name the exact column/constraint and why. |
+| The sweep finds **more instances than the sprint predicted** | Fix the ones in the declared file domain; list the rest. Do not expand into other domains unattended. |
+| A test asserts the **old** behaviour the phase is changing | Rewrite the test to assert the new behaviour and write in the test file why it changed. Never delete it. |
+| A **mutation check fails to fail** | That is a finding, not a formality. Fix the test so it can go red, re-run, and record the whole episode. If it still cannot go red, PARK the phase — an unfalsifiable test is not verification. |
+| Backfilling historical rows looks possible | **Do not backfill.** Forward-only unless the sprint explicitly instructs otherwise. Historical rows record what happened. |
+| A number cannot be computed honestly (missing cost, missing data) | Render **unknown**. Never zero, never a substitute, never an estimate presented as fact. GROUNDING-TEETH. |
+| Two plausible implementations, no instruction | Take the one that preserves existing observable behaviour and is revertible in one commit. Log both and why. |
+| A phase would touch **money, message wording, authorisation, personal data, or deletion** | PARK. Wiring *how* something is sent or stored is in scope; changing what it says, who may do it, or what is removed is not. |
+| A **compliance violation** is discovered | Build the forward fix if the sprint asks for it. PARK all remediation of past events, marked URGENT at the top of the run log. |
+| A phase fails verification 3 times | Revert your own commit for it, PARK, continue. |
+| A phase's dependants are parked | Skip them too, note the chain, continue to the next independent phase. |
+| Everything in the sprint is parked | Write the run log, push, stop. That is a complete and successful run. |
+
+### NEVER, UNATTENDED — no exceptions, not even with a decision table
+
+DDL · destructive SQL against production · key or secret rotation · `--no-verify` · committing with
+tsc/build/vitest failing · sending real messages to real customers as a test · deleting rows ·
+touching the worktree path · starting the next mega-sprint.
+
+### HALT the run entirely only for
+
+tsc or build not green within two attempts after reverting your own change · a rejected push or an
+unreconcilable tree · any risk of data loss · the same failure across three different phases
+(systemic). On halt: repo green and pushed at the last good commit, run log written, stop.
+
+### THE RUN LOG
+
+`docs/aria/RUN-<sprint-id>.md`, written **incrementally as you go** and committed with each phase —
+a halted run must still leave a readable log. Per phase: changes · sweep count · mutation result ·
+gates · commit sha · decisions taken under the standing table · parked items with everything
+learned · anything that changes a later mega-sprint.
+
+Finish with a one-screen summary at the top: phases done, phases parked, commits, and the three
+things the founder most needs to know. **That summary is the whole conversation he would otherwise
+have had — write it for someone who has been away all day.**
+
+### HOW THIS SITS WITH RULES 15 AND 18
+
+Recorded here rather than by editing those rules, which this change was told not to touch. Read
+them together as follows.
+
+**RULE 18 (STOP AND ASK) — three of its bullets are superseded for autonomous runs**, because the
+standing table decides them instead:
+- *"The code contradicts the mega-sprint document"* → decide (the code wins), log, continue.
+- *"A phase needs a file outside your declared domain"* → fix what is in domain, list the rest.
+- *"The sweep finds more instances than the document predicted"* → same: fix in domain, list the rest.
+
+**Its other bullets survive unchanged** and are reinforced by the PARK and NEVER lists above:
+schema, money, customer contact, authorisation, deletion, and bypassing a gate all still stop.
+
+**One bullet is NOT resolved by the standing table and needs the founder's call:** RULE 18 says stop
+for *"a fix that would change an existing HTTP response shape, or anything customer-facing"*. The
+standing table's PARK list covers message wording but not response shape. **Until that is settled,
+use the conservative reading: an ADDITIVE response field proceeds; a change that removes or renames
+an existing field, or alters a status code, PARKS under RULE 18.**
+
+**RULE 15** says *"a failed phase halts the mega-sprint — do not work around it, do not continue
+around it."* **The standing table supersedes that for autonomous runs:** a phase that fails
+verification three times is reverted and PARKED, its dependants are skipped, and the run continues
+to the next independent phase. RULE 15's halt survives only where the HALT list above applies —
+i.e. when the failure is systemic rather than confined to one phase.
+
+---
+
 ## Design system (Aria POS)
 - Palette: deep forest green #2D5240 + sage #7FB897
 - Fraunces italic for branding/totals, Inter for body
