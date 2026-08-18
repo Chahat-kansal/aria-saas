@@ -16,7 +16,9 @@ export const STOCKTAKE_ADJUST_REASON_PREFIX = 'stocktake_commit:'
 // queue (inventory_review_queue); the only path that moves items_on_hand is the owner ACCEPTING (review route,
 // via adjustOutletStock). Sessions persist in pos_stock_takes (status in_progress→committed) + lines in
 // pos_stock_take_items (REUSED, not duplicated). Per-outlet. Attributed (started_by / counted_by = staff PIN
-// identity). ABC from product_performance_scores.abc_tier. Amounts grounded — unknown cost → 0, never faked.
+// identity). ABC from product_performance_scores.abc_tier. Amounts grounded — INV-BASELINE-1 phase 3:
+// an unknown cost is stored as NULL, never 0. "Worth nothing" and "value unknown" are different facts
+// and this file used to record them identically.
 
 export type CountType = 'full' | 'cycle' | 'perpetual'
 
@@ -90,8 +92,13 @@ export async function countStocktakeLine(sb: SupabaseClient, businessId: string,
   const expected = Number(inv?.items_on_hand ?? 0)
   const countedQ = Math.max(0, Math.round(Number(counted) || 0))
   const variance = countedQ - expected
-  let varianceCents = 0
-  try { const rc = await resolveCostFor(sb, businessId, productId, outletId); if (rc.cost != null) varianceCents = Math.round(variance * rc.cost * 100) } catch { /* unknown cost → 0, never faked */ }
+  // INV-BASELINE-1 PHASE 3 — UNKNOWN COST IS NULL, NOT ZERO.
+  // resolveCostFor is already honest: its own header says "an absent/zero cost is reported as
+  // unknown (NULL), never silently treated as 0 and never fabricated". This caller was the liar —
+  // it initialised to 0 and left it there, so "this variance is worth nothing" and "we have no idea
+  // what this variance is worth" became the same stored value, indistinguishable forever after.
+  let varianceCents: number | null = null
+  try { const rc = await resolveCostFor(sb, businessId, productId, outletId); if (rc.cost != null) varianceCents = Math.round(variance * rc.cost * 100) } catch { /* unknown cost stays null — never faked */ }
   const { data: prod } = await sb.from('pos_products').select('name').eq('id', productId).maybeSingle()
   const productName = (prod?.name as string | null) ?? null
 
@@ -107,7 +114,9 @@ export async function countStocktakeLine(sb: SupabaseClient, businessId: string,
 }
 
 export interface SubmitResult {
-  session_id: string; lines_counted: number; variances: number; total_variance_cents: number
+  session_id: string; lines_counted: number; variances: number
+  /** Sum of the variance lines whose value IS known. NULL when not one of them could be priced. */
+  total_variance_cents: number | null
   reviews_raised: number; review_ids: string[]
   /** INV-BASELINE-1 PHASE 2 — sub-threshold owner lines applied directly, each with an attributed row. */
   committed: number
@@ -115,6 +124,12 @@ export interface SubmitResult {
   reviews_failed: number
   /** Why the threshold is in units and not dollars — for any surface that explains it. */
   threshold_disclosure: string
+  /**
+   * Variance lines whose value could not be resolved (no cost at any resolve-cost.ts tier). They
+   * contribute NOTHING to total_variance_cents, so a surface showing that total must show this
+   * count beside it or it presents a partial figure as a complete one.
+   */
+  unknown_value_lines: number
 }
 
 /**
@@ -181,6 +196,7 @@ export async function submitStocktake(
 
   let committedCount = 0
   let reviewsFailed = 0
+  let unknownValueLines = 0
 
   for (const l of varianceLines) {
     const expected = Number(l.system_qty) || 0
@@ -189,7 +205,10 @@ export async function submitStocktake(
     const recountCount = Number(l.recount_count) || 0
     const recountRequired = needsRecount(variance, expected)
     const movsDuring = movementCount.get(l.product_id as string) ?? 0
-    totalCents += Number(l.variance_cents) || 0
+    // Sum only what is KNOWN. A line with an unresolvable cost contributes nothing to the total and
+    // is counted separately, so the header total is never a partial figure passing as a complete one.
+    if (l.variance_cents == null) unknownValueLines++
+    else totalCents += Number(l.variance_cents) || 0
     const productId = l.product_id as string
     const decision = decideCountOutcome({ varianceQty: variance, systemQty: expected, actor })
 
@@ -226,7 +245,7 @@ export async function submitStocktake(
     const { data: rev, error: revErr } = await sb.from('inventory_review_queue').insert({
       business_id: businessId, outlet_id: outletId, flag_type: 'count_variance', product_id: l.product_id,
       expected_value: expected, actual_value: countedQ, variance,
-      evidence: { expected, counted: countedQ, variance, variance_cents: Number(l.variance_cents) || 0, product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt, policy_reason: decision.reason, policy_detail: decision.detail, threshold_disclosure: THRESHOLD_DISCLOSURE },
+      evidence: { expected, counted: countedQ, variance, variance_cents: l.variance_cents == null ? null : Number(l.variance_cents), product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt, policy_reason: decision.reason, policy_detail: decision.detail, threshold_disclosure: THRESHOLD_DISCLOSURE },
       raised_by_staff_id: (l.counted_by as string | null) ?? staffId, status: 'open',
     }).select('id').maybeSingle()
     if (rev?.id) {
@@ -247,16 +266,23 @@ export async function submitStocktake(
   if (reviewsFailed) noteParts.push(`⚠ ${reviewsFailed} NEITHER applied nor queued — review row failed`)
   if (!committedCount && !reviewIds.length && !reviewsFailed) noteParts.push('no action required')
 
+  // A total built only from the lines we could price. When NOT ONE variance line had a resolvable
+  // cost the honest total is NULL — writing 0 would assert "this count cost nothing", a claim
+  // rather than a measurement.
+  const knownValueLines = varianceLines.length - unknownValueLines
+  const headerTotal = varianceLines.length > 0 && knownValueLines === 0 ? null : totalCents
+  if (unknownValueLines) noteParts.push(`${unknownValueLines} of ${varianceLines.length} variances have no known cost — value unknown`)
+
   await sb.from('pos_stock_takes').update({
-    items_counted: counted.length, items_with_variance: varianceLines.length, total_variance_cents: totalCents,
+    items_counted: counted.length, items_with_variance: varianceLines.length, total_variance_cents: headerTotal,
     notes: noteParts.join(' · '),
   }).eq('id', sessionId)
 
   return {
     session_id: sessionId, lines_counted: counted.length, variances: varianceLines.length,
-    total_variance_cents: totalCents, reviews_raised: reviewIds.length, review_ids: reviewIds,
+    total_variance_cents: headerTotal, reviews_raised: reviewIds.length, review_ids: reviewIds,
     committed: committedCount, reviews_failed: reviewsFailed,
-    threshold_disclosure: THRESHOLD_DISCLOSURE,
+    threshold_disclosure: THRESHOLD_DISCLOSURE, unknown_value_lines: unknownValueLines,
   }
 }
 

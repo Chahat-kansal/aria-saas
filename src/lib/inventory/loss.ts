@@ -114,7 +114,22 @@ export async function ensureRecallTask(sb: SupabaseClient, businessId: string, o
 }
 
 // ── shrinkage analysis ──────────────────────────────────────────────────────────────────────────────────────
-export interface ShrinkageReport { period_days: number; total_dollars: number; by_category: Array<{ category: string; dollars: number; pct: number }>; top_products: Array<{ name: string; dollars: number }>; theft_signals: Array<{ name: string; fact: string }> }
+export interface ShrinkageReport {
+  period_days: number
+  /** Only losses whose value is KNOWN. Unvalued variances are excluded, and counted below. */
+  total_dollars: number
+  by_category: Array<{ category: string; dollars: number; pct: number }>
+  top_products: Array<{ name: string; dollars: number }>
+  theft_signals: Array<{ name: string; fact: string }>
+  /**
+   * INV-BASELINE-1 PHASE 3 — accepted count-variances with no resolvable cost. They are REAL losses
+   * of unknown value, so they are excluded from total_dollars rather than folded in as $0, and
+   * reported here instead. A $0 contribution sitting silently beside real waste dollars is a
+   * fabricated number inside an owner-facing money figure — exactly what GROUNDING-TEETH forbids.
+   * Any surface rendering total_dollars MUST render this too when it is non-zero.
+   */
+  unvalued_variance_count: number
+}
 /** Where loss happens: waste (pos_waste_log, cents→$) + accepted negative count-variances. Grounded; theft is a
  *  pattern fact, never an accusation. */
 export async function shrinkageReport(sb: SupabaseClient, businessId: string, outletIdIn: string | null, days = 30): Promise<ShrinkageReport> {
@@ -137,10 +152,19 @@ export async function shrinkageReport(sb: SupabaseClient, businessId: string, ou
   const negIds = [...new Set((revs ?? []).map(r => r.product_id as string).filter(Boolean))]
   const { data: negProds } = negIds.length ? await sb.from('pos_products').select('id, name').in('id', negIds) : { data: [] }
   const nameMap = new Map((negProds ?? []).map((p: { id: string; name: string }) => [p.id, p.name]))
+  // INV-BASELINE-1 PHASE 3 — a variance we cannot price is EXCLUDED, not counted as zero.
+  // Two sources of value, in order: the evidence snapshot written at count time, else a live cost
+  // lookup. If neither resolves, the loss is real but its value is unknown, and it is tallied into
+  // unvalued_variance_count instead of quietly adding $0.00 to an owner's shrinkage total.
+  let unvaluedVariances = 0
   for (const r of revs ?? []) {
-    const ev = (r.evidence ?? {}) as { variance_cents?: number }
-    let d = ev.variance_cents != null ? Math.abs(Number(ev.variance_cents)) / 100 : 0
-    if (d === 0) { const cost = await productCost(sb, businessId, r.product_id as string, outletId); d = cost != null ? round2(Math.abs(Number(r.variance) || 0) * cost) : 0 }
+    const ev = (r.evidence ?? {}) as { variance_cents?: number | null }
+    let d: number | null = ev.variance_cents != null ? Math.abs(Number(ev.variance_cents)) / 100 : null
+    if (d == null || d === 0) {
+      const cost = await productCost(sb, businessId, r.product_id as string, outletId)
+      d = cost != null ? round2(Math.abs(Number(r.variance) || 0) * cost) : null
+    }
+    if (d == null) { unvaluedVariances++; continue }
     add('Count variance', nameMap.get(r.product_id as string) ?? 'Item', d)
   }
 
@@ -154,7 +178,7 @@ export async function shrinkageReport(sb: SupabaseClient, businessId: string, ou
     const pat = await countPattern(sb, businessId, id, outletId)
     if (pat.flag && pat.fact) theft.push({ name: nameMap.get(id) ?? 'Item', fact: `${pat.fact} — unexplained, worth a closer look (not an accusation).` })
   }
-  return { period_days: days, total_dollars: total, by_category: byCategory, top_products: topProducts, theft_signals: theft }
+  return { period_days: days, total_dollars: total, by_category: byCategory, top_products: topProducts, theft_signals: theft, unvalued_variance_count: unvaluedVariances }
 }
 
 // ── age-restricted gate ─────────────────────────────────────────────────────────────────────────────────────

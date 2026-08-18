@@ -108,13 +108,22 @@ describe('zero and edge inputs', () => {
 })
 
 describe('the disclosure — GROUNDING-TEETH', () => {
-  it('states the threshold is in units AND says why it is not in dollars', () => {
-    // 0 of 74 products carry a cost. A dollar materiality figure computed against a null cost is
-    // the fabricated-$999,999-target failure again. The surface must say so rather than imply the
-    // absence of value is a design choice.
+  it('states the threshold is in units AND gives the TRUE reason it is not in dollars', () => {
+    // ⚠ THIS TEST PREVIOUSLY ASSERTED A FALSE CLAIM, and passed while doing so.
+    //
+    // Phase 2 shipped a disclosure saying costs "have not been entered yet", taken from a sprint
+    // brief rather than measured. Phase 3 measured it: Sip has 74 active tracked products and 72
+    // carry a cost_price ($1.60–$9.60). The claim was false and had been propagating for weeks.
+    //
+    // The threshold stays in units for a NARROWER, true reason: those costs resolve at
+    // resolve-cost.ts tier 5 (pos_products.cost_price), whose provenance is source:'catalogue' and
+    // grounding:'estimated' — a maintained reference figure tied to no transaction. Thresholding
+    // money on an estimate manufactures a confident boundary from an unverified number.
     expect(THRESHOLD_DISCLOSURE).toMatch(/units/i)
-    expect(THRESHOLD_DISCLOSURE).toMatch(/not dollars/i)
-    expect(THRESHOLD_DISCLOSURE).toMatch(/costs have not been entered/i)
+    expect(THRESHOLD_DISCLOSURE).toMatch(/catalogue estimates/i)
+    expect(THRESHOLD_DISCLOSURE).toMatch(/not verified purchase costs/i)
+    // The retracted claim must not come back.
+    expect(THRESHOLD_DISCLOSURE).not.toMatch(/have not been entered/i)
   })
 
   it('quotes the live constants, so it cannot drift from the policy it describes', () => {

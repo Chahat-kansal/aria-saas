@@ -221,7 +221,7 @@ export default function InventoryStaffApp() {
   const [stSearch, setStSearch] = useState('')
   const [stMatches, setStMatches] = useState<ScanMatch[]>([])
   const [stBusy, setStBusy] = useState(false)
-  const [stSummary, setStSummary] = useState<{ variances: number; reviews: number; total_cents: number; counted: number } | null>(null)
+  const [stSummary, setStSummary] = useState<{ variances: number; reviews: number; total_cents: number | null; counted: number; unknown_value: number } | null>(null)
   // INV-5 — buying (reorder suggestions → draft PO → owner approve → send)
   interface BuyItem { product_id: string; name: string; on_hand: number; reorder_point: number; target_stock: number; suggested_qty: number; abc_tier: string; unit_cost: number | null; line_total: number | null; needs_cost: boolean }
   interface BuyGroup { supplier_id: string | null; supplier_name: string; needs_supplier: boolean; items: BuyItem[]; total: number | null }
@@ -262,7 +262,7 @@ export default function InventoryStaffApp() {
   const [tempMsg, setTempMsg] = useState('')
   // INV-8 — loss & compliance
   interface Hold { id: string; product_id: string; item_name: string; quantity: number; reason: string; quarantined_by: string | null; value_at_risk: number | null }
-  interface ShrinkData { period_days: number; total_dollars: number; by_category: Array<{ category: string; dollars: number; pct: number }>; top_products: Array<{ name: string; dollars: number }>; theft_signals: Array<{ name: string; fact: string }> }
+  interface ShrinkData { period_days: number; total_dollars: number; by_category: Array<{ category: string; dollars: number; pct: number }>; top_products: Array<{ name: string; dollars: number }>; theft_signals: Array<{ name: string; fact: string }>; unvalued_variance_count?: number }
   const [lossTab, setLossTab] = useState<'quarantine' | 'recall' | 'shrinkage'>('quarantine')
   const [lossHolds, setLossHolds] = useState<Hold[]>([])
   const [lossFailedTemps, setLossFailedTemps] = useState<Array<{ location: string; reading_c: number; logged_at: string }>>([])
@@ -826,7 +826,7 @@ export default function InventoryStaffApp() {
     try {
       const r = await fetch(`/api/inventory/app/${slug}/stocktake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit', session_id: stSession.id }) })
       const d = await r.json().catch(() => ({}))
-      if (r.ok && d.result) { setStSummary({ variances: d.result.variances, reviews: d.result.reviews_raised, total_cents: d.result.total_variance_cents, counted: d.result.lines_counted }); setStState('submitted'); loadHome(outletId) }
+      if (r.ok && d.result) { setStSummary({ variances: d.result.variances, reviews: d.result.reviews_raised, total_cents: d.result.total_variance_cents ?? null, counted: d.result.lines_counted, unknown_value: d.result.unknown_value_lines ?? 0 }); setStState('submitted'); loadHome(outletId) }
     } catch { /* ignore */ }
     setStBusy(false)
   }
@@ -2347,7 +2347,13 @@ export default function InventoryStaffApp() {
               <div style={{ display: 'flex', gap: 9, marginBottom: 4 }}>
                 <PipelStat n={stSummary.counted} k="counted" />
                 <PipelStat n={stSummary.variances} k="variances" tone={stSummary.variances > 0 ? 'warn' : undefined} />
-                <PipelStat n={`$${Math.abs(stSummary.total_cents / 100).toFixed(0)}`} k="variance $" tone={stSummary.total_cents !== 0 ? 'alert' : undefined} />
+                {/* INV-BASELINE-1 PHASE 3 - an unpriced variance renders as "unknown", never as $0.
+                    The two used to be the same pixel: total_cents was 0 both when the variance was
+                    genuinely worthless and when no cost could be resolved for the product. */}
+                <PipelStat
+                  n={stSummary.total_cents == null ? 'unknown' : '$' + Math.abs(stSummary.total_cents / 100).toFixed(0)}
+                  k={stSummary.unknown_value > 0 && stSummary.total_cents != null ? 'variance $ (partial)' : 'variance $'}
+                  tone={stSummary.total_cents == null || stSummary.total_cents !== 0 ? 'alert' : undefined} />
               </div>
               <div style={{ marginTop: 14 }}><PipelButton onClick={resetStocktake}>New count</PipelButton></div>
             </div>
@@ -2734,7 +2740,15 @@ export default function InventoryStaffApp() {
                       <div style={{ height: 8, borderRadius: 5, background: 'rgba(255,255,255,.12)', overflow: 'hidden' }}><div style={{ width: `${Math.max(3, c.pct)}%`, height: '100%', background: catColor(c.category) === P.ink ? P.lime : catColor(c.category) }} /></div>
                     </div>
                   ))}
-                  {lossShrink.by_category.length === 0 && <div style={{ fontSize: 12, color: '#9aa3b2' }}>No loss recorded this period — clean.</div>}
+                  {lossShrink.by_category.length === 0 && !lossShrink.unvalued_variance_count && <div style={{ fontSize: 12, color: '#9aa3b2' }}>No loss recorded this period — clean.</div>}
+                  {/* INV-BASELINE-1 PHASE 3 — accepted variances with no resolvable cost are REAL losses of
+                      unknown value. They are excluded from the dollar figure above rather than folded in as
+                      $0, so the count must appear beside it or the total reads as complete when it is not. */}
+                  {!!lossShrink.unvalued_variance_count && (
+                    <div style={{ fontSize: 12, color: '#cfd2cc', marginTop: 4 }}>
+                      + {lossShrink.unvalued_variance_count} variance{lossShrink.unvalued_variance_count === 1 ? '' : 's'}, value unknown — no cost recorded for {lossShrink.unvalued_variance_count === 1 ? 'that product' : 'those products'}
+                    </div>
+                  )}
                 </div>
               </div>
               {lossShrink.top_products.length > 0 && (

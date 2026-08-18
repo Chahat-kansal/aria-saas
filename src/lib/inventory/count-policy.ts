@@ -16,18 +16,34 @@
 //   4. Staff counts ALWAYS route. Unchanged, and the default here, so an unknown actor fails
 //      closed rather than open.
 //
-// ⚠ THE THRESHOLD IS DELIBERATELY NOT IN DOLLARS.
+// ⚠ THE THRESHOLD IS DELIBERATELY NOT IN DOLLARS — AND NOT FOR THE REASON FIRST WRITTEN HERE.
 //
-// 0 of 74 products carry a cost. A dollar materiality figure computed against a null cost is
-// precisely the GROUNDING-TEETH failure this repo already committed once — a briefing that
-// computed every percentage against a fabricated $999,999 target — and total_variance_cents is
-// committing a version of it right now by summing quantities into a money column (phase 3).
+// CORRECTION (INV-BASELINE-1 PHASE 3, measured via MCP, not taken from a document): the claim that
+// "0 of 74 products carry a cost" is FALSE, and it had been propagating for weeks — through the
+// master tracker, the inventory skill file, the founder TODO, and into the first version of this
+// header. Sip has 74 active tracked products; 72 of them have a cost_price ($1.60–$9.60). Only 2
+// do not. Anyone reading the old comment, checking the data, and "fixing" the policy back to
+// dollars would have been correcting a lie with a mistake.
+//
+// THE THRESHOLD STAYS IN UNITS ANYWAY, for a narrower and real reason: those 72 costs resolve at
+// resolve-cost.ts tier 5, pos_products.cost_price, whose provenance is source:'catalogue' and
+// grounding:'estimated' — a manually-maintained reference figure tied to no actual transaction and
+// the weakest tier before the resolver gives up. Thresholding money on an estimate is its own trap:
+// it produces a confident dollar boundary out of a number nobody verified. Units are measured
+// directly by the person counting, so a unit threshold is grounded in a way a dollar one is not.
+//
 // So v1 is QUANTITY and PERCENTAGE OF BOOK STOCK, whichever trips first, and any surface showing
 // the threshold must say WHY it is not in dollars. See THRESHOLD_DISCLOSURE below.
 //
-// TODO(INV-COST-1): when product costs land, add a dollar arm to this policy — material when the
-// variance is worth more than $X — and switch THRESHOLD_DISCLOSURE to describe it. Until then a
-// dollar figure here would be invented, not measured.
+// TODO(INV-COST-1): when VERIFIED costs land (tier 1/2 — per-outlet item_cost or last_item_cost
+// from a real receipt; today only 2 rows have either), add a dollar arm to this policy and switch
+// THRESHOLD_DISCLOSURE to describe it. The blocker is cost PROVENANCE, not cost presence.
+//
+// TODO(INV-THRESHOLD-ABC): this threshold is GLOBAL, and the real one is ABC-tiered from this
+// business's own velocity data — 5 units of milk and 5 units of a premium spirit are not the same
+// event, and treating them alike either drowns the owner in reviews or waves through the variance
+// that mattered. product_performance_scores.abc_tier already exists and stocktake.ts already reads
+// it for cycle-count cadence. This constant is a starting point, not a finished answer.
 
 /** Absolute units of variance at which a count stops being routine. */
 export const MATERIAL_QTY_UNITS = 5
@@ -41,7 +57,7 @@ export const MATERIAL_PCT_OF_BOOK = 0.10
  */
 export const THRESHOLD_DISCLOSURE =
   `Counts differing by ${MATERIAL_QTY_UNITS} or more units, or by ${Math.round(MATERIAL_PCT_OF_BOOK * 100)}% or more of expected stock, go to owner review. ` +
-  'This threshold is measured in units, not dollars, because product costs have not been entered yet.'
+  'This threshold is measured in units because recorded costs are catalogue estimates, not verified purchase costs.'
 
 export type CountActor = 'owner' | 'staff'
 

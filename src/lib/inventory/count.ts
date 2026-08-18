@@ -52,12 +52,15 @@ export async function submitCount(supabase: SupabaseClient, p: CountParams): Pro
     taskDone = true
   }
 
-  // Audit trail: a stock-take event (started_by = staff). Variance value at cost (NULL cost → 0, not faked).
-  let varianceCents = 0
+  // Audit trail: a stock-take event (started_by = staff). Variance value at cost.
+  // INV-BASELINE-1 PHASE 3 — unknown cost is NULL, not 0. The old comment on this block said
+  // "NULL cost → 0, not faked", which was self-contradictory: writing 0 for an unknown value IS
+  // faking it, and it made "worth nothing" indistinguishable from "value unknown".
+  let varianceCents: number | null = null
   try {
     const rc = await resolveCostFor(supabase, p.businessId, p.productId, outletId)
     if (rc.cost != null) varianceCents = Math.round(variance * rc.cost * 100)
-  } catch { /* cost unknown → 0 */ }
+  } catch { /* cost unknown stays null */ }
   if (outletId) {
     await supabase.from('pos_stock_takes').insert({
       business_id: p.businessId, outlet_id: outletId, count_type: 'perpetual', started_at: new Date().toISOString(), completed_at: new Date().toISOString(),

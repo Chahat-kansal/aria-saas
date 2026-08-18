@@ -105,7 +105,12 @@ export default function NewStocktakePage() {
     }));
     const variances = items.filter(i => i.counted_qty !== i.system_qty);
     await fetch('/api/pos/stock-takes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ outlet_id: selectedOutlet.id, items }) }).catch(() => {});
-    track('stocktake_committed', { variance_count: variances.length, total_variance_cents: variances.reduce((s, i) => s + Math.abs(i.counted_qty - i.system_qty), 0) });
+    // INV-BASELINE-1 PHASE 3 - the fabricated cents figure is DROPPED, not corrected.
+    // This summed |counted - system|, a QUANTITY, under the name total_variance_cents: the exact
+    // bug removed from the server in phase 1, duplicated client-side. Analytics inheriting a wrong
+    // number is how it gets quoted back later as evidence, so the field goes rather than gets fixed.
+    // Variance VALUE is computed server-side from resolveCostFor and is null when no cost is known.
+    track('stocktake_committed', { variance_count: variances.length });
     setSaving(false);
     try { localStorage.removeItem(SESSION_KEY); } catch (e) { console.error('[silent-catch]', e) }
     router.push('/pos/stocktake');
