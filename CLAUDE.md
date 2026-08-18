@@ -635,11 +635,55 @@ standing table decides them instead:
 **Its other bullets survive unchanged** and are reinforced by the PARK and NEVER lists above:
 schema, money, customer contact, authorisation, deletion, and bypassing a gate all still stop.
 
-**One bullet is NOT resolved by the standing table and needs the founder's call:** RULE 18 says stop
-for *"a fix that would change an existing HTTP response shape, or anything customer-facing"*. The
-standing table's PARK list covers message wording but not response shape. **Until that is settled,
-use the conservative reading: an ADDITIVE response field proceeds; a change that removes or renames
-an existing field, or alters a status code, PARKS under RULE 18.**
+**RESPONSE-SHAPE CHANGES — SETTLED 2026-08-18. Use the CONSUMER TEST, not the shape of the diff.**
+
+RULE 18 says stop for *"a fix that would change an existing HTTP response shape, or anything
+customer-facing"*, and the standing table's PARK list covers message wording but not response
+shape. Resolved as follows.
+
+**SUPERSEDED 2026-08-18 — the interim reading, do not reinstate:**
+> - ~~An ADDITIVE response field proceeds; a change that removes or renames an existing field, or~~
+>   ~~alters a status code, PARKS under RULE 18.~~
+>
+> Retired because it asked the wrong question. Whether a change is additive says nothing about
+> whether anyone can be broken by it — a purely internal route can have a field deleted safely,
+> and a route with a cached client can be broken by a change that adds nothing.
+
+**THE QUESTION IS WHO CONSUMES THE ROUTE.**
+
+**PROCEEDS unattended** — every consumer of the route is inside this repo, the sibling sweep finds
+all of them, and they change in the same commit. **Type changes included**: that is an internal
+refactor with a wide diff, not an API change. If the sweep cannot find every consumer, you do not
+have this case.
+
+**PARKS** — any consumer outside this repo, **or any client that may be running an old cached
+bundle**. That second clause is not hypothetical here:
+
+- The **CX app** and the **inventory staff app** are installed PWAs. The staff app registers
+  `/inventory-sw.js` and injects a per-slug manifest (`inventory/[slug]/page.tsx`, PWA block); the
+  root app ships `src/app/manifest.ts`. A phone that has not refreshed is running last week's
+  JavaScript against today's server, which makes it **an external consumer sitting inside your own
+  repo**.
+- It writes as well as reads: `enqueueSafe` queues counts offline and replays them later, so a
+  stale bundle can POST an old payload shape to a new route *after* the deploy that changed it.
+
+**For routes with such a consumer:** additive fields proceed; **removing a field, renaming one,
+changing a status code, or widening a type to nullable PARKS.** Nullable is on that list for a
+concrete reason — a cached client calling `.toFixed()` on a newly-nullable field throws, and it
+throws on the phone of someone mid-stocktake, not in CI.
+
+**WORKED EXAMPLE — `total_variance_cents` → nullable (INV-BASELINE-1 Phase 3).** That change
+**PARKS** under this rule. It reaches the staff app's stocktake summary, which is exactly a cached-
+PWA consumer. **It was the correct change and it should still happen** — parking means it needs a
+human present when it ships, not that it is wrong. This is the distinction the interim reading
+could not draw: it would have parked the change for being a type widening, rather than for the
+reason that actually matters, and would have waved through the same widening on a purely internal
+route.
+
+> **Tightens later:** when the public API batch ships, external consumers stop being a
+> same-repo-cached-bundle edge case and become real third parties. At that point "every consumer is
+> inside this repo" stops being true for any published route, and this rule needs revisiting rather
+> than reinterpreting.
 
 **RULE 15** says *"a failed phase halts the mega-sprint — do not work around it, do not continue
 around it."* **The standing table supersedes that for autonomous runs:** a phase that fails
