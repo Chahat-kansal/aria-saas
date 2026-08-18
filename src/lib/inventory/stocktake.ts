@@ -104,13 +104,45 @@ export async function countStocktakeLine(sb: SupabaseClient, businessId: string,
 
   // Upsert the line (re-counting a product overwrites — recount). Keyed by (session, product).
   const { data: existing } = await sb.from('pos_stock_take_items').select('id, recount_count').eq('stock_take_id', sessionId).eq('product_id', productId).maybeSingle()
-  const payload = { system_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: nowIso(), product_name: productName }
+  const countedAt = nowIso()
+  const payload = { system_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: countedAt, product_name: productName }
   const { error: lineErr } = existing?.id
     ? await sb.from('pos_stock_take_items').update({ ...payload, recount_count: (Number(existing.recount_count) || 0) + 1 }).eq('id', existing.id)
     : await sb.from('pos_stock_take_items').insert({ stock_take_id: sessionId, product_id: productId, recount_count: 0, ...payload })
   if (lineErr) return null // never report a count as recorded when the line didn't persist
+
+  // ── INV-BASELINE-1 PHASE 4 — refresh the denormalised cache, IN THE SAME OPERATION ────────────
+  //
+  // SOURCE OF TRUTH: pos_stock_take_items.counted_at. That is the ledger — per session, per
+  // product, attributed via counted_by, and the only record that can answer "who counted this and
+  // when". pos_outlet_inventory.last_counted_at is a CACHE of max(counted_at) for the
+  // (product, outlet) pair, and exists so the cycle-count list can be built from one cheap query
+  // instead of a join over every line ever counted.
+  //
+  // IT IS WRITTEN HERE AND NOWHERE ELSE. Writing it independently of a ledger line is what makes a
+  // cache drift from its source, and this table already carried a write-only version of this column
+  // (one writer in the old auto-correcting route, zero readers — preflight §Q5). Deliberately the
+  // SAME `countedAt` value the line got, not a second nowIso(), so the two cannot differ by
+  // construction rather than by discipline.
+  //
+  // Only after lineErr is clear: a cache entry for a count that did not persist would be a claim
+  // about a count that never happened. Monotonic in practice — countedAt is always "now", and a
+  // recount overwrites the line's counted_at with the same value written here.
+  //
+  // No row is created if none exists: generateCycleCountList only lists products that already have
+  // a pos_outlet_inventory row, so a missing row cannot produce a stale "never counted" entry.
+  const { error: cacheErr } = await sb.from('pos_outlet_inventory')
+    .update({ last_counted_at: countedAt })
+    .eq('business_id', businessId).eq('product_id', productId).eq('outlet_id', outletId ?? '')
+  if (cacheErr) {
+    // Non-fatal: the ledger line IS the record and it persisted. A stale cache makes the cycle
+    // list suggest a product sooner than needed, which is noise, not data loss — but it is logged
+    // rather than swallowed so drift is attributable.
+    console.error('[stocktake] last_counted_at cache not refreshed (ledger line is intact):', { productId, outletId, error: cacheErr.message })
+  }
+
   const recountRequired = needsRecount(variance, expected)
-  return { product_id: productId, product_name: productName, expected_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: payload.counted_at, recount_required: recountRequired }
+  return { product_id: productId, product_name: productName, expected_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: countedAt, recount_required: recountRequired }
 }
 
 export interface SubmitResult {
@@ -306,24 +338,24 @@ export async function generateCycleCountList(sb: SupabaseClient, businessId: str
   for (const s of scores ?? []) { const pid = s.product_id as string; if (!abc.has(pid)) abc.set(pid, (s.abc_tier as 'A' | 'B' | 'C')) }
 
   // in-stock products at this outlet (expected qty)
+  // INV-BASELINE-1 PHASE 4 — reads the CACHE, in the query it was already making.
+  //
+  // last_counted_at is fetched here alongside items_on_hand, replacing a second 10,000-row query
+  // that joined pos_stock_take_items back through pos_stock_takes to recover the same fact. The
+  // cache is maintained by countStocktakeLine in the same operation as the ledger line, so the two
+  // agree by construction; this list is the one reader allowed to prefer the cheap copy, because
+  // rotation ordering tolerates staleness in a way attribution never could. Anything needing
+  // correctness or "who counted it" must read pos_stock_take_items.counted_at instead.
   const { data: inv } = await sb.from('pos_outlet_inventory')
-    .select('product_id, items_on_hand, pos_products!inner(name, is_active, track_stock)')
+    .select('product_id, items_on_hand, last_counted_at, pos_products!inner(name, is_active, track_stock)')
     .eq('business_id', businessId).eq('outlet_id', outletId).limit(10000)
   const stock = (inv ?? []).filter(r => (r.pos_products as { is_active?: boolean })?.is_active !== false)
-
-  // last counted_at per product at THIS outlet (cycle rotation)
-  const { data: counts } = await sb.from('pos_stock_take_items')
-    .select('product_id, counted_at, pos_stock_takes!inner(outlet_id)')
-    .eq('pos_stock_takes.outlet_id', outletId).not('counted_at', 'is', null)
-    .order('counted_at', { ascending: false }).limit(10000)
-  const lastCount = new Map<string, string>()
-  for (const c of counts ?? []) { const pid = c.product_id as string; if (!lastCount.has(pid)) lastCount.set(pid, c.counted_at as string) }
 
   const now = Date.now()
   const items: CycleItem[] = stock.map(r => {
     const pid = r.product_id as string
     const tier = abc.get(pid) ?? 'C'
-    const last = lastCount.get(pid) ?? null
+    const last = (r.last_counted_at as string | null) ?? null
     const daysSince = last ? (now - new Date(last).getTime()) / 86400_000 : null
     const cadence = ABC_CADENCE_DAYS[tier] ?? 30
     // due_score ≥ 1 means overdue for its class; never-counted = strongly due (cadence-scaled, finite).
