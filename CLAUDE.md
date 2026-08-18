@@ -136,6 +136,11 @@ npx vitest run     # must be green
 ```
 If the build breaks, FIX THE ERROR — never remove the feature causing it (see RULE 0).
 
+**⚠️ THE WRAPPER'S REPORTED EXIT CODE IS NOT EVIDENCE — `BUILD_EXIT` in the log is** (or the process
+exit read directly); when the two disagree, treat the gate as FAILED. *(2026-08-18: a backgrounded
+build exited 1 while its task notification reported "completed (exit code 0)" — only the
+`echo "BUILD_EXIT=$?" >> build.log` line was true.)*
+
 ---
 
 ## 🔒 RULE 4 — VERCEL CONSTRAINTS  *(revised 2026-08-17)*

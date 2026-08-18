@@ -62,5 +62,11 @@ if ! npm run test:unit --silent; then
   exit 1
 fi
 
+# MS7-PRE phase 1 — say what was NOT checked. This hook deliberately does not run `next build`
+# (see the header), so "OK" here must never be read as "all RULE 3 gates are green". A build that
+# exits non-zero is invisible to this hook, and on 2026-08-18 a backgrounded build exited 1 while
+# its wrapper reported success — the honest signal is BUILD_EXIT in the log, never the wrapper.
 echo "[pre-push] OK — canon-rail-guard clean, tsc 0 errors, unit tests green."
+echo "[pre-push] NOT checked here: next build (CI-only). RULE 3 needs it green too — read"
+echo "[pre-push]                   BUILD_EXIT in build.log, not a wrapper's reported exit code."
 exit 0
