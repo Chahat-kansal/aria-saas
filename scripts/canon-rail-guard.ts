@@ -43,6 +43,10 @@ const EXEMPT_PATHS = [
   'src/lib/aria/revenue-snapshot.ts',            // the canonical revenue compute layer
   'src/lib/aria/compute/',                       // the canonical compute layer
   'scripts/canon-rail-guard.ts',                 // this file quotes the patterns it blocks
+  // MS7 phase 5 — the two comms chokepoints ARE the rail; they are the only files allowed to
+  // call the provider directly. Everything else must go through sendSMS() / sendWhatsApp().
+  'src/lib/clicksend.ts',
+  'src/lib/whatsapp.ts',
 ]
 
 interface Violation {
@@ -107,6 +111,25 @@ function scan(diff: string): Violation[] {
         if (/\.neq\(\s*['"]status['"]\s*,\s*['"]voided['"]\s*\)/.test(text)) {
           violations.push({ file: currentFile, line: newLineNo, rule: 'neq-voided-filter', text: text.trim() })
         }
+
+        // MS7 phase 5 — NO NEW DIRECT CALLS TO THE SMS PROVIDER.
+        //
+        // src/lib/clicksend.ts's sendSMS() is the single SMS chokepoint: it checks per-channel
+        // sms_consent, honours the sms_suppression opt-out list, appends the STOP notice to
+        // marketing, and writes every attempt (sent/skipped/failed) to sms_send_log. 45 files
+        // import it and, as of MS7 phase 4, NOT ONE bypasses it.
+        //
+        // This rule exists because the rail working today is not the same as the rail working
+        // tomorrow. The email side already learned this: a raw fetch around sendEmail() in the CX
+        // digest meant no unsubscribe and no suppression check ever ran, and nothing caught it.
+        // A new fetch to rest.clicksend.com would reintroduce exactly that, and the send would
+        // look completely normal — the only visible difference is an absent sms_send_log row.
+        //
+        // Scoped to ADDED lines only, like every other rule here, so the two chokepoints and all
+        // existing code are untouched.
+        if (/rest\.clicksend\.com|api\.clicksend\.com/.test(text)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'direct-sms-provider-call', text: text.trim() })
+        }
       }
 
       const arr = addedLinesByFile.get(currentFile) ?? []
@@ -169,7 +192,10 @@ function main() {
   }
   console.error('Fix: use withBusinessContext (src/lib/api/with-error-capture.ts) instead of a local getBid/getBusinessId/getBiz;')
   console.error('use .eq(\'status\',\'completed\') or getRevenueSnapshot()/getRevenueForRange() instead of neq(\'voided\')/a hand-rolled sum;')
-  console.error('add REVOKE EXECUTE ... FROM PUBLIC, anon[, authenticated] in the same migration file as any new SECURITY DEFINER function.')
+  console.error('add REVOKE EXECUTE ... FROM PUBLIC, anon[, authenticated] in the same migration file as any new SECURITY DEFINER function;')
+  console.error("send SMS with sendSMS() from src/lib/clicksend.ts (pass category: 'marketing' for anything promotional) rather than")
+  console.error('calling rest.clicksend.com directly — the chokepoint is what checks sms_consent, honours the opt-out list, appends')
+  console.error('the STOP notice and writes the sms_send_log audit row. A raw fetch does none of those and looks identical when sent.')
   process.exit(1)
 }
 

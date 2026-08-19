@@ -163,7 +163,7 @@ None.
 
 ## PHASE 3 — CYCLE-LIST TRUTH
 
-**Commit:** *(written in phase 4's commit.)*
+**Commit:** `17ddb2ec`
 
 ### REPORT AND SKIP — nothing needed fixing.
 
@@ -212,7 +212,7 @@ None.
 
 ## PHASE 4 — CONSENT DIAGNOSIS
 
-**Commit:** *(written in phase 5's commit.)* · **Document:** `docs/aria/COMMS-CONSENT-AUDIT.md`
+**Commit:** `7bbd7bb3` · **Document:** `docs/aria/COMMS-CONSENT-AUDIT.md`
 
 ### The answer is none of the three offered
 
@@ -250,3 +250,123 @@ Documentation only. `tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 295/295.
 
 ### Parked
 None.
+
+
+---
+
+## PHASE 5 — ONE SEND RAIL
+
+**Commit:** *(written in phase 6's commit.)*
+
+### The rail already existed. What was missing was the guard.
+
+Per the decision table (*"the work is already done -> report and skip; never invent scope"*), I did
+not rebuild `sendSMS()`. It already checks per-channel `sms_consent`, honours the `sms_suppression`
+opt-out list, appends the STOP notice to marketing, and writes **every** attempt to `sms_send_log`
+— and phase 4 confirmed **no path bypasses it** (45 importers, 0 bypasses).
+
+What did not exist is anything stopping the *next* bypass. Not hypothetical: the email side already
+lost this exact way, when a raw `fetch` around `sendEmail()` in the CX digest meant no unsubscribe
+and no suppression check ever ran, and nothing caught it. This repo's own measured figure is that
+adoption stalls at **9-15%** without enforcement.
+
+### Changes
+- `scripts/canon-rail-guard.ts` — new rule **`direct-sms-provider-call`**; the two chokepoints
+  (`src/lib/clicksend.ts`, `src/lib/whatsapp.ts`) added to `EXEMPT_PATHS` because they *are* the
+  rail; and a fix-hint explaining what the chokepoint does that a raw fetch does not.
+
+Added to the **existing** guard rather than built as a second mechanism — it already runs in CI
+(`canon-rail-guard.yml`) and in the pre-push hook, scans **added lines only**, and grandfathers
+everything pre-existing. A new guard would have needed its own wiring into both.
+
+### Verified by making it fail
+Exercised, not asserted. A probe file containing a direct `fetch('https://rest.clicksend.com/...')`
+was written and scanned:
+
+```
+[canon-rail-guard] 1 new violation(s) found
+  src/lib/guard-probe-tmp.ts:2  [direct-sms-provider-call]
+    return fetch("https://rest.clicksend.com/v3/sms/send", { method: "POST" })
+```
+
+Probe deleted, re-scanned -> **Pass**, confirming the two real chokepoints do not trip their own
+rule. Both directions checked.
+
+> ⚠️ **Side effect, and it nearly bit me.** `--working-tree` mode runs `git add -N .`, which marks
+> every untracked file intent-to-add — including the 22 pre-existing junk files at the repo root
+> (`pw-report*-extracted/`, two `.glb` binaries, `design/*.png`). After my second guard run they
+> showed as staged `A` entries, and a plain `git commit` would have swept all of them in. Caught by
+> checking `git status` before staging; cleared with `git reset`. **Anyone running the guard in
+> working-tree mode must `git reset` afterwards.**
+
+### Not retrofitted, deliberately
+Per the decision table, the 62 call sites were left alone. Rail plus guard only.
+
+### Gates
+`tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 295/295 · guard verified in both directions.
+
+### Parked
+None.
+
+---
+
+## PHASE 6 — SENDER ID · PARKED (needs schema)
+
+### Why parked
+The decision table is explicit: *"P5 or P6 needs a column -> PARK, name the column, continue"* and
+*"schema needed -> PARK that phase."* Phase 6's scope is **per-business** Sender ID configuration,
+and there is nowhere to put it:
+
+- `businesses` has no sender/SMS-identity column (only `alert_sms_enabled`, unrelated).
+- No existing settings table fits. `pos_company_settings` is POS-terminal config (sign-in type,
+  auto-logout); `pos_online_settings.settings` is online-ordering config. A comms identity in
+  either would be the wrong home and found there by nobody.
+- Today it is **one global env var**, `CLICKSEND_SENDER_ID`, read once in `clicksend.ts`. Unset, the
+  `from` field is omitted and ClickSend falls back to a shared account number — so every business
+  sends under the same identity, or none.
+
+**Phase 5 is not parked with it.** Its deliverable was the guard: code-only, and shipped.
+
+### Schema needed — named exactly
+```sql
+-- per-business SMS sender identity + ACMA registration state
+ALTER TABLE businesses
+  ADD COLUMN sms_sender_id            text,         -- alphanumeric ID, max 11 chars (AU), e.g. 'SipCafe'
+  ADD COLUMN sms_sender_status        text NOT NULL DEFAULT 'unregistered'
+    CHECK (sms_sender_status IN ('unregistered','pending','registered','rejected')),
+  ADD COLUMN sms_sender_registered_at timestamptz;
+```
+The status column is not decoration: surfacing the **unregistered state to the owner** is the
+phase's actual requirement, and inferring it from a null ID cannot distinguish "not set up yet"
+from "submitted and waiting".
+
+### THIS IS OVERDUE, NOT UPCOMING
+ACMA Sender ID Register enforcement began **1 July 2026**. SMS on an unregistered alphanumeric
+Sender ID displays to recipients as **"Unverified"**. `clicksend.ts` already records the failure
+mode from experience: a hardcoded alphanumeric is accepted by the ClickSend API (`response_code:
+SUCCESS`, a `message_id` assigned) and then **silently dropped at the carrier** — exactly the
+symptom of OTP rows persisting while no SMS arrives.
+
+**Mitigating fact, verified:** `CLICKSEND_SENDER_ID` is unset in this environment, so sends omit
+`from` and go out on ClickSend's shared number rather than an unregistered alphanumeric. The
+"Unverified" exposure is **latent, not active** — and it activates the moment anyone sets that env
+var without registering first.
+
+### Registration — exactly what Chahat must do, in order
+1. **Choose the Sender ID string per business.** Max 11 characters, alphanumeric, no spaces. It must
+   plausibly identify the actual sender (`SipCafe`, not `AriaOS`, for a message from Sip) — ACMA's
+   rule is that it must not mislead the recipient about who is contacting them.
+2. **Register via ClickSend**, which files with the ACMA register on the account's behalf:
+   Dashboard -> **Account -> Sender IDs -> Add Alphanumeric Sender ID**. Supply the legal entity
+   name, ABN, and the ID string; ClickSend requires evidence the sender owns the brand.
+3. **Wait for approval before setting it anywhere.** Approval is not instant, and sending on a
+   pending ID has the same "Unverified" outcome as an unregistered one.
+4. **Only then set the value** — and once the schema above exists, set it per business rather than
+   in the global env var, so one cafe's registration does not put its ID on another's messages.
+5. **Repeat per business at onboarding.** Blocking a new customer from sending SMS before
+   registration depends on `sms_sender_status`, so it is parked with the column.
+
+### What this park does NOT block
+Marketing SMS cannot be delivered at all today (phase 4: zero ever sent; 1 customer with consent),
+so the Sender ID gap blocks no live send. Transactional SMS continues on the shared number, which
+is unaffected by the ACMA alphanumeric rules.
