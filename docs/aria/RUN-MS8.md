@@ -179,7 +179,7 @@ Tier reordering (catalogue-before-PO) — money, per the decision table.
 
 ## PHASE 3 — THE THRESHOLD DISCLOSURE
 
-**Commit:** *(recorded in phase 4's commit.)*
+**Commit:** `4f9a59d6`
 
 ### Built, not skipped — an honest per-business statement was possible
 

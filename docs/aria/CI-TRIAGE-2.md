@@ -333,3 +333,68 @@ and what state that business is in, so the failure set moves between runs; a gre
 need several successive runs to distinguish a real fix from a reshuffle. Any DDL or fixture DML in
 that sprint is founder-approved and applied via Supabase MCP under CLAUDE.md RULE 10a, then
 verified live under RULE 10.
+
+
+---
+
+## 11 · APPENDED 2026-08-19 (MS8 PHASE 4) — divergence re-confirmed, and the target end-state
+
+Appended, not merged, so §3 and §7 stay as written and can be scored. **Every claim in §3 and §10a
+re-verified true against today's code and database.** Nothing was re-scoped.
+
+### Code side — all three still hold
+| claim | verified |
+|---|---|
+| resolver picks "newest owned business" | `test-business.ts:15` — `.order('created_at', { ascending: false })` |
+| seed targets `…0001` only | `seed.ts:29` — `SIP_BUSINESS_ID = '…0001'` |
+| `TEST_BUSINESS_ID` unset in CI | **0 occurrences** in `.github/workflows/`. It exists only as an env *fallback* in `test-business.ts` and `api.spec.ts` |
+
+### Database side — all still hold
+| | `…0101` Smoke Test Café | `…0001` Sip (E2E Test) |
+|---|---|---|
+| resolver picks it? | **YES** (created 25 Jul, newest) | no (11 Jul) |
+| seeded by `seed.ts`? | no | **YES** |
+| `onboarding_complete` | true | **false** |
+| outlets | 1 | **0** |
+| registers | **0** | **0** |
+| open cash sessions | **1** (the orphan) | 0 |
+| active products | 2 | 2 |
+
+### 🚩 A fourth gap §3 did not name: the seed creates none of the state the specs need
+
+`seed.ts` contains **zero** references to `pos_outlets`, `pos_registers`, `pos_cash_sessions` or
+`onboarding_complete`. It seeds a business row, one staff member, two products, a loyalty reward and
+loyalty config — and nothing that lets the POS terminal open. So even pointing the resolver at the
+seeded business would not have worked: `…0001` has no outlet, and `openStocktake`/`resolveOutletId`
+return null without one.
+
+**This is why §3b's conclusion was right and is now sharper.** The fixture problem is not "the
+resolver picks the wrong business" — it is that *neither* business is complete, and the one that
+happens to be picked is only usable because of an orphaned cash session nobody created deliberately.
+
+### TARGET END-STATE
+
+**The e2e fixture is `…0001` Sip (E2E Test). The smoke fixture stays `…0101` Smoke Test Café.**
+
+Keeping them separate is the actual fix for the root cause: SECURITY-P4 created `…0101` for the
+*smoke* suite and thereby silently repointed the *e2e* suite. Sharing one fixture between two suites
+is what made that possible, and repurposing `…0101` for e2e would rebuild the same coupling facing
+the other way.
+
+`…0001` must contain, and the seed must create rather than assume:
+
+| requirement | why |
+|---|---|
+| `onboarding_complete = true` | otherwise authenticated traffic routes to the wizard, not the dashboard |
+| ≥ 1 outlet | `resolveOutletId` returns null without one; every stocktake/count path fails |
+| ≥ 1 register | the terminal's gate reads a cash **session**, and a session needs somewhere to belong |
+| an open cash session | `registerIsOpen = !!registerSession` — the POS specs cannot reach the grid otherwise |
+| products, staff, loyalty | already seeded, unchanged |
+
+**Who creates it: `seed.ts`, idempotently, on every CI run.** Not a migration, not a manual step,
+and explicitly *not* residue — the orphaned session on `…0101` is precisely the failure mode of
+relying on state nobody owns.
+
+**How the resolver is told: `TEST_BUSINESS_ID`, set explicitly in both CI jobs.** The
+"newest owned business" heuristic is deleted as a *primary* mechanism; it survives only as a
+last-resort fallback for local runs with no env var, and even then it is the thing that caused this.
