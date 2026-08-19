@@ -4,9 +4,32 @@ import { dbAdmin, hasDbAccess } from './supabase'
  *  dedicated test business), falling back to any business owned by the test user. */
 export const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID ?? ''
 
-/** Resolve the business ID for the test user via the DB (requires service-role key). */
+/**
+ * Resolve the business ID for the test suite.
+ *
+ * MS8 PHASE 5 — EXPLICIT FIRST. `TEST_BUSINESS_ID` now wins outright.
+ *
+ * This used to resolve "the newest business owned by the test user", and that heuristic is the
+ * whole reason CI has never been green. SECURITY-P4 created a fixture for the SMOKE suite on
+ * 25 Jul; because it was newer than the e2e fixture, it silently repointed the entire e2e suite at
+ * a business `seed.ts` does not seed. Nothing announced it, nothing failed loudly, and the specs
+ * simply began asserting against the wrong data.
+ *
+ * A resolver whose answer changes when an unrelated sprint inserts a row is not a resolver. The
+ * env var is now the mechanism; the heuristic survives only as a last resort for a local run with
+ * no env var set, and it warns when it fires so it can never silently decide again.
+ */
 export async function resolveTestBusinessId(userId: string): Promise<string | null> {
-  if (!hasDbAccess || !dbAdmin) return TEST_BUSINESS_ID || null
+  // 1. Explicit wins, always — and without a DB round-trip.
+  if (TEST_BUSINESS_ID) return TEST_BUSINESS_ID
+  if (!hasDbAccess || !dbAdmin) return null
+
+  // 2. Last resort: newest owned business. Local runs only; CI sets the env var.
+  console.warn(
+    '[test-business] TEST_BUSINESS_ID is not set — falling back to the newest business owned by ' +
+    'the test user. This heuristic silently repointed the whole e2e suite once already ' +
+    '(see docs/aria/CI-TRIAGE-2.md §3). Set TEST_BUSINESS_ID.',
+  )
   // businesses.user_id, not owner_id — CLAUDE.md RULE 6 column trap.
   const { data } = await dbAdmin
     .from('businesses')
@@ -15,7 +38,7 @@ export async function resolveTestBusinessId(userId: string): Promise<string | nu
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  return data?.id ?? (TEST_BUSINESS_ID || null)
+  return data?.id ?? null
 }
 
 /** Look up the authenticated user's ID by email via DB. */

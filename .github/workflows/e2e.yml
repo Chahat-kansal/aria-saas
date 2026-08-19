@@ -90,6 +90,10 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      # MS8 phase 5 — the fixture is resolved EXPLICITLY. The old "newest owned business" heuristic
+      # let an unrelated sprint's smoke fixture silently repoint this whole suite (CI-TRIAGE-2 §3).
+      # A literal, not a secret: it is the fixed seed UUID from e2e/helpers/seed.ts, public in-repo.
+      TEST_BUSINESS_ID: 00000000-0000-4000-a000-000000000001
       BASE_URL: http://localhost:3000
       # CI-FIX-1 — job-level so the "Build (TEST env)" step's `npm run build` inherits it too
       # (GitHub merges job-level env into every step; a step's own env: only overrides the keys

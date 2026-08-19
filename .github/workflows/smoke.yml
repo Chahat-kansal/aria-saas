@@ -70,6 +70,10 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      # MS8 phase 5 — explicit fixture. The SMOKE suite keeps its own business (…0101); the e2e
+      # suite pins …0001. Keeping them separate is the fix for the root cause: one suite's fixture
+      # silently became the other's when resolution was "newest owned business".
+      TEST_BUSINESS_ID: 00000000-0000-4000-a000-000000000101
       TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
       TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
       # Cloudflare official always-pass test keys — public, not secret.
