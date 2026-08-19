@@ -112,7 +112,7 @@ None.
 
 ## PHASE 2 — BLIND COUNT
 
-**Commit:** *(written in phase 3's commit — never amend a pushed commit.)*
+**Commit:** `05561d55`
 
 ### Changes
 - `src/app/inventory/[slug]/page.tsx` — 5 edits (both count flows + the cycle list).
@@ -154,6 +154,99 @@ Restored → 9/9 green.
 
 ### Gates
 `tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 295/295.
+
+### Parked
+None.
+
+
+---
+
+## PHASE 3 — CYCLE-LIST TRUTH
+
+**Commit:** *(written in phase 4's commit.)*
+
+### REPORT AND SKIP — nothing needed fixing.
+
+Per the decision table: *"P3: nothing to fix → report and skip. Do not invent scope."* The chain
+phases 1–2 completed is intact, verified link by link in source:
+
+| link | evidence |
+|---|---|
+| a counted line refreshes the cache | `stocktake.ts:135` — `.update({ last_counted_at: countedAt })` |
+| a spot count reaches that writer | `count.ts:98` — `countStocktakeLine(...)` (phase 1) |
+| the cycle list reads the cache | `stocktake.ts:350` — `last_counted_at` in the same query as `items_on_hand` |
+| a counted product leaves the rotation | `due = daysSince / cadence` → ~0 immediately after a count → sorts to the bottom |
+| an uncounted product stays | `due = 999 + tier bonus` when `last_counted_at` is null → sorts to the top |
+
+Phase 2's edit removed `expected_qty` from the *display* only; it is still passed to
+`stPickProduct(c.product_id, c.name, c.expected_qty)`, so nothing was orphaned.
+
+### ⚠️ THE PROOF IS STRUCTURAL, NOT OBSERVED — and that is worth knowing
+
+Live state right now: **0 of 75** `pos_outlet_inventory` rows have `last_counted_at`, the ledger
+(`pos_stock_take_items`) holds **0 rows**, and **0** perpetual sessions have ever existed.
+
+So the cycle list currently reports "never counted" for every product — **and that is TRUE.**
+Nothing has ever been counted through a path that wrote a ledger line. The misdirection phase 1
+fixes is *forward-looking*: before it, a spot count would have left this state unchanged; after it,
+a spot count sets `last_counted_at` and the product drops out of the rotation.
+
+**I cannot demonstrate the rotation working against live data, because no count has been run.**
+What Chahat should check after the first real spot count:
+
+1. `pos_stock_take_items` gains a row (it has never had one).
+2. That product's `pos_outlet_inventory.last_counted_at` becomes non-null and equals the line's
+   `counted_at`.
+3. The product disappears from the top of the staff app's cycle list.
+4. `inventory_review_queue` gains a `count_variance` row if the count differed (it has never had
+   one either — see phase 4's note that the review path has produced 0 rows in production).
+
+### Gates
+No source changed in this phase. `tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 295/295 — the same green
+run that covered phase 2, re-confirmed before this commit.
+
+### Parked
+None.
+
+---
+
+## PHASE 4 — CONSENT DIAGNOSIS
+
+**Commit:** *(written in phase 5's commit.)* · **Document:** `docs/aria/COMMS-CONSENT-AUDIT.md`
+
+### The answer is none of the three offered
+
+The brief asked whether **(a)** the gate runs but never records, **(b)** paths bypass it, or
+**(c)** all 48 are transactional. **The gate runs, records correctly, and refused 25 marketing
+sends.**
+
+`consent_ok` is `false` on 25 rows (marketing, skipped — refused at the gate) and `null` on 23
+(transactional, exempt by design). `suppressed` is false everywhere because `sms_suppression` is
+empty — nobody has opted out, because no marketing SMS has ever been delivered.
+
+**Zero marketing SMS have ever reached a customer.** 49 customers have a phone; 1 has
+`sms_consent`, and was not among the 25 targets.
+
+### 🟢 NOTHING PARKED AS URGENT — there is no past-send exposure to remediate
+
+The decision table's URGENT branch (*"a marketing path sends without consent → park all
+remediation"*) **does not fire.** No marketing message was sent without consent. The rail has been
+refusing them since 22 June.
+
+### Per-path
+All SMS goes through `sendSMS()` (45 importing files), so consent-check, `consent_ok` logging,
+suppression and the STOP notice are properties of the rail, not per-path. What varies is the
+`category` each caller passes: **36 marketing, 26 transactional.** No path is misclassified; two
+ambiguous ones (daily-briefing, community digest) already pass `marketing`, which is the safer
+error. Full table in the audit document.
+
+### Bypass check
+**None.** One direct ClickSend `fetch` exists (`whatsapp.ts:28`) and it is inside `sendWhatsApp()`
+— WhatsApp's own chokepoint with its own consent, the shared suppression list, and its own audit
+log. A second rail, not a hole in the first.
+
+### Gates
+Documentation only. `tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 295/295.
 
 ### Parked
 None.
