@@ -39,7 +39,7 @@ vocabulary rather than inventing a second one.
 
 ## PHASE 1 — ONE COST COLUMN
 
-**Commit:** *(recorded in phase 2's commit — never amend a pushed commit.)*
+**Commit:** `c497df6f`
 
 ### Changes
 - `src/lib/aria/hypothesis/generate.ts` — reads `cost_price`; low-margin filter rewritten.
@@ -100,3 +100,76 @@ Restored → 8/8 green.
 
 ### Parked
 None.
+
+
+---
+
+## PHASE 2 — PROVENANCE TIERS
+
+**Commit:** *(recorded in phase 3's commit.)*
+
+### The display half was already built. I did not rebuild it.
+
+Per RULE 20 (*"the work is already done → report and skip; never invent scope"*): `stock-value.ts`
+already carries `cost_source` and `cost_grounding` per product, **excludes** unknown-cost products
+from the at-cost total and counts them separately; `InventoryValuePanel.tsx` already renders
+`TruthBadge`, a per-source chip, a source legend and a missing-cost callout. Nothing needed
+inventing, and nothing was.
+
+### What was actually broken: the tier backed by a real transaction was dead
+
+`resolveCostFor`'s `purchase_order` tier queried **`pos_purchase_order_lines` — 0 rows**. The
+system's only recorded purchase costs are **5 rows in `pos_purchase_order_items.unit_cost`**, a
+different table. So the tier meant to represent an actual supplier transaction could never fire, and
+a product with a real purchase price resolved to `unknown`.
+
+Fixed on **both** paths — the single-product resolver *and* `resolveCostBatch`, which is what feeds
+the valuation panel. Fixing only the former would have left the one surface that displays provenance
+exactly as dead as before. `pos_purchase_order_lines` keeps precedence (richer vocabulary, newer
+schema, unchanged behaviour if it ever gains rows); `items` is the fallback that has data today.
+`items` has no `business_id`, so it is joined through `pos_purchase_orders` and filtered there —
+querying it unscoped would leak another tenant's purchase prices into this business's costs.
+
+### ⚠️ TWO HONEST LIMITS
+
+**1. The fix changes nothing observable on today's data.** All 4 distinct products with a PO cost
+*also* have a catalogue `cost_price`, and catalogue (tier 5) is consulted **before** the PO tier —
+the PO fallback only runs when outlet and catalogue are both unknown. So the tier is now alive and
+correctly scoped, but still does not fire for Sip. It removes a latent dead path, not a visible bug.
+
+**2. 🚩 A real purchase price is losing to a manually-typed estimate — reported, NOT changed.**
+
+| product | catalogue `cost_price` (estimated) | actual PO `unit_cost` | resolver reports |
+|---|---|---|---|
+| Turmeric Latte | $2.40 | **$3.20** | $2.40 |
+| Cortado | $1.80 | **$2.70** | $1.80 |
+| Apple Juice | $2.40 | **$2.50** | $2.40 |
+| Still Water 600ml | $1.60 | **$2.00** | $1.60 |
+
+Every real purchase price is **higher** than the catalogue figure the system uses — margins are
+being reported better than they are, by 4–50%. Reordering the tiers so a recorded transaction
+outranks a maintained estimate looks obviously right, **and I did not do it**: the decision table
+says anything touching money is PARKED, and tier order governs every cost figure across 65 reader
+sites. That is its own sprint with its own verification. **This is the single most consequential
+thing in Block A.**
+
+### The brief's "PO = verified" was not adopted — deliberately
+The brief said a PO-derived cost should be **verified**. The resolver already classifies it
+`derived`, with documented reasoning: a PO price is a real recorded price, but using it as *today's*
+cost assumes nothing has changed since. That is a finer distinction than the brief's, and flattening
+it would weaken an existing honest classification. Kept, and asserted in the test.
+
+### Mutation
+| mutation | result |
+|---|---|
+| collapse the tiers to one grounding | 2 red |
+| revert the batch path to the empty table | 1 red |
+| drop `business_id` scoping on the items join | 1 red |
+
+Restored → 10/10 green.
+
+### Gates
+`tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 313/313 (27 files).
+
+### Parked
+Tier reordering (catalogue-before-PO) — money, per the decision table.

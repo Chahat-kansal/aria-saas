@@ -61,13 +61,43 @@ export function resolveCost(input: { item_cost?: unknown; last_item_cost?: unkno
   return { cost: null, source: 'unknown', grounding: null }
 }
 
-/** Latest PO line price for a product, only queried when outlet/catalogue costs are both unknown. */
+/**
+ * Latest PO price for a product, only queried when outlet/catalogue costs are both unknown.
+ *
+ * MS8 PHASE 2 — THIS TIER HAD NEVER RETURNED A COST, because it read the wrong table.
+ *
+ * It queried `pos_purchase_order_lines`, which holds **0 rows**. The system's only recorded
+ * purchase costs live in `pos_purchase_order_items.unit_cost` — **5 rows, all populated**. So the
+ * one tier backed by an actual supplier transaction was invisible to the resolver, and any product
+ * without an outlet or catalogue cost resolved to `unknown` even when a real purchase price existed.
+ *
+ * Both tables are now consulted, `lines` first: it carries the richer vocabulary
+ * (confirmed_price vs last_purchase_price) and is the newer schema, so if it ever gains rows it
+ * keeps precedence and nothing about existing behaviour changes. `items` is the fallback that
+ * actually has data today.
+ *
+ * `items` carries no business_id — it scopes through its parent order — so it is joined to
+ * pos_purchase_orders and filtered there. Ordering is by the ORDER's created_at, since the line
+ * rows have no timestamp of their own.
+ */
 async function latestPoLinePrice(supabase: SupabaseClient, businessId: string, productId: string): Promise<{ po_confirmed_price?: unknown; po_last_purchase_price?: unknown }> {
   const { data: line } = await supabase.from('pos_purchase_order_lines')
     .select('confirmed_price, last_purchase_price')
     .eq('business_id', businessId).eq('product_id', productId)
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
-  return { po_confirmed_price: line?.confirmed_price, po_last_purchase_price: line?.last_purchase_price }
+  if (line?.confirmed_price != null || line?.last_purchase_price != null) {
+    return { po_confirmed_price: line?.confirmed_price, po_last_purchase_price: line?.last_purchase_price }
+  }
+
+  const { data: item } = await supabase.from('pos_purchase_order_items')
+    .select('unit_cost, pos_purchase_orders!inner(business_id, created_at)')
+    .eq('product_id', productId)
+    .eq('pos_purchase_orders.business_id', businessId)
+    .order('created_at', { ascending: false, referencedTable: 'pos_purchase_orders' })
+    .limit(1).maybeSingle()
+  // A received PO line's unit_cost is a price actually paid, so it maps to the same tier as a
+  // confirmed_price rather than to the softer last_purchase_price.
+  return { po_confirmed_price: item?.unit_cost }
 }
 
 /** Resolve one product's current unit cost at an outlet. */
@@ -119,6 +149,32 @@ export async function resolveCostBatch(supabase: SupabaseClient, businessId: str
       if (!line) continue
       const resolved = resolveCost({ po_confirmed_price: line.confirmed_price, po_last_purchase_price: line.last_purchase_price })
       if (resolved.source !== 'unknown') out.set(pid, resolved)
+    }
+
+    // MS8 PHASE 2 — same dead-tier fix as latestPoLinePrice, on the batch path.
+    // pos_purchase_order_lines holds 0 rows; the system's only recorded purchase costs are in
+    // pos_purchase_order_items.unit_cost. Without this, the valuation panel's provenance chips
+    // could never show 'purchase_order' for any product, however many POs had been received.
+    // Only products STILL unknown after the lines pass are queried, so nothing already resolved
+    // is overwritten and the extra query is skipped entirely when lines had data.
+    const stillUnknownAfterLines = stillUnknown.filter(pid => (out.get(pid)?.source ?? 'unknown') === 'unknown')
+    if (stillUnknownAfterLines.length) {
+      const { data: items } = await supabase.from('pos_purchase_order_items')
+        .select('product_id, unit_cost, pos_purchase_orders!inner(business_id, created_at)')
+        .in('product_id', stillUnknownAfterLines)
+        .eq('pos_purchase_orders.business_id', businessId)
+        .order('created_at', { ascending: false, referencedTable: 'pos_purchase_orders' })
+        .limit(5000)
+      const latestItemByProduct = new Map<string, unknown>()
+      for (const it of items ?? []) {
+        const pid = it.product_id as string
+        if (!latestItemByProduct.has(pid)) latestItemByProduct.set(pid, it.unit_cost)
+      }
+      for (const pid of stillUnknownAfterLines) {
+        if (!latestItemByProduct.has(pid)) continue
+        const resolved = resolveCost({ po_confirmed_price: latestItemByProduct.get(pid) })
+        if (resolved.source !== 'unknown') out.set(pid, resolved)
+      }
     }
   }
   return out
