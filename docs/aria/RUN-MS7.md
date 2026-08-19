@@ -1,8 +1,58 @@
 # RUN LOG — MEGA-SPRINT 7 · COUNT-TRUTH + AU-COMMS-RAIL
 
-**Autonomous run under RULE 20.** Six phases. Started 2026-08-19.
+**Autonomous run under RULE 20.** Completed 2026-08-19.
 
-*(Summary is written at the top when the run completes — see the end of this file until then.)*
+---
+
+## SUMMARY
+
+**Phases done: 5 · Parked: 1 (phase 6, needs schema) · Commits: 6**
+
+| phase | outcome | commit |
+|---|---|---|
+| 1 · spot count writes a ledger line | done | `8049b769` |
+| 2 · blind count on the staff app | done | `05561d55` |
+| 3 · cycle-list truth | verified, nothing to fix | `17ddb2ec` |
+| 4 · consent diagnosis | done — `COMMS-CONSENT-AUDIT.md` | `7bbd7bb3` |
+| 5 · one send rail | rail existed; guard added | `324648e9` |
+| 6 · Sender ID | **PARKED** — needs a column | *(this commit)* |
+
+Block A and Block B both completed. Nothing was parked as URGENT.
+
+### The three things you most need to know
+
+**1. Tell staff before their next count.** Phase 2 changed the counting surface they use daily. The
+box now **starts at 0** instead of pre-filled with the expected quantity, and "Aria expects: N" and
+the live variance no longer appear while they type — they appear immediately *after* the count is
+recorded. Every count that surface has produced until now was confirmation, not verification: open,
+submit, perfect match, nothing counted. This is the POS surface's existing pattern, not a new
+design, and no figure was removed — only the moment it appears has moved.
+
+**2. There is no consent problem, and no remediation to do.** The brief's reading of the SMS log
+was the opposite of what happened. `consent_ok` is not absent — it is **`false` on 25 rows**, all
+`status='skipped'`: the gate ran and **refused 25 marketing sends**. The remaining 23 are
+transactional, where consent is exempt by design and never evaluated. **Zero marketing SMS have
+ever reached a customer** (49 have a phone; 1 has consent, and wasn't targeted). The URGENT branch
+of the decision table did not fire, and nothing was parked for remediation. The rail has been
+quietly doing its job since 22 June — and phase 5 added the guard that stops the *next* bypass,
+which is what was genuinely missing.
+
+**3. The Sender ID work is parked on one column, and it is overdue rather than upcoming.** ACMA
+register enforcement began **1 July 2026**. Per-business Sender ID has nowhere to live — the exact
+`ALTER TABLE` is written out in phase 6 below, along with the five registration steps in order.
+**Mitigating fact:** `CLICKSEND_SENDER_ID` is currently unset, so sends go out on ClickSend's shared
+number, not an unregistered alphanumeric — the "Unverified" exposure is latent, and it activates the
+moment anyone sets that env var before registering.
+
+### Worth knowing beyond those three
+
+- **Two of the brief's live-DB facts were wrong**, both in Block B, both corrected in the preflight
+  below. The rail described in phase 5 as needing to be built already existed in full.
+- **A spot count has never actually been run.** `pos_stock_take_items` holds 0 rows and 0 of 75
+  inventory rows have `last_counted_at`. Phase 1's fix is therefore proven structurally, not
+  observed — phase 3 lists the four things to check after the first real count.
+- **The guard's `--working-tree` mode stages every untracked file** via `git add -N .`, and after a
+  guard run the 22 junk files at the repo root showed as staged. `git reset` before committing.
 
 ---
 
@@ -256,7 +306,7 @@ None.
 
 ## PHASE 5 — ONE SEND RAIL
 
-**Commit:** *(written in phase 6's commit.)*
+**Commit:** `324648e9`
 
 ### The rail already existed. What was missing was the guard.
 
