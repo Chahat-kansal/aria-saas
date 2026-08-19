@@ -100,7 +100,26 @@ async function latestPoLinePrice(supabase: SupabaseClient, businessId: string, p
   return { po_confirmed_price: item?.unit_cost }
 }
 
-/** Resolve one product's current unit cost at an outlet. */
+/**
+ * Resolve one product's current unit cost at an outlet.
+ *
+ * MS9 PHASE 1 — THE ORCHESTRATOR NOW HONOURS THE RESOLVER'S OWN DOCUMENTED ORDER.
+ *
+ * The pure resolveCost() has always ranked a purchase-order price (tiers 3–4) above the catalogue
+ * cost_price (tier 5) — the header calls that order "documented + locked". But THIS function only
+ * fetched the PO price after outlet AND catalogue had both failed, so whenever a catalogue figure
+ * existed, the recorded transaction was never even loaded and the estimate won by default.
+ *
+ * On live data that inverted reality: cost_price is a fabricated price × 0.4 back-calculation on
+ * 73 of 83 costed products (residue of the price*0.6 fallback INTEL-COMPUTE removed from the CODE
+ * in July — the data it had written was never corrected). Every margin computed through it was
+ * definitionally ~60%. Cortado's real margin is 40.0%; the resolver reported 60.0%.
+ *
+ * Now: outlet tiers are tried first (cheap, and still the strongest evidence); if they miss, the
+ * PO price is FETCHED and handed to the pure resolver TOGETHER with the catalogue figure, and the
+ * locked order decides. The stored cost_price is not touched — it is the owner's data, and phase 3
+ * surfaces its fabricated-looking shape rather than silently editing it.
+ */
 export async function resolveCostFor(supabase: SupabaseClient, businessId: string, productId: string, outletId: string | null): Promise<ResolvedCost> {
   const { data: prod } = await supabase.from('pos_products').select('cost_price').eq('id', productId).eq('business_id', businessId).maybeSingle()
   let oi: { item_cost?: unknown; last_item_cost?: unknown } = {}
@@ -109,13 +128,27 @@ export async function resolveCostFor(supabase: SupabaseClient, businessId: strin
       .eq('business_id', businessId).eq('product_id', productId).eq('outlet_id', outletId).maybeSingle()
     oi = data ?? {}
   }
-  const base = resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost, cost_price: prod?.cost_price })
-  if (base.source !== 'unknown') return base
+  // Outlet tiers only — deliberately WITHOUT cost_price, so a catalogue estimate cannot answer
+  // before the recorded transaction has been looked for.
+  const outletOnly = resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost })
+  if (outletOnly.source !== 'unknown') return outletOnly
   const po = await latestPoLinePrice(supabase, businessId, productId)
   return resolveCost({ ...po, cost_price: prod?.cost_price })
 }
 
-/** Batch-resolve cost for every product at an outlet → Map<product_id, ResolvedCost>. */
+/**
+ * Batch-resolve cost for every product at an outlet → Map<product_id, ResolvedCost>.
+ *
+ * MS9 PHASE 1 — same orchestrator fix as resolveCostFor: the PO passes now run for every product
+ * the OUTLET tiers could not answer, not just the ones catalogue also failed on. Before this, a
+ * catalogue estimate short-circuited the recorded transaction, and since cost_price is a
+ * fabricated price × 0.4 on 73 of 83 costed rows, the fabricated figure won everywhere. The pure
+ * resolver has always ranked PO above catalogue; the batch simply never gave it the PO data.
+ *
+ * Query cost is unchanged in shape: still at most one pass over each PO table, with an .in() list
+ * that is larger (products without an outlet cost, rather than products without any cost). On live
+ * data that is 73 ids instead of ~10 — one query either way.
+ */
 export async function resolveCostBatch(supabase: SupabaseClient, businessId: string, outletId: string | null): Promise<Map<string, ResolvedCost>> {
   const { data: products } = await supabase.from('pos_products').select('id, cost_price').eq('business_id', businessId).limit(10000)
   const oiMap = new Map<string, { item_cost?: unknown; last_item_cost?: unknown }>()
@@ -124,59 +157,63 @@ export async function resolveCostBatch(supabase: SupabaseClient, businessId: str
       .eq('business_id', businessId).eq('outlet_id', outletId).limit(10000)
     for (const r of inv ?? []) oiMap.set(r.product_id as string, { item_cost: r.item_cost, last_item_cost: r.last_item_cost })
   }
+
   const out = new Map<string, ResolvedCost>()
-  const stillUnknown: string[] = []
+  const catalogueByProduct = new Map<string, unknown>()
+  // Pass 1 — outlet tiers ONLY. cost_price is deliberately withheld here so an estimate cannot
+  // answer before the recorded transaction has been looked for.
+  const needPo: string[] = []
   for (const p of products ?? []) {
-    const oi = oiMap.get(p.id as string) ?? {}
-    const resolved = resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost, cost_price: p.cost_price })
-    out.set(p.id as string, resolved)
-    if (resolved.source === 'unknown') stillUnknown.push(p.id as string)
+    const pid = p.id as string
+    catalogueByProduct.set(pid, p.cost_price)
+    const oi = oiMap.get(pid) ?? {}
+    const outletOnly = resolveCost({ item_cost: oi.item_cost, last_item_cost: oi.last_item_cost })
+    if (outletOnly.source !== 'unknown') {
+      out.set(pid, outletOnly)
+    } else {
+      needPo.push(pid)
+    }
   }
-  // PO-line fallback only for the subset still unresolved after outlet/catalogue tiers — keeps the
-  // common case (most products already have a catalogue or outlet cost) free of the extra query.
-  if (stillUnknown.length) {
+
+  // Pass 2 — PO prices for everything the outlet tiers missed. Lines first (richer vocabulary,
+  // newer schema), then items (where the data actually lives today — MS8 phase 2).
+  const poByProduct = new Map<string, { confirmed_price?: unknown; last_purchase_price?: unknown }>()
+  if (needPo.length) {
     const { data: lines } = await supabase.from('pos_purchase_order_lines')
       .select('product_id, confirmed_price, last_purchase_price, created_at')
-      .eq('business_id', businessId).in('product_id', stillUnknown)
+      .eq('business_id', businessId).in('product_id', needPo)
       .order('created_at', { ascending: false }).limit(5000)
-    const latestByProduct = new Map<string, { confirmed_price?: unknown; last_purchase_price?: unknown }>()
     for (const l of lines ?? []) {
       const pid = l.product_id as string
-      if (!latestByProduct.has(pid)) latestByProduct.set(pid, { confirmed_price: l.confirmed_price, last_purchase_price: l.last_purchase_price })
-    }
-    for (const pid of stillUnknown) {
-      const line = latestByProduct.get(pid)
-      if (!line) continue
-      const resolved = resolveCost({ po_confirmed_price: line.confirmed_price, po_last_purchase_price: line.last_purchase_price })
-      if (resolved.source !== 'unknown') out.set(pid, resolved)
+      if (!poByProduct.has(pid)) poByProduct.set(pid, { confirmed_price: l.confirmed_price, last_purchase_price: l.last_purchase_price })
     }
 
-    // MS8 PHASE 2 — same dead-tier fix as latestPoLinePrice, on the batch path.
-    // pos_purchase_order_lines holds 0 rows; the system's only recorded purchase costs are in
-    // pos_purchase_order_items.unit_cost. Without this, the valuation panel's provenance chips
-    // could never show 'purchase_order' for any product, however many POs had been received.
-    // Only products STILL unknown after the lines pass are queried, so nothing already resolved
-    // is overwritten and the extra query is skipped entirely when lines had data.
-    const stillUnknownAfterLines = stillUnknown.filter(pid => (out.get(pid)?.source ?? 'unknown') === 'unknown')
-    if (stillUnknownAfterLines.length) {
+    const missingFromLines = needPo.filter(pid => !poByProduct.has(pid))
+    if (missingFromLines.length) {
       const { data: items } = await supabase.from('pos_purchase_order_items')
         .select('product_id, unit_cost, pos_purchase_orders!inner(business_id, created_at)')
-        .in('product_id', stillUnknownAfterLines)
+        .in('product_id', missingFromLines)
         .eq('pos_purchase_orders.business_id', businessId)
         .order('created_at', { ascending: false, referencedTable: 'pos_purchase_orders' })
         .limit(5000)
-      const latestItemByProduct = new Map<string, unknown>()
       for (const it of items ?? []) {
         const pid = it.product_id as string
-        if (!latestItemByProduct.has(pid)) latestItemByProduct.set(pid, it.unit_cost)
-      }
-      for (const pid of stillUnknownAfterLines) {
-        if (!latestItemByProduct.has(pid)) continue
-        const resolved = resolveCost({ po_confirmed_price: latestItemByProduct.get(pid) })
-        if (resolved.source !== 'unknown') out.set(pid, resolved)
+        if (!poByProduct.has(pid)) poByProduct.set(pid, { confirmed_price: it.unit_cost })
       }
     }
   }
+
+  // Pass 3 — final resolution for the outlet-missed products: PO price and catalogue together,
+  // with the pure resolver's locked order (PO above catalogue) actually deciding.
+  for (const pid of needPo) {
+    const po = poByProduct.get(pid) ?? {}
+    out.set(pid, resolveCost({
+      po_confirmed_price: po.confirmed_price,
+      po_last_purchase_price: po.last_purchase_price,
+      cost_price: catalogueByProduct.get(pid),
+    }))
+  }
+
   return out
 }
 
