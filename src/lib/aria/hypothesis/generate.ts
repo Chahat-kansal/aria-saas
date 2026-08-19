@@ -55,7 +55,8 @@ export async function buildHypothesisPrompt(businessId: string): Promise<{
     supabaseAdmin.from('businesses').select('name,industry,industry_subtype,city,timezone').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount,payment_method,created_at,served_by').eq('business_id', businessId).neq('status', 'voided').gte('created_at', day30ago).order('created_at'),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', day7ago),
-    supabaseAdmin.from('pos_products').select('name,price,cost,stock_quantity,low_stock_threshold,reorder_point,is_active,track_stock').eq('business_id', businessId).eq('is_active', true),
+    // MS8 PHASE 1 — cost_price, not cost. See the low-margin filter below for why this mattered.
+    supabaseAdmin.from('pos_products').select('name,price,cost_price,stock_quantity,low_stock_threshold,reorder_point,is_active,track_stock').eq('business_id', businessId).eq('is_active', true),
     supabaseAdmin.from('pos_customers').select('segment,rfm_score_total,days_since_visit,lifetime_value_cents').eq('business_id', businessId),
     supabaseAdmin.from('aria_business_memory').select('kind,content,importance').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('importance', { ascending: false }).limit(10),
     supabaseAdmin.from('aria_advice_weights').select('category,weight,positive_outcomes,negative_outcomes').eq('business_id', businessId),
@@ -75,9 +76,23 @@ export async function buildHypothesisPrompt(businessId: string): Promise<{
   const avgTicket  = sales30d.length > 0 ? revenue30d / sales30d.length : 0
 
   const lowMarginProducts = products
-    .filter(p => p.cost && p.price && ((Number(p.price) - Number(p.cost)) / Number(p.price)) < 0.2)
+    // MS8 PHASE 1 — THIS DETECTOR HAS NEVER FIRED.
+    //
+    // It read pos_products.cost, which is a NON-NULL ZERO on 87 of Sip's 87 costed rows. `p.cost`
+    // was therefore always falsy, the filter excluded every product, and the low-margin detector
+    // silently reported "nothing to see" for a business whose real costs sit in cost_price.
+    //
+    // Now reads cost_price, and a product with NO known cost is SKIPPED rather than treated as
+    // zero-cost — a missing cost means the margin is unknown, not 100%. Same rule
+    // INV-BASELINE-1 phase 3 established for variance value: unknown is never 0.
+    .filter(p => {
+      const cost = p.cost_price != null ? Number(p.cost_price) : null
+      const price = p.price != null ? Number(p.price) : null
+      if (cost == null || cost <= 0 || price == null || price <= 0) return false
+      return ((price - cost) / price) < 0.2
+    })
     .slice(0, 5)
-    .map(p => ({ name: p.name, price: Number(p.price), cost: Number(p.cost) }))
+    .map(p => ({ name: p.name, price: Number(p.price), cost: Number(p.cost_price) }))
 
   const deadStock = products
     .filter(p => p.track_stock && Number(p.stock_quantity || 0) > 0)
