@@ -1,3 +1,21 @@
+// MS7-PRE phase 2 — this route must NOT be prerendered.
+//
+// It was the ONLY statically-generated route in the app: 1 of 1,198 API routes, confirmed from the
+// build's own route table (`○ /api/aria/avatar` against `ƒ` for every other one). Being prerendered
+// meant Next executed this GET AT BUILD TIME, which downloads a multi-megabyte .glb from
+// raw.githubusercontent.com over the network as part of `next build`.
+//
+// That made the build network-dependent, and on 2026-08-18 it failed exactly that way: three
+// 60-second static-generation attempts timed out and the whole build exited 1, on a commit that
+// touched only CLAUDE.md. A flake that can redden any commit, including in CI, from a route nobody
+// changed.
+//
+// BEHAVIOUR CHANGE, stated plainly: the route stops being prerendered and is served per-request.
+// The avatar is now fetched when a browser asks for it rather than once at build time. The upstream
+// fetch already uses `cache: 'force-cache'`, so Next still caches the bytes after the first request
+// — the cost is one cold fetch on the first hit after a deploy, not a fetch per request.
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 
 const BRUNETTE = 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'

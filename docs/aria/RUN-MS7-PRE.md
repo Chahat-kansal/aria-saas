@@ -32,7 +32,7 @@
 
 ## PHASE 1 — make the gate honest
 
-**Commit:** `<phase-1-sha>`
+**Commit:** `258cc496`
 
 ### Changes
 - `CLAUDE.md` — one line appended beside RULE 3's gate definition: the wrapper's reported exit code
@@ -72,7 +72,7 @@ None.
 
 ## PHASE 2 — the avatar route
 
-**Commit:** `<phase-2-sha>`
+**Commit:** `44772486`
 
 ### Changes
 - `src/app/api/aria/avatar/route.ts` — added `export const dynamic = 'force-dynamic'`.
@@ -118,11 +118,16 @@ which is the whole point of Phase 1 and the only reason this phase can claim to 
 
 | | before fix | after fix |
 |---|---|---|
-| build 1 | `BUILD_EXIT=1` (avatar static-gen timeout ×3) | `BUILD_EXIT=<a>` |
-| build 2 | `BUILD_EXIT=0` (same code, network cooperated) | `BUILD_EXIT=<b>` |
+| build 1 | `BUILD_EXIT=1` (avatar static-gen timeout ×3) | **`BUILD_EXIT=0`** |
+| build 2 | `BUILD_EXIT=0` (same code, network cooperated) | **`BUILD_EXIT=0`** |
 
 That before-column is the proof the flake was real and non-deterministic: **identical source, two
 different outcomes.**
+
+**The behavioural proof the fix landed**, from the build's own route table rather than from the
+diff: prerendered API routes went **1 → 0**, and `/api/aria/avatar` reclassified from `○` to `ƒ`.
+Static-generation timeout events across both post-fix builds: **0**. The build no longer touches
+the network for this route at all.
 
 `tsc` 0 · `vitest` 277/277 · hook ran.
 
