@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
-import { resolveCostFor } from '@/lib/inventory/resolve-cost'
-import { decideCountOutcome, THRESHOLD_DISCLOSURE, type CountActor } from '@/lib/inventory/count-policy'
+import { resolveCostFor, resolveCostBatch } from '@/lib/inventory/resolve-cost'
+import { decideCountOutcome, THRESHOLD_DISCLOSURE, thresholdDisclosureFor, type CountActor, type CostTierMix } from '@/lib/inventory/count-policy'
 
 /**
  * Prefix for the `reason` of a pos_stock_adjustments row created by a stocktake commit, followed by
@@ -145,6 +145,32 @@ export async function countStocktakeLine(sb: SupabaseClient, businessId: string,
   return { product_id: productId, product_name: productName, expected_qty: expected, counted_qty: countedQ, variance_qty: variance, variance_cents: varianceCents, counted_by: staffId, counted_at: countedAt, recount_required: recountRequired }
 }
 
+/**
+ * MS8 PHASE 3 — the cost-provenance mix for this business, so the threshold disclosure can describe
+ * the owner's OWN data rather than the world in general.
+ *
+ * Reuses resolveCostBatch — the same resolver the valuation panel uses — so the mix reported here
+ * cannot drift from the tiers shown elsewhere. Never throws: a disclosure is explanatory text, and
+ * failing a stocktake submit because a sentence could not be personalised would be absurd. On any
+ * failure the caller falls back to the general wording, which is still true.
+ */
+async function costTierMix(sb: SupabaseClient, businessId: string, outletId: string | null): Promise<CostTierMix | null> {
+  try {
+    const resolved = await resolveCostBatch(sb, businessId, outletId)
+    const mix: CostTierMix = { verified: 0, estimated: 0, unknown: 0, total: 0 }
+    for (const r of resolved.values()) {
+      mix.total++
+      if (r.grounding === 'verified') mix.verified++
+      else if (r.source === 'unknown') mix.unknown++
+      else mix.estimated++   // catalogue (estimated) and purchase_order/last_delivery (derived)
+    }
+    return mix.total > 0 ? mix : null
+  } catch (e) {
+    console.error('[stocktake] cost tier mix unavailable, using the general disclosure:', (e as Error).message)
+    return null
+  }
+}
+
 export interface SubmitResult {
   session_id: string; lines_counted: number; variances: number
   /** Sum of the variance lines whose value IS known. NULL when not one of them could be priced. */
@@ -230,6 +256,9 @@ export async function submitStocktake(
   let reviewsFailed = 0
   let unknownValueLines = 0
 
+  // Resolved once per submit, not per line — the mix is a property of the business, not the count.
+  const disclosure = thresholdDisclosureFor(await costTierMix(sb, businessId, outletId))
+
   for (const l of varianceLines) {
     const expected = Number(l.system_qty) || 0
     const countedQ = Number(l.counted_qty) || 0
@@ -277,7 +306,7 @@ export async function submitStocktake(
     const { data: rev, error: revErr } = await sb.from('inventory_review_queue').insert({
       business_id: businessId, outlet_id: outletId, flag_type: 'count_variance', product_id: l.product_id,
       expected_value: expected, actual_value: countedQ, variance,
-      evidence: { expected, counted: countedQ, variance, variance_cents: l.variance_cents == null ? null : Number(l.variance_cents), product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt, policy_reason: decision.reason, policy_detail: decision.detail, threshold_disclosure: THRESHOLD_DISCLOSURE },
+      evidence: { expected, counted: countedQ, variance, variance_cents: l.variance_cents == null ? null : Number(l.variance_cents), product_name: l.product_name ?? null, staff_id: l.counted_by ?? staffId, staff_name: staffName, session_id: sessionId, count_type: claimed.count_type, counted_at: nowIso(), recount_required: recountRequired, recount_count: recountCount, movements_during_count: movsDuring, session_started_at: sessionStartedAt, policy_reason: decision.reason, policy_detail: decision.detail, threshold_disclosure: disclosure },
       raised_by_staff_id: (l.counted_by as string | null) ?? staffId, status: 'open',
     }).select('id').maybeSingle()
     if (rev?.id) {
@@ -314,7 +343,7 @@ export async function submitStocktake(
     session_id: sessionId, lines_counted: counted.length, variances: varianceLines.length,
     total_variance_cents: headerTotal, reviews_raised: reviewIds.length, review_ids: reviewIds,
     committed: committedCount, reviews_failed: reviewsFailed,
-    threshold_disclosure: THRESHOLD_DISCLOSURE, unknown_value_lines: unknownValueLines,
+    threshold_disclosure: disclosure, unknown_value_lines: unknownValueLines,
   }
 }
 

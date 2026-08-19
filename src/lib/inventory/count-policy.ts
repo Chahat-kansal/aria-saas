@@ -59,6 +59,55 @@ export const THRESHOLD_DISCLOSURE =
   `Counts differing by ${MATERIAL_QTY_UNITS} or more units, or by ${Math.round(MATERIAL_PCT_OF_BOOK * 100)}% or more of expected stock, go to owner review. ` +
   'This threshold is measured in units because recorded costs are catalogue estimates, not verified purchase costs.'
 
+/**
+ * The cost-provenance mix behind a business's products, as resolve-cost.ts tiers.
+ * `verified` = per-outlet actual cost. `estimated` = catalogue cost_price. `unknown` = no cost at all.
+ * (A purchase-order cost grounds as 'derived' and is counted with the estimates for this purpose —
+ * it is a real price, but not a verified current one, which is the distinction the threshold rests on.)
+ */
+export interface CostTierMix {
+  verified: number
+  estimated: number
+  unknown: number
+  total: number
+}
+
+/**
+ * MS8 PHASE 3 — the disclosure, stated for THIS business rather than in general.
+ *
+ * The static wording was already true ("recorded costs are catalogue estimates, not verified
+ * purchase costs"), but it is a claim about the world rather than about the owner's own data. An
+ * owner reading it cannot tell whether it means "you have no costs" or "your costs are the wrong
+ * kind" — and those imply completely different next actions.
+ *
+ * PURE, taking a mix rather than a businessId, so the wording is testable without a database and
+ * cannot silently start issuing queries from inside a policy module.
+ *
+ * Falls back to the general wording when the mix is unavailable or empty — a disclosure that says
+ * "0 of 0 products" would be worse than the honest generality it replaced.
+ */
+export function thresholdDisclosureFor(mix: CostTierMix | null | undefined): string {
+  const base = `Counts differing by ${MATERIAL_QTY_UNITS} or more units, or by ${Math.round(MATERIAL_PCT_OF_BOOK * 100)}% or more of expected stock, go to owner review. `
+  if (!mix || mix.total <= 0) return THRESHOLD_DISCLOSURE
+
+  if (mix.verified > 0 && mix.estimated === 0 && mix.unknown === 0) {
+    // Every product carries a verified per-outlet cost — the condition INV-COST-1 waits on.
+    return base +
+      `All ${mix.total} of your products have a verified cost, so a dollar-based threshold is now possible ` +
+      '(see INV-COST-1); until it is switched on, this threshold is still measured in units.'
+  }
+
+  const parts: string[] = []
+  if (mix.verified) parts.push(`${mix.verified} verified`)
+  if (mix.estimated) parts.push(`${mix.estimated} catalogue estimates`)
+  if (mix.unknown) parts.push(`${mix.unknown} with no cost recorded`)
+
+  return base +
+    `This threshold is measured in units, not dollars, because of your ${mix.total} products ` +
+    `${parts.join(', ')} — a dollar threshold built on estimates would be a confident figure ` +
+    'nobody has verified.'
+}
+
 export type CountActor = 'owner' | 'staff'
 
 export type CountOutcome =

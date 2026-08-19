@@ -106,7 +106,7 @@ None.
 
 ## PHASE 2 — PROVENANCE TIERS
 
-**Commit:** *(recorded in phase 3's commit.)*
+**Commit:** `6fae56cb`
 
 ### The display half was already built. I did not rebuild it.
 
@@ -173,3 +173,58 @@ Restored → 10/10 green.
 
 ### Parked
 Tier reordering (catalogue-before-PO) — money, per the decision table.
+
+
+---
+
+## PHASE 3 — THE THRESHOLD DISCLOSURE
+
+**Commit:** *(recorded in phase 4's commit.)*
+
+### Built, not skipped — an honest per-business statement was possible
+
+The brief allowed leaving the wording alone if no honest per-business version existed. One does:
+`resolveCostBatch` already returns a tier per product, so the mix is computable at the moment the
+disclosure is shown.
+
+**Before** (true, but a claim about the world):
+> "…measured in units because recorded costs are catalogue estimates, not verified purchase costs."
+
+**After** (true, and about the owner's own data):
+> "…measured in units, not dollars, because of your 74 products 72 catalogue estimates, 2 with no
+> cost recorded — a dollar threshold built on estimates would be a confident figure nobody has
+> verified."
+
+The difference is operational, not cosmetic. The old sentence cannot distinguish *"you have no
+costs"* from *"your costs are the wrong kind"*, and those imply completely different next actions —
+data entry versus receiving deliveries against purchase orders.
+
+### Kept pure
+`thresholdDisclosureFor(mix)` takes a mix rather than a businessId, so the wording is testable
+without a database and a policy module cannot quietly start issuing queries. `stocktake.ts` computes
+the mix **once per submit** — it is a property of the business, not of the count — using the same
+resolver the valuation panel uses, so the two can never disagree.
+
+**Falls back to the original wording** when the mix is unavailable or the business has no products.
+A disclosure reading "of your 0 products" would be worse than the generality it replaced, and a
+failed lookup must never fail a stocktake submit. Both asserted.
+
+### The threshold itself is unchanged
+Still 5 units or 10%. This phase changed the sentence describing the policy, not the policy. The
+all-verified branch says a dollar threshold *becomes possible* and names INV-COST-1, while stating
+explicitly that it is **still measured in units** — asserted, so a future edit cannot let the
+sentence claim a switch that has not happened.
+
+### Mutation
+| mutation | result |
+|---|---|
+| ignore the mix, always return the static wording | 4 red |
+| emit empty tiers as "0 verified" | 1 red |
+
+Restored → 9/9 green. GROUNDING-TEETH re-asserted: no branch contains a dollar sign.
+
+### Gates
+`tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 322/322 (28 files).
+
+### Parked
+None.
