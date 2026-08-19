@@ -84,10 +84,21 @@ describe('no caller re-flattens an unknown cost to zero', () => {
     expect(src).not.toContain('let varianceCents = 0')
   })
 
-  it('count.ts initialises variance value as null', () => {
+  // CHANGED BY MS7 PHASE 1 — the assertion moved because the responsibility moved.
+  //
+  // This used to require `count.ts` to initialise its own varianceCents to null. count.ts no longer
+  // computes a variance value at all: a perpetual spot count now goes through countStocktakeLine,
+  // so the engine prices the line and count.ts has no cost lookup left to get wrong. Asserting the
+  // old shape would have forced a dead local variable back into the file to keep a test green.
+  //
+  // The invariant itself is unchanged and is now asserted where it lives (the stocktake.ts case
+  // above). What is asserted HERE is the stronger property: count.ts cannot re-flatten an unknown
+  // cost, because it no longer resolves costs.
+  it('count.ts no longer computes a variance value at all — the engine does', () => {
     const src = code('src', 'lib', 'inventory', 'count.ts')
-    expect(src).toContain('let varianceCents: number | null = null')
     expect(src).not.toContain('let varianceCents = 0')
+    expect(src).not.toContain('resolveCostFor')
+    expect(src).toContain('countStocktakeLine')
   })
 
   it('stocktake-intelligence resolves cost through resolveCostFor, not cost_price ?? 0', () => {
