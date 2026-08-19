@@ -398,3 +398,56 @@ relying on state nobody owns.
 **How the resolver is told: `TEST_BUSINESS_ID`, set explicitly in both CI jobs.** The
 "newest owned business" heuristic is deleted as a *primary* mechanism; it survives only as a
 last-resort fallback for local runs with no env var, and even then it is the thing that caused this.
+
+
+---
+
+## 12 · APPENDED 2026-08-19 (MS8 PHASE 6) — scoring §7's predictions
+
+§7 committed four falsifiable predictions on 2026-08-17, before any artifact or fix. Scored now
+against what has actually been observed since. **Scoring constraint, stated up front:** the CI
+artifacts §7 was waiting on never arrived, and per-spec results live behind an authenticated API,
+so step-level CI outcomes plus the live database are the evidence base. Where that is not enough to
+score a prediction, it is marked UNSCORED rather than argued into a verdict.
+
+| # | prediction | verdict |
+|---|---|---|
+| P1 | login works — a subset under 15 fails, not a 40+ wipeout | **SUPPORTED, not proven** |
+| P2 | the POS ×3 cluster fails on `…0101` having 0 registers | **WRONG twice — and §10b's amendment was right** |
+| P3 | ask-aria's failure is latency, independent of the fixture | **UNSCORED** |
+| P4 | the same fixture-dependent specs fail in both suites | **UNSCORED — and now UNTESTABLE as posed** |
+
+### P1 — SUPPORTED, not proven
+Every e2e run since 12 Aug shows the same shape: all infrastructure steps green (secrets, build,
+seed, browsers, server) with only `Run e2e specs` failing, and `typecheck` green. A dead login
+would also fail exactly one step, so this shape cannot *prove* P1 — but the login page's own
+smoke assertions and the credentialed spec subset passing locally on 26–27 Jul (52→10→9, not
+~40+) both point the same way. Confidence: moderate. A spec-level artifact would settle it.
+
+### P2 — WRONG, and honestly so
+The original P2 said the POS cluster fails because `…0101` has **0 registers**. §10b amended this
+*before* evidence arrived: the terminal gate reads a cash **session**, never `pos_registers`, so
+the orphaned open session was *unblocking* the cluster, not the missing register blocking it. The
+amendment is confirmed by code (`terminal/page.tsx:1945`) and stands. Two lessons recorded: the
+original mechanism was wrong (register ≠ gate), and the amended branch prediction (A) remains the
+operative one. Scored as WRONG for the original, RIGHT for the amendment — recorded separately
+because §7 and §10b were separate commitments.
+
+### P3 — UNSCORED
+Ask-aria's latency failure cannot be distinguished from a fixture failure at step granularity, and
+no spec-level artifact exists for the current era. The spec's own in-code comment (a genuine
+latency finding on sparse-data businesses) remains the best evidence and remains unverified.
+
+### P4 — UNSCORED, and structurally UNTESTABLE as posed
+P4 predicted the same specs fail in both suites *because both used the same resolver*. MS8 phase 5
+**removed the shared mechanism**: the suites now pin separate fixtures (`…0001` e2e, `…0101`
+smoke) via `TEST_BUSINESS_ID`. The prediction's premise no longer exists, which is a better
+outcome than either verdict — the coupling it warned about is gone. Recorded as unscored-by-design
+rather than quietly dropped.
+
+### The fixture-era boundary, for future scoring
+`44a79f25` (19 Aug) is the first commit where e2e runs against an explicit, complete, seed-owned
+fixture. Runs before it failed against the wrong business propped up by residue; runs after it
+fail — or pass — against the right one. **e2e-local on `44a79f25`: still `failure`, with every
+infrastructure step green and only the spec step red.** Expected per the decision table;
+spec-level movement is the next diagnostic, and chasing individual specs is its own sprint.

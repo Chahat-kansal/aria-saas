@@ -1,8 +1,43 @@
 # RUN LOG — MEGA-SPRINT 8 · COST-TRUTH + CI-FIXTURE
 
-**Autonomous run under RULE 20.** Six phases. Started 2026-08-19.
+**Autonomous run under RULE 20.** Completed 2026-08-19.
 
-*(Summary written at the top on completion.)*
+---
+
+## SUMMARY
+
+**Phases done: 6 of 6 · Parked: 1 item (tier reordering — money) · Commits: 6**
+
+| phase | outcome | commit |
+|---|---|---|
+| 1 · one cost column | done — both `cost` readers rerouted | `c497df6f` |
+| 2 · provenance tiers | done — the dead PO tier now reads the table with data | `6fae56cb` |
+| 3 · threshold disclosure | done — per-business wording | `4f9a59d6` |
+| 4 · confirm the divergence | done — plus a fourth gap | `04cbc894` |
+| 5 · deterministic fixture | done — explicit, complete, seed-owned | `44a79f25` |
+| 6 · score the predictions | done — 1 supported, 1 wrong, 2 unscored | *(this commit)* |
+
+### The three things you most need to know
+
+**1. 🚩 Your margins are overstated, and fixing it is parked on your call.** The only four products
+with a real purchase price all cost MORE than the catalogue figure the system reports (Turmeric
+Latte $3.20 actual vs $2.40 catalogue; Cortado $2.70 vs $1.80; Apple Juice $2.50 vs $2.40; Still
+Water $2.00 vs $1.60). The resolver consults the catalogue estimate before the recorded
+transaction, so the estimate wins every time. Reordering those tiers is a money change across 65
+reader sites — parked per the decision table, and it is the most consequential item in Block A.
+
+**2. Two features that looked alive have never worked, and both are now honest.** The low-margin
+detector filtered on `pos_products.cost` — a non-null ZERO on every product — so it has never
+flagged anything; it now reads real costs (and finds nothing at Sip, correctly: no product is
+under 20% margin). The resolver's purchase-order tier queried a table with 0 rows; it now reads
+`pos_purchase_order_items`, where the 5 real costs live, scoped through the parent order so no
+tenant leak.
+
+**3. CI now runs against a fixture that exists on purpose.** e2e pins `…0001`, smoke pins `…0101`,
+the seed creates outlet + register + open session + onboarding, and the newest-owned-business
+heuristic warns if it ever decides again. First run on the new fixture: still red at the spec step
+with all infrastructure green — expected; which specs moved needs the run artifact, and that is
+the next sprint's question, not this one's.
 
 ---
 
@@ -228,3 +263,49 @@ Restored → 9/9 green. GROUNDING-TEETH re-asserted: no branch contains a dollar
 
 ### Parked
 None.
+
+
+---
+
+## PHASE 4 — CONFIRM THE DIVERGENCE
+
+**Commit:** `04cbc894` · appended to `docs/aria/CI-TRIAGE-2.md` as §11.
+
+Every CI-TRIAGE-2 claim re-verified true against today's code and DB — resolver still
+newest-owned, seed still `…0001`-only, `TEST_BUSINESS_ID` absent from both workflows, and the two
+businesses exactly as described (including the orphaned session). **Plus a fourth gap §3 never
+named: the seed creates NONE of the state the specs need** — zero references to outlets, registers,
+sessions or `onboarding_complete`. Even pointing the resolver at the seeded business would not have
+worked. Target end-state declared: separate fixtures per suite, seed owns everything, explicit
+resolution.
+
+## PHASE 5 — MAKE THE FIXTURE DETERMINISTIC
+
+**Commit:** `44a79f25`
+
+- `test-business.ts` — `TEST_BUSINESS_ID` wins outright; the newest-owned heuristic survives only
+  as a warning-emitting last resort for local runs.
+- `e2e.yml` pins `…0001`; `smoke.yml` pins `…0101`. **Separate fixtures per suite** — sharing one
+  is what let a smoke sprint silently repoint the e2e suite.
+- `seed.ts` now creates `onboarding_complete`, an outlet, a register, and an **open cash session**
+  (re-opened each run — a prior suite run may have closed it), all as fixed-UUID idempotent
+  upserts. The fixture no longer depends on residue.
+- Fixture state applied live via MCP (test-fixture data on an `is_test` business, per the decision
+  table) and verified: onboarding true / 1 outlet / 1 register / 1 open session on `…0001`.
+- The orphaned `…0101` session was **not** touched — it is the smoke suite's input now, and closing
+  it unattended would change smoke results in the same commit that changed e2e resolution.
+
+**Verify, honestly:** the Playwright suite cannot run in this environment (credentials live only in
+CI). The first observed run on `44a79f25`: `e2e-local` **still failure**, every infrastructure step
+green, only the spec step red — exactly what the decision table said to expect. Which individual
+specs moved requires the run artifact; chasing them is its own sprint.
+
+## PHASE 6 — SCORE THE PREDICTIONS
+
+**Commit:** *(this commit)* · appended to `docs/aria/CI-TRIAGE-2.md` as §12.
+
+P1 **supported, not proven** (infra green + spec step red is consistent with working login; not
+conclusive). P2 **wrong in the original, right in the §10b amendment** — the register never gated
+anything; the orphaned session was the unblocker. P3 **unscored** (no spec-level artifact). P4
+**unscored and now untestable as posed** — phase 5 deliberately removed the shared-resolver
+mechanism the prediction depended on, which is a better outcome than either verdict.
