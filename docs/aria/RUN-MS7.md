@@ -66,8 +66,7 @@ Phase 5 is therefore *not* "build a rail" — see that phase for what was actual
 
 ## PHASE 1 — `submitCount` WRITES A LEDGER LINE
 
-**Commit:** *(see git log — this phase's own sha is written in phase 2's commit, per the standing
-addition against amending pushed commits.)*
+**Commit:** `8049b769`
 
 ### Changes
 - `src/lib/inventory/count.ts` — a perpetual spot count now goes through the canonical engine
@@ -104,6 +103,57 @@ Restored → 9/9 green.
 
 ### Gates
 `tsc` 0 · **`BUILD_EXIT=0`** (read from build.log, not the wrapper) · `vitest` 286/286 (24 files).
+
+### Parked
+None.
+
+
+---
+
+## PHASE 2 — BLIND COUNT
+
+**Commit:** *(written in phase 3's commit — never amend a pushed commit.)*
+
+### Changes
+- `src/app/inventory/[slug]/page.tsx` — 5 edits (both count flows + the cycle list).
+- `src/lib/inventory/blind-count.test.ts` — new, 9 assertions.
+
+### What changes for staff — the item at the top of this log
+| | before | after |
+|---|---|---|
+| task count box | pre-filled with the expected qty | **starts at 0** |
+| stocktake count box | pre-filled with the expected qty | **starts at 0** |
+| during entry | "Aria expects: N" + live variance, updating per keystroke | nothing — a one-line instruction only |
+| cycle list row | "expect 14 · 3d since count" | "A-tier · 3d since count" |
+| after submit | (same) | **unchanged — expected + variance revealed immediately** |
+
+No figure was removed from the product; only the moment it appears has moved. This is the POS
+surface's existing pattern, not a new design.
+
+### Sweep
+Counting surfaces: **3.** Staff app — fixed (both flows). POS `stocktake/new` — **already correct**,
+untouched, and asserted as such so a later edit cannot quietly regress it. Dashboard `stocktake` —
+**out of scope by instruction** (3 of its 4 endpoints are 404); it renders `expected_qty` beside its
+input at `page.tsx:400` and would need the same treatment if those endpoints are ever built.
+
+### Mutation
+| mutation | result |
+|---|---|
+| restore the task-count pre-fill | 1 red |
+| restore the stocktake pre-fill + live variance chip | 2 red |
+| un-gate the "Aria expects" panel | 1 red |
+
+Restored → 9/9 green.
+
+### Decisions taken under the standing table
+- **"Do not redesign; build the minimum equivalent."** The POS anomaly modal was *not* ported. The
+  staff app's post-submit reveal already existed (`countMsg`, and the recorded-lines list with
+  `varChip`), so gating the pre-submit display was sufficient. Copying the modal would have been a
+  second implementation of a reveal that already works.
+- **"Out of scope — log it, don't touch it."** Dashboard page left alone, recorded above.
+
+### Gates
+`tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 295/295.
 
 ### Parked
 None.

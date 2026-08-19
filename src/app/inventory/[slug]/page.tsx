@@ -339,7 +339,11 @@ export default function InventoryStaffApp() {
       // auto-activate the first open count/cycle_count task
       const first = d.tasks.find(t => t.status === 'open' && (t.task_type === 'count' || t.task_type === 'cycle_count') && t.product_id)
       setActiveId(first?.id ?? null)
-      if (first) setCountVal(first.expected ?? 0)
+      // MS7 PHASE 2 — BLIND COUNT. Starts at 0, never at the expected figure.
+      // Pre-filling meant the default action (open, submit) recorded a perfect match having
+      // counted nothing: confirmation, not verification. Matches the POS surface, which has
+      // always started empty.
+      if (first) setCountVal(0)
       setCountMsg(null)
     } catch { setTasksState('error') }
   }, [slug])
@@ -802,7 +806,10 @@ export default function InventoryStaffApp() {
     setStBusy(false)
   }
   async function stPickProduct(id: string, name: string, expected: number) {
-    setStPick({ id, name, expected }); setStCountVal(expected); setStMatches([]); setStSearch(''); setStPattern(null)
+    // MS7 PHASE 2 — BLIND COUNT. `expected` is still carried in state because the post-submit
+    // reveal and the variance computation need it; it is simply never rendered before the count
+    // is recorded, and the input no longer starts on it.
+    setStPick({ id, name, expected }); setStCountVal(0); setStMatches([]); setStSearch(''); setStPattern(null)
     try { const r = await fetch(`/api/inventory/app/${slug}/stocktake?pattern=${id}${outletId ? `&outlet_id=${outletId}` : ''}`); if (r.ok) { const d = await r.json(); setStPattern(d.pattern?.fact ?? null) } } catch { /* ignore */ }
   }
   async function stSubmitLine() {
@@ -1357,7 +1364,11 @@ export default function InventoryStaffApp() {
                         <div style={{ fontFamily: DISPLAY, fontSize: 48, fontWeight: 600, minWidth: 70, textAlign: 'center', lineHeight: 1 }}>{countVal}</div>
                         <button onClick={() => setCountVal(v => v + 1)} style={{ width: 46, height: 46, borderRadius: 14, border: `1.5px solid ${T.line}`, background: '#fff', fontSize: 24, fontWeight: 600, color: T.green, cursor: 'pointer' }}>+</button>
                       </div>
-                      <div style={{ display: 'flex', gap: 9, marginBottom: 14 }}>
+                      {/* MS7 PHASE 2 — revealed only AFTER the count is recorded (`countMsg`).
+                          Shown during entry, "Aria expects: N" beside a live variance told the
+                          counter the answer while they were typing it. The figures are unchanged;
+                          only the moment they appear has moved. */}
+                      <div style={{ display: 'flex', gap: 9, marginBottom: 14, visibility: countMsg ? 'visible' : 'hidden' }}>
                         {[['Aria expects', active.expected ?? 0, T.paper, T.ink], ['You counted', countVal, T.greenSoft, T.green], ['Variance', `${variance > 0 ? '+' : ''}${variance}`, variance === 0 ? T.greenSoft : T.redSoft, variance === 0 ? T.green : T.red]].map(([l, v, bg, col], i) => (
                           <div key={i} style={{ flex: 1, borderRadius: 12, padding: 11, textAlign: 'center', background: bg as string }}>
                             <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.3px', color: T.muted }}>{l}</div>
@@ -2387,7 +2398,10 @@ export default function InventoryStaffApp() {
                     <input value={stCountVal} onChange={e => setStCountVal(Math.max(0, Math.round(Number(e.target.value) || 0)))} inputMode="numeric" style={{ width: 84, textAlign: 'center', fontSize: 40, fontWeight: 800, border: 'none', outline: 'none', color: P.ink, fontFamily: BODY }} />
                     <button onClick={() => setStCountVal(v => v + 1)} style={{ width: 48, height: 48, borderRadius: 14, border: `1.5px solid ${P.ink}`, background: '#fff', fontSize: 24, fontWeight: 800, cursor: 'pointer' }}>+</button>
                   </div>
-                  <div style={{ textAlign: 'center', marginBottom: 14 }}>{varChip(stCountVal - stPick.expected, null)} <span style={{ fontSize: 11, color: P.muted, fontWeight: 600 }}>variance</span></div>
+                  {/* MS7 PHASE 2 — no live variance during entry. The recorded lines list below
+                      (stLines) already reveals variance per product once a count is submitted,
+                      which is the POS surface's pattern: count first, reveal after. */}
+                  <div style={{ textAlign: 'center', marginBottom: 14, fontSize: 11, color: P.muted, fontWeight: 600 }}>count what is on the shelf — the expected figure is shown after you record it</div>
                   <PipelButton onClick={stSubmitLine} disabled={stBusy}>{stBusy ? 'Recording…' : 'Record count'}</PipelButton>
                   <button onClick={() => { setStPick(null); setStPattern(null) }} style={{ width: '100%', marginTop: 9, background: 'none', color: P.muted, border: 'none', fontFamily: BODY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>cancel</button>
                 </div>
@@ -2403,7 +2417,10 @@ export default function InventoryStaffApp() {
                         return (
                           <div key={c.product_id} onClick={() => !done && stPickProduct(c.product_id, c.name, c.expected_qty)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: P.card, border: `1.5px solid ${P.ink}`, borderRadius: 16, padding: '11px 13px', marginBottom: 9, cursor: done ? 'default' : 'pointer', opacity: done ? 0.55 : 1 }}>
                             <span style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${P.ink}`, background: c.abc_tier === 'A' ? P.lime : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{c.abc_tier}</span>
-                            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.name}</div><div style={{ fontSize: 11, color: P.muted, fontWeight: 500 }}>expect {c.expected_qty} · {c.last_counted_at ? `${c.days_since}d since count` : 'never counted'}</div></div>
+                            {/* MS7 PHASE 2 — the expected quantity is NOT printed here. It anchored the count before the
+                                 counter had even opened the product. Days-since-count stays: it explains why the item is
+                                 on today's list without telling anyone what they are expected to find. */}
+                            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.name}</div><div style={{ fontSize: 11, color: P.muted, fontWeight: 500 }}>{c.abc_tier}-tier · {c.last_counted_at ? `${c.days_since}d since count` : 'never counted'}</div></div>
                             {done ? <PIcon name="check-square" size={20} /> : <PIcon name="back" size={16} stroke={P.muted} />}
                           </div>
                         )
