@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { computePar, computeParReadonly, getOrSeedReorderSettings, setProductPar } from '@/lib/inventory/par-levels'
+import { reorderSuggestions, createDraftPO } from '@/lib/inventory/buying'
 
 // INV-PAR-1 — owner reorder surface. GET reads par + below-reorder (bootstraps a compute on first use);
 // POST { action } recomputes, saves settings, or applies a per-product override. getBid-scoped.
@@ -30,6 +31,28 @@ async function _POST(req: Request, _context: unknown, { businessId: bid }: Busin
     await supabaseAdmin.from('reorder_settings').update(patch).eq('business_id', bid)
     const result = await computePar(supabaseAdmin, bid) // re-derive with the new knobs
     return NextResponse.json({ ok: true, ...result })
+  }
+
+  // MS10 PHASE 4/5 — DRAFT, DON'T SEND. The dashboard's runs-out list drafts purchase orders
+  // through the SAME engine the staff app uses (reorderSuggestions → createDraftPO): grouped by
+  // supplier, quantities from par and velocity, per-line cost with its provenance tier, status
+  // 'draft'. NOTHING IS SENT: this action never touches the approve-and-send path, never contacts a
+  // supplier, never spends. Approval stays where it lives — the money-gated approve in the buying
+  // flow. Items whose product has no supplier cannot be drafted and are reported, not dropped.
+  if (body.action === 'draft') {
+    const suggestions = await reorderSuggestions(supabaseAdmin, bid, null)
+    const drafts: Array<{ id: string; order_number: string; supplier_name: string; lines: number; total: number; unpriced_lines: number }> = []
+    let failed = 0
+    for (const g of suggestions.groups) {
+      if (!g.supplier_id) continue // needs a supplier — counted below, never silently dropped
+      const po = await createDraftPO(supabaseAdmin, bid, g.supplier_id, g.items.map(i => ({
+        product_id: i.product_id, product_name: i.name, quantity: i.suggested_qty, unit_cost: i.unit_cost,
+      })), 'Owner')
+      if (po) drafts.push({ id: po.id, order_number: po.order_number, supplier_name: g.supplier_name, lines: g.items.length, total: po.total, unpriced_lines: po.unpriced_lines })
+      else failed++
+    }
+    const needsSupplier = suggestions.groups.filter(g => !g.supplier_id).reduce((n, g) => n + g.items.length, 0)
+    return NextResponse.json({ ok: true, drafts, drafts_failed: failed, items_needing_supplier: needsSupplier, below_count: suggestions.below_count })
   }
 
   if (body.action === 'override' && body.product_id) {
