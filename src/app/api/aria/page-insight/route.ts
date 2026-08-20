@@ -253,13 +253,18 @@ async function _POST(req: Request): Promise<Response> {
       const adjustments = movements.filter(
         (m: { movement_type: string }) => m.movement_type === 'adjustment'
       );
+      // MS11 PHASE 2 — movement-snapshot cost is the right historical source, but adjustments
+      // without one are counted and named, never folded into the $ figure as $0.00.
       const varianceValue = adjustments.reduce(
         (s: number, m: { quantity: number | null; cost_price: number | null }) =>
           s + Math.abs((m.quantity ?? 0) * (m.cost_price ?? 0)),
         0
       );
+      const uncostedAdj = adjustments.filter(
+        (m: { cost_price: number | null }) => !(Number(m.cost_price) > 0)
+      ).length;
 
-      const context = `Last 30 days: A$${totalSales.toFixed(2)} in sales, ${adjustments.length} stock adjustments worth ~A$${varianceValue.toFixed(2)} in variance.`;
+      const context = `Last 30 days: A$${totalSales.toFixed(2)} in sales, ${adjustments.length} stock adjustments worth ~A$${varianceValue.toFixed(2)} in variance${uncostedAdj > 0 ? ` (${uncostedAdj} adjustments have no recorded cost and are excluded from that $ figure — do not treat it as the complete variance)` : ''}.`;
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about variance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`

@@ -91,20 +91,22 @@ async function _GET(req: Request) {
       return {
         id: p.id, name: p.name, sku: p.sku ?? '—', outlet_name: 'All',
         stock_quantity: p.stock_quantity ?? 0, value_cost,
+        cost_unknown: (p.cost_price ?? 0) <= 0, // resolver left null → this item is NOT in any $ total
         value_retail: (p.stock_quantity ?? 0) * (p.price ?? 0),
         last_sold: lastSold, days_since: daysSince, suggested_action: suggestedAction,
       };
     }).sort((a, b) => b.value_cost - a.value_cost);
 
-  const totalValue = items.reduce((s, i) => s + i.value_cost, 0);
+  const totalValue = items.reduce((s, i) => s + i.value_cost, 0); // priced items only
+  const uncostedItemCount = items.filter(i => i.cost_unknown).length;
 
   let insight = null;
   if (bid) {
-    const res = await generateInsight({ business_id: bid, context: `dead_stock_report days=${days} total_items=${items.length} total_value=$${totalValue.toFixed(0)}`, data: { items: items.length, totalValue, top5: items.slice(0, 5).map(i => i.name) }, maxBullets: 2 });
+    const res = await generateInsight({ business_id: bid, context: `dead_stock_report days=${days} total_items=${items.length} total_value=$${totalValue.toFixed(0)} uncosted_items=${uncostedItemCount} (value covers costed items only)`, data: { items: items.length, totalValue, top5: items.slice(0, 5).map(i => i.name) }, maxBullets: 2 });
     insight = { bullets: res.bullets };
   }
 
-  return NextResponse.json({ items, insight });
+  return NextResponse.json({ items, insight, uncosted_item_count: uncostedItemCount });
 }
 
 export const GET = withErrorCapture('pos/dead-stock', _GET)

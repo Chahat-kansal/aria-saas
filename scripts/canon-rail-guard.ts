@@ -64,10 +64,9 @@ const EXEMPT_PATHS = [
 //
 // This is an ALLOWLIST, not a blanket exemption: each file is named so migrating one and removing
 // it here is a measurable step, and adding a NEW direct read anywhere else fails the push. The
-// deliverable metric is this list's length. Started at 53 (MS10 phase 1); 50 after phase 2 (price-check, product-insights, price-intelligence); 48 after phase 3 (both hypothesis files); 44 after MS11 phase 1 (pos-chat, guidance, owner-agent, replenishment-agent).
+// deliverable metric is this list's length. Started at 53 (MS10 phase 1); 50 after phase 2 (price-check, product-insights, price-intelligence); 48 after phase 3 (both hypothesis files); 44 after MS11 phase 1 (pos-chat, guidance, owner-agent, replenishment-agent); 42 after MS11 phase 2 (reports/[type], bundle-builder — closure and page-insight stay: their reads are sale-line/movement SNAPSHOTS, the correct historical source, not catalogue reads).
 const COST_READ_ALLOWLIST = [
   'src/app/api/admin/businesses/[id]/route.ts',
-  'src/app/api/aria/bundle-builder/route.ts',
   'src/app/api/aria/competitor-prices/auto-adjust/route.ts',
   'src/app/api/aria/competitor-prices/route.ts',
   'src/app/api/aria/dynamic-pricing/route.ts',
@@ -85,7 +84,6 @@ const COST_READ_ALLOWLIST = [
   'src/app/api/pos/products/[id]/route.ts',
   'src/app/api/pos/products/route.ts',
   'src/app/api/pos/products/scan/route.ts',
-  'src/app/api/pos/reports/[type]/route.ts',
   'src/app/api/pos/reports/closure/[id]/route.ts',
   'src/app/api/pos/sales/[id]/route.ts',
   'src/app/api/pos/warehouse/replenish/route.ts',

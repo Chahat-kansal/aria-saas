@@ -51,7 +51,10 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
     itemsBySale.get(sid)!.push(item);
   }
 
-  let revenue = 0, cogs = 0, discounts = 0, tax = 0;
+  // MS11 PHASE 2 — the sale-line cost_price snapshot is the correct HISTORICAL source (what the
+  // item cost when sold), but a line without one must be counted and named, never summed as $0.00
+  // into a COGS presented as complete.
+  let revenue = 0, cogs = 0, discounts = 0, tax = 0, uncostedLineCount = 0;
   const paymentTotals: Record<string, number> = {};
   const byCashier: Record<string, { revenue: number; cogs: number; count: number }> = {};
   const byHour: Record<string, { revenue: number; count: number; customers: Set<string> }> = {};
@@ -59,7 +62,8 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
   for (const sale of (sales || [])) {
     const r = (sale as any).total_amount || 0;
     const saleItems = itemsBySale.get((sale as any).id) || [];
-    const saleCogs = saleItems.reduce((s: number, i: any) => s + ((i.cost_price || 0) * (i.quantity || 1)), 0);
+    const saleCogs = saleItems.reduce((s: number, i: any) => s + ((i.cost_price || 0) * (i.quantity || 1)), 0); // priced lines only
+    uncostedLineCount += saleItems.filter((i: any) => !(Number(i.cost_price) > 0)).length;
     revenue += r;
     cogs += saleCogs;
     discounts += (sale as any).discount_amount || 0;
@@ -81,6 +85,8 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
   return NextResponse.json({
     session,
     revenue, cogs, profit: revenue - cogs, tax, discounts,
+    // cogs/profit cover costed lines only; this is how many lines they exclude
+    uncosted_line_count: uncostedLineCount,
     transaction_count: (sales || []).length,
     payment_totals: paymentTotals,
     by_cashier: Object.entries(byCashier).map(([name, d]) => ({

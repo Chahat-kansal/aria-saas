@@ -7,6 +7,7 @@ import { generateInsight } from '@/lib/aria-insights';
 import { toAESTStart, toAESTEnd, todayAEST, thirtyDaysAgoAEST, buildDateRange } from '@/lib/date-au';
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { REPORTABLE_STATUSES } from '@/lib/pos/revenue'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 type Params = { params: Promise<{ type: string }> };
 
@@ -172,10 +173,14 @@ async function getInventory(
   const search       = params.get('search') ?? '';
 
   let q = supabase.from('pos_products')
-    .select('id,name,sku,stock_quantity,low_stock_threshold,cost_price,price,track_stock,pos_categories(name)')
+    .select('id,name,sku,stock_quantity,low_stock_threshold,price,track_stock,pos_categories(name)')
     .eq('business_id', bid).eq('is_active', true);
   if (search) q = q.ilike('name', `%${search}%`);
   const { data: products } = await q.limit(500);
+  // MS11 PHASE 2 — resolved cost, and the total states what it covers. The old value_cost summed
+  // `cost_price ?? 0`: a fabricated price*0.4 where recorded, a silent $0.00 exclusion where not,
+  // presented as a complete stock value.
+  const invCostMap = await resolveCostBatch(supabase, bid, null);
 
   const rows = (products ?? []) as unknown as Array<{
     id: string; name: string; sku: string; stock_quantity: number;
@@ -208,8 +213,9 @@ async function getInventory(
       avg_daily: avgDaily,
       days_of_stock: daysOfStock,
       status,
-      value_cost:   (p.stock_quantity ?? 0) * (p.cost_price ?? 0),
+      value_cost:   (p.stock_quantity ?? 0) * (invCostMap.get(p.id)?.cost ?? 0),
       value_retail: (p.stock_quantity ?? 0) * (p.price ?? 0),
+      cost_unknown: (invCostMap.get(p.id)?.cost ?? 0) <= 0,
     };
   }).filter(p => {
     if (lowStockOnly && !['critical','low'].includes(p.status)) return false;
@@ -226,17 +232,18 @@ async function getInventory(
   const amberItems    = inventory.filter(i => i.status === 'low');
   const deadItems     = inventory.filter(i => i.status === 'dead');
   const criticalCount = criticalItems.length;
-  const deadValue     = deadItems.reduce((s, i) => s + i.value_cost, 0);
+  const deadValue     = deadItems.reduce((s, i) => s + i.value_cost, 0); // priced lines only — see uncosted_item_count
+  const uncostedCount = inventory.filter(i => i.cost_unknown).length;
   const reorderTop    = criticalItems.slice(0, 3).map(i => i.name);
 
   let insight: { bullets: string[] } | null = null;
   if (bid) {
-    const ctx = `inventory_report critical_count=${criticalCount} amber_count=${amberItems.length} dead_stock_count=${deadItems.length} dead_stock_value=$${deadValue.toFixed(0)} top_critical="${criticalItems[0]?.name ?? ''}" days_left=${criticalItems[0]?.days_of_stock?.toFixed(1) ?? 'N/A'} top_dead="${deadItems[0]?.name ?? ''}" dead_value_each=$${(deadItems[0]?.value_cost ?? 0).toFixed(0)}`;
+    const ctx = `inventory_report critical_count=${criticalCount} amber_count=${amberItems.length} dead_stock_count=${deadItems.length} dead_stock_value=$${deadValue.toFixed(0)} uncosted_items=${uncostedCount} (dollar figures cover costed items only) top_critical="${criticalItems[0]?.name ?? ''}" days_left=${criticalItems[0]?.days_of_stock?.toFixed(1) ?? 'N/A'} top_dead="${deadItems[0]?.name ?? ''}" dead_value_each=$${(deadItems[0]?.value_cost ?? 0).toFixed(0)}`;
     const res = await generateInsight({ business_id: bid, context: ctx, data: { criticalCount, deadValue, reorderTop, count: inventory.length }, maxBullets: 2 });
     insight = { bullets: res.bullets };
   }
 
-  return NextResponse.json({ inventory, insight });
+  return NextResponse.json({ inventory, insight, uncosted_item_count: uncostedCount });
 }
 
 // ── CASHIER ────────────────────────────────────────────────────
@@ -465,7 +472,10 @@ async function getAdvanced(
   let data: Record<string, unknown>[] = [];
 
   if (reportType === 'Product' || reportType === 'product') {
-    let q = supabase.from('pos_products').select('id,name,sku,price,cost_price,pos_categories(name)').eq('business_id', bid);
+    let q = supabase.from('pos_products').select('id,name,sku,price,pos_categories(name)').eq('business_id', bid);
+    // MS11 PHASE 2 — COGS/profit from resolved cost; a product with no known cost is FLAGGED, its
+    // profit is not silently computed against a $0.00 (or fabricated price*0.4) cost.
+    const profCostMap = await resolveCostBatch(supabase, bid, null);
     if (!includeDeleted) q = q.eq('is_active', true);
     const { data: prods } = await q.limit(500);
 
@@ -487,9 +497,10 @@ async function getAdvanced(
 
     const totalRevAll = Array.from(salesByProd.values()).reduce((s, v) => s + v.revenue, 0);
 
-    data = ((prods ?? []) as unknown as Array<{ id: string; name: string; sku: string; price: number; cost_price: number; pos_categories: { name: string } | null }>).map(p => {
+    data = ((prods ?? []) as unknown as Array<{ id: string; name: string; sku: string; price: number; pos_categories: { name: string } | null }>).map(p => {
       const s = salesByProd.get(p.id) ?? { revenue: 0, qty: 0, discount: 0 };
-      const cogs   = s.qty * (p.cost_price ?? 0);
+      const resolvedProdCost = profCostMap.get(p.id)?.cost ?? null;
+      const cogs   = s.qty * (resolvedProdCost ?? 0);
       const profit = s.revenue - cogs;
       return {
         name: p.name, sku: p.sku,
@@ -497,6 +508,7 @@ async function getAdvanced(
         revenue: s.revenue, cogs, transaction_count: s.qty,
         avg_sale: s.qty ? s.revenue / s.qty : 0,
         profit, profit_pct: s.revenue ? (profit / s.revenue * 100) : 0,
+        cost_unknown: resolvedProdCost == null || resolvedProdCost <= 0,
         discount_amount: s.discount,
         revenue_pct: totalRevAll ? (s.revenue / totalRevAll * 100) : 0,
         items_sold: s.qty,

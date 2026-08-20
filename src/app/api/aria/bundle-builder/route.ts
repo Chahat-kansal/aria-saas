@@ -9,6 +9,7 @@ import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/l
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { parseLLMJsonOr } from '@/lib/ai-json'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 import { guardOutput } from '@/lib/aria/ground-guard'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -98,10 +99,14 @@ async function _POST(_req: Request, _context: unknown, { businessId: bid }: Busi
 
   // ── Load product details for math + naming ─────────────────────────
   const { data: prods } = await supabaseAdmin.from('pos_products')
-    .select('id, name, price, cost_price')
+    .select('id, name, price')
     .in('id', Array.from(productIds))
 
-  type Prod = { id: string; name: string; price: number | null; cost_price: number | null }
+  type Prod = { id: string; name: string; price: number | null }
+  // MS11 PHASE 2 — resolved costs. A bundle price computed over `cost_price ?? 0` understated the
+  // bundle's cost wherever a member had none recorded, which OVERSTATED margin — the exact wrong
+  // direction for a discounting feature with a 25% margin floor.
+  const bundleCostMap = await resolveCostBatch(supabaseAdmin, bid, null)
   const pMap: Record<string, Prod> = {}
   for (const p of (prods ?? []) as Prod[]) pMap[p.id] = p
 
@@ -114,13 +119,18 @@ async function _POST(_req: Request, _context: unknown, { businessId: bid }: Busi
   }
 
   const candidates: Candidate[] = []
+  let skippedUnknownCost = 0
   const allCombos: Array<[string, number]> = [...topTriples, ...topPairs]
   for (const [key, count] of allCombos) {
     const ids = key.split('|')
     const products = ids.map(id => pMap[id]).filter(Boolean)
     if (products.length !== ids.length) continue
     const totalIndividual = products.reduce((s, p) => s + Number(p.price ?? 0), 0)
-    const totalCost = products.reduce((s, p) => s + Number(p.cost_price ?? 0), 0)
+    // REFUSE, don't guess: a bundle containing ANY unknown-cost member cannot have its margin
+    // computed honestly, so it is skipped (and counted) rather than priced against a $0.00 cost.
+    const memberCosts = products.map(p => bundleCostMap.get(p.id)?.cost ?? null)
+    if (memberCosts.some(c => c == null || c <= 0)) { skippedUnknownCost++; continue }
+    const totalCost = memberCosts.reduce((s: number, c) => s + (c as number), 0)
     if (totalIndividual <= 0 || totalCost <= 0) continue
     candidates.push({
       product_ids: ids,
@@ -154,7 +164,7 @@ async function _POST(_req: Request, _context: unknown, { businessId: bid }: Busi
     })
   }
 
-  if (suggestions.length === 0) return NextResponse.json({ generated: 0 })
+  if (suggestions.length === 0) return NextResponse.json({ generated: 0, skipped_unknown_cost: skippedUnknownCost })
 
   // ── Have Haiku name + pitch the bundles ──────────────────────────
   const top = suggestions.slice(0, 10)
@@ -202,7 +212,7 @@ async function _POST(_req: Request, _context: unknown, { businessId: bid }: Busi
     source: 'aria',
   })))
 
-  return NextResponse.json({ generated: top.length })
+  return NextResponse.json({ generated: top.length, skipped_unknown_cost: skippedUnknownCost })
 }
 
 // ── PATCH — approve / reject / archive
