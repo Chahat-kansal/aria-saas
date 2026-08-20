@@ -10,6 +10,7 @@ import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-conte
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { guardOutput } from '@/lib/aria/ground-guard'
+import { resolveCostFor, COST_SOURCE_LABEL } from '@/lib/inventory/resolve-cost'
 
 async function _POST(req: Request) {
   try {
@@ -36,7 +37,7 @@ async function _POST(req: Request) {
 
     const [{ data: product }, { data: saleItems30d }, { data: saleItems12m }, { data: invRows }] = await Promise.all([
       supabase.from('pos_products')
-        .select('name,price,cost_price,is_active')
+        .select('name,price,is_active')
         .eq('id', product_id).maybeSingle(),
       supabase.from('pos_sale_items')
         .select('quantity,line_total,created_at')
@@ -65,8 +66,12 @@ async function _POST(req: Request) {
       ? Math.round(onHand / dailyVel) : 999
 
     const priceCents = Math.round((product.price || 0) * 100)
-    const costCents  = Math.round((product.cost_price || 0) * 100)
-    const marginPct  = priceCents > 0 ? ((priceCents - costCents) / priceCents * 100) : 0
+    // MS10 phase 2 — cost through the resolver. The raw cost_price is a fabricated price*0.4
+    // back-calculation on most rows, so `|| 0` here produced either a definitionally-60% margin or
+    // a 100% one. Unknown stays null and the margin says so, rather than being a number.
+    const resolvedCost = await resolveCostFor(supabase, business_id, product_id, null)
+    const costCents  = resolvedCost.cost != null ? Math.round(resolvedCost.cost * 100) : null
+    const marginPct  = priceCents > 0 && costCents != null ? ((priceCents - costCents) / priceCents * 100) : null
 
     // Monthly grouping for trend
     const monthMap: Record<string, number> = {}
@@ -95,9 +100,10 @@ Best month: ${bestMonth[0]} (${bestMonth[1]} units)
 Last 30 days: ${units30d} units, A$${rev30d.toFixed(2)} revenue
 Current stock: ${onHand} units
 Days of stock at current velocity: ${daysStock === 999 ? 'No recent sales' : daysStock + ' days'}
-Margin: ${marginPct.toFixed(1)}%
+Margin: ${marginPct != null ? marginPct.toFixed(1) + '%' : 'unknown — no cost recorded'}
 Sell price: A$${product.price?.toFixed(2)}
-Cost: A$${product.cost_price?.toFixed(2)}
+Cost: ${costCents != null ? 'A$' + (costCents / 100).toFixed(2) + ' (' + COST_SOURCE_LABEL[resolvedCost.source] + ')' : 'unknown — no cost recorded'}
+If the cost is an estimate or unknown, hedge any margin claims accordingly.
 
 Give 3 specific insights and 1 recommended action. Format:
 - [insight 1]
@@ -110,7 +116,9 @@ Give 3 specific insights and 1 recommended action. Format:
     const text = response.content[0].type === 'text' ? response.content[0].text : ''
     const lines = text.split('\n').filter(l => l.trim())
     // BUGFIX-FAB-3 — guard each prose bullet + the recommendation against the REAL computed metrics.
-    const allowed: number[] = [units30d, Math.round(rev30d * 100) / 100, Math.round(dailyVel * 100) / 100, daysStock, Math.round(marginPct * 10) / 10, Math.round(trendPct * 10) / 10, onHand, Number(product.price) || 0, Number(product.cost_price) || 0]
+    const allowed: number[] = [units30d, Math.round(rev30d * 100) / 100, Math.round(dailyVel * 100) / 100, daysStock, Math.round(trendPct * 10) / 10, onHand, Number(product.price) || 0]
+    if (marginPct != null) allowed.push(Math.round(marginPct * 10) / 10)
+    if (costCents != null) allowed.push(costCents / 100)
     const insightsRaw = lines.filter(l => l.startsWith('- ')).map(l => l.slice(2).trim())
     const insights = await Promise.all(insightsRaw.map(async s => (await guardOutput(s, allowed, { mode: 'strip', businessId: business_id, surface: 'product-insights' })).text))
     const recLine  = lines.find(l => l.startsWith('💡')) ?? ''
@@ -124,7 +132,8 @@ Give 3 specific insights and 1 recommended action. Format:
         revenue_30d: rev30d,
         daily_velocity: Math.round(dailyVel * 100) / 100,
         days_of_stock: daysStock,
-        margin_pct: Math.round(marginPct * 10) / 10,
+        margin_pct: marginPct != null ? Math.round(marginPct * 10) / 10 : null,
+        cost_source: resolvedCost.source,
         trend_pct: Math.round(trendPct * 10) / 10,
         trend_label: trendLabel,
         best_month: bestMonth[0],

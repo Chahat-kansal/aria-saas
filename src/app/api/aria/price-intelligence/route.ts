@@ -6,6 +6,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,9 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
   const resolvedBid = (business_id as string | undefined) ?? bid;
 
+  // MS10 phase 2 — one batch resolution for every product in the cart; the map is consulted per
+  // line. resolveCostBatch is 3 queries per business, not N+1.
+  const costMap = await resolveCostBatch(supabase, resolvedBid, null);
   const alerts: string[] = [];
   const suggestions: string[] = [];
   const promotions_applied: string[] = [];
@@ -40,7 +44,7 @@ async function _POST(req: Request) {
 
   // Load products, active promotions, and settings in parallel
   const [productsRes, settingsRes] = await Promise.all([
-    supabase.from('pos_products').select('id, name, price, cost_price, stock_quantity, track_stock').in('id', productIds).eq('business_id', resolvedBid),
+    supabase.from('pos_products').select('id, name, price, stock_quantity, track_stock').in('id', productIds).eq('business_id', resolvedBid),
     supabase.from('pos_settings').select('loyalty_points_per_dollar').eq('business_id', resolvedBid).maybeSingle(),
   ]);
   let promosData: any[] = [];
@@ -67,9 +71,13 @@ async function _POST(req: Request) {
     cartTotal += lineTotal;
 
     // Below-cost check
-    if (p.cost_price && p.cost_price > 0) {
-      const marginPct = ((unitPrice - p.cost_price) / unitPrice) * 100;
-      if (unitPrice < p.cost_price) {
+    // MS10 phase 2 — resolved cost, not the raw column. The old check read the fabricated
+    // price*0.4 figure, so "margin below 10%" could mathematically never fire (it was always 60%).
+    const rc = costMap.get(p.id as string)
+    const resolvedUnitCost = rc?.cost ?? null
+    if (resolvedUnitCost != null && resolvedUnitCost > 0) {
+      const marginPct = ((unitPrice - resolvedUnitCost) / unitPrice) * 100;
+      if (unitPrice < resolvedUnitCost) {
         alerts.push(`⚠ ${p.name} is priced below cost — selling at a loss.`);
       } else if (marginPct < 10) {
         alerts.push(`${p.name} margin is only ${marginPct.toFixed(0)}%.`);

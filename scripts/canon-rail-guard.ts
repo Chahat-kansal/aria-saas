@@ -64,7 +64,7 @@ const EXEMPT_PATHS = [
 //
 // This is an ALLOWLIST, not a blanket exemption: each file is named so migrating one and removing
 // it here is a measurable step, and adding a NEW direct read anywhere else fails the push. The
-// deliverable metric is this list's length. Started at 53 (MS10 phase 1).
+// deliverable metric is this list's length. Started at 53 (MS10 phase 1); 50 after phase 2 migrated price-check, product-insights and price-intelligence.
 const COST_READ_ALLOWLIST = [
   'src/app/api/admin/businesses/[id]/route.ts',
   'src/app/api/aria/bundle-builder/route.ts',
@@ -75,9 +75,6 @@ const COST_READ_ALLOWLIST = [
   'src/app/api/aria/inventory-insight/route.ts',
   'src/app/api/aria/page-insight/route.ts',
   'src/app/api/aria/pos-chat/route.ts',
-  'src/app/api/aria/price-check/route.ts',
-  'src/app/api/aria/price-intelligence/route.ts',
-  'src/app/api/aria/product-insights/route.ts',
   'src/app/api/aria/promo-suggest/route.ts',
   'src/app/api/aria/receipt-scan/route.ts',
   'src/app/api/aria/supplier-reorder/route.ts',
