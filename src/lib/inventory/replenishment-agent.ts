@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getOrSeedReorderSettings } from '@/lib/inventory/par-levels'
 import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
+import { packConversion } from '@/lib/inventory/uom'
 
 // INV-AGENT-REPLENISH — velocity-driven replenishment draft generator (Tanpin Kanri: propose from real demand,
 // never from par — 0 par values exist). Derives reorder need via days-of-cover = items_on_hand / daily_rate.
@@ -85,22 +86,23 @@ export async function generateReplenishmentDrafts(
   const safetyDays = settings.buffer_weeks * 7
 
   // 1. Outlet inventory — sum items_on_hand per product (may span multiple outlet rows if no outlet filter)
-  type InvRow = { product_id: string; items_on_hand: number | null; items_per_case: number | null }
+  type InvRow = { product_id: string; items_on_hand: number | null }
   let invQ = sb.from('pos_outlet_inventory')
-    .select('product_id, items_on_hand, items_per_case')
+    .select('product_id, items_on_hand')
     .eq('business_id', businessId)
     .limit(600)
   if (outletIdIn) invQ = invQ.eq('outlet_id', outletIdIn)
   const { data: invRaw } = await invQ as { data: InvRow[] | null }
   if (!invRaw?.length) return { groups: [], drafts_created: 0, drafts_updated: 0, items_below_cover: 0, skipped_no_velocity: 0, unassigned_line_count: 0, total_proposed_cents: 0 }
 
-  const invMap = new Map<string, { onHand: number; perCase: number }>()
+  // MS11 PHASE 4 — pos_outlet_inventory.items_per_case is TOMBSTONED (see uom.ts): the canonical
+  // pack factor is pos_products.purchase_uom + purchase_uom_qty, read via packConversion below.
+  const invMap = new Map<string, { onHand: number }>()
   for (const r of invRaw) {
     const pid = r.product_id as string
     const existing = invMap.get(pid)
     invMap.set(pid, {
       onHand: (existing?.onHand ?? 0) + (Number(r.items_on_hand) || 0),
-      perCase: existing?.perCase || Number(r.items_per_case) || 1,
     })
   }
   const allPids = [...invMap.keys()]
@@ -120,9 +122,9 @@ export async function generateReplenishmentDrafts(
     velMap.set(pid, (velMap.get(pid) ?? 0) + (Number(it.quantity) || 0))
   }
 
-  // 3. Product info (name, cost_price, supplier_id, items_per_case) — active products only
+  // 3. Product info (name, supplier, canonical pack fields) — active products only
   const { data: prods } = await sb.from('pos_products')
-    .select('id, name, supplier_id, items_per_case')
+    .select('id, name, supplier_id, unit, purchase_uom, purchase_uom_qty')
     .in('id', allPids.slice(0, 500))
     .eq('business_id', businessId)
     .eq('is_active', true)
@@ -200,7 +202,12 @@ export async function generateReplenishmentDrafts(
 
     itemsBelowCover++
     const neededUnits = Math.max(0, (targetDays - daysOfCover) * dailyRate)
-    const caseSize = Math.max(1, inv.perCase || Number(prod.items_per_case) || 1)
+    // MS11 PHASE 4 — the canonical factor, or NO case rounding. packConversion refuses when the
+    // pack is unrecorded/ambiguous (all rows today: purchase_uom is null), and the refusal means
+    // we order in base units — caseSize 1 here is "no rounding applied", never a guessed factor.
+    // (Identical behaviour to the tombstoned items_per_case read, which was 1 on every row.)
+    const packConv = packConversion(prod)
+    const caseSize = packConv.ok ? Math.max(1, packConv.factor) : 1
     const rawQty = Math.ceil(neededUnits / caseSize) * caseSize
     if (rawQty <= 0) continue
 
