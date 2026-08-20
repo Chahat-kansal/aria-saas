@@ -34,13 +34,19 @@ const COUNTERFACTUAL = code('src', 'lib', 'aria', 'hypothesis', 'counterfactual.
 const GENERATE = code('src', 'lib', 'aria', 'hypothesis', 'generate.ts')
 
 describe('nothing reads pos_products.cost any more', () => {
-  it('counterfactual selects cost_price, not cost', () => {
-    expect(COUNTERFACTUAL).toContain("select('name,price,cost_price')")
+  // CHANGED BY MS10 PHASE 3 — the assertion moved because the files moved onto the resolver.
+  // MS8 asserted these two read cost_price (correct then: the alternative was the zeroed `cost`
+  // column). MS10 routed them through resolveCostBatch, so asserting a cost_price select would now
+  // force the fabricated column back in to keep a test green.
+  it('counterfactual resolves cost through the batch resolver, reading neither raw column', () => {
+    expect(COUNTERFACTUAL).toContain('resolveCostBatch')
+    expect(COUNTERFACTUAL).not.toMatch(/select\('[^']*cost_price/)
     expect(COUNTERFACTUAL).not.toMatch(/select\('name,price,cost'\)/)
   })
 
-  it('generate selects cost_price, not cost', () => {
-    expect(GENERATE).toContain('cost_price,stock_quantity')
+  it('generate resolves cost through the batch resolver, reading neither raw column', () => {
+    expect(GENERATE).toContain('resolveCostBatch')
+    expect(GENERATE).not.toMatch(/select\('[^']*cost_price/)
     expect(GENERATE).not.toMatch(/select\('name,price,cost,/)
   })
 
@@ -80,8 +86,9 @@ describe('the low-margin detector', () => {
 describe('the LLM is not told a cost it does not have', () => {
   it('sends null for an unknown cost, never 0', () => {
     // GROUNDING-TEETH at the source: a prompt containing "cost": 0 for every product invites the
-    // model to reason about margins that were never measured.
-    expect(COUNTERFACTUAL).toMatch(/Number\(p\.cost_price\) > 0 \? Number\(p\.cost_price\) : null/)
+    // model to reason about margins that were never measured. (MS10: the null now comes from the
+    // resolver rather than a hand-guarded cost_price read.)
+    expect(COUNTERFACTUAL).toMatch(/rc\?\.cost \?\? null/)
   })
 
   it('tells the model explicitly that null means unknown', () => {

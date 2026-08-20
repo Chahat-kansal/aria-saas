@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { callAnthropic } from '../providers/anthropic'
+import { resolveCostBatch, COST_SOURCE_LABEL } from '@/lib/inventory/resolve-cost'
 
 // I11 COUNTERFACTUAL Part 3 — live "what if" simulation. The owner describes a concrete scenario;
 // we ground it in this business's real 30-day data and ask Haiku for ONE quantified prediction, then
@@ -53,11 +54,11 @@ export async function simulateCounterfactual(businessId: string, scenario: strin
     supabaseAdmin.from('businesses').select('name,industry,industry_subtype,city').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount,created_at').eq('business_id', businessId).neq('status', 'voided').gte('created_at', day30ago),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', day7ago),
-    // MS8 PHASE 1 — cost_price, not cost. pos_products.cost holds a NON-NULL ZERO on 87 of Sip's
-    // rows while cost_price holds the real figure, so selecting `cost` fed this prompt "every
-    // product costs $0.00" as fact. cost_price is canonical for product cost (65 readers against
-    // this column's 2); `cost` is left in place per RULE 0 and simply no longer read.
-    supabaseAdmin.from('pos_products').select('name,price,cost_price').eq('business_id', businessId).eq('is_active', true).limit(40),
+    // MS10 PHASE 3 — through the resolver. MS8 moved this off the zeroed `cost` column onto
+    // cost_price; MS9 then established cost_price itself is a fabricated price*0.4 on most rows.
+    // resolveCostBatch (3 queries per business, so no N-fan-out concern on this cron path) ranks a
+    // recorded transaction above the estimate and reports unknown as null.
+    supabaseAdmin.from('pos_products').select('id,name,price').eq('business_id', businessId).eq('is_active', true).limit(40),
     supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
   ])
 
@@ -78,7 +79,8 @@ export async function simulateCounterfactual(businessId: string, scenario: strin
   }
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const dayPattern = Object.entries(byDay).map(([d, v]) => ({ day: dayNames[+d], avg: v.n > 0 ? v.rev / v.n : 0 })).sort((a, b) => b.avg - a.avg)
-  const products = (prodRes.data ?? []) as Array<{ name: string; price: number | null; cost_price: number | null }>
+  const products = (prodRes.data ?? []) as Array<{ id: string; name: string; price: number | null }>
+  const cfCostMap = await resolveCostBatch(supabaseAdmin, businessId, null)
 
   const evidence = {
     revenue_30d: +rev30.toFixed(2), revenue_7d: +rev7.toFixed(2), avg_weekly: +avgWeekly.toFixed(2),
@@ -95,10 +97,12 @@ EVIDENCE (last 30 days):
 - Avg ticket: $${avgTicket.toFixed(2)} across ${txns} transactions
 - Active products: ${products.length}; customers: ${evidence.customer_count}
 - Busiest days by avg ticket: ${evidence.busiest_days.join(', ') || 'n/a'}
-- Sample products (name/price/cost). cost is null where no cost has been recorded — treat null as
-  UNKNOWN and do not assume zero or estimate one: ${JSON.stringify(products.slice(0, 8).map(p => ({
-    name: p.name, price: p.price, cost: p.cost_price != null && Number(p.cost_price) > 0 ? Number(p.cost_price) : null,
-  })))}
+- Sample products (name/price/cost/cost_basis). cost is null where no cost is known — treat null as
+  UNKNOWN and do not assume zero or estimate one; where cost_basis says "estimated", hedge margin
+  claims: ${JSON.stringify(products.slice(0, 8).map(p => {
+    const rc = cfCostMap.get(p.id)
+    return { name: p.name, price: p.price, cost: rc?.cost ?? null, cost_basis: rc ? COST_SOURCE_LABEL[rc.source] : COST_SOURCE_LABEL.unknown }
+  }))}
 
 Simulate ONLY this scenario. Return the single JSON object.`
 

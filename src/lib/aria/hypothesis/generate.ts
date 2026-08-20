@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { callAnthropic } from '../providers/anthropic'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 const CATEGORIES = ['pricing', 'inventory', 'marketing', 'staff', 'customers', 'cashflow', 'hours'] as const
 type HypothesisCategory = typeof CATEGORIES[number]
@@ -55,8 +56,8 @@ export async function buildHypothesisPrompt(businessId: string): Promise<{
     supabaseAdmin.from('businesses').select('name,industry,industry_subtype,city,timezone').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount,payment_method,created_at,served_by').eq('business_id', businessId).neq('status', 'voided').gte('created_at', day30ago).order('created_at'),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', day7ago),
-    // MS8 PHASE 1 — cost_price, not cost. See the low-margin filter below for why this mattered.
-    supabaseAdmin.from('pos_products').select('name,price,cost_price,stock_quantity,low_stock_threshold,reorder_point,is_active,track_stock').eq('business_id', businessId).eq('is_active', true),
+    // MS10 PHASE 3 — cost via resolveCostBatch (see the low-margin filter below).
+    supabaseAdmin.from('pos_products').select('id,name,price,stock_quantity,low_stock_threshold,reorder_point,is_active,track_stock').eq('business_id', businessId).eq('is_active', true),
     supabaseAdmin.from('pos_customers').select('segment,rfm_score_total,days_since_visit,lifetime_value_cents').eq('business_id', businessId),
     supabaseAdmin.from('aria_business_memory').select('kind,content,importance').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('importance', { ascending: false }).limit(10),
     supabaseAdmin.from('aria_advice_weights').select('category,weight,positive_outcomes,negative_outcomes').eq('business_id', businessId),
@@ -66,6 +67,7 @@ export async function buildHypothesisPrompt(businessId: string): Promise<{
   const sales30d  = salesRes.data ?? []
   const sales7d   = sales7dRes.data ?? []
   const products  = productsRes.data ?? []
+  const genCostMap = await resolveCostBatch(supabaseAdmin, businessId, null)
   const customers = customersRes.data ?? []
   const memories  = memoryRes.data ?? []
   const weights   = weightsRes.data ?? []
@@ -86,13 +88,18 @@ export async function buildHypothesisPrompt(businessId: string): Promise<{
     // zero-cost — a missing cost means the margin is unknown, not 100%. Same rule
     // INV-BASELINE-1 phase 3 established for variance value: unknown is never 0.
     .filter(p => {
-      const cost = p.cost_price != null ? Number(p.cost_price) : null
+      // MS10 PHASE 3 — resolved cost, not the raw column. MS8 revived this detector from the
+      // always-zero `cost` column; MS9 then proved cost_price is fabricated (price*0.4 → margin
+      // exactly 60% storewide, so a <20% filter STILL could not fire honestly). The resolver ranks
+      // real transactions first and returns null for unknown, which is skipped, not zeroed.
+      const rc = genCostMap.get((p as { id?: string }).id ?? '')
+      const cost = rc?.cost ?? null
       const price = p.price != null ? Number(p.price) : null
       if (cost == null || cost <= 0 || price == null || price <= 0) return false
       return ((price - cost) / price) < 0.2
     })
     .slice(0, 5)
-    .map(p => ({ name: p.name, price: Number(p.price), cost: Number(p.cost_price) }))
+    .map(p => ({ name: p.name, price: Number(p.price), cost: Number(genCostMap.get((p as { id?: string }).id ?? '')?.cost ?? 0) }))
 
   const deadStock = products
     .filter(p => p.track_stock && Number(p.stock_quantity || 0) > 0)

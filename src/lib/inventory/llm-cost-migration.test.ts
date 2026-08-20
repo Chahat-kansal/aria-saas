@@ -75,13 +75,15 @@ describe('the allowlist shrank, measurably', () => {
     expect(list).not.toContain('price-intelligence')
   })
 
-  it('the allowlist holds exactly 50 files', () => {
+  it('the allowlist holds exactly 48 files', () => {
+    // 53 at phase 1 → 50 after phase 2 → 48 after phase 3 (both hypothesis files). This number
+    // going DOWN is the sprint's deliverable; update it only when a migration removes an entry.
     // Counted against the closing bracket on its own line — a naive indexOf(']') lands inside the
     // first [id] route path and reports 1, which is exactly the measurement error that produced
     // false findings twice before (failure pattern #5). The parser bug is memorialised here.
     const i = GUARD.indexOf('COST_READ_ALLOWLIST = [')
     const j = GUARD.indexOf('\n]', i)
     const n = (GUARD.slice(i, j).match(/^  'src\//gm) ?? []).length
-    expect(n).toBe(50)
+    expect(n).toBe(48)
   })
 })
