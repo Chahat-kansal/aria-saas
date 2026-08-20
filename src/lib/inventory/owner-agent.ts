@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { replenishmentGroundTruth } from '@/lib/inventory/replenishment-agent'
 import { exceptionGroundTruth } from '@/lib/inventory/exception-agent'
 import type { PlannedAction, ActionType } from '@/lib/aria/ask/action-planner'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 export type InvIntent =
   | 'approve_po'
@@ -406,7 +407,7 @@ async function handleExpiry(sb: SupabaseClient, bid: string): Promise<InvHandleR
   const today = new Date().toISOString().split('T')[0]
 
   const { data: expiring } = await sb.from('pos_products')
-    .select('id, name, expiry_date, cost_price, qty_backroom, shelf_capacity')
+    .select('id, name, expiry_date, qty_backroom, shelf_capacity')
     .eq('business_id', bid)
     .eq('is_active', true)
     .not('expiry_date', 'is', null)
@@ -423,18 +424,30 @@ async function handleExpiry(sb: SupabaseClient, bid: string): Promise<InvHandleR
     }
   }
 
-  const totalAtRisk = expiring.reduce((s, p) => {
+  // MS11 PHASE 1 — resolved cost, not the raw column, and no unknown summed as zero. The old
+  // reduce put `cost_price ?? 0` under an "est. $ at risk" headline: fabricated price*0.4 where
+  // recorded, fabricated $0.00 where not.
+  const expiryCostMap = await resolveCostBatch(sb, bid, null)
+  let atRiskPriced = 0
+  let unpricedAtRisk = 0
+  for (const p of expiring) {
     const qty = Number(p.qty_backroom ?? p.shelf_capacity ?? 0)
-    return s + qty * Number(p.cost_price ?? 0)
-  }, 0)
+    const rc = expiryCostMap.get(p.id as string)
+    if (rc?.cost != null && rc.cost > 0) atRiskPriced += qty * rc.cost
+    else unpricedAtRisk++
+  }
+  const atRiskStr = unpricedAtRisk === expiring.length
+    ? 'value unknown — no costs recorded'
+    : `est. $${atRiskPriced.toFixed(2)} at risk${unpricedAtRisk > 0 ? ` across priced items; ${unpricedAtRisk} more with no recorded cost` : ''}`
 
   const lines: string[] = [
-    `**${expiring.length} product${expiring.length !== 1 ? 's' : ''} expiring in ≤14 days** (est. $${totalAtRisk.toFixed(2)} at risk):`,
+    `**${expiring.length} product${expiring.length !== 1 ? 's' : ''} expiring in ≤14 days** (${atRiskStr}):`,
   ]
   for (const p of expiring) {
     const expDate = p.expiry_date as string
     const daysLeft = Math.ceil((new Date(expDate).getTime() - Date.now()) / 86400000)
-    const costStr = p.cost_price ? ` — $${Number(p.cost_price).toFixed(2)} cost` : ''
+    const rc = expiryCostMap.get(p.id as string)
+    const costStr = rc?.cost != null && rc.cost > 0 ? ` — $${rc.cost.toFixed(2)} cost` : ''
     lines.push(`• **${p.name}** — expires ${expDate} (${daysLeft}d)${costStr}`)
   }
   lines.push('\nApply FEFO — use these items first. Consider markdown or donation for near-expiry stock.')

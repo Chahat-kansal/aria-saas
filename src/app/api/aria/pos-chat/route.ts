@@ -14,6 +14,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 async function _POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -183,12 +184,12 @@ async function _POST(req: Request) {
       .gte('created_at', weekStart.toISOString())
       .limit(500),
     supabase.from('pos_products')
-      .select('id,name,stock_quantity,cost_price,price,category_id')
+      .select('id,name,stock_quantity,price,category_id')
       .eq('business_id', biz.id)
       .eq('is_active', true)
       .lt('stock_quantity', 10),
     supabase.from('pos_products')
-      .select('id,name,stock_quantity,price,cost_price,category_id')
+      .select('id,name,stock_quantity,price,category_id')
       .eq('business_id', biz.id)
       .eq('is_active', true)
       .limit(200),
@@ -466,24 +467,39 @@ TONE: Direct, specific, Australian English, A$ always.`
   const actionResults: any[] = []
   for (const action of (structured.actions || [])) {
     if (action.auto_execute && action.action === 'create_order') {
-      const items = (lowStock || []).slice(0, 10).map(p => ({
-        product_id: p.id,
-        product_name: p.name,
-        current_stock: p.stock_quantity,
-        suggested_qty: 24,
-        manual_qty: null,
-        unit_cost_cents: Math.round((p.cost_price ?? 0) * 100),
-        total_cost_cents: 24 * Math.round((p.cost_price ?? 0) * 100),
-        reason: 'Low stock — auto-ordered by Aria',
-      }))
+      // MS11 PHASE 1 — resolved cost, not the raw column. The old lines wrote
+      // `(p.cost_price ?? 0) * 100` cents into a draft the owner approves: a fabricated
+      // price*0.4 figure at best, a fabricated $0.00 at worst. unit_cost_cents keeps the existing
+      // 0-means-unknown JSON convention (consumers already render 0 as "cost unknown"); the
+      // stored TOTAL covers priced lines only and says so — never a false exact total.
+      const chatCostMap = await resolveCostBatch(supabase, biz.id, null)
+      const items = (lowStock || []).slice(0, 10).map(p => {
+        const rc = chatCostMap.get(p.id as string)
+        const unitCents = rc?.cost != null && rc.cost > 0 ? Math.round(rc.cost * 100) : 0
+        return {
+          product_id: p.id,
+          product_name: p.name,
+          current_stock: p.stock_quantity,
+          suggested_qty: 24,
+          manual_qty: null,
+          unit_cost_cents: unitCents,
+          total_cost_cents: 24 * unitCents,
+          reason: 'Low stock — auto-ordered by Aria',
+        }
+      })
       if (items.length > 0) {
+        const unpricedCount = items.filter(i => i.unit_cost_cents === 0).length
+        const pricedTotal = items.reduce((s, i) => s + i.total_cost_cents, 0)
+        const unpricedNote = unpricedCount > 0
+          ? ` ${unpricedCount} of ${items.length} lines have no recorded cost — the total covers priced lines only.`
+          : ''
         await supabase.from('purchase_order_drafts').insert({
           business_id: biz.id,
           draft_type: 'ai_generated',
           status: 'pending_approval',
           items,
-          total_cost_cents: items.reduce((s, i) => s + i.total_cost_cents, 0),
-          aria_reasoning: 'Created by Aria chat — low stock detected',
+          total_cost_cents: unpricedCount === items.length ? null : pricedTotal,
+          aria_reasoning: 'Created by Aria chat — low stock detected.' + unpricedNote,
           week_starting: new Date().toISOString().split('T')[0],
         })
         actionResults.push({ type: 'order_created', message: `Draft order created for ${items.length} products` })

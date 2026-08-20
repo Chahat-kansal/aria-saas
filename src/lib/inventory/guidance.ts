@@ -4,6 +4,7 @@ import { reorderSuggestions } from '@/lib/inventory/buying'
 import { tempStatus, expiryGroundTruth } from '@/lib/inventory/fresh'
 import { computeAvT } from '@/lib/inventory/avt'
 import { periodRange } from '@/lib/inventory/reports'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 // INV-6 — guidance (Tanpin-Kanri). Aria forms GROUNDED hypotheses from POS + weather + day, turns them into staff
 // tasks (inventory_tasks — reused), staff complete them (attributed). GROUNDING-TEETH: every "why" traces to a
@@ -273,12 +274,16 @@ export async function generateGuidanceTasks(sb: SupabaseClient, businessId: stri
       if (stalePids.length) {
         const invMap = new Map(inv.map(r => [r.product_id as string, Number(r.items_on_hand) || 0]))
         const { data: prods } = await sb.from('pos_products')
-          .select('id, name, cost_price').in('id', stalePids.slice(0, 200)).eq('business_id', businessId)
+          .select('id, name').in('id', stalePids.slice(0, 200)).eq('business_id', businessId)
+        // MS11 PHASE 1 — resolved cost, not the raw column. Unknown-cost items were ALREADY
+        // excluded here (cost||0 → value 0 → fails the >=10 filter); the resolver keeps that
+        // observable behaviour but the $ figure on the task is now a real cost, not price*0.4.
+        const slowCostMap = await resolveCostBatch(sb, businessId, outletId)
         const cands = (prods ?? [])
           .map(p => {
             const onHand = invMap.get(p.id as string) ?? 0
-            const cost = Number(p.cost_price) || 0
-            return { product_id: p.id as string, name: (p.name as string) ?? 'Item', on_hand: onHand, value: Math.round(onHand * cost * 100) / 100 }
+            const cost = slowCostMap.get(p.id as string)?.cost ?? null
+            return { product_id: p.id as string, name: (p.name as string) ?? 'Item', on_hand: onHand, value: cost != null ? Math.round(onHand * cost * 100) / 100 : 0 }
           })
           .filter(c => c.value >= 10)
           .sort((a, b) => b.value - a.value)

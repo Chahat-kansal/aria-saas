@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getOrSeedReorderSettings } from '@/lib/inventory/par-levels'
+import { resolveCostBatch } from '@/lib/inventory/resolve-cost'
 
 // INV-AGENT-REPLENISH — velocity-driven replenishment draft generator (Tanpin Kanri: propose from real demand,
 // never from par — 0 par values exist). Derives reorder need via days-of-cover = items_on_hand / daily_rate.
@@ -63,6 +64,7 @@ export interface ReplenishGroup {
   lead_days: number
   lines: ReplenishLine[]
   total_cost_cents: number
+  unpriced_line_count: number
 }
 
 export interface ReplenishResult {
@@ -120,11 +122,15 @@ export async function generateReplenishmentDrafts(
 
   // 3. Product info (name, cost_price, supplier_id, items_per_case) — active products only
   const { data: prods } = await sb.from('pos_products')
-    .select('id, name, cost_price, supplier_id, items_per_case')
+    .select('id, name, supplier_id, items_per_case')
     .in('id', allPids.slice(0, 500))
     .eq('business_id', businessId)
     .eq('is_active', true)
   const prodMap = new Map((prods ?? []).map(p => [p.id as string, p]))
+  // MS11 PHASE 1 — one batch cost resolution for every proposed line; the raw cost_price read is
+  // gone. unit_cost_cents keeps the existing 0-means-unknown convention (rendered "(cost
+  // unknown)" below), and the proposed total covers priced lines only.
+  const replCostMap = await resolveCostBatch(sb, businessId, null)
 
   // 4. Suppliers (delivery_days, name, email)
   const supplierIds = [...new Set((prods ?? []).map(p => p.supplier_id as string | null).filter((s): s is string => !!s))]
@@ -203,8 +209,8 @@ export async function generateReplenishmentDrafts(
     const qtyClamped = rawQty > maxQtyCap
     const finalQty = qtyClamped ? maxQtyCap : rawQty
 
-    const costDollars = Number(prod.cost_price) || 0
-    const unitCostCents = Math.round(costDollars * 100)
+    const costDollars = replCostMap.get(pid)?.cost ?? 0
+    const unitCostCents = costDollars > 0 ? Math.round(costDollars * 100) : 0
     const lineTotalCents = finalQty * unitCostCents
 
     const rateStr = (Math.round(dailyRate * 10) / 10).toString()
@@ -253,7 +259,9 @@ export async function generateReplenishmentDrafts(
       ? ' Note: ' + overflowCount + ' more item' + (overflowCount === 1 ? '' : 's') + ' below cover — showing top ' + MAX_LINES_PER_DRAFT + ' by urgency.'
       : ''
 
-    const totalCostCents = linesToWrite.reduce((s, l) => s + l.line_total_cents, 0)
+    // Priced lines only — an unknown-cost line is counted and named, never summed as $0.00.
+    const totalCostCents = linesToWrite.reduce((s, l) => s + (l.unit_cost_cents > 0 ? l.line_total_cents : 0), 0)
+    const unpricedLineCount = linesToWrite.filter(l => l.unit_cost_cents === 0).length
     const hasSchedule = !!(g.deliveryDays?.length)
     const leadDays = hasSchedule ? nextDeliveryDays(g.deliveryDays!) : settings.lead_time_days
     const isUnassigned = key === UNASSIGNED_KEY
@@ -270,12 +278,14 @@ export async function generateReplenishmentDrafts(
       const costNote = l.unit_cost_cents > 0 ? ' @ $' + (l.unit_cost_cents / 100).toFixed(2) : ' (cost unknown)'
       return l.product_name + ': ' + l.on_hand + ' on hand (' + l.days_of_cover + 'd cover), ' + l.daily_rate + '/day — order ' + l.suggested_qty + costNote
     }).join('; ')
-    const totalDollars = '$' + (totalCostCents / 100).toFixed(2)
+    const allUnpriced = unpricedLineCount === linesToWrite.length
+    const totalDollars = allUnpriced ? 'unknown (no recorded costs)' : '$' + (totalCostCents / 100).toFixed(2)
     const leadNote = hasSchedule
       ? 'next delivery for ' + g.supplierName + ' ~' + leadDays + 'd per schedule'
       : 'lead time assumed ' + leadDays + 'd (no delivery schedule set for ' + g.supplierName + ')'
     const lineWord = linesToWrite.length === 1 ? 'line' : 'lines'
-    const reasoning = 'Velocity-derived replenishment for ' + g.supplierName + ' — ' + leadNote + '. Safety buffer: ' + safetyDays + 'd. Items (sorted by urgency): ' + topItems + '. Proposed total: ' + totalDollars + ' (' + linesToWrite.length + ' ' + lineWord + ').' + truncateNote + largeDraftWarn + ' PROPOSE ONLY — no order placed. Owner must approve in the weekly-order flow.'
+    const unpricedNote = unpricedLineCount > 0 ? ' ' + unpricedLineCount + ' of ' + linesToWrite.length + ' lines have no recorded cost — the total covers priced lines only.' : ''
+    const reasoning = 'Velocity-derived replenishment for ' + g.supplierName + ' — ' + leadNote + '. Safety buffer: ' + safetyDays + 'd. Items (sorted by urgency): ' + topItems + '. Proposed total: ' + totalDollars + ' (' + linesToWrite.length + ' ' + lineWord + ').' + unpricedNote + truncateNote + largeDraftWarn + ' PROPOSE ONLY — no order placed. Owner must approve in the weekly-order flow.'
 
     const itemsJson = linesToWrite.map(l => ({
       product_id: l.product_id,
@@ -292,7 +302,7 @@ export async function generateReplenishmentDrafts(
     if (existingId) {
       await sb.from('purchase_order_drafts').update({
         items: itemsJson,
-        total_cost_cents: totalCostCents,
+        total_cost_cents: allUnpriced ? null : totalCostCents,
         aria_reasoning: reasoning,
         supplier_name: g.supplierName,
         supplier_email: g.supplierEmail,
@@ -308,7 +318,7 @@ export async function generateReplenishmentDrafts(
         supplier_name: g.supplierName,
         supplier_email: g.supplierEmail,
         items: itemsJson,
-        total_cost_cents: totalCostCents,
+        total_cost_cents: allUnpriced ? null : totalCostCents,
         aria_reasoning: reasoning,
         week_starting: weekStarting,
       })
@@ -321,7 +331,11 @@ export async function generateReplenishmentDrafts(
       assumed_lead_time: !hasSchedule,
       lead_days: leadDays,
       lines: linesToWrite,
+      // Stays a number for cached-PWA consumers (RULE 20 consumer test — the staff-app tasks
+      // route reads this shape). It is the PRICED-LINES sum; unpriced_line_count beside it is
+      // the additive honesty signal — a total without it reads as complete.
       total_cost_cents: totalCostCents,
+      unpriced_line_count: unpricedLineCount,
     })
   }
 

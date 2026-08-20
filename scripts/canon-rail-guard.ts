@@ -64,7 +64,7 @@ const EXEMPT_PATHS = [
 //
 // This is an ALLOWLIST, not a blanket exemption: each file is named so migrating one and removing
 // it here is a measurable step, and adding a NEW direct read anywhere else fails the push. The
-// deliverable metric is this list's length. Started at 53 (MS10 phase 1); 50 after phase 2 (price-check, product-insights, price-intelligence); 48 after phase 3 (both hypothesis files).
+// deliverable metric is this list's length. Started at 53 (MS10 phase 1); 50 after phase 2 (price-check, product-insights, price-intelligence); 48 after phase 3 (both hypothesis files); 44 after MS11 phase 1 (pos-chat, guidance, owner-agent, replenishment-agent).
 const COST_READ_ALLOWLIST = [
   'src/app/api/admin/businesses/[id]/route.ts',
   'src/app/api/aria/bundle-builder/route.ts',
@@ -74,7 +74,6 @@ const COST_READ_ALLOWLIST = [
   'src/app/api/aria/grn-assist/route.ts',
   'src/app/api/aria/inventory-insight/route.ts',
   'src/app/api/aria/page-insight/route.ts',
-  'src/app/api/aria/pos-chat/route.ts',
   'src/app/api/aria/promo-suggest/route.ts',
   'src/app/api/aria/receipt-scan/route.ts',
   'src/app/api/aria/supplier-reorder/route.ts',
@@ -109,9 +108,6 @@ const COST_READ_ALLOWLIST = [
   'src/lib/aria/context.ts',
   'src/lib/aria/deliverables.ts',
   'src/lib/aria/radar/loss-detector.ts',
-  'src/lib/inventory/guidance.ts',
-  'src/lib/inventory/owner-agent.ts',
-  'src/lib/inventory/replenishment-agent.ts',
   'src/lib/inventory/reports.ts',
   'src/lib/reports/weekly-data.ts',
 ]

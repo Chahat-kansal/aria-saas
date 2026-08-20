@@ -75,8 +75,9 @@ describe('the allowlist shrank, measurably', () => {
     expect(list).not.toContain('price-intelligence')
   })
 
-  it('the allowlist holds exactly 48 files', () => {
-    // 53 at phase 1 → 50 after phase 2 → 48 after phase 3 (both hypothesis files). This number
+  it('the allowlist holds exactly 44 files', () => {
+    // 53 at MS10 phase 1 → 50 → 48 → 44 after MS11 phase 1 (pos-chat + the three inventory
+    // agents: guidance, owner-agent, replenishment-agent). This number
     // going DOWN is the sprint's deliverable; update it only when a migration removes an entry.
     // Counted against the closing bracket on its own line — a naive indexOf(']') lands inside the
     // first [id] route path and reports 1, which is exactly the measurement error that produced
@@ -84,6 +85,6 @@ describe('the allowlist shrank, measurably', () => {
     const i = GUARD.indexOf('COST_READ_ALLOWLIST = [')
     const j = GUARD.indexOf('\n]', i)
     const n = (GUARD.slice(i, j).match(/^  'src\//gm) ?? []).length
-    expect(n).toBe(48)
+    expect(n).toBe(44)
   })
 })
