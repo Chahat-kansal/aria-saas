@@ -15,7 +15,7 @@ type Source = 'outlet' | 'last_delivery' | 'purchase_order' | 'catalogue' | 'unk
 // INTEL-TRUTH-1 — grounding fields are additive on the API response (computeStockValue's return
 // shape), null when the underlying figure is unknown/not applicable.
 type Grounding = 'verified' | 'derived' | 'estimated'
-interface Row { id: string; name: string; units: number; unit_cost: number | null; cost_source: Source; cost_grounding: Grounding | null; value_at_cost: number | null; price: number; value_at_retail: number; margin_pct: number | null; margin_grounding: Grounding | null }
+interface Row { id: string; name: string; units: number; unit_cost: number | null; cost_source: Source; cost_grounding: Grounding | null; cost_price_suspect?: boolean; value_at_cost: number | null; price: number; value_at_retail: number; margin_pct: number | null; margin_grounding: Grounding | null }
 interface Valuation { at_cost: number; at_retail: number; products_total: number; products_valued: number; products_unknown_cost: number; units_on_hand: number; margin_pct: number | null; margin_grounding: Grounding | null; at_cost_grounding: Grounding | null; margin_incomplete: boolean; products: Row[] }
 interface Missing { id: string; name: string; price: number }
 interface Payload { stock_value: Valuation; missing_costs: Missing[] }
@@ -230,6 +230,15 @@ export default function InventoryValuePanel() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
                     <Chip source={r.cost_source} />
+                    {/* MS9 PHASE 3 — the 60% tell. cost_price = price × 0.4 to the cent is the
+                        signature of a back-calculated figure, not a recorded one. Disclosure only;
+                        the fix route is the same per-product cost entry the missing-cost callout
+                        uses. */}
+                    {r.cost_price_suspect && (
+                      <span title="This catalogue cost is exactly 40% of the sell price — it looks derived from the price, not recorded from a purchase. Record a real cost (a delivery or purchase order) to replace it." style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, color: C.amber, background: C.amber + '1a', border: `1px solid ${C.amber}40`, whiteSpace: 'nowrap' }}>
+                        cost looks derived from price
+                      </span>
+                    )}
                   </div>
                   <div style={{ height: 4, marginTop: 6, borderRadius: 999, background: '#16201B', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${barPct}%`, background: r.cost_source === 'unknown' ? C.amber : C.green }} />

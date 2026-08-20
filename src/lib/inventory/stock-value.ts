@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveCostBatch, type ResolvedCost, type CostSource } from '@/lib/inventory/resolve-cost'
+import { resolveCostBatch, looksBackCalculatedCost, type ResolvedCost, type CostSource } from '@/lib/inventory/resolve-cost'
 import type { Grounding } from '@/lib/aria/compute/provenance'
 
 export interface StockValueRow {
@@ -9,6 +9,11 @@ export interface StockValueRow {
   unit_cost: number | null     // resolved cost (null = unknown)
   cost_source: CostSource      // provenance: outlet | last_delivery | catalogue | unknown
   cost_grounding: Grounding | null // INTEL-TRUTH-1 — Business Truth type of unit_cost; null when unknown
+  /** MS9 PHASE 3 — the stored catalogue cost_price matches price × 0.4 to the cent: it looks
+   *  back-calculated from the price, not recorded from a purchase. Disclosure only. Flagged on the
+   *  STORED figure regardless of which tier won resolution, so a product now costed from a PO still
+   *  tells the owner its catalogue entry is fabricated-looking. */
+  cost_price_suspect: boolean
   value_at_cost: number | null // units × unit_cost (null when cost unknown)
   price: number
   value_at_retail: number      // units × price
@@ -93,6 +98,7 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
       products.push({
         id: r.product_id, name, units: onHand, unit_cost: resolved.cost, cost_source: resolved.source,
         cost_grounding: resolved.grounding,
+        cost_price_suspect: looksBackCalculatedCost(r.pos_products?.price, r.pos_products?.cost_price),
         value_at_cost: Math.round(onHand * resolved.cost * 100) / 100, price, value_at_retail: retailVal,
         margin_pct: price > 0 ? Math.round(((price - resolved.cost) / price) * 1000) / 10 : null,
         // INTEL-TRUTH-1 — a margin is only as trustworthy as the cost it's computed over: folding in
@@ -105,6 +111,7 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
       unknownProducts.push({ id: r.product_id, name, units: onHand })
       products.push({
         id: r.product_id, name, units: onHand, unit_cost: null, cost_source: 'unknown', cost_grounding: null,
+        cost_price_suspect: false,
         value_at_cost: null, price, value_at_retail: retailVal, margin_pct: null, margin_grounding: null,
       })
     }

@@ -59,6 +59,30 @@ export const COST_SOURCE_LABEL: Record<CostSource, string> = {
   unknown: 'no cost recorded',
 }
 
+/**
+ * MS9 PHASE 3 — THE 60% TELL.
+ *
+ * A cost that is exactly 40% of the sell price is almost certainly back-calculated from the price,
+ * not recorded from a purchase. Sip's data proves it at scale: 73 of 83 costed products carry
+ * cost_price = price × 0.4 TO THE CENT — residue of the fabricated price*0.6 fallback that
+ * INTEL-COMPUTE removed from the code in July without correcting the rows it had already written.
+ * Every one of those products reports a margin of exactly 60.0%, which is how a fabrication hides:
+ * it looks like a remarkably consistent business.
+ *
+ * Detection and disclosure ONLY. Nothing auto-corrects, nothing bulk-edits, nothing guesses a
+ * replacement — the column is the owner's data, and the honest move is to say "this looks derived,
+ * here is where to record the real one".
+ *
+ * Tolerance is half a cent: the signature was written by exact multiplication, so a real recorded
+ * cost that happens to sit near 40% (Apple Juice's true $2.50 against $6.00 is 41.7%) clears it.
+ */
+export function looksBackCalculatedCost(price: unknown, costPrice: unknown): boolean {
+  const p = pos(price)
+  const c = pos(costPrice)
+  if (p == null || c == null) return false
+  return Math.abs(c - p * 0.4) < 0.005
+}
+
 function pos(n: unknown): number | null {
   const v = Number(n)
   return Number.isFinite(v) && v > 0 ? v : null

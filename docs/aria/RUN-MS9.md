@@ -96,7 +96,7 @@ None.
 
 ## PHASE 2 — EVERY NUMBER CARRIES ITS TIER
 
-**Commit:** *(recorded in phase 3's commit.)*
+**Commit:** `b88c09a9`
 
 ### One vocabulary, exported from the tier's home
 
@@ -143,3 +143,44 @@ Remedied by killing the zombie build process (3.8 GB), clearing `.next`, and reb
 
 ### Parked
 None.
+
+
+---
+
+## PHASE 3 — THE 60% TELL
+
+**Commit:** *(recorded in phase 4's commit.)*
+
+### Detection and disclosure, nothing corrected
+
+`looksBackCalculatedCost(price, cost_price)` lives beside the tier vocabulary in `resolve-cost.ts`:
+true when the stored catalogue cost matches `price × 0.4` **to the cent** (tolerance half a cent —
+the fabrication was written by exact multiplication, so a real cost that merely lands near 40%,
+like Apple Juice's true $2.50 against $6.00 at 41.7%, clears it).
+
+Flagged on the **stored** figure regardless of which tier won resolution — so Cortado, now costed
+from its PO, still tells the owner its catalogue entry looks fabricated. Surfaced in the valuation
+panel as a chip — *"cost looks derived from price"* — with the tooltip naming the fix route (record
+a real delivery or purchase cost). The fix mechanism is the panel's existing per-product cost
+entry; nothing new was built.
+
+### Scale, verified live
+**73 of 83** costed products carry the signature; the 10 at other ratios do not. The brief's "four
+products" are simply the only ones where the fabrication is *provable* against a recorded price.
+
+### Mutations — both observed red, then restored green
+| mutation | result |
+|---|---|
+| detector always false | 2 red |
+| tolerance loosened to 10¢ (accuses honest costs) | 2 red |
+
+The second mutation matters as much as the first: at 10¢ tolerance the four GENUINE PO costs start
+getting flagged, and accusing an honest figure is worse than missing a fabricated one.
+
+### Gates
+`tsc` 0 · **`BUILD_EXIT=0`** · `vitest` 340/340 (31 files).
+
+### Parked
+None. (An earlier hook rejection is on the record: phase 3's test file existed before its
+implementation, and the pre-push tsc caught the tree-level mismatch and blocked phase 2's push
+until the implementation landed. The hook working as designed — recorded, not hidden.)
