@@ -33,6 +33,8 @@ export default function InventoryReorderPanel() {
   const [draft, setDraft] = useState<Settings | null>(null)
   const [sort, setSort] = useState<'cover' | 'velocity' | 'tier'>('cover')
   const [edits, setEdits] = useState<Record<string, string>>({})
+  const [drafting, setDrafting] = useState(false)
+  const [draftResult, setDraftResult] = useState<{ drafts: Array<{ order_number: string; supplier_name: string; lines: number; total: number; unpriced_lines: number }>; items_needing_supplier: number } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError(false)
@@ -43,6 +45,18 @@ export default function InventoryReorderPanel() {
     } catch { setError(true) } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  // MS10 PHASE 4 — the dead button, wired. It sat here with no onClick since MS9 built the list:
+  // a button that looks functional and does nothing, the exact pattern this codebase keeps
+  // producing. Wired rather than removed, because phase 5's draft engine already existed and this
+  // is its owner-side entry. Drafts only — approval stays in the money-gated buying flow.
+  async function draftOrders() {
+    setDrafting(true); setDraftResult(null)
+    try {
+      const r = await fetch('/api/pos/inventory/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draft' }) })
+      if (r.ok) setDraftResult(await r.json())
+    } finally { setDrafting(false) }
+  }
 
   async function saveSettings() {
     if (!draft) return
@@ -125,8 +139,23 @@ export default function InventoryReorderPanel() {
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 2px 10px' }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Aria suggests — replenish</p>
-          <span style={{ fontSize: 12, color: below.length ? C.amber : C.dim }}>{below.length} below reorder point{data.reviewed_count ? ` · ${data.reviewed_count} to review` : ''}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, color: below.length ? C.amber : C.dim }}>{below.length} below reorder point{data.reviewed_count ? ` · ${data.reviewed_count} to review` : ''}</span>
+            {below.length > 0 && (
+              <button onClick={draftOrders} disabled={drafting} style={{ padding: '7px 14px', borderRadius: 9, border: 'none', background: C.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {drafting ? 'Drafting…' : 'Draft purchase orders'}
+              </button>
+            )}
+          </span>
         </div>
+        {draftResult && (
+          <div style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 10, background: C.surface, border: '1px solid ' + C.border, fontSize: 12, color: C.text }}>
+            {draftResult.drafts.length > 0
+              ? <>Drafted {draftResult.drafts.map(d => `${d.order_number} — ${d.supplier_name}, ${d.lines} line${d.lines === 1 ? '' : 's'}, $${d.total.toFixed(2)}${d.unpriced_lines ? ` (+${d.unpriced_lines} unpriced line${d.unpriced_lines === 1 ? '' : 's'} not in the total)` : ''}`).join(' · ')}. Nothing has been sent — approve in the buying flow.</>
+              : <>No drafts created.</>}
+            {draftResult.items_needing_supplier > 0 && <> {draftResult.items_needing_supplier} item{draftResult.items_needing_supplier === 1 ? '' : 's'} need a supplier before they can be drafted.</>}
+          </div>
+        )}
         {below.length === 0 && forecastable === 0 ? (
           /* MS9 PHASE 6 — the honest empty state. Not a blank panel, not a fabricated all-clear:
              what is missing, why it matters, and what fills it. */
@@ -162,7 +191,10 @@ export default function InventoryReorderPanel() {
                     <div style={{ fontSize: 9.5, color: C.amber, marginTop: 3, lineHeight: 1.3 }}>{r.confidence_note}</div>
                   )}
                 </div>
-                <button style={{ padding: '8px 12px', borderRadius: 9, border: 'none', background: C.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Order {r.suggested_qty}</button>
+                {/* MS10 phase 4 — the per-row "Order N" button had NO onClick since it was built.
+                    Replaced by a passive quantity (drafting is supplier-grouped, one action for the
+                    whole list) so nothing on this surface looks functional without being so. */}
+                <span style={{ padding: '8px 12px', borderRadius: 9, background: C.surface2, color: C.sage, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>needs {r.suggested_qty}</span>
               </div>
             ))}
           </div>
