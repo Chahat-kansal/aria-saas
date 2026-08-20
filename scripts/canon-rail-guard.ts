@@ -47,6 +47,78 @@ const EXEMPT_PATHS = [
   // call the provider directly. Everything else must go through sendSMS() / sendWhatsApp().
   'src/lib/clicksend.ts',
   'src/lib/whatsapp.ts',
+  // MS10 phase 1 — the cost rail itself: the resolver must read the raw columns to rank them, and
+  // stock-value's query predates its MS9 rerouting through the resolver.
+  'src/lib/inventory/resolve-cost.ts',
+  'src/lib/inventory/stock-value.ts',
+]
+
+// MS10 phase 1 — THE COST RAIL'S GRANDFATHER LIST, explicit and shrinking.
+//
+// resolve-cost.ts is the one honest way to get a product cost: it ranks a recorded transaction
+// above the catalogue estimate, reports unknown as null (never 0), and carries provenance. These
+// 53 files still read pos_products.cost_price directly in a .select(), so they can still show the
+// fabricated price*0.4 figure (72 of 76 active costed products carry it to the cent) while
+// resolver-backed surfaces show the truth. Two answers to one question is worse than one wrong
+// answer, because it looks fixed.
+//
+// This is an ALLOWLIST, not a blanket exemption: each file is named so migrating one and removing
+// it here is a measurable step, and adding a NEW direct read anywhere else fails the push. The
+// deliverable metric is this list's length. Started at 53 (MS10 phase 1).
+const COST_READ_ALLOWLIST = [
+  'src/app/api/admin/businesses/[id]/route.ts',
+  'src/app/api/aria/bundle-builder/route.ts',
+  'src/app/api/aria/competitor-prices/auto-adjust/route.ts',
+  'src/app/api/aria/competitor-prices/route.ts',
+  'src/app/api/aria/dynamic-pricing/route.ts',
+  'src/app/api/aria/grn-assist/route.ts',
+  'src/app/api/aria/inventory-insight/route.ts',
+  'src/app/api/aria/page-insight/route.ts',
+  'src/app/api/aria/pos-chat/route.ts',
+  'src/app/api/aria/price-check/route.ts',
+  'src/app/api/aria/price-intelligence/route.ts',
+  'src/app/api/aria/product-insights/route.ts',
+  'src/app/api/aria/promo-suggest/route.ts',
+  'src/app/api/aria/receipt-scan/route.ts',
+  'src/app/api/aria/supplier-reorder/route.ts',
+  'src/app/api/aria/weekly-order/route.ts',
+  'src/app/api/inventory/app/[slug]/expiring/route.ts',
+  'src/app/api/pos/cart-intelligence/route.ts',
+  'src/app/api/pos/import/barcode-lookup/route.ts',
+  'src/app/api/pos/price-tickets/route.ts',
+  'src/app/api/pos/products/[id]/route.ts',
+  'src/app/api/pos/products/route.ts',
+  'src/app/api/pos/products/scan/route.ts',
+  'src/app/api/pos/reports/[type]/route.ts',
+  'src/app/api/pos/reports/closure/[id]/route.ts',
+  'src/app/api/pos/sales/[id]/route.ts',
+  'src/app/api/pos/warehouse/replenish/route.ts',
+  'src/app/api/suppliers/compare/route.ts',
+  'src/app/api/warehouse/ai-order-suggestions/route.ts',
+  'src/app/api/warehouse/purchase-orders/[id]/receive/route.ts',
+  'src/app/api/warehouse/suppliers/[id]/prices/route.ts',
+  'src/app/api/wholesale/orders/[id]/items/route.ts',
+  'src/app/api/wholesale/orders/from-email/route.ts',
+  'src/lib/agents/flash-revenue-agent.ts',
+  'src/lib/agents/inventory-financing-agent.ts',
+  'src/lib/agents/menu-engineering-agent.ts',
+  'src/lib/agents/pricing-agent.ts',
+  'src/lib/agents/reorder-agent.ts',
+  'src/lib/agents/waste-elimination-agent.ts',
+  'src/lib/aria-tools.ts',
+  'src/lib/aria/ask/action-executor.ts',
+  'src/lib/aria/ask/action-planner.ts',
+  'src/lib/aria/ask/files.ts',
+  'src/lib/aria/context.ts',
+  'src/lib/aria/deliverables.ts',
+  'src/lib/aria/hypothesis/counterfactual.ts',
+  'src/lib/aria/hypothesis/generate.ts',
+  'src/lib/aria/radar/loss-detector.ts',
+  'src/lib/inventory/guidance.ts',
+  'src/lib/inventory/owner-agent.ts',
+  'src/lib/inventory/replenishment-agent.ts',
+  'src/lib/inventory/reports.ts',
+  'src/lib/reports/weekly-data.ts',
 ]
 
 interface Violation {
@@ -130,6 +202,18 @@ function scan(diff: string): Violation[] {
         if (/rest\.clicksend\.com|api\.clicksend\.com/.test(text)) {
           violations.push({ file: currentFile, line: newLineNo, rule: 'direct-sms-provider-call', text: text.trim() })
         }
+
+        // MS10 phase 1 — NO NEW DIRECT READS OF THE PRODUCT COST COLUMN.
+        //
+        // A .select() list naming cost_price bypasses resolve-cost.ts, and with it the tier order
+        // (recorded transaction beats estimate), the unknown-is-null rule, and provenance. On live
+        // data a direct read returns the fabricated price*0.4 figure for 72 of 76 products, so a
+        // new one silently reintroduces the ~60%-margin lie somewhere the fixed surfaces can't see.
+        // Scoped to ADDED lines; the 53 pre-existing reader files are grandfathered BY NAME in
+        // COST_READ_ALLOWLIST above so the migration is measurable file by file.
+        if (/\.select\(\s*['"`][^'"`]*\bcost_price\b/.test(text) && !COST_READ_ALLOWLIST.includes(currentFile)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'direct-cost-read', text: text.trim() })
+        }
       }
 
       const arr = addedLinesByFile.get(currentFile) ?? []
@@ -195,7 +279,10 @@ function main() {
   console.error('add REVOKE EXECUTE ... FROM PUBLIC, anon[, authenticated] in the same migration file as any new SECURITY DEFINER function;')
   console.error("send SMS with sendSMS() from src/lib/clicksend.ts (pass category: 'marketing' for anything promotional) rather than")
   console.error('calling rest.clicksend.com directly — the chokepoint is what checks sms_consent, honours the opt-out list, appends')
-  console.error('the STOP notice and writes the sms_send_log audit row. A raw fetch does none of those and looks identical when sent.')
+  console.error('the STOP notice and writes the sms_send_log audit row. A raw fetch does none of those and looks identical when sent;')
+  console.error('get product costs from resolveCostFor/resolveCostBatch (src/lib/inventory/resolve-cost.ts) instead of selecting')
+  console.error('cost_price directly — the raw column is a fabricated price*0.4 back-calculation on most rows, and only the resolver')
+  console.error('ranks real transactions above it, reports unknown as null, and carries the provenance tier the UI shows.')
   process.exit(1)
 }
 
