@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveCost, type ResolvedCost, type CostSource } from '@/lib/inventory/resolve-cost'
+import { resolveCostBatch, type ResolvedCost, type CostSource } from '@/lib/inventory/resolve-cost'
 import type { Grounding } from '@/lib/aria/compute/provenance'
 
 export interface StockValueRow {
@@ -66,6 +66,13 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
   const { data } = await q
   const rows = (data ?? []) as unknown as Row[]
 
+  // MS9 PHASE 2 — resolution goes through the canonical batch orchestrator, not a private inline
+  // resolveCost() over this query's own columns. The inline call carried the exact gating bug
+  // phase 1 fixed elsewhere: it never fetched a purchase-order price, so a product whose real cost
+  // lives on a PO (Cortado, Turmeric Latte) valued at the fabricated catalogue figure here while
+  // every other resolver-backed surface showed the corrected one. One orchestrator, one answer.
+  const costMap = await resolveCostBatch(supabase, businessId, outletId)
+
   let atCost = 0, atRetail = 0, valued = 0, unknown = 0, units = 0
   const unknownProducts: StockValuation['unknown_cost_products'] = []
   const products: StockValueRow[] = []
@@ -78,7 +85,7 @@ export async function computeStockValue(supabase: SupabaseClient, businessId: st
     const retailVal = Math.round(onHand * price * 100) / 100
     atRetail += onHand * price
 
-    const resolved: ResolvedCost = resolveCost({ item_cost: r.item_cost, last_item_cost: r.last_item_cost, cost_price: r.pos_products?.cost_price })
+    const resolved: ResolvedCost = costMap.get(r.product_id) ?? { cost: null, source: 'unknown', grounding: null }
     const name = r.pos_products?.name ?? 'Unknown'
     if (resolved.cost != null) {
       atCost += onHand * resolved.cost

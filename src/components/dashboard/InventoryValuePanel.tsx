@@ -1,13 +1,17 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { TruthBadge } from '@/components/ui'
+import { COST_SOURCE_LABEL } from '@/lib/inventory/resolve-cost'
 
 // INV-COST-1 — rich inventory-value surface (Stripe/Linear-grade). Hero (cost⇄retail + margin +
 // completeness) · ranked breakdown with provenance · cost-source legend · missing-cost callout with
 // inline add-cost. All four states (loading / error / empty / populated). Canonical data only — values
 // from items_on_hand × resolved cost; unknown-cost products are flagged, never counted as $0.
 
-type Source = 'outlet' | 'last_delivery' | 'catalogue' | 'unknown'
+// MS9 PHASE 2 — the FULL resolver vocabulary. This local type used to omit 'purchase_order', so
+// the panel would have crashed (`SOURCE_META[source]` → undefined → .label throws) for any product
+// resolved from a PO price — which phase 1 made real for Cortado and Turmeric Latte.
+type Source = 'outlet' | 'last_delivery' | 'purchase_order' | 'catalogue' | 'unknown'
 // INTEL-TRUTH-1 — grounding fields are additive on the API response (computeStockValue's return
 // shape), null when the underlying figure is unknown/not applicable.
 type Grounding = 'verified' | 'derived' | 'estimated'
@@ -25,11 +29,15 @@ const C = {
 const DISPLAY = "'Cormorant', Georgia, serif"
 const money = (n: number) => `A$${(Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+// Labels come from resolve-cost.ts's exported vocabulary — the panel's private copy is what let
+// 'purchase_order' go missing. Colors stay presentational and local; Record<Source, …> makes any
+// future missing tier a compile error rather than a runtime crash.
 const SOURCE_META: Record<Source, { label: string; color: string }> = {
-  outlet: { label: 'Outlet', color: C.green },
-  last_delivery: { label: 'Last delivery', color: C.gold },
-  catalogue: { label: 'Catalogue', color: '#A78BFA' },
-  unknown: { label: 'No cost', color: C.amber },
+  outlet: { label: COST_SOURCE_LABEL.outlet, color: C.green },
+  last_delivery: { label: COST_SOURCE_LABEL.last_delivery, color: C.gold },
+  purchase_order: { label: COST_SOURCE_LABEL.purchase_order, color: '#7FB897' },
+  catalogue: { label: COST_SOURCE_LABEL.catalogue, color: '#A78BFA' },
+  unknown: { label: COST_SOURCE_LABEL.unknown, color: C.amber },
 }
 
 function Chip({ source }: { source: Source }) {

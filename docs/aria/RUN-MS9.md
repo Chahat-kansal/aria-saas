@@ -38,7 +38,7 @@ the confidence statement, and the honest empty state — not the engine or the p
 
 ## PHASE 1 — TRANSACTIONS BEAT CATALOGUE
 
-**Commit:** *(recorded in phase 2's commit — never amend a pushed commit.)*
+**Commit:** `eb6cbb3f`
 
 ### The bug was in the orchestrators, not the order
 
@@ -87,6 +87,59 @@ decision.
 
 ### Gates
 `tsc` 0 · **`BUILD_EXIT=0`** · vitest green (see phase commit).
+
+### Parked
+None.
+
+
+---
+
+## PHASE 2 — EVERY NUMBER CARRIES ITS TIER
+
+**Commit:** *(recorded in phase 3's commit.)*
+
+### One vocabulary, exported from the tier's home
+
+`COST_SOURCE_LABEL` now lives in `resolve-cost.ts` beside the tiers themselves: *"from your
+purchase order"*, *"estimated from your catalogue"*, *"no cost recorded"* — trust calibration in
+the owner's words, which is the thing no POS does.
+
+### 🚨 Phase 1 had ARMED A CRASH, found and defused here
+
+`InventoryValuePanel` kept a **private copy** of the tier vocabulary — and its copy was missing
+`purchase_order` entirely (its local `Source` type too). The moment phase 1 let a PO price win,
+any Cortado or Turmeric Latte row would have hit `SOURCE_META[source] → undefined → .label` and
+**crashed the valuation panel**. Fixed by importing the shared labels and covering the full
+`CostSource` union, so a future missing tier is a compile error rather than a runtime crash. A
+private copy of a vocabulary is a crash with a delay on it.
+
+### A THIRD orchestrator had the same gating bug
+
+`stock-value.ts` ran its own inline `resolveCost()` over its own query — with **no PO data**, the
+same fetch-gating defect phase 1 fixed in the other two orchestrators. The valuation panel would
+have kept valuing Cortado at the fabricated $1.80 while every other surface showed $2.70. Now
+routed through `resolveCostBatch` — one orchestrator, one answer, and the tier a figure carries is
+the tier that actually resolved.
+
+### Also
+- Staff scan card: `cost basis · last_delivery` (raw enum) → the owner phrase.
+- `/api/pos/reports/inventory`: **zero UI consumers** and a `resolved?.cost ?? 0` fabricated-zero
+  inside — a dead endpoint with a lie in it. Logged, not decorated; candidate for cleanup, not
+  provenance.
+
+### Mutation
+Collapse all tiers to one label → **3 red**. Restored → 6/6 green.
+
+### Gates
+`tsc` 0 · **`BUILD_EXIT=0`** (clean rebuild — see incident below) · `vitest` 335/335 (30 files).
+
+### ⚠️ Incident: a concurrent-build corruption, caught by the gate rule
+The first phase-2 build wrote `BUILD_EXIT=1` (ENOENT on `_app.js.nft.json` in
+collect-build-traces) after I started a fresh build while the previous one was still finishing —
+the session's known two-builds-one-`.next` corruption. **The wrapper notification claimed
+"completed (exit code 0)" for that failed build**; only `BUILD_EXIT` told the truth, again.
+Remedied by killing the zombie build process (3.8 GB), clearing `.next`, and rebuilding once.
+`build.log` also picked up a NUL byte, so the gate greps now need `-a` — noted for the next run.
 
 ### Parked
 None.

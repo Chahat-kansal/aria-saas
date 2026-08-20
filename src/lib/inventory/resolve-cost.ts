@@ -41,6 +41,24 @@ const SOURCE_GROUNDING: Record<CostSource, Grounding | null> = {
   unknown: null,
 }
 
+/**
+ * MS9 PHASE 2 — the owner-facing phrase for each tier, exported from the ONE place the tier
+ * vocabulary lives so no surface grows its own copy. InventoryValuePanel already had a private
+ * SOURCE_META map, and it was missing 'purchase_order' entirely — so the moment phase 1 let a PO
+ * price win (Cortado, Turmeric Latte), any row rendering that source would have crashed the panel
+ * on `undefined.label`. A Record<CostSource, …> makes a missing tier a compile error instead.
+ *
+ * Phrases are calibrated to trust, not jargon: an owner should read HOW MUCH to believe the
+ * number, which is the thing no POS tells them.
+ */
+export const COST_SOURCE_LABEL: Record<CostSource, string> = {
+  outlet: 'from your recorded outlet cost',
+  last_delivery: 'from your last delivery',
+  purchase_order: 'from your purchase order',
+  catalogue: 'estimated from your catalogue',
+  unknown: 'no cost recorded',
+}
+
 function pos(n: unknown): number | null {
   const v = Number(n)
   return Number.isFinite(v) && v > 0 ? v : null

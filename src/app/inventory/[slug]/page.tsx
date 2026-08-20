@@ -5,6 +5,7 @@ import { P, JAKARTA, HARD_SHADOW, greetWord as pgreet, pipelDate, pfirst } from 
 import { PipelStatusBar, PipelTopBar, PipelGreeting, PipelTitle, PipelBottomNav, PipelSegment, PipelSectionHead, PipelHero, PipelTile, PipelNeed, PipelButton, PipelStat, PIcon } from '@/components/inventory/ui/pipel'
 import { PipelScanner } from '@/components/inventory/ui/PipelScanner'
 import { enqueueWrite, allWrites, removeWrite, markFailed, mintKey } from '@/lib/inventory/offline-queue'
+import { COST_SOURCE_LABEL } from '@/lib/inventory/resolve-cost'
 
 // INV-STAFF-APP-1 — staff inventory PWA. Phone-native shell, slug routing, per-staff PIN login, live Home
 // tool-hub. Matches the locked staff-app HTML (light theme, dashboard tokens, Cormorant + Outfit). Data is
@@ -1702,7 +1703,9 @@ export default function InventoryStaffApp() {
                   <PipelStat n={scanResult.units_per_day} k="sells / day" />
                   <PipelStat n={scanResult.days_of_cover != null ? scanResult.days_of_cover : '—'} k="days cover" tone={scanResult.days_of_cover != null && scanResult.days_of_cover < 7 ? 'alert' : undefined} />
                 </div>
-                <div style={{ fontSize: 10.5, color: P.muted, fontWeight: 600, textAlign: 'center', margin: '9px 0 12px' }}>cost basis · {scanResult.cost_source}</div>
+                {/* MS9 PHASE 2 — the tier in the owner's words, not the enum. 'cost basis · last_delivery'
+                    told a staffer nothing about how much to trust the margin above it. */}
+                <div style={{ fontSize: 10.5, color: P.muted, fontWeight: 600, textAlign: 'center', margin: '9px 0 12px' }}>cost {COST_SOURCE_LABEL[scanResult.cost_source as keyof typeof COST_SOURCE_LABEL] ?? scanResult.cost_source}</div>
                 {multiOutlet && (scanResult.locate?.length ?? 0) > 0 && (
                   <div style={{ marginBottom: 13 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: P.muted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '2px 2px 8px' }}>in stock by outlet</div>
