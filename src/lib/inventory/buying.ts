@@ -92,17 +92,55 @@ export async function reorderSuggestions(sb: SupabaseClient, businessId: string,
 
 export interface DraftLineIn { product_id: string; product_name: string; quantity: number; unit_cost: number | null }
 
+/**
+ * MS10 PHASE 6 — what a draft actually costs, honestly. PURE, because "never sum an unknown as
+ * zero" is a rule worth asserting without a database.
+ *
+ * priced_total covers ONLY the lines with a recorded/estimated cost; unpriced lines are COUNTED,
+ * never zeroed into the total. A draft whose every line is unpriced has NO total (null), because
+ * $0.00 there would be a claim, not a measurement — the same rule as variance value
+ * (INV-BASELINE-1) and stock value (INV-COST-1).
+ */
+export function draftTotals(lines: DraftLineIn[]): { priced_total: number | null; priced_count: number; unpriced_count: number } {
+  let total = 0
+  let priced = 0
+  let unpriced = 0
+  for (const l of lines) {
+    const qty = Number(l.quantity) || 0
+    if (qty <= 0) continue
+    if (l.unit_cost != null && Number(l.unit_cost) > 0) {
+      total += Number(l.unit_cost) * qty
+      priced++
+    } else {
+      unpriced++
+    }
+  }
+  const anyLines = priced + unpriced > 0
+  return {
+    priced_total: anyLines && priced === 0 ? null : Math.round(total * 100) / 100,
+    priced_count: priced,
+    unpriced_count: unpriced,
+  }
+}
+
 /** PART 2 — create a DRAFT PO (status='draft'). Does NOT send, does NOT change stock. Same header+lines shape the
  *  INV-2 Receive tile reads (order_id, product_id, product_name, quantity_ordered, unit_cost, line_total). */
-export async function createDraftPO(sb: SupabaseClient, businessId: string, supplierId: string, lines: DraftLineIn[], staffName: string): Promise<{ id: string; order_number: string; status: string; total: number } | null> {
+export async function createDraftPO(sb: SupabaseClient, businessId: string, supplierId: string, lines: DraftLineIn[], staffName: string): Promise<{ id: string; order_number: string; status: string; total: number; unpriced_lines: number } | null> {
   const clean = lines.filter(l => l.product_id && (Number(l.quantity) || 0) > 0)
   if (!supplierId || !clean.length) return null
-  const subtotal = Math.round(clean.reduce((s, l) => s + (Number(l.unit_cost) || 0) * (Number(l.quantity) || 0), 0) * 100) / 100
+  // MS10 PHASE 6 — the stored total covers PRICED lines only, and says so. The old reduce summed
+  // `Number(l.unit_cost) || 0`, so an unknown-cost line silently contributed $0.00 and the header
+  // presented a false exact total for the owner to approve.
+  const totals = draftTotals(clean)
+  const subtotal = totals.priced_total ?? 0
+  const honesty = totals.unpriced_count > 0
+    ? ` ⚠ ${totals.unpriced_count} of ${totals.priced_count + totals.unpriced_count} lines have no recorded cost — the total covers the ${totals.priced_count} priced line${totals.priced_count === 1 ? '' : 's'} only.`
+    : ''
   const orderNumber = `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
   const { data: po, error } = await sb.from('pos_purchase_orders').insert({
     business_id: businessId, supplier_id: supplierId, order_number: orderNumber, status: 'draft',
     subtotal, tax_amount: 0, total: subtotal, created_by: staffName, source: 'inventory_app',
-    notes: 'Draft from buying — awaiting owner approval',
+    notes: 'Draft from buying — awaiting owner approval.' + honesty,
   }).select('id, order_number, status, total').single()
   if (error || !po) return null
   const items = clean.map(l => ({
@@ -113,7 +151,12 @@ export async function createDraftPO(sb: SupabaseClient, businessId: string, supp
   }))
   const { error: le } = await sb.from('pos_purchase_order_items').insert(items)
   if (le) { await sb.from('pos_purchase_orders').delete().eq('id', po.id); return null } // don't leave a header with no lines
-  return { id: po.id as string, order_number: po.order_number as string, status: po.status as string, total: Number(po.total) || subtotal }
+  return {
+    id: po.id as string, order_number: po.order_number as string, status: po.status as string,
+    total: Number(po.total) || subtotal,
+    // Callers surfacing the total MUST surface this beside it, or the total reads as complete.
+    unpriced_lines: totals.unpriced_count,
+  }
 }
 
 /** PART 2 — OWNER approves → atomic draft→sent + send to the supplier (Resend email; CSV note if no email). The
