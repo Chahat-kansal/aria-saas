@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from 'react'
 // real velocity; nothing fabricated.
 
 type Abc = 'A' | 'B' | 'C' | 'dead'
-interface Row { product_id: string; name: string; units_per_day: number; abc_tier: Abc; reorder_point: number; target_stock: number; reorder_qty: number; on_hand: number; days_of_cover: number | null; below_reorder: boolean; suggested_qty: number; review: boolean }
+interface Row { product_id: string; name: string; units_per_day: number; abc_tier: Abc; reorder_point: number; target_stock: number; reorder_qty: number; on_hand: number; days_of_cover: number | null; below_reorder: boolean; suggested_qty: number; review: boolean; no_history?: boolean; cover_confidence?: 'ok' | 'low' | 'none'; confidence_note?: string | null }
 interface Settings { lead_time_days: number; buffer_weeks: number; review_cycle_days: number; default_reorder_qty: number; min_velocity_per_day: number }
 interface Data { settings: Settings; rows: Row[]; below_count: number; reviewed_count: number }
 
@@ -91,6 +91,11 @@ export default function InventoryReorderPanel() {
   )
 
   const below = data.rows.filter(r => r.below_reorder)
+  // MS9 PHASE 6 — "nothing to order" and "we can't tell" are different facts. A product counts as
+  // forecastable only with real history AND a nonzero velocity; when NONE qualifies, saying
+  // "everything is above its reorder point" would be a false all-clear built on an absence of data.
+  const forecastable = data.rows.filter(r => !r.no_history && r.units_per_day > 0).length
+  const neverSold = data.rows.filter(r => r.no_history).length
   const parRows = [...data.rows].sort((a, b) =>
     sort === 'velocity' ? b.units_per_day - a.units_per_day
     : sort === 'tier' ? (['A', 'B', 'C', 'dead'].indexOf(a.abc_tier) - ['A', 'B', 'C', 'dead'].indexOf(b.abc_tier))
@@ -122,7 +127,20 @@ export default function InventoryReorderPanel() {
           <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Aria suggests — replenish</p>
           <span style={{ fontSize: 12, color: below.length ? C.amber : C.dim }}>{below.length} below reorder point{data.reviewed_count ? ` · ${data.reviewed_count} to review` : ''}</span>
         </div>
-        {below.length === 0 ? (
+        {below.length === 0 && forecastable === 0 ? (
+          /* MS9 PHASE 6 — the honest empty state. Not a blank panel, not a fabricated all-clear:
+             what is missing, why it matters, and what fills it. */
+          <div style={{ padding: 24, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border, textAlign: 'center' }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>Not enough sales history to forecast yet</p>
+            <p style={{ fontSize: 12.5, color: C.dim, lineHeight: 1.6, maxWidth: 480, margin: '0 auto' }}>
+              Days-of-cover and reorder suggestions are computed from your completed sales, and right now
+              {neverSold > 0 ? ` ${neverSold} product${neverSold === 1 ? ' has' : 's have'} never sold and the rest have` : ' your products have'} too little
+              recent history to forecast honestly. Nothing is broken — sell through the till and this
+              panel fills itself. A stocktake also helps: it confirms what&apos;s actually on hand, so the
+              first forecasts start from a number someone counted.
+            </p>
+          </div>
+        ) : below.length === 0 ? (
           <div style={{ padding: 20, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border, fontSize: 13, color: C.dim, textAlign: 'center' }}>✓ Everything is above its reorder point — nothing to order right now.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -134,9 +152,15 @@ export default function InventoryReorderPanel() {
                   </div>
                   <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{r.on_hand} on hand · {r.units_per_day}/day · reorder at {r.reorder_point}</div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: coverColor(r.days_of_cover), lineHeight: 1 }}>{r.days_of_cover ?? '—'}<span style={{ fontSize: 10, fontStyle: 'normal', color: C.dim }}> days</span></div>
+                <div style={{ textAlign: 'right', maxWidth: 190 }}>
+                  {/* MS9 PHASE 5 — a cover date from thin evidence SAYS SO instead of standing
+                      there looking precise. 'low' = under 14 days observed (two weekly cycles) or
+                      under 5 sales in the window. */}
+                  <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontSize: 22, fontWeight: 600, color: coverColor(r.days_of_cover), lineHeight: 1 }}>{r.days_of_cover != null ? `~${r.days_of_cover}` : '—'}<span style={{ fontSize: 10, fontStyle: 'normal', color: C.dim }}> days</span></div>
                   <div style={{ fontSize: 10, color: C.dim }}>of cover left</div>
+                  {r.cover_confidence === 'low' && r.confidence_note && (
+                    <div style={{ fontSize: 9.5, color: C.amber, marginTop: 3, lineHeight: 1.3 }}>{r.confidence_note}</div>
+                  )}
                 </div>
                 <button style={{ padding: '8px 12px', borderRadius: 9, border: 'none', background: C.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Order {r.suggested_qty}</button>
               </div>
