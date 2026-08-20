@@ -274,6 +274,49 @@ export async function captureReceiptCost(supabase: SupabaseClient, params: { bus
 }
 
 /** Owner-facing "costs needed" — products whose cost resolves to unknown at this outlet. */
+/**
+ * MS11 PHASE 3 — WHAT THE OWNER SEES ABOUT THEIR OWN COSTS.
+ *
+ * Most of this catalogue's costs are cost_price = price × 0.4 to the cent — the residue of a
+ * removed price*0.6 fallback, not figures anyone recorded (72 of 76 active costed products at
+ * MCP-verified count, 2026-08-19). Every margin computed over one is 60% BY CONSTRUCTION.
+ * The owner had never been told. This helper is the live aggregate behind that disclosure:
+ * counted from the database AT CALL TIME, never a hardcoded number.
+ */
+export interface CostQualitySummary {
+  active_products: number
+  active_costed: number
+  derived_count: number
+  no_cost_count: number
+  derived: Array<{ id: string; name: string; price: number; cost_price: number }>
+}
+
+export async function summariseCostQuality(supabase: SupabaseClient, businessId: string): Promise<CostQualitySummary> {
+  const { data } = await supabase.from('pos_products')
+    .select('id, name, price, cost_price')
+    .eq('business_id', businessId).eq('is_active', true).limit(10000)
+  const rows = data ?? []
+  const derived: CostQualitySummary['derived'] = []
+  let costed = 0
+  for (const r of rows) {
+    const cp = Number(r.cost_price)
+    if (Number.isFinite(cp) && cp > 0) {
+      costed++
+      if (looksBackCalculatedCost(r.price, r.cost_price)) {
+        derived.push({ id: r.id as string, name: (r.name as string) ?? 'Item', price: Number(r.price) || 0, cost_price: cp })
+      }
+    }
+  }
+  derived.sort((a, b) => b.price - a.price)
+  return {
+    active_products: rows.length,
+    active_costed: costed,
+    derived_count: derived.length,
+    no_cost_count: rows.length - costed,
+    derived,
+  }
+}
+
 export async function listMissingCosts(supabase: SupabaseClient, businessId: string, outletId: string | null): Promise<Array<{ id: string; name: string; price: number }>> {
   const costs = await resolveCostBatch(supabase, businessId, outletId)
   const unknownIds = [...costs.entries()].filter(([, c]) => c.source === 'unknown').map(([id]) => id)

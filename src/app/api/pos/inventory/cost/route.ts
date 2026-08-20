@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { resolveOutletId } from '@/lib/inventory/outlet-stock'
-import { listMissingCosts } from '@/lib/inventory/resolve-cost'
+import { listMissingCosts, summariseCostQuality } from '@/lib/inventory/resolve-cost'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 
 // INV-COST-1 — owner cost surface. GET = stock-value-at-cost/retail + the "costs needed" list (products
@@ -14,11 +14,13 @@ import { computeStockValue } from '@/lib/inventory/stock-value'
 
 async function _GET(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {
   const outletId = await resolveOutletId(supabaseAdmin, bid, new URL(req.url).searchParams.get('outlet_id'))
-  const [valuation, missing] = await Promise.all([
+  const [valuation, missing, costQuality] = await Promise.all([
     computeStockValue(supabaseAdmin, bid, outletId),
     listMissingCosts(supabaseAdmin, bid, outletId),
+    // MS11 PHASE 3 — the derived-cost disclosure. Live count at request time, never hardcoded.
+    summariseCostQuality(supabaseAdmin, bid),
   ])
-  return NextResponse.json({ outlet_id: outletId, stock_value: valuation, missing_costs: missing })
+  return NextResponse.json({ outlet_id: outletId, stock_value: valuation, missing_costs: missing, cost_quality: costQuality })
 }
 
 async function _POST(req: Request, _context: unknown, { businessId: bid }: BusinessContext) {

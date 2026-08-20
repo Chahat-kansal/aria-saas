@@ -18,7 +18,8 @@ type Grounding = 'verified' | 'derived' | 'estimated'
 interface Row { id: string; name: string; units: number; unit_cost: number | null; cost_source: Source; cost_grounding: Grounding | null; cost_price_suspect?: boolean; value_at_cost: number | null; price: number; value_at_retail: number; margin_pct: number | null; margin_grounding: Grounding | null }
 interface Valuation { at_cost: number; at_retail: number; products_total: number; products_valued: number; products_unknown_cost: number; units_on_hand: number; margin_pct: number | null; margin_grounding: Grounding | null; at_cost_grounding: Grounding | null; margin_incomplete: boolean; products: Row[] }
 interface Missing { id: string; name: string; price: number }
-interface Payload { stock_value: Valuation; missing_costs: Missing[] }
+interface CostQuality { active_products: number; active_costed: number; derived_count: number; no_cost_count: number; derived: Array<{ id: string; name: string; price: number; cost_price: number }> }
+interface Payload { stock_value: Valuation; missing_costs: Missing[]; cost_quality?: CostQuality }
 
 // Dashboard tokens + INV-COST accents.
 const C = {
@@ -52,6 +53,7 @@ export default function InventoryValuePanel() {
   const [mode, setMode] = useState<'cost' | 'retail'>('cost')
   const [sort, setSort] = useState<'value' | 'margin'>('value')
   const [costInputs, setCostInputs] = useState<Record<string, string>>({})
+  const [suspectOnly, setSuspectOnly] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -139,7 +141,8 @@ export default function InventoryValuePanel() {
 
   // ── POPULATED ──
   const heroValue = mode === 'cost' ? sv.at_cost : sv.at_retail
-  const rows = [...sv.products].sort((a, b) => sort === 'margin'
+  const cq = data?.cost_quality ?? null
+  const rows = [...sv.products].filter(r => !suspectOnly || r.cost_price_suspect).sort((a, b) => sort === 'margin'
     ? (b.margin_pct ?? -1) - (a.margin_pct ?? -1)
     : ((mode === 'cost' ? (b.value_at_cost ?? -1) - (a.value_at_cost ?? -1) : b.value_at_retail - a.value_at_retail)))
   const topRows = rows.slice(0, 20)
@@ -176,6 +179,29 @@ export default function InventoryValuePanel() {
             ))}
           </div>
         </div>
+
+        {/* MS11 PHASE 3 — the derived-cost disclosure. The owner is TOLD, with the live count,
+            what it means for the margins on this panel, and where the fix is. Counts come from
+            summariseCostQuality at request time — never hardcoded. No auto-correction, no bulk
+            edit, no guessed replacement: the fix is the same per-product real-cost entry the
+            missing-cost callout uses. */}
+        {cq && cq.derived_count > 0 && (
+          <div style={{ margin: '0 16px 14px', padding: '12px 16px', borderRadius: 12, background: C.amber + '14', border: '1px solid ' + C.amber + '40' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.amber, marginBottom: 4 }}>
+              {cq.derived_count} of your {cq.active_costed} costed products have a cost that looks derived from its price
+            </p>
+            <p style={{ fontSize: 12, color: C.dim, lineHeight: 1.5 }}>
+              Each is exactly 40% of the sell price — the signature of a back-calculated figure, not one recorded
+              from a purchase. The margins shown for those products are 60% by construction, not a measurement.
+              Record a real cost (a delivery or purchase-order price) to replace each one — the amber
+              &ldquo;cost looks derived from price&rdquo; tags below mark them{cq.no_cost_count > 0 ? ', and ' + cq.no_cost_count + ' more products have no cost recorded at all' : ''}.
+            </p>
+            <button onClick={() => setSuspectOnly(v => !v)}
+              style={{ marginTop: 8, padding: '5px 12px', borderRadius: 8, border: '1px solid ' + C.amber + '60', background: suspectOnly ? C.amber : 'transparent', color: suspectOnly ? '#0E1812' : C.amber, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {suspectOnly ? 'Showing derived costs only — show all' : 'Show only derived costs'}
+            </button>
+          </div>
+        )}
 
         {/* completeness meter */}
         <div style={{ marginTop: 18 }}>
