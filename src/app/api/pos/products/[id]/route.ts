@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { toNullableUuid } from '@/lib/utils/uuid-helpers'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
+import { packConversion, applyPackSizeChange } from '@/lib/inventory/uom'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -274,6 +275,48 @@ async function _PATCH(req: NextRequest, { params }: Params) {
     const primary = images.find((i: any) => i.is_primary)
     if (primary) await supabase.from('pos_products').update({ image_url: primary.image_url, updated_at: new Date().toISOString() }).eq('id', id).eq('business_id', bid)
     return NextResponse.json({ ok: true })
+  }
+
+  // ── pack_size_change ────────────────────────────────────────────
+  // MS11 PHASE 5 — A PACK-SIZE CHANGE CANNOT REWRITE HISTORY. Stored stock (base units) and
+  // recorded costs are immutable to it BY CONSTRUCTION: applyPackSizeChange returns only the two
+  // pack columns, and this action writes nothing else. The response carries the per-outlet grid
+  // (stock / last cost / average cost — the Shopfront "Case Quantity Adjustments" idea) as a
+  // PREVIEW with nothing pre-ticked: without body.apply === true, nothing is written at all.
+  if (action === 'pack_size_change') {
+    const { data: prod } = await supabase.from('pos_products')
+      .select('id, name, unit, purchase_uom, purchase_uom_qty, stock_quantity, cost_price')
+      .eq('id', id).eq('business_id', bid).maybeSingle()
+    if (!prod) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+
+    const change = applyPackSizeChange(body.new_purchase_uom, body.new_purchase_uom_qty)
+    if (!change.ok) return NextResponse.json({ error: change.reason }, { status: 400 })
+
+    const { data: inv } = await supabase.from('pos_outlet_inventory')
+      .select('outlet_id, items_on_hand, item_cost, last_item_cost')
+      .eq('business_id', bid).eq('product_id', id)
+    const grid = (inv ?? []).map(r => ({
+      outlet_id: r.outlet_id,
+      items_on_hand: r.items_on_hand,   // base units — will NOT change
+      item_cost: r.item_cost,           // will NOT change
+      last_item_cost: r.last_item_cost, // will NOT change
+    }))
+
+    const current = packConversion(prod)
+    const payload = {
+      product_id: id,
+      current_conversion: current,      // today: a refusal with a reason (purchase_uom null everywhere)
+      proposed: change.patch,
+      grid,
+      note: 'Stored stock and costs are in base units and will not change. The new pack size applies to future conversions only.',
+    }
+    if (body.apply !== true) return NextResponse.json({ ...payload, applied: false })
+
+    const { error: packErr } = await supabase.from('pos_products')
+      .update({ ...change.patch, updated_at: new Date().toISOString() })
+      .eq('id', id).eq('business_id', bid)
+    if (packErr) return NextResponse.json({ error: packErr.message }, { status: 500 })
+    return NextResponse.json({ ...payload, applied: true, changed_fields: Object.keys(change.patch) })
   }
 
   // ── Legacy fallback (no action) ─────────────────────────────────
