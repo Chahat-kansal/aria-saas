@@ -65,6 +65,21 @@ const EXEMPT_PATHS = [
 // This is an ALLOWLIST, not a blanket exemption: each file is named so migrating one and removing
 // it here is a measurable step, and adding a NEW direct read anywhere else fails the push. The
 // deliverable metric is this list's length. Started at 53 (MS10 phase 1); 50 after phase 2 (price-check, product-insights, price-intelligence); 48 after phase 3 (both hypothesis files); 44 after MS11 phase 1 (pos-chat, guidance, owner-agent, replenishment-agent); 42 after MS11 phase 2 (reports/[type], bundle-builder — closure and page-insight stay: their reads are sale-line/movement SNAPSHOTS, the correct historical source, not catalogue reads).
+// MS12 PHASE 6 — files that may still WRITE the tombstoned UOM columns (items_per_case,
+// case_quantity, cases_*, sell_uom; see src/lib/inventory/uom.ts for the tombstone record).
+// These are the edit-form/mapping surfaces MS12 phase 5 deliberately left (decision table:
+// import fixed, edit forms listed) — everything else must write the canonical
+// purchase_uom/purchase_uom_qty pair. Shrink this list; never grow it.
+const UOM_TOMBSTONE_WRITE_ALLOWLIST = [
+  'src/app/api/pos/products/route.ts',
+  'src/app/api/pos/products/[id]/route.ts',
+  'src/app/api/pos/import/map-columns/route.ts',
+  'src/components/pos/ProductForm.tsx',
+  'src/components/products/edit/ProductEditShell.tsx',
+  'src/components/products/edit/tabs/InventoryTab.tsx',
+  'src/components/products/industry/RetailProductFields.tsx',
+]
+
 const COST_READ_ALLOWLIST = [
   'src/app/api/admin/businesses/[id]/route.ts',
   'src/app/api/aria/competitor-prices/auto-adjust/route.ts',
@@ -203,6 +218,16 @@ function scan(diff: string): Violation[] {
         if (/\.select\(\s*['"`][^'"`]*\bcost_price\b/.test(text) && !COST_READ_ALLOWLIST.includes(currentFile)) {
           violations.push({ file: currentFile, line: newLineNo, rule: 'direct-cost-read', text: text.trim() })
         }
+
+        // Rule 7 — MS12 phase 6: a NEW write to a tombstoned UOM column. The object-key form
+        // (`items_per_case: value`) is the write signature — payload objects for insert/update/
+        // upsert. Reads (select strings) are untouched; type declarations in database.types.ts
+        // are exempt above. Points at uom.ts, which records why each column is dead.
+        if (/\b(items_per_case|case_quantity|cases_in_stock|sell_uom|cases_on_hand|cases_reorder_level|cases_reorder_amount|cases_reorder_limit|cases_max_on_hand)\s*:/.test(text)
+            && !/^\s*(\/\/|\*|interface |type )/.test(text)
+            && !UOM_TOMBSTONE_WRITE_ALLOWLIST.includes(currentFile)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'tombstoned-uom-write', text: text.trim() })
+        }
       }
 
       const arr = addedLinesByFile.get(currentFile) ?? []
@@ -271,7 +296,10 @@ function main() {
   console.error('the STOP notice and writes the sms_send_log audit row. A raw fetch does none of those and looks identical when sent;')
   console.error('get product costs from resolveCostFor/resolveCostBatch (src/lib/inventory/resolve-cost.ts) instead of selecting')
   console.error('cost_price directly — the raw column is a fabricated price*0.4 back-calculation on most rows, and only the resolver')
-  console.error('ranks real transactions above it, reports unknown as null, and carries the provenance tier the UI shows.')
+  console.error('ranks real transactions above it, reports unknown as null, and carries the provenance tier the UI shows;')
+  console.error('never write items_per_case/case_quantity/cases_*/sell_uom — those columns are TOMBSTONED (see')
+  console.error('src/lib/inventory/uom.ts): stock is BASE UNITS and the only live pack pair is purchase_uom + purchase_uom_qty.')
+  console.error('Convert at the boundary with packConversion()/importPackFields(); refuse ambiguity, never default a factor.')
   process.exit(1)
 }
 
