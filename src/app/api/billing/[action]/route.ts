@@ -52,7 +52,11 @@ async function _POST(req: Request, { params }: Params) {
     // client (createServerSupabaseClient) silently no-ops all these writes under RLS. Use the
     // service-role client instead, matching src/app/api/stripe/webhook/route.ts. Do NOT change the
     // other branches below (checkout/portal/GET) — those legitimately run with the user's session.
-    const { data: existing } = await supabaseAdmin.from('stripe_events').select('id').eq('id', event.id).maybeSingle();
+    // MS12 phase 4 — fail closed like the canonical handler: unreadable idempotency store → 500.
+    // NOTE this duplicate handler must NOT be registered in Stripe (see BILLING-MODEL.md); it
+    // skips on ANY existing row (stricter than the canonical processed-only skip).
+    const { data: existing, error: idemReadErr } = await supabaseAdmin.from('stripe_events').select('id').eq('id', event.id).maybeSingle();
+    if (idemReadErr) return NextResponse.json({ error: 'idempotency_store_unavailable' }, { status: 500 });
     if (existing) return NextResponse.json({ received: true });
 
     const { error: insertErr } = await supabaseAdmin.from('stripe_events').insert({ id: event.id, type: event.type, payload: event as unknown as Record<string, unknown> });

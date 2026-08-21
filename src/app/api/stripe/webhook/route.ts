@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { decideEventAction, priceIdToTier } from '@/lib/billing/webhook-guards'
+import { PLANS } from '@/lib/billing/plans'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
 
@@ -48,13 +50,9 @@ async function logChargeFee(charge: Stripe.Charge): Promise<void> {
   }
 }
 
-function tierFromPriceId(priceId: string | undefined): string {
-  if (!priceId) return 'starter'
-  if (priceId === process.env.STRIPE_PRICE_ID_PRO) return 'pro'
-  if (priceId === process.env.STRIPE_PRICE_ID_GROWTH) return 'growth'
-  if (priceId === process.env.STRIPE_PRICE_ID_STARTER) return 'starter'
-  return 'starter'
-}
+// MS12 PHASE 4 — tier mapping moved to webhook-guards.priceIdToTier: unknown price IDs now
+// REFUSE (null) instead of defaulting to 'starter'. The old copy, with unset env vars (true
+// today), would have labelled every subscription 'starter' regardless of price paid.
 
 export async function POST(req: Request) {
   const body = await req.text()
@@ -71,21 +69,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  // Idempotency — skip already-processed events
-  const { data: existing } = await supabaseAdmin
+  // Idempotency — FAIL CLOSED (MS12 phase 4). If the store can't be read or the marker can't be
+  // written, we refuse with 500 so Stripe retries later; processing without a dedupe record is
+  // how an event double-applies. The old code discarded both errors (RULE 7).
+  const { data: existing, error: idemReadErr } = await supabaseAdmin
     .from('stripe_events')
     .select('id, processed')
     .eq('id', event.id)
     .maybeSingle()
 
-  if (existing?.processed) {
+  const decision = decideEventAction(existing, idemReadErr)
+  if (decision === 'fail_closed') {
+    console.error('[stripe/webhook] idempotency store unreadable — refusing event', event.id, idemReadErr?.message)
+    return NextResponse.json({ error: 'idempotency_store_unavailable' }, { status: 500 })
+  }
+  if (decision === 'skip') {
     return NextResponse.json({ received: true })
   }
 
-  await supabaseAdmin.from('stripe_events').upsert(
+  const { error: idemWriteErr } = await supabaseAdmin.from('stripe_events').upsert(
     { id: event.id, type: event.type, processed: false, received_at: new Date().toISOString() },
     { onConflict: 'id' }
   )
+  if (idemWriteErr) {
+    console.error('[stripe/webhook] idempotency marker write failed — refusing event', event.id, idemWriteErr.message)
+    return NextResponse.json({ error: 'idempotency_store_unavailable' }, { status: 500 })
+  }
 
   try {
     // ── checkout.session.completed ─────────────────────────────────────────
@@ -93,7 +102,12 @@ export async function POST(req: Request) {
       const session = event.data.object as Stripe.Checkout.Session
       const businessId = session.metadata?.business_id
       const userId = session.metadata?.user_id ?? session.metadata?.userId
-      const tier = (session.metadata?.tier ?? session.metadata?.plan ?? 'starter') as string
+      // MS12 phase 4 — checkout metadata tier is validated at checkout creation (phase 3), but a
+      // webhook must not trust it blind: an unknown label updates LIFECYCLE fields only, never
+      // the tier/plan, and logs loudly. Status/period/ids only — nothing here moves money.
+      const metaTier = (session.metadata?.tier ?? session.metadata?.plan ?? null) as string | null
+      const tierKnown = metaTier !== null && metaTier in PLANS
+      if (metaTier !== null && !tierKnown) console.error('[stripe/webhook] unknown tier in checkout metadata — lifecycle updated, tier left alone:', metaTier)
       const stripeSubId = session.subscription as string
       const customerId = session.customer as string
 
@@ -102,7 +116,7 @@ export async function POST(req: Request) {
           business_id: businessId,
           stripe_customer_id: customerId,
           stripe_subscription_id: stripeSubId,
-          tier,
+          ...(tierKnown ? { tier: metaTier } : {}),
           status: 'active',
           trial_ends_at: null,
           updated_at: new Date().toISOString(),
@@ -111,7 +125,7 @@ export async function POST(req: Request) {
         // Also update businesses.plan for quick access
         if (userId) {
           await supabaseAdmin.from('businesses')
-            .update({ plan: tier, stripe_customer_id: customerId, stripe_subscription_id: stripeSubId })
+            .update({ ...(tierKnown ? { plan: metaTier } : {}), stripe_customer_id: customerId, stripe_subscription_id: stripeSubId })
             .eq('id', businessId)
             .eq('user_id', userId)
         }
@@ -123,7 +137,9 @@ export async function POST(req: Request) {
       const sub = event.data.object as Stripe.Subscription
       const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
       const priceId = sub.items.data[0]?.price.id
-      const tier = tierFromPriceId(priceId)
+      // REFUSE, don't guess: an unrecognised price ID updates lifecycle fields only.
+      const tier = priceIdToTier(priceId)
+      if (tier === null) console.error('[stripe/webhook] unknown price id — lifecycle updated, tier left alone:', priceId)
 
       // Find business by stripe_customer_id
       const { data: bSub } = await supabaseAdmin
@@ -135,7 +151,7 @@ export async function POST(req: Request) {
       if (bSub?.business_id) {
         await supabaseAdmin.from('business_subscriptions').update({
           stripe_subscription_id: sub.id,
-          tier,
+          ...(tier !== null ? { tier } : {}),
           status: sub.status,
           trial_ends_at: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
           current_period_start: new Date((sub as any).current_period_start * 1000).toISOString(),
@@ -145,9 +161,35 @@ export async function POST(req: Request) {
           updated_at: new Date().toISOString(),
         }).eq('business_id', bSub.business_id)
 
-        await supabaseAdmin.from('businesses')
-          .update({ plan: tier })
-          .eq('id', bSub.business_id)
+        if (tier !== null) {
+          await supabaseAdmin.from('businesses')
+            .update({ plan: tier })
+            .eq('id', bSub.business_id)
+        }
+      }
+    }
+
+    // ── customer.subscription.trial_will_end (MS12 phase 4) ────────────────
+    // Stripe sends this ~3 days before a trial converts. Notification only — no money moves.
+    if (event.type === 'customer.subscription.trial_will_end') {
+      const sub = event.data.object as Stripe.Subscription
+      const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
+      const { data: bSub } = await supabaseAdmin
+        .from('business_subscriptions')
+        .select('business_id')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle()
+      if (bSub?.business_id) {
+        await supabaseAdmin.from('aria_notifications').upsert({
+          business_id: bSub.business_id,
+          type: 'trial_ending',
+          title: 'Your trial ends soon',
+          message: 'Your Aria trial ends in about 3 days. Add a payment method to keep everything running.',
+          action_url: '/dashboard/billing',
+          action_label: 'Manage billing',
+          read: false,
+          created_at: new Date().toISOString(),
+        }, { onConflict: 'business_id,type', ignoreDuplicates: false })
       }
     }
 

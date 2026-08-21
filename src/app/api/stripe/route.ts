@@ -6,6 +6,7 @@ import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { headers } from 'next/headers'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { priceIdToTier } from '@/lib/billing/webhook-guards'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -16,12 +17,9 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-function priceToTier(priceId: string | undefined): string {
-  if (priceId === process.env.STRIPE_PRICE_ID_STARTER) return 'starter'
-  if (priceId === process.env.STRIPE_PRICE_ID_GROWTH) return 'growth'
-  if (priceId === process.env.STRIPE_PRICE_ID_PRO) return 'pro'
-  return 'starter'
-}
+// MS12 phase 4 — third copy of the tier mapping replaced by the shared guard (unknown → null,
+// never a silent 'starter'). This handler is a DUPLICATE kept per RULE 0 — do not register its
+// endpoint in Stripe (see BILLING-MODEL.md).
 
 async function _GET() {
   const supabase = createServerSupabaseClient()
@@ -76,7 +74,8 @@ async function _POST(request: NextRequest) {
         const sub = event.data.object as Stripe.Subscription
         const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
         const priceId = sub.items.data[0]?.price.id
-        const tier = priceToTier(priceId)
+        const tier = priceIdToTier(priceId)
+        if (tier === null) console.error('[stripe/route] unknown price id — lifecycle updated, tier left alone:', priceId)
 
         const { data: bSub } = await supabase
           .from('business_subscriptions')
@@ -87,7 +86,7 @@ async function _POST(request: NextRequest) {
         if (bSub) {
           await supabase.from('business_subscriptions').update({
             stripe_subscription_id: sub.id,
-            tier,
+            ...(tier !== null ? { tier } : {}),
             status: sub.status,
             trial_ends_at: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
             current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
