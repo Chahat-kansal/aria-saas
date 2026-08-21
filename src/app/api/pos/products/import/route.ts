@@ -7,6 +7,7 @@ import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/l
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Papa from 'papaparse'
 import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
+import { importPackFields } from '@/lib/inventory/uom'
 
 const HEADER_MAP: Record<string, string> = {
   // Name
@@ -144,7 +145,14 @@ async function _POST(req: Request, _context: unknown, { businessId: bid }: Busin
         case 'barcode': product.barcode = value; break
         case 'stock_quantity': product.stock_quantity = Math.round(Number(value) || 0); break
         case 'reorder_point': product.reorder_point = Math.round(Number(value) || 0); break
-        case 'items_per_case': product.items_per_case = Math.round(Number(value) || 0); break
+        case 'items_per_case': {
+          // MS12 PHASE 5 — canonical pair, not the tombstoned column. Invalid values refuse the
+          // row (checked after the field loop, where the row's name is known).
+          const packResult = importPackFields(null, value)
+          if (!packResult.ok) { product.__pack_refusal = packResult.reason }
+          else if (packResult.patch) { product.purchase_uom = packResult.patch.purchase_uom; product.purchase_uom_qty = packResult.patch.purchase_uom_qty }
+          break
+        }
         case 'alcohol_percentage': product.alcohol_percentage = Number(value) || null; break
         case 'standard_drinks': product.standard_drinks = Number(value) || null; break
         case 'volume': product.volume = Number(value.replace(/[^0-9.]/g, '')) || null; break
@@ -165,6 +173,12 @@ async function _POST(req: Request, _context: unknown, { businessId: bid }: Busin
       if (errors.length < 10) errors.push(`Row ${i + 2}: missing product name`)
       continue
     }
+    if (product.__pack_refusal) {
+      skipped++
+      if (errors.length < 10) errors.push(`Row ${i + 2} (${String(product.name)}): ${String(product.__pack_refusal)}`)
+      continue
+    }
+    delete product.__pack_refusal
     if (product.price === undefined || product.price === null) product.price = 0
 
     // Track products with no image so we can auto-fetch after upsert

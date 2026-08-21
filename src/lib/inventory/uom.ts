@@ -83,6 +83,34 @@ export function fromBaseUnits(baseQty: number, conv: PackConversion): { ok: true
 }
 
 /**
+ * MS12 PHASE 5 — THE IMPORT BOUNDARY. A CSV's "Units Per Case" / "Case Quantity" column is an
+ * EXPLICIT pack declaration: the unit is 'case' (it is the column's own name), the quantity is
+ * the cell. It converts to the canonical pair at the front door — it must never again land in
+ * the tombstoned items_per_case/case_quantity columns, because an import path is exactly how a
+ * dead column gets quietly repopulated.
+ *
+ * Refusals (MS11 phase-6 rule, applied at the front door): a non-positive/non-numeric value
+ * refuses the ROW with a reason; two mapped pack columns that DISAGREE refuse as ambiguous —
+ * never pick one, never default.
+ */
+export function importPackFields(caseQuantity: unknown, itemsPerCase: unknown):
+  | { ok: true; patch: PackSizeChange | null }
+  | { ok: false; reason: string } {
+  const vals: number[] = []
+  for (const raw of [caseQuantity, itemsPerCase]) {
+    if (raw == null || raw === '') continue
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n <= 0) return { ok: false, reason: 'pack size "' + String(raw) + '" is not a positive number — row refused, never defaulted' }
+    vals.push(n)
+  }
+  if (vals.length === 0) return { ok: true, patch: null }
+  if (vals.length === 2 && vals[0] !== vals[1]) {
+    return { ok: false, reason: 'case_quantity (' + String(vals[0]) + ') and items_per_case (' + String(vals[1]) + ') disagree — ambiguous pack size, row refused' }
+  }
+  return { ok: true, patch: { purchase_uom: 'case', purchase_uom_qty: vals[0] } }
+}
+
+/**
  * MS11 PHASE 5 — the ONLY fields a pack-size change may write.
  *
  * The return type is the whole guarantee: a caller applying this patch cannot touch

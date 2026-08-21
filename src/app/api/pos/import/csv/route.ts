@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { importPackFields } from '@/lib/inventory/uom'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -172,10 +173,17 @@ async function _POST(req: Request) {
         const reorder_point = reorderRaw             ? parseInt(reorderRaw) || null : null;
         const reorderQtyRaw = mapping.reorder_qty    ? row[mapping.reorder_qty]?.trim()    : null;
         const reorder_qty   = reorderQtyRaw          ? parseInt(reorderQtyRaw) || null : null;
+        // MS12 PHASE 5 — pack columns convert to the canonical base-unit pair at the front door
+        // (uom.ts). The tombstoned case_quantity/items_per_case columns are NO LONGER WRITTEN;
+        // an invalid or self-contradictory pack size refuses the ROW with a reason.
         const caseQRaw      = mapping.case_quantity  ? row[mapping.case_quantity]?.trim()  : null;
-        const case_quantity = caseQRaw               ? parseInt(caseQRaw) || null : null;
         const ipcRaw        = mapping.items_per_case ? row[mapping.items_per_case]?.trim() : null;
-        const items_per_case= ipcRaw                 ? parseInt(ipcRaw) || null : null;
+        const packResult    = importPackFields(caseQRaw || null, ipcRaw || null);
+        if (!packResult.ok) {
+          errors.push(`${name}: ${packResult.reason}`);
+          skipped++;
+          continue;
+        }
         const vintageRaw    = mapping.vintage        ? row[mapping.vintage]?.trim()        : null;
         const vintage       = vintageRaw             ? parseInt(vintageRaw) || null : null;
         const shelfRaw      = mapping.shelf_life_days? row[mapping.shelf_life_days]?.trim(): null;
@@ -205,7 +213,8 @@ async function _POST(req: Request) {
         const optionals: Record<string, unknown> = {
           sku, barcode, category, brand, description, supplier_name, supplier_sku,
           notes, colour, size, country_of_origin, container_type, bin_location,
-          cost_price, rrp, reorder_point, reorder_qty, case_quantity, items_per_case,
+          cost_price, rrp, reorder_point, reorder_qty,
+          purchase_uom: packResult.patch?.purchase_uom, purchase_uom_qty: packResult.patch?.purchase_uom_qty,
           vintage, shelf_life_days, weight, weight_unit: weight ? weight_unit : undefined,
           volume, volume_unit: volume ? volume_unit : undefined,
           alcohol_percentage, standard_drinks,
