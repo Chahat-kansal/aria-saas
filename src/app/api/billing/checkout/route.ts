@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getPriceId } from '@/lib/stripe'
+import { PLANS } from '@/lib/billing/plans'
 
 export async function POST(req: Request) {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -21,7 +22,15 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}))
-  const tier = (body.tier || body.plan) as 'starter' | 'growth' | 'pro'
+  // MS12 PHASE 3 — the tier is VALIDATED against the registry, not cast. This string reaches
+  // Stripe metadata and comes back through the webhook into business_subscriptions.tier — an
+  // arbitrary body value here would become a live tier row (exactly how orphan vocabulary is
+  // born). Unknown tiers are refused, not defaulted.
+  const rawTier = String(body.tier || body.plan || '')
+  if (!(rawTier in PLANS)) {
+    return NextResponse.json({ error: 'unknown_tier', message: `Tier must be one of: ${Object.keys(PLANS).join(', ')}` }, { status: 400 })
+  }
+  const tier = rawTier as 'starter' | 'growth' | 'pro'
 
   let priceId: string
   try { priceId = getPriceId(tier) }

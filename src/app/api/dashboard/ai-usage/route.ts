@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
+import { normalizePlan } from '@/lib/plans/resolve-plan'
 
 const PLAN_DEFAULTS: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
 
@@ -27,7 +28,10 @@ async function _GET(_req: Request, _context: unknown, { businessId: bid }: Busin
     supabaseAdmin.from('aria_ai_calls').select('agent_key, cost_usd_cents, created_at').eq('business_id', bid).gte('created_at', thirtyDaysAgo.toISOString()).gt('cost_usd_cents', 0),
   ])
 
-  const budget = (sub?.sonnet_monthly_budget_cents as number) ?? PLAN_DEFAULTS[(sub?.tier as string) ?? ''] ?? 3000
+  // MS12 PHASE 3 — the tier resolves through the ONE vocabulary before it keys anything: a live
+  // 'autonomous' (or null) tier previously missed PLAN_DEFAULTS entirely and fell to the generic
+  // 3000, silently mis-budgeting the exact row the alias exists for.
+  const budget = (sub?.sonnet_monthly_budget_cents as number) ?? PLAN_DEFAULTS[normalizePlan(sub?.tier as string | null)] ?? 3000
   const sonnetUsed = spend?.sonnet_cents ?? 0
   const totalThisMonth = spend?.total_cents ?? 0
 

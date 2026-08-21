@@ -10,6 +10,7 @@ import { deliveryAccuracyGroundTruth } from '@/lib/inventory/buying'
 import { expiryGroundTruth } from '@/lib/inventory/fresh'
 import { replenishmentGroundTruth } from '@/lib/inventory/replenishment-agent'
 import { exceptionGroundTruth } from '@/lib/inventory/exception-agent'
+import { normalizePlan } from '@/lib/plans/resolve-plan'
 
 export interface ConversationSummary {
   id: string
@@ -290,7 +291,10 @@ export async function buildAskAriaContext(
   const avgDailyRevenue = (monthCents / 100) / daysElapsed
 
   // Subscription tier
-  const subscriptionTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
+  // MS12 PHASE 3 — normalized before it reaches the prompt: 'autonomous' is pro's alias, and the
+  // model should reason about the plan that actually governs entitlements, not a stale label.
+  const rawTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
+  const subscriptionTier = rawTier != null ? normalizePlan(rawTier) : null
 
   // ── Build self-state grounding block (aria_actions = canonical recommendation table) ──
   const ariaActionsDetail = {

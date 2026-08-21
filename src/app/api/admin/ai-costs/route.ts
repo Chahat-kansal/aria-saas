@@ -5,10 +5,13 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAdminClient, isAdminEmail, logAdminAction } from '@/lib/admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { normalizePlan } from '@/lib/plans/resolve-plan'
 
 const PLAN_DEFAULTS: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
+// MS12 PHASE 3 — tier strings resolve through normalizePlan before keying budgets, so the live
+// 'autonomous' row lands on pro's default instead of missing the map.
 const budgetFor = (tier: string | null | undefined, col: number | null | undefined) =>
-  col ?? PLAN_DEFAULTS[tier ?? ''] ?? 3000
+  col ?? PLAN_DEFAULTS[normalizePlan(tier)] ?? 3000
 
 function ymOf(d: Date) { return d.toISOString().slice(0, 7) }
 function modelFamily(id: string): string {
