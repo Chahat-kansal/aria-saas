@@ -10,6 +10,10 @@ export interface Entitlement {
   sections: string[]
   max_outlets: number | null
   max_staff: number | null
+  // MS13 PHASE 6 — agent/routine caps ride the SAME canonical entitlement path MS12 established
+  // (businesses.plan → getEffectivePlan → PLANS), so a tier change moves them with everything else.
+  max_agents: number | null
+  max_routines: number | null
   ai_budget_usd: number
   is_trial: boolean
 }
@@ -65,6 +69,8 @@ export async function getEntitlement(business_id: string): Promise<Entitlement> 
     sections: planDef.sections,
     max_outlets: planDef.max_outlets,
     max_staff: planDef.max_staff,
+    max_agents: planDef.max_agents,
+    max_routines: planDef.max_routines,
     ai_budget_usd,
     is_trial,
   }

@@ -26,6 +26,18 @@ export interface PlanDef {
   ai_budget_usd: number
   max_outlets: number | null
   max_staff: number | null
+  /**
+   * MS13 PHASE 6 — owner-built agents per tier (null = unlimited). The brief fixes these:
+   * starter 2 / growth 5 / pro unlimited.
+   */
+  max_agents: number | null
+  /**
+   * Scheduled routines per tier. The brief says "routines capped" WITHOUT giving numbers, so
+   * these MIRROR max_agents rather than inventing a second scale — flagged for the founder, and
+   * revertible in one edit here (config, not logic). GROUNDING-TEETH: a made-up number stated as
+   * a decision is worse than a stated mirror.
+   */
+  max_routines: number | null
   /** Sidebar.tsx `section` values this plan unlocks (cumulative — see SECTIONS_BY_TIER below). */
   sections: string[]
   /** Stripe Price ID for Checkout — filled in SS-2, null until then (no Stripe integration in SS-1). */
@@ -58,16 +70,19 @@ export const PLANS: Record<Plan, PlanDef> = {
   starter: {
     plan_key: 'starter', price_usd: 297, ai_budget_usd: 20,
     max_outlets: 1, max_staff: 5,
+    max_agents: 2, max_routines: 2,
     sections: STARTER_SECTIONS, stripe_price_id: null,
   },
   growth: {
     plan_key: 'growth', price_usd: 597, ai_budget_usd: 50,
     max_outlets: 3, max_staff: 15,
+    max_agents: 5, max_routines: 5,
     sections: GROWTH_SECTIONS, stripe_price_id: null,
   },
   pro: {
     plan_key: 'pro', price_usd: 997, ai_budget_usd: 120,
     max_outlets: null, max_staff: null,
+    max_agents: null, max_routines: null,
     sections: PRO_SECTIONS, stripe_price_id: null,
   },
 }

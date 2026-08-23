@@ -372,6 +372,25 @@ async function runAction(
           name?: string; instructions?: string; allowed_tools?: string[]
         }
         if (!name || !instructions) return { ok: false, affected_count: 0, error: 'Agent name and instructions required', rollback_available: false }
+        // MS13 PHASE 6 — TIER CAP, enforced SERVER-SIDE at the one creation point (a UI-side
+        // check is a suggestion; this is the gate). Reads the canonical entitlement path.
+        {
+          const { getEntitlement } = await import('@/lib/billing/entitlement')
+          const ent = await getEntitlement(businessId)
+          if (ent.max_agents != null) {
+            const { count: agentCount } = await supabase.from('aria_skills')
+              .select('id', { count: 'exact', head: true })
+              .eq('business_id', businessId).eq('kind', 'agent')
+            if ((agentCount ?? 0) >= ent.max_agents) {
+              return {
+                ok: false,
+                affected_count: 0,
+                error: `Your ${ent.plan_key} plan includes ${ent.max_agents} agent${ent.max_agents === 1 ? '' : 's'} and you already have ${agentCount ?? 0}. Delete one, or upgrade for more.`,
+                rollback_available: false,
+              }
+            }
+          }
+        }
         entityType = 'aria_skills'
         const { data: agentRow, error: agentErr } = await supabase.from('aria_skills').insert({
           business_id: businessId,
