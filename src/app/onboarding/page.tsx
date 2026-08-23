@@ -8,6 +8,7 @@ import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import Papa from 'papaparse';
 import { getFeatureSetForBusiness } from '@/lib/industry-features';
 import { Tag, MessageSquareText, ShieldCheck, PackageSearch, ShoppingBag, CalendarCheck, Boxes, type LucideIcon } from 'lucide-react';
+import { HOUSE_RULE_QUESTIONS, deriveHouseRules, buildReadback } from '@/lib/aria/onboarding-house-rules';
 
 // ONBOARD-WIZARD-1 — rebuilt as a clean 4-step wizard matching
 // public/_refs/onboarding-welcome.png + onboarding-features.png: the same
@@ -36,7 +37,9 @@ function validateABN(raw: string): boolean {
   return sum % 89 === 0;
 }
 
-const VISUAL_STEPS = ['welcome', 'details', 'features', 'products'] as const;
+// MS14 PHASE 5 — 'rules' appended LAST so every existing step keeps its index; an in-progress
+// wizard resumes exactly where it was, and an existing business is never sent back through this.
+const VISUAL_STEPS = ['welcome', 'details', 'features', 'products', 'rules'] as const;
 type VisualStep = typeof VISUAL_STEPS[number];
 type Setter = (k: keyof FD, v: FD[keyof FD]) => void;
 
@@ -77,6 +80,10 @@ type FD = {
   products: { name: string; price: string; category: string }[];
   lat: string; lng: string; place_id: string; formatted_address: string;
   feature_choices: Record<string, boolean>;
+  // MS14 PHASE 5 — house-rule answers. Every one is OPTIONAL; an unanswered question stores
+  // nothing at all (no default, no guess).
+  hr_margin_target: string; hr_never_discount: string; hr_peak_times: string;
+  hr_pricing_style: string; hr_non_negotiable: string;
 };
 
 const EMPTY: FD = {
@@ -89,6 +96,8 @@ const EMPTY: FD = {
   products: [],
   lat: '', lng: '', place_id: '', formatted_address: '',
   feature_choices: {},
+  hr_margin_target: '', hr_never_discount: '', hr_peak_times: '',
+  hr_pricing_style: '', hr_non_negotiable: '',
 };
 
 interface AbnDup { duplicate: boolean; owned_by_me?: boolean; business_id?: string | null; business_name?: string | null }
@@ -104,6 +113,8 @@ function canAdvance(step: VisualStep, f: FD, abnDup: AbnDup | null): boolean {
   // loyalty from, so product/POS businesses need at least 1 (manual/CSV/
   // photo — any source). Service businesses skip products entirely.
   if (step === 'products') return f.business_model === 'service' || f.products.length > 0;
+  // 'rules' — every question is optional. Skipping is a valid answer and stores nothing.
+  if (step === 'rules') return true;
   // welcome (nothing to fill in) and features (sensible defaults pre-ticked) are always advanceable.
   return true;
 }
@@ -283,6 +294,7 @@ export default function OnboardingWizard() {
 
           {step === 'features' && <FeaturesScreen form={form} set={set} />}
           {step === 'products' && <ProductsScreen form={form} set={set} />}
+          {step === 'rules' && <HouseRulesScreen form={form} set={set} />}
 
           {step !== 'welcome' && (
             <div style={{ marginTop: 28 }}>
@@ -714,6 +726,45 @@ const CSV_HEADER_MAP: Record<string, 'name' | 'price' | 'category'> = {
 // src/app/api/onboarding/provision/route.ts — the synchronous Anthropic
 // briefing call was replaced with a deterministic template specifically so
 // provisioning can never be blocked by AI credit/availability issues).
+// MS14 PHASE 5 — the questions whose answers become House Rules, and Aria reading them back
+// live as they are typed. The readback text comes from the SAME pure function the server uses to
+// derive the stored rules, so what the owner is shown is exactly what gets stored.
+function HouseRulesScreen({ form, set }: { form: FD; set: Setter }) {
+  const answers = HOUSE_RULE_QUESTIONS.reduce<Record<string, unknown>>((acc, q) => {
+    acc[q.id] = (form as unknown as Record<string, string>)[q.id] ?? '';
+    return acc;
+  }, {});
+  const derived = deriveHouseRules(answers);
+  const readback = buildReadback(form.trading_name || form.legal_name || 'your business', derived);
+
+  return (
+    <div>
+      <ScreenHeading>How do you run the place?</ScreenHeading>
+      <p style={{ fontSize: 14, color: INK_SOFT, marginBottom: 18, fontFamily: FONT_BODY }}>
+        Tell me your rules in your own words. I&apos;ll follow them everywhere — and I&apos;ll never
+        make one up. Skip anything you&apos;d rather not answer.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {HOUSE_RULE_QUESTIONS.map(q => (
+          <label key={q.id} style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: INK, marginBottom: 6, fontFamily: FONT_BODY }}>{q.prompt}</span>
+            <input
+              value={(form as unknown as Record<string, string>)[q.id] ?? ''}
+              onChange={e => set(q.id as keyof FD, e.target.value as FD[keyof FD])}
+              placeholder={q.placeholder}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: BORDER, background: SURFACE, color: INK, fontSize: 14, fontFamily: FONT_BODY }}
+            />
+          </label>
+        ))}
+      </div>
+      <div style={{ marginTop: 22, padding: '16px 18px', borderRadius: 14, border: BORDER, background: SURFACE }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: INK_SOFT, letterSpacing: 0.4, marginBottom: 8, fontFamily: FONT_BODY }}>ARIA</div>
+        <div style={{ fontSize: 14, color: INK, whiteSpace: 'pre-wrap', lineHeight: 1.55, fontFamily: FONT_BODY }}>{readback}</div>
+      </div>
+    </div>
+  );
+}
+
 function ProductsScreen({ form, set }: { form: FD; set: Setter }) {
   const products = form.products;
   const [csvError, setCsvError] = useState('');

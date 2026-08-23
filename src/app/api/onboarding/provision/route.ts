@@ -414,7 +414,31 @@ async function _POST(_req: Request) {
       (onb?.step_data as Record<string, unknown>) ?? {},
       biz.name ?? 'your business',
     )
-    return NextResponse.json({ provisioning_status: 'complete' })
+
+    // MS14 PHASE 5 — the onboarding answers become HOUSE RULES: the owner's own words, stored as
+    // memory Aria reads everywhere. Derivation is pure and skips anything unanswered — a rule
+    // nobody stated is never invented. Non-fatal by construction: a business must never fail to
+    // provision because a memory row did not write.
+    let houseRulesCreated = 0
+    try {
+      const { deriveHouseRules } = await import('@/lib/aria/onboarding-house-rules')
+      const { createHouseRule, listHouseRules } = await import('@/lib/aria/house-rules')
+      const derived = deriveHouseRules((onb?.step_data as Record<string, unknown>) ?? {})
+      if (derived.length > 0) {
+        // Idempotency: provisioning can be retried, and a retry must not duplicate rules.
+        const existing = await listHouseRules(biz.id)
+        const seen = new Set(existing.map(r => r.content.trim().toLowerCase()))
+        for (const rule of derived) {
+          if (seen.has(rule.content.trim().toLowerCase())) continue
+          const res = await createHouseRule({ businessId: biz.id, content: rule.content, topic: rule.topic, sourceType: 'onboarding' })
+          if (res.ok) houseRulesCreated++
+        }
+      }
+    } catch (hrErr) {
+      console.error('[provision] house rules non-fatal:', (hrErr as Error).message)
+    }
+
+    return NextResponse.json({ provisioning_status: 'complete', house_rules_created: houseRulesCreated })
   } catch (e) {
     const msg = (e as Error).message ?? 'Provisioning failed'
     await supabaseAdmin
