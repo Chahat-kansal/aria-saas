@@ -71,6 +71,7 @@ export interface ExecutionResult {
 // a way that can be MEANINGFULLY matched to a decision and an outcome, not just matched by id.
 const CATEGORY_BY_ACTION_TYPE: Record<PlannedAction['type'], string> = {
   bulk_price_update: 'sales',
+  create_agent: 'operations', // MS13 phase 4 - agent creation is an ops capability, not a sales rec
   create_promotion: 'sales',
   apply_category_discount: 'sales',
   update_promotion: 'sales',
@@ -359,6 +360,33 @@ async function runAction(
         if (thrErr) return { ok: false, affected_count: 0, error: `Update failed: ${thrErr.message}`, rollback_available: false }
         affectedCount = targets.length
         afterState = { new_threshold: threshold, affected: affectedCount }
+        break
+      }
+
+      case 'create_agent': {
+        // MS13 PHASE 4 — the ONLY place an owner-built agent is persisted, and it runs strictly
+        // on confirm (the composer lane stages; reject/expiry clears the card with zero writes).
+        // V2: allowed_tools starts EMPTY (read-only default) — the executor enforces the
+        // allowlist at call time, never the model. V5: share_token is never read or written.
+        const { name, instructions, allowed_tools } = action.payload as {
+          name?: string; instructions?: string; allowed_tools?: string[]
+        }
+        if (!name || !instructions) return { ok: false, affected_count: 0, error: 'Agent name and instructions required', rollback_available: false }
+        entityType = 'aria_skills'
+        const { data: agentRow, error: agentErr } = await supabase.from('aria_skills').insert({
+          business_id: businessId,
+          name: String(name).slice(0, 60),
+          description: String(instructions).slice(0, 200),
+          system_prompt_addition: String(instructions).slice(0, 2000),
+          kind: 'agent',
+          allowed_tools: Array.isArray(allowed_tools) ? allowed_tools : [],
+          built_in: false,
+          enabled: true,
+        }).select('id').single()
+        if (agentErr || !agentRow) return { ok: false, affected_count: 0, error: agentErr?.message ?? 'Failed to create agent', rollback_available: false }
+        entityIds = [agentRow.id as string]
+        affectedCount = 1
+        afterState = { agent_id: agentRow.id, name, kind: 'agent' }
         break
       }
 

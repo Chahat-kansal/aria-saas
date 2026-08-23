@@ -421,6 +421,8 @@ async function _POST(req: Request, _routeCtx: unknown, { supabase, userId, busin
               return `Done — draft roster **${String(_ap.name)}** created for week starting ${String(_ap.week_start)}. Review and publish from Staff.`
             case 'create_invoice':
               return `Done — draft invoice created for **${String(_ap.customer_name)}**. Review and send from Invoices.`
+            case 'create_agent':
+              return `Done \u2014 agent **${String(_ap.name)}** is ready. Mention it with @${String(_ap.name).toLowerCase().replace(/\s+/g, '-')} in any conversation, or find it in the skill picker.`
             case 'approve_po_draft': {
               const totalDollars = (Number(_ap.total_cost_cents ?? 0) / 100).toFixed(2)
               const itemCount = Number(_ap.items_count ?? result.affected_count)
@@ -460,6 +462,38 @@ async function _POST(req: Request, _routeCtx: unknown, { supabase, userId, busin
         })
       }
     }
+  }
+
+  // MS13 PHASE 4 — THE AGENT COMPOSER LANE. Describe → spec card (with the ALWAYS-TRUE box) →
+  // revise by re-describing → approve → aria_skills row (kind='agent'). Deterministic (no LLM),
+  // staged through the SAME pending_action machinery as every other action: NOTHING persists
+  // until the owner confirms, and reject/expiry clears the card without a write.
+  const AGENT_COMPOSE_RE = /\b(create|build|make|set ?up|compose)\b[\s\S]{0,40}\ban? agent\b/i
+  if (AGENT_COMPOSE_RE.test(message)) {
+    const { planCreateAgent } = await import('@/lib/aria/agents/composer')
+    const planned = planCreateAgent(message)
+    const cardText = 'Here\u2019s the agent I\u2019ll create:\n\n' + planned.preview.join('\n')
+    let agentConvId = conversationId
+    try {
+      agentConvId = await upsertConversation(bid, userId, conversationId, message, cardText, 'action_request')
+    } catch (e) { console.error('[aria/ask] composer upsert failed:', (e as Error).message) }
+    if (agentConvId) {
+      const { error: stageErr } = await supabase.from('aria_conversations').update({
+        pending_action: planned,
+        pending_action_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      }).eq('id', agentConvId).eq('business_id', bid)
+      if (stageErr) {
+        console.error('[aria/ask] composer stage failed:', stageErr.message)
+        return NextResponse.json({ response: "Couldn't stage the agent \u2014 please try again.", conversation_id: agentConvId, intent: 'action_request', action: null, cost_usd_cents: 0 })
+      }
+    }
+    return NextResponse.json({
+      response: cardText,
+      conversation_id: agentConvId ?? conversationId,
+      intent: 'action_request',
+      action: { action: 'fork', planned, propose_only: false },
+      cost_usd_cents: 0,
+    })
   }
 
   // 1b. Detect action intent not caught by classifier

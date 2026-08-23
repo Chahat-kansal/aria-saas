@@ -13,6 +13,7 @@ export type ActionType =
   | 'create_roster'
   | 'create_invoice'
   | 'approve_po_draft'
+  | 'create_agent' // MS13 phase 4 — staged by the composer lane (deterministic), executed on confirm
 
 export interface PlannedAction {
   type: ActionType
