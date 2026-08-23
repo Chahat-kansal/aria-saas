@@ -1848,6 +1848,14 @@ ALWAYS give detailed answers:
 
 NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth with the advantage of having the owner's actual live data.`
 
+  // MS14 PHASE 6 — HOUSE RULES reach every answer. Appended AFTER the IRON RULES and the
+  // grounding rules above (which always win) and BEFORE any owner-built agent overlay, so the
+  // owner's standing instructions outrank an agent's lens but never a safety rule.
+  if (ctx.house_rules && ctx.house_rules.length > 0) {
+    const { formatHouseRulesBlock } = await import('@/lib/aria/house-rules')
+    systemPrompt += formatHouseRulesBlock(ctx.house_rules)
+  }
+
   // Inject memories at top of prompt so they frame every response
   if (ctx.memories.length > 0) {
     const memoryBlock = '\n\nWHAT I KNOW ABOUT ' + ctx.business_name.toUpperCase() + ' (from our history — use this to personalise every response):\n' +

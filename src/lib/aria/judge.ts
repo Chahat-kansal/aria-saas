@@ -54,6 +54,34 @@ export async function judge(
       alcohol_percentage: p.alcohol_percentage, age_restricted: p.age_restricted,
       shelf_life_days: p.shelf_life_days, units_per_week: p.units_per_week,
     }
+    // MS14 PHASE 6 — HOUSE RULES ARE ENFORCED HERE, not merely prompted. An owner who said
+    // "never discount coffee" should never SEE a card proposing one; a prompt makes that likely,
+    // this makes it true. Runs before the economic checks: a rule the owner set outranks a
+    // suggestion that would merely be profitable.
+    try {
+      const { listHouseRules } = await import('@/lib/aria/house-rules')
+      const { conflictsWithHouseRules, houseRuleRefusal } = await import('@/lib/aria/house-rule-guard')
+      const houseRules = await listHouseRules(context.business_id)
+      if (houseRules.length > 0) {
+        const clash = conflictsWithHouseRules({
+          suggestion: promoSuggestion,
+          productText: `${productCtx.name ?? ''} ${(productCtx as { category?: string }).category ?? ''}`,
+          rules: houseRules,
+        })
+        if (clash.conflict) {
+          return {
+            ok: false, rejected_reason: houseRuleRefusal(clash.rule), severity: 'hard',
+            primary_judge_score: 0, cost_cents: 0,
+            judge_notes: `Breaks the owner's house rule (${clash.subject}) — Opus call skipped.`,
+          }
+        }
+      }
+    } catch (e) {
+      // Never block a suggestion because the rules lookup failed — that would be a silent,
+      // unexplained refusal, which is worse than the suggestion it was meant to stop.
+      console.error('[judge] house rule check non-fatal:', (e as Error).message)
+    }
+
     const detResult = validatePromoSuggestion(promoSuggestion, productCtx)
     if (!detResult.ok) {
       return {

@@ -80,6 +80,9 @@ export interface AskAriaContext {
   fresh_signals: Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>
   // Distilled memories from prior conversations
   memories: Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>
+  // MS14 PHASE 6 — the owner's STATED operating rules. Fetched separately from `memories` on
+  // purpose: they must never lose a top-15 importance slot to an inferred pattern.
+  house_rules: Array<{ content: string; topic: string | null }>
   // Per-category advice confidence weights from outcome learning
   advice_weights: Record<string, number>
   competitor_intelligence: Array<{ name: string; last_checked: string | null; data: unknown }>
@@ -362,6 +365,18 @@ export async function buildAskAriaContext(
     adviceWeights[w.category] = Number(w.weight)
   }
 
+  // MS14 PHASE 6 — house rules, fetched in their own right (never squeezed out by memories).
+  const { data: houseRuleRows } = await supabaseAdmin
+    .from('aria_business_memory')
+    .select('content, topic')
+    .eq('business_id', businessId)
+    .eq('kind', 'house_rule')
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .order('importance', { ascending: false })
+    .limit(25)
+    .then(r => r, () => ({ data: null }))
+
   // Fetch top memories by importance (non-blocking, best-effort)
   const { data: memoryRows } = await supabaseAdmin
     .from('aria_business_memory')
@@ -522,6 +537,7 @@ export async function buildAskAriaContext(
     recent_conversations: recentConvs,
     fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,
     memories: (memoryRows ?? []) as Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>,
+    house_rules: (houseRuleRows ?? []) as Array<{ content: string; topic: string | null }>,
     advice_weights: adviceWeights,
     competitor_intelligence: (competitorsRes.data ?? []).map((c: Record<string, unknown>) => ({
       name: String(c.competitor_name ?? ''),

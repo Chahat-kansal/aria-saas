@@ -226,12 +226,28 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const industry = biz?.industry ?? 'retail'
   const weather  = await getWeatherContext(industry, city)
 
+  // MS14 PHASE 6 — HOUSE RULES for the council/briefing lane, which carried NO memory of ANY
+  // kind before this (the ASK-ARIA-AUDIT-1 finding: memories reached only the fat ask lane). This
+  // is the surface where discount and pricing advice is actually formed, so it is the surface
+  // where "never discount coffee" most needs to be present.
+  let houseRulesForCouncil: string[] = []
+  try {
+    const { listHouseRules } = await import('@/lib/aria/house-rules')
+    houseRulesForCouncil = (await listHouseRules(businessId)).map(r => r.content)
+  } catch (e) {
+    console.error('[get-business-context] house rules non-fatal:', (e as Error).message)
+  }
+
   return JSON.stringify({
     _meta: {
       snapshot_date: now.toISOString().split('T')[0],
       has_sales_data: hasSalesData,
       business_id: businessId,
     },
+    house_rules: houseRulesForCouncil.length > 0 ? houseRulesForCouncil : undefined,
+    house_rules_note: houseRulesForCouncil.length > 0
+      ? 'HOUSE RULES are the owner\u2019s stated operating rules, in their words. Honour them in every recommendation. Never propose an action that breaks one without saying plainly that it breaks it and why you are raising it anyway.'
+      : undefined,
     business: biz ? {
       name:             biz.name,
       industry:         biz.industry,
