@@ -56,6 +56,12 @@ describe('nothing persists on reject', () => {
     const files = execSync('git grep -l "share_token" -- src/ || true', { encoding: 'utf8', cwd: process.cwd() })
       .split('\n').map(f => f.trim()).filter(Boolean)
       .filter(f => !f.endsWith('src/types/database.types.ts'))
+      // …and test files: an assertion ABOUT share_token necessarily names it. (This exclusion was
+      // added because this very test became its own offender the moment it was committed — git
+      // grep only sees TRACKED files, so it passed while untracked and failed on the next push.
+      // Recorded rather than quietly patched: a check whose result depends on staging state is a
+      // check that can lie.)
+      .filter(f => !/\.test\.tsx?$/.test(f))
     const offenders = files.filter(f => {
       const code = readFileSync(join(process.cwd(), f), 'utf8')
         .split('\n').filter(l => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*')).join('\n')
