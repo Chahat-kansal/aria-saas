@@ -1,61 +1,15 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server'
 
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import Anthropic from '@anthropic-ai/sdk';
-import { parseLLMJsonOr } from '@/lib/ai-json';
-import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
-import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
-import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+// RETIRED (MS13 PHASE 2): zero callers anywhere in src/ (verified by sweep, 2026-08-22 — the BAS
+// classifier at /api/agents/bas/classify-products is a different, live route). This one ran a
+// paid Sonnet call with NO business scoping at all (telemetry logged businessId: undefined).
+// Kept as a 410 Gone (not deleted, RULE 0 + twilio/webhook precedent). Rebuild ON the rail if
+// product classification is ever wanted at this path again.
+const GONE = { error: 'gone', message: 'aria/classify-product is retired. It had no callers and no tenant scoping.' }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { name, barcode, description } = await req.json();
-  if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
-
-  try {
-    const msg = await trackAICall({ route: 'aria/classify-product', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'product-classification' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 300,
-      messages: [{
-        role: 'user',
-        content: `Classify this Australian retail product for a POS system.
-Product name: "${name}"
-${barcode ? `Barcode: ${barcode}` : ''}
-${description ? `Description: ${description}` : ''}
-
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "category": "Beer & Cider|Wine|Spirits|RTD|Soft Drinks|Water|Coffee|Food|Snacks|Confectionery|Dairy|Tobacco|Other",
-  "brand": "extracted brand name or empty string",
-  "family": "product family/subcategory e.g. Pale Ale, Shiraz, Vodka",
-  "is_age_restricted": true or false,
-  "tax_treatment": "gst" or "gst_free",
-  "suggested_price_points": [
-    {"qty": 1, "label": "Single"},
-    {"qty": 4, "label": "4-pack"},
-    {"qty": 24, "label": "Case"}
-  ]
-}`,
-      }],
-    }));
-
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const result = parseLLMJsonOr(raw, null, 'classify-product');
-    if (!result) return NextResponse.json({ error: 'Could not parse response' }, { status: 500 });
-    return NextResponse.json(result);
-  } catch (err) {
-    console.error('[classify-product]', err);
-    return NextResponse.json({ error: 'Classification failed' }, { status: 500 });
-  }
+export function POST() {
+  return NextResponse.json(GONE, { status: 410 })
 }
-
-export const POST = withErrorCapture('aria/classify-product', _POST)
+export function GET() {
+  return NextResponse.json(GONE, { status: 410 })
+}

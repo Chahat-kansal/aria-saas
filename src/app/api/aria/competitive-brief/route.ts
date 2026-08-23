@@ -4,22 +4,24 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface CacheRow { brief: string; generated_at: string }
 
 const _cache = new Map<string, CacheRow>();
 
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const business_id = new URL(req.url).searchParams.get('business_id');
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
+// MS13 PHASE 2 — TENANT RESOLVED SERVER-SIDE (pre-authorised fix). The old handler trusted
+// ?business_id= straight into the reads AND into an in-memory cache served before any tenant
+// check — any authenticated user could read any tenant's cached brief. The rail resolves the
+// tenant; a client-supplied id is REJECTED, never honoured.
+async function _GET(req: Request, _ctx: unknown, { supabase, businessId }: BusinessContext) {
+  const suppliedId = new URL(req.url).searchParams.get('business_id');
+  if (suppliedId) {
+    return NextResponse.json({ error: 'business_id is resolved server-side — do not send it' }, { status: 400 });
+  }
+  const business_id = businessId;
 
   // 24h in-memory cache
   const cached = _cache.get(business_id);
@@ -76,4 +78,4 @@ async function _GET(req: Request) {
   return NextResponse.json({ brief, cached: false, generated_at });
 }
 
-export const GET = withErrorCapture('aria/competitive-brief', _GET);
+export const GET = withBusinessContext('aria/competitive-brief', _GET);

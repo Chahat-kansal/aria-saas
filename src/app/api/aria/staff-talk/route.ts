@@ -38,6 +38,17 @@ export async function POST(req: Request) {
     message?: string
     messages?: Array<{ role: 'user' | 'assistant'; content: string }>
     page_context?: { route?: string; page_name?: string }
+    business_id?: unknown
+    businessId?: unknown
+  }
+  // MS13 PHASE 2 — JUDGED VARIANCE within the pre-authorised scope, recorded in RUN-MS13.md:
+  // this route reads ZERO tenant data (nav grounding + static prompt only) and serves staff
+  // portal users, who are NOT business owners — forcing the owner rail here would break every
+  // staff user (RULE 0). The fix that applies is the other half of the pre-authorisation:
+  // tenant-shaped input is REJECTED so nothing client-supplied can ever become a tenant key,
+  // and any future tenant read added here must start from the rail, not from the body.
+  if (body.business_id !== undefined || body.businessId !== undefined) {
+    return NextResponse.json({ error: 'business_id is resolved server-side — do not send it' }, { status: 400 })
   }
   const message = (body.message ?? '').trim().slice(0, 500)
   if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 })

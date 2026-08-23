@@ -4,10 +4,9 @@ export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface Review { text: string; rating: number }
 interface Opportunity { competitor: string; complaint_theme: string; advantage: string; message: string }
@@ -25,13 +24,14 @@ async function fetchReviews(competitorName: string, city: string, key: string): 
   } catch { return []; }
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { business_id } = await req.json();
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
+// MS13 PHASE 2 — TENANT RESOLVED SERVER-SIDE (pre-authorised fix). body.business_id used to be
+// trusted into the businesses/watches reads; it is now rejected outright.
+async function _POST(req: Request, _ctx: unknown, { supabase, businessId }: BusinessContext) {
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  if (body.business_id !== undefined || body.businessId !== undefined) {
+    return NextResponse.json({ error: 'business_id is resolved server-side — do not send it' }, { status: 400 });
+  }
+  const business_id = businessId;
 
   const { data: biz } = await supabase.from('businesses')
     .select('name, suburb, city, industry').eq('id', business_id).maybeSingle();
@@ -86,4 +86,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ opportunities });
 }
 
-export const POST = withErrorCapture('aria/competitor-opportunities', _POST);
+export const POST = withBusinessContext('aria/competitor-opportunities', _POST);

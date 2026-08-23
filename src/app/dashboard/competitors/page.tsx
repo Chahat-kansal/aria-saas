@@ -373,7 +373,7 @@ export default function CompetitorsPage() {
     fetch(`/api/aria/competitor-watches?business_id=${business.id}`)
       .then(r => r.json()).then(d => setWatches(d.watches ?? [])).catch(() => {})
     setBriefLoading(true)
-    fetch(`/api/aria/competitive-brief?business_id=${business.id}`)
+    fetch('/api/aria/competitive-brief') // MS13: tenant resolved server-side
       .then(r => r.json()).then(d => { setBrief(d.brief ?? ''); setBriefLoading(false) }).catch(() => setBriefLoading(false))
     fetch(`/api/aria/competitor-alerts?business_id=${business.id}`)
       .then(r => r.json()).then(d => setAlertRows(d.alerts ?? [])).catch(() => {})
@@ -388,7 +388,7 @@ export default function CompetitorsPage() {
     setOppsLoading(true)
     const res = await fetch('/api/aria/competitor-opportunities', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: business.id }),
+      body: JSON.stringify({}), // MS13: tenant resolved server-side
     }).then(r => r.json()).catch(() => ({ opportunities: [] }))
     setOpps(res.opportunities ?? [])
     setOppsLoading(false)

@@ -57,7 +57,7 @@ export default function RecipeInsightsTab({ businessId }: { businessId: string }
     const r = await fetch('/api/aria/menu-optimisation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: businessId }),
+      body: JSON.stringify({}), // MS13: tenant resolved server-side
     }).then(r => r.json()).catch(() => ({ analysis: [], insight: '' }));
     setAnalysis(r.analysis ?? []);
     setInsight(r.insight ?? '');

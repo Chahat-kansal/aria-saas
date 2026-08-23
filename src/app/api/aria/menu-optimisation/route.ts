@@ -4,20 +4,19 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { waitUntil } from '@vercel/functions';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture';
 
 interface RecipeRow { id: string; name: string; cost_per_serve: number | null; menu_price: number | null; margin_percent: number | null; linked_product_id: string | null; }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { business_id } = await req.json();
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
+// MS13 PHASE 2 — TENANT RESOLVED SERVER-SIDE (pre-authorised fix). body.business_id rejected.
+async function _POST(req: Request, _ctx: unknown, { supabase, businessId }: BusinessContext) {
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  if (body.business_id !== undefined || body.businessId !== undefined) {
+    return NextResponse.json({ error: 'business_id is resolved server-side — do not send it' }, { status: 400 });
+  }
+  const business_id = businessId;
 
   const { data: recipes } = await supabase
     .from('recipes')
@@ -28,9 +27,12 @@ async function _POST(req: Request) {
 
   // Pull sales velocity per product over last 28 days
   const since = new Date(Date.now() - 28 * 86400000).toISOString();
+  // MS13 phase 2 — this query had NO business filter at all: RLS was its only tenant barrier.
+  // Belt and braces: the joined-sale tenant filter is now explicit.
   const { data: sales } = await supabase
     .from('pos_sale_items')
     .select('product_id, quantity, pos_sales!inner(business_id, created_at)')
+    .eq('pos_sales.business_id', business_id)
     .gte('pos_sales.created_at', since);
 
   const velocity: Record<string, number> = {};
@@ -84,4 +86,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ analysis, insight });
 }
 
-export const POST = withErrorCapture('aria/menu-optimisation', _POST);
+export const POST = withBusinessContext('aria/menu-optimisation', _POST);

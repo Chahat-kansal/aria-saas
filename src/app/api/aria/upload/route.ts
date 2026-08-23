@@ -3,8 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -13,13 +12,15 @@ type AllowedMime = typeof ALLOWED_MIMES[number]
 
 const MAX_B64_LEN = 5 * 1024 * 1024 // ~3.75 MB original file
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  let body: { base64?: string; mime?: string; name?: string }
+// MS13 PHASE 2 — the tenant is resolved ON THE RAIL before the paid vision call runs
+// (pre-authorised fix): auth alone let any logged-in user spend vision tokens with no business
+// membership at all. Tenant-shaped body fields are rejected — this route takes file bytes only.
+async function _POST(req: Request, _ctx: unknown, _biz: BusinessContext) {
+  let body: { base64?: string; mime?: string; name?: string; business_id?: unknown; businessId?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  if (body.business_id !== undefined || body.businessId !== undefined) {
+    return NextResponse.json({ error: 'business_id is resolved server-side — do not send it' }, { status: 400 })
+  }
 
   const { base64, mime, name = 'image' } = body
   if (!base64 || !mime) return NextResponse.json({ error: 'Missing base64 or mime' }, { status: 422 })
@@ -52,4 +53,4 @@ async function _POST(req: Request) {
   return NextResponse.json({ description })
 }
 
-export const POST = withErrorCapture('aria/upload', _POST)
+export const POST = withBusinessContext('aria/upload', _POST)
