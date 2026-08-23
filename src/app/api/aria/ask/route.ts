@@ -1874,13 +1874,26 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin')
     const { data: skills } = await supabaseAdmin.from('aria_skills')
-      .select('name, system_prompt_addition')
+      .select('name, system_prompt_addition, kind')
       .eq('business_id', bid).eq('enabled', true).limit(8)
-    if (skills && skills.length > 0) {
-      const block = skills
+    const skillRows = (skills ?? []) as Array<{ name: string; system_prompt_addition: string; kind?: string | null }>
+    // MS13 PHASE 5 — legacy skills keep their existing placement (RULE 0: unchanged behaviour).
+    const legacySkills = skillRows.filter(s => (s.kind ?? 'skill') !== 'agent')
+    if (legacySkills.length > 0) {
+      const block = legacySkills
         .map((s: { name: string; system_prompt_addition: string }) => `[${s.name}] ${s.system_prompt_addition}`)
         .join('\n')
       systemPrompt += '\n\nACTIVE SKILLS (the owner has asked you to take on these roles — stack their lenses across your reply):\n' + block
+    }
+    // Owner-built AGENTS are a delimited, sanitised, LOWEST-PRECEDENCE overlay appended at the
+    // very END of the prompt — below the constitution and the grounding rules, never inside the
+    // authority section. An @mention narrows the overlay to that agent.
+    const agentRows = skillRows.filter(s => s.kind === 'agent')
+    if (agentRows.length > 0) {
+      const { buildAgentOverlay } = await import('@/lib/aria/agents/overlay')
+      const mentioned = agentRows.filter(a => new RegExp('@' + a.name.toLowerCase().replace(/\s+/g, '[-\\s]?'), 'i').test(message))
+      const active = mentioned.length > 0 ? mentioned : agentRows
+      systemPrompt += buildAgentOverlay(active.map(a => ({ name: a.name, instructions: a.system_prompt_addition })))
     }
   } catch (e) { console.error('[aria/ask] skills execution failed (non-blocking):', e) }
 
