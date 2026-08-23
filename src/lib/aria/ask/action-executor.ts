@@ -406,6 +406,9 @@ async function runAction(
         entityIds = [agentRow.id as string]
         affectedCount = 1
         afterState = { agent_id: agentRow.id, name, kind: 'agent' }
+        // MS14 PHASE 3 — meter the event the limit is about (fire-and-forget, counts only; the
+        // agent's NAME is deliberately not sent — it is owner free text).
+        { const { trackUsage } = await import('@/lib/track-usage'); trackUsage({ business_id: businessId, event_type: 'agent_created' }) }
         break
       }
 

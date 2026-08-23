@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { dollarsToCents } from '@/lib/staff/pay-rates'
 import { getBid } from '@/lib/auth/get-bid'
+import { trackUsage } from '@/lib/track-usage'
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -45,6 +46,16 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'first_name, last_name, and position required' }, { status: 400 })
   }
 
+  // MS14 PHASE 2 — plan limit gate, INERT BY DEFAULT (see the outlets route for the full note).
+  // Counts ACTIVE staff only: an archived leaver should not consume a seat.
+  {
+    const { checkLimit } = await import('@/lib/billing/enforce-limits')
+    const { count: staffCount } = await supabase.from('staff_members')
+      .select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('status', 'active')
+    const gate = await checkLimit({ businessId: bid, key: 'staff', current: staffCount ?? 0 })
+    if (!gate.allowed) return NextResponse.json({ error: 'plan_limit', message: gate.reason }, { status: 403 })
+  }
+
   const { data, error } = await supabase.from('staff_members').insert({
     business_id: bid,
     first_name, last_name,
@@ -67,6 +78,9 @@ async function _POST(req: Request) {
   }).select('*').single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // MS14 PHASE 3 — meter the event the limit is about (fire-and-forget, counts only).
+  trackUsage({ business_id: bid, event_type: 'staff_created' })
   return NextResponse.json({ member: data }, { status: 201 })
 }
 

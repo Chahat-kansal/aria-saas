@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture, withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
+import { trackUsage } from '@/lib/track-usage'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -43,6 +44,12 @@ async function _POST(req: Request, _context: unknown, { businessId: bid }: Busin
   }).select('*').single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // MS14 PHASE 3 — meter the routine count the limit is about. Placed AFTER the error check so
+  // a failed insert is never counted as a routine (fire-and-forget, counts only — the schedule's
+  // name and recipients are deliberately not sent).
+  trackUsage({ business_id: bid, event_type: 'routine_created' })
+
   return NextResponse.json({ schedule: data })
 }
 

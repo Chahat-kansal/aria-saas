@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { getBid } from '@/lib/auth/get-bid'
+import { trackUsage } from '@/lib/track-usage';
 
 // H-17 — POST/PATCH used to spread the whole request body directly into the DB write, so a
 // client could set any column verbatim. Explicit allowlist matching pos_outlets' real columns
@@ -46,8 +47,24 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const body = await req.json();
+
+  // MS14 PHASE 2 — plan limit gate, INERT BY DEFAULT. With ARIA_LIMITS_ENFORCE unset (the
+  // shipped state) checkLimit returns allowed before any I/O, so this block costs nothing and
+  // changes nothing. Armed, it refuses with the limit, the count and the tier that lifts it.
+  {
+    const { checkLimit } = await import('@/lib/billing/enforce-limits');
+    const { count: outletCount } = await supabase.from('pos_outlets')
+      .select('id', { count: 'exact', head: true }).eq('business_id', bid);
+    const gate = await checkLimit({ businessId: bid, key: 'outlets', current: outletCount ?? 0 });
+    if (!gate.allowed) return NextResponse.json({ error: 'plan_limit', message: gate.reason }, { status: 403 });
+  }
+
   const { data: outlet, error } = await supabase.from('pos_outlets').insert({ ...pickOutletFields(body), business_id: bid }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // MS14 PHASE 3 — meter the event the limit is about. Fire-and-forget: never awaited, never
+  // able to fail this request. Counts only — no names, no addresses.
+  trackUsage({ business_id: bid, event_type: 'outlet_created' });
 
   // Auto-create a default register for every new outlet
   await supabase.from('pos_registers').insert({
