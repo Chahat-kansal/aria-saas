@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { waitUntil } from '@vercel/functions'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from '@/lib/aria/providers/anthropic'
 import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, recordTotalOutage, isAnthropicUnreachable } from '@/lib/aria/circuit-breaker'
@@ -104,12 +104,10 @@ async function loadAnswerHistory(
   return msgs.filter(m => m.role === 'user' || m.role === 'assistant').slice(-10).map(m => ({ role: m.role as 'user' | 'assistant', content: String(m.content ?? '') }))
 }
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
-  return data?.id ?? null
-}
+// MS13 PHASE 3 — the local getBid() copy is gone: this route now rides withBusinessContext,
+// which resolves the tenant through resolveOwnerBusinessId (the ONE canonical resolver, with the
+// stale/foreign active-row re-validation the 16 inline copies never had). Ask Aria was the
+// biggest remaining off-rail resolver.
 
 function extractAction(text: string): Record<string, unknown> | null {
   const match = text.match(/<json>([\s\S]*?)<\/json>/)
@@ -193,16 +191,11 @@ async function upsertConversation(
   return (created as { id: string }).id
 }
 
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const rl = await checkRateLimit('ai', user.id)
+async function _POST(req: Request, _routeCtx: unknown, { supabase, userId, businessId }: BusinessContext) {
+  const rl = await checkRateLimit('ai', userId)
   if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 })
 
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 })
+  const bid = businessId
 
   // Accept both JSON and multipart/form-data (for file attachments)
   const contentType = req.headers.get('content-type') ?? ''
@@ -264,7 +257,7 @@ async function _POST(req: Request) {
     const planTitle = (convRow?.pending_action as import('@/lib/aria/ask/action-planner').PlannedAction | null)?.title ?? 'your plan'
     const planReply = `Plan saved: "${planTitle}". You'll find it in your Actions dashboard when you're ready to execute.`
     let planConvId = conversationId
-    try { planConvId = await upsertConversation(bid, user.id, conversationId, 'Save plan', planReply, 'plan_saved') } catch (_e) { /* non-fatal */ }
+    try { planConvId = await upsertConversation(bid, userId, conversationId, 'Save plan', planReply, 'plan_saved') } catch (_e) { /* non-fatal */ }
     return NextResponse.json({ response: planReply, conversation_id: planConvId, intent: 'plan_saved', action: { type: 'plan_saved' }, cost_usd_cents: 0 })
   }
 
@@ -330,7 +323,7 @@ async function _POST(req: Request) {
       if (expired) {
         const expiredText = "Your action plan has expired — please re-request the action and I'll set it up again."
         let expConvId = conversationId
-        try { expConvId = await upsertConversation(bid, user.id, conversationId, message, expiredText, 'action_expired') } catch (_e) { /* non-fatal */ }
+        try { expConvId = await upsertConversation(bid, userId, conversationId, message, expiredText, 'action_expired') } catch (_e) { /* non-fatal */ }
         return NextResponse.json({
           response: expiredText,
           conversation_id: expConvId ?? conversationId,
@@ -349,7 +342,7 @@ async function _POST(req: Request) {
           ? JSON.parse(rawPending) as PlannedAction
           : rawPending as PlannedAction
 
-        const result = await executeAction(parsedPending, bid, user.id, conversationId, message)
+        const result = await executeAction(parsedPending, bid, userId, conversationId, message)
 
         // RC2/RC6: executor refused an unconfirmed mass mutation — re-stage WITH confirm_mass and ask the owner
         // to confirm the scale (showing the exact count). Nothing was written. This is the injection backstop:
@@ -362,7 +355,7 @@ async function _POST(req: Request) {
           }).eq('id', conversationId)
           const massText = `⚠️ ${result.error ?? `This affects ${result.affected_preview} items.`} Reply "confirm" to proceed.`
           let massConvId = conversationId
-          try { massConvId = await upsertConversation(bid, user.id, conversationId, message, massText, 'action_request') } catch { /* non-fatal */ }
+          try { massConvId = await upsertConversation(bid, userId, conversationId, message, massText, 'action_request') } catch { /* non-fatal */ }
           return NextResponse.json({ response: massText, conversation_id: massConvId ?? conversationId, intent: 'action_request', action: { action: 'mass_confirm', affected: result.affected_preview }, cost_usd_cents: 0 })
         }
 
@@ -374,7 +367,7 @@ async function _POST(req: Request) {
         if (!result.ok) {
           const errText = `Action failed: ${result.error ?? 'Unknown error'}`
           let failConvId = conversationId
-          try { failConvId = await upsertConversation(bid, user.id, conversationId, message, errText, 'action_executed') } catch (e) { console.error('[silent-catch]', e) }
+          try { failConvId = await upsertConversation(bid, userId, conversationId, message, errText, 'action_executed') } catch (e) { console.error('[silent-catch]', e) }
           return NextResponse.json({
             response: errText,
             conversation_id: failConvId ?? conversationId,
@@ -451,7 +444,7 @@ async function _POST(req: Request) {
         const responseText = confirmTextFinal
         let savedConvId = conversationId
         try {
-          savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'action_executed')
+          savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'action_executed')
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (action_executed):', (e as Error).message)
         }
@@ -516,7 +509,7 @@ async function _POST(req: Request) {
       // then attach pending_action to it — even for brand-new conversations (conversationId=null).
       let forkConvId = conversationId
       try {
-        forkConvId = await upsertConversation(bid, user.id, conversationId, message, previewText, 'action_request')
+        forkConvId = await upsertConversation(bid, userId, conversationId, message, previewText, 'action_request')
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (action_request):', (e as Error).message, 'conv_id:', conversationId)
       }
@@ -552,7 +545,7 @@ async function _POST(req: Request) {
     const clarifyReply = `I can help create that — I just need a couple of quick details: what type of promotion (e.g. 10% off, $5 off, buy-one-get-one) and when should it start?`
     let clarifyConvId = conversationId
     try {
-      clarifyConvId = await upsertConversation(bid, user.id, conversationId, message, clarifyReply, 'action_request')
+      clarifyConvId = await upsertConversation(bid, userId, conversationId, message, clarifyReply, 'action_request')
     } catch (_e) { /* non-fatal */ }
     return NextResponse.json({
       response: clarifyReply,
@@ -576,7 +569,7 @@ async function _POST(req: Request) {
           const planned = invResult.approve_action
           let forkConvId = conversationId
           try {
-            forkConvId = await upsertConversation(bid, user.id, conversationId, message, invResult.text, 'action_request')
+            forkConvId = await upsertConversation(bid, userId, conversationId, message, invResult.text, 'action_request')
           } catch (e) { console.error('[aria/ask] inv_agent upsert failed:', (e as Error).message) }
           if (forkConvId) {
             await supabase.from('aria_conversations').update({
@@ -595,7 +588,7 @@ async function _POST(req: Request) {
         // Informational inventory answer — return directly.
         let invConvId = conversationId
         try {
-          invConvId = await upsertConversation(bid, user.id, conversationId, message, invResult.text, 'inventory')
+          invConvId = await upsertConversation(bid, userId, conversationId, message, invResult.text, 'inventory')
         } catch (e) { console.error('[aria/ask] inv_agent upsert failed:', (e as Error).message) }
         return NextResponse.json({
           response: invResult.text,
@@ -627,7 +620,7 @@ async function _POST(req: Request) {
     if (match) {
       const navReply = `You can find **${match.feature}** at \`${match.route}\` in the sidebar.\n\n${match.blurb}.`
       let navConvId = conversationId
-      try { navConvId = await upsertConversation(bid, user.id, conversationId, message, navReply, 'navigation') } catch (_e) { /* non-fatal */ }
+      try { navConvId = await upsertConversation(bid, userId, conversationId, message, navReply, 'navigation') } catch (_e) { /* non-fatal */ }
       return NextResponse.json({
         response: navReply,
         conversation_id: navConvId ?? conversationId,
@@ -680,7 +673,7 @@ Rules:
 
     let generalConvId = conversationId
     try {
-      generalConvId = await upsertConversation(bid, user.id, conversationId, message, generalResult.raw, 'general')
+      generalConvId = await upsertConversation(bid, userId, conversationId, message, generalResult.raw, 'general')
     } catch (e) {
       console.error('[aria/ask] upsertConversation failed (general):', (e as Error).message)
     }
@@ -714,7 +707,7 @@ Rules:
       const responseText = 'Here\'s your full business overview:\n\n' + parallelResult.merged
       let savedConvId = conversationId
       try {
-        savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'multi_domain')
+        savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'multi_domain')
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (multi_domain):', (e as Error).message)
       }
@@ -747,7 +740,7 @@ Rules:
       const responseText = 'Here\'s your ' + result.title + ':\n\n[DELIVERABLE:' + result.outputId + ']'
       let savedConvId = conversationId
       try {
-        savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'deliverable')
+        savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'deliverable')
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (deliverable):', (e as Error).message)
       }
@@ -817,7 +810,7 @@ Rules:
         ],
         estimated_seconds: 120,
       }
-      const bgConvId = await upsertConversation(bid, user.id, conversationId, message, 'Working on it in the background — I\'ll notify you when done.', 'background_task').catch(() => conversationId)
+      const bgConvId = await upsertConversation(bid, userId, conversationId, message, 'Working on it in the background — I\'ll notify you when done.', 'background_task').catch(() => conversationId)
       return NextResponse.json({
         response: 'Working on it in the background — I\'ll notify you when done.',
         conversation_id: bgConvId ?? conversationId,
@@ -862,7 +855,7 @@ Rules:
       if (!bizCtx || bizCtx.length < 50) {
         const noDataMsg = "I don't have enough data yet for a strategic read — try a specific question."
         let savedConvId = conversationId
-        try { savedConvId = await upsertConversation(bid, user.id, conversationId, message, noDataMsg, intent.type) } catch { /* non-fatal */ }
+        try { savedConvId = await upsertConversation(bid, userId, conversationId, message, noDataMsg, intent.type) } catch { /* non-fatal */ }
         return NextResponse.json({
           response: noDataMsg,
           blocks: [{ type: 'lead', content: noDataMsg }],
@@ -1152,7 +1145,7 @@ Rules:
       if (council?.final_briefing) {
         let savedConvId = conversationId
         try {
-          savedConvId = await upsertConversation(bid, user.id, conversationId, message, councilText, intent.type)
+          savedConvId = await upsertConversation(bid, userId, conversationId, message, councilText, intent.type)
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
@@ -2035,7 +2028,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       : `Sorry, I couldn't generate the image. ${imgResult.error ?? 'Please try again.'}`
     let savedConvId = conversationId
     try {
-      savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'generate_image')
+      savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'generate_image')
     } catch (e) { console.error('[aria/ask] upsertConversation failed (image):', (e as Error).message) }
     const downloads = imgResult.ok && imgResult.download_url ? [{
       filename: imgResult.filename ?? 'poster.png',
@@ -2163,7 +2156,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       : 'Aria\'s thinking cap is off for a moment — your data is safe and everything else (POS, payments, stock, customers, bookings) keeps working as normal. Give it another go in a bit.'
 
     let outageConvId = conversationId
-    try { outageConvId = await upsertConversation(bid, user.id, conversationId, message, reply, 'ai_outage') }
+    try { outageConvId = await upsertConversation(bid, userId, conversationId, message, reply, 'ai_outage') }
     catch (e) { console.error('[aria/ask] outage upsertConversation failed:', (e as Error).message) }
 
     console.error('[aria/ask] TOTAL OUTAGE served', JSON.stringify({ cached: isCached }), 'business', bid)
@@ -2254,7 +2247,9 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     try {
       const ticket = await createSupportTicket({
         businessId: bid,
-        userEmail: user.email ?? 'unknown',
+        // MS13 phase 3 — auth already established by the rail; the email is fetched only where
+        // it is actually used (this escalate branch).
+        userEmail: (await supabase.auth.getUser()).data.user?.email ?? 'unknown',
         subject: String(action.issue_summary ?? message).slice(0, 200),
         message,
         category: String(action.category ?? 'general'),
@@ -2277,7 +2272,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // 7. Save conversation
   let savedConvId = conversationId
   try {
-    savedConvId = await upsertConversation(bid, user.id, conversationId, message, historyContent, intent.type)
+    savedConvId = await upsertConversation(bid, userId, conversationId, message, historyContent, intent.type)
   } catch (e) {
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
@@ -2335,7 +2330,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // Persist downloads in conversation so they survive page reload
   if (savedConvId && downloads.length > 0) {
     try {
-      await upsertConversation(bid, user.id, savedConvId, message, historyContent, intent.type, downloads)
+      await upsertConversation(bid, userId, savedConvId, message, historyContent, intent.type, downloads)
     } catch (e) { console.error('[non-fatal]', e) }
   }
 
@@ -2403,4 +2398,4 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   })
 }
 
-export const POST = withErrorCapture('aria/ask', _POST)
+export const POST = withBusinessContext('aria/ask', _POST)
