@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { formatAxFigure, type AxFigure } from './ax-context-types'
 import { segmentFigures, hasProvenance } from './figure-provenance'
-import { resolveAutonomy, isPersistable, PERSISTABLE_MODES } from './autonomy'
+import { resolveAutonomy, isPersistable, PERSISTABLE_MODES, mayActWithoutAsking } from './autonomy'
 
 /**
  * MS16 · AX-1 — the mutation checks the sprint names, one describe block per phase.
@@ -158,11 +158,112 @@ describe('phase 3 · presence reflects real state', () => {
     expect(mixed.mode).toBe('suggest')
   })
 
-  it('refuses to persist a mode the database cannot hold', () => {
-    expect(isPersistable('copilot')).toBe(false)
+  it('accepts all three real modes, and still refuses anything else', () => {
+    // CHANGED BY MS16B PHASE 4. The CHECK constraint on agent_settings.mode was widened on 24 Aug
+    // to CHECK (mode = ANY (ARRAY['suggest','copilot','auto'])), verified live against the database
+    // on 25 Aug before this test changed. Co-pilot is persistable now, so asserting it is NOT would
+    // be asserting something false. Widening the vocabulary is not the same as accepting anything,
+    // so the refusal of unknown values is asserted alongside.
     expect(isPersistable('suggest')).toBe(true)
+    expect(isPersistable('copilot')).toBe(true)
     expect(isPersistable('auto')).toBe(true)
-    expect(PERSISTABLE_MODES).not.toContain('copilot')
+    expect(PERSISTABLE_MODES).toEqual(['suggest', 'copilot', 'auto'])
+
+    for (const junk of ['', 'AUTO', 'full', 'yolo', 'admin', 'true']) {
+      expect(isPersistable(junk), junk + ' must be refused').toBe(false)
+    }
+  })
+})
+
+// ── MS16B PHASE 4 — CO-PILOT MUST NOT WIDEN A GATED PATH ──────────────────────────────────────
+describe('phase 4 (16B) · Co-pilot grants no permission Suggest does not', () => {
+  it('only auto may act without asking', () => {
+    expect(mayActWithoutAsking('auto')).toBe(true)
+    expect(mayActWithoutAsking('copilot')).toBe(false)
+    expect(mayActWithoutAsking('suggest')).toBe(false)
+  })
+
+  it('an unknown or absent mode never acts unprompted', () => {
+    // The predicate is a POSITIVE test, so a future fourth mode lands on the safe side by default
+    // instead of inheriting permission nobody granted it.
+    for (const v of [null, undefined, '', 'Auto', 'AUTO', 'copilot ', 'full']) {
+      expect(mayActWithoutAsking(v as string | null | undefined), String(v)).toBe(false)
+    }
+  })
+
+  it('THE RAIL — no agent gate is written in the negative form', () => {
+    // This is the check that makes Co-pilot safe rather than accidentally safe. Every gate in the
+    // agent layer tests `mode === 'auto'`. Had one been written `mode !== 'suggest'`, adding a third
+    // value would have silently promoted every Co-pilot business to full execution — including the
+    // paths that send SMS to customers and spend money. If anyone ever writes one, this goes red.
+    const AGENT_FILES = [
+      'src/lib/agents/clv-agent.ts',
+      'src/lib/agents/council.ts',
+      'src/lib/agents/flash-revenue-agent.ts',
+      'src/lib/agents/base-agent.ts',
+      'src/lib/aria/labour-realtime.ts',
+    ]
+    for (const f of AGENT_FILES) {
+      const src = read(f)
+      expect(src, f + ' must not gate on a negative mode test').not.toMatch(/mode\s*!==?\s*['"]suggest['"]/)
+      expect(src, f + ' must not gate on a negative mode test').not.toMatch(/mode\s*!==?\s*['"]copilot['"]/)
+    }
+  })
+
+  it('the three gated actions still test for auto positively', () => {
+    expect(read('src/lib/agents/clv-agent.ts')).toMatch(/if \(mode === 'auto'\)/)
+    expect(read('src/lib/agents/council.ts')).toMatch(/if \(mode === 'auto'\)/)
+    expect(read('src/lib/agents/flash-revenue-agent.ts')).toMatch(/if \(mode === 'auto'\)/)
+    expect(read('src/lib/agents/flash-revenue-agent.ts')).toMatch(/mode === 'auto' \? 'executed' : 'pending'/)
+  })
+
+  it('MUTATION PROBE — a negative-form gate is caught', () => {
+    const mutated = "if (mode !== 'suggest') { await sendSms() }"
+    expect(mutated).toMatch(/mode\s*!==?\s*['"]suggest['"]/)
+  })
+
+  it('resolves a mixed three-way state DOWN to the least rope', () => {
+    const mixed = resolveAutonomy([
+      { agent_type: 'a', mode: 'auto', enabled: true },
+      { agent_type: 'b', mode: 'copilot', enabled: true },
+    ])
+    expect(mixed.mode).toBe('copilot')
+    expect(mixed.mixed).toBe(true)
+
+    const withSuggest = resolveAutonomy([
+      { agent_type: 'a', mode: 'auto', enabled: true },
+      { agent_type: 'b', mode: 'copilot', enabled: true },
+      { agent_type: 'c', mode: 'suggest', enabled: true },
+    ])
+    expect(withSuggest.mode).toBe('suggest')
+  })
+
+  it('all-copilot resolves to copilot, and it is persisted', () => {
+    const all = resolveAutonomy([
+      { agent_type: 'a', mode: 'copilot', enabled: true },
+      { agent_type: 'b', mode: 'copilot', enabled: true },
+    ])
+    expect(all.mode).toBe('copilot')
+    expect(all.persisted).toBe(true)
+    expect(all.mixed).toBe(false)
+  })
+
+  it('an unrecognised stored value is read as the least rope, never the most', () => {
+    const junk = resolveAutonomy([{ agent_type: 'a', mode: 'god-mode', enabled: true }])
+    expect(junk.mode).toBe('suggest')
+  })
+
+  it('disabled agents do not drag the resolution', () => {
+    const r = resolveAutonomy([
+      { agent_type: 'a', mode: 'auto', enabled: true },
+      { agent_type: 'b', mode: 'suggest', enabled: false },
+    ])
+    expect(r.mode).toBe('auto')
+  })
+
+  it('the surface no longer tells the owner Co-pilot cannot be saved', () => {
+    expect(SURFACE).not.toMatch(/copilot_parked/)
+    expect(SURFACE).not.toMatch(/can.t be saved/i)
   })
 })
 

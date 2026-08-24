@@ -62,7 +62,7 @@ export default function AskAriaTransition() {
   const [ctxLoading, setCtxLoading] = useState(true)
   const [ctxUnreadable, setCtxUnreadable] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [autonomy, setAutonomy] = useState<(AutonomyState & { explanations?: Record<string, string>; copilot_parked?: string }) | null>(null)
+  const [autonomy, setAutonomy] = useState<(AutonomyState & { explanations?: Record<string, string> }) | null>(null)
   const [autonomyNote, setAutonomyNote] = useState<string | null>(null)
   const [savingMode, setSavingMode] = useState(false)
   const [openSrc, setOpenSrc] = useState<string | null>(null)
@@ -107,8 +107,7 @@ export default function AskAriaTransition() {
 
   const chooseMode = useCallback(async (mode: AutonomyMode) => {
     if (savingMode || !autonomy) return
-    // Co-pilot has no storage yet — say so rather than appear to save. See lib/aria/autonomy.ts.
-    if (mode === 'copilot') { setAutonomyNote(autonomy.copilot_parked ?? null); return }
+    // MS16B — all three modes persist now; the CHECK constraint was widened. No special case.
     setAutonomyNote(null)
     setSavingMode(true)
     try {

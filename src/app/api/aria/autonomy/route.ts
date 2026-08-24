@@ -4,13 +4,16 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
-import { resolveAutonomy, isPersistable, MODE_EXPLANATION, COPILOT_PARK_REASON } from '@/lib/aria/autonomy'
+import { resolveAutonomy, isPersistable, MODE_EXPLANATION, PERSISTABLE_MODES } from '@/lib/aria/autonomy'
 
 /**
- * MS16 PHASE 3 — read and write the REAL autonomy setting (agent_settings.mode).
+ * Read and write the REAL autonomy setting (agent_settings.mode).
  *
- * Tenant comes from the rail (MS13), never the client. Co-pilot is refused with its reason rather
- * than silently coerced — see src/lib/aria/autonomy.ts for the DDL that would unpark it.
+ * Tenant comes from the rail (MS13), never the client.
+ *
+ * MS16B PHASE 4 — all three modes persist. The CHECK constraint was widened on 24 Aug and verified
+ * live before this route changed. Unknown values are still refused: widening the vocabulary is not
+ * the same as accepting anything.
  */
 async function _GET(_req: Request, _ctx: unknown, { businessId }: BusinessContext) {
   const { data, error } = await supabaseAdmin
@@ -21,11 +24,11 @@ async function _GET(_req: Request, _ctx: unknown, { businessId }: BusinessContex
   if (error) {
     console.error('[aria/autonomy] read failed:', error.message)
     // Never guess a mode — say the setting is unreadable and let the UI show that.
-    return NextResponse.json({ error: 'unreadable', copilot_parked: COPILOT_PARK_REASON }, { status: 503 })
+    return NextResponse.json({ error: 'unreadable' }, { status: 503 })
   }
 
   const state = resolveAutonomy(data as Array<{ agent_type: string; mode: string | null; enabled: boolean | null }>)
-  return NextResponse.json({ ...state, explanations: MODE_EXPLANATION, copilot_parked: COPILOT_PARK_REASON })
+  return NextResponse.json({ ...state, explanations: MODE_EXPLANATION, modes: PERSISTABLE_MODES })
 }
 
 async function _POST(req: Request, _ctx: unknown, { businessId }: BusinessContext) {
@@ -34,20 +37,30 @@ async function _POST(req: Request, _ctx: unknown, { businessId }: BusinessContex
 
   if (!isPersistable(mode)) {
     return NextResponse.json(
-      { error: 'not_persistable', mode, reason: COPILOT_PARK_REASON },
+      { error: 'unknown_mode', mode, accepted: PERSISTABLE_MODES },
       { status: 400 },
     )
   }
 
-  // Apply to every agent this business has settings for — the control is per-business.
-  const { error } = await supabaseAdmin
+  // Applied to every agent this business has settings for — the control is per-business.
+  const { data: updated, error } = await supabaseAdmin
     .from('agent_settings')
     .update({ mode, updated_at: new Date().toISOString() })
     .eq('business_id', businessId)
+    .select('agent_type')
 
   if (error) {
     console.error('[aria/autonomy] write failed:', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // A business with no agent_settings rows updates nothing. That is a no-op, not a save, and
+  // reporting it as success would leave the owner believing a setting they never got.
+  if (!updated || updated.length === 0) {
+    return NextResponse.json(
+      { error: 'no_agents', message: 'There are no agent settings to apply this to yet.' },
+      { status: 409 },
+    )
   }
 
   const { data } = await supabaseAdmin
@@ -55,7 +68,8 @@ async function _POST(req: Request, _ctx: unknown, { businessId }: BusinessContex
     .select('agent_type, mode, enabled')
     .eq('business_id', businessId)
 
-  return NextResponse.json(resolveAutonomy(data as Array<{ agent_type: string; mode: string | null; enabled: boolean | null }>))
+  const state = resolveAutonomy(data as Array<{ agent_type: string; mode: string | null; enabled: boolean | null }>)
+  return NextResponse.json({ ...state, explanations: MODE_EXPLANATION, modes: PERSISTABLE_MODES })
 }
 
 export const GET = withBusinessContext('aria/autonomy:get', _GET)
