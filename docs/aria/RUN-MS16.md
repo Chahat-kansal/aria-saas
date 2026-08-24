@@ -41,6 +41,39 @@ audit-log cards, action preview/fork cards and file upload. RULE 0 forbids losin
 environment cannot render a page to prove none was lost. **That swap is the one decision waiting on
 you.** Open both and say go.
 
+### The commits
+
+Committed in **dependency order**, not phase-number order, so that every commit builds on its own:
+the surface imports the streaming hook, the provenance splitter, the context types and the autonomy
+lib, so it lands last.
+
+| | phase | sha | |
+|---|---|---|---|
+| 1 | Phase 1 | `d1f69643` | the contract's stylesheet, lifted byte-for-byte |
+| 2 | Phase 3 | `fc785251` | the rope is a real setting, and Co-pilot says it isn't |
+| 3 | Phase 4 | `03fd69da` | Aria speaks as she thinks, and her figures say where they came from |
+| 4 | Phase 6 | `b47deccc` | what Aria actually noticed, and a zero that stays a zero |
+| 5 | Phase 5 | `e437b4fb` | the proposal card, on the contract's classes and the existing endpoint |
+| 6 | Phase 2 | `974dae94` | one screen, two states, and an avatar that never remounts |
+
+Pushed as one push so no intermediate, individually-unbuilt state was ever deployed. Pre-push hook
+ran and passed: *canon-rail-guard clean, tsc 0 errors, unit tests green (700/700).*
+
+### A visual check the pixel numbers could not have caught
+
+After the 0.0px result I opened the four screenshots rather than trusting the number, and found two
+things that look wrong at a glance in **both** images: inside the `.nt` cards the title and subtitle
+run together on one line, and the `→` affordance renders as a large blue pill rather than a subtle
+grey arrow. **Both are the contract's own rendering, reproduced faithfully** — `.nt .h`/`.nt .s` are
+inline `<span>`s, and `.go` is defined twice in the sheet (`.nt .go` sets only `margin-left`/`color`,
+so the later `.go` button's background, radius and padding still apply). The mockup renders them
+exactly the same way.
+
+**They are not defects in this port, and I did not "fix" them** — the brief forbids changing a
+lifted rule, and the whole point of a byte-for-byte lift is that the app inherits the contract's
+rendering, quirks included. **But if that is not what you intended visually, the fix belongs in
+`ask-aria-transition.html` and I will re-lift.** Flagging it rather than silently diverging.
+
 > ⚠️ **A brief arrived mid-run and replaced the contract.** The first half of this session built
 > against `docs/design/ask-aria-FINAL.html` — a five-column layout with `--ax-*` tokens and renamed
 > classes. The revised brief named a different file (`ask-aria-transition.html`), a different design
