@@ -48,6 +48,60 @@ export function computeCostCents(modelId: string, inputTokens: number, outputTok
   return computeCostCentsWithCache(modelId, inputTokens, outputTokens)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// MS15 PHASE 1 — AN UNPRICED CALL IS UNKNOWN, NOT FREE.
+//
+// 1,459 of the last 30 days' calls carried tokens and a recorded cost of ZERO. Measured against
+// the live ledger, that is TWO different faults wearing one symptom:
+//
+//   (a) MISSING RATE — `gpt-4o-mini` and `openai/gpt-4o-mini` (93 calls) are not in PRICING, and
+//       computeCostCentsWithCache returns 0 for any model it does not know. A call whose price we
+//       cannot compute was being recorded as free. THIS FILE FIXES THAT: use
+//       computeCostCentsOrNull and the ledger records null — unknown, not zero.
+//
+//   (b) SUB-CENT ROUNDING — the remaining 1,366 (gemini-2.5-flash ×1,308, haiku ×35, sonnet ×3)
+//       ARE priced correctly; they are simply smaller than the storage granularity. A gemini call
+//       averages 514 in / 27 out ≈ 0.006 cents, and Math.round() of that is 0. Measured true cost
+//       of all 1,308 gemini calls: ~8.1 cents. So the ledger's understatement today is CENTS, not
+//       dollars — but it is structural, and it scales with volume.
+//       FIXING (b) NEEDS A COLUMN and is therefore PARKED, named here:
+//         aria_ai_calls.cost_usd_cents is `integer`. Representing sub-cent costs needs either
+//         numeric(12,6) on that column or a new cost_usd_micros integer column. DDL is not mine.
+//       Until then a sub-cent call still records 0 — which is approximately true and, unlike (a),
+//       not a claim that the call was free of charge.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Models seen in PRODUCTION with no rate in PRICING. Each needs a founder-verified rate. */
+export const UNPRICED_MODELS_SEEN: readonly string[] = [
+  'gpt-4o-mini',          // 90 calls / 128,815 tokens in the last 30 days
+  'openai/gpt-4o-mini',   // 3 calls / 37,948 tokens (OpenRouter slug)
+]
+
+/** True when this codebase can actually price the model. */
+export function isPricedModel(modelId: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PRICING, modelId)
+}
+
+/**
+ * Cost in whole cents, or NULL when the model has no rate in PRICING.
+ *
+ * Every LOGGER should use this rather than computeCostCentsWithCache, so an unknown model lands
+ * in the ledger as `null` (unknown) instead of `0` (free). computeCostCentsWithCache keeps its
+ * 0-for-unknown behaviour for the arithmetic call sites that sum costs — changing those to handle
+ * null is a separate migration, and a null in a sum is a worse failure than a zero.
+ */
+export function computeCostCentsOrNull(
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+  cachedReadTokens = 0,
+  cachedWriteTokens = 0,
+  searches = 0,
+): number | null {
+  if (!isPricedModel(modelId)) return null
+  return computeCostCentsWithCache(modelId, inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens, searches)
+}
+
 // AI-COST-2 — the Anthropic Batches API discount (AI-COST-AUDIT-1 §1 flagged this as ASSUMED:
 // "no batch-rate constant exists anywhere in the codebase"). 50% off both input and output,
 // applied uniformly — Anthropic's published Batches API rate as of this sprint. Used by

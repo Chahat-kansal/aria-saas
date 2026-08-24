@@ -80,6 +80,194 @@ const UOM_TOMBSTONE_WRITE_ALLOWLIST = [
   'src/components/products/industry/RetailProductFields.tsx',
 ]
 
+// MS15 PHASE 1 — THE MODEL GATEWAY'S GRANDFATHER LIST.
+//
+// src/lib/aria/model-router.ts is the gateway: one place that logs provider, model, tokens,
+// latency, cost and outcome for a model call. 174 files instantiate a provider SDK directly and
+// therefore log whatever they each remember to log — which is how model-router.ts and ai-router.ts
+// went months logging NOTHING (AI-COST-AUDIT-1), and how 93 production calls are still recorded as
+// costing zero because nobody priced their model.
+//
+// Migrating 174 sites in one sprint is not the move (measured adoption of a new helper without a
+// rail in this repo: 9-15%). This is the rail: every existing site is grandfathered BY NAME, and a
+// NEW direct instantiation fails the push. Shrink this list; never grow it.
+const MODEL_SDK_ALLOWLIST = [
+  'src/app/api/agent/route.ts',
+  'src/app/api/agents/bas/classify-products/route.ts',
+  'src/app/api/aria/activity-narrative/route.ts',
+  'src/app/api/aria/auto-review/route.ts',
+  'src/app/api/aria/autopilot/route.ts',
+  'src/app/api/aria/bom-suggest/route.ts',
+  'src/app/api/aria/booking-insights/route.ts',
+  'src/app/api/aria/briefing/route.ts',
+  'src/app/api/aria/bundle-builder/route.ts',
+  'src/app/api/aria/cash-commentary/route.ts',
+  'src/app/api/aria/cashup-intelligence/route.ts',
+  'src/app/api/aria/command/route.ts',
+  'src/app/api/aria/competitive-brief/route.ts',
+  'src/app/api/aria/competitor-opportunities/route.ts',
+  'src/app/api/aria/competitor-prices/route.ts',
+  'src/app/api/aria/competitor-review-analysis/route.ts',
+  'src/app/api/aria/customer-insight/route.ts',
+  'src/app/api/aria/customer-intel/route.ts',
+  'src/app/api/aria/daily-narrative/route.ts',
+  'src/app/api/aria/delivery-prediction/route.ts',
+  'src/app/api/aria/dynamic-pricing/route.ts',
+  'src/app/api/aria/explain-metric/route.ts',
+  'src/app/api/aria/feature-builder/route.ts',
+  'src/app/api/aria/first-insight/route.ts',
+  'src/app/api/aria/generate-promotion/route.ts',
+  'src/app/api/aria/generate-purchase-orders/route.ts',
+  'src/app/api/aria/generate-quote/route.ts',
+  'src/app/api/aria/grn-assist/route.ts',
+  'src/app/api/aria/influencer/generate/route.ts',
+  'src/app/api/aria/inventory-insight/route.ts',
+  'src/app/api/aria/marketing-campaigns/route.ts',
+  'src/app/api/aria/menu-optimisation/route.ts',
+  'src/app/api/aria/missed-demand-analysis/route.ts',
+  'src/app/api/aria/page-insight/route.ts',
+  'src/app/api/aria/pos-chat/route.ts',
+  'src/app/api/aria/pos-end-of-day/route.ts',
+  'src/app/api/aria/pos-insight/route.ts',
+  'src/app/api/aria/price-check/route.ts',
+  'src/app/api/aria/price-intelligence/route.ts',
+  'src/app/api/aria/product-insights/route.ts',
+  'src/app/api/aria/product-suggest/route.ts',
+  'src/app/api/aria/quote-followup/route.ts',
+  'src/app/api/aria/receipt-scan/route.ts',
+  'src/app/api/aria/recipe-cost-optimiser/route.ts',
+  'src/app/api/aria/recipe-scale/route.ts',
+  'src/app/api/aria/reorder-forecast/route.ts',
+  'src/app/api/aria/roster/route.ts',
+  'src/app/api/aria/sale-insight/route.ts',
+  'src/app/api/aria/shift-analysis/route.ts',
+  'src/app/api/aria/slow-day/route.ts',
+  'src/app/api/aria/social-learning/route.ts',
+  'src/app/api/aria/staff-schedule/route.ts',
+  'src/app/api/aria/staff-talk/route.ts',
+  'src/app/api/aria/staff-visa-insight/route.ts',
+  'src/app/api/aria/stocktake-intelligence/route.ts',
+  'src/app/api/aria/studio/route.ts',
+  'src/app/api/aria/supplier-insights/route.ts',
+  'src/app/api/aria/supplier-margin-intelligence/route.ts',
+  'src/app/api/aria/supplier-reorder/route.ts',
+  'src/app/api/aria/supplier-savings/route.ts',
+  'src/app/api/aria/talk/route.ts',
+  'src/app/api/aria/theft-detection/route.ts',
+  'src/app/api/aria/upload/route.ts',
+  'src/app/api/aria/variance/route.ts',
+  'src/app/api/aria/warehouse-intelligence/route.ts',
+  'src/app/api/aria/warehouse-slotting/route.ts',
+  'src/app/api/aria/weekly-report/route.ts',
+  'src/app/api/aria/widget-insights/route.ts',
+  'src/app/api/aria/winback-compose/route.ts',
+  'src/app/api/aria/winback-message/route.ts',
+  'src/app/api/aria/winback-send/route.ts',
+  'src/app/api/aria/winback/route.ts',
+  'src/app/api/bookings/aria-suggest/route.ts',
+  'src/app/api/builder/route.ts',
+  'src/app/api/chat/route.ts',
+  'src/app/api/community/owner/ai-draft/route.ts',
+  'src/app/api/community/owner/marketer/plan/route.ts',
+  'src/app/api/cron/parcel-insights/route.ts',
+  'src/app/api/customers/[id]/ai-summary/route.ts',
+  'src/app/api/customers/[id]/summarise/route.ts',
+  'src/app/api/customers/[id]/winback/route.ts',
+  'src/app/api/customers/import-map/route.ts',
+  'src/app/api/delivery/analytics/route.ts',
+  'src/app/api/documents/generate/route.ts',
+  'src/app/api/execute-autofix/route.ts',
+  'src/app/api/health/deep/route.ts',
+  'src/app/api/instore/insights/route.ts',
+  'src/app/api/invoices/draft-ai/route.ts',
+  'src/app/api/invoices/reminder/route.ts',
+  'src/app/api/loyalty/revenue-forecast/route.ts',
+  'src/app/api/plugins/route.ts',
+  'src/app/api/pos/agents/[type]/route.ts',
+  'src/app/api/pos/cash-flow/analysis/route.ts',
+  'src/app/api/pos/customer-greet/route.ts',
+  'src/app/api/pos/customers/insight/route.ts',
+  'src/app/api/pos/customers/sms-draft/route.ts',
+  'src/app/api/pos/display-suggestions/route.ts',
+  'src/app/api/pos/gift-cards/aria-check/route.ts',
+  'src/app/api/pos/import/csv/route.ts',
+  'src/app/api/pos/import/map-columns/route.ts',
+  'src/app/api/pos/menu-extract/route.ts',
+  'src/app/api/pos/migrate/route.ts',
+  'src/app/api/pos/online-orders/aria-upsell/route.ts',
+  'src/app/api/pos/production-plan/route.ts',
+  'src/app/api/pos/products/generate-image/route.ts',
+  'src/app/api/pos/quick-promo-suggest/route.ts',
+  'src/app/api/pos/recipes/[id]/allergens/route.ts',
+  'src/app/api/pos/recipes/import/route.ts',
+  'src/app/api/pos/shift-audits/route.ts',
+  'src/app/api/pos/shift-reports/route.ts',
+  'src/app/api/products/barcode-lookup/route.ts',
+  'src/app/api/project/generate/route.ts',
+  'src/app/api/public/instore/chat/route.ts',
+  'src/app/api/public/instore/recipe/route.ts',
+  'src/app/api/public/menu/[business_id]/descriptions/route.ts',
+  'src/app/api/public/widget/chat/route.ts',
+  'src/app/api/recipes/compare/route.ts',
+  'src/app/api/recipes/import/route.ts',
+  'src/app/api/reels/ai-edit/route.ts',
+  'src/app/api/reels/captions/route.ts',
+  'src/app/api/reels/ideas/route.ts',
+  'src/app/api/research/route.ts',
+  'src/app/api/screenshot-to-code/route.ts',
+  'src/app/api/sentry/webhook/route.ts',
+  'src/app/api/seo/competitor-analysis/route.ts',
+  'src/app/api/seo/competitors/route.ts',
+  'src/app/api/seo/generate-fix/route.ts',
+  'src/app/api/seo/keyword-suggestions/route.ts',
+  'src/app/api/seo/local-scan/route.ts',
+  'src/app/api/seo/recommendations/route.ts',
+  'src/app/api/social/calendar/route.ts',
+  'src/app/api/social/growth-post/route.ts',
+  'src/app/api/social/media/route.ts',
+  'src/app/api/social/owner-request/route.ts',
+  'src/app/api/suppliers/price-lists/route.ts',
+  'src/app/api/tickets/ai-suggest/route.ts',
+  'src/app/api/tickets/price-schedules/route.ts',
+  'src/app/api/training/draft-from-recipe/route.ts',
+  'src/app/api/visa/chat/route.ts',
+  'src/app/api/visa/generate-doc/route.ts',
+  'src/app/api/visa/monitor/route.ts',
+  'src/app/api/warehouse/ai-order-suggestions/route.ts',
+  'src/app/api/warehouse/purchase-orders/[id]/receive/route.ts',
+  'src/app/api/wholesale/aria-intelligence/route.ts',
+  'src/app/api/wholesale/orders/aria-suggest/route.ts',
+  'src/app/api/wholesale/orders/from-email/route.ts',
+  'src/app/api/widget/chat/route.ts',
+  'src/lib/agents/aeo-monitor.ts',
+  'src/lib/agents/base-agent.ts',
+  'src/lib/agents/council.ts',
+  'src/lib/ai-router.ts',
+  'src/lib/aria-insights.ts',
+  'src/lib/aria/agents/automation-agent.ts',
+  'src/lib/aria/agents/message-agent.ts',
+  'src/lib/aria/agents/orchestrator.ts',
+  'src/lib/aria/agents/query-agent.ts',
+  'src/lib/aria/agents/rostering-agent.ts',
+  'src/lib/aria/council.ts',
+  'src/lib/aria/deliverables.ts',
+  'src/lib/aria/intelligence/competitor.ts',
+  'src/lib/aria/market-prices.ts',
+  'src/lib/aria/model-router.ts',
+  'src/lib/aria/parallel-orchestrator.ts',
+  'src/lib/aria/providers/anthropic.ts',
+  'src/lib/aria/response-validator.ts',
+  'src/lib/community/abuse-guard.ts',
+  'src/lib/community/privacy-guard.ts',
+  'src/lib/gemini.ts',
+  'src/lib/intelligence/agent.ts',
+  'src/lib/loyalty/challenges.ts',
+  'src/lib/pos/ai-split.ts',
+  'src/lib/pos/receipt-ocr.ts',
+  'src/lib/reports/weekly-ai.ts',
+  'src/lib/seo/ai-fix.ts',
+]
+
 const COST_READ_ALLOWLIST = [
   'src/app/api/admin/businesses/[id]/route.ts',
   'src/app/api/aria/competitor-prices/auto-adjust/route.ts',
@@ -219,6 +407,15 @@ function scan(diff: string): Violation[] {
           violations.push({ file: currentFile, line: newLineNo, rule: 'direct-cost-read', text: text.trim() })
         }
 
+        // Rule 8 — MS15 phase 1: a NEW direct provider-SDK instantiation. Model calls go through
+        // the gateway (src/lib/aria/model-router.ts) so provider, model, tokens, latency, cost and
+        // outcome are logged in ONE place. The 174 pre-existing sites are grandfathered by name in
+        // MODEL_SDK_ALLOWLIST above.
+        if (/new\s+(?:Anthropic|OpenAI|GoogleGenerativeAI)\s*\(/.test(text)
+            && !MODEL_SDK_ALLOWLIST.includes(currentFile)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'direct-model-sdk-call', text: text.trim() })
+        }
+
         // Rule 7 — MS12 phase 6: a NEW write to a tombstoned UOM column. The object-key form
         // (`items_per_case: value`) is the write signature — payload objects for insert/update/
         // upsert. Reads (select strings) are untouched; type declarations in database.types.ts
@@ -299,7 +496,10 @@ function main() {
   console.error('ranks real transactions above it, reports unknown as null, and carries the provenance tier the UI shows;')
   console.error('never write items_per_case/case_quantity/cases_*/sell_uom — those columns are TOMBSTONED (see')
   console.error('src/lib/inventory/uom.ts): stock is BASE UNITS and the only live pack pair is purchase_uom + purchase_uom_qty.')
-  console.error('Convert at the boundary with packConversion()/importPackFields(); refuse ambiguity, never default a factor.')
+  console.error('Convert at the boundary with packConversion()/importPackFields(); refuse ambiguity, never default a factor;')
+  console.error('route model calls through the gateway (src/lib/aria/model-router.ts) rather than instantiating a provider SDK')
+  console.error('directly — the gateway is the one place that logs provider, model, tokens, latency, cost and outcome, and a')
+  console.error('direct client logs whatever that call site remembered to log (93 production calls are recorded as $0 today).')
   process.exit(1)
 }
 

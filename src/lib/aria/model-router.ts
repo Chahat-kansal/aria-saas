@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy';
-import { computeCostCentsWithCache } from './cost';
+import { computeCostCentsOrNull } from './cost';
 
 // AI-COST-2 — this file's runAriaModel() had ZERO aria_ai_calls logging of any kind
 // (AI-COST-AUDIT-1 §1: the single largest confirmed blind spot — business-brain's dashboard-load
@@ -13,14 +13,14 @@ async function logModelRouterCall(params: {
   task: AriaTask; provider: Provider; model_id: string
   input_tokens: number; output_tokens: number; success: boolean
   business_id?: string; agent_key?: string; error_message?: string
+  latency_ms?: number
 }) {
   if (!params.business_id) return; // no business context to attribute this call to — nothing to log against
   try {
-    // Cost is only computable for models present in cost.ts's PRICING table (Anthropic + the OpenAI
-    // models added there). OpenRouter/OpenRouter-free model IDs are configurable via env slug and are
-    // not in a static pricing table — token counts still land in the ledger for volume visibility,
-    // cost is 0 for those two providers (computeCostCentsWithCache already no-ops on an unknown model).
-    const cost = computeCostCentsWithCache(params.model_id, params.input_tokens, params.output_tokens);
+    // MS15 PHASE 1 — an unpriced model now records NULL, not 0. The old comment below was accurate
+    // and the behaviour it described was the bug: "cost is 0 for those two providers". A call we
+    // cannot price is unknown, and the ledger must say so rather than reporting it as free.
+    const cost = computeCostCentsOrNull(params.model_id, params.input_tokens, params.output_tokens);
     const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: params.business_id,
       agent_key: params.agent_key ?? `model_router_${params.task}`,
@@ -29,6 +29,7 @@ async function logModelRouterCall(params: {
       role: 'analysis',
       input_tokens: params.input_tokens,
       output_tokens: params.output_tokens,
+      latency_ms: params.latency_ms ?? null,
       cost_usd_cents: cost,
       success: params.success,
       error_message: params.error_message ?? null,

@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getAdminClient, isAdminEmail, logAdminAction } from '@/lib/admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { normalizePlan } from '@/lib/plans/resolve-plan'
+import { summariseProviderFailures } from '@/lib/aria/provider-failure'
 
 const PLAN_DEFAULTS: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
 // MS12 PHASE 3 — tier strings resolve through normalizePlan before keying budgets, so the live
@@ -50,7 +51,7 @@ async function _GET(req: Request) {
     // numbers this page already reports. But a failed call costs $0, so that same filter made every
     // failure invisible on the only surface that reads this table — which is how a 48% Anthropic
     // failure rate ran for weeks unnoticed. No cost filter here, and success is selected.
-    db.from('aria_ai_calls').select('provider, agent_key, success, error_message').gte('created_at', thirtyDaysAgo.toISOString()).limit(20000),
+    db.from('aria_ai_calls').select('provider, agent_key, success, error_message, created_at').gte('created_at', thirtyDaysAgo.toISOString()).limit(20000),
   ])
 
   const nameOf = new Map((businesses ?? []).map(b => [b.id as string, b.name as string]))
@@ -180,7 +181,20 @@ async function _GET(req: Request) {
     }))
     .sort((a, b) => b.failure_rate - a.failure_rate)
 
+  // MS15 PHASE 1 — WHY, not just how many. The block above already showed a 60% Anthropic failure
+  // rate and the verbatim strings; what it could not say is whether anyone needs to DO something.
+  // 2,401 of 2,533 Anthropic failures in the last 30 days are one unpaid bill, still rejecting
+  // calls today — a fact that should interrupt someone, unlike a rate-limit blip that will not.
+  const failure_causes = summariseProviderFailures(
+    (healthRows ?? []) as Array<{ provider: string | null; success: boolean | null; error_message: string | null; created_at: string | null }>,
+  )
+  const action_required = failure_causes.filter(f => f.action_required)
+
   return NextResponse.json({
+    // ACTION REQUIRED first of all — a human-fixable provider failure outranks every metric on
+    // this page, because no other number on it means anything while calls are being rejected.
+    action_required,
+    failure_causes,
     // Failure rate FIRST, cost second — a dashboard that leads with cost is what produced this
     // blind spot in the first place.
     health,

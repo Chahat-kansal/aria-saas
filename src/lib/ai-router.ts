@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
-import { computeCostCentsWithCache } from '@/lib/aria/cost'
+import { computeCostCentsOrNull } from '@/lib/aria/cost'
 
 // AI-COST-2 — this file's Claude call sites (callClaude/callHaiku) never wrote to aria_ai_calls
 // at all (AI-COST-AUDIT-1 §1: a confirmed blind spot). Lazy client — module-scope createClient()
@@ -20,7 +20,8 @@ async function logClaudeCall(params: {
 }) {
   if (!params.business_id) return // no business context to attribute this call to — nothing to log against
   try {
-    const cost = computeCostCentsWithCache(params.model_id, params.input_tokens, params.output_tokens)
+    // MS15 PHASE 1 — unknown model → null (unknown), never 0 (free).
+    const cost = computeCostCentsOrNull(params.model_id, params.input_tokens, params.output_tokens)
     const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: params.business_id,
       agent_key: params.agent_key ?? `ai_router_${params.task}`,
