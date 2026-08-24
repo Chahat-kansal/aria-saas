@@ -118,6 +118,10 @@
     {
       "path": "/api/cron/dispatch/h23",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/inertness-scan",
+      "schedule": "0 4 * * *"
     }
   ]
 }
