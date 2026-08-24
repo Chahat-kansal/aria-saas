@@ -69,7 +69,23 @@ describe('EVAL 3 — an instruction sheet naming another business returns nothin
 
   it('and the mechanism holds independently: the route resolves the tenant on the rail', () => {
     // Phase 3 put ask/route.ts on withBusinessContext; no agent text is consulted for tenancy.
-    expect(ROUTE).toMatch(/export const POST = withBusinessContext\('aria\/ask', _POST\)/)
+    //
+    // CHANGED BY MS16 PHASE 4 (streaming). The handler this rail wraps is now `_STREAMING_POST`
+    // rather than `_POST` directly: a request asking for `text/event-stream` gets SSE frames, and
+    // everything else is handed straight to the original `_POST`. The tenancy property this test
+    // exists to protect is UNCHANGED and is asserted more strictly than before — the export must
+    // still go through withBusinessContext under the same key, AND the wrapper must pass the
+    // rail-resolved BusinessContext (`biz`) through to `_POST` on BOTH paths rather than
+    // re-deriving a tenant of its own. The old assertion pinned the handler's NAME, which is not
+    // the security property; these pin the property.
+    expect(ROUTE).toMatch(/export const POST = withBusinessContext\('aria\/ask', _STREAMING_POST\)/)
+    expect(ROUTE).toMatch(/_STREAMING_POST = async \(req: Request, routeCtx: unknown, biz: BusinessContext\)/)
+    // non-streaming path: straight through with the rail's context
+    expect(ROUTE).toMatch(/if \(!wantsStream\(req\)\) return _POST\(req, routeCtx, biz\)/)
+    // streaming path: same context, plus the token sink
+    expect(ROUTE).toMatch(/await _POST\(req, routeCtx, biz, \(t: string\)/)
+    // and no tenant is ever read from the request body or agent text
+    expect(ROUTE).not.toMatch(/business_id:\s*body\./)
     expect(ROUTE).toMatch(/const bid = businessId/)
     // The agent rows themselves are fetched scoped to the resolved tenant.
     expect(ROUTE).toMatch(/\.eq\('business_id', bid\)\.eq\('enabled', true\)/)

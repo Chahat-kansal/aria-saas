@@ -198,6 +198,16 @@ interface ToolLoopParams {
   tools: Tool[]
   executeTool: (name: string, input: unknown) => Promise<unknown>
   maxTokens?: number
+  /**
+   * MS16 PHASE 4 — REAL token streaming. When provided, each model turn runs through the SDK's
+   * streaming API and every text delta fires this callback AS IT ARRIVES. The loop is otherwise
+   * untouched: finalMessage() resolves to the same shape messages.create() returns, so tool turns,
+   * usage accounting, caching and the circuit breaker all behave identically.
+   *
+   * Chunking an already-complete string would have been easier and would have been a lie — the
+   * owner would see a typewriter effect over an answer that took just as long to arrive.
+   */
+  onToken?: (text: string) => void
   maxIterations?: number
   thinking?: { enabled: boolean; budget_tokens?: number }
   businessId?: string
@@ -286,7 +296,14 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         }, iterTimeoutMs)
       })
       const response = await Promise.race([
-        withBackoff(() => client.messages.create(requestBody, { signal: iterAc.signal })),
+        withBackoff(async () => {
+          if (!params.onToken) return client.messages.create(requestBody, { signal: iterAc.signal })
+          // Streaming turn: deltas reach the caller immediately; finalMessage() gives the loop
+          // exactly what messages.create() would have.
+          const streamed = client.messages.stream(requestBody, { signal: iterAc.signal })
+          streamed.on('text', (delta: string) => { try { params.onToken!(delta) } catch { /* a broken sink must never kill the turn */ } })
+          return streamed.finalMessage()
+        }),
         iterHardTimeout,
       ])
       clearTimeout(iterTimerId)

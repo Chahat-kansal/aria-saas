@@ -16,6 +16,8 @@ import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import type { AskBlock } from '@/lib/aria/ask-types'
 import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 
+import { readAriaSse, isEventStream } from '@/lib/aria/ask-sse'
+
 const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
@@ -678,7 +680,10 @@ export default function AskAriaPage() {
       } else {
         res = await fetch('/api/aria/ask', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // MS16 PHASE 4 — ask for tokens as they are produced. The route falls back to the
+          // buffered JSON body for any client that does not send this header, so nothing that
+          // called this endpoint before behaves differently.
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
           body: JSON.stringify({ message: msg, conversation_id: conversationId }),
           signal: controller.signal,
         })
@@ -689,7 +694,7 @@ export default function AskAriaPage() {
         throw new Error(errData.error ?? `Request failed (${res.status})`)
       }
 
-      const data = await res.json() as {
+      type AskPayload = {
         response?: string; conversation_id?: string; intent?: string
         action?: { action?: string; planned?: PlannedAction; type?: string; [k: string]: unknown }
         cost_usd_cents?: number
@@ -704,6 +709,29 @@ export default function AskAriaPage() {
         note?: string
         total_outage?: boolean
         cached?: boolean
+      }
+
+      // MS16 PHASE 4 — STREAMING IS THE HEADLINE. Aria used to buffer the entire answer and dump it
+      // in one go; her words now land as she produces them. The `done` frame carries the same
+      // payload the buffered response always did, so every branch below is untouched — blocks,
+      // downloads, actions, deliverables and the council flag all still arrive exactly as before.
+      let data: AskPayload
+      if (isEventStream(res)) {
+        data = await readAriaSse<AskPayload>(res, {
+          onText: (full) => {
+            setMessages(prev => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last?.role === 'assistant' && last.streaming) {
+                updated[updated.length - 1] = { ...last, content: full }
+              }
+              return updated
+            })
+          },
+        })
+      } else {
+        // Older deploy, a proxy that strips the content type, or the file-upload path.
+        data = await res.json() as AskPayload
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)

@@ -191,7 +191,13 @@ async function upsertConversation(
   return (created as { id: string }).id
 }
 
-async function _POST(req: Request, _routeCtx: unknown, { supabase, userId, businessId }: BusinessContext) {
+/**
+ * MS16 PHASE 4 — `onToken` is threaded in rather than bolted on. It is used at exactly ONE place:
+ * the main tool-loop call. Every other lane (action planner, inventory agent, council, deliverable,
+ * image, background task…) returns fast and simply emits its result as the stream's `done` event —
+ * so the twelve early returns keep working untouched and nothing was duplicated to get streaming.
+ */
+async function _POST(req: Request, _routeCtx: unknown, { supabase, userId, businessId }: BusinessContext, onToken?: (t: string) => void) {
   const rl = await checkRateLimit('ai', userId)
   if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 })
 
@@ -2136,6 +2142,8 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
   } else {
     toolResult = await callAnthropicWithTools({
+      // MS16 phase 4 — the only streaming call site.
+      onToken,
       model: routedModel,
       systemPrompt: effectiveSystemPrompt,
       userPrompt,
@@ -2453,4 +2461,50 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   })
 }
 
-export const POST = withBusinessContext('aria/ask', _POST)
+/**
+ * MS16 PHASE 4 — SSE when the client asks for it, unchanged JSON when it doesn't.
+ *
+ * The stream carries three event types: `stage` (what Aria is doing — the avatar column's live
+ * status line reads these), `token` (real deltas), and `done` (the full JSON payload the
+ * non-streaming client already understands, so blocks, downloads, actions and provenance arrive
+ * exactly as before). A client that cannot stream loses nothing.
+ */
+function wantsStream(req: Request): boolean {
+  return (req.headers.get('accept') ?? '').includes('text/event-stream')
+}
+
+const _STREAMING_POST = async (req: Request, routeCtx: unknown, biz: BusinessContext): Promise<Response> => {
+  if (!wantsStream(req)) return _POST(req, routeCtx, biz)
+
+  const encoder = new TextEncoder()
+  const line = (o: unknown) => encoder.encode(`data: ${JSON.stringify(o)}\n\n`)
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
+  const writer = writable.getWriter()
+
+  void (async () => {
+    try {
+      await writer.write(line({ type: 'stage', stage: 'thinking' }))
+      const res = await _POST(req, routeCtx, biz, (t: string) => {
+        void writer.write(line({ type: 'token', text: t }))
+      })
+      const payload = await res.json().catch(() => ({ error: 'unreadable response' }))
+      await writer.write(line({ type: 'done', payload }))
+    } catch (e) {
+      // A failure mid-stream must still tell the client something true.
+      await writer.write(line({ type: 'error', message: (e as Error).message })).catch(() => {})
+    } finally {
+      await writer.close().catch(() => {})
+    }
+  })()
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
+export const POST = withBusinessContext('aria/ask', _STREAMING_POST)
