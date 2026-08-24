@@ -33,7 +33,9 @@ const cormorant = Cormorant({
 
 const outfit = Outfit({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
+  // MS16 — 700 added for AX-1's proposal-card total. Outfit was ALREADY the body face, so the
+  // Ask Aria contract's "Outfit everywhere, no serif" needed a weight, not a font.
+  weight: ['300', '400', '500', '600', '700'],
   variable: '--font-body',
   display: 'swap',
 });
