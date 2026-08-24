@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy';
 import { computeCostCentsOrNull } from './cost';
+import { modelForTask, modelForTaskOnProvider, isJudgementTask } from './jobs';
 
 // AI-COST-2 — this file's runAriaModel() had ZERO aria_ai_calls logging of any kind
 // (AI-COST-AUDIT-1 §1: the single largest confirmed blind spot — business-brain's dashboard-load
@@ -100,15 +101,18 @@ export type AriaModelResult<T = any> = {
   provider?: Provider;
 };
 
-// Tasks that genuinely need Sonnet-level reasoning (user-initiated, high-value)
-// High-frequency auto-refresh tasks (daily_briefing, business_health) use Haiku
-// to avoid 504 timeouts — they run on a schedule and volume matters more than depth
-const SMART_TASKS = new Set<AriaTask>([
+// MS15 PHASE 2 — SUPERSEDED by src/lib/aria/jobs.ts. This set encoded ONE distinction (smart vs
+// routine) inside the router; the job map encodes four, outside it, so a call site declares the
+// KIND of work and the model follows. The membership is preserved exactly — every task listed here
+// is a 'judgement' job in TASK_JOB, asserted in jobs.test.ts — and the set is kept, unread, per
+// RULE 0 so the previous routing rule stays legible next to its replacement.
+const SMART_TASKS_SUPERSEDED = new Set<AriaTask>([
   'reorder_plan',
   'profit_leak',
   'supplier_risk',
   'explain',
 ]);
+void SMART_TASKS_SUPERSEDED;
 
 function hasAnthropic() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -169,7 +173,10 @@ export function parseModelJson(text: string) {
 }
 
 async function callAnthropic(input: RunInput): Promise<ProviderCallResult> {
-  const model = SMART_TASKS.has(input.task) ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+  // MS15 PHASE 2 — the model comes from the task's JOB, never from a ternary here. Byte-identical
+  // to the previous SMART_TASKS choice (asserted per-task in jobs.test.ts); what changed is that
+  // swapping a model is now one line in jobs.ts instead of an edit at every call site.
+  const model = modelForTask(input.task);
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
   const createParams: any = {
     model,
@@ -192,7 +199,7 @@ async function callAnthropic(input: RunInput): Promise<ProviderCallResult> {
 }
 
 async function callOpenAI(input: RunInput): Promise<ProviderCallResult> {
-  const model = SMART_TASKS.has(input.task) ? 'gpt-4o' : 'gpt-4o-mini';
+  const model = modelForTaskOnProvider(input.task, 'openai'); // MS15 phase 2 — same choice, one file
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const response = await client.chat.completions.create({
     model,
@@ -213,7 +220,7 @@ async function callOpenAI(input: RunInput): Promise<ProviderCallResult> {
 }
 
 async function callOpenRouter(input: RunInput): Promise<ProviderCallResult> {
-  const model = SMART_TASKS.has(input.task) ? 'anthropic/claude-sonnet-4-6' : 'openai/gpt-4o-mini';
+  const model = modelForTaskOnProvider(input.task, 'openrouter'); // MS15 phase 2 — same choice, one file
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -254,7 +261,9 @@ async function callOpenRouter(input: RunInput): Promise<ProviderCallResult> {
 async function callOpenRouterFree(input: RunInput): Promise<ProviderCallResult> {
   const smart = process.env.OPENROUTER_FREE_SMART_MODEL;
   const routine = process.env.OPENROUTER_FREE_ROUTINE_MODEL;
-  const model = SMART_TASKS.has(input.task) ? (smart || routine) : (routine || smart);
+  // The free floor picks between two env-supplied slugs, so it needs the job DISTINCTION rather
+  // than a model string — same rule, no literal to drift.
+  const model = isJudgementTask(input.task) ? (smart || routine) : (routine || smart);
   if (!model) throw new Error('OpenRouter free model not configured');
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
