@@ -72,6 +72,22 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
   }
 
   // ── AWAITING YOU — real pending decisions ────────────────────────────────────────────────────
+  // THE COUNT IS ITS OWN QUERY. The list below is capped at 6 for the panel; using that cap as the
+  // badge reported "6" while 55 decisions were actually pending. A count and a page size are not
+  // the same number and must not share a source.
+  let awaitingTotal = 0
+  try {
+    const { count, error } = await supabaseAdmin
+      .from('aria_actions')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', businessId)
+      .eq('status', 'pending')
+    if (error) throw new Error(error.message)
+    awaitingTotal = count ?? 0
+  } catch (e) {
+    console.error('[ax-context] pending count failed:', (e as Error).message)
+  }
+
   try {
     const { data, error } = await supabaseAdmin
       .from('aria_actions')
@@ -186,5 +202,5 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
     console.error('[ax-context] memory tags failed:', (e as Error).message)
   }
 
-  return { ownerName, businessName, today, awaiting, didToday, tags, noticed, quiet: noticed.length === 0 }
+  return { ownerName, businessName, awaitingTotal, today, awaiting, didToday, tags, noticed, quiet: noticed.length === 0 }
 }

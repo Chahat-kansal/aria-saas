@@ -33,6 +33,12 @@ export interface AxNotice {
 }
 
 export interface AxContext {
+  /**
+   * How many decisions are ACTUALLY pending — not how many this payload carries.
+   * `awaiting` is capped for the panel; this is the real count, and it is what the badge shows.
+   * They differed 6 vs 55 on the first live screenshot, which is a number reporting a page size.
+   */
+  awaitingTotal: number
   /** Who to greet. null when the row has no owner_name — the greeting drops the name, never invents one. */
   ownerName: string | null
   businessName: string | null

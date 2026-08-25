@@ -306,8 +306,11 @@ export default function AskAriaTransition() {
   }, [ctx?.ownerName, ctxLoading, ctxUnreadable, noticed.length])
 
   const revenue = ctx?.today.find(f => f.label === 'Revenue today')
-  /** LIVE count, straight off the pending decisions. Never a constant. */
-  const awaitingCount = ctx?.awaiting.length ?? 0
+  /**
+   * The TRUE number of pending decisions, counted server-side — not the length of the capped list.
+   * Using the list length showed "6" while 55 were pending.
+   */
+  const awaitingCount = ctx?.awaitingTotal ?? 0
 
   const enterRoom = useCallback((id: Room) => {
     setRoom(id)
@@ -490,12 +493,14 @@ export default function AskAriaTransition() {
           </div>
 
           {room === 'awaiting' && (
-            <div className="ax-room">
-              <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable} onPrompt={ask} />
+            // ONE .ax-room. The audit log goes INSIDE the room as a child rather than beside it in
+            // a second wrapper — nesting two `.ax-room`s gave two competing scroll containers and
+            // collapsed the content to a sliver.
+            <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable} onPrompt={ask}>
               {/* Migrated: what Aria has already done, and the rollback path. Real component,
                   real route (/api/aria/ask/audit, /rollback) over aria_action_log. */}
               <AuditLogCard />
-            </div>
+            </AwaitingRoom>
           )}
           {room === 'made' && <MadeForYouRoom onPrompt={ask} />}
 

@@ -187,6 +187,52 @@ describe('MS17 · no fake controls on the Ask Aria surface', () => {
 //
 // It still cannot prove the route WORKS against real data. Nothing static can. Phase 5's walk is
 // the nearest available, and only for the day it ran.
+describe('MS17 . the awaiting room layout and its count', () => {
+  const ROOM = read('src/components/ask-aria-ax/rooms/AwaitingRoom.tsx')
+  const SURFACE = read('src/components/ask-aria-ax/AskAriaTransition.tsx')
+
+  it('the caller does NOT wrap AwaitingRoom in a second .ax-room', () => {
+    // `.ax-room` is flex:1 + overflow-y:auto + padding. Two nested gave two competing scroll
+    // containers and collapsed the room to a sliver with a dead gap below — what the founder saw.
+    // Extra content goes in as children so there is exactly one container.
+    const at = SURFACE.indexOf('<AwaitingRoom')
+    expect(at).toBeGreaterThan(-1)
+    const before = SURFACE.slice(Math.max(0, at - 400), at)
+    expect(before, 'AwaitingRoom must not sit inside another .ax-room')
+      .not.toMatch(/className="ax-room"[^]*$/)
+  })
+
+  it('AwaitingRoom renders its own single room container', () => {
+    expect(ROOM).toMatch(/className="ax-room"/)
+    expect(ROOM).toMatch(/children/)
+  })
+
+  it('the badge is the TRUE pending count, not the length of the capped list', () => {
+    // These differed 6 vs 55 on the first live screenshot: the list is .limit(6) server-side, so
+    // its length is a page size. A count and a page size must not share a source.
+    expect(SURFACE).toMatch(/awaitingCount = ctx\?\.awaitingTotal/)
+    expect(SURFACE).not.toMatch(/awaitingCount = ctx\?\.awaiting\.length/)
+    expect(ROOM).toMatch(/ctx\.awaitingTotal/)
+  })
+
+  it('the room says so when it is showing a page rather than everything', () => {
+    expect(ROOM).toMatch(/most recent of/)
+  })
+
+  it('the server counts pending separately from the list it returns', () => {
+    const CTX = read('src/lib/aria/ax-context.ts')
+    expect(CTX).toMatch(/count: 'exact', head: true/)
+    expect(CTX).toMatch(/awaitingTotal = count \?\? 0/)
+  })
+
+  it('MUTATION PROBE -- reverting the badge to the list length is caught', () => {
+    const mutated = SURFACE.replace('const awaitingCount = ctx?.awaitingTotal ?? 0',
+                                    'const awaitingCount = ctx?.awaiting.length ?? 0')
+    expect(mutated).not.toBe(SURFACE)
+    expect(mutated).toMatch(/awaitingCount = ctx\?\.awaiting\.length/)
+  })
+})
+
 describe('MS17 phase 6 . every wire reaches a real route', () => {
   const CALLERS = [
     'src/components/ask-aria-ax/AskAriaTransition.tsx',
@@ -272,16 +318,24 @@ describe('MS17 · the rooms are over stores that have a writer', () => {
   })
 
   it('the awaiting badge is a live count, never a constant', () => {
-    expect(SURFACE).toMatch(/awaitingCount = ctx\?\.awaiting\.length/)
+    // CHANGED after the first live screenshot. This originally asserted
+    // `awaitingCount = ctx?.awaiting.length`, which WAS live — and still wrong. `awaiting` is
+    // capped at 6 server-side, so its length is a page size: the badge read 6 while 55 decisions
+    // were actually pending. "Live" was never the whole requirement; "true" is. The assertion now
+    // pins the server-side count, and the old shape is asserted ABSENT so it cannot come back.
+    expect(SURFACE).toMatch(/awaitingCount = ctx\?\.awaitingTotal/)
+    expect(SURFACE).not.toMatch(/awaitingCount = ctx\?\.awaiting\.length/)
     expect(SURFACE).toMatch(/awaitingCount > 0 && <span className="badge">\{awaitingCount\}/)
   })
 
   it('MUTATION PROBE — a hard-coded badge is caught', () => {
+    // Re-pointed at the current source line for the same reason as the test above. It still proves
+    // the same thing: replacing the count with a constant is detectable.
     const mutated = SURFACE.replace(
-      'const awaitingCount = ctx?.awaiting.length ?? 0',
+      'const awaitingCount = ctx?.awaitingTotal ?? 0',
       'const awaitingCount = 3',
     )
     expect(mutated).not.toBe(SURFACE)
-    expect(mutated).not.toMatch(/awaitingCount = ctx\?\.awaiting\.length/)
+    expect(mutated).not.toMatch(/awaitingCount = ctx\?\.awaitingTotal/)
   })
 })
