@@ -118,7 +118,29 @@ whoever ran it can commit them deliberately if they were meant to land.
 ## GATES
 
 Nothing was built, so nothing new was gated. The pre-push hook ran on this run log's commit:
-canon-rail-guard clean, tsc 0 errors, unit tests green.
+canon-rail-guard clean, tsc 0 errors, unit tests green (710/710).
+
+### ⚠️ THE PUSH GATE FLAKED ONCE — worth knowing, because this is how `--no-verify` habits start
+
+The **first** push attempt was **BLOCKED** by the pre-push hook with "unit tests failed". The
+**second** attempt, on **byte-identical code**, passed with 710/710 and a clean canon rail. Nothing
+was changed between them and nothing was bypassed.
+
+Investigated before retrying rather than reflexively pushing again:
+- `npx vitest run` → **710/710 passed**
+- `npm run test:unit` (the hook's exact command) → **710/710 passed**
+
+So the suite is green and the failure did not reproduce. The failing run was also visibly slower
+(`import 56.71s, tests 31.65s` versus 7–26s when run directly), which points at contention or a
+timeout-sensitive test under load rather than a real regression.
+
+**My own measurement error, stated:** I piped that first push through `tail -5`, so the hook's
+output scrolled past and **I never saw which test failed.** I therefore cannot name it, and I am not
+going to guess. If this recurs, capture the whole hook output (`git push > push.log 2>&1`) and the
+offending test will be in it.
+
+**No bypass was used.** `--no-verify` is on the NEVER-unattended list and the correct response to a
+blocked push is to find out why, which is what happened here.
 
 ## WHAT IS NOT DONE
 
