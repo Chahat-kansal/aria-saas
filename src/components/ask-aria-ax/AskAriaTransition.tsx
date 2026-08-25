@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAriaStream } from './useAriaStream'
+import AriaAvatarMount from './AriaAvatarMount'
 import { segmentFigures } from '@/lib/aria/figure-provenance'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
@@ -163,6 +164,16 @@ export default function AskAriaTransition() {
     setWorking(false)
   }, [])
 
+  // The last SETTLED Aria reply — the avatar's only text input. Never `text` (the live stream),
+  // because that would change on every token. `.filter` walks finished turns only.
+  const settledReply = useMemo(() => {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const t = turns[i]
+      if (t && t.role === 'aria' && !t.streaming && t.text) return t.text
+    }
+    return ''
+  }, [turns])
+
   // ── what the status pill says. Real state, never a timer. ───────────────────────────────────
   const doing = isBusy
     ? (stage === 'streaming' ? 'Writing' : 'Reading your till')
@@ -216,10 +227,17 @@ export default function AskAriaTransition() {
           */}
           <div className="orbit">
             <div className="corona" />
-            {/* #ax-avatar is the mount point the contract names. The real Aria goes in here.
-                The contract's drawn .hair/.head/.fringe/.eye/.smile/.torso/.lapel children are
-                deliberately absent — that face is a mockup placeholder, not Aria. */}
-            <div className="figure" id="ax-avatar" />
+            {/* #ax-avatar is the mount point the contract names, and the REAL Aria mounts into it:
+                the VRM at public/models/Aria.glb via AriaTalkingHead. The contract's drawn
+                .hair/.head/.fringe/.eye/.smile/.torso/.lapel children are deliberately absent in
+                every state — that face is a mockup placeholder, not Aria.
+
+                `settledReply` is deliberately NOT the streaming buffer. Feeding the avatar
+                in-flight text would change its props on every token and re-render a WebGL canvas
+                per token; this changes once, when a turn finishes. */}
+            <div className="figure" id="ax-avatar">
+              <AriaAvatarMount replyText={settledReply} speaking={isBusy} />
+            </div>
           </div>
 
           <div className="headline">

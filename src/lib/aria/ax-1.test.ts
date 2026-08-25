@@ -155,6 +155,87 @@ describe('phase 2 · the transition', () => {
   })
 })
 
+// -- MS16C PHASE 3 -- THE DRAWN FACE IS NOT ARIA, AND MUST NEVER REACH THE BROWSER -----------
+describe('phase 3 (16C) . the real Aria, and no placeholder face', () => {
+  const MOUNT = read('src/components/ask-aria-ax/AriaAvatarMount.tsx')
+
+  /** Source with comments stripped, so prose mentioning a filename cannot satisfy or trip a check. */
+  const code = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+  /**
+   * NOTE ON THESE REGEXES. They are written as literals on purpose. The first version built them
+   * with `new RegExp('className="[^"]*\\bhair\\b')`, and a `\b` inside a JS string is a BACKSPACE
+   * character rather than a word boundary — so the pattern matched nothing, and the assertion
+   * passed no matter what the source contained. A test that cannot fail is worse than no test.
+   * The MUTATION PROBE below exists to prove these can still go red.
+   */
+  const PLACEHOLDER = [
+    /className="[^"]*\bhair\b/,
+    /className="[^"]*\bfringe\b/,
+    /className="[^"]*\btorso\b/,
+    /className="[^"]*\blapel\b/,
+    /className="[^"]*\bsmile\b/,
+    /className="[^"]*\beye\b/,
+  ]
+
+  it('renders NONE of the contract placeholder children', () => {
+    // The contract carries .hair/.head/.fringe/.eye/.smile/.torso/.lapel inside #ax-avatar as an
+    // explicitly marked placeholder. Shipping any of them is a failed phase even if everything
+    // else is perfect -- so none may appear in the surface, in any state.
+    for (const re of PLACEHOLDER) {
+      expect(code(SURFACE), 'placeholder ' + re.source + ' must never render').not.toMatch(re)
+    }
+  })
+
+  it('MUTATION PROBE -- these patterns really can go red', () => {
+    // Proves the assertion above is falsifiable rather than vacuously true.
+    const mutated = SURFACE.replace(
+      '<div className="figure" id="ax-avatar">',
+      '<div className="figure" id="ax-avatar"><div className="hair" />',
+    )
+    expect(mutated).not.toBe(SURFACE)
+    expect(code(mutated)).toMatch(PLACEHOLDER[0]!)
+  })
+
+  it('mounts the real Aria at the mount point the contract names', () => {
+    expect(SURFACE).toMatch(/id="ax-avatar"/)
+    expect(SURFACE).toMatch(/<AriaAvatarMount/)
+    expect(code(MOUNT)).toMatch(/@\/components\/aria\/AriaTalkingHead/)
+  })
+
+  it('NEVER uses the marketing poster -- it is a different, male character', () => {
+    // Checked against CODE, not prose: this file names the poster in a comment precisely to warn
+    // the next reader off it, and that mention must not fail the check.
+    expect(code(MOUNT)).not.toMatch(/aria-intro-poster/)
+    expect(code(SURFACE)).not.toMatch(/aria-intro-poster/)
+  })
+
+  it('does not block first paint', () => {
+    expect(code(MOUNT)).toMatch(/dynamic\(/)
+    expect(code(MOUNT)).toMatch(/ssr:\s*false/)
+    expect(code(MOUNT)).toMatch(/requestIdleCallback/)
+  })
+
+  it('CANNOT re-render per streamed token', () => {
+    expect(code(MOUNT)).toMatch(/memo\(/)
+    expect(code(SURFACE)).toMatch(/replyText=\{settledReply\}/)
+    expect(code(SURFACE)).not.toMatch(/replyText=\{text\}/)
+    expect(code(SURFACE)).toMatch(/!t\.streaming/)
+  })
+
+  it('MUTATION PROBE -- feeding it the live stream is caught', () => {
+    const mutated = SURFACE.replace('replyText={settledReply}', 'replyText={text}')
+    expect(mutated).not.toBe(SURFACE)
+    expect(code(mutated)).toMatch(/replyText=\{text\}/)
+  })
+
+  it('its loading state is a label, never a face', () => {
+    expect(code(MOUNT)).toMatch(/className="fallback"/)
+    expect(CSS).toMatch(/\.fallback\{/)
+  })
+})
+
 // ── PHASE 3 — the status line and the rope ────────────────────────────────────────────────────
 describe('phase 3 · presence reflects real state', () => {
   it('drives the status pill from the real stream state, not a timer', () => {
