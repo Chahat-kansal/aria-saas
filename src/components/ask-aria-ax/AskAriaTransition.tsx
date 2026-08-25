@@ -9,6 +9,7 @@ import VoiceInput from '@/components/aria/VoiceInput'
 import ChatSuggestions from '@/components/aria/ChatSuggestions'
 import { SkillPicker } from '@/components/aria/SkillPicker'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
+import AuditLogCard from '@/components/aria/AuditLogCard'
 import { segmentFigures } from '@/lib/aria/figure-provenance'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
@@ -45,6 +46,8 @@ interface Turn {
   skill?: string | null
   disagrees?: boolean
   blocks?: AskBlock[] | null
+  /** Migrated from the old surface: it showed when the council answered. */
+  usedCouncil?: boolean
 }
 
 /** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
@@ -89,6 +92,10 @@ export default function AskAriaTransition() {
   const [threadsOpen, setThreadsOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // Migrated from the old surface (page.tsx:534): the provider-degraded / total-outage notice.
+  // It is set ONLY from what the route reports, never guessed.
+  const [degraded, setDegraded] = useState<{ note: string; outage: boolean } | null>(null)
+  const [copied, setCopied] = useState<number | null>(null)
 
   const { send, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
@@ -161,12 +168,46 @@ export default function AskAriaTransition() {
           streaming: false,
           skill: (result?.tool_calls ?? [])[0]?.name ?? null,
           blocks: (result?.blocks as AskBlock[] | null | undefined) ?? null,
+          usedCouncil: Boolean(result?.used_council),
         }
       }
       return updated
     })
     if (result?.conversation_id) setConversationId(result.conversation_id)
+
+    // Migrated: API-RESILIENCE-1/1B. Backup provider = amber, total outage = red. Only what the
+    // route actually said — never inferred from a slow or empty answer.
+    const r = result as { total_outage?: boolean; degraded_provider?: boolean; note?: string } | null
+    if (r?.total_outage) {
+      setDegraded({ outage: true, note: 'All AI providers are briefly offline. Your business data and POS are safe and working.' })
+    } else if (r?.degraded_provider) {
+      setDegraded({ outage: false, note: r.note ?? 'Aria is running on backup intelligence — answers use your latest saved data.' })
+    } else {
+      setDegraded(null)
+    }
   }, [conversationId, isBusy, send])
+
+  /**
+   * Regenerate — migrated from the old surface (page.tsx:830). Drops the last Aria turn and re-asks
+   * the last question. Same behaviour, same route.
+   */
+  const regenerate = useCallback(() => {
+    let lastUser = -1
+    for (let i = turns.length - 1; i >= 0; i--) if (turns[i]?.role === 'user') { lastUser = i; break }
+    if (lastUser === -1 || isBusy) return
+    const question = turns[lastUser]!.text
+    setTurns(turns.slice(0, lastUser))
+    void ask(question)
+  }, [ask, isBusy, turns])
+
+  /** Copy an answer — the old surface's MessageActions (page.tsx:96). */
+  const copyAnswer = useCallback(async (i: number, body: string) => {
+    try {
+      await navigator.clipboard.writeText(body)
+      setCopied(i)
+      // cleared on the next copy or the next turn; no timer, which the presence rail forbids
+    } catch { setCopied(null) }
+  }, [])
 
   /**
    * File upload — migrated from the old surface's `uploadFile` (page.tsx:842). Same route, same
@@ -309,6 +350,14 @@ export default function AskAriaTransition() {
       </nav>
       <button className="newbtn" onClick={newChat}>New chat</button>
 
+      {/* Migrated: the provider-degraded / outage notice. Red for a total outage, amber for
+          backup intelligence. Shown only when the route said so. */}
+      {degraded && (
+        <div className={degraded.outage ? 'ax-degraded out' : 'ax-degraded'} role="status">
+          {degraded.note}
+        </div>
+      )}
+
       <div className="stage">
         <div className="hero">
           {/* #ax-avatar is the mount point the contract names, and the REAL Aria mounts into it:
@@ -441,7 +490,12 @@ export default function AskAriaTransition() {
           </div>
 
           {room === 'awaiting' && (
-            <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable} onPrompt={ask} />
+            <div className="ax-room">
+              <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable} onPrompt={ask} />
+              {/* Migrated: what Aria has already done, and the rollback path. Real component,
+                  real route (/api/aria/ask/audit, /rollback) over aria_action_log. */}
+              <AuditLogCard />
+            </div>
           )}
           {room === 'made' && <MadeForYouRoom onPrompt={ask} />}
 
@@ -465,6 +519,9 @@ export default function AskAriaTransition() {
                   <div key={i}>
                     {t.skill && (
                       <div className="skill"><i>✦</i> <b>{t.skill}</b> · checked your records</div>
+                    )}
+                    {t.usedCouncil && (
+                      <div className="skill"><i>✦</i> <b>The council</b> · several advisors weighed in</div>
                     )}
                     <div className={t.disagrees ? 'm disagree' : 'm'}>
                       <div className="a aria">A</div>
@@ -499,6 +556,19 @@ export default function AskAriaTransition() {
                             <BlockRenderer block={b} onChoice={ask} />
                           </div>
                         ))}
+                        {/* Migrated from the old surface's MessageActions: copy, and re-ask. */}
+                        {!t.streaming && t.text && (
+                          <div className="ax-msgacts">
+                            <button className="gh" onClick={() => void copyAnswer(i, t.text)}>
+                              {copied === i ? 'Copied' : 'Copy'}
+                            </button>
+                            {i === turns.length - 1 && (
+                              <button className="gh" onClick={regenerate} disabled={isBusy}>
+                                Ask again
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
