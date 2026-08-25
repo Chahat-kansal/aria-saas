@@ -26,13 +26,17 @@ const body = renderToStaticMarkup(React.createElement(AskAriaTransition))
 
 // The mockup's three noticed cards, so the two pages are compared with equivalent content.
 const CARDS = `
-  <button class="nt"><span class="p"></span><span><span class="h">Oat milk runs out Thursday</span><span class="s">Nine left, 4.2 a day. Kirkwood need two days.</span></span><span class="go">→</span></button>
-  <button class="nt"><span class="p b"></span><span><span class="h">Your margins aren't real yet</span><span class="s">72 of 76 costs are guessed from price.</span></span><span class="go">→</span></button>
-  <button class="nt"><span class="p c"></span><span><span class="h">Tuesdays are down 18% since July</span><span class="s">Four weeks running. Nothing else moved.</span></span><span class="go">→</span></button>`
+  <button class="nt"><span class="p"></span><span><span class="h">Oat milk runs out Thursday</span><span class="s">Nine left, 4.2 a day. Kirkwood need two days.</span></span><span class="arrow">→</span></button>
+  <button class="nt"><span class="p b"></span><span><span class="h">Your margins aren't real yet</span><span class="s">72 of 76 costs are guessed from price.</span></span><span class="arrow">→</span></button>
+  <button class="nt"><span class="p c"></span><span><span class="h">Tuesdays are down 18% since July</span><span class="s">Four weeks running. Nothing else moved.</span></span><span class="arrow">→</span></button>`
 
 const harness = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>${css}</style></head><body>${body}
+<style>${css}</style>
+<style>/* harness only: the surface resolves height:100% against its parent, which in the app is
+  the dashboard's <main>. Give both sides the same definite box so geometry is comparable. */
+  html,body{height:100%;margin:0} body>.ax-surface{height:100%}</style>
+</head><body>${body}
 <script>
   // seed the noticed list to match the contract's content, and neutralise the loading placeholder
   var n = document.querySelector('.noticed');
@@ -83,7 +87,7 @@ async function run() {
     results[name + ':welcome'] = await measure(page, name + ':welcome')
     await page.screenshot({ path: join(OUT, name + '-welcome.png') })
 
-    await page.evaluate("document.body.classList.add('work')")
+    await page.evaluate("document.querySelector('.ax-surface').classList.add('work')")
     await page.waitForTimeout(1600)     // let the .85s transition settle
     results[name + ':working'] = await measure(page, name + ':working')
     await page.screenshot({ path: join(OUT, name + '-working.png') })
