@@ -50,9 +50,9 @@ describe('phase 1 · the stylesheet is the contract, byte-for-byte', () => {
   })
 
   it('carries all 44 class names the sprint names', () => {
-    const NAMES = ('deco streaks moire hill blob brand nav newbtn stage hero orbit corona figure ' +
-      'headline tagline live wave noticed nt bigask talk th flow m bub skill n2 src prop ph ord oh ' +
-      'li tt pf go gh done write box brow cb mode send2 oath back cursor').split(' ')
+    const NAMES = ('ax-surface deco streaks moire hill blob nav newbtn stage hero orbit corona ' +
+      'figure headline tagline live wave noticed nt arrow bigask talk th flow m bub skill n2 src ' +
+      'prop ph ord oh li tt pf go gh done write box brow cb mode send2 oath back cursor').split(' ')
     const missing = NAMES.filter(n => !liftedRegion.includes('.' + n))
     expect(missing).toEqual([])
   })
@@ -97,9 +97,26 @@ function renderedUnconditionally(src: string, cls: string): boolean {
 
 // ── PHASE 2 — the two states, one avatar node, one toggle ─────────────────────────────────────
 describe('phase 2 · the transition', () => {
-  it('toggles the single class `work`, exactly as the contract does', () => {
-    expect(SURFACE).toMatch(/classList\.add\('work'\)/)
-    expect(SURFACE).toMatch(/classList\.remove\('work'\)/)
+  it('toggles `work` on the surface itself, never on <body>', () => {
+    // CHANGED BY MS16C. The previous contract was a standalone page and put the state on <body>;
+    // inside the dashboard shell that leaked. The contract now scopes it to .ax-surface, so the
+    // component must not write to document.body at all.
+    expect(SURFACE).toMatch(/working \? 'ax-surface work' : 'ax-surface'/)
+    expect(SURFACE).not.toMatch(/document\.body\.classList/)
+    expect(liftedRegion).toContain('.ax-surface.work')
+    expect(liftedRegion).not.toContain('body.work')
+  })
+
+  it('THE SURFACE IS ISOLATED — nothing can escape it', () => {
+    // The fix for what Chahat saw: decoration anchored to the viewport instead of the surface.
+    expect(liftedRegion).toContain('isolation:isolate')
+    expect(liftedRegion).not.toContain('position:fixed')
+    expect(liftedRegion).toMatch(/\.deco\{position:absolute/)
+  })
+
+  it('MUTATION PROBE — position:fixed anywhere in the lifted sheet is caught', () => {
+    const mutated = liftedRegion.replace('.deco{position:absolute', '.deco{position:fixed')
+    expect(mutated).toContain('position:fixed')
   })
 
   it('THE AVATAR IS ONE DOM NODE — rendered exactly once, never conditionally', () => {
@@ -119,7 +136,7 @@ describe('phase 2 · the transition', () => {
 
   it('collapses the avatar column below 1180 and never the conversation', () => {
     expect(liftedRegion).toContain('@media(max-width:1180px)')
-    expect(liftedRegion).toContain('body.work .hero{display:none}')
+    expect(liftedRegion).toContain('.ax-surface.work .hero{display:none}')
     expect(liftedRegion).not.toContain('.talk{display:none}')
   })
 

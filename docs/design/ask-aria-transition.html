@@ -13,14 +13,19 @@
   --ease:cubic-bezier(.65,.02,.2,1);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{height:100vh;overflow:hidden;font-family:'Outfit',system-ui,sans-serif;font-size:15px;color:var(--ink);
+/* The surface owns its canvas, type and colour. It never styles <body>, because it
+   renders inside the dashboard shell beside the existing sidebar. */
+.ax-surface{position:relative;height:100%;min-height:100%;overflow:hidden;isolation:isolate;
+  font-family:'Outfit',system-ui,sans-serif;font-size:15px;color:var(--ink);
   -webkit-font-smoothing:antialiased;
   background:linear-gradient(163deg,#EFF3FF 0%,#E4ECFE 34%,#EAF0FF 62%,#F4F8FF 100%)}
+.ax-surface *{font-family:inherit}
+body{margin:0;height:100vh;overflow:hidden}
 button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
 /* ── decoration: fades out in working mode ── */
-.deco{position:fixed;inset:0;pointer-events:none;transition:opacity .8s var(--ease)}
-body.work .deco{opacity:.22}
+.deco{position:absolute;inset:0;pointer-events:none;transition:opacity .8s var(--ease)}
+.ax-surface.work .deco{opacity:.22}
 .streaks i{position:absolute;border-radius:50%;filter:blur(2px);opacity:.5}
 .streaks i:nth-child(1){left:-14%;top:-30%;width:120%;height:90%;
   background:radial-gradient(ellipse 60% 30% at 50% 50%,rgba(255,255,255,.85),transparent 62%);transform:rotate(-14deg)}
@@ -32,11 +37,11 @@ body.work .deco{opacity:.22}
   -webkit-mask-image:radial-gradient(circle,#000 8%,rgba(0,0,0,.5) 30%,transparent 62%);
   animation:drift 70s linear infinite;transition:transform .9s var(--ease),opacity .7s}
 @keyframes drift{to{transform:translateX(-50%) rotate(360deg)}}
-body.work .moire{opacity:0}
+.ax-surface.work .moire{opacity:0}
 .hill{position:absolute;left:-6%;bottom:-46vh;width:112%;height:78vh;background:#fff;
   border-radius:50% 50% 0 0 / 62% 62% 0 0;box-shadow:0 -18px 60px rgba(37,99,235,.10);
   transition:transform .85s var(--ease),opacity .6s}
-body.work .hill{transform:translateY(30vh);opacity:.6}
+.ax-surface.work .hill{transform:translateY(30vh);opacity:.6}
 .blob{position:absolute;filter:drop-shadow(0 14px 26px rgba(37,99,235,.28));transition:opacity .6s}
 .blob span{display:block;width:100%;height:100%;
   background:radial-gradient(circle at 34% 28%,#fff 2%,#9DC4FF 26%,#4E86F5 62%,#2563EB 100%);
@@ -45,43 +50,46 @@ body.work .hill{transform:translateY(30vh);opacity:.6}
 .blob.two{right:12%;top:68%;width:42px;height:42px;animation:float 7s ease-in-out infinite reverse}
 .blob.three{left:8%;top:26%;width:32px;height:32px;animation:float 11s ease-in-out infinite}
 @keyframes float{50%{transform:translateY(-14px) rotate(9deg)}}
-body.work .blob{opacity:0}
+.ax-surface.work .blob{opacity:0}
 
 /* ── chrome ── */
-.brand{position:fixed;top:22px;left:26px;z-index:50;display:flex;align-items:center;gap:10px;font-size:19px;font-weight:600}
+.brand{position:absolute;top:22px;left:26px;z-index:50;display:flex;align-items:center;gap:10px;font-size:19px;font-weight:600}
 .brand i{width:32px;height:32px;border-radius:9px;background:linear-gradient(140deg,var(--blue),var(--violet));
   display:grid;place-items:center;color:#fff;font-style:normal;font-size:14px;font-weight:700}
-.nav{position:fixed;top:22px;left:50%;transform:translateX(-50%);z-index:50;display:flex;align-items:center;
+.nav{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:50;display:flex;align-items:center;
   background:rgba(255,255,255,.86);backdrop-filter:blur(20px);border-radius:999px;padding:6px 8px;
   box-shadow:0 6px 24px rgba(16,24,40,.07)}
 .nav a{padding:9px 18px;font-size:14px;color:var(--ink2);position:relative;border-radius:999px}
 .nav a.on{color:var(--ink);font-weight:500}
 .nav a.on::after{content:"";position:absolute;left:18px;right:18px;bottom:2px;height:2px;background:var(--blue);border-radius:2px}
-.newbtn{position:fixed;top:22px;right:26px;z-index:50;background:rgba(255,255,255,.86);backdrop-filter:blur(20px);
+.newbtn{position:absolute;top:22px;right:26px;z-index:50;background:rgba(255,255,255,.86);backdrop-filter:blur(20px);
   border-radius:999px;padding:11px 22px;font-size:14px;font-weight:500;box-shadow:0 6px 24px rgba(16,24,40,.07)}
-body.work .newbtn{background:var(--blue);color:#fff}
+.ax-surface.work .newbtn{background:var(--blue);color:#fff}
 
 /* ── stage: the transition ── */
-.stage{position:relative;z-index:10;height:100vh;display:grid;gap:26px;padding:92px 26px 24px;
+.stage{position:relative;z-index:10;height:100%;display:grid;gap:26px;padding:92px 26px 24px;
   grid-template-columns:1fr 0px;align-items:center;
   transition:grid-template-columns .85s var(--ease),padding .85s var(--ease)}
-body.work .stage{grid-template-columns:268px minmax(0,1fr);padding:88px 26px 22px;align-items:stretch}
-@media(max-width:1180px){body.work .stage{grid-template-columns:minmax(0,1fr)}body.work .hero{display:none}}
+.ax-surface.work .stage{grid-template-columns:268px minmax(0,1fr);padding:88px 26px 22px;align-items:stretch}
+@media(max-width:1180px){.ax-surface.work .stage{grid-template-columns:minmax(0,1fr)}.ax-surface.work .hero{display:none}}
 
 /* hero → avatar column */
 .hero{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
   transition:all .85s var(--ease)}
-body.work .hero{justify-content:flex-start;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);
+.ax-surface.work .hero{justify-content:flex-start;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);
   border:1px solid #fff;border-radius:24px;box-shadow:0 8px 30px rgba(37,99,235,.10);padding:24px 20px 20px;height:100%}
 .orbit{width:250px;height:250px;position:relative;display:grid;place-items:center;transition:all .85s var(--ease)}
-body.work .orbit{width:148px;height:148px}
+.ax-surface.work .orbit{width:148px;height:148px}
 .corona{position:absolute;inset:0;border-radius:50%;
   background:radial-gradient(circle at 50% 42%,#fff 0%,#DCE9FF 40%,#A7C6FA 70%,rgba(167,198,250,0) 100%);
   box-shadow:0 0 90px rgba(96,165,250,.6);animation:glow 6s ease-in-out infinite;transition:box-shadow .85s}
 @keyframes glow{50%{box-shadow:0 0 130px rgba(96,165,250,.8)}}
-body.work .corona{animation:none;box-shadow:0 0 40px rgba(96,165,250,.45)}
-.figure{position:absolute;inset:26px;border-radius:50%;overflow:hidden;transition:inset .85s var(--ease)}
-body.work .figure{inset:15px}
+.ax-surface.work .corona{animation:none;box-shadow:0 0 40px rgba(96,165,250,.45)}
+.figure{position:absolute;inset:26px;border-radius:50%;overflow:hidden;transition:inset .85s var(--ease);
+  display:grid;place-items:center;background:radial-gradient(circle at 50% 34%,#EAF1FF,#CBDCFC)}
+/* When the real 3D Aria mounts, she fills this box and the drawn shapes below are deleted. */
+.figure canvas{width:100%!important;height:100%!important;display:block}
+.ax-surface.work .figure{inset:15px}
 .hair{position:absolute;left:50%;top:22%;transform:translateX(-50%);width:52%;height:41%;
   border-radius:54px 54px 32px 32px;background:linear-gradient(168deg,#4B3A31,#2C211C)}
 .head{position:absolute;left:50%;top:29%;transform:translateX(-50%);width:39%;height:37%;
@@ -101,9 +109,9 @@ body.work .figure{inset:15px}
   transition:all .7s var(--ease)}
 .headline em{font-style:normal;background:linear-gradient(96deg,var(--blue) 10%,var(--violet) 90%);
   -webkit-background-clip:text;background-clip:text;color:transparent}
-body.work .headline{font-size:21px;margin-top:16px}
+.ax-surface.work .headline{font-size:21px;margin-top:16px}
 .tagline{font-size:15px;color:var(--ink2);margin-top:16px;line-height:1.6;max-width:400px;transition:all .6s var(--ease)}
-body.work .tagline{font-size:12.5px;margin-top:8px;opacity:.85}
+.ax-surface.work .tagline{font-size:12.5px;margin-top:8px;opacity:.85}
 .live{display:flex;align-items:center;gap:8px;margin-top:20px;background:#fff;border:1px solid var(--blue-b);
   border-radius:999px;padding:8px 16px;font-size:13px;color:var(--blue-d);font-weight:500}
 .wave{display:flex;gap:2.5px;align-items:flex-end;height:13px}
@@ -115,21 +123,22 @@ body.work .tagline{font-size:12.5px;margin-top:8px;opacity:.85}
 /* welcome-only: the three things + big composer */
 .noticed{margin-top:26px;width:min(620px,92%);display:flex;flex-direction:column;gap:10px;
   transition:opacity .4s,max-height .7s var(--ease);overflow:hidden;max-height:400px}
-body.work .noticed{opacity:0;max-height:0;margin-top:0}
+.ax-surface.work .noticed{opacity:0;max-height:0;margin-top:0}
 .nt{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.86);backdrop-filter:blur(16px);
   border:1px solid #fff;border-radius:18px;padding:15px 18px;text-align:left;box-shadow:0 6px 22px rgba(37,99,235,.09);
   transition:.18s}
 .nt:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(37,99,235,.16)}
 .nt .p{width:9px;height:9px;border-radius:50%;flex:none;background:var(--amber)}
+.nt>span:nth-child(2){flex:1;min-width:0;text-align:left}
 .nt .p.b{background:var(--tan)}.nt .p.c{background:var(--blue)}
-.nt .h{font-size:15px;font-weight:600}
-.nt .s{font-size:13px;color:var(--ink2);margin-top:3px}
-.nt .go{margin-left:auto;color:var(--ink3)}
+.nt .h{display:block;font-size:15px;font-weight:600;line-height:1.3}
+.nt .s{display:block;font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.45}
+.nt .arrow{margin-left:auto;color:var(--ink3);font-size:16px;flex:none}
 
 .bigask{margin-top:24px;width:min(620px,92%);background:#fff;border-radius:999px;padding:8px 8px 8px 24px;
   display:flex;align-items:center;gap:12px;box-shadow:0 12px 34px rgba(37,99,235,.16);
   transition:opacity .4s,max-height .6s,margin .6s;overflow:hidden}
-body.work .bigask{opacity:0;max-height:0;margin:0;padding:0}
+.ax-surface.work .bigask{opacity:0;max-height:0;margin:0;padding:0}
 .bigask input{flex:1;border:0;outline:0;font-family:inherit;font-size:15.5px;color:var(--ink);background:transparent}
 .bigask input::placeholder{color:var(--ink3)}
 .bigask .mic{color:var(--ink3);font-size:16px}
@@ -141,7 +150,7 @@ body.work .bigask{opacity:0;max-height:0;margin:0;padding:0}
   box-shadow:0 20px 54px rgba(37,99,235,.15);display:flex;flex-direction:column;overflow:hidden;
   opacity:0;transform:translateY(22px) scale(.98);pointer-events:none;
   transition:opacity .5s .28s var(--ease),transform .6s .28s var(--ease);height:100%}
-body.work .talk{opacity:1;transform:none;pointer-events:auto}
+.ax-surface.work .talk{opacity:1;transform:none;pointer-events:auto}
 .th{display:flex;align-items:center;gap:11px;padding:17px 24px;border-bottom:1px solid rgba(16,24,40,.05)}
 .th .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(140deg,var(--blue),var(--sky));
   display:grid;place-items:center;color:#fff;font-weight:600;font-size:13px}
@@ -195,15 +204,16 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
 .mode{font-size:12.5px;color:var(--ink2);border:1px solid rgba(16,24,40,.09);border-radius:999px;padding:5px 13px;margin-right:4px}
 .send2{margin-left:auto;background:var(--blue);color:#fff;border-radius:50%;width:38px;height:38px;display:grid;place-items:center;font-size:15px;box-shadow:0 6px 18px rgba(37,99,235,.3)}
 .oath{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:9px}
-.back{position:fixed;bottom:26px;left:26px;z-index:60;background:#fff;border-radius:999px;padding:10px 20px;
+.back{position:absolute;bottom:26px;left:26px;z-index:60;background:#fff;border-radius:999px;padding:10px 20px;
   font-size:13.5px;font-weight:500;box-shadow:0 8px 24px rgba(16,24,40,.12);opacity:0;pointer-events:none;transition:.4s}
-body.work .back{opacity:1;pointer-events:auto}
+.ax-surface.work .back{opacity:1;pointer-events:auto}
 .cursor{display:inline-block;width:2px;height:15px;background:var(--blue);vertical-align:-2px;animation:bk .9s steps(2) infinite}
 @keyframes bk{50%{opacity:0}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
+<div class="ax-surface">
 
 <div class="deco">
   <div class="streaks"><i></i><i></i></div>
@@ -214,7 +224,6 @@ body.work .back{opacity:1;pointer-events:auto}
   <div class="blob three"><span></span></div>
 </div>
 
-<div class="brand"><i>A</i>Aria</div>
 <nav class="nav"><a class="on">Ask</a><a>Awaiting you</a><a>Made for you</a><a>Routines</a></nav>
 <button class="newbtn" onclick="go()">New chat</button>
 
@@ -222,7 +231,8 @@ body.work .back{opacity:1;pointer-events:auto}
   <div class="hero">
     <div class="orbit">
       <div class="corona"></div>
-      <div class="figure">
+      <div class="figure" id="ax-avatar" data-mount="AriaTalkingHead">
+          <!-- PLACEHOLDER ONLY. Mount AriaTalkingHead here and remove every child below. -->
         <div class="hair"></div><div class="head"></div><div class="fringe"></div>
         <div class="eye l"></div><div class="eye r"></div><div class="smile"></div>
         <div class="torso"></div><div class="lapel"></div>
@@ -235,13 +245,13 @@ body.work .back{opacity:1;pointer-events:auto}
     <div class="noticed">
       <button class="nt" onclick="go()"><span class="p"></span>
         <span><span class="h">Oat milk runs out Thursday</span><span class="s">Nine left, 4.2 a day. Kirkwood need two days.</span></span>
-        <span class="go">→</span></button>
+        <span class="arrow">→</span></button>
       <button class="nt" onclick="go()"><span class="p b"></span>
         <span><span class="h">Your margins aren't real yet</span><span class="s">72 of 76 costs are guessed from price.</span></span>
-        <span class="go">→</span></button>
+        <span class="arrow">→</span></button>
       <button class="nt" onclick="go()"><span class="p c"></span>
         <span><span class="h">Tuesdays are down 18% since July</span><span class="s">Four weeks running. Nothing else moved.</span></span>
-        <span class="go">→</span></button>
+        <span class="arrow">→</span></button>
     </div>
 
     <div class="bigask">
@@ -296,11 +306,11 @@ body.work .back{opacity:1;pointer-events:auto}
 <script>
 let typed=false;
 function go(){
-  if(document.body.classList.contains('work'))return;
-  document.body.classList.add('work');
+  if(document.querySelector('.ax-surface').classList.contains('work'))return;
+  document.querySelector('.ax-surface').classList.add('work');
   if(!typed){typed=true;setTimeout(type,900)}
 }
-function home(){document.body.classList.remove('work')}
+function home(){document.querySelector('.ax-surface').classList.remove('work')}
 function s(id,el){const b=document.getElementById(id);const o=b.classList.toggle('on');
   el.style.borderBottomColor=o?(b.classList.contains('est')?'var(--amber)':'var(--blue)'):''}
 function send(b){const p=b.closest('.prop');p.querySelector('.pf').style.display='none';
@@ -319,5 +329,6 @@ function type(){
   })();
 }
 </script>
+</div>
 </body>
 </html>

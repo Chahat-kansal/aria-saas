@@ -15,8 +15,8 @@ import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
  * ── THE TWO RULES THIS COMPONENT EXISTS TO HOLD ──────────────────────────────────────────────
  *
  * 1. THE AVATAR IS ONE DOM NODE. `.orbit` / `.corona` / `.figure` are rendered exactly once, at the
- *    top level of `.hero`, and are NEVER inside a conditional. The state change is a class on
- *    <body>; CSS tweens the size and position. If this element ever unmounted and remounted the
+ *    top level of `.hero`, and are NEVER inside a conditional. The state change is a class on the
+ *    surface; CSS tweens the size and position. If this element ever unmounted and remounted the
  *    whole effect would be lost and the phase would have failed — so the element is deliberately
  *    never wrapped in a conditional branch below, and a test asserts both that it appears exactly
  *    once and that nothing conditional precedes it.
@@ -25,8 +25,20 @@ import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
  *    times; the lifted CSS collapses them by max-height/opacity. Conditionally rendering them would
  *    make the transition a cut rather than a tween.
  *
- * The state toggle is the class `work` on <body>, exactly as in the mockup, because every rule in
- * the lifted sheet is written as `body.work .x` and editing those selectors is forbidden.
+ * ── MS16C: THE SURFACE NO LONGER TOUCHES <body> ─────────────────────────────────────────────────
+ *
+ * The previous contract was a standalone page: its canvas was on <body>, its decoration was
+ * position:fixed (anchored to the VIEWPORT, so it escaped over the dashboard sidebar wherever the
+ * surface sat), and its state class was body.work. Inside the dashboard shell all of that
+ * misbehaved — the hill sliced across the headline, blobs floated in a corner, and the mockup's
+ * brand mark collided with the sidebar's.
+ *
+ * The state class is now `work` on `.ax-surface` itself, which owns the canvas and carries
+ * isolation:isolate. Nothing is written to document.body at all.
+ *
+ * THE DRAWN CSS FACE IS NEVER RENDERED. The contract carries it inside #ax-avatar as an explicitly
+ * marked placeholder so the static mockup isn't an empty circle — it is NOT Aria. It is not
+ * reproduced here in any state, not even transiently before the real avatar mounts.
  */
 
 interface Turn {
@@ -69,15 +81,6 @@ export default function AskAriaTransition() {
 
   const { send, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
-
-  // ── the state toggle: one class on <body>, exactly as the contract has it ───────────────────
-  useEffect(() => {
-    const b = document.body
-    if (working) b.classList.add('work')
-    else b.classList.remove('work')
-    // Leaving the page must not strand the class on <body> for the next route.
-    return () => { b.classList.remove('work') }
-  }, [working])
 
   // ── live context ────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,8 +185,10 @@ export default function AskAriaTransition() {
   const revenue = ctx?.today.find(f => f.label === 'Revenue today')
 
   return (
-    <>
-      {/* ── decoration ── */}
+    // THE SURFACE OWNS EVERYTHING. `work` lives here, not on <body>, and isolation:isolate in the
+    // lifted sheet stops decoration escaping into the dashboard shell around it.
+    <div className={working ? 'ax-surface work' : 'ax-surface'}>
+      {/* ── decoration — position:absolute in the contract, so it cannot leave this box ── */}
       <div className="deco">
         <div className="streaks"><i /><i /></div>
         <div className="moire" />
@@ -193,7 +198,8 @@ export default function AskAriaTransition() {
         <div className="blob three"><span /></div>
       </div>
 
-      <div className="brand"><i>A</i>Aria</div>
+      {/* No brand mark: the dashboard sidebar already carries one, and two collided on screen.
+          The pill below is ARIA'S OWN ROOMS, not app navigation — the sidebar still owns that. */}
       <nav className="nav">
         <a className="on">Ask</a>
         <a>Awaiting you</a>
@@ -210,11 +216,10 @@ export default function AskAriaTransition() {
           */}
           <div className="orbit">
             <div className="corona" />
-            <div className="figure">
-              <div className="hair" /><div className="head" /><div className="fringe" />
-              <div className="eye l" /><div className="eye r" /><div className="smile" />
-              <div className="torso" /><div className="lapel" />
-            </div>
+            {/* #ax-avatar is the mount point the contract names. The real Aria goes in here.
+                The contract's drawn .hair/.head/.fringe/.eye/.smile/.torso/.lapel children are
+                deliberately absent — that face is a mockup placeholder, not Aria. */}
+            <div className="figure" id="ax-avatar" />
           </div>
 
           <div className="headline">
@@ -256,7 +261,7 @@ export default function AskAriaTransition() {
                   <span className="h">{n.title}</span>
                   <span className="s">{n.subtitle}</span>
                 </span>
-                <span className="go">→</span>
+                <span className="arrow">→</span>
               </button>
             ))}
           </div>
@@ -401,6 +406,6 @@ export default function AskAriaTransition() {
       </div>
 
       <button className="back" onClick={home}>← Back to welcome</button>
-    </>
+    </div>
   )
 }
