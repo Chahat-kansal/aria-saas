@@ -1298,7 +1298,7 @@ Rules:
         extractAndStoreMemories(bid, message, councilText, savedConvId).catch(() => {})
         if (savedConvId) {
           const _cid = savedConvId
-          Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _cid).maybeSingle())
+          Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _cid).eq('business_id', bid).maybeSingle())
             .then(({ data: conv }) => {
               const msgs = Array.isArray((conv as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
                 ? (conv as { messages: Array<{ role: string; content: string }> }).messages
@@ -2204,12 +2204,12 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     }] : []
     if (savedConvId && downloads.length > 0) {
       try {
-        const { data: conv } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', savedConvId).single()
+        const { data: conv } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', savedConvId).eq('business_id', bid).single()
         const msgs = Array.isArray((conv as any)?.messages) ? (conv as any).messages : []
         const lastMsg = msgs[msgs.length - 1]
         if (lastMsg?.role === 'assistant') {
           lastMsg.downloads = downloads
-          await supabaseAdmin.from('aria_conversations').update({ messages: msgs }).eq('id', savedConvId)
+          await supabaseAdmin.from('aria_conversations').update({ messages: msgs }).eq('id', savedConvId).eq('business_id', bid)
         }
       } catch (e) { console.error('[non-fatal]', e) }
     }
@@ -2483,7 +2483,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // Summarise conversation for multi-session context — fire-and-forget
   if (savedConvId) {
     const _scid = savedConvId
-    Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _scid).maybeSingle())
+    Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _scid).eq('business_id', bid).maybeSingle())
       .then(({ data: conv }) => {
         const msgs = Array.isArray((conv as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
           ? (conv as { messages: Array<{ role: string; content: string }> }).messages
