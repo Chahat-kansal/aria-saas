@@ -137,15 +137,55 @@ Rather than stopping the whole sprint on the DDL, everything that works on today
 | 2 — thread list | see below |
 | 3 — rename / pin / delete | rename ships; **pin and soft-delete park** on `pinned_at` / `deleted_at` |
 | 4 — search | **parks** on `search_tsv` + the GIN index |
-| 5 — drafts | ships — local to the device, no schema needed |
-| 6 — rendering | ships — verified in a real browser again |
-| 7 — the walk | ships, against real data |
+| 5 — drafts | **SHIPPED** — local to the device, per thread, no schema needed |
+| 6 — rendering | **carried, not re-run** — see below |
+| 7 — the walk | **not run** — see below |
+
+---
+
+## PHASE 5 — DRAFTS (SHIPPED)
+
+Local to the device and keyed per thread, so a half-written note to one supplier cannot surface in
+a conversation about something else. A half-typed message is not a business record: no audit value,
+nobody else should read it, and a write per keystroke to Postgres would be absurd for something
+usually discarded.
+
+**The case that is easy to miss:** a draft typed *before* the thread exists. Its key is `new`, and
+`adoptDraft()` moves it onto the id the server assigns — without that, the **first message of every
+conversation** loses its draft the moment it is created, which is the most common case of all.
+
+Storage failures (private mode, disabled storage, quota) are swallowed: the composer still works,
+it just stops remembering. Carried from S1, four tests assert the **surface actually reaches it** —
+because a capability nothing calls is as broken as a button that does nothing.
+
+---
+
+## WHAT I DID NOT DO, AND WHY
+
+**Phases 2, 3 and 4 are blocked on the migration**, not on effort:
+
+- **Thread list (2)** already exists from MS17 and works. Paging it "newest first, pinned first"
+  needs `pinned_at`; ordering without pinning would be a half-feature that changes again the moment
+  the column lands, so it waits for one correct change rather than two.
+- **Rename / pin / delete (3)** — pin needs `pinned_at`, and **soft delete needs `deleted_at`**.
+  The existing delete is a HARD `.delete()`, which phase 3 calls a failed phase. I did not make it
+  soft, because there is nowhere to write the tombstone. **This is the most important thing waiting
+  on your approval:** until then, a mis-click still destroys a thread permanently.
+- **Search (4)** needs `search_tsv` + the GIN index. The sprint explicitly forbids embeddings and
+  wants Postgres FTS, which is the right call — and it is exactly what the proposal adds.
+
+**Phases 6 and 7 were not run in this session.** S1's phase 8 verification already covers the
+rendering paths in a real browser (real tables, working copy button, hostile input producing
+nothing, provenance surviving), and nothing in S2 changed the renderer. Re-running it against a
+*restored thread* and a *search result* — which is what phase 6 actually asks — needs the migration
+first, because search results do not exist yet. Rather than re-run the same fixture and call it new
+evidence, it waits for something new to test.
 
 ---
 
 ## GATES
 
 - `npx tsc --noEmit` — 0 errors
-- `npx vitest run` — recorded in the final commit
+- `npx vitest run` — **861 passed / 861** across 72 files
 - **Cross-tenant isolation proven live**, and guarded by a source rail
-- `npx next build` — `BUILD_EXIT` read from the log, never the wrapper
+- `npx next build` — **BUILD_EXIT=0**, read from the log, never the wrapper
