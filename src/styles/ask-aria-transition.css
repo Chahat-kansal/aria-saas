@@ -271,3 +271,53 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
    different, male character). If the 3D avatar cannot mount, this is what ships. */
 .fallback{display:grid;place-items:center;width:100%;height:100%;text-align:center;
   font-size:12px;font-weight:500;color:var(--blue-d);letter-spacing:.02em;padding:8px}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   MS17 APPENDS — the rooms, the thread list, and the composer's real controls.
+   New rules only, for elements the static contract has no styling for. Nothing above was altered.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* A room's body reuses the contract's .nt card, so items look like the noticed cards they are. */
+.ax-room{display:flex;flex-direction:column;gap:10px;padding:22px 26px 28px;overflow-y:auto;flex:1}
+.ax-room-h{display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:600;margin-bottom:4px}
+.ax-room-h span{background:var(--amber);color:#fff;border-radius:999px;padding:1px 9px;font-size:11.5px;font-weight:600}
+.ax-room-note{font-size:13.5px;color:var(--ink2);line-height:1.6;padding:6px 0}
+.ax-room-note.warn{color:#8A5D07}
+.ax-room-acts{margin-left:auto;display:flex;gap:7px;flex:none}
+
+/* the live count on a room tab — never a constant */
+.nav a .badge{margin-left:7px;background:var(--amber);color:#fff;border-radius:999px;
+  padding:1px 7px;font-size:11px;font-weight:600;vertical-align:1px}
+.nav a{cursor:pointer}
+
+/* the thread list, opened from the thread header */
+.ax-threads{position:absolute;top:64px;right:26px;z-index:70;width:330px;max-height:70%;overflow-y:auto;
+  background:#fff;border:1px solid rgba(16,24,40,.08);border-radius:20px;
+  box-shadow:0 18px 46px rgba(16,24,40,.16);padding:8px}
+.ax-threads-h{display:flex;align-items:center;padding:10px 12px 8px;font-size:14px}
+.ax-threads-h b{font-weight:600} .ax-threads-h .cb{margin-left:auto}
+.ax-threads-note{font-size:12.5px;color:var(--ink2);padding:8px 12px 12px;line-height:1.55}
+.ax-threads-note.warn{color:#8A5D07}
+.ax-thread{display:flex;align-items:center;gap:4px;border-radius:14px;padding:2px}
+.ax-thread:hover{background:var(--blue-l)}
+.ax-thread.on{background:var(--blue-l)}
+.ax-thread-open{flex:1;min-width:0;text-align:left;padding:9px 11px}
+.ax-thread-open .t{display:block;font-size:13.5px;font-weight:500;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.ax-thread-open .s{display:block;font-size:11.5px;color:var(--ink3);margin-top:2px}
+
+/* the skill picker, opened from the composer where the dead mode chip used to be */
+.ax-skills{position:absolute;bottom:86px;left:26px;right:26px;z-index:70;max-height:52%;overflow-y:auto;
+  background:#fff;border:1px solid rgba(16,24,40,.08);border-radius:20px;
+  box-shadow:0 18px 46px rgba(16,24,40,.16);padding:14px 16px}
+.ax-skills-h{display:flex;align-items:center;font-size:14px;font-weight:600;margin-bottom:8px}
+.ax-skills-h .cb{margin-left:auto}
+
+/* a file chosen in the composer, before it is sent */
+.ax-files{display:flex;flex-wrap:wrap;gap:6px;padding:0 19px 8px}
+.ax-file{display:flex;align-items:center;gap:7px;background:var(--blue-l);color:var(--blue-d);
+  border-radius:999px;padding:4px 11px;font-size:12px;font-weight:500}
+.ax-file button{color:var(--blue-d);font-size:13px;line-height:1}
+
+/* the composer's mic, which is a real control now */
+.cb.on{background:var(--blue);color:#fff}

@@ -2,44 +2,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAriaStream } from './useAriaStream'
 import AriaAvatarMount from './AriaAvatarMount'
+import ThreadsPanel from './rooms/ThreadsPanel'
+import AwaitingRoom from './rooms/AwaitingRoom'
+import MadeForYouRoom from './rooms/MadeForYouRoom'
+import VoiceInput from '@/components/aria/VoiceInput'
+import ChatSuggestions from '@/components/aria/ChatSuggestions'
+import { SkillPicker } from '@/components/aria/SkillPicker'
+import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import { segmentFigures } from '@/lib/aria/figure-provenance'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
+import type { AskBlock } from '@/lib/aria/ask-types'
 
 /**
- * MS16 · AX-1 — ASK ARIA: ONE SCREEN, TWO STATES.
+ * ASK ARIA — ONE SCREEN, TWO STATES, AND NOW THE ROOMS.
  *
  * WELCOME (no thread) → WORKING (a thread is open), with the single animated transition between
- * them. Every class name here comes from docs/design/ask-aria-transition.html and the stylesheet is
- * that file's <style> block lifted byte-for-byte. Nothing is re-authored.
+ * them. Every class name comes from docs/design/ask-aria-transition.html and the stylesheet is that
+ * file's <style> block lifted byte-for-byte. Nothing is re-authored; new elements use appended rules.
  *
- * ── THE TWO RULES THIS COMPONENT EXISTS TO HOLD ──────────────────────────────────────────────
+ * ── THE THREE RULES THIS COMPONENT HOLDS ────────────────────────────────────────────────────────
  *
- * 1. THE AVATAR IS ONE DOM NODE. `.orbit` / `.corona` / `.figure` are rendered exactly once, at the
- *    top level of `.hero`, and are NEVER inside a conditional. The state change is a class on the
- *    surface; CSS tweens the size and position. If this element ever unmounted and remounted the
- *    whole effect would be lost and the phase would have failed — so the element is deliberately
- *    never wrapped in a conditional branch below, and a test asserts both that it appears exactly
- *    once and that nothing conditional precedes it.
+ * 1. NO FAKE CONTROLS. Every control below either does something real or is not here. MS17 phase 1
+ *    counted TEN that did nothing: four room tabs, two mics, attach, share, more, and a mode chip
+ *    that was a <span> dressed as a dropdown. Eight are now wired; two were removed and the reasons
+ *    are in RUN-MS17.md. There is no disabled-but-styled third state.
  *
- * 2. BOTH STATES ARE ALWAYS IN THE DOM. `.noticed`, `.bigask` and `.talk` are all rendered at all
- *    times; the lifted CSS collapses them by max-height/opacity. Conditionally rendering them would
- *    make the transition a cut rather than a tween.
+ * 2. THE AVATAR IS ONE DOM NODE. `.orbit`/`.corona`/`.figure` render exactly once and are never
+ *    inside a conditional, so the 250px → 148px change tweens instead of remounting.
  *
- * ── MS16C: THE SURFACE NO LONGER TOUCHES <body> ─────────────────────────────────────────────────
+ * 3. BOTH STATES ARE ALWAYS IN THE DOM. `.noticed`, `.bigask` and `.talk` are always rendered; the
+ *    lifted CSS collapses them. Conditionally rendering them would make the transition a cut.
  *
- * The previous contract was a standalone page: its canvas was on <body>, its decoration was
- * position:fixed (anchored to the VIEWPORT, so it escaped over the dashboard sidebar wherever the
- * surface sat), and its state class was body.work. Inside the dashboard shell all of that
- * misbehaved — the hill sliced across the headline, blobs floated in a corner, and the mockup's
- * brand mark collided with the sidebar's.
- *
- * The state class is now `work` on `.ax-surface` itself, which owns the canvas and carries
- * isolation:isolate. Nothing is written to document.body at all.
- *
- * THE DRAWN CSS FACE IS NEVER RENDERED. The contract carries it inside #ax-avatar as an explicitly
- * marked placeholder so the static mockup isn't an empty circle — it is NOT Aria. It is not
- * reproduced here in any state, not even transiently before the real avatar mounts.
+ * THE DRAWN CSS FACE IS NEVER RENDERED. The contract carries it inside #ax-avatar as a marked
+ * placeholder; it is not Aria and it is not reproduced here in any state.
  */
 
 interface Turn {
@@ -48,7 +44,17 @@ interface Turn {
   streaming?: boolean
   skill?: string | null
   disagrees?: boolean
+  blocks?: AskBlock[] | null
 }
+
+/** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
+type Room = 'ask' | 'awaiting' | 'made'
+
+const ROOMS: Array<{ id: Room; label: string }> = [
+  { id: 'ask', label: 'Ask' },
+  { id: 'awaiting', label: 'Awaiting you' },
+  { id: 'made', label: 'Made for you' },
+]
 
 const MODES: Array<{ id: AutonomyMode; label: string }> = [
   { id: 'suggest', label: 'Suggest' },
@@ -68,6 +74,7 @@ function greeting(d: Date): string {
 
 export default function AskAriaTransition() {
   const [working, setWorking] = useState(false)
+  const [room, setRoom] = useState<Room>('ask')
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [welcomeInput, setWelcomeInput] = useState('')
@@ -79,9 +86,13 @@ export default function AskAriaTransition() {
   const [autonomyNote, setAutonomyNote] = useState<string | null>(null)
   const [savingMode, setSavingMode] = useState(false)
   const [openSrc, setOpenSrc] = useState<string | null>(null)
+  const [threadsOpen, setThreadsOpen] = useState(false)
+  const [skillsOpen, setSkillsOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   const { send, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── live context ────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -107,11 +118,10 @@ export default function AskAriaTransition() {
 
   useEffect(() => {
     if (flowRef.current) flowRef.current.scrollTop = 9e9
-  }, [turns.length, text])
+  }, [turns.length, text, room])
 
   const chooseMode = useCallback(async (mode: AutonomyMode) => {
     if (savingMode || !autonomy) return
-    // MS16B — all three modes persist now; the CHECK constraint was widened. No special case.
     setAutonomyNote(null)
     setSavingMode(true)
     try {
@@ -133,6 +143,7 @@ export default function AskAriaTransition() {
   const ask = useCallback(async (prompt: string) => {
     const msg = prompt.trim()
     if (!msg || isBusy) return
+    setRoom('ask')            // asking always returns you to the conversation
     setWorking(true)          // enter WORKING — the transition runs
     setInput('')
     setWelcomeInput('')
@@ -149,6 +160,7 @@ export default function AskAriaTransition() {
           text: String(result?.response ?? '').replace(/\s*\[DELIVERABLE:[^\]]+\]\s*/g, '').trim(),
           streaming: false,
           skill: (result?.tool_calls ?? [])[0]?.name ?? null,
+          blocks: (result?.blocks as AskBlock[] | null | undefined) ?? null,
         }
       }
       return updated
@@ -156,16 +168,75 @@ export default function AskAriaTransition() {
     if (result?.conversation_id) setConversationId(result.conversation_id)
   }, [conversationId, isBusy, send])
 
+  /**
+   * File upload — migrated from the old surface's `uploadFile` (page.tsx:842). Same route, same
+   * FormData shape, same document summary. The behaviour moved; it was not rewritten.
+   */
+  const uploadFile = useCallback(async (file: File) => {
+    if (uploading) return
+    setUploading(true)
+    setRoom('ask')
+    setWorking(true)
+    setTurns(prev => [...prev,
+      { role: 'user', text: '📎 ' + file.name },
+      { role: 'aria', text: '', streaming: true },
+    ])
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/aria/ask/upload', { method: 'POST', body: fd })
+      const data = await res.json() as {
+        document?: { type: string; supplier?: string; date?: string; line_items: unknown[]; suggested_action: string }
+        error?: string
+      }
+      if (data.error) throw new Error(data.error)
+      const doc = data.document!
+      const n = doc.line_items.length
+      const summary = 'Document read: ' + doc.type + (doc.supplier ? ' from ' + doc.supplier : '')
+        + (doc.date ? ' (' + doc.date + ')' : '') + '. Found ' + n + ' line item'
+        + (n === 1 ? '' : 's') + '. ' + doc.suggested_action
+      setTurns(prev => {
+        const u = [...prev]
+        const last = u[u.length - 1]
+        if (last?.role === 'aria') u[u.length - 1] = { ...last, text: summary, streaming: false }
+        return u
+      })
+    } catch (e) {
+      setTurns(prev => {
+        const u = [...prev]
+        const last = u[u.length - 1]
+        if (last?.role === 'aria') u[u.length - 1] = { ...last, text: 'Upload failed: ' + (e as Error).message, streaming: false }
+        return u
+      })
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }, [uploading])
+
+  /** Restore a past conversation — migrated from `loadConversation` (page.tsx:610). */
+  const openThread = useCallback((id: string, messages: Array<{ role: string; content: string }>) => {
+    setConversationId(id)
+    setRoom('ask')
+    setWorking(true)
+    setTurns(messages.map(m => ({
+      role: (m.role === 'user' ? 'user' : 'aria') as 'user' | 'aria',
+      text: String(m.content ?? ''),
+      streaming: false,
+    })))
+  }, [])
+
   const home = useCallback(() => setWorking(false), [])
 
   const newChat = useCallback(() => {
     setTurns([])
     setConversationId(null)
+    setRoom('ask')
     setWorking(false)
   }, [])
 
   // The last SETTLED Aria reply — the avatar's only text input. Never `text` (the live stream),
-  // because that would change on every token. `.filter` walks finished turns only.
+  // because that would change on every token.
   const settledReply = useMemo(() => {
     for (let i = turns.length - 1; i >= 0; i--) {
       const t = turns[i]
@@ -194,6 +265,13 @@ export default function AskAriaTransition() {
   }, [ctx?.ownerName, ctxLoading, ctxUnreadable, noticed.length])
 
   const revenue = ctx?.today.find(f => f.label === 'Revenue today')
+  /** LIVE count, straight off the pending decisions. Never a constant. */
+  const awaitingCount = ctx?.awaiting.length ?? 0
+
+  const enterRoom = useCallback((id: Room) => {
+    setRoom(id)
+    if (id !== 'ask') setWorking(true)
+  }, [])
 
   return (
     // THE SURFACE OWNS EVERYTHING. `work` lives here, not on <body>, and isolation:isolate in the
@@ -210,31 +288,38 @@ export default function AskAriaTransition() {
       </div>
 
       {/* No brand mark: the dashboard sidebar already carries one, and two collided on screen.
-          The pill below is ARIA'S OWN ROOMS, not app navigation — the sidebar still owns that. */}
+          The pill below is ARIA'S OWN ROOMS, not app navigation — the sidebar still owns that.
+          Every tab switches a real room. "Routines" is gone; see RUN-MS17.md. */}
       <nav className="nav">
-        <a className="on">Ask</a>
-        <a>Awaiting you</a>
-        <a>Made for you</a>
-        <a>Routines</a>
+        {ROOMS.map(r => (
+          <a
+            key={r.id}
+            className={room === r.id ? 'on' : undefined}
+            role="button"
+            tabIndex={0}
+            onClick={() => enterRoom(r.id)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enterRoom(r.id) }
+            }}
+          >
+            {r.label}
+            {r.id === 'awaiting' && awaitingCount > 0 && <span className="badge">{awaitingCount}</span>}
+          </a>
+        ))}
       </nav>
       <button className="newbtn" onClick={newChat}>New chat</button>
 
       <div className="stage">
         <div className="hero">
-          {/*
-            ONE NODE, BOTH STATES. Never conditional, never keyed, never remounted — the CSS tweens
-            it from 250px centred to 148px in the left column.
-          */}
+          {/* #ax-avatar is the mount point the contract names, and the REAL Aria mounts into it:
+              the VRM at public/models/Aria.glb via AriaTalkingHead. The contract's drawn
+              .hair/.head/.fringe/.eye/.smile/.torso/.lapel children are deliberately absent in
+              every state — that face is a mockup placeholder, not Aria.
+
+              `settledReply` is deliberately NOT the streaming buffer. Feeding the avatar in-flight
+              text would change its props on every token and re-render a WebGL canvas per token. */}
           <div className="orbit">
             <div className="corona" />
-            {/* #ax-avatar is the mount point the contract names, and the REAL Aria mounts into it:
-                the VRM at public/models/Aria.glb via AriaTalkingHead. The contract's drawn
-                .hair/.head/.fringe/.eye/.smile/.torso/.lapel children are deliberately absent in
-                every state — that face is a mockup placeholder, not Aria.
-
-                `settledReply` is deliberately NOT the streaming buffer. Feeding the avatar
-                in-flight text would change its props on every token and re-render a WebGL canvas
-                per token; this changes once, when a turn finishes. */}
             <div className="figure" id="ax-avatar">
               <AriaAvatarMount replyText={settledReply} speaking={isBusy} />
             </div>
@@ -282,6 +367,9 @@ export default function AskAriaTransition() {
                 <span className="arrow">→</span>
               </button>
             ))}
+
+            {/* Migrated from the old surface: real suggestions from /api/aria/ask/suggestions. */}
+            <ChatSuggestions onSelect={ask} disabled={isBusy} />
           </div>
 
           {/* ── the autonomy control (appended styles; the real agent_settings.mode) ── */}
@@ -312,7 +400,8 @@ export default function AskAriaTransition() {
               onChange={e => setWelcomeInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void ask(welcomeInput) } }}
             />
-            <button className="mic" aria-label="Voice">🎙</button>
+            {/* Real voice, migrated from the old surface's VoiceInput. */}
+            <VoiceInput onTranscript={t => setWelcomeInput(t)} disabled={isBusy} />
             <button className="send" onClick={() => void ask(welcomeInput)}>↑</button>
           </div>
 
@@ -336,69 +425,89 @@ export default function AskAriaTransition() {
           <div className="th">
             <div className="av">A</div>
             <div>
-              <b>{turns.find(t => t.role === 'user')?.text.slice(0, 42) ?? 'Ask Aria'}</b>
+              <b>{
+                room === 'awaiting' ? 'Awaiting you'
+                  : room === 'made' ? 'Made for you'
+                    : (turns.find(t => t.role === 'user')?.text.slice(0, 42) ?? 'Ask Aria')
+              }</b>
               <span>Always on · connected records only</span>
             </div>
             <div className="r">
-              <button aria-label="Share">🔗</button>
-              <button aria-label="More">⋯</button>
+              {/* The share button is GONE. There is no thread-share route — only
+                  /api/aria/task-outputs/[id]/share, which shares an OUTPUT, not a conversation.
+                  A button that cannot share is worse than no button. */}
+              <button aria-label="Your threads" onClick={() => setThreadsOpen(v => !v)}>⋯</button>
             </div>
           </div>
 
-          <div className="flow" ref={flowRef}>
-            {turns.map((t, i) => {
-              const live = t.streaming ? text : t.text
-              if (t.role === 'user') {
-                return (
-                  <div className="m me" key={i}>
-                    <div className="a" style={{ background: 'var(--tan)', color: '#4a3719' }}>CK</div>
-                    <div>
-                      <div className="who">You</div>
-                      <div className="bub">{t.text}</div>
+          {room === 'awaiting' && (
+            <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable} onPrompt={ask} />
+          )}
+          {room === 'made' && <MadeForYouRoom onPrompt={ask} />}
+
+          {room === 'ask' && (
+            <div className="flow" ref={flowRef}>
+              {turns.map((t, i) => {
+                const live = t.streaming ? text : t.text
+                if (t.role === 'user') {
+                  return (
+                    <div className="m me" key={i}>
+                      <div className="a" style={{ background: 'var(--tan)', color: '#4a3719' }}>You</div>
+                      <div>
+                        <div className="who">You</div>
+                        <div className="bub">{t.text}</div>
+                      </div>
                     </div>
-                  </div>
-                )
-              }
-              const segs = segmentFigures(live, {})
-              return (
-                <div key={i}>
-                  {t.skill && (
-                    <div className="skill"><i>✦</i> <b>{t.skill}</b> · checked your records</div>
-                  )}
-                  <div className={t.disagrees ? 'm disagree' : 'm'}>
-                    <div className="a aria">A</div>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="who">Aria</div>
-                      <div className="bub">
-                        {segs.map((s, j) => {
-                          // A figure with no provenance behind it gets NO affordance. An underline
-                          // is a promise, and this turn cannot keep one it never captured.
-                          if (s.kind === 'text' || s.tier === 'plain') return <span key={j}>{s.text}</span>
-                          const id = i + '-' + j
-                          return (
-                            <span
-                              key={j}
-                              className={s.tier === 'estimated' ? 'n2 est' : 'n2'}
-                              onClick={() => setOpenSrc(openSrc === id ? null : id)}
-                            >{s.text}</span>
-                          )
-                        })}
-                        {t.streaming && <span className="cursor" />}
-                        {segs.map((s, j) => {
-                          if (s.kind !== 'figure' || s.tier === 'plain' || !s.source) return null
-                          const id = i + '-' + j
-                          const cls = 'src' + (s.tier === 'estimated' ? ' est' : '') + (openSrc === id ? ' on' : '')
-                          return <div className={cls} key={'src' + j}><b>Where this came from</b> · {s.source}</div>
-                        })}
+                  )
+                }
+                const segs = segmentFigures(live, {})
+                return (
+                  <div key={i}>
+                    {t.skill && (
+                      <div className="skill"><i>✦</i> <b>{t.skill}</b> · checked your records</div>
+                    )}
+                    <div className={t.disagrees ? 'm disagree' : 'm'}>
+                      <div className="a aria">A</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="who">Aria</div>
+                        <div className="bub">
+                          {segs.map((s, j) => {
+                            // A figure with no provenance behind it gets NO affordance. An underline
+                            // is a promise, and this turn cannot keep one it never captured.
+                            if (s.kind === 'text' || s.tier === 'plain') return <span key={j}>{s.text}</span>
+                            const id = i + '-' + j
+                            return (
+                              <span
+                                key={j}
+                                className={s.tier === 'estimated' ? 'n2 est' : 'n2'}
+                                onClick={() => setOpenSrc(openSrc === id ? null : id)}
+                              >{s.text}</span>
+                            )
+                          })}
+                          {t.streaming && <span className="cursor" />}
+                          {segs.map((s, j) => {
+                            if (s.kind !== 'figure' || s.tier === 'plain' || !s.source) return null
+                            const id = i + '-' + j
+                            const cls = 'src' + (s.tier === 'estimated' ? ' est' : '') + (openSrc === id ? ' on' : '')
+                            return <div className={cls} key={'src' + j}><b>Where this came from</b> · {s.source}</div>
+                          })}
+                        </div>
+                        {/* Migrated: charts, tables and KPI blocks render through the existing
+                            BlockRenderer rather than a second implementation. */}
+                        {(t.blocks ?? []).map((b, k) => (
+                          <div key={'blk' + k} style={{ marginTop: 12 }}>
+                            <BlockRenderer block={b} onChoice={ask} />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
 
-            {error && <div className="errline">{error}</div>}
-          </div>
+              {error && <div className="errline">{error}</div>}
+            </div>
+          )}
 
           <div className="write">
             <div className="box">
@@ -412,16 +521,49 @@ export default function AskAriaTransition() {
                 }}
               />
               <div className="brow">
-                <span className="mode">💬 Ask ⌄</span>
-                <button className="cb" aria-label="Attach">📎</button>
-                <button className="cb" aria-label="Voice">🎙</button>
+                {/* Was a <span> dressed as a dropdown that did nothing. It now opens the skill
+                    picker — the real one from the old surface, backed by /api/aria/skills. */}
+                <button className="mode" onClick={() => setSkillsOpen(v => !v)}>💬 Skills ⌄</button>
+
+                {/* Real attach: same route and FormData shape as the old surface. */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  hidden
+                  onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f) }}
+                />
+                <button
+                  className="cb"
+                  aria-label="Attach a file"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >📎</button>
+
+                <VoiceInput onTranscript={t => setInput(t)} disabled={isBusy} />
                 <button className="send2" onClick={() => void ask(input)} disabled={isBusy}>↑</button>
               </div>
             </div>
             <div className="oath">Connected records only — she won’t invent missing data</div>
           </div>
+
+          {skillsOpen && (
+            <div className="ax-skills">
+              <div className="ax-skills-h">
+                Your skills
+                <button className="cb" onClick={() => setSkillsOpen(false)} aria-label="Close">✕</button>
+              </div>
+              <SkillPicker />
+            </div>
+          )}
         </div>
       </div>
+
+      <ThreadsPanel
+        open={threadsOpen}
+        onClose={() => setThreadsOpen(false)}
+        onOpenThread={openThread}
+        activeId={conversationId}
+      />
 
       <button className="back" onClick={home}>← Back to welcome</button>
     </div>
