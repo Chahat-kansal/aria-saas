@@ -340,3 +340,10 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
   padding:12px 15px;font-family:inherit;font-size:14.5px;line-height:1.6;resize:vertical;outline:0;background:#fff}
 .ax-edit textarea:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(37,99,235,.09)}
 .m.me .ax-msgacts{justify-content:flex-end}
+
+/* S1 PHASE 7 APPENDS — a failure that ends somewhere. */
+.ax-error{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#FDECEC;
+  border:1px solid #F3C4C3;border-radius:16px;padding:13px 16px;margin:8px 0}
+.ax-error-msg{font-size:13.5px;color:#8E2C2B;line-height:1.5;flex:1;min-width:220px}
+.ax-error-note{font-size:12.5px;color:#8E2C2B;opacity:.75}
+.ax-degraded-who{font-weight:600}

@@ -97,12 +97,12 @@ export default function AskAriaTransition() {
   const [uploading, setUploading] = useState(false)
   // Migrated from the old surface (page.tsx:534): the provider-degraded / total-outage notice.
   // It is set ONLY from what the route reports, never guessed.
-  const [degraded, setDegraded] = useState<{ note: string; outage: boolean } | null>(null)
+  const [degraded, setDegraded] = useState<{ note: string; outage: boolean; provider?: string | null } | null>(null)
   const [copied, setCopied] = useState<number | null>(null)
   // S1 phase 3 — which rendered message is being edited, and its working text.
   const [editing, setEditing] = useState<{ index: number; text: string } | null>(null)
 
-  const { send, cancel, text, stage, error, isBusy } = useAriaStream()
+  const { send, cancel, retry, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -196,11 +196,20 @@ export default function AskAriaTransition() {
 
     // Migrated: API-RESILIENCE-1/1B. Backup provider = amber, total outage = red. Only what the
     // route actually said — never inferred from a slow or empty answer.
-    const r = result as { total_outage?: boolean; degraded_provider?: boolean; note?: string } | null
+    const r = result as {
+      total_outage?: boolean; degraded_provider?: boolean | string; note?: string; provider?: string
+    } | null
     if (r?.total_outage) {
       setDegraded({ outage: true, note: 'All AI providers are briefly offline. Your business data and POS are safe and working.' })
     } else if (r?.degraded_provider) {
-      setDegraded({ outage: false, note: r.note ?? 'Aria is running on backup intelligence — answers use your latest saved data.' })
+      // S1 phase 7 — say WHICH provider answered. "Backup intelligence" alone tells the owner
+      // nothing they can act on or report.
+      const who = typeof r.degraded_provider === 'string' ? r.degraded_provider : (r.provider ?? null)
+      setDegraded({
+        outage: false,
+        note: r.note ?? 'Aria is running on backup intelligence — answers use your latest saved data.',
+        provider: who,
+      })
     } else {
       setDegraded(null)
     }
@@ -404,6 +413,9 @@ export default function AskAriaTransition() {
       {degraded && (
         <div className={degraded.outage ? 'ax-degraded out' : 'ax-degraded'} role="status">
           {degraded.note}
+          {degraded.provider && (
+            <span className="ax-degraded-who"> Answered by {degraded.provider}.</span>
+          )}
         </div>
       )}
 
@@ -659,7 +671,21 @@ export default function AskAriaTransition() {
                 )
               })}
 
-              {error && <div className="errline">{error}</div>}
+              {/* S1 PHASE 7 — A FAILURE THAT ENDS SOMEWHERE. Retry appears only when retrying can
+                  actually help: offering it on an exhausted credit balance or a bad key would cost
+                  the owner a second wait to reach the same wall. */}
+              {error && (
+                <div className="ax-error">
+                  <div className="ax-error-msg">{error.message}</div>
+                  {error.retryable ? (
+                    <button className="go" onClick={() => void retry()} disabled={isBusy}>
+                      Try again
+                    </button>
+                  ) : (
+                    <div className="ax-error-note">Retrying won’t change this one.</div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

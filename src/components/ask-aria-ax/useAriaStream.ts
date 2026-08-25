@@ -1,6 +1,9 @@
 'use client'
 import { useCallback, useRef, useState } from 'react'
 import { readAriaSse, isEventStream } from '@/lib/aria/ask-sse'
+import {
+  classifyChatError, stalledError, STREAM_STALL_MS, type ChatError,
+} from '@/lib/aria/chat-errors'
 
 /**
  * MS16 PHASE 4 — the client half of streaming.
@@ -34,10 +37,14 @@ export type AriaStage = 'idle' | 'thinking' | 'streaming' | 'done' | 'error' | '
 export function useAriaStream() {
   const [text, setText] = useState('')
   const [stage, setStage] = useState<AriaStage>('idle')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ChatError | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   // Mirrors `text` for the abort path: state is not readable synchronously inside the catch.
   const textRef = useRef('')
+  // Set by the watchdog just before it aborts, so the catch can tell a stall from a user Stop.
+  const stalledRef = useRef(false)
+  // The last request body, so Retry can resend it verbatim.
+  const lastBodyRef = useRef<Record<string, unknown> | null>(null)
 
   /**
    * S1 PHASE 1 — STOP GENERATING.
@@ -58,6 +65,7 @@ export function useAriaStream() {
   ): Promise<AriaStreamResult | null> => {
     const controller = new AbortController()
     abortRef.current = controller
+    lastBodyRef.current = body
     setText('')
     textRef.current = ''
     setError(null)
@@ -88,21 +96,44 @@ export function useAriaStream() {
       // ── the stream ────────────────────────────────────────────────────────────────────────
       // Frame parsing lives in lib/aria/ask-sse.ts, shared with the live Ask Aria page, so the two
       // clients of this stream cannot drift apart (failure pattern #4).
-      const result = await readAriaSse<AriaStreamResult>(res, {
-        onText: (full) => { setStage('streaming'); setText(full); textRef.current = full },
-        onStage: () => setStage('thinking'),
-      })
+      //
+      // S1 PHASE 7 — THE WATCHDOG. A stream that sits in "streaming" forever is the worst failure
+      // of the set: no error to read, no button to press, so the owner waits and then reloads and
+      // loses the thread. Every frame resets the timer; silence past STREAM_STALL_MS aborts the
+      // request and resolves to an ordinary retryable error.
+      let stallTimer: ReturnType<typeof setTimeout> | undefined
+      let stalled = false
+      const kick = () => {
+        if (stallTimer) clearTimeout(stallTimer)
+        stallTimer = setTimeout(() => { stalled = true; stalledRef.current = true; controller.abort() }, STREAM_STALL_MS)
+      }
+      kick()
+
+      let result: AriaStreamResult
+      try {
+        result = await readAriaSse<AriaStreamResult>(res, {
+          onText: (full) => { kick(); setStage('streaming'); setText(full); textRef.current = full },
+          onStage: () => { kick(); setStage('thinking') },
+        })
+      } finally {
+        if (stallTimer) clearTimeout(stallTimer)
+      }
+      if (stalled) throw new Error('stream stalled')
       if (typeof result.response === 'string' && result.response.length > 0) setText(result.response)
       setStage('done')
       onDone?.(result)
       return result
     } catch (e) {
       // A stop is a deliberate act, not a failure. Return what streamed so the caller can keep it.
-      if ((e as Error).name === 'AbortError') {
+      // But an abort raised BY THE WATCHDOG is a stall, and must surface as a retryable error
+      // rather than be mistaken for the owner pressing Stop.
+      if ((e as Error).name === 'AbortError' && !stalledRef.current) {
         setStage('stopped')
         return { response: textRef.current, stopped: true, incomplete: true } as AriaStreamResult
       }
-      setError((e as Error).message)
+      const classified = stalledRef.current ? stalledError() : classifyChatError(e)
+      stalledRef.current = false
+      setError(classified)
       setStage('error')
       return null
     } finally {
@@ -110,5 +141,18 @@ export function useAriaStream() {
     }
   }, [])
 
-  return { send, cancel, text, stage, error, isBusy: stage === 'thinking' || stage === 'streaming' }
+  /**
+   * S1 PHASE 7 — RETRY. Resends the exact last request, so the owner never retypes a question that
+   * failed for reasons that were nothing to do with them.
+   */
+  const retry = useCallback(async (onDone?: (r: AriaStreamResult) => void) => {
+    const body = lastBodyRef.current
+    if (!body) return null
+    return send(body, onDone)
+  }, [send])
+
+  return {
+    send, cancel, retry, text, stage, error,
+    isBusy: stage === 'thinking' || stage === 'streaming',
+  }
 }
