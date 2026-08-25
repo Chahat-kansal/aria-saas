@@ -313,6 +313,30 @@ they would to the real component. It does mean nothing here was seen under real 
 full `next build` before the push**. A build on this tree takes ~20 minutes, so six were not run.
 Nothing reached `main` unbuilt, but saying so is better than implying otherwise.
 
+## THE FLAKY PUSH GATE, FINALLY IDENTIFIED
+
+MS16C attempt 1 recorded a mystery flake: the pre-push hook blocked once, then passed on identical
+code. I could not name the test then, because I had piped the push through `tail -5` and the output
+scrolled past. **It happened again on this run, and this time I captured it.**
+
+```
+FAIL  src/lib/pos/staff-pin.test.ts > no route compares a PIN in plaintext
+      > the only === / !== comparisons on .pin are documented legacy fallbacks
+Error: Test timed out in 5000ms.
+```
+
+**Not an assertion failure — a timeout.** That test is a SEC-PIN security rail: it walks every file
+under `src/`, reads each one, and runs an `indexOf` over the whole file for each matching line. It
+is slow by construction, and vitest's 5s default is tight enough that it fails intermittently when
+the disk is busy — which it was, repeatedly, during this sprint's builds and screenshot runs.
+
+**Fixed with an explicit 30s timeout on that one test.** The walk, the pattern, the offenders list
+and the expectation are all unchanged — only the time budget moves. This is not a weakened security
+check; it is the same check given room to finish.
+
+Worth doing rather than retrying the push: a security rail that fails randomly under load is exactly
+the kind people learn to push past with `--no-verify`, and that is how a guard quietly stops working.
+
 ## WHAT IS NOT DONE
 
 - **The 3D Aria was never seen rendering** — see the Phase 3 warning. This is the one thing in the

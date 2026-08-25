@@ -96,7 +96,17 @@ describe('no route compares a PIN in plaintext', () => {
       })
     }
     expect(offenders, 'plaintext PIN comparison outside the helper: ' + offenders.join(', ')).toEqual([])
-  })
+    // MS16C — explicit timeout, NOT a weaker assertion. This test walks every file under src/,
+    // reads each one, and runs an indexOf over the whole file per matching line, so it is slow by
+    // construction. Under vitest's 5s default it times out intermittently when the disk is busy —
+    // it blocked two pushes during MS16C while the tree was being built and screenshotted, and the
+    // first time it did, the failure was mistaken for a mystery flake because the hook output was
+    // truncated before the test name appeared.
+    //
+    // The check itself is unchanged: same walk, same pattern, same offenders list, same expectation.
+    // Only the time budget moves. A security rail that fails randomly under load is a rail people
+    // learn to push past with --no-verify, which is exactly how this guard would stop working.
+  }, 30_000)
 
   // ── SEC-PIN-3 — THE BLIND SPOT IN THE GUARD ABOVE ─────────────────────────────────────────────
   // The pattern `\.pin (===|!==)` cannot match `m.manager_pin === manager_pin`, because the
