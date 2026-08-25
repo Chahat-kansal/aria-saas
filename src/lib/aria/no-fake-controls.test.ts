@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -175,6 +175,67 @@ describe('MS17 · no fake controls on the Ask Aria surface', () => {
       expect(NO_OP.some(re => re.test(s)), s + ' should be flagged').toBe(true)
     }
     expect(NO_OP.some(re => re.test('onClick={() => void ask(input)}'))).toBe(false)
+  })
+})
+
+// -- MS17 PHASE 6 -- THE WIRE MUST REACH SOMETHING ---------------------------------------------
+//
+// The handler check above proves a control is wired. It does NOT prove the wire reaches anything:
+// `onClick={() => fetch('/api/aria/does-not-exist')}` passes it happily. That was the first
+// limitation listed in this file's header, and this closes it — every /api/ path the surface calls
+// must resolve to a route file on disk.
+//
+// It still cannot prove the route WORKS against real data. Nothing static can. Phase 5's walk is
+// the nearest available, and only for the day it ran.
+describe('MS17 phase 6 . every wire reaches a real route', () => {
+  const CALLERS = [
+    'src/components/ask-aria-ax/AskAriaTransition.tsx',
+    'src/components/ask-aria-ax/rooms/ThreadsPanel.tsx',
+    'src/components/ask-aria-ax/rooms/MadeForYouRoom.tsx',
+    'src/components/ask-aria-ax/ProposalCard.tsx',
+    'src/components/ask-aria-ax/useAriaStream.ts',
+  ]
+
+  /** Every /api/... path a file fetches, quote or backtick, query string trimmed. */
+  function apiPaths(src: string): string[] {
+    const out = new Set<string>()
+    for (const m of src.matchAll(/fetch\(\s*[`'"](\/api\/[^`'"?$]*)/g)) out.add(m[1]!)
+    return [...out]
+  }
+
+  function routeExists(apiPath: string): boolean {
+    return existsSync(join(root, 'src/app', apiPath.replace(/^\//, ''), 'route.ts'))
+  }
+
+  it('every /api path the surface calls has a route file', () => {
+    const dead: string[] = []
+    for (const f of CALLERS) {
+      for (const p of apiPaths(read(f))) {
+        if (!routeExists(p)) dead.push(f + ' -> ' + p)
+      }
+    }
+    expect(dead, 'controls wired to routes that do not exist: ' + dead.join(' | ')).toEqual([])
+  })
+
+  it('the surface really does call the routes it should', () => {
+    // A guard against the check above passing vacuously because nothing was found to check.
+    const all = CALLERS.flatMap(f => apiPaths(read(f)))
+    expect(all.length).toBeGreaterThanOrEqual(8)
+    expect(all).toContain('/api/aria/ask/history')
+    expect(all).toContain('/api/aria/ask/upload')
+    expect(all).toContain('/api/aria/deliverables')
+  })
+
+  it('PROBE -- a route that does not exist is caught', () => {
+    expect(routeExists('/api/aria/ask/history')).toBe(true)
+    expect(routeExists('/api/aria/definitely-not-a-route')).toBe(false)
+  })
+
+  it('PROBE -- the path extractor sees both quote styles', () => {
+    const quoted = "fetch('/api/aria/ask/delete', { method: 'DELETE' })"
+    const templated = 'fetch(`/api/aria/ask/history?id=${id}&messages=true`)'
+    expect(apiPaths(quoted)).toContain('/api/aria/ask/delete')
+    expect(apiPaths(templated)).toContain('/api/aria/ask/history')
   })
 })
 
