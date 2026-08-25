@@ -43,6 +43,10 @@ import { AbortedByCaller } from '@/lib/aria/providers/anthropic'
 import {
   supersedeLastAssistant, supersedeFrom, liveIndexToAbsolute, type ThreadMessage,
 } from '@/lib/aria/conversation-branch'
+import {
+  buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle,
+} from '@/lib/aria/thread-title'
+import { ariaChatWithProvider } from '@/lib/ai-router'
 import { computeHealthSignals } from '@/lib/aria/health-signals'
 import { computeGoalContext } from '@/lib/aria/goal-context'
 import { getOpenLoops } from '@/lib/aria/open-loops'
@@ -218,7 +222,31 @@ async function upsertConversation(
     }
   }
 
-  const title = userMsg.slice(0, 60)
+  /**
+   * S1 PHASE 6 — THE TITLE IS WRITTEN EXACTLY ONCE, HERE, AT CREATION.
+   *
+   * There is no title UPDATE anywhere in this route, which is what guarantees both sprint rules
+   * without needing a `title_edited` column: one call per thread ever, and a rename can never be
+   * clobbered by code that never writes the field again.
+   *
+   * Generation is best-effort and time-boxed. A thread with a crude title is fine; a thread whose
+   * first answer was delayed by titling is not, so a failure falls straight back to the question.
+   */
+  let title = fallbackTitle(userMsg)
+  if (shouldGenerateTitle({ isNewConversation: true, question: userMsg })) {
+    try {
+      const generated = await Promise.race([
+        ariaChatWithProvider('insight', buildTitlePrompt(userMsg, assistantMsg), 24, {
+          businessId, agentKey: 'thread_title',
+        }).then(r => r.text),
+        new Promise<string>((_, rej) => setTimeout(() => rej(new Error('title timeout')), 6_000)),
+      ])
+      title = sanitiseTitle(generated, userMsg)
+    } catch (e) {
+      console.warn('[thread-title] falling back to the question:', (e as Error).message)
+    }
+  }
+
   const { data: created, error: insertErr } = await supabaseAdmin.from('aria_conversations').insert({
     business_id: businessId,
     user_id: userId,
