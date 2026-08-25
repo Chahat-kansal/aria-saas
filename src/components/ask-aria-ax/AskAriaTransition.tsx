@@ -13,6 +13,7 @@ import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import AuditLogCard from '@/components/aria/AuditLogCard'
 import { segmentFigures } from '@/lib/aria/figure-provenance'
 import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
+import { readDraft, writeDraft, clearDraft, adoptDraft } from '@/lib/aria/draft-store'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
 import type { AskBlock } from '@/lib/aria/ask-types'
@@ -135,6 +136,17 @@ export default function AskAriaTransition() {
     if (flowRef.current) flowRef.current.scrollTop = 9e9
   }, [turns.length, text, room])
 
+  /**
+   * S2 PHASE 5 — restore this thread's unsent draft.
+   *
+   * Runs on every thread change, so switching threads swaps drafts rather than carrying one across.
+   * A draft is per-thread precisely so a half-written note to one supplier cannot surface in a
+   * conversation about something else.
+   */
+  useEffect(() => {
+    setInput(readDraft(conversationId))
+  }, [conversationId])
+
   const chooseMode = useCallback(async (mode: AutonomyMode) => {
     if (savingMode || !autonomy) return
     setAutonomyNote(null)
@@ -169,6 +181,8 @@ export default function AskAriaTransition() {
     setWorking(true)          // enter WORKING — the transition runs
     setInput('')
     setWelcomeInput('')
+    // S2 phase 5 — the thought has been sent, so it is no longer a draft.
+    clearDraft(conversationId)
     setTurns(prev => [...prev, { role: 'user', text: msg }, { role: 'aria', text: '', streaming: true }])
 
     const result = await send({
@@ -197,7 +211,11 @@ export default function AskAriaTransition() {
       }
       return updated
     })
-    if (result?.conversation_id) setConversationId(result.conversation_id)
+    if (result?.conversation_id) {
+      // A draft typed before the thread existed belongs to the thread it produced.
+      adoptDraft(result.conversation_id)
+      setConversationId(result.conversation_id)
+    }
 
     // Migrated: API-RESILIENCE-1/1B. Backup provider = amber, total outage = red. Only what the
     // route actually said — never inferred from a slow or empty answer.
@@ -700,7 +718,7 @@ export default function AskAriaTransition() {
                 rows={1}
                 placeholder="Ask Aria anything…"
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={e => { setInput(e.target.value); writeDraft(conversationId, e.target.value) }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(input) }
                 }}
