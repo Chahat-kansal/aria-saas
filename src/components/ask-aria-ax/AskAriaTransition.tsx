@@ -11,6 +11,7 @@ import { SkillPicker } from '@/components/aria/SkillPicker'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import AuditLogCard from '@/components/aria/AuditLogCard'
 import { segmentFigures } from '@/lib/aria/figure-provenance'
+import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
 import type { AskBlock } from '@/lib/aria/ask-types'
@@ -240,9 +241,15 @@ export default function AskAriaTransition() {
   }, [ask, isBusy])
 
   /** Copy an answer — the old surface's MessageActions (page.tsx:96). */
+  /**
+   * S1 PHASE 4 — copy the RAW MARKDOWN, never the rendered DOM text.
+   *
+   * `body` is the model's own output, so a table stays a table and a code block keeps its fence.
+   * Reading innerText here would flatten all of it and the owner would paste mush into an email.
+   */
   const copyAnswer = useCallback(async (i: number, body: string) => {
     try {
-      await navigator.clipboard.writeText(body)
+      await navigator.clipboard.writeText(toClipboardMarkdown(body))
       setCopied(i)
       // cleared on the next copy or the next turn; no timer, which the presence rail forbids
     } catch { setCopied(null) }
