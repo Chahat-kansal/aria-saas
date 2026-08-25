@@ -40,6 +40,9 @@ import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliver
 import { validateAndHeal } from '@/lib/aria/response-validator'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { AbortedByCaller } from '@/lib/aria/providers/anthropic'
+import {
+  supersedeLastAssistant, supersedeFrom, liveIndexToAbsolute, type ThreadMessage,
+} from '@/lib/aria/conversation-branch'
 import { computeHealthSignals } from '@/lib/aria/health-signals'
 import { computeGoalContext } from '@/lib/aria/goal-context'
 import { getOpenLoops } from '@/lib/aria/open-loops'
@@ -148,9 +151,21 @@ async function upsertConversation(
    * history route, a later regenerate — can mistake it for a finished answer.
    */
   incomplete?: boolean,
+  /**
+   * S1 PHASES 2 & 3 — how this turn joins the thread.
+   *
+   *   'append'    the normal case: a new question and its answer.
+   *   'regenerate' re-running the last answer. The previous answer is SUPERSEDED, not overwritten,
+   *               and no duplicate copy of the question is added.
+   *   'edit'      an earlier question was changed. That message and everything after it are
+   *               superseded, then the new question and answer are appended.
+   *
+   * Nothing is ever spliced out of the array. See lib/aria/conversation-branch.ts.
+   */
+  branch?: { mode: 'append' | 'regenerate' | 'edit'; editLiveIndex?: number },
 ): Promise<string> {
   console.log('[upsertConversation] called for biz:', businessId, 'user:', userId, 'existing:', conversationId)
-  const pair = [
+  const pair: ThreadMessage[] = [
     { role: 'user', content: userMsg, ts: new Date().toISOString() },
     {
       role: 'assistant', content: assistantMsg, ts: new Date().toISOString(), downloads: downloads ?? [],
@@ -167,10 +182,30 @@ async function upsertConversation(
       .maybeSingle()
 
     if (existing) {
-      const msgs = Array.isArray(existing.messages) ? existing.messages : []
+      const msgs = (Array.isArray(existing.messages) ? existing.messages : []) as ThreadMessage[]
+      const mode = branch?.mode ?? 'append'
+      const stamp = new Date().toISOString()
+      const newAssistantId = 'a:' + stamp
+
+      // SUPERSEDE, NEVER DELETE. The array only ever grows; renderPath() decides what is shown.
+      let base: ThreadMessage[] = msgs
+      let toAppend = pair
+      if (mode === 'regenerate') {
+        base = supersedeLastAssistant(msgs, newAssistantId, stamp).messages
+        // no second copy of the question — the owner asked once
+        toAppend = [{ ...pair[1]!, id: newAssistantId }]
+      } else if (mode === 'edit') {
+        const abs = liveIndexToAbsolute(msgs, branch?.editLiveIndex ?? -1)
+        if (abs >= 0) base = supersedeFrom(msgs, abs, newAssistantId, stamp).messages
+        toAppend = [
+          { ...pair[0]!, id: 'u:' + stamp, edited_from: String(abs) },
+          { ...pair[1]!, id: newAssistantId },
+        ]
+      }
+
       const { error: updateErr } = await supabaseAdmin.from('aria_conversations').update({
-        messages: [...msgs, ...pair],
-        message_count: (Number(existing.message_count) || 0) + 2,
+        messages: [...base, ...toAppend],
+        message_count: (Number(existing.message_count) || 0) + toAppend.length,
         last_message_at: new Date().toISOString(),
         last_intent: intentType,
       }).eq('id', conversationId)
@@ -221,6 +256,12 @@ async function _POST(
 ) {
   // Everything the model has streamed this turn, so a stop can persist the partial.
   let streamedSoFar = ''
+  /**
+   * S1 PHASES 2 & 3 — regenerate / edit-and-rerun. Supersede, never delete: the previous answer
+   * (and, for an edit, everything after the edited question) stays in the database and stops
+   * rendering. Default 'append' is the ordinary new-question case.
+   */
+  let branchIntent: { mode: 'append' | 'regenerate' | 'edit'; editLiveIndex?: number } = { mode: 'append' }
   const tokenSink = onToken
     ? (t: string) => { streamedSoFar += t; onToken(t) }
     : undefined
@@ -251,10 +292,20 @@ async function _POST(
       }
     }
   } else {
-    const body = await req.json() as { message?: string; conversation_id?: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> }
+    const body = await req.json() as {
+      message?: string; conversation_id?: string
+      messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+      // S1 phases 2 & 3 — how this turn joins the thread. Absent means a normal new question.
+      regenerate?: boolean
+      edit_live_index?: number
+    }
     message = (body.message ?? '').trim()
     conversationId = body.conversation_id ?? null
     clientMessages = Array.isArray(body.messages) ? body.messages.slice(-20) : []
+    if (body.regenerate) branchIntent = { mode: 'regenerate' }
+    else if (typeof body.edit_live_index === 'number') {
+      branchIntent = { mode: 'edit', editLiveIndex: body.edit_live_index }
+    }
   }
 
   if (!message && attachments.length === 0) return NextResponse.json({ error: 'message or file required' }, { status: 400 })
@@ -2392,7 +2443,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // 7. Save conversation
   let savedConvId = conversationId
   try {
-    savedConvId = await upsertConversation(bid, userId, conversationId, message, historyContent, intent.type)
+    savedConvId = await upsertConversation(bid, userId, conversationId, message, historyContent, intent.type, undefined, false, branchIntent)
   } catch (e) {
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
@@ -2450,7 +2501,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // Persist downloads in conversation so they survive page reload
   if (savedConvId && downloads.length > 0) {
     try {
-      await upsertConversation(bid, userId, savedConvId, message, historyContent, intent.type, downloads)
+      await upsertConversation(bid, userId, savedConvId, message, historyContent, intent.type, downloads, false, branchIntent)
     } catch (e) { console.error('[non-fatal]', e) }
   }
 

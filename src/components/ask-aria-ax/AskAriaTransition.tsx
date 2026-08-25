@@ -98,6 +98,8 @@ export default function AskAriaTransition() {
   // It is set ONLY from what the route reports, never guessed.
   const [degraded, setDegraded] = useState<{ note: string; outage: boolean } | null>(null)
   const [copied, setCopied] = useState<number | null>(null)
+  // S1 phase 3 — which rendered message is being edited, and its working text.
+  const [editing, setEditing] = useState<{ index: number; text: string } | null>(null)
 
   const { send, cancel, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
@@ -149,7 +151,14 @@ export default function AskAriaTransition() {
     } finally { setSavingMode(false) }
   }, [autonomy, savingMode])
 
-  const ask = useCallback(async (prompt: string) => {
+  const ask = useCallback(async (
+    prompt: string,
+    /**
+     * S1 phases 2 & 3. 'regenerate' re-runs the last answer; 'edit' replaces an earlier question.
+     * Both SUPERSEDE rather than delete — the old rows stay in the database (conversation-branch.ts).
+     */
+    branch?: { regenerate?: true } | { editLiveIndex: number },
+  ) => {
     const msg = prompt.trim()
     if (!msg || isBusy) return
     setRoom('ask')            // asking always returns you to the conversation
@@ -158,7 +167,12 @@ export default function AskAriaTransition() {
     setWelcomeInput('')
     setTurns(prev => [...prev, { role: 'user', text: msg }, { role: 'aria', text: '', streaming: true }])
 
-    const result = await send({ message: msg, conversation_id: conversationId })
+    const result = await send({
+      message: msg,
+      conversation_id: conversationId,
+      ...(branch && 'regenerate' in branch ? { regenerate: true } : {}),
+      ...(branch && 'editLiveIndex' in branch ? { edit_live_index: branch.editLiveIndex } : {}),
+    })
 
     setTurns(prev => {
       const updated = [...prev]
@@ -195,14 +209,35 @@ export default function AskAriaTransition() {
    * Regenerate — migrated from the old surface (page.tsx:830). Drops the last Aria turn and re-asks
    * the last question. Same behaviour, same route.
    */
+  /**
+   * S1 PHASE 2 — REGENERATE. The previous answer is NOT overwritten.
+   *
+   * MS17 shipped a version of this that did `turns.slice(0, lastUser)` — it threw the old answer
+   * away, which is exactly what this phase forbids. Server-side the old answer is superseded and
+   * kept; client-side the question is not repeated, and the new answer replaces the old one in the
+   * rendered path only.
+   */
   const regenerate = useCallback(() => {
     let lastUser = -1
     for (let i = turns.length - 1; i >= 0; i--) if (turns[i]?.role === 'user') { lastUser = i; break }
     if (lastUser === -1 || isBusy) return
     const question = turns[lastUser]!.text
-    setTurns(turns.slice(0, lastUser))
-    void ask(question)
+    // drop only the RENDERED old answer; the stored one is superseded, not deleted
+    setTurns(prev => prev.slice(0, lastUser + 1))
+    void ask(question, { regenerate: true })
   }, [ask, isBusy, turns])
+
+  /**
+   * S1 PHASE 3 — EDIT AND RE-RUN. Everything after the edited question is superseded server-side,
+   * never deleted. No branch-navigation UI: a café owner will never use one.
+   */
+  const submitEdit = useCallback((liveIndex: number, newText: string) => {
+    const text = newText.trim()
+    if (!text || isBusy) return
+    setEditing(null)
+    setTurns(prev => prev.slice(0, liveIndex))
+    void ask(text, { editLiveIndex: liveIndex })
+  }, [ask, isBusy])
 
   /** Copy an answer — the old surface's MessageActions (page.tsx:96). */
   const copyAnswer = useCallback(async (i: number, body: string) => {
@@ -517,12 +552,36 @@ export default function AskAriaTransition() {
               {turns.map((t, i) => {
                 const live = t.streaming ? text : t.text
                 if (t.role === 'user') {
+                  const isEditing = editing?.index === i
                   return (
                     <div className="m me" key={i}>
                       <div className="a" style={{ background: 'var(--tan)', color: '#4a3719' }}>You</div>
                       <div>
                         <div className="who">You</div>
-                        <div className="bub">{t.text}</div>
+                        {isEditing ? (
+                          <div className="ax-edit">
+                            <textarea
+                              value={editing!.text}
+                              autoFocus
+                              onChange={e => setEditing({ index: i, text: e.target.value })}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(i, editing!.text) }
+                                if (e.key === 'Escape') setEditing(null)
+                              }}
+                            />
+                            <div className="ax-msgacts">
+                              <button className="go" onClick={() => submitEdit(i, editing!.text)}>Ask again</button>
+                              <button className="gh" onClick={() => setEditing(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="bub">{t.text}</div>
+                            <div className="ax-msgacts">
+                              <button className="gh" onClick={() => setEditing({ index: i, text: t.text })}>Edit</button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )

@@ -334,3 +334,9 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
 .send2.stop, .send.stop{background:var(--red);box-shadow:0 6px 18px rgba(226,75,74,.3)}
 .ax-incomplete{margin-top:9px;font-size:12px;font-weight:500;color:#8A5D07;
   background:var(--amber-l);border:1px solid #F3DDB3;border-radius:10px;padding:6px 11px;display:inline-block}
+
+/* S1 PHASE 3 APPENDS — editing an earlier question in place. */
+.ax-edit textarea{width:100%;min-width:280px;border:1px solid var(--blue-b);border-radius:16px;
+  padding:12px 15px;font-family:inherit;font-size:14.5px;line-height:1.6;resize:vertical;outline:0;background:#fff}
+.ax-edit textarea:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(37,99,235,.09)}
+.m.me .ax-msgacts{justify-content:flex-end}
