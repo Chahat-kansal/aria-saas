@@ -29,18 +29,27 @@ export interface AriaStreamResult {
   [k: string]: unknown
 }
 
-export type AriaStage = 'idle' | 'thinking' | 'streaming' | 'done' | 'error'
+export type AriaStage = 'idle' | 'thinking' | 'streaming' | 'done' | 'error' | 'stopped'
 
 export function useAriaStream() {
   const [text, setText] = useState('')
   const [stage, setStage] = useState<AriaStage>('idle')
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Mirrors `text` for the abort path: state is not readable synchronously inside the catch.
+  const textRef = useRef('')
 
+  /**
+   * S1 PHASE 1 — STOP GENERATING.
+   *
+   * Aborting the fetch cancels the request, which the route now propagates into the provider call,
+   * so the model actually stops rather than generating on into a closed connection. `send()` below
+   * returns the partial instead of throwing, because a stop is not an error.
+   */
   const cancel = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
-    setStage('idle')
+    setStage('stopped')
   }, [])
 
   const send = useCallback(async (
@@ -50,6 +59,7 @@ export function useAriaStream() {
     const controller = new AbortController()
     abortRef.current = controller
     setText('')
+    textRef.current = ''
     setError(null)
     setStage('thinking')
 
@@ -79,7 +89,7 @@ export function useAriaStream() {
       // Frame parsing lives in lib/aria/ask-sse.ts, shared with the live Ask Aria page, so the two
       // clients of this stream cannot drift apart (failure pattern #4).
       const result = await readAriaSse<AriaStreamResult>(res, {
-        onText: (full) => { setStage('streaming'); setText(full) },
+        onText: (full) => { setStage('streaming'); setText(full); textRef.current = full },
         onStage: () => setStage('thinking'),
       })
       if (typeof result.response === 'string' && result.response.length > 0) setText(result.response)
@@ -87,7 +97,11 @@ export function useAriaStream() {
       onDone?.(result)
       return result
     } catch (e) {
-      if ((e as Error).name === 'AbortError') { setStage('idle'); return null }
+      // A stop is a deliberate act, not a failure. Return what streamed so the caller can keep it.
+      if ((e as Error).name === 'AbortError') {
+        setStage('stopped')
+        return { response: textRef.current, stopped: true, incomplete: true } as AriaStreamResult
+      }
       setError((e as Error).message)
       setStage('error')
       return null

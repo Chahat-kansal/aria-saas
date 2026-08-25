@@ -39,6 +39,7 @@ import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 import { validateAndHeal } from '@/lib/aria/response-validator'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { AbortedByCaller } from '@/lib/aria/providers/anthropic'
 import { computeHealthSignals } from '@/lib/aria/health-signals'
 import { computeGoalContext } from '@/lib/aria/goal-context'
 import { getOpenLoops } from '@/lib/aria/open-loops'
@@ -140,11 +141,21 @@ async function upsertConversation(
   assistantMsg: string,
   intentType: string,
   downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }>,
+  /**
+   * S1 PHASE 1 — the owner pressed Stop, so this assistant turn is a PARTIAL answer.
+   * It is stored, not discarded: a half-answer the owner watched arrive is real, and silently
+   * dropping it would lose work they saw. It is marked so nothing downstream — the UI, the
+   * history route, a later regenerate — can mistake it for a finished answer.
+   */
+  incomplete?: boolean,
 ): Promise<string> {
   console.log('[upsertConversation] called for biz:', businessId, 'user:', userId, 'existing:', conversationId)
   const pair = [
     { role: 'user', content: userMsg, ts: new Date().toISOString() },
-    { role: 'assistant', content: assistantMsg, ts: new Date().toISOString(), downloads: downloads ?? [] },
+    {
+      role: 'assistant', content: assistantMsg, ts: new Date().toISOString(), downloads: downloads ?? [],
+      ...(incomplete ? { incomplete: true, stopped_by: 'user' } : {}),
+    },
   ]
 
   if (conversationId) {
@@ -197,7 +208,22 @@ async function upsertConversation(
  * image, background task…) returns fast and simply emits its result as the stream's `done` event —
  * so the twelve early returns keep working untouched and nothing was duplicated to get streaming.
  */
-async function _POST(req: Request, _routeCtx: unknown, { supabase, userId, businessId }: BusinessContext, onToken?: (t: string) => void) {
+async function _POST(
+  req: Request,
+  _routeCtx: unknown,
+  { supabase, userId, businessId }: BusinessContext,
+  onToken?: (t: string) => void,
+  /**
+   * S1 PHASE 1 — the request's abort signal, threaded all the way into the provider call so that
+   * pressing Stop CANCELS generation rather than merely closing the browser's ear to it.
+   */
+  signal?: AbortSignal,
+) {
+  // Everything the model has streamed this turn, so a stop can persist the partial.
+  let streamedSoFar = ''
+  const tokenSink = onToken
+    ? (t: string) => { streamedSoFar += t; onToken(t) }
+    : undefined
   const rl = await checkRateLimit('ai', userId)
   if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 })
 
@@ -2141,9 +2167,13 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     if (circuit.incidentId) await recordAnthropicFallbackProvider(circuit.incidentId, deg.provider)
     toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
   } else {
+    try {
     toolResult = await callAnthropicWithTools({
       // MS16 phase 4 — the only streaming call site.
-      onToken,
+      // S1 phase 1 — the sink accumulates so a stop can persist the partial, and `signal` carries
+      // the owner's cancellation into the SDK call itself.
+      onToken: tokenSink,
+      signal,
       model: routedModel,
       systemPrompt: effectiveSystemPrompt,
       userPrompt,
@@ -2169,6 +2199,33 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       toolChoice: imageToolChoice,
       requestSummary: message.slice(0, 100),
     })
+    } catch (e) {
+      // S1 PHASE 1 — STOPPED, NOT FAILED. Persist whatever streamed, marked incomplete, and return
+      // it as a normal (non-error) response so the thread stays usable and the next action works.
+      if (e instanceof AbortedByCaller || signal?.aborted) {
+        const partial = streamedSoFar.trim()
+        let stoppedConvId: string | null = conversationId
+        try {
+          stoppedConvId = await upsertConversation(
+            bid, userId, conversationId, message,
+            partial || '(stopped before Aria wrote anything)',
+            'stopped', undefined, true,
+          )
+        } catch (persistErr) {
+          console.error('[aria/ask] could not persist the stopped turn:', (persistErr as Error).message)
+        }
+        return NextResponse.json({
+          response: partial,
+          conversation_id: stoppedConvId,
+          intent: 'stopped',
+          stopped: true,
+          incomplete: true,
+          blocks: null,
+          followups: [],
+        })
+      }
+      throw e
+    }
 
     const emptyResult = toolResult.success && (!toolResult.raw || toolResult.raw.trim().length === 0)
     if (!toolResult.success || emptyResult) {
@@ -2486,7 +2543,7 @@ const _STREAMING_POST = async (req: Request, routeCtx: unknown, biz: BusinessCon
       await writer.write(line({ type: 'stage', stage: 'thinking' }))
       const res = await _POST(req, routeCtx, biz, (t: string) => {
         void writer.write(line({ type: 'token', text: t }))
-      })
+      }, req.signal)
       const payload = await res.json().catch(() => ({ error: 'unreadable response' }))
       await writer.write(line({ type: 'done', payload }))
     } catch (e) {

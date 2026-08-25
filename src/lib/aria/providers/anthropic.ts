@@ -189,6 +189,20 @@ export async function callAnthropic<T = Record<string, unknown>>(
 }
 
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
+import { linkAbort } from '@/lib/aria/abort-link'
+
+/**
+ * S1 PHASE 1 — the owner pressed Stop. This is NOT a failure and must never be reported as one:
+ * whatever streamed is a real partial answer, and the turn is persisted marked incomplete.
+ * Distinct from a timeout (which is a failure) and from a network drop (which is retryable).
+ */
+export class AbortedByCaller extends Error {
+  readonly aborted = true
+  constructor() {
+    super('Generation stopped by the caller')
+    this.name = 'AbortedByCaller'
+  }
+}
 
 interface ToolLoopParams {
   model: keyof typeof MODEL_IDS
@@ -208,6 +222,14 @@ interface ToolLoopParams {
    * owner would see a typewriter effect over an answer that took just as long to arrive.
    */
   onToken?: (text: string) => void
+  /**
+   * S1 PHASE 1 — THE CALLER'S CANCELLATION, PROPAGATED INTO THE SDK CALL.
+   *
+   * Without this a client "stop" is a DISCONNECT, not a cancellation: the browser stops listening
+   * but the model keeps generating and the tokens are still billed. Linking the caller's signal to
+   * this iteration's AbortController is what makes stop actually stop.
+   */
+  signal?: AbortSignal
   maxIterations?: number
   thinking?: { enabled: boolean; budget_tokens?: number }
   businessId?: string
@@ -286,8 +308,18 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         if (requestBody.max_tokens < budget + 1024) requestBody.max_tokens = budget + 1024
       }
 
+      // S1 PHASE 1 — if the caller already gave up, do not start another model turn at all.
+      if (params.signal?.aborted) throw new AbortedByCaller()
+
       const iterTimeoutMs = params.timeoutMs ?? 45_000
       const iterAc = new AbortController()
+
+      // Link the caller's signal to THIS iteration's controller, so an abort from the route
+      // reaches `client.messages.stream(...)`/`create(...)` and the provider stops generating.
+      // linkAbort lives in lib/aria/abort-link.ts so the mechanism has a real unit test rather
+      // than a grep assertion.
+      const unlinkCallerAbort = linkAbort(params.signal, iterAc)
+
       let iterTimerId: ReturnType<typeof setTimeout> | undefined
       const iterHardTimeout = new Promise<never>((_, rej) => {
         iterTimerId = setTimeout(() => {
@@ -307,6 +339,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         iterHardTimeout,
       ])
       clearTimeout(iterTimerId)
+      unlinkCallerAbort()
 
       totalInputTokens += response.usage.input_tokens
       totalOutputTokens += response.usage.output_tokens

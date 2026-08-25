@@ -48,6 +48,8 @@ interface Turn {
   blocks?: AskBlock[] | null
   /** Migrated from the old surface: it showed when the council answered. */
   usedCouncil?: boolean
+  /** S1 phase 1 — the owner pressed Stop. A partial answer, never shown as a finished one. */
+  incomplete?: boolean
 }
 
 /** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
@@ -97,7 +99,7 @@ export default function AskAriaTransition() {
   const [degraded, setDegraded] = useState<{ note: string; outage: boolean } | null>(null)
   const [copied, setCopied] = useState<number | null>(null)
 
-  const { send, text, stage, error, isBusy } = useAriaStream()
+  const { send, cancel, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -169,6 +171,8 @@ export default function AskAriaTransition() {
           skill: (result?.tool_calls ?? [])[0]?.name ?? null,
           blocks: (result?.blocks as AskBlock[] | null | undefined) ?? null,
           usedCouncil: Boolean(result?.used_council),
+          // S1 phase 1 — a stopped turn keeps its partial text and says it is partial.
+          incomplete: Boolean(result?.incomplete ?? result?.stopped),
         }
       }
       return updated
@@ -454,7 +458,11 @@ export default function AskAriaTransition() {
             />
             {/* Real voice, migrated from the old surface's VoiceInput. */}
             <VoiceInput onTranscript={t => setWelcomeInput(t)} disabled={isBusy} />
-            <button className="send" onClick={() => void ask(welcomeInput)}>↑</button>
+            {isBusy ? (
+              <button className="send stop" onClick={cancel} aria-label="Stop generating">■</button>
+            ) : (
+              <button className="send" onClick={() => void ask(welcomeInput)}>↑</button>
+            )}
           </div>
 
           {/* the collapsed column repeats the control compactly */}
@@ -561,6 +569,11 @@ export default function AskAriaTransition() {
                             <BlockRenderer block={b} onChoice={ask} />
                           </div>
                         ))}
+                        {t.incomplete && (
+                          <div className="ax-incomplete">
+                            Stopped — this answer is unfinished.
+                          </div>
+                        )}
                         {/* Migrated from the old surface's MessageActions: copy, and re-ask. */}
                         {!t.streaming && t.text && (
                           <div className="ax-msgacts">
@@ -615,7 +628,14 @@ export default function AskAriaTransition() {
                 >📎</button>
 
                 <VoiceInput onTranscript={t => setInput(t)} disabled={isBusy} />
-                <button className="send2" onClick={() => void ask(input)} disabled={isBusy}>↑</button>
+                {/* S1 PHASE 1 — STOP GENERATING. While a turn is in flight the send button becomes
+                    Stop, because a streaming answer you cannot interrupt is worse than no streaming:
+                    the owner watches a wrong answer arrive and can do nothing. */}
+                {isBusy ? (
+                  <button className="send2 stop" onClick={cancel} aria-label="Stop generating">■</button>
+                ) : (
+                  <button className="send2" onClick={() => void ask(input)}>↑</button>
+                )}
               </div>
             </div>
             <div className="oath">Connected records only — she won’t invent missing data</div>
