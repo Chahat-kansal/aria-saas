@@ -347,3 +347,42 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
 .ax-error-msg{font-size:13.5px;color:#8E2C2B;line-height:1.5;flex:1;min-width:220px}
 .ax-error-note{font-size:12.5px;color:#8E2C2B;opacity:.75}
 .ax-degraded-who{font-weight:600}
+
+/* S1 PHASE 8 APPENDS — real markdown inside an answer bubble. */
+.ax-md > *:first-child{margin-top:0}
+.ax-md > *:last-child{margin-bottom:0}
+.ax-md p{margin:0 0 10px}
+.ax-md h4{font-size:15px;font-weight:600;margin:14px 0 6px}
+.ax-md h5{font-size:14px;font-weight:600;margin:12px 0 6px}
+.ax-md ul,.ax-md ol{margin:0 0 10px;padding-left:20px}
+.ax-md li{margin:3px 0}
+.ax-md a{color:var(--blue-d);text-decoration:underline}
+.ax-md blockquote{margin:0 0 10px;padding-left:12px;border-left:3px solid var(--blue-b);color:var(--ink2)}
+.ax-md code{background:#F1F5FC;border-radius:5px;padding:1px 5px;font-size:13px}
+
+/* tables render as tables — the whole point of the phase */
+.ax-tablewrap{overflow-x:auto;margin:0 0 12px;border:1px solid rgba(16,24,40,.08);border-radius:12px}
+.ax-md table{border-collapse:collapse;width:100%;font-size:13.5px}
+.ax-md th,.ax-md td{padding:8px 12px;text-align:left;border-bottom:1px solid rgba(16,24,40,.06);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.ax-md th{background:#F6F9FF;font-weight:600;font-size:12.5px}
+.ax-md tr:last-child td{border-bottom:0}
+
+/* code blocks, with a copy button */
+.ax-code{position:relative;margin:0 0 12px}
+.ax-code pre{background:#F6F9FF;border:1px solid rgba(16,24,40,.07);border-radius:12px;
+  padding:13px 15px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+.ax-code code{background:none;padding:0}
+.ax-code-copy{position:absolute;top:8px;right:8px;background:#fff;border:1px solid rgba(16,24,40,.1);
+  border-radius:8px;padding:3px 9px;font-size:11.5px;color:var(--ink2)}
+.ax-code-copy:hover{border-color:var(--blue-b);color:var(--blue-d)}
+
+/* a figure keeps its provenance panel anchored inside flowing text */
+.ax-fig{position:relative}
+.ax-fig .src.on{display:block;margin-top:8px}
+
+/* suggested next questions */
+.ax-followups{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+.ax-followup{border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue-d);
+  border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:500;text-align:left}
+.ax-followup:hover{background:#fff}

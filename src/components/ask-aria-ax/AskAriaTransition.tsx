@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAriaStream } from './useAriaStream'
 import AriaAvatarMount from './AriaAvatarMount'
+import AnswerMarkdown from './AnswerMarkdown'
 import ThreadsPanel from './rooms/ThreadsPanel'
 import AwaitingRoom from './rooms/AwaitingRoom'
 import MadeForYouRoom from './rooms/MadeForYouRoom'
@@ -51,6 +52,8 @@ interface Turn {
   usedCouncil?: boolean
   /** S1 phase 1 — the owner pressed Stop. A partial answer, never shown as a finished one. */
   incomplete?: boolean
+  /** S1 phase 8 — up to three suggested next questions, from the route's own payload. */
+  followups?: string[]
 }
 
 /** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
@@ -188,6 +191,8 @@ export default function AskAriaTransition() {
           usedCouncil: Boolean(result?.used_council),
           // S1 phase 1 — a stopped turn keeps its partial text and says it is partial.
           incomplete: Boolean(result?.incomplete ?? result?.stopped),
+          // S1 phase 8 — the route already produced these; nothing new is generated for them.
+          followups: (Array.isArray(result?.followups) ? result.followups : []).slice(0, 3),
         }
       }
       return updated
@@ -605,7 +610,6 @@ export default function AskAriaTransition() {
                     </div>
                   )
                 }
-                const segs = segmentFigures(live, {})
                 return (
                   <div key={i}>
                     {t.skill && (
@@ -619,26 +623,17 @@ export default function AskAriaTransition() {
                       <div style={{ minWidth: 0 }}>
                         <div className="who">Aria</div>
                         <div className="bub">
-                          {segs.map((s, j) => {
-                            // A figure with no provenance behind it gets NO affordance. An underline
-                            // is a promise, and this turn cannot keep one it never captured.
-                            if (s.kind === 'text' || s.tier === 'plain') return <span key={j}>{s.text}</span>
-                            const id = i + '-' + j
-                            return (
-                              <span
-                                key={j}
-                                className={s.tier === 'estimated' ? 'n2 est' : 'n2'}
-                                onClick={() => setOpenSrc(openSrc === id ? null : id)}
-                              >{s.text}</span>
-                            )
-                          })}
+                          {/* S1 PHASE 8 — real markdown. Provenance is wrapped INSIDE the rendered
+                              elements (table cells included), so a number in a table keeps its
+                              truth tier and click-to-source exactly as one in a paragraph does. */}
+                          <AnswerMarkdown
+                            text={live}
+                            streaming={t.streaming}
+                            idPrefix={String(i)}
+                            openSrc={openSrc}
+                            onToggleSrc={setOpenSrc}
+                          />
                           {t.streaming && <span className="cursor" />}
-                          {segs.map((s, j) => {
-                            if (s.kind !== 'figure' || s.tier === 'plain' || !s.source) return null
-                            const id = i + '-' + j
-                            const cls = 'src' + (s.tier === 'estimated' ? ' est' : '') + (openSrc === id ? ' on' : '')
-                            return <div className={cls} key={'src' + j}><b>Where this came from</b> · {s.source}</div>
-                          })}
                         </div>
                         {/* Migrated: charts, tables and KPI blocks render through the existing
                             BlockRenderer rather than a second implementation. */}
@@ -647,6 +642,16 @@ export default function AskAriaTransition() {
                             <BlockRenderer block={b} onChoice={ask} />
                           </div>
                         ))}
+                        {/* S1 PHASE 8 — up to three suggested next questions. These come from the
+                            route's existing payload; nothing is invented client-side, and they are
+                            absent when the route had none. */}
+                        {!t.streaming && (t.followups ?? []).length > 0 && (
+                          <div className="ax-followups">
+                            {(t.followups ?? []).slice(0, 3).map(f => (
+                              <button key={f} className="ax-followup" onClick={() => void ask(f)}>{f}</button>
+                            ))}
+                          </div>
+                        )}
                         {t.incomplete && (
                           <div className="ax-incomplete">
                             Stopped — this answer is unfinished.
