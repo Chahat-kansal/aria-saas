@@ -1,4 +1,26 @@
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
+-- ⚠️  SUPERSEDED — 2026-08-26. DO NOT RUN THIS FILE. IT WOULD FAIL.
+--
+-- This was the PROPOSAL. It has been applied, but NOT as written: the `search_tsv` definition below
+-- uses an INLINE SUBQUERY inside a generation expression, and Postgres rejects that outright — a
+-- generated column may only call immutable functions and may not contain a subquery. Running this
+-- as-is aborts the whole transaction, taking the three perfectly good columns with it.
+--
+-- WHAT ACTUALLY RAN, and what production now matches:
+--     supabase/migrations/20260826_aria_conversations_threads_search.sql
+-- The subquery was moved into an IMMUTABLE function, public.aria_conv_search_tsv(title, messages),
+-- and the generated column calls that. Transcribed from the live database, not from a paste.
+--
+-- Kept rather than deleted so the design rationale below stays readable, and so the mistake is on
+-- the record: "a generated column cannot contain a subquery" is the kind of thing worth only
+-- learning once.
+--
+-- ⚠️ Editing that function later does NOT retroactively update stored search_tsv values — a STORED
+-- generated column is computed on write, so existing rows keep the OLD function's output until each
+-- row is rewritten. The column has to be dropped and re-added to rebuild. See RUN-S2B.md.
+-- ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+-- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- S2 PHASE 1 — CONVERSATION PERSISTENCE. PROPOSED MIGRATION.
 --
 -- ⚠️  NOT APPLIED. NOT IN supabase/migrations/. THIS IS A PROPOSAL AWAITING APPROVAL.
