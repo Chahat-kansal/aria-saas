@@ -219,6 +219,15 @@ export default function TerminalPage() {
 
   /* ── Cart ─────────────────────────────────────────────────────── */
   const [cart,           setCart]           = useState<CartItem[]>([]);
+  /**
+   * POS-INTEGRITY-1 §2.3 — this cart's identity, minted ONCE and reused for every attempt at
+   * paying it. It is the `clientSaleRef` half of the sale's idempotency key.
+   *
+   * A key regenerated per attempt is not idempotency, it is a second sale with extra steps — so
+   * this is a ref, not state (no re-render, no stale closure), it is minted lazily on the first
+   * pay attempt, and it is cleared ONLY by clearSale() when the cart is finished with.
+   */
+  const saleRef = useRef<string | null>(null);
   const [scanGoOpen,     setScanGoOpen]     = useState(false);
 
   // Multi-business killer feature: INSTANT in-place re-skin on business switch.
@@ -1276,6 +1285,9 @@ export default function TerminalPage() {
   }
   function confirmClear() { if (!cart.length) return; if (confirm('Clear the current sale?')) clearSale(); }
   function clearSale() {
+    // POS-INTEGRITY-1 §2.3 — the cart's sale ref dies with the cart, so the NEXT customer can never
+    // inherit this one's idempotency key and have their sale swallowed as a replay.
+    saleRef.current = null;
     setCart([]); setCustomer(null); setSelectedItem(null);
     setCashTendered(''); setSplitCash(''); setCustomerSearch('');
     setDiscountMode(null); setDiscountVal('');
@@ -1747,7 +1759,23 @@ export default function TerminalPage() {
     const capturedSessionId = registerSession?.id ?? null;
     const capturedPendingRedemption = pendingRedemption;
     const capturedOutletId = typeof window !== 'undefined' ? localStorage.getItem('pos_outlet_id') || null : null;
+    // POS-INTEGRITY-1 §2.3 — derived from the business operation, never freshly generated per
+    // attempt. Minted on the first pay press for this cart and captured here BEFORE clearSale()
+    // wipes it, so every retry of THIS submission carries the same key and the unique index
+    // idx_pos_sales_biz_idempotency_key collapses duplicates into one sale.
+    if (!saleRef.current) {
+      saleRef.current = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+    // The spec's key shape is sale-${businessId}-${registerId}-${clientSaleRef}. RegisterSession
+    // (declared at :101) carries no register_id — only its own id — so the OPEN SESSION's id is
+    // used as the register component. It is the correct granularity (one open session per register)
+    // and it is a real field; inventing a register_id that does not exist would not compile.
+    const capturedRegisterKey = capturedSessionId ?? 'noreg';
+    const capturedIdempotencyKey = 'sale-' + capturedBusinessId + '-' + capturedRegisterKey + '-' + saleRef.current;
     const saleBody = JSON.stringify({
+      idempotency_key: capturedIdempotencyKey,
       items: cartSnapshot.map(i => ({
         product_id: i.product.id, product_name: i.label ?? i.product.name, product_sku: i.product.sku,
         quantity: i.qty, unit_price: i.unitPrice, tax_rate: i.product.tax_rate ?? 10,
@@ -1900,17 +1928,25 @@ export default function TerminalPage() {
             if (!pr.ok) moneyMoveFailures.push(`Store credit was NOT deducted for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}, $${capturedTotal.toFixed(2)}. Correct their balance manually.`);
           } catch { moneyMoveFailures.push(`Store credit was NOT deducted for ${customerSnapshot.name ?? 'this customer'} — sale ${saleLabel}, $${capturedTotal.toFixed(2)}. Correct their balance manually.`); }
         }
-        // Split payments
-        if (capturedPayMethod === 'split') {
-          const splitCalls: Array<{ label: string; req: Promise<Response> }> = [];
-          if (capturedSplitCash > 0) splitCalls.push({ label: 'cash', req: fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'cash', amount_cents: Math.round(capturedSplitCash * 100) }) }) });
-          if (capturedSplitCardAmt > 0) splitCalls.push({ label: 'card', req: fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'card', amount_cents: Math.round(capturedSplitCardAmt * 100) }) }) });
-          const results = await Promise.allSettled(splitCalls.map(c => c.req));
-          results.forEach((res, i) => {
-            const ok = res.status === 'fulfilled' && res.value.ok;
-            if (!ok) moneyMoveFailures.push(`Split payment (${splitCalls[i].label}) was NOT recorded for sale ${saleLabel} — till reconciliation will be short unless corrected manually.`);
-          });
-        }
+        // POS-INTEGRITY-1 — THE SPLIT-PAYMENT POST THAT USED TO LIVE HERE WAS A DUPLICATE WRITE,
+        // and it was corrupting money data in production.
+        //
+        // This block POSTed cash and card lines to /api/pos/sale-payments AFTER /api/pos/sale had
+        // already returned — but createSale() writes those same two lines itself, from the
+        // split_cash/split_card this very request sent (terminal :1772-1773 -> pos/sale route
+        // :145-146 -> create-sale buildPaymentRows). Every split sale therefore recorded its
+        // tenders TWICE.
+        //
+        // Proven on live data before removal — sale 1296dff9-0935-4234-9f00-086fadce133c:
+        //   total_amount 18.00, split_cash 10.00, split_card 8.00
+        //   4 payment rows: card=8 | cash=10 | card=8 | cash=10  ->  recorded 36.00, drift -18.00
+        //
+        // Nothing is lost by removing it (RULE 0): the tender lines are still written, once, by the
+        // rail — and as of §2.2 that write is FATAL, so a split that cannot be recorded now fails
+        // the sale outright instead of raising a toast after the receipt has already printed. That
+        // is a strictly stronger guarantee than the moneyMoveFailures warning this replaces.
+        //
+        // /api/pos/sale-payments is NOT removed — it remains for out-of-band tender corrections.
 
         if (moneyMoveFailures.length) {
           console.error('[POS money-move] failed:', moneyMoveFailures);

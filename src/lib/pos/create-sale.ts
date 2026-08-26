@@ -74,6 +74,15 @@ export interface CreateSaleParams {
   splitCard?: number | null
   /** Additive — pos/sales' arbitrary-length split. When present, takes priority over splitCash/splitCard. */
   splitPayments?: Array<{ method: string; amount: number }> | null
+  /**
+   * POS-INTEGRITY-1 — additive. Gratuity in DOLLARS for this sale. Written to the tender line's
+   * `tip_amount` and summed onto `pos_sales.tip_total`.
+   *
+   * NOTE, deliberately: no surface collects a tip today, so every caller omits this and `tip_total`
+   * is a truthful 0 — not a fabricated one. The wiring is real and tested; the till UX that asks
+   * for a tip is a separate piece of work.
+   */
+  tipAmount?: number | null
   outletId?: string | null
   registerId?: string | null
   servedBy?: string | null
@@ -110,6 +119,66 @@ export interface CreateSaleResult {
   error: string | null
   status: number
   voided: boolean
+}
+
+/**
+ * POS-INTEGRITY-1 — one tender line, written in DOLLARS and cents.
+ *
+ * `amount` is the authority; `amount_cents` is derived from it exactly once, here. Dollars are
+ * NEVER re-derived from cents at runtime — the migration's backfill did that conversion once,
+ * correctly, for the 62 legacy rows, and repeating it in application code is how the two columns
+ * start disagreeing.
+ */
+export interface SalePaymentRow {
+  sale_id: string
+  business_id: string
+  method: string
+  amount: number
+  amount_cents: number
+  tip_amount: number
+  reference?: string | null
+}
+
+/**
+ * The ONLY place a tender line is shaped. Extracted so the normal path and the idempotent-replay
+ * repair path (see createSale) cannot drift into two definitions — this codebase's #1 failure
+ * pattern is N copies of the same rule.
+ *
+ * Accepts either an arbitrary `splitPayments` array (pos/sales), the fixed splitCash/splitCard pair
+ * (pos/sale), or neither — in which case the sale is a single tender for its payment_method.
+ */
+export function buildPaymentRows(
+  params: Pick<CreateSaleParams, 'paymentMethod' | 'splitPayments' | 'splitCash' | 'splitCard' | 'totalAmount' | 'directDepositRef' | 'tipAmount'>,
+  saleId: string,
+  businessId: string,
+): SalePaymentRow[] {
+  const line = (method: string, amount: number, tip: number, reference?: string | null): SalePaymentRow => ({
+    sale_id: saleId,
+    business_id: businessId,
+    method,
+    amount: +Number(amount || 0).toFixed(2),
+    amount_cents: Math.round(Number(amount || 0) * 100),
+    tip_amount: +Number(tip || 0).toFixed(2),
+    ...(reference !== undefined ? { reference } : {}),
+  })
+
+  const pm = params.paymentMethod ?? 'cash'
+  const tip = Number(params.tipAmount) || 0
+
+  if (params.splitPayments?.length) {
+    // A split's tip rides on the first line rather than being divided — splitting a tip across
+    // tenders would invent an allocation nobody entered.
+    return params.splitPayments.map((sp, i) => line(sp.method, sp.amount ?? 0, i === 0 ? tip : 0))
+  }
+
+  if (pm === 'split') {
+    const rows: SalePaymentRow[] = []
+    if ((params.splitCash ?? 0) > 0) rows.push(line('cash', params.splitCash ?? 0, rows.length === 0 ? tip : 0))
+    if ((params.splitCard ?? 0) > 0) rows.push(line('card', params.splitCard ?? 0, rows.length === 0 ? tip : 0))
+    return rows
+  }
+
+  return [line(pm, params.totalAmount ?? 0, tip, params.directDepositRef ?? null)]
 }
 
 /** Builds the tax breakdown from real tax codes when the items (or their underlying products)
@@ -173,6 +242,36 @@ export async function createSale(
     const { data: existing } = await supabase.from('pos_sales')
       .select('*').eq('business_id', businessId).eq('idempotency_key', params.idempotencyKey).maybeSingle()
     if (existing) {
+      // POS-INTEGRITY-1 §2.4 — THE RETRY-PATH GUARD.
+      //
+      // Now that every sale carries a key, retries actually start FINDING the existing sale, which
+      // opens a hole this early return did not previously have to think about: a first attempt that
+      // died between the sale insert and the payment insert leaves a completed sale with no tender
+      // lines, and replaying it used to return that sale as if it were whole.
+      //
+      //   sale exists, lines exist  -> return it, insert nothing   (the common case)
+      //   sale exists, no lines     -> insert the lines only       (repair, below)
+      //
+      // Read-then-insert closes this for SEQUENTIAL retries, which is all traffic through one rail.
+      // It does NOT close two genuinely simultaneous identical requests, where the loser of the
+      // sale-insert race can read zero lines before the winner writes them. That needs a unique
+      // index on (sale_id, line_no) — proposed, NOT applied, because DDL is not mine. Until then
+      // this is the documented narrow gap, not an oversight.
+      const { count: existingLines } = await supabase.from('pos_sale_payments')
+        .select('id', { count: 'exact', head: true }).eq('sale_id', String(existing.id))
+
+      if ((existingLines ?? 0) === 0) {
+        const repairRows = buildPaymentRows(params, String(existing.id), businessId)
+        if (repairRows.length) {
+          const { error: repairErr } = await supabase.from('pos_sale_payments').insert(repairRows)
+          if (repairErr) {
+            logger.error('createSale replay payment repair failed', { businessId, saleId: existing.id, error: repairErr.message })
+            return { sale: null, error: repairErr.message, status: 500, voided: false }
+          }
+          logger.info('createSale replay repaired missing payment lines', { businessId, saleId: existing.id, lines: repairRows.length })
+        }
+      }
+
       logger.info('createSale idempotent replay', { businessId, saleId: existing.id, idempotencyKey: params.idempotencyKey })
       return { sale: existing, error: null, status: 200, voided: false }
     }
@@ -301,24 +400,33 @@ export async function createSale(
     return { sale: null, error: itemsErr.message, status: 500, voided: true }
   }
 
-  // Payment rows — accepts either an arbitrary split_payments array (pos/sales) or the fixed
-  // split_cash/split_card pair (pos/sale), else a single row for the sale's payment_method.
-  try {
-    const paymentRows: Array<{ sale_id: string; method: string; amount_cents: number; reference?: string | null }> = []
-    const pm = params.paymentMethod ?? 'cash'
-    if (params.splitPayments?.length) {
-      for (const sp of params.splitPayments) paymentRows.push({ sale_id: sale.id, method: sp.method, amount_cents: Math.round((sp.amount ?? 0) * 100) })
-    } else if (pm === 'split') {
-      if ((params.splitCash ?? 0) > 0) paymentRows.push({ sale_id: sale.id, method: 'cash', amount_cents: Math.round((params.splitCash ?? 0) * 100) })
-      if ((params.splitCard ?? 0) > 0) paymentRows.push({ sale_id: sale.id, method: 'card', amount_cents: Math.round((params.splitCard ?? 0) * 100) })
-    } else {
-      paymentRows.push({ sale_id: sale.id, method: pm, amount_cents: Math.round((params.totalAmount ?? 0) * 100), reference: params.directDepositRef ?? null })
+  // POS-INTEGRITY-1 §2.2 — THE PAYMENT INSERT IS NOW FATAL, matching the item insert above.
+  //
+  // This block used to swallow its error (console.error, then return 200). A completed sale that
+  // cannot state how it was paid is the exact defect this sprint exists to remove: a loud failure
+  // is recoverable — the till retries with the same idempotency key and the customer is re-rung in
+  // seconds — while a silent 200 surfaces weeks later as drift nobody can reconstruct.
+  //
+  // ⚠️ THIS IS A STOPGAP, NOT THE ANSWER. There is still a window between the sale insert and this
+  // one where a crash leaves a sale with no tender lines; the void below narrows it but cannot
+  // close it. The real fix is sale + items + payments in a single Postgres function — POS-ATOMIC-1.
+  // Deliberately not attempted here.
+  const paymentRows = buildPaymentRows(params, sale.id, businessId)
+  if (paymentRows.length) {
+    const { error: paymentsErr } = await supabase.from('pos_sale_payments').insert(paymentRows)
+    if (paymentsErr) {
+      await supabase.from('pos_sales').update({ status: 'voided', notes: 'system:payments_insert_failed' }).eq('id', sale.id)
+      logger.error('createSale payment insert failed — sale voided', { businessId, saleId: sale.id, error: paymentsErr.message })
+      return { sale: null, error: paymentsErr.message, status: 500, voided: true }
     }
-    if (paymentRows.length) {
-      const { error: paymentsErr } = await supabase.from('pos_sale_payments').insert(paymentRows)
-      if (paymentsErr) console.error('[createSale] pos_sale_payments insert failed:', paymentsErr.message)
-    }
-  } catch (e) { console.error('[createSale] payment recording failed:', e) }
+  }
+
+  // Tips ride on the tender lines; the sale carries their sum for shift/staff attribution.
+  // Written only when non-zero so the column's DEFAULT 0 stands for every ordinary sale.
+  const tipTotal = paymentRows.reduce((s, r) => s + (Number(r.tip_amount) || 0), 0)
+  if (tipTotal > 0) {
+    await supabase.from('pos_sales').update({ tip_total: +tipTotal.toFixed(2) }).eq('id', sale.id)
+  }
 
   // Canonical stock decrement — pos_outlet_inventory.items_on_hand (awaited, logged on failure),
   // stock_quantity kept in parallel as a rollback cache. INVENTORY-DECREMENT-FIX-1's single source

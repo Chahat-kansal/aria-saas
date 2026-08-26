@@ -38,11 +38,27 @@ async function _POST(req: Request) {
   const { data: sale } = await supabase.from('pos_sales').select('id').eq('id', sale_id).eq('business_id', bid).maybeSingle();
   if (!sale) return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
 
-  console.log('[sale-payments] inserting:', JSON.stringify({ sale_id, method, amount_cents }))
+  // POS-INTEGRITY-1 §2.1 — dollars and tenancy, alongside the existing cents.
+  //
+  // This route is in scope even though it is not one of the three files the sprint named, and the
+  // reason is concrete: the reconciliation query sums pos_sale_payments.amount. A row written here
+  // WITHOUT `amount` would be counted as $0.00 and would report as drift on a sale that was in fact
+  // fully paid — a false incident on the money tool, raised by the very sprint adding the check.
+  //
+  // `amount` is the authority; cents are derived from it. Where the caller sent amount_cents (the
+  // legacy shape) dollars are recovered from it once, at the boundary, not on every read.
+  const amountDollars = body.amount != null
+    ? +Number(body.amount).toFixed(2)
+    : +(amount_cents / 100).toFixed(2);
+
+  console.log('[sale-payments] inserting:', JSON.stringify({ sale_id, method, amount_cents, amount: amountDollars }))
   const { data, error: insertErr } = await supabase.from('pos_sale_payments').insert({
     sale_id,
+    business_id: bid,
     method,
+    amount: amountDollars,
     amount_cents,
+    tip_amount: body.tip_amount != null ? +Number(body.tip_amount).toFixed(2) : 0,
     reference,
   }).select('id').single();
 
