@@ -1,123 +1,233 @@
 # RUN-S2B — THREADS, SEARCH, SOFT DELETE
 
 **Run date:** 2026-08-26 · autonomous (RULE 20) · branch `main`
-**Outcome: STOPPED AT PHASE 0. The migration has not been applied. Nothing was built.**
+*(This supersedes the earlier S2B run, which correctly halted because the migration had not been
+applied. It has now been applied and verified.)*
 
 ---
 
 ## THE ONE-SCREEN SUMMARY
 
-**`docs/aria/S2-MIGRATION-PROPOSAL.sql` has not run against the database.** All four columns and
-both indexes are absent. Phase 0 says stop and report exactly which, so that is what this is.
+**Five phases shipped, one parked, seven commits.** The live data loss is fixed.
 
-### Phase 0 verification — queried live, not read from the file
+| phase | commit | outcome |
+|---|---|---|
+| 0 — gate + reconcile | `ae53425a` | schema verified live · repo reconciled to production |
+| 1 — thread list | `85c192f9` | pinned first, paged, scoped |
+| 2 — soft delete | `85c192f9` | **the hard DELETE is gone** |
+| 3 — rename and pin | `75cb5cf9` | one title writer, no second mechanism |
+| 4 — search | `75cb5cf9` | GIN + `websearch_to_tsquery`, scoped |
+| — surface wiring | `1226e225` | every new route is actually reachable |
+| 5 — rendering | `2c181596` | tables survive a restore · **provenance finding** |
+| 6 — the walk | — | **not run** — see below |
 
-| required | present? |
+### The three things you most need to know
+
+**1. A mis-click no longer destroys a conversation.** `/api/aria/ask/delete` did
+`.delete().eq('id', id)`. It now writes a tombstone. Proven on the live database as a rolled-back
+block: **list 174→173, search 1→0, row_survives=1, msgs 3→3** — the thread leaves the list and stops
+being findable, while the row and every message survive.
+
+**2. Search is scoped, and I can show you what that filter is worth.** My first cross-tenant test
+used "coffee" and was **worthless** — 29 scoped, 29 unscoped, because no other business happened to
+match. It would have passed with or without the filter. Re-run on "revenue", which discriminates:
+
+```
+scoped (correct)        95
+unscoped would return  165
+foreign rows leaked     70   from 1 other business
+```
+
+**3. Provenance is not lost on reload — it was never there.** Verified in a real browser: **0
+figures on the surface carry a truth tier today.** The renderer is fine; the wire above it was never
+connected. Detail below, and it is the most important thing in this report.
+
+---
+
+## PHASE 0 — SCHEMA VERIFICATION AND REPO RECONCILIATION
+
+Queried live, with my own check rather than the file or the paste:
+
+| | |
 |---|---|
-| `pinned_at` | ❌ **missing** |
-| `deleted_at` | ❌ **missing** |
-| `title_edited_at` | ❌ **missing** |
-| `search_tsv` | ❌ **missing** |
-| `aria_conversations_biz_recent_idx` | ❌ **missing** |
-| `aria_conversations_search_idx` | ❌ **missing** |
+| `pinned_at` · `deleted_at` · `title_edited_at` | present, `is_generated = NEVER` |
+| `search_tsv` | present, **`GENERATED ALWAYS`** |
+| `aria_conversations_biz_recent_idx` | present, `USING btree` |
+| `aria_conversations_search_idx` | present, `USING gin` |
+| rows | **288** · with `search_tsv` **288** · null **0** |
+| sanity | `websearch_to_tsquery('english','coffee')` → **29 threads** |
 
-**Six of six missing.** Not a partial application — nothing ran at all.
+**4/4 columns, 2/2 indexes.** Matches what the paste reported.
 
-### I checked my own query before reporting, because that matters here
+### The repo disagreed with production, and now doesn't
 
-S2's first isolation rail flagged 11 blocks and none were leaks, so a bare empty result was not
-good enough to stop a sprint on. Three independent confirmations:
+`docs/aria/S2-MIGRATION-PROPOSAL.sql` described SQL **that would fail if run**, which is precisely
+the git-vs-prod drift RULE 10 calls a recurring failure here. Both files fixed:
 
-1. **Listing every column** on `aria_conversations` returns exactly the **same 14 it had before S2**:
-   `id, business_id, role, content, created_at, last_message_at, title, user_id, messages,
-   pending_action, message_count, has_escalated, last_intent, pending_action_expires_at`.
-   The table is untouched — my filter wasn't wrong, there is nothing to find.
-2. **Listing every index** returns only the three pre-existing ones — `aria_conversations_pkey`,
-   `idx_aria_conversations_business_id`, `idx_aria_conversations_created_at`. Neither new index.
-3. **The repo agrees.** `supabase/migrations/` has had nothing new since 24 Aug, and no migration
-   file anywhere mentions `pinned_at`, `search_tsv` or `title_edited_at`. The proposal file itself is
-   byte-unchanged since S2 committed it (`0209bbd4`, 26 Aug 02:17).
+- **`supabase/migrations/20260826_aria_conversations_threads_search.sql`** — new, the record of what
+  actually ran. Transcribed from `pg_get_functiondef`, `pg_get_expr` and `pg_indexes`, **not**
+  reconstructed from the sprint text.
+- **`docs/aria/S2-MIGRATION-PROPOSAL.sql`** — banner-marked **SUPERSEDED — DO NOT RUN**, kept rather
+  than deleted so its design rationale stays readable and the mistake stays visible.
 
-Right project, too: `nxfzippunqvqsvkmwtjv` — the one carrying Sip's 173 conversations, which every
-query this session has read.
+**Why they differ:** the proposal defined `search_tsv` with an **inline subquery**. Postgres rejects
+that outright — a generation expression may only call immutable functions and may not contain a
+subquery — so the whole transaction would have rolled back, taking the three perfectly good columns
+with it. The subquery now lives in `public.aria_conv_search_tsv(text, jsonb)`, declared
+`IMMUTABLE PARALLEL SAFE`.
 
-**I did not apply it, did not work around it, and have not re-proposed it.** The decision table's
-first row and RULE 20's NEVER-UNATTENDED list both say the same thing, and the file is already
-written and waiting — re-writing it would just create a second copy to keep in step.
+> ⚠️ **The caveat, recorded in both files because it will bite someone.** Editing that function does
+> **not** retroactively update stored `search_tsv` values. A `STORED` generated column is computed on
+> write, so existing rows keep the **old** function's output until each row is rewritten. Rebuilding
+> means dropping and re-adding the column. A function change alone is not enough.
 
----
-
-## ⚠️ THE URGENT CONSEQUENCE: LIVE DATA LOSS IS STILL SHIPPING
-
-The sprint calls phase 2 the urgent one, and it is right. **`/api/aria/ask/delete` still does a hard
-`.delete()`**, and MS17's thread list calls it. Today, on production:
-
-> An owner who mis-clicks the 🗑 on a thread **permanently destroys that conversation and every
-> message in it.** There is no tombstone, no undo, and no recovery short of a database backup.
-
-That is unchanged by this run, and it stays true on every deployment until the migration lands.
-
-**I could not fix it without the column.** A tombstone has to be written somewhere, and the honest
-options were: a new column (DDL — forbidden), or smuggling a marker into `last_intent` /
-`pending_action` / the `messages` JSONB (abusing a column for a meaning it does not have, which is
-how schemas rot and how the next reader gets misled).
-
-### One decision available to you right now, if you want it
-
-If you would rather delete were **disabled** than **destructive** while the migration waits, that is
-a one-line change to the delete route — return a "not available yet" response instead of destroying
-the row. I have deliberately **not** done it: the sprint says do not work around a missing schema
-object, and disabling a working control is a product decision, not mine. Say the word and it takes a
-minute.
+**No DDL was applied by me.**
 
 ---
 
-## PREFLIGHT — WHAT EXISTS TODAY (unchanged from S2, re-verified)
+## PHASE 2 — EVERY HARD-DELETE PATH FOUND
 
-| thing | state |
+| path | table | verdict |
+|---|---|---|
+| `src/app/api/aria/ask/delete/route.ts:33` | `aria_conversations` | **FIXED** — now a tombstone |
+| `src/app/api/conversations/route.ts:26` | `conversations` | **reported, not touched** |
+
+The second is a **different table** — the CX/widget store, not Ask Aria. It is outside this sprint's
+scope, and that table has no `deleted_at` column, so "fixing" it would need DDL I am not permitted
+to apply. Flagged here so it is on the record rather than quietly skipped.
+
+**Both read paths exclude tombstones**, and the single-thread read matters most: without
+`deleted_at IS NULL` on read-by-id, a deleted thread would vanish from the list but still **reopen by
+id** — worse than not deleting it, because the owner would believe it was gone.
+
+The tombstone write carries its own `.eq('business_id', …)` even though an ownership check sits three
+lines above it. `supabaseAdmin` bypasses RLS, and a destructive-looking write is the last place to
+lean on a check further up the function.
+
+---
+
+## THE CROSS-TENANT RESULT
+
+**RLS layer** (S2, re-confirmed): impersonating each owner, `SIP_OWNER own=173 foreign=0
+total_visible=173` · `SMOKE_OWNER own=112 foreign=0 total_visible=112`.
+
+**Query layer** (the one that matters, because `supabaseAdmin` never reaches RLS): every query
+written this sprint carries its own `business_id` filter — list, single read, rename, pin, delete,
+search. The "revenue" numbers above are what that filter is worth: **70 foreign threads**.
+
+---
+
+## PHASE 4 — THE INDEX AND QUERY SHAPE
+
+```
+index   aria_conversations_search_idx  GIN (search_tsv)
+column  search_tsv GENERATED ALWAYS AS (aria_conv_search_tsv(title, messages)) STORED
+query   WHERE business_id = $bid AND deleted_at IS NULL
+          AND search_tsv @@ websearch_to_tsquery('english', $q)
+        ORDER BY pinned_at DESC NULLS LAST, last_message_at DESC
+```
+
+`websearch_to_tsquery`, not `to_tsquery`: it accepts what a person actually types — bare words,
+"quoted phrases", OR, minus-signs — and never throws on punctuation. `to_tsquery` raises a syntax
+error on an unbalanced quote, turning a typo into a 500.
+
+### The index is used — but not by the full query, and I would rather say so
+
+| query | plan | time |
+|---|---|---|
+| tsquery alone | **Bitmap Index Scan on `aria_conversations_search_idx`**, 29 rows | **0.250 ms** |
+| the full route query | Index Scan on `aria_conversations_biz_recent_idx`, tsquery as a Filter, 131 rows removed | 12.3 ms |
+
+Both indexes are correct. At 288 rows the planner prefers the btree because it already satisfies the
+`ORDER BY`, and filtering 131 rows is cheaper than a bitmap scan plus a sort. It will switch to GIN
+as the table grows. Nothing to fix — but *"uses the GIN index"* would have been the wrong sentence
+to put in a report.
+
+**Which message matched** is located in TypeScript, not SQL: the whole thread is **one** tsvector, so
+the index knows the thread matched but not the line. `bestMatchingMessage()` is a pure, tested
+locator that also excludes S1's superseded branches — something SQL over the raw JSONB could not do —
+and returns `-1` honestly when the thread matched on its **title**.
+
+**No embeddings, no vector column**, asserted by test. Right at this scale.
+
+---
+
+## PHASE 5 — DID PROVENANCE SURVIVE RELOAD AND SEARCH?
+
+**A restored thread renders correctly:** 1 real `<table>`, 3 headers, 6 cells, 0 raw pipes. Markdown
+survives the round trip through history and replay.
+
+**But provenance did not survive — because it was never there.**
+
+```
+figures carrying a truth tier, as the surface renders today:  0
+the same content with anchors supplied:                       2, click-to-source resolving
+```
+
+Two causes, both **upstream of the renderer**:
+
+1. `AskAriaTransition` calls `<AnswerMarkdown>` with **no `provenance` prop**, so `segmentFigures`
+   runs with zero anchors.
+2. `/api/aria/ask` **never sends anchors to the client**. They exist server-side (`anchorValues`,
+   `route.ts:1110`) but sit inside one deeply-nested intent branch and reach the response only as
+   `_anchor_values` buried in `augCtx`.
+
+With no anchors `segmentFigures` marks **every** figure `plain` — not underlined, not clickable. That
+is that function behaving **correctly** by its own rule ("a turn whose ground truth was never
+captured cannot vouch for its numbers"), which is exactly why nothing *looks* broken. It quietly
+promises nothing.
+
+**MS16's phase-8 work is intact.** The same run proves it: handed the same content with anchors, the
+renderer tiers 2 figures and click-to-source resolves to *"Where this came from · Completed sales,
+18-24 Aug."*
+
+**Parked, not bodged.** A real fix threads anchors out of that nested branch into the response **and**
+persists them per assistant message in the JSONB, so a restored thread has them too. That is a phase
+of its own inside a 2,500-line route — and a half-version would put blue underlines under numbers
+whose backing had not actually been checked, which is worse than plain text, because an underline is
+a promise.
+
+---
+
+## PHASE 6 — THE WALK: NOT RUN
+
+**I did not click through the surface as a café owner**, and I am not going to present the checks I
+did run as if I had. The route sits behind `DashboardShell` and Supabase auth, and `.env` is not
+readable in this environment, so there is no logged-in session to walk.
+
+What *was* exercised, and how:
+
+| action | how it was verified |
 |---|---|
-| conversation store | `aria_conversations` — **287 rows, 3 businesses, 0 orphans**, RLS on and business-scoped |
-| messages | a **JSONB array on the conversation row** — 712 messages, longest thread 12. No messages table |
-| thread list + open | **built** (MS17 `ThreadsPanel` → `/api/aria/ask/history`) |
-| delete | **built, and HARD** — the defect above |
-| rename | **not built** — the `title` column exists, no route writes it |
-| pin | **not built**, needs `pinned_at` |
-| soft delete | **not built**, needs `deleted_at` |
-| search | **not built**, needs `search_tsv` + GIN |
-| drafts | **built in S2** — local, per thread |
-| isolation rail | **built in S2** — guards every service-role read |
+| delete a thread | **live database**, rolled back: list 174→173, search 1→0, row survives, messages intact |
+| search | **live database**: 29 hits for "coffee", 95 vs 165 for "revenue", real query plans |
+| restore a thread | **real Chromium**: table renders, 0 raw pipes |
+| rename / pin | route + rail only — **not clicked** |
+| stop mid-answer and return | **not exercised** |
 
-**Nothing here is half-built in a way that would surprise a later phase.** The three unbuilt
-features each map to exactly one missing column, which is why the migration unblocks all of them in
-one pass rather than piecemeal.
+**What you should check on the deployed site:** open `⋯`, rename a thread and send another message
+(the name must survive), pin one and reload, delete one and search for a phrase that was in it, then
+stop a stream mid-answer and reopen the thread.
 
----
+### Anything that rendered plausibly but did nothing
 
-## WHAT EACH PHASE NEEDS
+**One, and it is the provenance gap above** — numbers render as ordinary text with no tier and no
+click-to-source, on a surface whose whole design premise is that every figure carries its
+provenance. Nothing looks wrong, which is what makes it worth reporting.
 
-| phase | blocked on |
-|---|---|
-| 1 — thread list | `pinned_at` for "pinned first". The list itself already works |
-| 2 — soft delete | **`deleted_at`.** The urgent one |
-| 3 — rename and pin | `pinned_at`; rename also wants `title_edited_at` so S1's auto-titler has an explicit signal rather than an inferred one |
-| 4 — search | `search_tsv` + `aria_conversations_search_idx` |
-| 5 — rendering on restored/searched threads | phase 4 — a search result cannot be rendered before search exists |
-| 6 — the walk | phases 1–4 |
-
-**Every one of the six is downstream of the same six schema objects.** There is no useful subset to
-build first, which is why this run produced no code rather than a partial sprint that would need
-rewriting the moment the columns arrive.
+Otherwise nothing: every route this sprint built is reached from `ThreadsPanel`, asserted by a rail
+that checks **both** halves of the thread route, that search is called and debounced, and that every
+button in the panel has a handler.
 
 ---
-
-## TO UNBLOCK
-
-Apply `docs/aria/S2-MIGRATION-PROPOSAL.sql`, then re-run this sprint. The proposal ends with RULE
-10's verification queries; running them should return **4 columns, 2 indexes, 287 rows, and 287
-non-null `search_tsv`** — the generated column backfills on `ALTER`, so every existing thread becomes
-searchable immediately without a data migration.
 
 ## GATES
 
-Nothing was built, so nothing new was gated. `src/` is untouched: the tree is exactly as S2 left it —
-tsc 0 errors, vitest 861/861, `BUILD_EXIT=0`.
+- `npx tsc --noEmit` — **0 errors**
+- `npx vitest run` — **902 passed / 902** across 74 files
+- **Mutations, all RED:** hard delete restored (4 tests) · list business filter dropped · tombstone
+  reopened by id · search business filter dropped · tombstones into search · auto-titler title
+  UPDATE · unreachable search route
+- **Live proofs:** soft delete (rolled back, nothing left behind: 0 tombstoned, 0 leftovers, 288
+  rows) · cross-tenant search · both query plans
+- `npx next build` — **BUILD_EXIT=0**, read from the log, never the wrapper
