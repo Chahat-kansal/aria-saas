@@ -2,9 +2,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { MAX_TITLE } from '@/lib/aria/thread-title'
 
 /**
@@ -30,23 +29,19 @@ import { MAX_TITLE } from '@/lib/aria/thread-title'
  * themselves — a write is the last place to lean on a check further up the function.
  */
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase
-    .from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data: biz } = await supabase
-    .from('businesses').select('id').eq('user_id', userId).limit(1).maybeSingle()
-  return (biz?.id as string) ?? null
-}
-
-async function _PATCH(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 403 })
-
+/**
+ * BUSINESS CONTEXT COMES FROM THE CANON RAIL (CANON-RAIL-1), NOT A LOCAL RESOLVER.
+ *
+ * This route originally carried its own five-line `getBid`. The canon rail guard caught it on
+ * push, and it was RIGHT to — this codebase's failure pattern #4 is "N copies drift", and it
+ * already has six independently-invented business-id resolvers.
+ *
+ * The migration is a CORRECTNESS GAIN, not just deduplication. withBusinessContext resolves
+ * through resolveOwnerBusinessId(), which re-validates that the active-business row still
+ * EXISTS, is OWNED by this user and is ACTIVE before trusting it. The inline version trusted
+ * user_active_business.business_id directly — a stale or foreign row would have been believed.
+ */
+async function _PATCH(req: Request, _ctx: unknown, { businessId: bid }: BusinessContext) {
   const body = await req.json().catch(() => ({})) as {
     id?: string; title?: string; pinned?: boolean
   }
@@ -92,4 +87,4 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true, thread: data })
 }
 
-export const PATCH = withErrorCapture('aria/ask/thread', _PATCH)
+export const PATCH = withBusinessContext('aria/ask/thread', _PATCH)

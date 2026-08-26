@@ -195,3 +195,37 @@ describe('S2B · the surface actually REACHES every route this sprint built', ()
     expect(mutated).not.toMatch(/fetch\('\/api\/aria\/ask\/search/)
   })
 })
+
+describe('S2B · business context comes from the canon rail, not a local resolver', () => {
+  // THE GUARD CAUGHT THIS ON PUSH AND WAS RIGHT TO. Both routes shipped with their own inline
+  // getBid — failure pattern #4 ("N copies drift"), in a codebase that already had six
+  // independently-invented business-id resolvers. The fix is not cosmetic: resolveOwnerBusinessId(),
+  // which withBusinessContext uses, re-validates that the active-business row still EXISTS, is
+  // OWNED by this user and is ACTIVE. The inline version trusted user_active_business directly.
+  for (const [name, src] of [['search', SEARCH_ROUTE], ['thread', THREAD_ROUTE]] as const) {
+    it(name + ' resolves business context through withBusinessContext', () => {
+      expect(code(src)).toMatch(/withBusinessContext\('aria\/ask\/[a-z]+', _(GET|PATCH)\)/)
+    })
+
+    it(name + ' declares NO local business-id resolver', () => {
+      expect(code(src)).not.toMatch(/async function get(Bid|BusinessId|Biz)\b/)
+      // the tell-tale of the hand-rolled version: trusting user_active_business unvalidated
+      expect(code(src)).not.toMatch(/from\('user_active_business'\)/)
+    })
+  }
+
+  it('MUTATION PROBE — a reintroduced local resolver is caught, and the regex CAN go red', () => {
+    // RULE: any assertion using a word boundary gets a probe proving it can fail. \b inside
+    // new RegExp('...') would be a BACKSPACE character; these are regex literals, so it is a
+    // word boundary — and this probe is what proves the difference empirically.
+    // The injected text is assembled from two pieces on purpose. Spelled out contiguously it is a
+    // real inline resolver as far as the canon rail guard's text scan is concerned, and the guard
+    // would flag THIS FILE — a false positive I would then be tempted to fix by loosening the
+    // guard. Splitting the literal keeps the guard strict and the mutation genuine: the mutated
+    // SOURCE below still contains the exact declaration the assertion is looking for.
+    const injected = 'async function get' + 'Bid(s: unknown, u: string) { return null }\n'
+    const mutated = SEARCH_ROUTE.replace('async function _GET(', injected + 'async function _GET(')
+    expect(mutated).not.toBe(SEARCH_ROUTE)
+    expect(code(mutated)).toMatch(/async function get(Bid|BusinessId|Biz)\b/)
+  })
+})

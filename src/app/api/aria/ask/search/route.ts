@@ -2,9 +2,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { renderPath, type ThreadMessage } from '@/lib/aria/conversation-branch'
 import { bestMatchingMessage } from '@/lib/aria/search-match'
 
@@ -40,23 +39,19 @@ import { bestMatchingMessage } from '@/lib/aria/search-match'
  * and where superseded branches (S1 phases 2-3) can be excluded from the result.
  */
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase
-    .from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
-  if (active?.business_id) return active.business_id as string
-  const { data: biz } = await supabase
-    .from('businesses').select('id').eq('user_id', userId).limit(1).maybeSingle()
-  return (biz?.id as string) ?? null
-}
-
-async function _GET(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ results: [] }, { status: 401 })
-
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ results: [] })
-
+/**
+ * BUSINESS CONTEXT COMES FROM THE CANON RAIL (CANON-RAIL-1), NOT A LOCAL RESOLVER.
+ *
+ * This route originally carried its own five-line `getBid`. The canon rail guard caught it on
+ * push, and it was RIGHT to — this codebase's failure pattern #4 is "N copies drift", and it
+ * already has six independently-invented business-id resolvers.
+ *
+ * The migration is a CORRECTNESS GAIN, not just deduplication. withBusinessContext resolves
+ * through resolveOwnerBusinessId(), which re-validates that the active-business row still
+ * EXISTS, is OWNED by this user and is ACTIVE before trusting it. The inline version trusted
+ * user_active_business.business_id directly — a stale or foreign row would have been believed.
+ */
+async function _GET(req: Request, _ctx: unknown, { businessId: bid }: BusinessContext) {
   const q = (new URL(req.url).searchParams.get('q') ?? '').trim()
   // An empty search is not an error and must not return everything.
   if (q.length < 2) return NextResponse.json({ results: [], query: q })
@@ -94,4 +89,4 @@ async function _GET(req: Request) {
   return NextResponse.json({ results, query: q })
 }
 
-export const GET = withErrorCapture('aria/ask/search', _GET)
+export const GET = withBusinessContext('aria/ask/search', _GET)

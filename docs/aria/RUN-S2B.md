@@ -8,7 +8,7 @@ applied. It has now been applied and verified.)*
 
 ## THE ONE-SCREEN SUMMARY
 
-**Five phases shipped, one parked, seven commits.** The live data loss is fixed.
+**Five phases shipped, one parked, eight commits.** The live data loss is fixed.
 
 | phase | commit | outcome |
 |---|---|---|
@@ -19,6 +19,7 @@ applied. It has now been applied and verified.)*
 | 4 — search | `75cb5cf9` | GIN + `websearch_to_tsquery`, scoped |
 | — surface wiring | `1226e225` | every new route is actually reachable |
 | 5 — rendering | `2c181596` | tables survive a restore · **provenance finding** |
+| — canon rail | *the fix commit* | **the hook blocked my push** — two hand-rolled resolvers replaced |
 | 6 — the walk | — | **not run** — see below |
 
 ### The three things you most need to know
@@ -221,10 +222,50 @@ button in the panel has a handler.
 
 ---
 
+## THE GATE CAUGHT ME, AND IT WAS RIGHT
+
+The first push of this sprint was **BLOCKED** by the pre-push hook. Recorded here because a report
+that only lists the gates it passed is worth very little.
+
+```
+[canon-rail-guard] 2 new violation(s) found
+  src/app/api/aria/ask/search/route.ts:43  [inline-business-id-resolver]
+  src/app/api/aria/ask/thread/route.ts:33  [inline-business-id-resolver]
+```
+
+Both new routes shipped with their own five-line `getBid`. That is **failure pattern #4 — "N copies
+drift"** — in a codebase that already had six independently-invented business-id resolvers, and I
+wrote two more without noticing.
+
+**The fix is a correctness gain, not a tidy-up**, which is the part worth knowing. Both routes now
+resolve through `withBusinessContext`, whose resolver `resolveOwnerBusinessId()` re-validates that
+the active-business row still **exists**, is **owned by this user**, and is **active** before
+trusting it. My inline version trusted `user_active_business.business_id` **directly** — a stale or
+foreign row would have been believed. In a sprint whose whole subject is cross-tenant scoping, I had
+hand-rolled the weaker of the two resolvers at the very top of the query.
+
+**Two error-path response shapes changed**, and by the consumer test (RULE 18 as settled 2026-08-18)
+this proceeds unattended: the only consumer of either route is `ThreadsPanel.tsx`, inside this repo,
+found by the sweep, and Ask Aria is not one of the cached-PWA surfaces.
+
+| route | before | after |
+|---|---|---|
+| search | `401 {results:[]}` · no business `200 {results:[]}` | `401 {error}` · `400 {error:'No business'}` |
+| thread | no business `403 {error}` | `400 {error:'No business'}` |
+
+The panel treats any non-`ok` response as an error either way, so nothing on screen changes. The
+success shapes are untouched.
+
+A test now asserts both routes use the rail and declare **no** local resolver, with a mutation probe
+proving the `` assertion can go red — it is a regex literal, not `new RegExp('…')`, where ``
+would be a backspace character.
+
+---
+
 ## GATES
 
 - `npx tsc --noEmit` — **0 errors**
-- `npx vitest run` — **902 passed / 902** across 74 files
+- `npx vitest run` — **907 passed / 907** across 74 files
 - **Mutations, all RED:** hard delete restored (4 tests) · list business filter dropped · tombstone
   reopened by id · search business filter dropped · tombstones into search · auto-titler title
   UPDATE · unreachable search route
