@@ -148,3 +148,50 @@ describe('S2B phase 3 · rename and pin', () => {
     expect(updates.some(u => /\btitle\s*:/.test(u))).toBe(true)
   })
 })
+
+describe('S2B · the surface actually REACHES every route this sprint built', () => {
+  // Carried from S1: a capability that exists but nothing calls is as broken as a dead button.
+  // S1 shipped a working cancel() the surface never destructured, so Stop did not exist.
+  const PANEL = read('src/components/ask-aria-ax/rooms/ThreadsPanel.tsx')
+
+  it('rename and pin are called from the panel', () => {
+    expect(PANEL).toMatch(/fetch\('\/api\/aria\/ask\/thread'/)
+    expect(PANEL).toMatch(/method: 'PATCH'/)
+    // both halves of that route are actually used, not just one
+    expect(PANEL).toMatch(/patchThread\(t\.id, \{ title: renaming\.title \}\)/)
+    expect(PANEL).toMatch(/patchThread\(t\.id, \{ pinned: !t\.pinned_at \}\)/)
+  })
+
+  it('search is called from the panel', () => {
+    expect(PANEL).toMatch(/fetch\('\/api\/aria\/ask\/search\?q=' \+ encodeURIComponent\(q\)\)/)
+  })
+
+  it('search is debounced — a query per keystroke is a query per keystroke', () => {
+    expect(PANEL).toMatch(/setTimeout\(/)
+    expect(PANEL).toMatch(/clearTimeout\(t\)/)
+  })
+
+  it('a pinned thread is visibly pinned, and the list keeps pinned-first order', () => {
+    expect(PANEL).toMatch(/t\.pinned_at \? '📌 ' : ''/)
+    expect(PANEL).toMatch(/if \(Boolean\(a\.pinned_at\) !== Boolean\(b\.pinned_at\)\)/)
+  })
+
+  it('a search hit shows WHERE it matched, not just the thread', () => {
+    expect(PANEL).toMatch(/\{r\.snippet \|\| when\(r\.last_message_at\)\}/)
+  })
+
+  it('every control in the panel has a handler', () => {
+    // The MS17 no-fake-control rule, applied to the buttons this sprint added.
+    const buttons = [...PANEL.matchAll(/<button(?=[\s/>])[\s\S]{0,220}?>/g)].map(m => m[0])
+    expect(buttons.length).toBeGreaterThanOrEqual(5)
+    for (const b of buttons) {
+      expect(b, 'a button with no handler: ' + b.slice(0, 70)).toMatch(/onClick=/)
+    }
+  })
+
+  it('MUTATION PROBE — an unreachable route is detectable', () => {
+    const mutated = PANEL.replace("fetch('/api/aria/ask/search?q=' + encodeURIComponent(q))", 'null')
+    expect(mutated).not.toBe(PANEL)
+    expect(mutated).not.toMatch(/fetch\('\/api\/aria\/ask\/search/)
+  })
+})
