@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle, MAX_TITLE, extractTitleFromJson, subjectOf, looksLikeLeakedJson } from './thread-title'
+import { buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle, MAX_TITLE, extractTitleFromJson, subjectOf, looksLikeLeakedJson, closeDanglingQuote } from './thread-title'
 
 const root = join(__dirname, '..', '..', '..')
 const ROUTE = readFileSync(join(root, 'src/app/api/aria/ask/route.ts'), 'utf8')
@@ -183,5 +183,39 @@ describe('S3 phase 2b · a title distinguishes one thread from another', () => {
   it('still respects the length ceiling', () => {
     const t = fallbackTitle('Tell me about "' + 'x'.repeat(200) + '"')
     expect(t.length).toBeLessThanOrEqual(MAX_TITLE + 1) // +1 for the ellipsis
+  })
+})
+
+
+describe('S3 phase 6 · a truncation never leaves a quote hanging open', () => {
+  it('THE LIVE HEADER BUG: the closing quote is no longer lopped off', () => {
+    // `.slice(0, 42)` of this rendered: Tell me about "Revenue below weekly target
+    const q = 'Tell me about "Revenue below weekly target"'
+    expect(q.slice(0, 42)).toBe('Tell me about "Revenue below weekly target')   // the old behaviour
+    const t = fallbackTitle(q)
+    expect(t).toBe('Revenue below weekly target')                               // opener + quotes gone
+    expect((t.match(/"/g) ?? []).length % 2).toBe(0)
+  })
+
+  it('a long subject with an INTERNAL quote is cut without leaving one open', () => {
+    const t = fallbackTitle('the "oat milk" order from Kirkwood that keeps arriving late every single week')
+    expect((t.match(/"/g) ?? []).length % 2).toBe(0)
+    expect(t.endsWith('…')).toBe(true)
+  })
+
+  it('closeDanglingQuote leaves balanced text alone', () => {
+    expect(closeDanglingQuote('the "oat milk" order')).toBe('the "oat milk" order')
+    expect(closeDanglingQuote('no quotes here')).toBe('no quotes here')
+  })
+
+  it('closeDanglingQuote removes the stray QUOTE and keeps the word after it', () => {
+    // I first asserted this dropped the trailing fragment too ('the "oat milk" and'). The code
+    // keeps it, and the code is right: the owner's word is content, the stray quote is the
+    // artefact. Removing only the artefact preserves more of what they actually typed.
+    expect(closeDanglingQuote('the "oat milk" and "cream')).toBe('the "oat milk" and cream')
+  })
+
+  it('handles curly quotes too', () => {
+    expect((closeDanglingQuote('a \u201Cquoted').match(/\u201C/g) ?? []).length).toBe(0)
   })
 })

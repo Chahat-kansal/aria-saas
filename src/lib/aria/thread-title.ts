@@ -180,10 +180,30 @@ export function subjectOf(question: string): string {
 }
 
 /** The crude-but-honest title used when generation is unavailable: the question, truncated. */
+/**
+ * S3 PHASE 6 — a truncation must never leave a quote hanging open.
+ *
+ * The conversation header showed `Tell me about "Revenue below weekly target` — a raw 42-character
+ * slice that cut the closing quote off. An unbalanced quote reads as a rendering fault, and the
+ * same cut can happen to any truncated title, so the trim lives with the truncation rather than
+ * beside the one caller that noticed.
+ */
+export function closeDanglingQuote(t: string): string {
+  let out = t
+  for (const q of ['"', '“', '‘', "'"]) {
+    // an odd count means one was opened and never closed by the cut
+    const count = out.split(q).length - 1
+    if (count % 2 === 1) out = out.replace(new RegExp(q + '(?=[^' + q + ']*$)'), '').trimEnd()
+  }
+  return out
+}
+
 export function fallbackTitle(question: string): string {
   const q = subjectOf(question)
   if (!q) return 'New conversation'
-  return q.length > MAX_TITLE ? q.slice(0, MAX_TITLE).replace(/\s+\S*$/, '').trim() + '…' : q
+  if (q.length <= MAX_TITLE) return q
+  const cut = q.slice(0, MAX_TITLE).replace(/\s+\S*$/, '').trim()
+  return closeDanglingQuote(cut) + '…'
 }
 
 /**

@@ -4,6 +4,7 @@ import { useAriaStream } from './useAriaStream'
 import AriaAvatarMount from './AriaAvatarMount'
 import AnswerMarkdown from './AnswerMarkdown'
 import type { ProvenanceInput } from '@/lib/aria/figure-provenance'
+import { fallbackTitle } from '@/lib/aria/thread-title'
 import ThreadsPanel from './rooms/ThreadsPanel'
 import AwaitingRoom from './rooms/AwaitingRoom'
 import MadeForYouRoom from './rooms/MadeForYouRoom'
@@ -583,7 +584,16 @@ export default function AskAriaTransition() {
               <b>{
                 room === 'awaiting' ? 'Awaiting you'
                   : room === 'made' ? 'Made for you'
-                    : (turns.find(t => t.role === 'user')?.text.slice(0, 42) ?? 'Ask Aria')
+                    : (() => {
+                  // S3 PHASE 6 — was `.slice(0, 42)`, a raw cut with no ellipsis and no quote
+                  // balancing, which rendered `Tell me about "Revenue below weekly target` with
+                  // the closing quote lopped off. fallbackTitle applies the SAME rule the thread
+                  // list uses — strip the stock opener, strip wrapping quotes, truncate on a word
+                  // boundary, close any quote the cut left hanging — so the header and the list
+                  // name a thread identically instead of two truncations disagreeing.
+                  const first = turns.find(t => t.role === 'user')?.text
+                  return first ? fallbackTitle(first) : 'Ask Aria'
+                })()
               }</b>
               <span>Always on · connected records only</span>
             </div>
