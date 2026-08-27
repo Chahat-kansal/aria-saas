@@ -167,6 +167,18 @@ async function upsertConversation(
    * Nothing is ever spliced out of the array. See lib/aria/conversation-branch.ts.
    */
   branch?: { mode: 'append' | 'regenerate' | 'edit'; editLiveIndex?: number },
+  /**
+   * S3 PHASE 1 — the turn's provenance, STORED WITH THE MESSAGE.
+   *
+   * This is the link the chain was missing. Anchors were computed per turn and thrown away at the
+   * end of it, so a reloaded thread could never show a tier no matter how good the renderer was:
+   * the ground truth for that turn no longer existed anywhere. Persisting it here is what makes
+   * provenance survive a reload and a search hit rather than living only in the live response.
+   *
+   * Omitted on every path that computed no anchors — the field is absent, not an empty object, so
+   * "we never captured this" and "we captured nothing" stay distinguishable in the JSONB.
+   */
+  provenance?: { anchors: number[]; anchorLabels?: Record<string, string> },
 ): Promise<string> {
   console.log('[upsertConversation] called for biz:', businessId, 'user:', userId, 'existing:', conversationId)
   const pair: ThreadMessage[] = [
@@ -174,6 +186,7 @@ async function upsertConversation(
     {
       role: 'assistant', content: assistantMsg, ts: new Date().toISOString(), downloads: downloads ?? [],
       ...(incomplete ? { incomplete: true, stopped_by: 'user' } : {}),
+      ...(provenance && provenance.anchors.length > 0 ? { provenance } : {}),
     },
   ]
 
@@ -988,6 +1001,21 @@ Rules:
   const DATA_LOOKUP_RE = /\b(who('?s| is| are)?|what('?s| is| are)?|which|how many|how much|list|show me|top|best|lowest|highest|worst)\b/i
   const isDataLookup = DATA_LOOKUP_RE.test(message) && !STRATEGIC_RE.test(message)
 
+  // S3 PHASE 1 — THE PROVENANCE CARRIER.
+  //
+  // `anchorValues` (below) has always been built from real queries against this business's rows,
+  // but it lived three `try` blocks deep inside this branch and was only ever spent on the MODEL
+  // PROMPT (`_anchor_values` inside augCtx) and the verifier. Nothing carried it out to the
+  // response, so nothing was ever persisted with the message and nothing reached the renderer —
+  // which is why 0 of 288 conversations carried a provenance field. This variable is the carrier
+  // the chain was missing; it is declared here so it outlives the nested scope that computes it.
+  //
+  // It stays null on every other path ON PURPOSE. A turn with no anchors renders every figure
+  // `plain`, which is segmentFigures() behaving correctly — "a turn whose ground truth was never
+  // captured cannot vouch for its numbers". Inventing anchors to make more numbers look blue is
+  // exactly the failure the decision table forbids.
+  let turnProvenance: { anchors: number[]; anchorLabels: Record<string, string> } | null = null
+
   // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests.
   // RC5: a clear data-lookup never enters the council (answers in the tool-loop instead).
   if (!isBrevityQuestion && !isDataLookup && (isStrategicQuestion || ariaIntent.intent_type === 'analytical')) {
@@ -1112,6 +1140,24 @@ Rules:
             gtConsent.count ?? 0, gtTotalCust.count ?? 0, tuesdayAvg, tuesdayGap, targetWeekly, gtPromoActions.count ?? 0,
             ...topCustLTVs, ...healthAnchors, ...goalAnchors, ...benchmarkAnchors, ...hypothesisAnchors,
           ].filter((n): n is number => typeof n === 'number' && isFinite(n))
+
+          // S3 PHASE 1 — labels are only attached where the query that produced the number is
+          // KNOWN BY NAME here. The spread sets (health/goal/benchmark/hypothesis anchors) arrive
+          // as bare number[] with no per-value provenance, so they get an anchor but no label, and
+          // segmentFigures falls back to "Computed from your data this turn" rather than inventing
+          // a source sentence. A wrong source line is worse than a generic true one.
+          const anchorLabels: Record<string, string> = {}
+          const labelAnchor = (n: number | null | undefined, text: string) => {
+            if (typeof n === 'number' && isFinite(n)) anchorLabels[String(n)] = text
+          }
+          labelAnchor(revToday, 'Completed sales, today.')
+          labelAnchor(revWeekCal, 'Completed sales, this week to date.')
+          labelAnchor(revLastWeekCal, 'Completed sales, last week.')
+          labelAnchor(revSwlm, 'Completed sales, the same week last month.')
+          labelAnchor(gtConsent.count ?? 0, 'Customers who have consented to marketing.')
+          labelAnchor(gtTotalCust.count ?? 0, 'Customers on record.')
+          labelAnchor(targetWeekly, 'Your weekly revenue target.')
+          turnProvenance = { anchors: anchorValues, anchorLabels }
           // OUTCOME-LOOP-1 (I4) Part 4: shape advice weights for the council. `weight` is the stored
           // [0.3,2.0] multiplier (unchanged — 4 downstream consumers depend on that frame). `success_rate`
           // is a Laplace-smoothed (positive+1)/(total+3) read-side view so a category with few/poor
@@ -1290,7 +1336,7 @@ Rules:
       if (council?.final_briefing) {
         let savedConvId = conversationId
         try {
-          savedConvId = await upsertConversation(bid, userId, conversationId, message, councilText, intent.type)
+          savedConvId = await upsertConversation(bid, userId, conversationId, message, councilText, intent.type, undefined, undefined, undefined, turnProvenance ?? undefined)
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
@@ -1312,6 +1358,9 @@ Rules:
           blocks: (councilBlocks && councilBlocks.length > 0) ? councilBlocks : [{ type: 'lead', content: councilText }],
           followups: council.ask_followups ?? [],
           used_council: true,
+          // S3 PHASE 1 — the anchors travel to the client so the renderer can tier the figures it
+          // is about to draw. Null on paths that computed none; never fabricated to fill the field.
+          provenance: turnProvenance,
           response: councilText,
           conversation_id: savedConvId ?? conversationId,
           intent: intent.type,

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAriaStream } from './useAriaStream'
 import AriaAvatarMount from './AriaAvatarMount'
 import AnswerMarkdown from './AnswerMarkdown'
+import type { ProvenanceInput } from '@/lib/aria/figure-provenance'
 import ThreadsPanel from './rooms/ThreadsPanel'
 import AwaitingRoom from './rooms/AwaitingRoom'
 import MadeForYouRoom from './rooms/MadeForYouRoom'
@@ -55,6 +56,12 @@ interface Turn {
   incomplete?: boolean
   /** S1 phase 8 — up to three suggested next questions, from the route's own payload. */
   followups?: string[]
+  /**
+   * S3 PHASE 1 — the anchors this answer was grounded against, carried from the route and, for a
+   * restored thread, from the stored message. Absent means the turn captured no ground truth, and
+   * every figure in it renders plain — the honest outcome, not a degraded one.
+   */
+  provenance?: ProvenanceInput
 }
 
 /** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
@@ -207,6 +214,9 @@ export default function AskAriaTransition() {
           incomplete: Boolean(result?.incomplete ?? result?.stopped),
           // S1 phase 8 — the route already produced these; nothing new is generated for them.
           followups: (Array.isArray(result?.followups) ? result.followups : []).slice(0, 3),
+          // S3 phase 1 — carried straight from the route. Never synthesised client-side: the
+          // client cannot know what was queried, so a client-built anchor set would be a guess.
+          provenance: (result?.provenance as ProvenanceInput | null | undefined) ?? undefined,
         }
       }
       return updated
@@ -334,7 +344,7 @@ export default function AskAriaTransition() {
   }, [uploading])
 
   /** Restore a past conversation — migrated from `loadConversation` (page.tsx:610). */
-  const openThread = useCallback((id: string, messages: Array<{ role: string; content: string }>) => {
+  const openThread = useCallback((id: string, messages: Array<{ role: string; content: string; provenance?: ProvenanceInput }>) => {
     setConversationId(id)
     setRoom('ask')
     setWorking(true)
@@ -342,6 +352,10 @@ export default function AskAriaTransition() {
       role: (m.role === 'user' ? 'user' : 'aria') as 'user' | 'aria',
       text: String(m.content ?? ''),
       streaming: false,
+      // S3 PHASE 1 — THIS is what makes provenance survive a reload. Dropping it here would undo
+      // the persistence: the tier would exist in the database and vanish on the way to the screen,
+      // which is indistinguishable from never having stored it.
+      provenance: m.provenance,
     })))
   }, [])
 
@@ -647,6 +661,7 @@ export default function AskAriaTransition() {
                           <AnswerMarkdown
                             text={live}
                             streaming={t.streaming}
+                            provenance={t.provenance}
                             idPrefix={String(i)}
                             openSrc={openSrc}
                             onToggleSrc={setOpenSrc}

@@ -31,6 +31,12 @@ export interface ThreadMessage {
   superseded_by?: string
   branch_root?: string
   edited_from?: string
+  /**
+   * S3 PHASE 1 — the ground truth this assistant turn was checked against, stored WITH the turn.
+   * Absent (not empty) when the turn computed no anchors, so "never captured" stays distinct from
+   * "captured nothing".
+   */
+  provenance?: { anchors: number[]; anchorLabels?: Record<string, string> }
   [k: string]: unknown
 }
 

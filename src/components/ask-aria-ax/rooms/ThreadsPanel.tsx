@@ -37,7 +37,7 @@ export interface ThreadsPanelProps {
   open: boolean
   onClose: () => void
   /** Called with the conversation id and its restored messages. */
-  onOpenThread: (id: string, messages: Array<{ role: string; content: string }>) => void
+  onOpenThread: (id: string, messages: Array<{ role: string; content: string; provenance?: { anchors: number[]; anchorLabels?: Record<string, string> } }>) => void
   /** The conversation currently on screen, so it can be marked. */
   activeId: string | null
 }
@@ -97,7 +97,9 @@ export default function ThreadsPanel({ open, onClose, onOpenThread, activeId }: 
     setBusyId(id)
     try {
       const res = await fetch(`/api/aria/ask/history?id=${encodeURIComponent(id)}&messages=true`)
-      const data = await res.json() as { conversation?: { messages?: Array<{ role: string; content: string }> } }
+      // S3 PHASE 1 — the stored message shape includes provenance; widening the type here is what
+      // stops it being silently discarded on the way from the history route to the surface.
+      const data = await res.json() as { conversation?: { messages?: Array<{ role: string; content: string; provenance?: { anchors: number[]; anchorLabels?: Record<string, string> } }> } }
       onOpenThread(id, data.conversation?.messages ?? [])
       onClose()
     } catch (e) {

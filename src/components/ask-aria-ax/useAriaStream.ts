@@ -29,6 +29,11 @@ export interface AriaStreamResult {
   used_council?: boolean
   degraded_provider?: boolean
   figures?: unknown
+  /**
+   * S3 PHASE 1 — the anchors this turn was grounded against. Null/absent on paths that computed
+   * none, in which case every figure renders `plain` and claims nothing.
+   */
+  provenance?: { anchors: number[]; anchorLabels?: Record<string, string> } | null
   [k: string]: unknown
 }
 
