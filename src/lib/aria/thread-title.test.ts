@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle, MAX_TITLE } from './thread-title'
+import { buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle, MAX_TITLE, extractTitleFromJson, subjectOf, looksLikeLeakedJson } from './thread-title'
 
 const root = join(__dirname, '..', '..', '..')
 const ROUTE = readFileSync(join(root, 'src/app/api/aria/ask/route.ts'), 'utf8')
@@ -82,5 +82,106 @@ describe('phase 6 · the title itself', () => {
     // The route races the title call against a 6s timeout and catches everything.
     expect(ROUTE).toMatch(/title timeout/)
     expect(ROUTE).toMatch(/\[thread-title\] falling back to the question/)
+  })
+})
+
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * S3 PHASE 2 — the two live failures.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+
+describe('S3 phase 2a · a raw model response never reaches the title column', () => {
+  // These are the EXACT shapes found in production, plus the two the old cleaner mangled worse.
+  it('pretty-printed JSON yields the title, not a brace', () => {
+    // The shipped code returned "{" here — the first line of the object.
+    const out = sanitiseTitle('{\n  "title": "Revenue Shortfall Analysis",\n  "reason": "x"\n}', 'q')
+    expect(out).toBe('Revenue Shortfall Analysis')
+  })
+
+  it('compact JSON yields the title, not the whole blob', () => {
+    expect(sanitiseTitle('{"title":"POS Payment Sync","why":"y"}', 'q')).toBe('POS Payment Sync')
+  })
+
+  it('fenced JSON yields the title, not the fence language', () => {
+    // The shipped code returned "json".
+    expect(sanitiseTitle('```json\n{"title":"Stock levels"}\n```', 'q')).toBe('Stock levels')
+  })
+
+  it('a TRUNCATED object still yields its title — the common real failure', () => {
+    // The model hit its token cap mid-object. This is how both live rows were produced.
+    expect(sanitiseTitle('{ "title": "Revenue Shortfall Analysis",', 'q')).toBe('Revenue Shortfall Analysis')
+  })
+
+  it('accepts name/label/subject as well as title', () => {
+    expect(sanitiseTitle('{"name":"Oat milk supply"}', 'q')).toBe('Oat milk supply')
+  })
+
+  it('FAILS CLOSED to the question when the object has no usable title', () => {
+    expect(sanitiseTitle('{"reason":"no title here"}', 'how did last week go?')).toBe('how did last week go?')
+  })
+
+  it('FAILS CLOSED rather than storing anything with a brace in it', () => {
+    expect(sanitiseTitle('{ garbage', 'how did last week go?')).toBe('how did last week go?')
+    expect(looksLikeLeakedJson('{ "title"')).toBe(true)
+    expect(looksLikeLeakedJson('Last week takings')).toBe(false)
+  })
+
+  it('a plain string title is completely unaffected', () => {
+    expect(sanitiseTitle('Last week takings', 'q')).toBe('Last week takings')
+    expect(extractTitleFromJson('Last week takings')).toBeNull()
+  })
+
+  it('MUTATION PROBE — removing the parse step reinstates the bug', () => {
+    // Emulates deleting the extractTitleFromJson call: fall straight through to line-splitting.
+    const withoutParse = (raw: string) => raw.split('\n')[0]!.trim()
+    expect(withoutParse('{\n  "title": "Revenue Shortfall Analysis",\n}')).toBe('{')
+    expect(sanitiseTitle('{\n  "title": "Revenue Shortfall Analysis",\n}', 'q')).not.toBe('{')
+  })
+})
+
+describe('S3 phase 2b · a title distinguishes one thread from another', () => {
+  it('strips the stock opener so the SUBJECT leads', () => {
+    expect(subjectOf('Tell me about "Revenue below weekly target"')).toBe('Revenue below weekly target')
+    expect(subjectOf('Can you tell me more about oat milk')).toBe('oat milk')
+    expect(subjectOf('What about Tuesday')).toBe('Tuesday')
+  })
+
+  it('THE LIVE CASE: three identical-looking titles become the same distinct subject', () => {
+    // Before: all three truncated to `Tell me about "Briefing pipeline stalled - only` and were
+    // indistinguishable from each other AND from the revenue thread beside them.
+    const q = 'Tell me about "Briefing pipeline stalled — only 0 rows written in last 24h"'
+    const t = fallbackTitle(q)
+    expect(t.startsWith('Tell me about')).toBe(false)
+    expect(t.startsWith('Briefing pipeline stalled')).toBe(true)
+  })
+
+  it('TEN launcher questions produce TEN distinguishable titles', () => {
+    const subjects = [
+      'Revenue below weekly target', 'Briefing pipeline stalled', '53 Aria recommendations pending review',
+      'Stock running low on oat milk', 'Customer churn risk rising', 'Payment sync failing overnight',
+      'Weekend staffing below cover', 'Supplier price increase detected', 'Loyalty redemptions falling',
+      'Waste above the usual range',
+    ]
+    const titles = subjects.map(sub => fallbackTitle('Tell me about "' + sub + '"'))
+    expect(new Set(titles).size).toBe(10)
+    expect(titles.every(t => !t.startsWith('Tell me about'))).toBe(true)
+  })
+
+  it('a question that is ONLY the opener is left alone rather than emptied', () => {
+    expect(fallbackTitle('Tell me about')).toBe('Tell me about')
+  })
+
+  it('never returns an empty title', () => {
+    expect(fallbackTitle('')).toBe('New conversation')
+    expect(fallbackTitle('   ')).toBe('New conversation')
+  })
+
+  it('an internal quote is preserved — only WRAPPING quotes are dropped', () => {
+    expect(subjectOf('the "oat milk" order')).toBe('the "oat milk" order')
+  })
+
+  it('still respects the length ceiling', () => {
+    const t = fallbackTitle('Tell me about "' + 'x'.repeat(200) + '"')
+    expect(t.length).toBeLessThanOrEqual(MAX_TITLE + 1) // +1 for the ellipsis
   })
 })

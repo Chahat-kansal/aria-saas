@@ -44,28 +44,144 @@ export function buildTitlePrompt(question: string, answer: string): string {
 }
 
 /**
+ * S3 PHASE 2 — A RAW MODEL RESPONSE MUST NEVER REACH THE TITLE COLUMN.
+ *
+ * Two live rows proved this was not theoretical:
+ *
+ *   { "title": "Revenue Shortfall Analysis",     <- stored verbatim, as the thread's name
+ *   {"title":"POS Payment Sync
+ *
+ * And the old cleaner did WORSE than pass them through. Probed against the shipped code before
+ * changing it, which is the only reason all three cases are covered rather than the obvious one:
+ *
+ *   pretty JSON   ->  "{"        the first line was just a brace
+ *   compact JSON  ->  the entire JSON string
+ *   fenced JSON   ->  "json"     the fence's language tag became the title
+ *
+ * A model asked for a plain string sometimes answers with an object. That is not an error to paper
+ * over with another regex — it is a shape to PARSE, with a safe fallback when parsing fails.
+ */
+function unwrapCodeFence(s: string): string {
+  const m = s.match(/^\s*```[a-zA-Z]*\s*\n?([\s\S]*?)\n?\s*```\s*$/)
+  return m ? m[1]! : s
+}
+
+/**
+ * Pull a title out of a model response that turned out to be JSON.
+ *
+ * Returns null when there is nothing trustworthy to take — the caller then falls back to the
+ * owner's own question, which is always honest. It never returns a fragment of the JSON.
+ */
+export function extractTitleFromJson(raw: string): string | null {
+  const body = unwrapCodeFence(String(raw ?? '')).trim()
+  if (!body.startsWith('{') && !body.startsWith('[')) return null
+
+  const tryParse = (text: string): unknown => { try { return JSON.parse(text) } catch { return undefined } }
+
+  // A truncated object (the model hit its token cap mid-answer) is the common real case, so a
+  // failed parse is retried with the dangling tail closed off rather than given up on.
+  let parsed = tryParse(body)
+  if (parsed === undefined) {
+    const lastComma = body.lastIndexOf(',')
+    if (lastComma > 0) parsed = tryParse(body.slice(0, lastComma) + '}')
+  }
+  if (parsed === undefined) {
+    // Last resort: read the first "title": "..." pair. Still a parse of the SHAPE, not a substring
+    // of the blob — anything that is not a quoted string value is refused.
+    const m = body.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/)
+    if (!m) return null
+    const v = m[1]!.replace(/\\"/g, '"').trim()
+    return v || null
+  }
+
+  const obj = (Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown> | undefined
+  if (!obj || typeof obj !== 'object') return null
+  for (const key of ['title', 'name', 'label', 'subject']) {
+    const v = obj[key]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return null
+}
+
+/** Anything still carrying JSON punctuation is a leaked response, not a title. */
+export function looksLikeLeakedJson(t: string): boolean {
+  return /[{}]/.test(t) || /^\s*"?\w+"?\s*:/.test(t) || /^(json|javascript|ts|typescript)$/i.test(t)
+}
+
+/**
  * Clean a model's title into something safe to store.
  *
  * Models wrap titles in quotes, prefix them with "Title:", and add full stops. All of that has to
  * go, and the result must never be empty — an empty title is worse than a crude one.
  */
 export function sanitiseTitle(raw: string | null | undefined, fallback: string): string {
-  let t = String(raw ?? '')
+  const source = String(raw ?? '')
+
+  // PARSE FIRST. Splitting a JSON object on its first newline is what produced "{".
+  const fromJson = extractTitleFromJson(source)
+  const base = fromJson ?? unwrapCodeFence(source)
+
+  let t = base
     .split('\n')[0]!                       // a title is one line
     .replace(/^\s*title\s*:\s*/i, '')      // "Title: ..."
-    .replace(/^["'`\u201C\u2018]+|["'`\u201D\u2019]+$/g, '')  // surrounding quotes
-    .replace(/[.\u2026]+$/, '')            // trailing full stop / ellipsis
+    .replace(/^["'`“‘]+|["'`”’]+$/g, '')  // surrounding quotes
+    .replace(/[.…]+$/, '')            // trailing full stop / ellipsis
     .replace(/\s+/g, ' ')
     .trim()
+
+  // FAIL CLOSED. If the model's shape defeated both the parser and the cleaner, the owner's own
+  // question is a better title than a leaked fragment of a response they never saw.
+  if (looksLikeLeakedJson(t)) return fallbackTitle(fallback)
 
   if (t.length > MAX_TITLE) t = t.slice(0, MAX_TITLE).replace(/\s+\S*$/, '').trim()
   if (!t) return fallbackTitle(fallback)
   return t
 }
 
+/**
+ * S3 PHASE 2 — THE SECOND FAILURE: A TITLE MUST TELL ONE THREAD FROM ANOTHER.
+ *
+ * Six live threads were titled "Tell me about ..." and four were indistinguishable in the list. A
+ * title that six rows share is a working feature that is useless — the owner still has to open each
+ * one to find out which is which, which is the exact job the title exists to save them.
+ *
+ * The cause is not the truncation, it is WHERE the truncation lands. These questions come from the
+ * Awaiting room's one-click launcher, so they all begin with the same stock opener and the subject
+ * — the only part that differs — is pushed past the cut. Stripping the opener puts the subject
+ * first, using the owner's OWN WORDS and inventing nothing:
+ *
+ *   before  Tell me about "Briefing pipeline stalled - only...   (identical across three threads)
+ *   after   Briefing pipeline stalled - only 0 rows written...   (distinct)
+ *
+ * Quotes wrapping the whole subject are dropped for the same reason: they cost four characters of
+ * a 48-character budget and carry no information.
+ */
+const STOCK_OPENERS = [
+  /^tell me (more )?about\s+/i,
+  /^can you tell me (more )?about\s+/i,
+  /^what (can you )?tell me about\s+/i,
+  /^(so )?what about\s+/i,
+  /^(please )?explain\s+/i,
+  /^i want to know about\s+/i,
+]
+
+/** Strips a stock opener and wrapping quotes so the SUBJECT leads. Never returns empty. */
+export function subjectOf(question: string): string {
+  let q = String(question ?? '').replace(/\s+/g, ' ').trim()
+  for (const re of STOCK_OPENERS) {
+    const stripped = q.replace(re, '')
+    // Only accept the strip if something survives it — "Tell me about" alone stays as it is.
+    if (stripped !== q && stripped.trim()) { q = stripped.trim(); break }
+  }
+  // Drop quotes only when they wrap the WHOLE subject; an internal quote is meaningful.
+  const wrapped = q.match(/^["'`“‘](.+)["'`”’]$/)
+  if (wrapped && wrapped[1]!.trim()) q = wrapped[1]!.trim()
+  return q
+}
+
 /** The crude-but-honest title used when generation is unavailable: the question, truncated. */
 export function fallbackTitle(question: string): string {
-  const q = String(question ?? '').replace(/\s+/g, ' ').trim()
+  const q = subjectOf(question)
   if (!q) return 'New conversation'
   return q.length > MAX_TITLE ? q.slice(0, MAX_TITLE).replace(/\s+\S*$/, '').trim() + '…' : q
 }
