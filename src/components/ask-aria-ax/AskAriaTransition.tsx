@@ -393,9 +393,13 @@ export default function AskAriaTransition() {
     if (ctxUnreadable) return { lead: 'I can’t see your business right now.', em: '' }
     if (ctxLoading) return { lead, em: 'Having a look…' }
     if (noticed.length === 0) return { lead, em: 'Nothing needs you.' }
-    const n = noticed.length
+    // S3 PHASE 5 — the TRUE total, not the length of the capped render list. `noticed` holds at
+    // most 6 decisions because that is the panel's page size; counting it told the owner "8 things
+    // stood out" while the tab beside it said 55. Falls back to the list length only if the route
+    // is an older deploy that does not send noticedTotal.
+    const n = ctx?.noticedTotal ?? noticed.length
     return { lead, em: n === 1 ? 'One thing stood out.' : n + ' things stood out.' }
-  }, [ctx?.ownerName, ctxLoading, ctxUnreadable, noticed.length])
+  }, [ctx?.ownerName, ctx?.noticedTotal, ctxLoading, ctxUnreadable, noticed.length])
 
   const revenue = ctx?.today.find(f => f.label === 'Revenue today')
   /**

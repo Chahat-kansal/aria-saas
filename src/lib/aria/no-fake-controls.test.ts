@@ -461,3 +461,34 @@ describe('S3 phase 4 · a capability nothing calls is as broken as a dead button
     expect(check(orphaned)).toEqual(['provenance'])  // the exact S3 phase 1 bug
   })
 })
+
+
+describe('S3 phase 5 · a page size never becomes a user-facing count', () => {
+  const CTX = read('src/lib/aria/ax-context.ts')
+  const SURFACE = read('src/components/ask-aria-ax/AskAriaTransition.tsx')
+
+  it('the awaiting badge counts with its own query, not the capped list', () => {
+    // MS17 fixed this once for the badge; phase 5 found the same defect one line higher.
+    expect(CTX).toMatch(/awaitingTotal = count \?\? 0/)
+    expect(SURFACE).toMatch(/awaitingCount = ctx\?\.awaitingTotal/)
+  })
+
+  it('the headline counts the TRUE total, not the length of the render list', () => {
+    expect(CTX).toMatch(/const noticedTotal = awaitingTotal \+ \(noticed\.length - awaiting\.length\)/)
+    expect(SURFACE).toMatch(/const n = ctx\?\.noticedTotal \?\? noticed\.length/)
+  })
+
+  it('THE ARITHMETIC, against the live shape on 26 Aug: 53 pending, 6 shown, 2 other notices', () => {
+    // noticed = 6 capped decisions + zero-till notice + low-stock notice = 8  <- what was displayed
+    // noticedTotal = 53 + (8 - 6) = 55                                        <- what is true
+    const awaitingTotal = 53, awaitingLen = 6, noticedLen = 8
+    expect(awaitingTotal + (noticedLen - awaitingLen)).toBe(55)
+    expect(noticedLen).toBe(8)
+  })
+
+  it('MUTATION PROBE — counting the capped list again is detectable', () => {
+    const mutated = SURFACE.replace('const n = ctx?.noticedTotal ?? noticed.length', 'const n = noticed.length')
+    expect(mutated).not.toBe(SURFACE)
+    expect(mutated).not.toMatch(/const n = ctx\?\.noticedTotal \?\? noticed\.length/)
+  })
+})

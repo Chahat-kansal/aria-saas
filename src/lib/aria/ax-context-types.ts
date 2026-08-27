@@ -39,6 +39,11 @@ export interface AxContext {
    * They differed 6 vs 55 on the first live screenshot, which is a number reporting a page size.
    */
   awaitingTotal: number
+  /**
+   * S3 PHASE 5 — everything Aria noticed, counted server-side. `noticed` is capped for rendering;
+   * this is not. The headline reads from this so a page size can never become a user-facing count.
+   */
+  noticedTotal: number
   /** Who to greet. null when the row has no owner_name — the greeting drops the name, never invents one. */
   ownerName: string | null
   businessName: string | null

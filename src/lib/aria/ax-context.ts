@@ -202,5 +202,17 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
     console.error('[ax-context] memory tags failed:', (e as Error).message)
   }
 
-  return { ownerName, businessName, awaitingTotal, today, awaiting, didToday, tags, noticed, quiet: noticed.length === 0 }
+  // S3 PHASE 5 — THE HEADLINE COUNT MUST NOT BE A FUNCTION OF A PAGE SIZE.
+  //
+  // `noticed` is the RENDER list, and 6 of its entries come from `awaiting`, which is capped at 6
+  // for the panel. So "8 things stood out" was 6-capped-decisions + 2 other notices, sitting beside
+  // a tab reading 55. That is the SAME defect MS17 fixed for the badge — "a count and a page size
+  // are not the same number and must not share a source" — still live one line higher up.
+  //
+  // noticedTotal replaces the capped slice with the true pending count and leaves everything else
+  // as counted. The two numbers still differ, and SHOULD: "Awaiting you" counts decisions waiting,
+  // the headline counts everything Aria noticed, which includes notices that are not decisions
+  // (a zero-till day, lines below reorder). Different questions, differently labelled, both true.
+  const noticedTotal = awaitingTotal + (noticed.length - awaiting.length)
+  return { ownerName, businessName, awaitingTotal, noticedTotal, today, awaiting, didToday, tags, noticed, quiet: noticed.length === 0 }
 }
