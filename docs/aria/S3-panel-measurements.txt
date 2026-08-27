@@ -1,0 +1,27 @@
+S3 PHASES 3 + 6 — PANEL MEASURED IN CHROMIUM
+
+  OK structure verified against ThreadsPanel.tsx: 3 per-row controls (Pin, Rename, Delete)
+
+=== viewport 1280px  ->  surface 1060px (sidebar 220) ===
+  {"stage_w":1060,"panel_left":704,"panel_right":1034,"panel_w":330,"gap_to_viewport_right":26,"overflows_stage":false,"control_count":12,"controls_clipped":0,"controls_squashed":0,"narrowest_control_w":32,"covers_conversation_pct":15,"titles_ellipsised":3}
+  OK 1060: panel inside the viewport (gap 26px)
+  OK 1060: all 12 row controls fully inside the panel
+  OK 1060: no control squashed (narrowest 32px)
+  -- covers 15% of the conversation area
+  -- 3/4 titles ellipsised (CSS truncation, expected)
+=== viewport 1440px  ->  surface 1220px (sidebar 220) ===
+  {"stage_w":1220,"panel_left":864,"panel_right":1194,"panel_w":330,"gap_to_viewport_right":26,"overflows_stage":false,"control_count":12,"controls_clipped":0,"controls_squashed":0,"narrowest_control_w":32,"covers_conversation_pct":13,"titles_ellipsised":3}
+  OK 1220: panel inside the viewport (gap 26px)
+  OK 1220: all 12 row controls fully inside the panel
+  OK 1220: no control squashed (narrowest 32px)
+  -- covers 13% of the conversation area
+  -- 3/4 titles ellipsised (CSS truncation, expected)
+=== viewport 1920px  ->  surface 1700px (sidebar 220) ===
+  {"stage_w":1700,"panel_left":1344,"panel_right":1674,"panel_w":330,"gap_to_viewport_right":26,"overflows_stage":false,"control_count":12,"controls_clipped":0,"controls_squashed":0,"narrowest_control_w":32,"covers_conversation_pct":9,"titles_ellipsised":3}
+  OK 1700: panel inside the viewport (gap 26px)
+  OK 1700: all 12 row controls fully inside the panel
+  OK 1700: no control squashed (narrowest 32px)
+  -- covers 9% of the conversation area
+  -- 3/4 titles ellipsised (CSS truncation, expected)
+
+ALL CHECKS PASSED
