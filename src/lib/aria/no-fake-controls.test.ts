@@ -339,3 +339,125 @@ describe('MS17 · the rooms are over stores that have a writer', () => {
     expect(mutated).not.toMatch(/awaitingCount = ctx\?\.awaitingTotal/)
   })
 })
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * S3 PHASE 4 — THE UNREACHABLE-CAPABILITY RAIL.
+ *
+ * The rail above catches a control that LOOKS real and does nothing. This one catches the exact
+ * opposite, and it is the failure that has now happened three times:
+ *
+ *   S1   `cancel` was returned by useAriaStream and never destructured. Stop existed, worked, and
+ *        was not on screen.
+ *   S2B  rename and pin were built as routes and panel handlers; the database still says 0 and 0.
+ *   S3   `provenance` was accepted by AnswerMarkdown from the day it was written and never passed.
+ *        0 of 288 conversations carried a tier.
+ *
+ * All three are invisible to a rail that inspects rendered controls, because the missing thing is
+ * not a control — it is the WIRE to one. A capability nothing calls is as broken as a dead button,
+ * and it is harder to see: the code reads as finished.
+ *
+ * ── WHAT IT CHECKS ──────────────────────────────────────────────────────────────────────────────
+ *   1. Every key a surface hook RETURNS is destructured by a surface file. (The Stop case.)
+ *   2. Every prop a surface component ACCEPTS is passed by at least one caller. (The provenance
+ *      case — this is the check that would have caught phase 1 on the day it was written.)
+ *
+ * ── WHAT IT CANNOT CATCH — and this list is the honest half ─────────────────────────────────────
+ *   a. A prop that is passed but always `undefined` — `provenance={t.provenance}` where nothing
+ *      ever sets `t.provenance`. Syntactically wired, semantically dead. Phase 1's own chain test
+ *      pins that end; this rail only proves the prop is handed over.
+ *   b. A destructured value that is never USED after destructuring (`const { cancel } = ...` and
+ *      then nothing). Catching that needs scope analysis, not a regex.
+ *   c. Anything reached dynamically — `obj[name]()`, a spread `{...handlers}`, or a capability
+ *      called from a file outside the surface list.
+ *   d. A route with no caller at all. That is a different scan (a URL string search) and is not
+ *      attempted here rather than half-attempted.
+ *
+ *   It proves a capability is HANDED OVER. It does not prove anyone uses what they were handed.
+ *
+ * ⚠️ FALSE POSITIVES ARE EXPECTED AND ARE HANDLED BY NAMING THEM, NOT BY LOOSENING THE CHECK.
+ *   S2B's first isolation rail flagged 11 blocks and none were leaks. So every exemption below is
+ *   an explicit entry with a reason, and the list is short enough to read. If it ever grows long,
+ *   that is the signal the rail is wrong — not that the exemptions need extending again.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Keys a hook hands back, read from its `return { ... }`. */
+function hookReturnKeys(src: string): string[] {
+  // the LAST top-level `return {` in the file is the hook's public surface
+  const idx = src.lastIndexOf('\n  return {')
+  if (idx < 0) return []
+  const close = src.indexOf('\n  }', idx)
+  const body = src.slice(idx + '\n  return {'.length, close)
+  return body
+    .split(',')
+    .map(part => part.split(':')[0]!.trim())
+    .filter(k => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))
+}
+
+/** Props a component declares in its `interface XProps { ... }`. */
+function declaredProps(src: string, interfaceName: string): string[] {
+  const m = src.match(new RegExp('interface\\s+' + interfaceName + '\\s*\\{([\\s\\S]*?)\\n\\}'))
+  if (!m) return []
+  return m[1]!
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => /^[A-Za-z_][A-Za-z0-9_]*\??\s*:/.test(l))
+    .map(l => l.split(/[?:]/)[0]!.trim())
+}
+
+describe('S3 phase 4 · a capability nothing calls is as broken as a dead button', () => {
+  const SURFACE_SRC = SURFACE_FILES.filter(f => existsSync(join(root, f))).map(read).join('\n')
+
+  it('every key useAriaStream returns is destructured by the surface', () => {
+    // THE S1 REGRESSION TEST. `cancel` was returned and never taken; Stop did not exist on screen
+    // even though it was fully built and working.
+    const keys = hookReturnKeys(read('src/components/ask-aria-ax/useAriaStream.ts'))
+    expect(keys.length).toBeGreaterThan(3)
+    const destructured = SURFACE_SRC.match(/const \{([^}]*)\} = useAriaStream\(\)/)?.[1] ?? ''
+    const taken = destructured.split(',').map(k => k.trim())
+    const orphans = keys.filter(k => !taken.includes(k))
+    expect(orphans, 'useAriaStream returns these and nothing takes them: ' + orphans.join(', ')).toEqual([])
+  })
+
+  it('every prop AnswerMarkdown accepts is passed by its caller', () => {
+    // THE S3 PHASE 1 REGRESSION TEST. `provenance` was accepted and never passed, for the whole
+    // life of the component, and the moat quietly did nothing.
+    const props = declaredProps(read('src/components/ask-aria-ax/AnswerMarkdown.tsx'), 'AnswerMarkdownProps')
+    expect(props).toContain('provenance')
+    const call = SURFACE_SRC.match(/<AnswerMarkdown([\s\S]*?)\/>/)?.[1] ?? ''
+    const orphans = props.filter(pr => !new RegExp('\\b' + pr + '=').test(call))
+    expect(orphans, 'AnswerMarkdown accepts these and no caller passes them: ' + orphans.join(', ')).toEqual([])
+  })
+
+  it('every prop ThreadsPanel accepts is passed by its caller', () => {
+    const props = declaredProps(read('src/components/ask-aria-ax/rooms/ThreadsPanel.tsx'), 'ThreadsPanelProps')
+    expect(props.length).toBeGreaterThan(2)
+    const call = SURFACE_SRC.match(/<ThreadsPanel([\s\S]*?)\/>/)?.[1] ?? ''
+    const orphans = props.filter(pr => !new RegExp('\\b' + pr + '=').test(call))
+    expect(orphans, 'ThreadsPanel accepts these and no caller passes them: ' + orphans.join(', ')).toEqual([])
+  })
+
+  it('RED/GREEN PROOF — a deliberately orphaned hook key is caught', () => {
+    // The phase asks for proof it goes red against an orphan and green when wired. Both directions
+    // are exercised here rather than asserted, because a rail nobody has seen fail is not a rail.
+    const keys = ['send', 'cancel', 'retry']
+    const wired = 'const { send, cancel, retry } = useAriaStream()'
+    const orphaned = 'const { send, retry } = useAriaStream()'
+    const check = (surface: string) => {
+      const taken = (surface.match(/const \{([^}]*)\} = useAriaStream\(\)/)?.[1] ?? '')
+        .split(',').map(k => k.trim())
+      return keys.filter(k => !taken.includes(k))
+    }
+    expect(check(wired)).toEqual([])            // green when wired
+    expect(check(orphaned)).toEqual(['cancel']) // red when orphaned — the exact S1 bug
+  })
+
+  it('RED/GREEN PROOF — a deliberately orphaned prop is caught', () => {
+    const props = ['text', 'provenance']
+    const wired = '<AnswerMarkdown text={live} provenance={t.provenance} />'
+    const orphaned = '<AnswerMarkdown text={live} />'
+    const check = (call: string) => props.filter(pr => !new RegExp('\\b' + pr + '=').test(call))
+    expect(check(wired)).toEqual([])
+    expect(check(orphaned)).toEqual(['provenance'])  // the exact S3 phase 1 bug
+  })
+})
