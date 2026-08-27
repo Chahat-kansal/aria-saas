@@ -17,6 +17,7 @@ import type { AskBlock } from '@/lib/aria/ask-types'
 import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 
 import { readAriaSse, isEventStream } from '@/lib/aria/ask-sse'
+import { STREAM_STALL_MS, classifyChatError } from '@/lib/aria/chat-errors'
 
 const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
@@ -717,18 +718,51 @@ export default function AskAriaPage() {
       // downloads, actions, deliverables and the council flag all still arrive exactly as before.
       let data: AskPayload
       if (isEventStream(res)) {
-        data = await readAriaSse<AskPayload>(res, {
-          onText: (full) => {
-            setMessages(prev => {
-              const updated = [...prev]
-              const last = updated[updated.length - 1]
-              if (last?.role === 'assistant' && last.streaming) {
-                updated[updated.length - 1] = { ...last, content: full }
-              }
-              return updated
-            })
-          },
-        })
+        // ── S4 PHASE 1 — THE WATCHDOG. THIS IS WHY SEND STOPPED SENDING. ──────────────────────
+        //
+        // This `await` had no timer. If the stream opened and then went silent — which is exactly
+        // what a provider failure looks like from here, and Anthropic has been rejecting this
+        // deployment's key for 24h — the promise NEVER SETTLED. So:
+        //
+        //   · the `finally` below never ran, so `sending` stayed true FOREVER;
+        //   · the assistant bubble stayed `streaming: true`, cursor blinking, Stop button live;
+        //   · and every subsequent send hit `if (... || sending) return` at the top of send()
+        //     and returned WITHOUT FETCHING.
+        //
+        // That is the reported symptom exactly: a streaming UI with no request in flight, and no
+        // POST to /api/aria/ask in the logs — because after the first hung send there genuinely
+        // were none. One stuck boolean silenced the whole product.
+        //
+        // S1 phase 7 built this watchdog for the /ax surface (useAriaStream). It was never given
+        // to THIS surface, which is the one the owner actually loads. Same mechanism, same shared
+        // STREAM_STALL_MS — extended, not reimplemented.
+        let stallTimer: ReturnType<typeof setTimeout> | undefined
+        let stalled = false
+        const kick = () => {
+          if (stallTimer) clearTimeout(stallTimer)
+          stallTimer = setTimeout(() => { stalled = true; controller.abort() }, STREAM_STALL_MS)
+        }
+        kick()
+        try {
+          data = await readAriaSse<AskPayload>(res, {
+            onText: (full) => {
+              kick()
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last?.role === 'assistant' && last.streaming) {
+                  updated[updated.length - 1] = { ...last, content: full }
+                }
+                return updated
+              })
+            },
+          })
+        } finally {
+          if (stallTimer) clearTimeout(stallTimer)
+        }
+        // A watchdog abort is NOT the owner pressing Stop. Thrown so the catch below reports a
+        // real, retryable error instead of a silent "— stopped —" the owner never asked for.
+        if (stalled) throw new Error('Aria stopped responding. Nothing was lost — try again.')
       } else {
         // Older deploy, a proxy that strips the content type, or the file-upload path.
         data = await res.json() as AskPayload
@@ -805,12 +839,24 @@ export default function AskAriaPage() {
         })
         return
       }
-      const errMsg = err instanceof Error ? err.message : 'Unknown error'
+      // S4 PHASE 2 — A FAILED TURN MUST READ AS FAILED, AND SAY WHETHER TRYING AGAIN IS WORTH IT.
+      //
+      // This rendered `Something went wrong: <raw provider error>` — the model vendor's words,
+      // shown to a cafe owner, with no indication of what to do. classifyChatError is S1's
+      // existing classifier (chat-errors.ts) and is REUSED here rather than a second set of
+      // messages being written for this surface: a credit failure reads as a credit failure and
+      // does NOT invite a pointless retry, while a rate limit or a timeout says to try again.
+      //
+      // `streaming: false` is set in every terminal path. A bubble left streaming is
+      // indistinguishable from Aria thinking — which is exactly why a hung request went unnoticed
+      // for a day. Nothing on screen ever said it had stopped.
+      const classified = classifyChatError(err)
+      console.error('[ask-aria] turn failed:', classified.kind, classified.detail ?? classified.message)
       setMessages(prev => {
         const updated = [...prev]
         const last = updated[updated.length - 1]
         if (last?.role === 'assistant') {
-          updated[updated.length - 1] = { ...last, content: `Something went wrong: ${errMsg}`, streaming: false }
+          updated[updated.length - 1] = { ...last, content: classified.message, streaming: false }
         }
         return updated
       })
