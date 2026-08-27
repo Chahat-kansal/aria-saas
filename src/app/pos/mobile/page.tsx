@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
-import { getOfflineQueue, queueOfflineSale, saveProductsToCache, loadProductsFromCache, clearOfflineQueue } from '@/lib/pos-offline';
+import { saveProductsToCache, loadProductsFromCache, readQueue, writeQueue, queueSaleV2, applySyncResult, syncableSales, stuckSales, MAX_SYNC_ATTEMPTS } from '@/lib/pos-offline';
 
 // Lazy-load ZXing — never loads server-side or until user opens camera
 const BarcodeScanner = lazy(() => import('@/components/pos/BarcodeScanner'));
@@ -128,7 +128,7 @@ export default function MobileTerminal() {
       } catch { /* offline */ }
 
       // Offline queue count
-      setOfflineCount(getOfflineQueue().length);
+      setOfflineCount(readQueue().length);
 
       // Attempt to sync any queued offline sales
       await syncOfflineQueue();
@@ -144,25 +144,49 @@ export default function MobileTerminal() {
       .catch(() => {});
   }, [businessId]);
 
+  // POS-OFFLINE-1a — THE QUEUE NOW DROPS ONLY WHAT THE SERVER CONFIRMS.
+  //
+  // This used to be `if (d.synced > 0) clearOfflineQueue()`: one success in a batch of ten cleared
+  // all ten, and the nine that failed ceased to exist — no row, no retry, no trace. A partial
+  // failure is now the normal case the code is built around, not an edge it ignores.
   async function syncOfflineQueue() {
-    const queue = getOfflineQueue();
-    if (queue.length === 0) return;
+    const queue = readQueue();
+    const sendable = syncableSales(queue);
+    if (sendable.length === 0) {
+      // Nothing sendable does not mean nothing queued — exhausted items are still here.
+      setOfflineCount(queue.length);
+      return;
+    }
     try {
       const r = await fetch('/api/pos/sync-offline', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ sales: queue, business_id: businessId }),
+        body:    JSON.stringify({ sales: sendable, business_id: businessId }),
       });
-      if (r.ok) {
-        const d = await r.json();
-        if (d.synced > 0) {
-          clearOfflineQueue();
-          setOfflineCount(0);
-          setSyncMsg(`✓ ${d.synced} offline sale${d.synced > 1 ? 's' : ''} synced`);
-          setTimeout(() => setSyncMsg(''), 4000);
-        }
+      // 207 is a PARTIAL success and must still be processed — `r.ok` alone would discard the
+      // per-item results and leave confirmed sales queued forever, re-sending them every round.
+      if (!r.ok && r.status !== 207) return;
+      const d = await r.json() as { synced?: string[]; failed?: Array<{ ref: string; reason: string }> };
+      const synced = Array.isArray(d.synced) ? d.synced : [];
+      const failed = Array.isArray(d.failed) ? d.failed : [];
+
+      const next = applySyncResult(queue, synced, failed);
+      writeQueue(next);
+      setOfflineCount(next.length);
+
+      const stuck = stuckSales(next).length;
+      if (synced.length > 0) {
+        setSyncMsg(`✓ ${synced.length} offline sale${synced.length > 1 ? 's' : ''} synced`);
       }
-    } catch { /* still offline */ }
+      if (failed.length > 0) {
+        // Named plainly. The owner is told the sale is still held, never that it is gone.
+        setSyncMsg(`⚠ ${failed.length} sale${failed.length > 1 ? 's' : ''} could not sync — still saved, will retry`);
+      }
+      if (stuck > 0) {
+        setSyncMsg(`⚠ ${stuck} sale${stuck > 1 ? 's' : ''} stuck after ${MAX_SYNC_ATTEMPTS} tries — still saved. Show this to support.`);
+      }
+      if (synced.length || failed.length) setTimeout(() => setSyncMsg(''), 6000);
+    } catch { /* still offline — the queue is untouched, which is the correct outcome */ }
   }
 
   /* ── Barcode scan handler ─────────────────────────────────────── */
@@ -286,8 +310,39 @@ export default function MobileTerminal() {
     }
 
     if (offline) {
-      queueOfflineSale({ id: `offline-${Date.now()}`, items: salePayload.items as never[], total_amount: totalCents / 100, payment_method: payMethod, customer_id: null, created_at: new Date().toISOString() });
-      setOfflineCount(getOfflineQueue().length);
+      // POS-OFFLINE-1a — QUEUE THE REQUEST WE COULD NOT SEND, VERBATIM.
+      //
+      // The old call stored `total_amount` and dollar-denominated items while the server read
+      // `total_cents`, `subtotal_cents`, `tax_cents` and `unit_price_cents`. Every one of those
+      // arrived undefined, `undefined / 100` is NaN, NaN serialises to null, and pos_sales
+      // .total_amount is NOT NULL — so every offline sale failed its insert and the swallow hid it.
+      // That is why `synced_from_offline = true` matched 0 rows in production: the offline path had
+      // never once worked. Storing the exact /api/pos/sale body removes the second format entirely.
+      const offlineRef = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `offline-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      queueSaleV2(offlineRef, {
+        business_id:     businessId,
+        session_id:      session?.id ?? null,
+        items:           cart.map(i => ({
+          product_id:       i.id,
+          product_name:     i.name,
+          quantity:         i.quantity,
+          unit_price:       i.price_cents / 100,
+          line_total:       (i.price_cents * i.quantity) / 100,
+          tax_rate:         10,
+          discount_percent: 0,
+        })),
+        payment_method:  payMethod,
+        subtotal:        subtotalCents / 100,
+        tax_amount:      gstCents / 100,
+        discount_amount: 0,
+        total_amount:    totalCents / 100,
+        cash_tendered:   payMethod === 'cash' ? tenderedCents / 100 : null,
+        change_given:    payMethod === 'cash' ? changeCents / 100 : null,
+        customer_id:     null,
+      });
+      setOfflineCount(readQueue().length);
     }
 
     setSaleResult({ offline, total: totalCents, change: changeCents });

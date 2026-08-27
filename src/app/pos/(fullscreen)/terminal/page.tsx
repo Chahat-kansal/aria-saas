@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
 import { feedKey, takeCode, emptyWedge, type WedgeState } from '@/lib/pos/wedge-buffer';
+import { readQueue, writeQueue, applySyncResult, syncableSales } from '@/lib/pos-offline';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
 import type { ReceiptTemplate, ReceiptSettings } from '@/components/pos/Receipt';
@@ -770,17 +771,40 @@ export default function TerminalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
-  // Sync offline queue when connection restored
+  // Sync offline queue when connection restored.
+  //
+  // POS-OFFLINE-1a — TWO THINGS WERE WRONG HERE, AND ONE OF THEM MEANT THIS NEVER RAN AT ALL.
+  //
+  // 1. WRONG KEY. This read `aria_offline_queue`; the queue module writes `aria_pos_offline_queue`
+  //    (src/lib/pos-offline.ts:7). Nothing in the repo has EVER written `aria_offline_queue` —
+  //    it is read here and removed here, and that is its entire lifecycle. So this effect has
+  //    always seen an empty array and returned immediately. The main till has no offline
+  //    queueing of its own; only /pos/mobile queues sales. Giving the terminal real offline
+  //    capability is POS-OFFLINE-1, deliberately not attempted here.
+  //
+  // 2. CLEAR-ALL ON PARTIAL SUCCESS. `if (d.synced > 0) localStorage.removeItem(...)` destroyed
+  //    every unsynced sale in the batch the moment one succeeded. Inert today because of (1),
+  //    but a dormant data-loss bug is still a data-loss bug — it was waiting for someone to fix
+  //    the key. It is removed rather than left as a trap.
+  //
+  // The route now returns { synced: string[], failed: [...] } and 207 on partial failure, so the
+  // old `d.synced > 0` numeric test would silently be false forever. This reads the canonical
+  // queue and removes ONLY server-confirmed refs.
   useEffect(() => {
     function handleOnline() {
-      const queue = JSON.parse(localStorage.getItem('aria_offline_queue') || '[]')
-      if (queue.length === 0) return
+      const queue = readQueue()
+      const sendable = syncableSales(queue)
+      if (sendable.length === 0) return
       fetch('/api/pos/sync-offline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sales: queue, business_id: businessId }),
-      }).then(r => r.json()).then(d => {
-        if (d.synced > 0) localStorage.removeItem('aria_offline_queue')
+        body: JSON.stringify({ sales: sendable, business_id: businessId }),
+      }).then(r => {
+        if (!r.ok && r.status !== 207) return null
+        return r.json()
+      }).then((d: { synced?: string[]; failed?: Array<{ ref: string; reason: string }> } | null) => {
+        if (!d) return
+        writeQueue(applySyncResult(queue, d.synced ?? [], d.failed ?? []))
       }).catch(() => {})
     }
     window.addEventListener('online', handleOnline)

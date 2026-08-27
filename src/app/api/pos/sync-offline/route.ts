@@ -2,35 +2,59 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { recordSaleMovements } from '@/lib/inventory/record-sale-movement'
-import { resolveOutletId, adjustOutletStock } from '@/lib/inventory/outlet-stock'
+import { createSale, type CreateSaleItem } from '@/lib/pos/create-sale'
+import { adaptLegacyQueuedSale, offlineIdempotencyKey, type QueuedSale } from '@/lib/pos-offline'
 
-interface OfflineItem {
-  product_id?:      string;
-  product_name:     string;
-  quantity:         number;
-  unit_price_cents: number;
-  discount_cents?:  number;
-  total_cents:      number;
+/**
+ * POS-OFFLINE-1a — THE SYNC SWALLOW (G11).
+ *
+ * ── WHAT THIS ROUTE USED TO DO ──────────────────────────────────────────────────────────────────
+ * It carried its own copy of the sale write (insert sale, insert items, decrement stock, bump
+ * session totals) and, on any failure, ran `errors++; continue` before returning a success-shaped
+ * `{ synced, errors }` with a 200. Three defects wearing one coat:
+ *
+ *   1. the Postgres error naming the bad column never reached a log;
+ *   2. a partial failure was indistinguishable from a clean run;
+ *   3. the till believed it, cleared the queue, and the sale ceased to exist.
+ *
+ * ── WHAT IT DOES NOW ────────────────────────────────────────────────────────────────────────────
+ *   · per-item results, never a count: { synced: ref[], failed: {ref, reason}[], ok }
+ *   · NON-2XX (207) whenever anything failed, so a lossy batch cannot look like a clean one
+ *   · the real error is logged with its Postgres code and the ref it belongs to
+ *   · replay goes through createSale() — the same path every online sale takes
+ *
+ * ── WHY REUSING createSale() IS THE POINT, NOT A TIDY-UP ────────────────────────────────────────
+ * The bug that started this was `synced_from_offline` — a column that did not exist, written by a
+ * raw insert built as an untyped object literal, which compiled happily and failed at runtime where
+ * the swallow hid it. This route no longer names a pos_sales column at all. `CreateSaleParams` is a
+ * closed TypeScript interface, so an invented field at this call site is now a `tsc` error, and tsc
+ * gates every push. That is the class killed at compile time for this path.
+ *
+ * ⚠️ RESIDUAL, stated rather than implied: createSale() still assembles its own `salePayload` as
+ * `Record<string, unknown>` (create-sale.ts:313), so the class is NOT yet dead inside that function.
+ * Closing it needs regenerated Supabase types — see the run log; it could not be done in this
+ * session because the CLI is unauthenticated and .env.local is not readable here.
+ *
+ * ── IDEMPOTENCY IS WHAT MAKES RETRY SAFE ────────────────────────────────────────────────────────
+ * Retries now genuinely happen, so a replayed batch is the single most likely duplicate source in
+ * the product. Each queued sale carries the `ref` minted when it was queued; the idempotency key is
+ * derived from it the same way the till derives one, and the existing unique index
+ * idx_pos_sales_biz_idempotency_key rejects the duplicate. Retry and idempotency ship together or
+ * neither ships.
+ */
+
+interface SyncResult {
+  synced: string[]
+  failed: Array<{ ref: string; reason: string }>
+  ok: boolean
 }
 
-interface OfflineSale {
-  business_id?:          string;
-  session_id?:           string | null;
-  items:                 OfflineItem[];
-  subtotal_cents:        number;
-  discount_cents?:       number;
-  tax_cents:             number;
-  total_cents:           number;
-  payment_method:        string;
-  payment_tendered_cents?: number;
-  change_cents?:         number;
-  status?:               string;
-  source?:               string;
-  queued_at:             string;
+/** Accepts a v2 queued sale, or upgrades a v1 one. Returns null if the row is unusable. */
+function normalise(raw: unknown): QueuedSale | null {
+  if (raw && typeof raw === 'object' && 'ref' in raw && 'body' in raw) return raw as QueuedSale
+  return adaptLegacyQueuedSale((raw ?? {}) as Record<string, unknown>)
 }
 
 async function _POST(req: Request) {
@@ -39,13 +63,13 @@ async function _POST(req: Request) {
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { sales = [], business_id }: { sales: OfflineSale[]; business_id?: string } = body;
+  const { sales = [], business_id }: { sales: unknown[]; business_id?: string } = body;
 
   if (!Array.isArray(sales) || sales.length === 0) {
-    return NextResponse.json({ synced: 0, errors: 0 });
+    return NextResponse.json({ synced: [], failed: [], ok: true } satisfies SyncResult);
   }
 
-  // Verify business ownership
+  // Verify business ownership — unchanged.
   let bid = business_id;
   if (!bid) {
     const { data: biz } = await supabase.from('businesses').select('id').eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
@@ -56,94 +80,81 @@ async function _POST(req: Request) {
   }
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
-  let synced = 0;
-  let errors = 0;
+  const result: SyncResult = { synced: [], failed: [], ok: true }
 
-  for (const sale of sales) {
+  for (const raw of sales) {
+    const queued = normalise(raw)
+    const ref = queued?.ref ?? ''
+
+    // An unreadable row is REPORTED, not skipped in silence. Without a ref the till cannot even
+    // match it to a queue entry, so it is named as unidentifiable rather than quietly dropped.
+    if (!queued || !ref) {
+      console.error('[sync-offline] unreadable queued sale:', JSON.stringify(raw)?.slice(0, 400))
+      result.failed.push({ ref: ref || 'unidentifiable', reason: 'Queued sale could not be read' })
+      continue
+    }
+
     try {
-      const totalDollars = sale.total_cents / 100;
-      const taxDollars   = sale.tax_cents   / 100;
+      const items: CreateSaleItem[] = (queued.body.items ?? []).map(i => ({
+        product_id: String(i.product_id ?? ''),
+        product_name: i.product_name,
+        quantity: Number(i.quantity) || 0,
+        unit_price: Number(i.unit_price) || 0,
+        line_total: Number(i.line_total) || 0,
+        tax_rate: Number(i.tax_rate) || 10,
+        discount_percent: Number(i.discount_percent) || 0,
+      }))
 
-      // Insert sale record
-      const { data: saleRecord, error: saleErr } = await supabase
-        .from('pos_sales')
-        .insert({
-          business_id:       bid,
-          session_id:        sale.session_id ?? null,
-          payment_method:    sale.payment_method,
-          subtotal:          sale.subtotal_cents / 100,
-          tax_amount:        taxDollars,
-          discount_amount:   (sale.discount_cents ?? 0) / 100,
-          total_amount:      totalDollars,
-          cash_tendered:     sale.payment_tendered_cents ? sale.payment_tendered_cents / 100 : null,
-          change_given:      sale.change_cents ? sale.change_cents / 100 : null,
-          status:            sale.status ?? 'completed',
-          source:            sale.source ?? 'mobile_offline',
-          synced_from_offline: true,
-          offline_queued_at:   sale.queued_at,
-        })
-        .select('id')
-        .single();
-
-      if (saleErr || !saleRecord) { errors++; continue; }
-
-      // Insert sale items
-      const items = (sale.items ?? []).map(item => ({
-        sale_id:       saleRecord.id,
-        business_id:   bid,
-        product_id:    item.product_id ?? null,
-        product_name:  item.product_name,
-        quantity:      item.quantity,
-        unit_price:    item.unit_price_cents / 100,
-        discount_percent: 0,
-        line_total:    item.total_cents / 100,
-        tax_rate:      10,
-      }));
-
-      if (items.length > 0) {
-        await supabase.from('pos_sale_items').insert(items);
+      if (items.length === 0) {
+        result.failed.push({ ref, reason: 'Queued sale has no items' })
+        continue
       }
 
-      // INV-DECREMENT-FIX phase 2 — decrement CANONICAL items_on_hand (+ stock_quantity cache) for offline
-      // sales and log the movement. Guarded against double-processing (decrement is not atomically
-      // idempotent): skip if this sale already has movements.
-      if ((sale.status ?? 'completed') === 'completed') {
-        const lineItems = (items.filter(it => it.product_id) as Array<{ product_id: string; quantity: number }>);
-        const { data: alreadyLogged } = await supabase.from('stock_movements').select('id').eq('sale_id', saleRecord.id).limit(1).maybeSingle();
-        if (!alreadyLogged && lineItems.length) {
-          const outletForStock = await resolveOutletId(supabase, bid, (sale as { outlet_id?: string | null }).outlet_id ?? null);
-          const lines = [];
-          for (const it of lineItems) {
-            // SECURITY-P5 Tier 2 — supabaseAdmin keeps this RPC callable after EXECUTE is revoked
-            // from anon/authenticated; bid/it.product_id are already ownership-checked above.
-            await supabaseAdmin.rpc('decrement_stock_quantity', { p_product_id: it.product_id, p_amount: it.quantity }); // cache
-            const itemsOnHand = await adjustOutletStock(supabase, { businessId: bid, outletId: outletForStock, productId: it.product_id, delta: -it.quantity }); // canonical
-            lines.push({ itemId: it.product_id, quantitySold: it.quantity, newStock: itemsOnHand });
-          }
-          await recordSaleMovements(supabase, { businessId: bid, saleId: saleRecord.id, lines, outletId: outletForStock, writtenBy: 'pos/sync-offline' });
-        }
+      const saleResult = await createSale(supabase, {
+        businessId: bid,
+        userId: user.id,
+        items,
+        customerId: queued.body.customer_id ?? null,
+        paymentMethod: queued.body.payment_method,
+        subtotal: Number(queued.body.subtotal) || 0,
+        taxAmount: Number(queued.body.tax_amount) || 0,
+        discountAmount: Number(queued.body.discount_amount) || 0,
+        totalAmount: Number(queued.body.total_amount) || 0,
+        cashTendered: queued.body.cash_tendered ?? null,
+        changeGiven: queued.body.change_given ?? null,
+        outletId: queued.body.outlet_id ?? null,
+        sessionId: queued.body.session_id ?? null,
+        status: 'completed',
+        source: 'mobile_offline',
+        idempotencyKey: offlineIdempotencyKey(bid, ref),
+        synced: { fromOffline: true, queuedAt: queued.queued_at },
+      })
+
+      if (saleResult.error || !saleResult.sale) {
+        // THE LINE THIS SPRINT EXISTS FOR. The real reason, attached to the ref it belongs to.
+        console.error('[sync-offline] sale replay FAILED', JSON.stringify({
+          ref, business_id: bid, reason: saleResult.error, status: saleResult.status, voided: saleResult.voided,
+        }))
+        result.failed.push({ ref, reason: saleResult.error ?? 'Sale could not be created' })
+        continue
       }
 
-      // Update session totals
-      if (sale.session_id) {
-        const isCard = sale.payment_method === 'card' || sale.payment_method === 'eftpos';
-        // SECURITY-P5 Tier 2 — supabaseAdmin keeps this RPC callable after EXECUTE is revoked from
-        // anon/authenticated; sale.session_id belongs to this ownership-checked business.
-        Promise.resolve(supabaseAdmin.rpc('increment_session_totals', {
-          p_session_id:        sale.session_id,
-          p_cash_delta:        isCard ? 0 : totalDollars,
-          p_card_delta:        isCard ? totalDollars : 0,
-          p_transaction_delta: 1,
-        })).then(() => null, () => null); // non-blocking
-      }
-
-      synced++;
-    } catch {
-      errors++;
+      result.synced.push(ref)
+    } catch (e) {
+      const err = e as { code?: string; message?: string }
+      console.error('[sync-offline] sale replay THREW', JSON.stringify({
+        ref, business_id: bid, code: err?.code ?? null, message: err?.message ?? String(e),
+      }))
+      result.failed.push({ ref, reason: err?.message ?? 'Unexpected error' })
     }
   }
 
-  return NextResponse.json({ synced, errors, total: sales.length });
+  result.ok = result.failed.length === 0
+
+  // 207 Multi-Status when anything failed: a batch that lost rows MUST NOT be distinguishable from
+  // a clean one by a number nobody reads. The till keys off `synced`/`failed`, but the status code
+  // means even a caller that only checks `r.ok` cannot mistake a lossy sync for a good one.
+  return NextResponse.json(result, { status: result.ok ? 200 : 207 });
 }
 
 export const POST = withErrorCapture('pos/sync-offline', _POST)
