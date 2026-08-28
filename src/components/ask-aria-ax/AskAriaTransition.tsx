@@ -428,8 +428,23 @@ export default function AskAriaTransition() {
     // stood out" while the tab beside it said 55. Falls back to the list length only if the route
     // is an older deploy that does not send noticedTotal.
     const n = ctx?.noticedTotal ?? noticed.length
-    return { lead, em: n === 1 ? 'One thing stood out.' : n + ' things stood out.' }
-  }, [ctx?.ownerName, ctx?.noticedTotal, ctxLoading, ctxUnreadable, noticed.length])
+    // S6 PHASE 4 — SAY WHY THE TWO NUMBERS DIFFER, because both are right.
+    //
+    // The headline counts everything Aria noticed; the "Awaiting you" tab counts DECISIONS
+    // waiting. On this business that is 54 and 52 — 52 pending decisions plus a zero-till notice
+    // and a low-stock notice. Verified against the database, not assumed. S3 already removed the
+    // real defect here (the headline was counting a capped list); what was left was two true
+    // numbers sitting side by side with nothing explaining the gap, which reads as a bug.
+    //
+    // The clause only appears when they actually differ — an owner with 0 extra notices should
+    // not be shown "52 things stood out — 52 need a decision."
+    const decisions = ctx?.awaitingTotal ?? 0
+    const head = n === 1 ? 'One thing stood out.' : n + ' things stood out.'
+    const em = decisions > 0 && decisions !== n
+      ? head.replace(/\.$/, '') + ' — ' + decisions + ' need a decision.'
+      : head
+    return { lead, em }
+  }, [ctx?.ownerName, ctx?.noticedTotal, ctx?.awaitingTotal, ctxLoading, ctxUnreadable, noticed.length])
 
   const revenue = ctx?.today.find(f => f.label === 'Revenue today')
   /**
