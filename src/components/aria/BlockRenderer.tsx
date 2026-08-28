@@ -1,5 +1,5 @@
-import { isContentFreeBlock } from '@/lib/aria/block-content'
 'use client'
+import { isContentFreeBlock } from '@/lib/aria/block-content'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area, PieChart, Pie, Legend } from 'recharts'
 import { useEffect, useRef, useState } from 'react'
 import type { AskBlock } from '@/lib/aria/ask-types'

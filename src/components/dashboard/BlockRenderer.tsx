@@ -1,5 +1,5 @@
-import { isContentFreeBlock } from '@/lib/aria/block-content'
 'use client'
+import { isContentFreeBlock } from '@/lib/aria/block-content'
 import type { AskBlock } from '@/lib/aria/ask-types'
 import { sanitizeHtml } from '@/lib/security/sanitize-html'
 
