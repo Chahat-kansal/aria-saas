@@ -360,6 +360,35 @@ export default function AskAriaTransition() {
     })))
   }, [])
 
+  /**
+   * S5 PHASE 4 — `?q=` AUTO-SEND. THE ONE CAPABILITY THE SWAP COULD NOT SHIP WITHOUT.
+   *
+   * The old surface reads `?q=` and sends it on load (page.tsx:578). About eight places in the
+   * product link here with a question already attached — all three of the daily briefing's "full
+   * detailed briefing" actions, AriaSays, MorningCommandCentre's prompt list, ProWidgets, the
+   * spotlight tour's Ask-Aria step and the POS coming-soon page.
+   *
+   * Without this, every one of those links would land on a BLANK COMPOSER and the owner's question
+   * would vanish with no error — the quietest possible regression, and the exact class this sprint
+   * series exists to stop shipping.
+   *
+   * Reads window.location.search rather than useSearchParams() deliberately: the hook requires a
+   * Suspense boundary around this component, and adding one to satisfy a URL read would be a
+   * structural change to the surface for no behavioural gain. The old page reads it the same way.
+   *
+   * Fires ONCE. The ref guard matters because `ask` is recreated whenever conversationId changes,
+   * and re-running would re-send the owner's question a second time.
+   */
+  const autoSentRef = useRef(false)
+  useEffect(() => {
+    if (autoSentRef.current) return
+    if (typeof window === 'undefined') return
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (!q || !q.trim()) return
+    autoSentRef.current = true
+    void ask(q)
+  }, [ask])
+
   const home = useCallback(() => setWorking(false), [])
 
   const newChat = useCallback(() => {
