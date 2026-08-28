@@ -17,7 +17,8 @@ import type { AskBlock } from '@/lib/aria/ask-types'
 import { SaveToFilesButton } from '@/components/dashboard/SaveToFilesButton'
 
 import { readAriaSse, isEventStream } from '@/lib/aria/ask-sse'
-import { STREAM_STALL_MS, classifyChatError } from '@/lib/aria/chat-errors'
+import { classifyChatError } from '@/lib/aria/chat-errors'
+import { runWithStallWatchdog, StreamStalled } from '@/lib/aria/stream-watchdog'
 
 const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
@@ -736,33 +737,22 @@ export default function AskAriaPage() {
         // S1 phase 7 built this watchdog for the /ax surface (useAriaStream). It was never given
         // to THIS surface, which is the one the owner actually loads. Same mechanism, same shared
         // STREAM_STALL_MS — extended, not reimplemented.
-        let stallTimer: ReturnType<typeof setTimeout> | undefined
-        let stalled = false
-        const kick = () => {
-          if (stallTimer) clearTimeout(stallTimer)
-          stallTimer = setTimeout(() => { stalled = true; controller.abort() }, STREAM_STALL_MS)
-        }
-        kick()
-        try {
-          data = await readAriaSse<AskPayload>(res, {
-            onText: (full) => {
-              kick()
-              setMessages(prev => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last?.role === 'assistant' && last.streaming) {
-                  updated[updated.length - 1] = { ...last, content: full }
-                }
-                return updated
-              })
-            },
-          })
-        } finally {
-          if (stallTimer) clearTimeout(stallTimer)
-        }
-        // A watchdog abort is NOT the owner pressing Stop. Thrown so the catch below reports a
-        // real, retryable error instead of a silent "— stopped —" the owner never asked for.
-        if (stalled) throw new Error('Aria stopped responding. Nothing was lost — try again.')
+        // S5 PHASE 3 — the shared watchdog. S4 fixed this surface by writing the /ax watchdog a
+        // SECOND time, inline. Two copies of a timing rule on the send path is how they drift, so
+        // both surfaces now call one helper (lib/aria/stream-watchdog.ts) with one STREAM_STALL_MS.
+        data = await runWithStallWatchdog(controller, kick => readAriaSse<AskPayload>(res, {
+          onText: (full) => {
+            kick()
+            setMessages(prev => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last?.role === 'assistant' && last.streaming) {
+                updated[updated.length - 1] = { ...last, content: full }
+              }
+              return updated
+            })
+          },
+        }))
       } else {
         // Older deploy, a proxy that strips the content type, or the file-upload path.
         data = await res.json() as AskPayload
@@ -828,7 +818,9 @@ export default function AskAriaPage() {
       loadHistory()
       if (data.intent === 'deliverable') loadDeliverables()
     } catch (err: unknown) {
-      if (err instanceof Error && (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))) {
+      // A stall aborts the controller too, so StreamStalled must be tested FIRST — otherwise
+      // a hung request renders as '— stopped —', a cancellation the owner never asked for.
+      if (!(err instanceof StreamStalled) && err instanceof Error && (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))) {
         setMessages(prev => {
           const updated = [...prev]
           const last = updated[updated.length - 1]

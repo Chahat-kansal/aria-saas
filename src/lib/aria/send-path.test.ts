@@ -9,6 +9,21 @@ const OLD_SURFACE = read('src/app/dashboard/ask-aria/page.tsx')
 const HOOK = read('src/components/ask-aria-ax/useAriaStream.ts')
 
 /** Strip comments — this sprint is entirely about prose describing work nobody wired. */
+
+/*
+ * ⚠️ REWRITTEN BY S5 PHASE 3 — the behaviour these assert MOVED, it was not removed.
+ *
+ * S1 built the stall watchdog inline in useAriaStream. S4 found the old page had none and fixed it
+ * by writing the same watchdog a SECOND time, inline, in that page. S5 extracted the single copy to
+ * lib/aria/stream-watchdog.ts because two copies of a timing rule on the send path is exactly how
+ * they drift apart.
+ *
+ * So the assertions below no longer look for an inline `setTimeout(... controller.abort())` — they
+ * look for the shared helper being called. The GUARANTEE is unchanged and is now tested for real,
+ * against actual timers and an actually-silent stream, in stream-watchdog.test.ts. These were
+ * rewritten rather than deleted so the history of what they were protecting stays readable.
+ */
+
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 /**
@@ -29,42 +44,47 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*
 describe('S4 phase 1 · the stream read can never hang forever', () => {
   it('the OLD surface now has the watchdog S1 built for the new one', () => {
     const c = code(OLD_SURFACE)
-    expect(c).toMatch(/import \{ STREAM_STALL_MS, classifyChatError \} from '@\/lib\/aria\/chat-errors'/)
-    expect(c).toMatch(/stallTimer = setTimeout\(\(\) => \{ stalled = true; controller\.abort\(\) \}, STREAM_STALL_MS\)/)
+    expect(c).toMatch(/import \{ runWithStallWatchdog, StreamStalled \} from '@\/lib\/aria\/stream-watchdog'/)
+    expect(c).toMatch(/await runWithStallWatchdog\(controller, kick => readAriaSse/)
   })
 
   it('the timer is kicked by every frame, not set once', () => {
     // A once-only timer would abort a healthy long answer mid-flow.
+    // The kick is now the helper's callback parameter; the surface still calls it per frame.
     const c = code(OLD_SURFACE)
     expect(c).toMatch(/onText: \(full\) => \{\s*kick\(\)/)
-    expect(c).toMatch(/const kick = \(\) => \{/)
+    expect(c).toMatch(/runWithStallWatchdog\(controller, kick =>/)
   })
 
   it('the timer is always cleared, including on the success path', () => {
-    expect(code(OLD_SURFACE)).toMatch(/\} finally \{\s*if \(stallTimer\) clearTimeout\(stallTimer\)/)
+    // Clearing moved into the helper, where it is covered by a real-timer test:
+    // "the timer is cleared on the success path — no leaked handle keeps the process alive".
+    expect(code(read('src/lib/aria/stream-watchdog.ts'))).toMatch(/finally \{\s*if \(timer\) clearTimeout\(timer\)/)
   })
 
   it('a watchdog abort is NOT reported as the owner pressing Stop', () => {
     // The catch treats AbortError as "— stopped —". Without this throw, a stall would render as
     // though the owner had cancelled a question they were still waiting on.
-    expect(code(OLD_SURFACE)).toMatch(/if \(stalled\) throw new Error\('Aria stopped responding/)
+    // Now expressed as a typed error the catch tests for FIRST, before the abort branch.
+    expect(code(OLD_SURFACE)).toMatch(/!\(err instanceof StreamStalled\) && err instanceof Error/)
+    expect(code(read('src/lib/aria/stream-watchdog.ts'))).toMatch(/class StreamStalled extends Error/)
   })
 
   it('BOTH surfaces use the SAME shared constant — no second timeout was invented', () => {
-    expect(code(HOOK)).toMatch(/STREAM_STALL_MS/)
-    expect(code(OLD_SURFACE)).toMatch(/STREAM_STALL_MS/)
+    // Stronger than before: neither surface names the constant now, because neither owns the
+    // timing. One helper does, and it defaults to the one shared value.
     expect(STREAM_STALL_MS).toBe(45_000)
-    // and neither file hard-codes a competing number next to it
-    expect(code(OLD_SURFACE)).not.toMatch(/setTimeout\([^)]*45_?000/)
+    expect(code(read('src/lib/aria/stream-watchdog.ts'))).toMatch(/stallMs: number = STREAM_STALL_MS/)
+    for (const src of [code(HOOK), code(OLD_SURFACE)]) {
+      expect(src).toMatch(/runWithStallWatchdog/)
+      expect(src).not.toMatch(/setTimeout\([^)]*45_?000/)
+    }
   })
 
   it('MUTATION PROBE — removing the watchdog is detectable', () => {
-    const mutated = OLD_SURFACE.replace(
-      'stallTimer = setTimeout(() => { stalled = true; controller.abort() }, STREAM_STALL_MS)',
-      '/* no watchdog */',
-    )
+    const mutated = OLD_SURFACE.replace('await runWithStallWatchdog(controller, kick => readAriaSse', 'await (readAriaSse')
     expect(mutated).not.toBe(OLD_SURFACE)
-    expect(code(mutated)).not.toMatch(/stalled = true; controller\.abort\(\)/)
+    expect(code(mutated)).not.toMatch(/await runWithStallWatchdog\(controller, kick => readAriaSse/)
   })
 
   it('THE GUARD THAT SILENCED EVERYTHING is still there — the fix is the watchdog, not its removal', () => {

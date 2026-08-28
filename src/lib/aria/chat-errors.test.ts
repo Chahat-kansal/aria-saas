@@ -66,11 +66,12 @@ describe('phase 7 · retryable and not-retryable are told apart', () => {
 
 describe('phase 7 · the watchdog — no stream sits in streaming forever', () => {
   it('the hook arms a stall timer and every frame resets it', () => {
-    expect(HOOK).toMatch(/STREAM_STALL_MS/)
-    expect(HOOK).toMatch(/const kick = \(\) =>/)
-    // both frame types reset it — a tool turn that emits only stage frames must not be killed
+    // S5 PHASE 3 — REWRITTEN, NOT REMOVED. The watchdog moved out of the hook into the shared
+    // lib/aria/stream-watchdog.ts (S4 had been forced to write a second inline copy in the old
+    // page). The guarantee is identical and is now tested against real timers and a genuinely
+    // silent stream in stream-watchdog.test.ts; this pins that the hook still uses it.
+    expect(HOOK).toMatch(/await runWithStallWatchdog\(controller, kick => readAriaSse/)
     expect(HOOK).toMatch(/onText: \(full\) => \{ kick\(\)/)
-    expect(HOOK).toMatch(/onStage: \(\) => \{ kick\(\)/)
   })
 
   it('a stall aborts and surfaces as retryable, NOT as a user stop', () => {
@@ -88,9 +89,9 @@ describe('phase 7 · the watchdog — no stream sits in streaming forever', () =
   })
 
   it('MUTATION PROBE — removing the watchdog is detectable', () => {
-    const mutated = HOOK.replace(/stallTimer = setTimeout\([\s\S]{0,140}?STREAM_STALL_MS\)/, '// no watchdog')
+    const mutated = HOOK.replace('await runWithStallWatchdog(controller, kick => readAriaSse', 'await (readAriaSse')
     expect(mutated).not.toBe(HOOK)
-    expect(mutated).not.toMatch(/stallTimer = setTimeout/)
+    expect(mutated).not.toMatch(/await runWithStallWatchdog\(controller, kick => readAriaSse/)
   })
 })
 

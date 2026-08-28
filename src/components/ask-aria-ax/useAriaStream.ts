@@ -4,6 +4,7 @@ import { readAriaSse, isEventStream } from '@/lib/aria/ask-sse'
 import {
   classifyChatError, stalledError, STREAM_STALL_MS, type ChatError,
 } from '@/lib/aria/chat-errors'
+import { runWithStallWatchdog, StreamStalled } from '@/lib/aria/stream-watchdog'
 
 /**
  * MS16 PHASE 4 — the client half of streaming.
@@ -106,24 +107,20 @@ export function useAriaStream() {
       // of the set: no error to read, no button to press, so the owner waits and then reloads and
       // loses the thread. Every frame resets the timer; silence past STREAM_STALL_MS aborts the
       // request and resolves to an ordinary retryable error.
-      let stallTimer: ReturnType<typeof setTimeout> | undefined
-      let stalled = false
-      const kick = () => {
-        if (stallTimer) clearTimeout(stallTimer)
-        stallTimer = setTimeout(() => { stalled = true; stalledRef.current = true; controller.abort() }, STREAM_STALL_MS)
-      }
-      kick()
-
+      // S5 PHASE 3 — the SHARED watchdog. This is where it was first built (S1 phase 7); S4 had
+      // to write a second copy inline in the old page, so it now lives in one place and both
+      // surfaces call it. `stalledRef` still records that a stall (not a user Stop) happened, so
+      // the catch below classifies it correctly.
       let result: AriaStreamResult
       try {
-        result = await readAriaSse<AriaStreamResult>(res, {
+        result = await runWithStallWatchdog(controller, kick => readAriaSse<AriaStreamResult>(res, {
           onText: (full) => { kick(); setStage('streaming'); setText(full); textRef.current = full },
           onStage: () => { kick(); setStage('thinking') },
-        })
-      } finally {
-        if (stallTimer) clearTimeout(stallTimer)
+        }))
+      } catch (e) {
+        if (e instanceof StreamStalled) stalledRef.current = true
+        throw e
       }
-      if (stalled) throw new Error('stream stalled')
       if (typeof result.response === 'string' && result.response.length > 0) setText(result.response)
       setStage('done')
       onDone?.(result)
