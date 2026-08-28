@@ -71,13 +71,32 @@ describe('isValidStaffPin', () => {
 // ── THE STATIC GUARD — this is the one that would have caught SEC-PIN-2 existing ────────────────
 // A plaintext `.pin ===` comparison anywhere outside staff-pin.ts and the documented legacy
 // fallbacks is the exact defect this sprint fixed. Grep is what found it; grep is what pins it.
-function walk(dir: string, out: string[] = []): string[] {
+function walkUncached(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     if (entry === 'node_modules' || entry === '.next') continue
     const p = join(dir, entry)
-    if (statSync(p).isDirectory()) walk(p, out)
+    if (statSync(p).isDirectory()) walkUncached(p, out)
     else if (p.endsWith('.ts') || p.endsWith('.tsx')) out.push(p)
   }
+  return out
+}
+
+/**
+ * S5 — CACHED. This walk stats several thousand files, and two tests in this file called it
+ * independently. Under disk contention the second one alone took 7,267ms and blew vitest's default
+ * 5s timeout, failing a SECURITY rail for reasons that had nothing to do with security. The tree
+ * cannot change mid-run, so walking it twice was pure cost.
+ *
+ * The sibling test at :109 was given an explicit 30s timeout for exactly this reason and this one
+ * was missed. Caching fixes the cause; the timeout below covers the first (uncached) call, which
+ * still pays the full cost.
+ */
+const walkCache = new Map<string, string[]>()
+function walk(dir: string): string[] {
+  const hit = walkCache.get(dir)
+  if (hit) return hit
+  const out = walkUncached(dir)
+  walkCache.set(dir, out)
   return out
 }
 
@@ -133,7 +152,7 @@ describe('no route compares a PIN in plaintext', () => {
       if (/\.manager_pin\s*(===|!==)/.test(readFileSync(file, 'utf8'))) offenders.push(norm)
     }
     expect(offenders, 'new plaintext manager_pin comparison: ' + offenders.join(', ')).toEqual([])
-  })
+  }, 30_000)
 
   it('POSITIVE CONTROL — the allowlisted site really does still contain the defect', () => {
     // Without this the allowlist would quietly become a list of files that no longer matter, and the
