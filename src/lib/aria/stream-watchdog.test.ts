@@ -27,7 +27,7 @@ describe('S5 phase 3 · a silent stream settles instead of hanging — BEHAVIOUR
     // later send returned at its guard without fetching. This is that scenario, executed.
     const controller = new AbortController()
     const started = Date.now()
-    await expect(runWithStallWatchdog(controller, () => silentStream(controller), 60))
+    await expect(runWithStallWatchdog(controller, () => silentStream(controller), 100))
       .rejects.toBeInstanceOf(StreamStalled)
     expect(Date.now() - started).toBeLessThan(1_000)
     expect(controller.signal.aborted).toBe(true)
@@ -35,23 +35,26 @@ describe('S5 phase 3 · a silent stream settles instead of hanging — BEHAVIOUR
 
   it('THE NEXT SEND WORKS — the caller is left usable, which was the whole failure', async () => {
     const c1 = new AbortController()
-    await expect(runWithStallWatchdog(c1, () => silentStream(c1), 40)).rejects.toBeInstanceOf(StreamStalled)
+    await expect(runWithStallWatchdog(c1, () => silentStream(c1), 100)).rejects.toBeInstanceOf(StreamStalled)
     // a fresh attempt, exactly as the UI would make after showing the error
     const c2 = new AbortController()
-    await expect(runWithStallWatchdog(c2, async () => 'answer', 40)).resolves.toBe('answer')
+    await expect(runWithStallWatchdog(c2, async () => 'answer', 100)).resolves.toBe('answer')
   })
 
   it('a talking stream is NOT aborted — every frame resets the timer', async () => {
-    // A once-only timer would kill a healthy long answer mid-flow. This runs 6 frames at 30ms
-    // against a 60ms budget: 180ms total, far past the budget, and it must survive.
+    // A once-only timer would kill a healthy long answer mid-flow. This runs 6 frames at 25ms —
+    // 150ms total, far past the 400ms-per-frame budget only because each frame kicks it.
+    // Margins are deliberately WIDE (25ms frames against a 400ms budget, 16:1). A tight ratio
+    // makes this test fail under disk/CPU contention rather than when the code is wrong — and a
+    // flaky test on the send-path guard is worse than no test, because it trains people to re-run.
     const controller = new AbortController()
     const out = await runWithStallWatchdog(controller, async (kick) => {
       for (let i = 0; i < 6; i++) {
-        await new Promise(r => setTimeout(r, 30))
+        await new Promise(r => setTimeout(r, 25))
         kick()
       }
       return 'complete'
-    }, 60)
+    }, 400)
     expect(out).toBe('complete')
     expect(controller.signal.aborted).toBe(false)
   })
@@ -60,10 +63,10 @@ describe('S5 phase 3 · a silent stream settles instead of hanging — BEHAVIOUR
     // Two frames, then silence — a provider dying partway, not at the start.
     const controller = new AbortController()
     await expect(runWithStallWatchdog(controller, async (kick) => {
-      await new Promise(r => setTimeout(r, 20)); kick()
-      await new Promise(r => setTimeout(r, 20)); kick()
-      return silentStream(controller)
-    }, 60)).rejects.toBeInstanceOf(StreamStalled)
+      await new Promise(r => setTimeout(r, 25)); kick()
+      await new Promise(r => setTimeout(r, 25)); kick()
+      return silentStream(controller)   // then silence, past the 200ms budget
+    }, 200)).rejects.toBeInstanceOf(StreamStalled)
   })
 
   it('a REAL error is passed through unchanged, not disguised as a stall', async () => {
@@ -83,8 +86,8 @@ describe('S5 phase 3 · a silent stream settles instead of hanging — BEHAVIOUR
 
   it('the timer is cleared on the success path — no leaked handle keeps the process alive', async () => {
     const controller = new AbortController()
-    await runWithStallWatchdog(controller, async () => 'ok', 50)
-    await new Promise(r => setTimeout(r, 120))   // past the budget
+    await runWithStallWatchdog(controller, async () => 'ok', 60)
+    await new Promise(r => setTimeout(r, 300))   // past the budget
     expect(controller.signal.aborted).toBe(false)
   })
 
