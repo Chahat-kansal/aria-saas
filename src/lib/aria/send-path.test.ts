@@ -5,7 +5,7 @@ import { classifyChatError, STREAM_STALL_MS } from './chat-errors'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
-const OLD_SURFACE = read('src/app/dashboard/ask-aria/page.tsx')
+const OLD_SURFACE = read('src/app/dashboard/ask-aria/classic/page.tsx')
 const HOOK = read('src/components/ask-aria-ax/useAriaStream.ts')
 
 /** Strip comments — this sprint is entirely about prose describing work nobody wired. */

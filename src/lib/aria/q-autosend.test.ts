@@ -5,7 +5,7 @@ import { join } from 'node:path'
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
 const AX = read('src/components/ask-aria-ax/AskAriaTransition.tsx')
-const OLD = read('src/app/dashboard/ask-aria/page.tsx')
+const OLD = read('src/app/dashboard/ask-aria/classic/page.tsx')
 const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 /**

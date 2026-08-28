@@ -6,7 +6,7 @@ import { STREAM_STALL_MS } from './chat-errors'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
-const OLD = read('src/app/dashboard/ask-aria/page.tsx')
+const OLD = read('src/app/dashboard/ask-aria/classic/page.tsx')
 const HOOK = read('src/components/ask-aria-ax/useAriaStream.ts')
 const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
