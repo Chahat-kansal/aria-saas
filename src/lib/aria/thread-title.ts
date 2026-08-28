@@ -198,12 +198,33 @@ export function closeDanglingQuote(t: string): string {
   return out
 }
 
+/**
+ * S6 PHASE 3 — TRUNCATE ON A WORD BOUNDARY, AND NEVER MID-QUOTE.
+ *
+ * S3 fixed a `.slice(0, 42)` that cut a thread title mid-quote. The same defect was still live one
+ * layer down: ax-context.ts:105 did `(a.recommendation ?? '').slice(0, 140)` to build the subtitle
+ * of a notice chip, so a suggested question rendered cut off mid-sentence with no ellipsis — the
+ * owner cannot tell whether Aria stopped talking or the text stopped fitting.
+ *
+ * This is the primitive both callers now share, so the rule lives in ONE place: cut on a word
+ * boundary, mark the cut with an ellipsis so it is visibly a truncation, and close any quote the
+ * cut left hanging (closeDanglingQuote, below).
+ */
+export function truncateAtWord(text: string | null | undefined, max: number): string {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim()
+  if (!t || t.length <= max) return t
+  const cut = t.slice(0, max).replace(/\s+\S*$/, '').trim()
+  // A single word longer than the budget has no boundary to cut on — take the hard cut rather
+  // than returning nothing.
+  const base = cut || t.slice(0, max).trim()
+  return closeDanglingQuote(base) + '…'
+}
+
 export function fallbackTitle(question: string): string {
   const q = subjectOf(question)
   if (!q) return 'New conversation'
-  if (q.length <= MAX_TITLE) return q
-  const cut = q.slice(0, MAX_TITLE).replace(/\s+\S*$/, '').trim()
-  return closeDanglingQuote(cut) + '…'
+  // S6 PHASE 3 — the truncation rule moved to truncateAtWord() so the notice chips share it.
+  return truncateAtWord(q, MAX_TITLE)
 }
 
 /**

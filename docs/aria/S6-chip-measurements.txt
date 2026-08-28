@@ -1,0 +1,28 @@
+S6 PHASE 3 — SUGGESTION/NOTICE CHIPS MEASURED IN CHROMIUM
+
+=== TEXT (truncateAtWord, 140) ===
+  "Revenue is below your weekly target and the gap is widening. Consider a midweek …[136 chars]"
+  "Seven lines are at or below their reorder level, including oat milk and the hous…[137 chars]"
+  "Nothing has gone through the till today."
+  OK the two long recommendations are marked as truncated; the short one is untouched
+  OK no chip text is cut mid-word
+
+=== viewport 1280 -> surface 1060 ===
+  chip 0 lines=1 overflowsChip=false scrollClipped=false
+  chip 1 lines=1 overflowsChip=false scrollClipped=false
+  chip 2 lines=1 overflowsChip=false scrollClipped=false
+  OK 1280: all chips wrap fully, nothing clipped
+
+=== viewport 1440 -> surface 1220 ===
+  chip 0 lines=1 overflowsChip=false scrollClipped=false
+  chip 1 lines=1 overflowsChip=false scrollClipped=false
+  chip 2 lines=1 overflowsChip=false scrollClipped=false
+  OK 1440: all chips wrap fully, nothing clipped
+
+=== viewport 1920 -> surface 1700 ===
+  chip 0 lines=1 overflowsChip=false scrollClipped=false
+  chip 1 lines=1 overflowsChip=false scrollClipped=false
+  chip 2 lines=1 overflowsChip=false scrollClipped=false
+  OK 1920: all chips wrap fully, nothing clipped
+
+ALL CHECKS PASSED

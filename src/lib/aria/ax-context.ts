@@ -1,3 +1,4 @@
+import { truncateAtWord } from '@/lib/aria/thread-title'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getRevenueSnapshot } from '@/lib/aria/revenue-snapshot'
 import { todayAEST } from '@/lib/date-au'
@@ -102,7 +103,10 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
       awaiting.push({
         id: String(a.id),
         title: a.title ?? 'A decision is waiting',
-        subtitle: (a.recommendation ?? '').slice(0, 140),
+        // S6 PHASE 3 — was `.slice(0, 140)`: a raw cut with no word boundary and no ellipsis, so a
+        // notice chip rendered cut off mid-sentence and the owner could not tell whether Aria had
+        // stopped talking or the text had stopped fitting. Same rule as the thread titles now.
+        subtitle: truncateAtWord(a.recommendation, 140),
         tone: a.priority === 'high' ? 'amber' : 'blue',
         prompt: `Tell me about "${a.title ?? ''}"`,
         rank: a.priority === 'high' ? 90 : 60,
