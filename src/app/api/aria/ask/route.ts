@@ -44,6 +44,7 @@ import {
   supersedeLastAssistant, supersedeFrom, liveIndexToAbsolute, type ThreadMessage,
 } from '@/lib/aria/conversation-branch'
 import { dropContentFreeBlocks } from '@/lib/aria/block-content'
+import { buildProvenance } from '@/lib/aria/figure-provenance'
 import type { AskBlock as AskBlockType } from '@/lib/aria/ask-types'
 import {
   buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle,
@@ -1143,23 +1144,33 @@ Rules:
             ...topCustLTVs, ...healthAnchors, ...goalAnchors, ...benchmarkAnchors, ...hypothesisAnchors,
           ].filter((n): n is number => typeof n === 'number' && isFinite(n))
 
-          // S3 PHASE 1 — labels are only attached where the query that produced the number is
-          // KNOWN BY NAME here. The spread sets (health/goal/benchmark/hypothesis anchors) arrive
-          // as bare number[] with no per-value provenance, so they get an anchor but no label, and
-          // segmentFigures falls back to "Computed from your data this turn" rather than inventing
-          // a source sentence. A wrong source line is worse than a generic true one.
-          const anchorLabels: Record<string, string> = {}
-          const labelAnchor = (n: number | null | undefined, text: string) => {
-            if (typeof n === 'number' && isFinite(n)) anchorLabels[String(n)] = text
-          }
-          labelAnchor(revToday, 'Completed sales, today.')
-          labelAnchor(revWeekCal, 'Completed sales, this week to date.')
-          labelAnchor(revLastWeekCal, 'Completed sales, last week.')
-          labelAnchor(revSwlm, 'Completed sales, the same week last month.')
-          labelAnchor(gtConsent.count ?? 0, 'Customers who have consented to marketing.')
-          labelAnchor(gtTotalCust.count ?? 0, 'Customers on record.')
-          labelAnchor(targetWeekly, 'Your weekly revenue target.')
-          turnProvenance = { anchors: anchorValues, anchorLabels }
+          // S6 PHASE 2 — THE STORED PROVENANCE IS THE LABELLED SET ONLY.
+          //
+          // `anchorValues` above still goes to the VERIFIER unchanged (Check 6 validates against as
+          // wide a corpus as possible — dropping values there would weaken grounding). What changes
+          // is what gets STORED as clickable sources: a live turn kept 33 anchors against 4 labels,
+          // so 29 numbers were underlined and said nothing when clicked.
+          //
+          // The four spread sets — healthAnchors, goalAnchors, benchmarkAnchors, hypothesisAnchors —
+          // are bare number[] with no per-value provenance, and they are where the junk came from:
+          // -800, -600, -100, 100. A chart axis is not a source. They are not listed below, so they
+          // are validated against but never offered as one.
+          //
+          // buildProvenance also drops AMBIGUOUS values. Labels were keyed by String(value), so on a
+          // quiet day revenue-today, the weekly target and a promo count are all 0 and collapse to
+          // one key with last-write-wins — the owner would click 0 and read whichever label landed
+          // last. That is a coin-flip presented as a fact.
+          turnProvenance = buildProvenance([
+            { value: revToday,               label: 'Completed sales, today.' },
+            { value: revWeekCal,             label: 'Completed sales, this week to date.' },
+            { value: revLastWeekCal,         label: 'Completed sales, last week.' },
+            { value: revSwlm,                label: 'Completed sales, the same week last month.' },
+            { value: gtConsent.count ?? 0,   label: 'Customers who have consented to marketing.' },
+            { value: gtTotalCust.count ?? 0, label: 'Customers on record.' },
+            { value: targetWeekly,           label: 'Your weekly revenue target.' },
+            { value: tuesdayAvg,             label: 'Average takings on a Tuesday.' },
+            { value: coveragePct,            label: 'Share of sales with a customer attached.' },
+          ])
           // OUTCOME-LOOP-1 (I4) Part 4: shape advice weights for the council. `weight` is the stored
           // [0.3,2.0] multiplier (unchanged — 4 downstream consumers depend on that frame). `success_rate`
           // is a Laplace-smoothed (positive+1)/(total+3) read-side view so a category with few/poor

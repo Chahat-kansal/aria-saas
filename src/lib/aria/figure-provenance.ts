@@ -65,6 +65,53 @@ function matchAnchor(value: number, anchors: number[]): number | null {
  * never captured cannot retroactively vouch for its numbers, and dressing them in a blue underline
  * would be a claim the system cannot support.
  */
+/**
+ * S6 PHASE 2 — AN ANCHOR EXISTS ONLY IF ITS MEANING CAN BE STATED.
+ *
+ * A live turn stored 33 anchors and 4 labels, so 29 numbers were underlined-and-clickable with
+ * nothing to say. Two separate causes, and both are fixed here rather than hidden at the renderer:
+ *
+ * 1. UNLABELLED VALUES. route.ts spreads four bare `number[]` sets into the anchor list —
+ *    healthAnchors, goalAnchors, benchmarkAnchors, hypothesisAnchors. They carry no per-value
+ *    provenance, so they contributed the junk: -800, -600, -100, 100. A chart axis or a percentage
+ *    constant is not a source. They are still passed to the VERIFIER (Check 6 validates against a
+ *    wider corpus, and more is better there) — they simply stop being stored as clickable sources.
+ *
+ * 2. COLLISIONS. anchorLabels is keyed by String(value), so two metrics that happen to share a
+ *    value collapse to one key and the last write wins. On a quiet day revenue-today, the weekly
+ *    target and a promo count are ALL 0 — the owner would click 0 and read whichever label
+ *    happened to be assigned last. A number whose meaning is ambiguous cannot be a source, so an
+ *    ambiguous value is dropped entirely rather than labelled with a coin-flip.
+ *
+ * The result is the invariant the UI needs: anchors and labels are the same length, and every
+ * stored anchor resolves.
+ */
+export interface LabelledAnchor { value: number | null | undefined; label: string }
+
+export function buildProvenance(pairs: LabelledAnchor[]): { anchors: number[]; anchorLabels: Record<string, string> } {
+  const byValue = new Map<string, { value: number; labels: Set<string> }>()
+
+  for (const { value, label } of pairs) {
+    if (typeof value !== 'number' || !isFinite(value)) continue
+    if (typeof label !== 'string' || !label.trim()) continue
+    const key = String(value)
+    const entry = byValue.get(key) ?? { value, labels: new Set<string>() }
+    entry.labels.add(label.trim())
+    byValue.set(key, entry)
+  }
+
+  const anchors: number[] = []
+  const anchorLabels: Record<string, string> = {}
+  for (const [key, { value, labels }] of byValue) {
+    // Ambiguous: the same number means two different things this turn. Saying either would be a
+    // coin-flip presented as a fact, so it is not offered as a source at all.
+    if (labels.size !== 1) continue
+    anchors.push(value)
+    anchorLabels[key] = [...labels][0]!
+  }
+  return { anchors, anchorLabels }
+}
+
 export function segmentFigures(text: string, input: ProvenanceInput = {}): FigureSegment[] {
   const src = String(text ?? '')
   const anchors = input.anchors ?? []
