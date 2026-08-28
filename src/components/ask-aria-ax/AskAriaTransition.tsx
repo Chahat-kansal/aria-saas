@@ -411,7 +411,11 @@ export default function AskAriaTransition() {
   // ── what the status pill says. Real state, never a timer. ───────────────────────────────────
   const doing = isBusy
     ? (stage === 'streaming' ? 'Writing' : 'Reading your till')
-    : (ctxLoading ? 'Looking at your day' : 'Watching your till')
+    // S6 PHASE 5 — was 'Watching your till', which sat directly above "Takings today A$0.00".
+    // Aria does not watch anything continuously: it reads the business on load and when asked.
+    // 'Connected' is the true version of that and claims no surveillance it isn't doing. The till's
+    // actual state belongs in the tagline below, where it can be stated as a fact.
+    : (ctxLoading ? 'Looking at your day' : 'Connected')
 
   // ── the headline: what Aria actually noticed ────────────────────────────────────────────────
   const noticed = ctx?.noticed ?? []
@@ -525,9 +529,16 @@ export default function AskAriaTransition() {
             {headline.lead} <em>{headline.em}</em>
           </div>
           <div className="tagline">
+            {/* S6 PHASE 5 — "I've been watching your stock, your money and your people ALL DAY" is
+                the strongest unsupported claim on the surface: Aria reads the business on load, not
+                continuously. Note what was NOT wrong — the domains are real (95 products, 1,802
+                completed sales, 4 active staff, 51 customers), so this is not corrected into "I
+                have no data", which would be its own untruth. Only the continuity claim goes.
+                When the till is empty today, that fact leads, because it is the thing the owner
+                can act on. */}
             {revenue
-              ? 'Takings today ' + formatAxFigure(revenue) + '. I’ve been watching your stock, your money and your people.'
-              : 'I’ve been watching your stock, your money and your people all day.'}
+              ? 'Takings today ' + formatAxFigure(revenue) + '. Connected to your till, stock and people.'
+              : 'Nothing through the till yet today. Connected to your till, stock and people.'}
           </div>
 
           <div className="live">
@@ -639,7 +650,9 @@ export default function AskAriaTransition() {
                   return first ? fallbackTitle(first) : 'Ask Aria'
                 })()
               }</b>
-              <span>Always on · connected records only</span>
+              {/* S6 PHASE 5 — "Always on" is the same continuity claim in miniature. The honest
+                  half of this line was always the second half. */}
+              <span>Connected records only</span>
             </div>
             <div className="r">
               {/* The share button is GONE. There is no thread-share route — only
