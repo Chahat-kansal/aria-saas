@@ -23,8 +23,11 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*
 describe('S3 phase 1 · the four links that were broken', () => {
   it('LINK 1 — the route carries anchors out of the nested scope that computes them', () => {
     const c = code(ROUTE)
+    // S6 PHASE 2 — REWRITTEN. The carrier is unchanged; what fills it changed. It used to take
+    // anchorValues wholesale (33 values, 4 labels). It now takes labelled pairs through
+    // buildProvenance(), so anchors and labels are the same length by construction.
     expect(c).toMatch(/let turnProvenance: \{ anchors: number\[\]; anchorLabels: Record<string, string> \} \| null = null/)
-    expect(c).toMatch(/turnProvenance = \{ anchors: anchorValues, anchorLabels \}/)
+    expect(c).toMatch(/turnProvenance = buildProvenance\(\[/)
   })
 
   it('LINK 2 — it is persisted WITH the message, not just returned', () => {
@@ -54,9 +57,10 @@ describe('S3 phase 1 · the four links that were broken', () => {
 
   it('MUTATION PROBE — stripping the tier at the assembly step is detectable', () => {
     // The sprint's named mutation: break the assembly and the assertion must go red.
-    const mutated = ROUTE.replace('turnProvenance = { anchors: anchorValues, anchorLabels }', '')
+    // S6 PHASE 2 — REWRITTEN to the new assembly step. Same guarantee: break it, this goes red.
+    const mutated = ROUTE.replace('turnProvenance = buildProvenance([', 'const _dropped = ([')
     expect(mutated).not.toBe(ROUTE)
-    expect(code(mutated)).not.toMatch(/turnProvenance = \{ anchors: anchorValues, anchorLabels \}/)
+    expect(code(mutated)).not.toMatch(/turnProvenance = buildProvenance\(\[/)
   })
 
   it('MUTATION PROBE — dropping the prop at the renderer is detectable', () => {
@@ -113,6 +117,9 @@ describe('S3 phase 1 · the tier is never generous', () => {
 
 describe('S3 phase 1 · the labels describe queries that actually ran', () => {
   it('every label is attached to a named query result, not to a spread set', () => {
+    // S6 PHASE 2 — REWRITTEN. labelAnchor() keyed a shared map by String(value), which is how
+    // two metrics with the same number collapsed to one label. Labels are now (value, label)
+    // PAIRS, so the same guarantee is expressed against the pair list.
     const c = code(ROUTE)
     for (const [sym, text] of [
       ['revToday', 'Completed sales, today.'],
@@ -121,11 +128,15 @@ describe('S3 phase 1 · the labels describe queries that actually ran', () => {
       ['revSwlm', 'Completed sales, the same week last month.'],
       ['targetWeekly', 'Your weekly revenue target.'],
     ] as const) {
-      expect(c, sym + ' must be labelled').toContain(`labelAnchor(${sym}, '${text}')`)
+      expect(c.replace(/\s+/g, ' '), sym + ' must be labelled')
+        .toContain(`{ value: ${sym}, label: '${text}' }`)
     }
   })
 
   it('labelAnchor refuses a non-finite value rather than keying on NaN', () => {
-    expect(code(ROUTE)).toMatch(/if \(typeof n === 'number' && isFinite\(n\)\) anchorLabels\[String\(n\)\] = text/)
+    // S6 PHASE 2 — REWRITTEN. The guard moved into buildProvenance(), where it is covered by a
+    // real unit test ("non-finite values never enter") rather than a regex over the route.
+    expect(code(read('src/lib/aria/figure-provenance.ts')))
+      .toMatch(/if \(typeof value !== 'number' \|\| !isFinite\(value\)\) continue/)
   })
 })
