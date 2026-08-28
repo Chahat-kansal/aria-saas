@@ -1,3 +1,4 @@
+import { isContentFreeBlock } from '@/lib/aria/block-content'
 'use client'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, AreaChart, Area, PieChart, Pie, Legend } from 'recharts'
 import { useEffect, useRef, useState } from 'react'
@@ -448,6 +449,11 @@ function SlidesBlock({ block }: { block: Extract<AskBlock, { type: 'slides' }> }
 }
 
 function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onAction?: (prompt: string) => void; theme?: 'light' | 'dark' }) {
+  // S6 PHASE 1 — never draw a panel whose body is empty. The council header and its four role
+  // labels used to render over nothing whenever the model returned prose instead of sections.
+  // Shared with the route and the dashboard renderer so "empty" cannot mean three different things.
+  if (isContentFreeBlock(block)) return null
+
   switch (block.type) {
     case 'lead':
       return <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>{block.content}</p>

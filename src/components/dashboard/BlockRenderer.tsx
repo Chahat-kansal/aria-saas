@@ -1,3 +1,4 @@
+import { isContentFreeBlock } from '@/lib/aria/block-content'
 'use client'
 import type { AskBlock } from '@/lib/aria/ask-types'
 import { sanitizeHtml } from '@/lib/security/sanitize-html'
@@ -12,6 +13,11 @@ const trendIcon = (t?: string) => t === 'up' ? '↑' : t === 'down' ? '↓' : '�
 const trendColor = (t?: string, c?: string) => c ?? (t === 'up' ? G : t === 'down' ? R : 'rgba(255,255,255,0.35)')
 
 export function BlockRenderer({ block, onChoice }: Props) {
+  // S6 PHASE 1 — never draw a panel whose body is empty. The council header and its four role
+  // labels used to render over nothing whenever the model returned prose instead of sections.
+  // Shared with the route and the other renderer so "empty" cannot mean three different things.
+  if (isContentFreeBlock(block)) return null
+
   if (!block || !block.type) return null
   try {
 

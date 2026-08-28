@@ -43,6 +43,8 @@ import { AbortedByCaller } from '@/lib/aria/providers/anthropic'
 import {
   supersedeLastAssistant, supersedeFrom, liveIndexToAbsolute, type ThreadMessage,
 } from '@/lib/aria/conversation-branch'
+import { dropContentFreeBlocks } from '@/lib/aria/block-content'
+import type { AskBlock as AskBlockType } from '@/lib/aria/ask-types'
 import {
   buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle,
 } from '@/lib/aria/thread-title'
@@ -1355,7 +1357,14 @@ Rules:
             }).catch(() => {})
         }
         return NextResponse.json({
-          blocks: (councilBlocks && councilBlocks.length > 0) ? councilBlocks : [{ type: 'lead', content: councilText }],
+          // S6 PHASE 1 — drop any block that would render its header with nothing under it. The
+          // council IS meant to return sections (council.ts:457-461 asks for them); when the model
+          // returns one paragraph instead, `ask_blocks` can still carry an empty brain_readouts,
+          // and the renderer would print COUNCIL READ + four role labels over nothing.
+          blocks: (() => {
+            const kept = dropContentFreeBlocks(councilBlocks as AskBlockType[] | null)
+            return kept.length > 0 ? kept : [{ type: 'lead', content: councilText }]
+          })(),
           followups: council.ask_followups ?? [],
           used_council: true,
           // S3 PHASE 1 — the anchors travel to the client so the renderer can tier the figures it
