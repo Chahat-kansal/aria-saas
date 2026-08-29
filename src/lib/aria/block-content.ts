@@ -33,6 +33,54 @@ function speaks(v: unknown): boolean {
   return typeof v === 'string' && v.trim().length > 0
 }
 
+/** An array that contains at least one entry carrying something. */
+function hasEntries(v: unknown): boolean {
+  if (!Array.isArray(v) || v.length === 0) return false
+  return v.some(entry => {
+    if (entry === null || entry === undefined) return false
+    if (typeof entry === 'string') return entry.trim().length > 0
+    if (typeof entry === 'number') return Number.isFinite(entry)
+    if (typeof entry === 'object') {
+      return Object.entries(entry as Record<string, unknown>)
+        // `&&` binds tighter than `||`, so this needs the parentheses: without them a `type` key
+        // holding a number would count as content and keep an otherwise-empty entry alive.
+        .some(([k, val]) => k !== 'type' && (speaks(val) || (typeof val === 'number' && Number.isFinite(val))))
+    }
+    return true
+  })
+}
+
+/**
+ * S7 PHASE 2 — WHICH FIELD IS THE BODY, PER BLOCK TYPE.
+ *
+ * S6 taught this predicate three shapes. The live screenshot showed a fourth — a `data_table`
+ * carrying `TOP CUSTOMERS — ALL LAPSED 60+ DAYS` with columns and no rows — and the phase-1
+ * inventory found 13 types in total that can print a header over an empty body.
+ *
+ * ⚠️ `data_table`'s body is `rows`, NOT `columns`. Columns ARE the header: a table with columns and
+ * no rows is exactly the reported defect, so counting a non-empty `columns` as content would
+ * reproduce the bug while looking like a fix. Same reasoning for `spreadsheet`'s `headers`.
+ *
+ * A type listed here is content-free when NONE of its body fields carries an entry. A type NOT
+ * listed is never dropped — S6's conservative rule, kept deliberately: losing a real answer is far
+ * worse than showing an empty panel, and this map is a claim about shapes we have actually read.
+ */
+const BODY_FIELDS: Record<string, string[]> = {
+  data_table:       ['rows'],
+  spreadsheet:      ['rows'],
+  comparison_table: ['rows'],
+  action_card:      ['buttons'],
+  action_list:      ['items'],
+  menu_list:        ['items'],
+  metric_row:       ['items'],
+  task_plan:        ['steps'],
+  infographic:      ['sections'],
+  slides:           ['slides'],
+  chart:            ['values', 'metrics'],
+  bar:              ['data'],
+  styled_chart:     ['data'],
+}
+
 /**
  * True when a block would render its chrome and promise content it does not have.
  *
@@ -43,6 +91,9 @@ function speaks(v: unknown): boolean {
 export function isContentFreeBlock(block: AskBlock | null | undefined): boolean {
   if (!block || typeof block !== 'object') return true
   const b = block as Record<string, unknown>
+
+  const bodyFields = BODY_FIELDS[String(b.type)]
+  if (bodyFields) return !bodyFields.some(f => hasEntries(b[f]))
 
   switch (b.type) {
     case 'brain_readouts': {
