@@ -3,6 +3,7 @@ import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
 import { toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { computeCostCentsWithCache } from './cost'
 import type { AskBlock } from './ask-types'
+import { inspectTruncation, classifyOutcome, truncationSignal, type ModelOutcome } from './truncation'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
 import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSummariesForPrompt } from './memory/recall'
@@ -28,6 +29,13 @@ interface BrainOutput {
   verify_findings?: string // I9: advisor's VERIFY step (what the data says)
   raw: string
   succeeded: boolean
+  /**
+   * S8 PHASE 1 — `succeeded: false` never said why, so a truncated advisor and a model that
+   * returned prose were the same event. They need different fixes, so they are now different
+   * words. 'ok_at_ceiling' is NOT a failure: it parsed, and it is recorded only because the
+   * budget is provably tight.
+   */
+  outcome?: ModelOutcome
 }
 
 export interface CouncilResult {
@@ -272,7 +280,18 @@ async function callBrain(
     const res = await callWithTimeout(
       () => withBackoff(() => client.messages.create({
         model,
-        max_tokens: 1200,
+        // S8 PHASE 1 — WAS 1200, AND THE DISTRIBUTION WAS VISIBLY CLIPPED AGAINST IT.
+        // Measured over 1,016 real advisor calls (billing-outage rows excluded): avg 896,
+        // p50 878, p90 1160, p99 1200, max 1200, and 8% pinned exactly at the cap. A p90 at
+        // 97% of the ceiling is not a distribution, it is a wall. On the reported turn three
+        // of four advisors hit it and two were lost mid-JSON.
+        //
+        // This is the same class S4 fixed at 300 in suggestions, and the fix is the same one:
+        // the budget, never the parser. Nothing here accepts truncated output.
+        //
+        // 4000 is ~4.5x the median, so it costs nothing for the 92% that never approach it —
+        // max_tokens is a cap, not a reservation, and output is billed on what is produced.
+        max_tokens: 4000,
         temperature: 0.25,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
@@ -282,12 +301,31 @@ async function callBrain(
     )
     const text = res.content.filter((b: {type:string}) => b.type === 'text').map((b: {type:string,text?:string}) => (b as {text:string}).text).join('')
     const parsed = safeParseJSON(text)
+    // S8 PHASE 1 — the two facts together, never either alone. `res.stop_reason` is the model's
+    // own account of why it stopped; `!!parsed` is whether OUR parser survived it. Only the pair
+    // distinguishes "ran out of room and lost the structure" from "ran out of room having already
+    // finished it" — and 69 of the 81 historical ceiling-hits are the second kind.
+    const trunc = inspectTruncation(res)
+    const outcome = classifyOutcome(trunc, !!parsed)
     await logAICall({
       agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
       input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
       success: !!parsed, business_id: businessId, request_summary: requestSummary,
     })
-    if (!parsed) return { role, observations: [], recommendations: [], confidence: 'low', raw: text, succeeded: false }
+    if (trunc.hitCeiling) {
+      // Queryable without Vercel log access — the same reason council's log-failure fallback
+      // writes its rejection reason into a row rather than console.error alone.
+      await logAICallSafe({
+        business_id: businessId, agent_key: 'council_ceiling', provider: 'other', role: 'other',
+        success: outcome !== 'truncated_mid_structure',
+        request_summary: 'council_' + role,
+        response_summary: 'stop_reason=' + (trunc.stopReason ?? 'null') + ' out=' + (trunc.outputTokens ?? '?'),
+        learning_signal: truncationSignal('council_' + role, trunc, outcome),
+      })
+      console.error('[council] ' + role + ' hit its token ceiling — outcome=' + outcome
+        + ' output_tokens=' + (trunc.outputTokens ?? '?'))
+    }
+    if (!parsed) return { role, observations: [], recommendations: [], confidence: 'low', raw: text, succeeded: false, outcome }
     return {
       role,
       observations: Array.isArray(parsed.observations) ? parsed.observations as string[] : [],
@@ -297,6 +335,7 @@ async function callBrain(
       verify_findings: typeof parsed.verify_findings === 'string' ? parsed.verify_findings : undefined,
       raw: text,
       succeeded: true,
+      outcome,
     }
   } catch (e) {
     await logAICall({
@@ -304,7 +343,10 @@ async function callBrain(
       input_tokens: 0, output_tokens: 0, success: false, business_id: businessId,
       error_message: (e as Error).message, request_summary: requestSummary,
     })
-    return { role, observations: [], recommendations: [], confidence: 'low', raw: '', succeeded: false }
+    // An exception is not a truncation. 1,904 of the ~1,920 historical exceptions on these four
+    // agent keys were "credit balance is too low" — a billing condition, not a budget one — and
+    // conflating the two would send the next reader looking at max_tokens for a payment problem.
+    return { role, observations: [], recommendations: [], confidence: 'low', raw: '', succeeded: false, outcome: 'unparseable' }
   }
 }
 
@@ -1129,6 +1171,25 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
     )
     const text = res.content.filter((b: {type:string}) => b.type === 'text').map((b: {type:string,text?:string}) => (b as {text:string}).text).join('')
     const parsed = safeParseJSON(text)
+
+    // S8 PHASE 1 — DETECTION ONLY. THE SYNTHESIS BUDGET IS NOT CHANGED, AND THAT IS A MEASURED
+    // DECISION, NOT AN OVERSIGHT: 258 real calls, max output 1,613 against max_tokens 6000, 3
+    // failures. Nothing in the data says 6000 is tight, so nothing here moves it — the sprint's
+    // own rule is that observed output beats static analysis. But detection costs nothing and the
+    // day this DOES clip, it will say so instead of silently returning half an answer.
+    const synthTrunc = inspectTruncation(res)
+    const synthOutcome = classifyOutcome(synthTrunc, !!parsed)
+    if (synthTrunc.hitCeiling) {
+      await logAICallSafe({
+        business_id: businessId, agent_key: 'council_ceiling', provider: 'other', role: 'other',
+        success: synthOutcome !== 'truncated_mid_structure',
+        request_summary: 'council_synthesis',
+        response_summary: 'stop_reason=' + (synthTrunc.stopReason ?? 'null') + ' out=' + (synthTrunc.outputTokens ?? '?'),
+        learning_signal: truncationSignal('council_synthesis', synthTrunc, synthOutcome),
+      })
+      console.error('[council] synthesis hit its token ceiling — outcome=' + synthOutcome
+        + ' output_tokens=' + (synthTrunc.outputTokens ?? '?'))
+    }
 
     await logAICall({
       agent_key: 'council_synthesis', model_id: synthesisModel, provider: 'anthropic',
