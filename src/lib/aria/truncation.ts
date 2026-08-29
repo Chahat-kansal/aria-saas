@@ -73,6 +73,30 @@ export function inspectTruncation(res: unknown): TruncationCheck {
 }
 
 /**
+ * The same question, asked of Gemini.
+ *
+ * S8 PHASE 5 (open-bugs #4) — the Gemini context brain sets `maxOutputTokens: 1500`, parses the
+ * reply as JSON, and never read why the model stopped. Same class as the Anthropic advisors, in
+ * the one provider phase 1 could not reach: there is no `stop_reason` here, the field is
+ * `candidates[0].finishReason` and the value is 'MAX_TOKENS'.
+ *
+ * It lives in THIS file rather than in context-brain.ts on purpose. A second definition of
+ * "truncated" is how N-copies drift starts, and that file already carries a second private
+ * `safeParseJSON` — one duplicate in a file is enough.
+ */
+export function inspectGeminiTruncation(data: unknown): TruncationCheck {
+  const d = (data ?? {}) as { candidates?: Array<{ finishReason?: unknown }>; usageMetadata?: { candidatesTokenCount?: unknown } }
+  const reason = d.candidates?.[0]?.finishReason
+  const stopReason = typeof reason === 'string' ? reason : null
+  const out = d.usageMetadata?.candidatesTokenCount
+  return {
+    hitCeiling: stopReason === 'MAX_TOKENS',
+    stopReason,
+    outputTokens: typeof out === 'number' ? out : null,
+  }
+}
+
+/**
  * The pair that matters: did it run out of room, and did the structure survive.
  *
  * `parsed` is whether the caller's OWN parser succeeded — this module never parses anything itself,

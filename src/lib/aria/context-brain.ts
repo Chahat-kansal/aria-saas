@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { inspectGeminiTruncation, classifyOutcome, truncationSignal } from './truncation'
 
 export type ContextBrainOutput = {
   external_factors: string[]
@@ -115,7 +116,25 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
 
     await logCall({ business_id: businessId, success: true, input_tokens: inputTokens, output_tokens: outputTokens })
 
+    // S8 PHASE 5 (open-bugs #4) — WHY it stopped, not just that it did. Before this, a context
+    // brain that ran out of room at maxOutputTokens returned `failed: true`, which is exactly what
+    // a network error returns — so a budget problem and an outage were the same event, and neither
+    // could be counted. Same classification as the Anthropic advisors, same module: hitting the
+    // ceiling is only a FAILURE when the structure did not survive it.
     const parsed = safeParseJSON(raw)
+    const gTrunc = inspectGeminiTruncation(data)
+    const gOutcome = classifyOutcome(gTrunc, !!parsed)
+    if (gTrunc.hitCeiling) {
+      console.error('[context-brain] hit its token ceiling — outcome=' + gOutcome
+        + ' output_tokens=' + (gTrunc.outputTokens ?? '?'))
+      await logCall({
+        business_id: businessId,
+        success: gOutcome !== 'truncated_mid_structure',
+        input_tokens: 0,
+        output_tokens: gTrunc.outputTokens ?? 0,
+        error_message: truncationSignal('context_brain', gTrunc, gOutcome),
+      })
+    }
     if (!parsed) return { ...FAILED }
 
     const conf = parsed.confidence as string

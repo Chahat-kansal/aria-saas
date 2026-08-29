@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { inspectTruncation, classifyOutcome, isBudgetProblem, truncationNote } from './truncation'
+import { inspectTruncation, inspectGeminiTruncation, classifyOutcome, isBudgetProblem, truncationNote } from './truncation'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
@@ -23,8 +23,12 @@ const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\
  * ── WHAT THIS RAIL CANNOT CATCH, and the list is not short ─────────────────────────────────────
  *   · Whether a ceiling is BIG ENOUGH. Only production data can say that. The rail pins the one
  *     number we have evidence for and cannot derive the others.
- *   · Non-Anthropic calls. `context-brain.ts` calls Gemini over raw fetch and has no `max_tokens`
- *     at all, so `stop_reason` does not exist for it. It is out of this rail's reach, by provider.
+ *   · ~~Non-Anthropic calls.~~ FIXED IN S8 PHASE 5 (open-bugs #4). This said the Gemini context
+ *     brain was "out of this rail's reach, by provider". It was, and then it was the register's #4
+ *     and it got fixed — `inspectGeminiTruncation` reads `candidates[0].finishReason`. The line is
+ *     struck rather than deleted because a stale "cannot catch" claim is how a fixed gap gets
+ *     re-reported as open, and this file's whole point is being honest about its own limits.
+ *     What remains true: the RAIL (the messages.create scan) still only walks council.ts.
  *   · Ceilings passed as variables rather than literals — the ask route computes `maxTokens` from
  *     the routed model, so the scan sees a name, not a number.
  *   · Whether the truncation, once detected, is HANDLED well. Phase 2 is about that.
@@ -95,6 +99,26 @@ describe('S8 phase 1 · the token-ceiling rail', () => {
       .toBe(false)   // 4000 tokens and NOT truncated — length proves nothing
     expect(inspectTruncation(null)).toEqual({ hitCeiling: false, stopReason: null, outputTokens: null })
     expect(inspectTruncation({}).hitCeiling).toBe(false)
+  })
+
+  it('S8 PHASE 5 — the Gemini brain can now notice its own ceiling too', () => {
+    // open-bugs #4. Different provider, different field name, SAME module — a second definition of
+    // "truncated" is how N-copies drift starts, and context-brain.ts already carries a second
+    // private safeParseJSON.
+    expect(inspectGeminiTruncation({ candidates: [{ finishReason: 'MAX_TOKENS' }], usageMetadata: { candidatesTokenCount: 1500 } }))
+      .toEqual({ hitCeiling: true, stopReason: 'MAX_TOKENS', outputTokens: 1500 })
+    expect(inspectGeminiTruncation({ candidates: [{ finishReason: 'STOP' }] }).hitCeiling).toBe(false)
+    expect(inspectGeminiTruncation({}).hitCeiling).toBe(false)
+    expect(inspectGeminiTruncation(null)).toEqual({ hitCeiling: false, stopReason: null, outputTokens: null })
+    // Anthropic's value must NOT be accepted here, and vice versa — the two providers spell it
+    // differently and a detector that accepted both would be quietly wrong for one of them.
+    expect(inspectGeminiTruncation({ candidates: [{ finishReason: 'max_tokens' }] }).hitCeiling).toBe(false)
+    expect(inspectTruncation({ stop_reason: 'MAX_TOKENS' }).hitCeiling).toBe(false)
+
+    // and the context brain actually calls it
+    const cb = strip(read('src/lib/aria/context-brain.ts'))
+    expect(cb).toContain('inspectGeminiTruncation(data)')
+    expect(cb).toContain("from './truncation'")
   })
 
   it('NO PARSER WAS WIDENED — safeParseJSON is still strict', () => {
