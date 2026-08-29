@@ -52,6 +52,26 @@ That reframes phase 2. It is not "add the guard to more renderers" — every ren
 34 types exist. **12 have a header/label plus an array body**, and are unjudged today. Plus
 `spreadsheet`, which has column headers and rows but no title — the same failure without the label.
 
+> ## ⚠️ CORRECTED IN PHASE 3 — THIS TABLE UNDERCOUNTED BY FOUR
+>
+> **17, not 13.** The scan that produced this table was line-anchored (`/^\s*(\w+):/m`).
+> `ask-types.ts` is written in **two formatting eras**: multi-line variants above line ~160, and
+> single-line ones (`| { type: 'x'; title?: string; items: Array<{...}> }`) below it. A line-anchored
+> field scan reads the first era and is **blind to the second — 11 of the 34 types**.
+>
+> Four of those eleven have the defect and are listed in the table below. All four were verified in
+> the JSX, not inferred: `progress_bars` and `activity_stream` print an uppercase title into a panel
+> and then `items.map()`; `clay_chart` draws a solid accent-coloured card with a title bar over an
+> empty 100px chart container; `bento_grid` has no title but still draws a padded grid box around
+> nothing.
+>
+> The phase-3 rail now carries an **anti-vacuity assertion** for exactly this: every type the
+> predicate claims to judge must be one the rail's own scan actually reached. Reverting the scan to
+> the line-anchored version makes the rail fail with
+> `the scan never reached these judged types: bento_grid, progress_bars, activity_stream, clay_chart`
+> instead of reporting all-clear. That is failure pattern #5 — a diagnostic that measures the wrong
+> thing and calls it a finding — caught by the rail built to catch the class it belongs to.
+
 | block type | chrome it prints | body that can be empty | judged today? |
 |---|---|---|---|
 | `data_table` | `title`, `columns` | **`rows`** | ❌ ← **the screenshot** |
@@ -67,6 +87,10 @@ That reframes phase 2. It is not "add the guard to more renderers" — every ren
 | `bar` | `title`, axis labels | `data` | ❌ |
 | `styled_chart` | `title`, axis labels | `data` | ❌ |
 | `spreadsheet` | `filename`, `headers` | `rows` | ❌ |
+| `progress_bars` | `title` | `items` | ❌ ← **missed here, found in phase 3** |
+| `activity_stream` | `title` | `items` | ❌ ← **missed here, found in phase 3** |
+| `clay_chart` | `title` bar in the accent colour | `data` | ❌ ← **missed here, found in phase 3** |
+| `bento_grid` | padded grid box (no title) | `items` | ❌ ← **missed here, found in phase 3** |
 | `brain_readouts` | "Council read" panel | `items` | ✅ S6 |
 | `council_split` | Growth/Risk/Strategy boxes | text + `choices` | ✅ S6 |
 | `lead` | — | `content` | ✅ S6 |
@@ -80,8 +104,10 @@ reproduce it.
 ## THE ANSWER TO THE PHASE
 
 > **Renderers: 2. Renderers with the defect: 2 — but not for the reason assumed.**
-> Both are guarded; the guard is blind to 31 of 34 types, 13 of which can print a header over an
+> Both are guarded; the guard is blind to 31 of 34 types, **17** of which can print a header over an
 > empty body. That is one fix in one predicate, not two renderers to patch.
+>
+> *(13 when this was written; corrected to 17 in phase 3 — see the box above.)*
 
 ## WHAT THIS INVENTORY DOES NOT COVER
 

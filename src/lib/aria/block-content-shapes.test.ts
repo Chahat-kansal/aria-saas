@@ -57,6 +57,12 @@ describe('S7 phase 2 · every header+body shape from the inventory', () => {
     ['chart',            { values: [] },   { values: [1, 2, 3] }],
     ['bar',              { data: [] },     { data: [{ x: 1, y: 2 }] }],
     ['styled_chart',     { data: [] },     { data: [{ x: 1, y: 2 }] }],
+    // S7 phase 3 — found by the rail, in the single-line half of ask-types.ts that every
+    // line-anchored scan before it had skipped.
+    ['bento_grid',       { items: [] },    { items: [{ label: 'Sales', value: 12 }] }],
+    ['progress_bars',    { items: [] },    { items: [{ label: 'Stock', value: 40 }] }],
+    ['activity_stream',  { items: [] },    { items: [{ text: 'Sale at 9:04' }] }],
+    ['clay_chart',       { data: [] },     { data: [{ name: 'Mon', value: 4 }] }],
   ]
 
   for (const [type, empty, full] of cases) {

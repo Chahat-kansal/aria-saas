@@ -64,8 +64,11 @@ function hasEntries(v: unknown): boolean {
  * A type listed here is content-free when NONE of its body fields carries an entry. A type NOT
  * listed is never dropped — S6's conservative rule, kept deliberately: losing a real answer is far
  * worse than showing an empty panel, and this map is a claim about shapes we have actually read.
+ *
+ * Exported so the phase-3 rail can assert its own scan reaches at least every type claimed here —
+ * an under-reaching scan would report "nothing unjudged" and mean nothing by it.
  */
-const BODY_FIELDS: Record<string, string[]> = {
+export const BODY_FIELDS: Record<string, string[]> = {
   data_table:       ['rows'],
   spreadsheet:      ['rows'],
   comparison_table: ['rows'],
@@ -79,6 +82,20 @@ const BODY_FIELDS: Record<string, string[]> = {
   chart:            ['values', 'metrics'],
   bar:              ['data'],
   styled_chart:     ['data'],
+
+  // S7 PHASE 3 — FOUND BY THE RAIL, MISSED BY PHASES 1 AND 2.
+  // ask-types.ts is written in two eras: multi-line variants above line ~160, single-line ones
+  // below it. Both earlier scans were line-anchored, so they read the multi-line half and were
+  // blind to the single-line half — which is 11 of the 34 types. These four are the same defect
+  // as data_table, sitting in the half nobody had looked at:
+  //   progress_bars / activity_stream — uppercase title, then items.map() into an empty panel
+  //   clay_chart                      — a solid accent-coloured card with a title bar and an
+  //                                     empty 100px chart container under it
+  //   bento_grid                      — no title, but a padded grid box drawn around nothing
+  bento_grid:       ['items'],
+  progress_bars:    ['items'],
+  activity_stream:  ['items'],
+  clay_chart:       ['data'],
 }
 
 /**
