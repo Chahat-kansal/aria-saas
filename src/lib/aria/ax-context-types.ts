@@ -28,6 +28,14 @@ export interface AxNotice {
   tone: 'blue' | 'amber' | 'violet' | 'green'
   /** What clicking it asks Aria. */
   prompt: string
+  /**
+   * S8 PHASE 3 — WHICH RECORD `id` REFERS TO, so a click can carry identity instead of a display
+   * string. 'aria_action' means `id` is an aria_actions UUID. 'computed' means this notice has no
+   * row behind it (the zero-till and low-stock notices are derived on the fly) and its prompt is a
+   * self-contained question that never suffered the amnesia bug. Optional so an older cached
+   * payload still renders — absent is treated as 'computed', which passes no reference.
+   */
+  source?: 'aria_action' | 'computed'
   /** Higher first. Ranked by how much it matters, not by recency. */
   rank: number
 }

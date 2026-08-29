@@ -24,7 +24,8 @@ export interface AwaitingRoomProps {
   ctx: AxContext | null
   loading?: boolean
   unreadable?: boolean
-  onPrompt: (prompt: string) => void
+  /** S8 PHASE 3 — the record a click came from, when there is one. */
+  onPrompt: (prompt: string, noticeRef?: { id: string; source: 'aria_action' | 'deliverable' }) => void
   /** Rendered inside this room's single container — e.g. the audit log. */
   children?: ReactNode
 }
@@ -69,7 +70,12 @@ export default function AwaitingRoom({ ctx, loading, unreadable, onPrompt, child
           )}
 
           {ctx.awaiting.map(a => (
-            <button className="nt" key={a.id} onClick={() => onPrompt(a.prompt)}>
+            <button
+              className="nt"
+              key={a.id}
+              onClick={() => onPrompt(a.prompt,
+                a.source === 'aria_action' ? { id: a.id, source: 'aria_action' } : undefined)}
+            >
               <span className={a.tone === 'amber' ? 'p' : 'p c'} />
               <span>
                 <span className="h">{a.title}</span>

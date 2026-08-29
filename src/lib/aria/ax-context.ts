@@ -109,6 +109,10 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
         subtitle: truncateAtWord(a.recommendation, 140),
         tone: a.priority === 'high' ? 'amber' : 'blue',
         prompt: `Tell me about "${a.title ?? ''}"`,
+        // S8 PHASE 3 — `id` is already the real aria_actions UUID; this says so, so the click can
+        // send it. Before, the id reached the DOM as a React key and went no further, while the
+        // council got `Tell me about "<title>"` and asked the owner where they had seen it.
+        source: 'aria_action' as const,
         rank: a.priority === 'high' ? 90 : 60,
       })
     }
@@ -143,6 +147,7 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
   if (revenueToday?.provenance === 'measured' && revenueToday.value === 0) {
     noticed.push({
       id: 'no-sales-today',
+      source: 'computed' as const,
       title: 'Nothing has gone through the till today',
       subtitle: 'That is a real zero, not missing data. Worth a look if you expected trade by now.',
       tone: 'amber', prompt: 'Why might today be quiet so far?', rank: 70,
@@ -173,6 +178,7 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
       if (names.length > 0) {
         noticed.push({
           id: 'low-stock',
+          source: 'computed' as const,
           title: `${names.length} ${names.length === 1 ? 'line is' : 'lines are'} at or below your reorder level`,
           subtitle: names.join(', '),
           tone: 'violet', prompt: 'What should I reorder?', rank: 80,

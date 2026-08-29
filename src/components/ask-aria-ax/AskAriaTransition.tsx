@@ -188,6 +188,12 @@ export default function AskAriaTransition() {
      * Both SUPERSEDE rather than delete — the old rows stay in the database (conversation-branch.ts).
      */
     branch?: { regenerate?: true } | { editLiveIndex: number },
+    /**
+     * S8 PHASE 3 — the record this question came from, when it came from clicking one of Aria's
+     * own notices. An id and a source; never the notice's text. The route re-reads the row itself,
+     * scoped to the business, so nothing sent from here has to be trusted.
+     */
+    noticeRef?: { id: string; source: 'aria_action' | 'deliverable' },
   ) => {
     const msg = prompt.trim()
     if (!msg || isBusy) return
@@ -202,6 +208,7 @@ export default function AskAriaTransition() {
     const result = await send({
       message: msg,
       conversation_id: conversationId,
+      ...(noticeRef ? { notice_ref: noticeRef } : {}),
       ...(branch && 'regenerate' in branch ? { regenerate: true } : {}),
       ...(branch && 'editLiveIndex' in branch ? { edit_live_index: branch.editLiveIndex } : {}),
     })
@@ -573,8 +580,17 @@ export default function AskAriaTransition() {
               </div>
             )}
 
+            {/* S8 PHASE 3 — `n.id` was already on the next line as the React key and went no
+                further, while the council got `Tell me about "<title>"` and asked the owner where
+                they had seen it. A 'computed' notice has no row to look up, so it passes no
+                reference rather than a fabricated one. */}
             {!ctxLoading && !ctxUnreadable && noticed.slice(0, 3).map((n, i) => (
-              <button className="nt" key={n.id} onClick={() => ask(n.prompt)}>
+              <button
+                className="nt"
+                key={n.id}
+                onClick={() => void ask(n.prompt, undefined,
+                  n.source === 'aria_action' ? { id: n.id, source: 'aria_action' } : undefined)}
+              >
                 <span className={DOT_CLASS[i] ?? 'p'} />
                 <span>
                   <span className="h">{n.title}</span>
@@ -675,13 +691,14 @@ export default function AskAriaTransition() {
             // ONE .ax-room. The audit log goes INSIDE the room as a child rather than beside it in
             // a second wrapper — nesting two `.ax-room`s gave two competing scroll containers and
             // collapsed the content to a sliver.
-            <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable} onPrompt={ask}>
+            <AwaitingRoom ctx={ctx} loading={ctxLoading} unreadable={ctxUnreadable}
+              onPrompt={(p, ref) => void ask(p, undefined, ref)}>
               {/* Migrated: what Aria has already done, and the rollback path. Real component,
                   real route (/api/aria/ask/audit, /rollback) over aria_action_log. */}
               <AuditLogCard />
             </AwaitingRoom>
           )}
-          {room === 'made' && <MadeForYouRoom onPrompt={ask} />}
+          {room === 'made' && <MadeForYouRoom onPrompt={(p, ref) => void ask(p, undefined, ref)} />}
 
           {room === 'ask' && (
             <div className="flow" ref={flowRef}>

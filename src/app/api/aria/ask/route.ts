@@ -44,6 +44,7 @@ import {
   supersedeLastAssistant, supersedeFrom, liveIndexToAbsolute, type ThreadMessage,
 } from '@/lib/aria/conversation-branch'
 import { dropContentFreeBlocks } from '@/lib/aria/block-content'
+import { formatNoticeContext, isValidNoticeId, isValidNoticeSource, type NoticeRef, type NoticeRecord } from '@/lib/aria/notice-context'
 import { buildProvenance } from '@/lib/aria/figure-provenance'
 import type { AskBlock as AskBlockType } from '@/lib/aria/ask-types'
 import {
@@ -321,6 +322,7 @@ async function _POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let attachments: any[] = []
   let clientMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  let noticeRef: NoticeRef | null = null
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await req.formData()
@@ -342,10 +344,16 @@ async function _POST(
       // S1 phases 2 & 3 — how this turn joins the thread. Absent means a normal new question.
       regenerate?: boolean
       edit_live_index?: number
+      // S8 PHASE 3 — the record a click came from. An id and a source, never content: text from a
+      // client would be both an injection point and a second copy of something already in a table.
+      notice_ref?: { id?: unknown; source?: unknown }
     }
     message = (body.message ?? '').trim()
     conversationId = body.conversation_id ?? null
     clientMessages = Array.isArray(body.messages) ? body.messages.slice(-20) : []
+    if (isValidNoticeId(body.notice_ref?.id) && isValidNoticeSource(body.notice_ref?.source)) {
+      noticeRef = { id: body.notice_ref.id, source: body.notice_ref.source }
+    }
     if (body.regenerate) branchIntent = { mode: 'regenerate' }
     else if (typeof body.edit_live_index === 'number') {
       branchIntent = { mode: 'edit', editLiveIndex: body.edit_live_index }
@@ -1313,7 +1321,31 @@ Rules:
             turns.map(m => `${m.role === 'assistant' ? 'Aria' : 'Owner'}: ${String(m.content ?? '').slice(0, 600)}`).join('\n')
         }
       } catch { /* non-fatal — council still answers without history */ }
-      const council = await runAriaCouncil(augCtx + recentHistoryBlock + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
+      // ── S8 PHASE 3 — THE NOTICE THIS QUESTION CAME FROM ────────────────────────────────────
+      // Re-read server-side and SCOPED TO THIS BUSINESS. The client sent an id; it did not send
+      // the content, and it is not trusted to. The .eq('business_id', bid) is the whole security
+      // story: three production rows share the title this bug was reported against, one per
+      // business, so an unscoped lookup by id would be a cross-business read waiting to happen.
+      let noticeBlock = ''
+      if (noticeRef) {
+        try {
+          const table = noticeRef.source === 'aria_action' ? 'aria_actions' : 'aria_task_outputs'
+          const cols = noticeRef.source === 'aria_action'
+            ? 'id, title, category, priority, status, source, recommendation, reason, expected_impact, confidence, payload, created_at'
+            : 'id, title, output_kind, status, created_at'
+          const { data: noticeRow, error: noticeErr } = await supabaseAdmin
+            .from(table).select(cols)
+            .eq('id', noticeRef.id).eq('business_id', bid).maybeSingle()
+          // RULE 7 — the error is checked, never discarded into an empty result. A notice that
+          // cannot be read means the turn proceeds WITHOUT it, which is the old behaviour, rather
+          // than the turn inventing what the notice might have said.
+          if (noticeErr) console.error('[aria/ask] notice lookup failed:', noticeErr.message)
+          else noticeBlock = formatNoticeContext(noticeRow as NoticeRecord | null, noticeRef.source)
+        } catch (e) {
+          console.error('[aria/ask] notice lookup threw:', (e as Error).message)
+        }
+      }
+      const council = await runAriaCouncil(augCtx + recentHistoryBlock + noticeBlock + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
       // COUNCIL-PORT-1 Parts 6+7: run council synthesis through the HEAL-1/GROUND-1 validator.
       // Council brains make zero LLM tool calls — their grounding is the pre-fetched context
       // (getBusinessContext + facts packet). toolsUsed=1 when that context loaded (mirrors the

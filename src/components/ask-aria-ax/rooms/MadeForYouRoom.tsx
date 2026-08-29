@@ -27,7 +27,8 @@ interface Deliverable {
 }
 
 export interface MadeForYouRoomProps {
-  onPrompt: (prompt: string) => void
+  /** S8 PHASE 3 — the record a click came from, when there is one. */
+  onPrompt: (prompt: string, noticeRef?: { id: string; source: 'aria_action' | 'deliverable' }) => void
 }
 
 function when(iso: string | null): string {
@@ -97,7 +98,11 @@ export default function MadeForYouRoom({ onPrompt }: MadeForYouRoomProps) {
             <button className="gh" onClick={() => void pdf(d.id)} disabled={busy === d.id}>
               {busy === d.id ? 'Working…' : 'PDF'}
             </button>
-            <button className="gh" onClick={() => onPrompt(`Tell me about "${d.title ?? 'this report'}"`)}>
+            <button
+              className="gh"
+              onClick={() => onPrompt(`Tell me about "${d.title ?? 'this report'}"`,
+                { id: d.id, source: 'deliverable' })}
+            >
               Ask about it
             </button>
           </span>
