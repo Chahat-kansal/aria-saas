@@ -1378,6 +1378,12 @@ Rules:
           })(),
           followups: council.ask_followups ?? [],
           used_council: true,
+          // S8 PHASE 2 — WHICH advisors were lost, so the owner is told the answer is narrower
+          // rather than being handed a confident-looking partial. `meta.brains_failed` already
+          // counted them, but that count only ever reached the council_runs table and the agents
+          // dashboard. Empty array = a complete council; the field is never omitted, so a client
+          // cannot read "absent" as "fine".
+          advisors_lost: (council.advisors_lost ?? []).map(a => a.role),
           // S3 PHASE 1 — the anchors travel to the client so the renderer can tier the figures it
           // is about to draw. Null on paths that computed none; never fabricated to fill the field.
           provenance: turnProvenance,

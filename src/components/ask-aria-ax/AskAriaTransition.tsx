@@ -14,6 +14,7 @@ import { SkillPicker } from '@/components/aria/SkillPicker'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import AuditLogCard from '@/components/aria/AuditLogCard'
 import { segmentFigures } from '@/lib/aria/figure-provenance'
+import { advisorShortfallNote } from '@/lib/aria/council-advisors'
 import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
 import { readDraft, writeDraft, clearDraft, adoptDraft } from '@/lib/aria/draft-store'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
@@ -55,6 +56,11 @@ interface Turn {
   usedCouncil?: boolean
   /** S1 phase 1 — the owner pressed Stop. A partial answer, never shown as a finished one. */
   incomplete?: boolean
+  /**
+   * S8 PHASE 2 — the advisors that did not report back on this turn. An answer from two of four
+   * is not wrong, but it must not present as complete.
+   */
+  advisorsLost?: string[]
   /** S1 phase 8 — up to three suggested next questions, from the route's own payload. */
   followups?: string[]
   /**
@@ -213,6 +219,9 @@ export default function AskAriaTransition() {
           usedCouncil: Boolean(result?.used_council),
           // S1 phase 1 — a stopped turn keeps its partial text and says it is partial.
           incomplete: Boolean(result?.incomplete ?? result?.stopped),
+          // Deliberately NOT folded into `incomplete`: that one means "you pressed stop", and
+          // conflating a user's own action with a council shortfall would make both unreadable.
+          advisorsLost: Array.isArray(result?.advisors_lost) ? result.advisors_lost as string[] : undefined,
           // S1 phase 8 — the route already produced these; nothing new is generated for them.
           followups: (Array.isArray(result?.followups) ? result.followups : []).slice(0, 3),
           // S3 phase 1 — carried straight from the route. Never synthesised client-side: the
@@ -759,6 +768,14 @@ export default function AskAriaTransition() {
                         {t.incomplete && (
                           <div className="ax-incomplete">
                             Stopped — this answer is unfinished.
+                          </div>
+                        )}
+                        {/* S8 PHASE 2 — a narrower answer says so. No percentage and no quality
+                            score: the owner cannot act on either, and GROUNDING-TEETH forbids a
+                            number that is not measured. It says what happened and nothing more. */}
+                        {!t.streaming && t.advisorsLost && t.advisorsLost.length > 0 && (
+                          <div className="ax-incomplete">
+                            {advisorShortfallNote(t.advisorsLost.length)}
                           </div>
                         )}
                         {/* Migrated from the old surface's MessageActions: copy, and re-ask. */}

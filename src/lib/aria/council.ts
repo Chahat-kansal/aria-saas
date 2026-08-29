@@ -4,6 +4,7 @@ import { toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { computeCostCentsWithCache } from './cost'
 import type { AskBlock } from './ask-types'
 import { inspectTruncation, classifyOutcome, truncationSignal, type ModelOutcome } from './truncation'
+import { renderAdvisorSection, lostAdvisors, lostAdvisorRule } from './council-advisors'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
 import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSummariesForPrompt } from './memory/recall'
@@ -50,6 +51,13 @@ export interface CouncilResult {
   escalation_reason?: string
   // LOGGING-FIX-1 Part 3: set true when this output was served from council_cache
   served_from_cache?: boolean
+  /**
+   * S8 PHASE 2 — WHICH advisors were lost, not just how many. `meta.brains_failed` has always
+   * carried the count, but a count goes to the council_runs table and the agents dashboard; it
+   * never reached the synthesis prompt and it never reached the owner. This does both.
+   * Empty array = a complete council. Never null, so a consumer cannot mistake "unknown" for "none".
+   */
+  advisors_lost: Array<{ role: string; reason: ModelOutcome | 'unknown' }>
   meta: {
     brains_succeeded: number
     brains_failed: number
@@ -1118,6 +1126,40 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
     learning_signal: `plan_verify_conclude:${confScore}` + (councilConflicts.length ? `|conflicts:${councilConflicts.length}` : ''),
   })
 
+  // ── S8 PHASE 2 — THE COUNCIL MUST KNOW WHAT IT LOST ──────────────────────────────────────────
+  //
+  // WHAT WAS WRONG. The synthesis input rendered all four advisors unconditionally, so a failed
+  // one arrived as:
+  //     RISK BRAIN (confidence: low):
+  //     Observations:
+  //     Recommendations:
+  // Two blank fields under a confident heading. That does not read as "the risk advisor was lost",
+  // it reads as "the risk advisor looked and found nothing" — and the model has no way to tell the
+  // difference. It is exactly the empty-chrome class S6 and S7 fixed in the renderers, one layer
+  // up: a header promising content that was never there. On the reported turn TWO of the four
+  // arrived like this, and synthesis answered an 11,485-token prompt with 556 tokens.
+  //
+  // WHY DEGRADE HONESTLY RATHER THAN RETRY OR FAIL — decided from the code, as the sprint asks:
+  //   · RETRY is the wrong tool. The advisors already run in parallel behind an 18s timeout, so a
+  //     retry doubles the worst case on the owner's most latency-sensitive surface. And a retry of
+  //     a TRUNCATION just truncates again at the same ceiling — phase 1 fixed that cause directly.
+  //   · FAIL throws away a usable answer. `succeeded.length === 0` already returns null; failing on
+  //     one lost advisor would discard three good ones, which is a downgrade.
+  //   · DEGRADE HONESTLY costs nothing, keeps the answer, and removes the only thing that was
+  //     actually wrong: silence being mistaken for a finding.
+  // S8 PHASE 2 — the renderer, the roster and the rule live in ./council-advisors so they can be
+  // tested rather than grepped. See that file for what was wrong and why this degrades honestly
+  // rather than retrying or failing:
+  //   · RETRY is the wrong tool. The advisors run in parallel behind an 18s timeout, so a retry
+  //     doubles the worst case on the owner's most latency-sensitive surface — and retrying a
+  //     TRUNCATION just truncates again at the same ceiling, which is what phase 1 fixed directly.
+  //   · FAIL throws away a usable answer. `succeeded.length === 0` already returns null; failing on
+  //     one lost advisor would discard three good ones, which is a downgrade.
+  //   · DEGRADE HONESTLY keeps the answer and removes the only thing that was actually wrong —
+  //     silence being mistaken for a finding.
+  const advisorsLost = lostAdvisors(brains)
+  const lostRule = lostAdvisorRule(advisorsLost)
+
   const synthesisInput = `
 ${verifiedFiguresBlock ? verifiedFiguresBlock + '\n' : ''}${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}${diagnosticPointer}
 ${goalPointer}
@@ -1125,22 +1167,10 @@ ${openLoopsPointer}
 BUSINESS DATA:
 ${cleanContextStr}
 ${qualitySynthesisBlock}
-GROWTH BRAIN (confidence: ${growth.confidence}):
-Observations: ${growth.observations.join(' | ')}
-Recommendations: ${growth.recommendations.join(' | ')}
-
-RISK BRAIN (confidence: ${risk.confidence}):
-Observations: ${risk.observations.join(' | ')}
-Recommendations: ${risk.recommendations.join(' | ')}
-
-STRATEGY BRAIN (confidence: ${strategy.confidence}):
-Observations: ${strategy.observations.join(' | ')}
-Recommendations: ${strategy.recommendations.join(' | ')}
-Primary lever: ${(strategy.raw && safeParseJSON(strategy.raw)?.primary_lever) ?? 'not identified'}
-
-CONTEXT BRAIN (confidence: ${context.confidence}):
-Observations: ${context.observations.join(' | ')}
-Recommendations: ${context.recommendations.join(' | ')}
+${renderAdvisorSection('GROWTH', growth)}
+${renderAdvisorSection('RISK', risk)}
+${renderAdvisorSection('STRATEGY', strategy, 'Primary lever: ' + String((strategy.succeeded && strategy.raw && safeParseJSON(strategy.raw)?.primary_lever) ?? 'not identified'))}
+${renderAdvisorSection('CONTEXT', context)}${lostRule}
 ${ctxOutput && !ctxOutput.failed ? `
 EXTERNAL CONTEXT (from web search — treat as lower confidence than internal data):
 Factors: ${ctxOutput.external_factors.join(', ') || 'none found'}
@@ -1200,7 +1230,8 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
     if (!parsed) {
       return {
         final_briefing: text.slice(0, 500),
-        raw_brain_outputs: brains,
+        advisors_lost: advisorsLost,
+      raw_brain_outputs: brains,
         context_brain_output: ctxOutput ?? null,
         meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
       }
@@ -1273,6 +1304,7 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
         return true
       }) : undefined,
       ask_followups: mode === 'ask_aria' && Array.isArray(parsed.ask_followups) ? parsed.ask_followups as string[] : undefined,
+      advisors_lost: advisorsLost,
       raw_brain_outputs: brains,
       context_brain_output: ctxOutput ?? null,
       meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: true, fell_back: false, duration_ms: Date.now() - start },
@@ -1298,6 +1330,7 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
 
     return {
       final_briefing: fallbackBriefing || 'Council completed with partial data.',
+      advisors_lost: advisorsLost,
       raw_brain_outputs: brains,
       context_brain_output: ctxOutput ?? null,
       meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
