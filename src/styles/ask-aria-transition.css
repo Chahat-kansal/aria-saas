@@ -393,3 +393,80 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
 .ax-thread-search:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
 .ax-thread-rename{flex:1;min-width:0;margin:2px;padding:8px 11px;font-family:inherit;font-size:13.5px;
   border:1px solid var(--blue);border-radius:12px;outline:0;background:#fff}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   S7 PHASE 4 APPENDS — CONTRAST. EVERY RULE HERE IS AN OVERRIDE, NOT AN EDIT.
+
+   The first version of this phase changed the lifted rules in place. `ax-1.test.ts` caught it:
+   the mockup style block is contract, byte-for-byte, and the failing assertion was right. So the
+   whole fix moved down here. Nothing above this banner was altered — same specificity, later in
+   the cascade, so these win without a single `!important`.
+
+   HOW THE NUMBERS WERE GOT: Chromium (Playwright) loaded this sheet through the real cascade and
+   every text node's COMPUTED colour was measured against its own composited background — 62 nodes
+   at 1280, 1440 and 1920. Not read off the file. 22 nodes were below WCAG AA at every width; all
+   22 are fixed below and the suite now reports 0 at all three.
+
+   NO NEW COLOUR WAS INVENTED. --ink2, --blue and --blue-d were already the sheet's own tokens;
+   #8A5D07 and #8E2C2B were already in it, used exactly this way, and are only given names here.
+
+   AMBER AND RED STILL MEAN WHAT THEY MEANT. Nothing was recoloured to escape a contrast problem
+   and no meaning moved: estimated/awaiting stays amber, warning stays red. Only the shade that
+   carries the LETTERS changes. The estimated underline keeps #F3DDB3, so the tier is still told
+   by the rule under the figure as well as by its colour.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --amber-ink:#8A5D07;   /* amber that can carry text — already in this sheet six times over */
+  --red-ink:#8E2C2B;     /* the red already used by .ax-error-msg */
+}
+
+/* ── 1. --ink3 (#94A3B4) WAS CARRYING WORDS. It is a hairline colour: 2.17–2.57:1 everywhere it
+      held text. --ink2 is the sheet's own secondary text and lands at 4.61–5.46:1. --ink3 itself
+      is NOT removed and is still correct for borders, rules and the wave. ── */
+.nt .arrow{color:var(--ink2)}                 /* 2.52 -> 5.32  the → on a noticed card */
+.rope .l{color:var(--ink2)}                   /* 2.17 -> 4.61  "HOW MUCH ROPE" */
+.bigask input::placeholder{color:var(--ink2)} /* 2.57 -> 5.46  composer placeholder */
+.bigask .mic{color:var(--ink2)}               /* 2.57 -> 5.46  the mic glyph */
+.th span{color:var(--ink2)}                   /* 2.53 -> 5.37  thread subtitle ("Reading your till") */
+.th .r button{color:var(--ink2)}              /* 2.53 -> 5.37  thread header icon buttons */
+.stamp{color:var(--ink2)}                     /* 2.53 -> 5.37  the datestamp */
+.m .who{color:var(--ink2)}                    /* 2.53 -> 5.37  the "Aria" / "You" label */
+.skill{color:var(--ink2)}                     /* 2.53 -> 5.37  the skill line */
+.ph em{color:var(--ink2)}                     /* 2.57 -> 5.46  proposal card timestamp */
+.kb{color:var(--ink2)}                        /* 2.57 -> 5.46  the ⌘⏎ hint */
+.cb{color:var(--ink2)}                        /* 2.57 -> 5.46  composer icon buttons */
+.oath{color:var(--ink2)}                      /* 2.53 -> 5.46  "Aria never invents a number." */
+
+/* ── 2. AMBER AS TEXT. --amber stays the RULE colour under an estimated figure (a 2px border is
+      not text and is exempt); the letters move to --amber-ink. Still amber, still "estimated". ── */
+.n2.est{color:var(--amber-ink)}               /* 2.24 -> 5.65  an ESTIMATED figure */
+.unknown{color:var(--amber-ink)}              /* 2.24 -> 5.65  a figure that could not be read */
+.tt em{color:var(--amber-ink)}                /* 2.24 -> 5.46  the "estimated" label on a total */
+
+/* ── 3. RED AS TEXT, and an opacity that pushed an already-correct colour under AA. ── */
+.errline{color:var(--red-ink)}                /* 3.87 -> 8.11  a streaming error line */
+.ax-error-note{color:var(--red-ink);opacity:1}
+/* 4.19 -> 7.22. opacity:.75 was the whole failure — the colour underneath was fine. The note is
+   still de-emphasised by size and position, which costs nothing in legibility. */
+
+/* ── 4. WHITE ON AMBER COUNT BADGES. #fff on --amber is 2.36:1. The badge stays amber — it is the
+      "awaiting you" colour and that meaning is not for this phase to move — but goes to the shade
+      that can hold white type. ── */
+.ax-room-h span{background:var(--amber-ink)}  /* 2.36 -> 5.75 */
+.nav a .badge{background:var(--amber-ink)}    /* 2.36 -> 5.75 */
+
+/* ── 5. GRADIENTS WHOSE LIGHT END CANNOT HOLD WHITE TEXT. --sky (#60A5FA) gives white 2.54:1 and
+      #3B7BF0 gives 3.98:1, so the avatar initials and the owner's own message were the two least
+      readable things on the surface. Both replacements are the sheet's locked blues, so these stay
+      blue gradients in the same direction — only the unreadable stop changes. --sky is untouched
+      and still used elsewhere. ── */
+.th .av{background:linear-gradient(140deg,var(--blue-d),var(--blue))}    /* 2.54 -> 5.17 */
+.m .a.aria{background:linear-gradient(140deg,var(--blue-d),var(--blue))} /* 2.54 -> 5.17 */
+.ph .d{background:linear-gradient(140deg,var(--blue-d),var(--blue))}     /* 2.54 -> 5.17 */
+.m.me .bub{background:linear-gradient(138deg,var(--blue-d),var(--blue))} /* 3.98 -> 5.17 */
+
+/* ── 6. The takings line was legible on the welcome screen (5.37:1) and not in working mode
+      (3.91:1) — the only difference being opacity:.85. The size change already de-emphasises it. ── */
+.ax-surface.work .tagline{opacity:1}
