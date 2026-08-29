@@ -13,7 +13,11 @@ Canon Rail Guard, E2E Tests, Smoke Suite — die at `npm ci` before any test exe
 `package.json` declares `@vercel/global-config` and the committed lockfile does not contain it.
 `git blame` puts that line in `0ced26289` (POS-OFFLINE-1a, my commit): a dependency change swept in
 without its lockfile — exactly the `git add -A` hazard CLAUDE.md warns about. **Fixed in phase 5**,
-and reproduced both ways locally: `npm ci` exits 1 with the committed lockfile and 0 with the fix.
+reproduced both ways locally (`npm ci` exits 1 with the committed lockfile, 0 with the fix), and then
+**confirmed by observation: Canon Rail Guard went green on the next push — the first successful CI
+run since 27 August.** E2E and Smoke got past install for the first time too and immediately
+reported three defects nobody could see while the install was broken; they are recorded as
+open-bugs #10–#12 and are NEW INFORMATION, not regressions.
 
 **2. The council was losing advisors and nobody could tell — not the model, not you.** The 1,200
 ceiling was clipping the advisors' output distribution (p90 at 1160, 8% pinned exactly at the cap),
@@ -50,7 +54,8 @@ reservation — the 92% of calls that never approach it cost exactly what they d
 the row itself, **scoped to your business**, and hands the council the record: category, the cron
 that raised it, the recommendation, the expected impact, the evidence payload.
 
-**Open bugs: 9 open · 4 parked · 4 delisted as already fixed.** Recurring classes: *exists, looks
+**Open bugs: 12 open · 4 parked · 4 delisted as already fixed.** 9 from the sweep, 3 more that only
+became visible once CI could run. Recurring classes: *exists, looks
 correct, does nothing* (3), *silent failure* (2), *truncation at a ceiling* (1), *N copies drift* (1).
 
 ### What remains

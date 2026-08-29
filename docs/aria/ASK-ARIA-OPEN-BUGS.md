@@ -13,8 +13,13 @@ a register that inherits stale entries is worse than no register.
 > `package-lock.json` are out of sync. **I caused it**, in `0ced26289` (POS-OFFLINE-1a, 27 Aug):
 > a dependency line was swept into that commit without its lockfile. Every "failure" in the Actions
 > tab since is that install step, not a real finding.
+>
+> **FIXED AND CONFIRMED, 30 Aug.** Phase 5 committed the missing lockfile entries; on the very next
+> push **Canon Rail Guard went green — the first successful CI run since 27 August.** What the other
+> two then reported is in the addendum, and it is new information rather than regression.
 
-**9 open · 4 parked (3 of them the founder's) · 4 already fixed and delisted.**
+**12 open · 4 parked (3 of them the founder's) · 4 already fixed and delisted.**
+(9 found by the sweep; **3 more appeared the moment CI could run again** — see the addendum.)
 
 Recurring classes, counted across S1–S8:
 
@@ -45,9 +50,9 @@ before that date.
 **Class.** Exists, looks correct, does nothing — the most expensive instance yet, because it
 silently disabled the canon rail, the e2e typecheck and the smoke suite at once.
 
-**Severity 1.** Fixed in phase 5. The repair is already sitting in the working tree: the local
-`package-lock.json` is modified, `+29/-0`, adding exactly the two missing packages and changing no
-existing version.
+**Severity 1 · FIXED** (`b6d93385`). `+29/-0`, adding exactly the two missing packages and changing
+no existing version. Reproduced both directions before committing — `npm ci` exits 1 with the old
+lockfile and 0 with the fix — and then confirmed by a green Canon Rail Guard run on the next push.
 
 ---
 
@@ -102,7 +107,11 @@ It also carries **a second, private `safeParseJSON`** (`context-brain.ts:17`) �
 **How it presents.** The context brain reports `failed: true`, indistinguishable from a network
 error, and the council proceeds with three advisors instead of four.
 
-**Severity 3.** Fixed in phase 5 if there is room; the detection half is small.
+**Severity 3 · FIXED** (`b6d93385`). `inspectGeminiTruncation` reads `candidates[0].finishReason`,
+in the SAME module as the Anthropic one — a second definition of “truncated” is how N-copies drift
+starts. The `maxOutputTokens: 1500` budget is deliberately unchanged: no distribution justifies a
+number, and inventing one would undo what phase 1 established. **The duplicate `safeParseJSON`
+remains** — still open, still worth a sweep of its own.
 
 ---
 
@@ -158,6 +167,40 @@ pending rows; the surface renders 6 and reports the true total separately (`awai
 like the count-vs-page-size bug and someone will re-report it.
 
 **Severity 5 — not a bug.** Verified working.
+
+---
+
+## ADDENDUM — WHAT CI FOUND THE MOMENT IT COULD RUN (30 Aug, after the #1 fix)
+
+The point of fixing #1 was to get the gates back. Within ten minutes of the push they reported
+three things that had been invisible for three days. **Recorded, not fixed — these are new
+information, not regressions**, exactly as CLAUDE.md's RULE 12 amendment says a first Smoke Suite
+result must be treated.
+
+**Canon Rail Guard: GREEN.** First successful CI run since 27 August. #1 is confirmed fixed by
+observation, not by reasoning.
+
+### 10 · MEDIUM — the smoke suite's login selector matches three buttons
+`getByRole('button', { name: /sign in|log in|continue/i })` → `strict mode violation: resolved to
+3 elements`. A **test** defect, not a product one: the login page has three controls matching that
+name. The suite cannot get past its own first step, so every assertion behind it is unproven.
+**Severity 3.** This is the first time this line has ever executed against a real page.
+
+### 11 · MEDIUM — `/api/cron/nightly-sync` throws during static generation
+`Dynamic server usage: Route /api/cron/nightly-sync couldn't be rendered statically because it used
+request.headers` — three retries, then logged as `cron_runs failed`. It does not stop the build, but
+it writes a **failure row on every build**, which makes the cron's own health signal untrustworthy.
+Wants `export const dynamic = 'force-dynamic'`. **Severity 3.**
+
+### 12 · MEDIUM — the E2E `test` job times out waiting for a URL after login
+`TimeoutError: page.waitForURL: Timeout 25000ms exceeded`, and `e2e-local` and `typecheck` are then
+**skipped** because they depend on it. Likely the same root cause as #10 — the login step. Note this
+changes CLAUDE.md's picture: the amendment describes `typecheck` as green and `e2e-local` as the
+known-red job; today neither runs at all.
+
+**None of these is fixed here.** They are test-harness and route-config defects, they arrived after
+this sprint's last commit, and fixing a login fixture unattended — on the surface that gates every
+other assertion — is the kind of change that wants a person watching it.
 
 ---
 
