@@ -470,3 +470,15 @@ textarea{width:100%;border:0;outline:0;resize:none;padding:15px 19px 5px;font-fa
 /* ── 6. The takings line was legible on the welcome screen (5.37:1) and not in working mode
       (3.91:1) — the only difference being opacity:.85. The size change already de-emphasises it. ── */
 .ax-surface.work .tagline{opacity:1}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   S9 PHASE 3 APPENDS — the schedule form on a "Made for you" card.
+   APPENDS, not edits: ax-1.test.ts holds the lifted mockup block byte-for-byte, and S7 phase 4
+   already learned that lesson the hard way. Colours are the sheet's own tokens only.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+.ax-sched{display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:100%;margin-top:10px;
+  padding-top:10px;border-top:1px solid rgba(16,24,40,.07)}
+.ax-sched-l{font-size:12px;color:var(--ink2);font-weight:500}
+.ax-sched-in{font-family:inherit;font-size:13px;color:var(--ink);background:#fff;
+  border:1px solid rgba(16,24,40,.12);border-radius:10px;padding:7px 11px;outline:0;min-width:150px}
+.ax-sched-in:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.08)}

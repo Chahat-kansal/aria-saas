@@ -39,9 +39,21 @@ describe('S5 phase 5 · the canonical route serves the built surface', () => {
 
   it('the classic surface kept its own capabilities intact', () => {
     const c = code(read(CLASSIC))
-    for (const cap of ['AriaArtifact', 'SaveToFilesButton', 'ActionPreviewCard', 'intelligence/schedules', 'artifact-parse-failure']) {
+    for (const cap of ['AriaArtifact', 'SaveToFilesButton', 'ActionPreviewCard', 'intelligence/schedules']) {
       expect(c, 'classic lost ' + cap).toMatch(new RegExp(cap.replace('/', '\/')))
     }
+    // REWRITTEN IN S9 PHASE 3, AND THE REASON MATTERS MORE THAN THE EDIT.
+    // This list used to include the literal 'artifact-parse-failure', because classic POSTed to
+    // that endpoint from its own copy of parseAriaResponse. Phase 3 moved that parser to
+    // @/lib/aria/artifact-segments so the DEFAULT surface could render artifacts too, so the
+    // string is no longer in this file — but the capability is not gone, it is shared. Asserting
+    // the string would now fail for the one reason it was written to catch: nothing was lost.
+    //
+    // So it asserts the capability instead: classic still parses artifacts and still reports
+    // malformed ones, through the module that owns both.
+    expect(c, 'classic no longer reaches the artifact parser').toMatch(/artifact-segments/)
+    const shared = code(read('src/lib/aria/artifact-segments.ts'))
+    expect(shared, 'the parse-failure endpoint is gone entirely').toContain('/api/aria/artifact-parse-failure')
   })
 
   it('the stylesheet stays page-scoped, never in a layout', () => {

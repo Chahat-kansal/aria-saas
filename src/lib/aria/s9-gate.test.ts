@@ -94,7 +94,11 @@ describe('S9 phase 0 · the premises, re-checked from source', () => {
     expect(classic).toContain('AriaArtifact')
     expect(classic).toContain('SaveToFilesButton')
     expect(classic).toContain('/api/aria/intelligence/schedules')
-    expect(classic).toContain('/api/aria/artifact-parse-failure')
+    // REWRITTEN IN PHASE 3. Phase 0 asserted classic contained '/api/aria/artifact-parse-failure'
+    // — true then, and the whole point of the phase was to stop it being true ONLY there. The
+    // endpoint now lives in the shared module both surfaces call.
+    expect(classic).toContain('artifact-segments')
+    expect(read('src/lib/aria/artifact-segments.ts')).toContain('/api/aria/artifact-parse-failure')
   })
 
   it('#6 — /classic is still reachable, and approve/reject stays parked there', () => {

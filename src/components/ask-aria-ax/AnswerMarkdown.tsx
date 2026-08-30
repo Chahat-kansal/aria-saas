@@ -1,10 +1,14 @@
 'use client'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { segmentFigures, type ProvenanceInput } from '@/lib/aria/figure-provenance'
 import { stabiliseStreamingMarkdown } from '@/lib/aria/markdown-stream'
 import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
+import { AriaArtifact } from '@/components/aria/AriaArtifact'
+import {
+  parseAriaResponse, reportArtifactParseFailures, hasArtifact,
+} from '@/lib/aria/artifact-segments'
 
 /**
  * S1 PHASE 8 — RENDERING AN ANSWER.
@@ -112,10 +116,53 @@ export default function AnswerMarkdown({
   text, streaming, provenance, idPrefix, openSrc, onToggleSrc,
 }: AnswerMarkdownProps) {
   const wrap = useFigureWrapper(provenance ?? {}, idPrefix, openSrc, onToggleSrc)
+
+  /**
+   * S9 PHASE 3 — ARTIFACTS RENDER HERE NOW, NOT ONLY ON `/classic`.
+   *
+   * Before this, an answer containing `<aria_artifact …>` printed its raw tag and JSON on the
+   * default surface — the one every navigation entry point has sent owners to since S5. The
+   * capability existed; it was just on the page nobody is routed to.
+   *
+   * WHILE STREAMING, ARTIFACTS ARE NOT SPLIT OUT. A half-arrived `<aria_artifact>` tag has no
+   * closing tag yet, so the regex would not match it and the partial JSON would flash as prose
+   * before becoming a chart. Streaming text renders as markdown (its existing behaviour, entirely
+   * unchanged) and the artifacts appear when the answer settles. That is the same reasoning
+   * stabiliseStreamingMarkdown already applies to half-written tables.
+   */
+  const parsed = useMemo(
+    () => (streaming || !hasArtifact(text) ? null : parseAriaResponse(text)),
+    [text, streaming],
+  )
+
+  // Telemetry, never during render: an effect fires once per distinct malformed payload.
+  useEffect(() => {
+    if (parsed?.failures.length) reportArtifactParseFailures(parsed.failures)
+  }, [parsed])
+
   const source = useMemo(
     () => stabiliseStreamingMarkdown(toClipboardMarkdown(text), Boolean(streaming)),
     [text, streaming],
   )
+
+  if (parsed) {
+    return (
+      <div className="ax-md">
+        {parsed.segments.map((seg, i) => seg.kind === 'artifact'
+          ? <AriaArtifact key={i} type={seg.type} title={seg.title} data={seg.data} />
+          : (
+            <AnswerMarkdown
+              key={i}
+              text={seg.content}
+              provenance={provenance}
+              idPrefix={idPrefix + ':s' + i}
+              openSrc={openSrc}
+              onToggleSrc={onToggleSrc}
+            />
+          ))}
+      </div>
+    )
+  }
 
   return (
     <div className="ax-md">

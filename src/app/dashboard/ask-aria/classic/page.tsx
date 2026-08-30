@@ -10,6 +10,10 @@ import { SkillPicker } from '@/components/aria/SkillPicker'
 import ActionPreviewCard from '@/components/aria/ActionPreviewCard'
 import AuditLogCard from '@/components/aria/AuditLogCard'
 import { AriaArtifact } from '@/components/aria/AriaArtifact'
+import {
+  parseAriaResponse as sharedParseAriaResponse, reportArtifactParseFailures,
+  type Segment,
+} from '@/lib/aria/artifact-segments'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
@@ -215,50 +219,15 @@ function ActionCard({ action }: { action: MessageAction }) {
   return null
 }
 
-type ArtifactSegment = { kind: 'artifact'; type: string; title?: string; data: Record<string, unknown> }
-type TextSegment    = { kind: 'text'; content: string }
-type Segment = TextSegment | ArtifactSegment
-
-function tolerantJSONParse(raw: string): Record<string, unknown> | null {
-  const cleanups: Array<(s: string) => string> = [
-    s => s,
-    s => s.replace(/,(\s*[}\]])/g, '$1'),
-    s => s.replace(/,(\s*[}\]])/g, '$1').replace(/'/g, '"'),
-    s => s.replace(/,(\s*[}\]])/g, '$1').replace(/\r?\n/g, '\\n'),
-  ]
-  for (const fix of cleanups) {
-    try { return JSON.parse(fix(raw).trim()) } catch { /* try next */ }
-  }
-  return null
-}
+// S9 PHASE 3 — the parser, the tolerant-JSON ladder and the Segment types moved to
+// @/lib/aria/artifact-segments so the default surface could have them too. This file keeps its
+// behaviour exactly: `parseAriaResponse` below still returns the same segments in the same order
+// and still reports the same failures to the same endpoint. What changed is that the reporting is
+// now deduplicated by payload, so a re-render cannot resend one. Nothing here is re-implemented.
 
 function parseAriaResponse(text: string): Segment[] {
-  const segments: Segment[] = []
-  const regex = /<aria_artifact\s+type="([^"]+)"(?:\s+title="([^"]+)")?\s*>([\s\S]*?)<\/aria_artifact>/g
-  let lastIdx = 0
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIdx) {
-      const t = text.slice(lastIdx, match.index).trim()
-      if (t) segments.push({ kind: 'text', content: t })
-    }
-    const parsed = tolerantJSONParse(match[3])
-    if (parsed) {
-      segments.push({ kind: 'artifact', type: match[1], title: match[2], data: parsed })
-    } else {
-      segments.push({ kind: 'text', content: 'I tried to show a chart here but the data was malformed. Please ask again.' })
-      fetch('/api/aria/artifact-parse-failure', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw: match[0].slice(0, 500), type: match[1] ?? 'unknown' }),
-      }).catch(() => {})
-    }
-    lastIdx = regex.lastIndex
-  }
-  if (lastIdx < text.length) {
-    const t = text.slice(lastIdx).trim()
-    if (t) segments.push({ kind: 'text', content: t })
-  }
+  const { segments, failures } = sharedParseAriaResponse(text)
+  reportArtifactParseFailures(failures)
   return segments
 }
 
