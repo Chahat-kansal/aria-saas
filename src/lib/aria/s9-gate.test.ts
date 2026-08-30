@@ -75,15 +75,18 @@ describe('S9 phase 0 · the premises, re-checked from source', () => {
     expect(missing, 'cron routes that can be statically rendered: ' + missing.join(', ')).toEqual([])
   })
 
-  it('#4 — there are exactly two safeParseJSON definitions, and they differ in one character class', () => {
+  it('#4 — ONE safeParseJSON survives (phase 0 found two, phase 4 merged them)', () => {
+    // REWRITTEN IN PHASE 4. Phase 0 asserted there were exactly two definitions differing only in
+    // whether the fence regexes ate a newline — true then, and the reason the item was on the
+    // register. safe-json.test.ts proved that difference immaterial over a corpus BEFORE the merge,
+    // so this now asserts the outcome the phase was for.
     const cb = read('src/lib/aria/context-brain.ts')
     const co = read('src/lib/aria/council.ts')
-    // Both strip a fenced code block then slice first `{` to last `}`. council's fence regexes
-    // consume an optional newline; context-brain's do not. Phase 4 proves that difference is
-    // immaterial BEFORE merging them, rather than assuming it.
-    expect(cb).toMatch(/```(?:\(\?:json\)\?)?/)
-    expect(co).toContain("replace(/^```(?:json)?\\n?/i, '')")
-    expect(cb).toContain("replace(/^```(?:json)?/i, '')")
+    for (const [name, src] of [['context-brain', cb], ['council', co]] as const) {
+      expect(src, name + ' grew its own safeParseJSON back').not.toMatch(/function safeParseJSON\s*\(/)
+      expect(src, name + ' does not use the shared one').toMatch(/from '\.\/safe-json'/)
+    }
+    expect(read('src/lib/aria/safe-json.ts')).toContain('export function safeParseJSON')
   })
 
   it('#6 — the capabilities are components that exist and can be reused, not rewritten', () => {

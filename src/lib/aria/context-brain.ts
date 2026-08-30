@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { inspectGeminiTruncation, classifyOutcome, truncationSignal } from './truncation'
+import { safeParseJSON } from './safe-json'
 
 export type ContextBrainOutput = {
   external_factors: string[]
@@ -15,16 +16,10 @@ const FAILED: ContextBrainOutput = {
   confidence: 'low', sources_used: [], failed: true,
 }
 
-function safeParseJSON(text: string): Record<string, unknown> | null {
-  try {
-    const stripped = text.trim()
-      .replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim()
-    const start = stripped.indexOf('{')
-    const end = stripped.lastIndexOf('}')
-    if (start >= 0 && end > start) return JSON.parse(stripped.slice(start, end + 1))
-    return null
-  } catch { return null }
-}
+// S9 PHASE 4 (#4) — this file's private safeParseJSON is gone. It differed from council's only in
+// whether the code-fence regexes also consumed a newline, which safe-json.test.ts proves is
+// immaterial: both then trim and slice first `{` to last `}`. Two definitions of "did this parse"
+// is where N-copies drift starts, so one survives.
 
 async function logCall(params: {
   business_id: string; success: boolean; input_tokens: number;

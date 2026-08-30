@@ -123,10 +123,22 @@ describe('S8 phase 1 · the token-ceiling rail', () => {
 
   it('NO PARSER WAS WIDENED — safeParseJSON is still strict', () => {
     // The forbidden fix, and S4 asserted the same thing for the same reason.
-    const src = strip(council)
-    const fn = src.slice(src.indexOf('function safeParseJSON'), src.indexOf('function safeParseJSON') + 420)
+    //
+    // REWRITTEN IN S9 PHASE 4: this used to slice the definition out of council.ts. The definition
+    // moved to ./safe-json when its duplicate in context-brain.ts was merged away, so reading
+    // council.ts would now find nothing and this test would pass VACUOUSLY — a strictness check
+    // that examines an empty string is exactly the failure this file exists to prevent. It follows
+    // the function instead.
+    const src = strip(read('src/lib/aria/safe-json.ts'))
+    const at = src.indexOf('export function safeParseJSON')
+    expect(at, 'safeParseJSON is not where this test thinks it is').toBeGreaterThan(-1)
+    const fn = src.slice(at, at + 420)
+    expect(fn.length).toBeGreaterThan(100)
     expect(fn).toContain('JSON.parse(')
     expect(fn).not.toMatch(/repair|lenient|partial|salvage|tolerant/i)
+    // and council still uses it rather than having grown a private one back
+    expect(strip(council)).toMatch(/from '\.\/safe-json'/)
+    expect(strip(council)).not.toMatch(/function safeParseJSON\s*\(/)
   })
 
   it('MUTATION PROBE — restoring the 1200 ceiling makes the floor assertion red', () => {

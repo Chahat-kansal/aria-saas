@@ -5,6 +5,7 @@ import { computeCostCentsWithCache } from './cost'
 import type { AskBlock } from './ask-types'
 import { inspectTruncation, classifyOutcome, truncationSignal, type ModelOutcome } from './truncation'
 import { renderAdvisorSection, lostAdvisors, lostAdvisorRule } from './council-advisors'
+import { safeParseJSON } from './safe-json'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
 import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSummariesForPrompt } from './memory/recall'
@@ -98,14 +99,10 @@ async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T>
   throw lastErr ?? new Error('All retries failed')
 }
 
-function safeParseJSON(text: string): Record<string, unknown> | null {
-  try {
-    const s = text.trim().replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
-    const start = s.indexOf('{'), end = s.lastIndexOf('}')
-    if (start >= 0 && end > start) return JSON.parse(s.slice(start, end + 1))
-    return null
-  } catch { return null }
-}
+// S9 PHASE 4 (#4) — safeParseJSON moved to ./safe-json. THIS implementation is the one that
+// survived: the decision table says keep the one the canonical engine uses, and the council is that
+// engine. context-brain.ts's near-copy was proven equivalent over a corpus first (safe-json.test.ts)
+// rather than assumed, then deleted. Nothing about the behaviour here changed.
 
 async function logAICall(params: {
   agent_key: string; model_id: string; provider: string
