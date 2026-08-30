@@ -38,7 +38,25 @@ async function loginAndSave(baseURL: string, email: string, password: string, st
   // THE PAGE IS NOT CHANGED: three buttons matching that name is correct product behaviour, and
   // the auth flow is explicitly out of scope. The selector is what was wrong.
   await page.locator('form button[type="submit"]').click()
-  await page.waitForURL(/\/(pos|dashboard)/, { timeout: 25_000 })
+  // S9 PHASE 1 — SAY WHY, INSTEAD OF TIMING OUT.
+  // With the selector fixed, both suites click the real submit and STILL do not navigate — so the
+  // login itself is being refused, and a bare `waitForURL` timeout cannot tell anyone whether that
+  // is a wrong password or the rate-limit guard. AuthScene renders any failure into `.errbox`
+  // (checkAuthGuard's "Too many attempts…" and Supabase's own authError.message both land there),
+  // so the fixture now reads it and puts it in the thrown error.
+  //
+  // This changes NOTHING about the auth flow — it only reports what the page already displays.
+  try {
+    await page.waitForURL(/\/(pos|dashboard)/, { timeout: 25_000 })
+  } catch (e) {
+    const shown = await page.locator('.errbox').first().textContent().catch(() => null)
+    const url = page.url()
+    throw new Error(
+      '[login] did not navigate after submitting. url=' + url
+      + ' page_error=' + (shown?.trim() || '(none shown — the form did not report an error)')
+      + ' | original: ' + (e as Error).message,
+    )
+  }
   await page.context().storageState({ path: statePath })
   await browser.close()
 }
