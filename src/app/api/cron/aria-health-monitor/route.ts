@@ -380,6 +380,8 @@ async function runWiringHealthPass(since7d: string, since24h: string): Promise<{
   for (const check of redChecks) {
     const title = buildRedTitle(check)
     const recommendation = buildRedRecommendation(check)
+    // S9 PHASE 5 (#8) — the "why", which this writer has never supplied. See buildRedReason.
+    const reason = buildRedReason(check)
 
     // Dedup via upsertAriaAction — refreshes existing pending row or inserts new one
     try {
@@ -388,6 +390,7 @@ async function runWiringHealthPass(since7d: string, since24h: string): Promise<{
         category:       'system_health',
         title,
         recommendation,
+        reason,
         priority:       'high',
         status:         'pending',
         source:         'cron:aria-health-monitor',
@@ -449,6 +452,55 @@ function buildRedTitle(check: WiringCheck): string {
       return `Briefing pipeline stalled — only ${check.value} rows written in last 24h`
     default:
       return `System health check failed: ${check.check_name} (value=${check.value})`
+  }
+}
+
+/**
+ * S9 PHASE 5 (#8) — WHY THIS FIRED, WHICH IS NOT THE SAME AS WHAT TO DO ABOUT IT.
+ *
+ * `aria_actions.reason` is NOT a dead column: signal_engine populates it on 112 of 112 rows and
+ * aria_intelligence:alert on 9 of 11. This writer was simply never passing it — 0 of 78 rows, 27 of
+ * them pending, and those are exactly the notices the Ask Aria surface renders. So the fix is at
+ * the writer, not in the schema, and no DDL is involved.
+ *
+ * The established convention, read off the populated rows rather than invented: `reason` states the
+ * EVIDENCE ("the alert identifies 20 menu items with stock up to 999 units, which is improbable
+ * for a café…") while `recommendation` states the action. This builder holds to that.
+ *
+ * EVERY VALUE HERE IS MEASURED. The check's own `value` and `threshold` are what the monitor
+ * actually computed; nothing is estimated and no figure is introduced that the check did not
+ * produce. That is GROUNDING-TEETH, and it is also why this is worth having at all — S8 phase 3
+ * now carries this record into the council when an owner clicks the notice, so a fabricated
+ * "reason" would become a fabricated answer.
+ *
+ * FORWARD-ONLY. The 78 existing rows are not backfilled: they record what the system actually
+ * wrote, and rewriting history to make a column look populated would destroy the evidence for
+ * this very finding.
+ */
+function buildRedReason(check: WiringCheck): string {
+  const measured = 'The ' + check.check_name + ' check measured ' + String(check.value)
+    + ' against its threshold (' + check.threshold + ').'
+  switch (check.check_name) {
+    case 'total_amount_drift':
+      return measured + ' Each drifted sale has a total_amount that does not equal the sum of its'
+        + ' line items, so revenue reported from the header and from the items disagree.'
+    case 'headless_sales':
+      return measured + ' A sale with no line items cannot be reconciled against stock or margin,'
+        + ' and usually means a checkout was interrupted or a sync landed only half a record.'
+    case 'payments_coverage_pct':
+      return measured + ' Sales without a matching payment row are invisible to revenue reporting'
+        + ' and to the Xero sync, so takings can read lower than they were.'
+    case 'pending_aria_actions':
+      return measured + ' A backlog this size means recommendations are being produced faster than'
+        + ' they are being read, not that anything has broken.'
+    case 'briefing_table_writes_24h':
+      return measured + ' No briefing rows were written in the last 24 hours across'
+        + ' daily_briefings, pos_daily_briefings and aria_daily_briefings, which is what the'
+        + ' morning brief is generated from.'
+    default:
+      // No invented narrative for a check this function has not been taught about. The measured
+      // sentence is true for every check by construction; anything beyond it would be a guess.
+      return measured
   }
 }
 
