@@ -950,7 +950,12 @@ export async function runAriaCouncil(
     }
     verifiedFiguresBlock = lines.join('\n') + '\n'
     console.log('[council] verifiedFiguresBlock chars:', verifiedFiguresBlock.length, 'business:', businessId)
-  } catch { /* non-fatal */ }
+  } catch (e) {
+    // S9 PHASE 6 (#7) — this block IS the corpus the grounding checks measure against. Losing it
+    // does not fail the turn, it quietly removes the thing that keeps the numbers honest, and the
+    // success log above simply never printed. Now the absence is stated rather than inferred.
+    console.error('[council] verifiedFiguresBlock FAILED — synthesis loses its anchor corpus:', (e as Error).message)
+  }
 
   // Strip aria_facts_packet from context passed to brains — it's already formatted in verifiedFiguresBlock
   let cleanContextStr = businessContext
@@ -1055,7 +1060,14 @@ export async function runAriaCouncil(
       v2Anchors = Array.isArray(agt.available_ground_truth?._anchor_values)
         ? agt.available_ground_truth!._anchor_values!
         : extractNumbers(verifiedFiguresBlock) // fallback: numbers from VERIFIED FIGURES if anchors absent
-    } catch { v2Anchors = [] }
+    } catch (e) {
+      // S9 PHASE 6 (#7) — falling to zero anchors is not neutral. stripUngroundedNumbers treats
+      // zero anchors as "nothing can be grounded" (BRIEF-FIX-1 BUG 1, deliberately), so every
+      // figure an advisor writes gets stripped. That is the correct safe behaviour AND a large
+      // silent change in the answer, which is exactly the pair worth logging.
+      v2Anchors = []
+      console.error('[council] anchor extraction FAILED — every advisor figure will be stripped:', (e as Error).message)
+    }
     // BRIEF-FIX-1 (BUG 4/1) — health signals' own numbers (hours since last sale, completed_sales_7d,
     // etc.) are real and verified; merging them in gives a dormant business a few legitimate anchors
     // to ground short factual statements against, instead of zero.
@@ -1086,7 +1098,14 @@ export async function runAriaCouncil(
         }
       }
     }
-  } catch { /* graceful — advisor cleaning never blocks the council */ }
+  } catch (e) {
+    // S9 PHASE 6 (#7) — LEFT NON-BLOCKING ON PURPOSE. The register says this catch is deliberate
+    // and it is right: advisor cleaning must never stop the council from answering. But a catch
+    // that must not block can still speak. If this throws, ungrounded advisor numbers reach the
+    // synthesis uncleaned — the exact failure GROUNDING-TEETH-V2 exists to prevent — and nothing
+    // recorded it. The behaviour is unchanged; only the silence is.
+    console.error('[council] advisor cleaning FAILED — ungrounded figures may reach synthesis:', (e as Error).message)
+  }
 
   // Build synthesis input
   const qualitySynthesisBlock = quality.hedge_level !== 'none'

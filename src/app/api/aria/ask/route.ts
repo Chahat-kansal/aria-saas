@@ -490,7 +490,12 @@ async function _POST(
           }).eq('id', conversationId)
           const massText = `⚠️ ${result.error ?? `This affects ${result.affected_preview} items.`} Reply "confirm" to proceed.`
           let massConvId = conversationId
-          try { massConvId = await upsertConversation(bid, userId, conversationId, message, massText, 'action_request') } catch { /* non-fatal */ }
+          // S9 PHASE 6 (#7) — STILL NON-FATAL, NO LONGER SILENT. If this throws, the turn is not
+          // saved and the id returned below points at a conversation that may not exist — the owner
+          // loses the exchange with no trace anywhere. S2B found live data loss in exactly this
+          // area. Answering is still the right thing to do; saying nothing about it was not.
+          try { massConvId = await upsertConversation(bid, userId, conversationId, message, massText, 'action_request') }
+          catch (e) { console.error('[aria/ask] mass-confirm conversation NOT saved:', (e as Error).message) }
           return NextResponse.json({ response: massText, conversation_id: massConvId ?? conversationId, intent: 'action_request', action: { action: 'mass_confirm', affected: result.affected_preview }, cost_usd_cents: 0 })
         }
 
@@ -1039,7 +1044,11 @@ Rules:
       if (!bizCtx || bizCtx.length < 50) {
         const noDataMsg = "I don't have enough data yet for a strategic read — try a specific question."
         let savedConvId = conversationId
-        try { savedConvId = await upsertConversation(bid, userId, conversationId, message, noDataMsg, intent.type) } catch { /* non-fatal */ }
+        // S9 PHASE 6 (#7) — same class as the mass-confirm save above: still non-fatal, no longer
+        // silent. The owner asked something and the answer is real; losing the record of it is not
+        // a reason to fail the request, but it is a reason to be able to find out.
+        try { savedConvId = await upsertConversation(bid, userId, conversationId, message, noDataMsg, intent.type) }
+        catch (e) { console.error('[aria/ask] no-data conversation NOT saved:', (e as Error).message) }
         return NextResponse.json({
           response: noDataMsg,
           blocks: [{ type: 'lead', content: noDataMsg }],
@@ -1300,7 +1309,12 @@ Rules:
           }
         } catch { /* non-fatal — council proceeds without anchors */ }
         augCtx = JSON.stringify(ctxParsed)
-      } catch { /* non-fatal — council still gets bizCtx */ }
+      } catch (e) {
+        // S9 PHASE 6 (#7) — the council still answers, but WITHOUT the facts packet and the
+        // ground-truth anchors. That is a quieter, more grounded answer than it should have been,
+        // and until now nothing recorded that it had happened.
+        console.error('[aria/ask] augmented council context FAILED — answering on raw bizCtx only:', (e as Error).message)
+      }
       // RC4: COREFERENCE — the council path previously received zero conversation history, so pronouns in a
       // follow-up ("what does SHE buy") had no referent. Rehydrate the last ~10 turns (client-sent messages
       // first, else from aria_conversations by id) and inject them so the council resolves references.
@@ -1320,7 +1334,12 @@ Rules:
           recentHistoryBlock = '\n\nRECENT_CONVERSATION (resolve pronouns/"she"/"that" against this — most recent last):\n' +
             turns.map(m => `${m.role === 'assistant' ? 'Aria' : 'Owner'}: ${String(m.content ?? '').slice(0, 600)}`).join('\n')
         }
-      } catch { /* non-fatal — council still answers without history */ }
+      } catch (e) {
+        // S9 PHASE 6 (#7) — without history the council cannot resolve "she"/"that" against the
+        // previous turn (RC4). The answer will look like a non-sequitur to the owner and like a
+        // model failure to whoever reads it. It is neither.
+        console.error('[aria/ask] conversation history unavailable — pronouns will not resolve:', (e as Error).message)
+      }
       // ── S8 PHASE 3 — THE NOTICE THIS QUESTION CAME FROM ────────────────────────────────────
       // Re-read server-side and SCOPED TO THIS BUSINESS. The client sent an id; it did not send
       // the content, and it is not trusted to. The .eq('business_id', bid) is the whole security
@@ -1481,7 +1500,11 @@ Rules:
     }
     lines.push('RULES: "same week last month" → use the figure above, NEVER 30-day average. "on track?" → use weekly target above; if NOT SET, say so honestly and offer to set one, never substitute an average.')
     weeklyTrackingBlock = lines.join('\n')
-  } catch { /* non-fatal */ }
+  } catch (e) {
+    // S9 PHASE 6 (#7) — losing this block means "are we on track?" is answered without the weekly
+    // target, and the block's own RULES line (never substitute a 30-day average) goes with it.
+    console.error('[aria/ask] weekly tracking block FAILED — target-aware answers degraded:', (e as Error).message)
+  }
 
   // Self-state grounding block: surfaces live aria_actions data so Aria can correct wrong premises.
   const ariaRecsBlock = (() => {
