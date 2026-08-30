@@ -26,7 +26,18 @@ async function loginAndSave(baseURL: string, email: string, password: string, st
   await emailInput.fill(email)
   const passwordInput = page.locator('input[type="password"], input[name="password"]').first()
   await passwordInput.fill(password)
-  await page.getByRole('button', { name: /sign in|log in|continue/i }).click()
+  // S9 PHASE 1 (#10) — WAS `getByRole('button', { name: /sign in|log in|continue/i })`, which
+  // resolves to THREE controls on /login and failed strict mode before it could click anything:
+  //
+  //   AuthScene.tsx:208  <button type="button" class="tab">Sign in</button>        the TAB
+  //   AuthScene.tsx:214  <button type="button" class="gbtn">Continue with Google</button>
+  //   AuthScene.tsx:266  <button type="submit" class="cta">{ctaLabel}</button>     the real one
+  //
+  // Only the third is inside <form> and only it submits. Adding `.first()` would have "fixed" the
+  // error by silently clicking the TAB — which is precisely the bug the e2e fixture had (#12).
+  // THE PAGE IS NOT CHANGED: three buttons matching that name is correct product behaviour, and
+  // the auth flow is explicitly out of scope. The selector is what was wrong.
+  await page.locator('form button[type="submit"]').click()
   await page.waitForURL(/\/(pos|dashboard)/, { timeout: 25_000 })
   await page.context().storageState({ path: statePath })
   await browser.close()

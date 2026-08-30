@@ -35,10 +35,16 @@ export const test = base.extend<AuthFixtures>({
       ).first()
       await passwordInput.fill(password)
 
-      const submitButton = page
-        .getByRole('button', { name: /sign in|log in|continue/i })
-        .or(page.locator('button[type="submit"]'))
-        .first()
+      // S9 PHASE 1 (#12) — THE `.first()` WAS THE BUG, NOT THE CURE. This selector matches three
+      // controls on /login and `.first()` deterministically picks the FIRST in DOM order, which is
+      // the "Sign in" TAB (AuthScene.tsx:208) — a type="button" that switches tabs and navigates
+      // nowhere. So the click succeeded, nothing happened, and `waitForURL` below burned its full
+      // timeout. That is why #12 presented as a timeout rather than an error, and why it looked
+      // like a different bug from #10 despite sharing one cause.
+      //
+      // `form button[type="submit"]` is unambiguous: the tab and the Google button both sit OUTSIDE
+      // the <form>, and there is exactly one submit inside it.
+      const submitButton = page.locator('form button[type="submit"]')
       await submitButton.click()
       await page.waitForURL(/\/(pos|dashboard)/, { timeout: 20_000 })
     }
