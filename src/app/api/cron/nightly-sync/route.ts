@@ -1,4 +1,14 @@
 export const maxDuration = 300
+// S9 PHASE 2 (#11) — WITHOUT THIS, THIS ROUTE HAS WRITTEN A FALSE FAILURE ROW SINCE 1 JUNE.
+// Next tries to render it statically at build time, `verifyCronAuth` reads request.headers, and
+// the resulting `Dynamic server usage` error is caught by trackCron and written to cron_runs as a
+// genuine failure. Measured: 2,272 failed rows against 90 completed, and EVERY ONE of the 2,272
+// carries that same error — so this cron reads 96% failed and always has, and a real failure
+// would be indistinguishable from the noise.
+//
+// Not a judgement call: 72 of the 73 cron routes already carry this directive. nightly-sync was
+// the only one without it.
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/auth/cron';
 import { withErrorCapture } from '@/lib/api/with-error-capture'

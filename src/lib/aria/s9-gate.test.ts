@@ -53,7 +53,7 @@ describe('S9 phase 0 · the premises, re-checked from source', () => {
     expect(scene.indexOf(google)).toBeLessThan(formStart)
   })
 
-  it('#11 — nightly-sync is the ONLY cron route without the dynamic directive', () => {
+  it('#11 — NO cron route may be statically renderable (was: only nightly-sync lacked it)', () => {
     const dir = join(root, 'src/app/api/cron')
     const routes = readdirSync(dir, { withFileTypes: true })
       .filter(d => d.isDirectory())
@@ -61,11 +61,18 @@ describe('S9 phase 0 · the premises, re-checked from source', () => {
       .filter(p => existsSync(join(root, p)))
     expect(routes.length, 'the cron-route scan found nothing').toBeGreaterThan(50)
     const missing = routes.filter(p => !/export const dynamic\s*=\s*'force-dynamic'/.test(read(p)))
-    // PHASE 0 ASSERTS THE PREMISE, NOT THE FIX. Today exactly one route is missing the directive and
-    // it is nightly-sync — which is what makes this a one-line repair rather than a sweep. The
-    // INVARIANT ("no cron route may be statically rendered") belongs in phase 2, where it becomes
-    // true; asserting it here would have committed a red test.
-    expect(missing).toEqual(['src/app/api/cron/nightly-sync/route.ts'])
+    // REWRITTEN IN PHASE 2, AND THE OLD ASSERTION IS RECORDED RATHER THAN DELETED.
+    // Phase 0 asserted the PREMISE — `toEqual(['src/app/api/cron/nightly-sync/route.ts'])`, exactly
+    // one route missing the directive — because asserting the invariant before the fix would have
+    // committed a red test. Phase 2 added the directive, so this is now the INVARIANT:
+    //
+    //   NO CRON ROUTE MAY BE STATICALLY RENDERABLE.
+    //
+    // Every one of them reads request headers through verifyCronAuth, so a statically-rendered cron
+    // route does not merely warn — trackCron catches the `Dynamic server usage` throw and writes it
+    // to cron_runs as a genuine failure. nightly-sync did that 2,272 times between 1 June and
+    // 29 August, against 90 real completions.
+    expect(missing, 'cron routes that can be statically rendered: ' + missing.join(', ')).toEqual([])
   })
 
   it('#4 — there are exactly two safeParseJSON definitions, and they differ in one character class', () => {
