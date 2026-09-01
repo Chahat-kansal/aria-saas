@@ -29,7 +29,22 @@ a register that inherits stale entries is worse than no register.
 > error, we know exactly why: e2e says `Invalid login credentials`, smoke says `Too many attempts`.
 > Your own untracked `scripts/set-smoke-test-password.ts` is the fix for the first.
 
-**5 open · 4 parked (3 of them the founder's) · 11 closed or delisted.**
+> ## UPDATED IN PLACE BY S10 · 1 Sep 2026
+>
+> **The smoke suite finally ran.** 6 passed, 3 failed, behind a real session — assertions that had
+> never once executed against a real page. Four consecutive infrastructure layers had blocked it
+> (lockfile → selector → password → limiter store) and **none of them was Ask Aria**.
+>
+> **Then my own push cadence tripped the REAL limit.** With Upstash now reachable in CI, "Too many
+> attempts" is a genuine count: 10 logins / 15 min per IP, against three pushes in thirty minutes
+> running two suites each from shared runner IPs. Not a regression, not the old bug — the limiter
+> working, on a caller that logs in more often than a human. See #14.
+>
+> **Two findings that outlive CI:** an Upstash outage locks every owner out of login
+> ([S10-LIMITER-ANALYSIS.md](./S10-LIMITER-ANALYSIS.md)), and the alerting that exists watches cost
+> while `cron_runs` has no watcher at all ([S10-FATAL-SWEEP.md](./S10-FATAL-SWEEP.md)).
+
+**4 open · 6 parked (5 of them the founder's) · 13 closed or delisted.**
 
 Recurring classes, counted across S1–S8:
 
@@ -270,7 +285,13 @@ had**. nightly-sync was the only one out of step. A local build now emits zero s
 the route `ƒ` (dynamic). The 2,272 historical rows are **not** deleted: forward-only, and they are
 the evidence for this finding.
 
-### 12 · ⛔ PARKED WITH THE FOUNDER (S9 phase 1) — and it was never a selector bug
+### 12 · ✅ CLOSED (S10 · founder set the password, then S9/S10 cleared the rest)
+**The credential half is fixed** — Chahat set `TEST_USER_PASSWORD`. Confirmed by observation:
+`e2e-local`'s `page_error` changed from `Invalid login credentials` to `Too many attempts`, and the
+31 Aug production run got past login entirely. **`typecheck` is now green and runs; `e2e-local`
+executes rather than skipping.** The remaining login failure is a different thing — #13 then #14.
+
+### ~~12~~ · the original diagnosis, for the record
 **It shares one FACT with #10 — three buttons match the selector — but it is a different failure and
 needed a different fix.** `e2e/helpers/global-setup.ts:89` was *already* form-scoped and correct.
 
@@ -308,6 +329,76 @@ mention as at risk) is the only one passing. **Not edited here: that file is the
 **None of these is fixed here.** They are test-harness and route-config defects, they arrived after
 this sprint's last commit, and fixing a login fixture unattended — on the surface that gates every
 other assertion — is the kind of change that wants a person watching it.
+
+---
+
+### 13 · ✅ CLOSED (S10 `6b41cc42`) — the CI web server never got the limiter's backing store
+`next start` sets `NODE_ENV=production`, so `rate-limit.ts` takes its production branch, which
+**fails closed** when Upstash is unreachable (SECURITY-P1 M-01, deliberate). Both variables are set
+in Vercel; CI's server runs outside Vercel and nothing passed them in — so every limited route
+returned 429 on its **first** call. "Too many attempts" was not a count; it was a limiter with
+nowhere to count.
+
+**Fixed** by passing both variables job-level to the two jobs that run their own server, and **not**
+to the production job. **Verified by observation:** run `33496413779` shows zero `[rate-limit] FATAL`
+lines, login succeeded, and the suite ran 6 passed / 3 failed. A rail keys off `BASE_URL` so the next
+server-running job is covered automatically.
+
+---
+
+### 14 · ⛔ OPEN — 10 logins / 15 min is too tight for CI's cadence
+**Not the same as #13, and worth keeping separate.** Run `33498410137` shows **zero FATAL and zero
+"Redis unavailable"** — the limiter is connected and working correctly. The 429 is a **genuine
+count**: `/api/auth/guard` allows 10 logins per 15 minutes per IP, and three pushes in thirty
+minutes × two suites × one-to-two logins each, with retries, from shared GitHub runner egress IPs,
+exceeds it.
+
+**Two ways forward:**
+- **Test-side, safe, not done here:** the smoke fixture logs in fresh every run. `e2e/helpers/`
+  already has `restoreCachedSession`. Reusing a cached session cuts CI's login count without
+  touching auth.
+- **Product-side, PARKED:** raising the limit is authorisation and is the founder's call.
+
+---
+
+### 15 · ⛔ OPEN — an Upstash outage locks every owner out of their own business
+The login guard runs *before* Supabase; a 429 there means `signInWithPassword` is never called
+(`AuthScene.tsx:120-121`). When Redis is unreachable the guard 429s on the **first** call for **every**
+caller — no owner, no staff, no admin can log in.
+
+Fail-open/closed is **one global default** in `rate-limit.ts`, not per route as assumed, and there is
+a **third** behaviour nobody had named: Redis configured but unreachable at call time **throws**, and
+the route 500s (`rate-limit.ts:64`, unwrapped) — which on login *also* shows "Too many attempts".
+
+Also found: `instore-chat` keys on **business_id only** (60/hour for the whole venue) and
+`with-rate-limit.ts` trusts a **client-supplied** `x-user-id`.
+
+**PARKED — authorisation.** Full route table, key composition and recommendation in
+[S10-LIMITER-ANALYSIS.md](./S10-LIMITER-ANALYSIS.md).
+
+---
+
+### 16 · ⛔ OPEN — `cron_runs` has no watcher, and the FATAL has no consumer
+`MONITOR-1` alerting **exists, is scheduled and runs** — but it watches **cost** (budget, renewals,
+quota). `aria-health-monitor` calls `sendAlert` six times and **not once for its own red checks**;
+27 are pending. Nothing reads `cron_runs` looking for failures, which is why nightly-sync buried
+2,272 false failures for three months. The `[rate-limit] FATAL` is a `console.error` and nothing
+more.
+
+**And there is no evidence trail that alerting has ever worked** — `alert.ts` writes nothing to the
+database and no-ops silently when `ALERT_WEBHOOK` is unset. **Confirm that variable is set.**
+
+**Reported, not built** — the escalation path is Resend, a sending path, which is parked. Sweep in
+[S10-FATAL-SWEEP.md](./S10-FATAL-SWEEP.md).
+
+---
+
+### 17 · ⛔ OPEN — POS product grid does not render for the smoke suite
+`owner-flows.spec.ts:104` — `.pos-product-grid` not visible. **Checked before classifying:** that
+class *is* on a real element (`terminal/page.tsx:3093`), so the selector is valid and the grid
+genuinely did not render. Likeliest cause is the "Continue as owner" bypass not taking, leaving
+POSShell on its PIN screen — **but that is inference**, and settling it needs the failure screenshot.
+Recorded rather than fixed on a hunch.
 
 ---
 
