@@ -70,6 +70,18 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      # ── S10 PHASE 1 — THE LIMITER'S BACKING STORE MUST REACH THE CI WEB SERVER ──────────────
+      # `next start` sets NODE_ENV=production, so src/lib/rate-limit.ts takes its PRODUCTION
+      # branch — and that branch FAILS CLOSED when Upstash is unreachable, by design
+      # (SECURITY-P1 M-01: a missing env var must never silently strip rate limiting). Both
+      # variables are set in Vercel, but CI's web server runs outside Vercel and nothing passed
+      # them in, so every limited route returned 429 on its FIRST call. That is what
+      # "Too many attempts" was: not a count, a limiter with nowhere to count.
+      #
+      # Job-level, so the webServer step inherits them — the same reason NODE_OPTIONS moved here
+      # in CI-FIX-1. Values are never echoed; the check step below asserts presence only.
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
       # MS8 phase 5 — explicit fixture. The SMOKE suite keeps its own business (…0101); the e2e
       # suite pins …0001. Keeping them separate is the fix for the root cause: one suite's fixture
       # silently became the other's when resolution was "newest owned business".
@@ -112,6 +124,11 @@ jobs:
           check SUPABASE_SERVICE_ROLE_KEY
           check TEST_USER_EMAIL
           check TEST_USER_PASSWORD
+          # S10 PHASE 1 — presence only. `check` prints a character COUNT, never a value or a
+          # fragment of one; that is the existing convention here and it is what makes a missing
+          # secret loud instead of surfacing 40 minutes later as "Too many attempts".
+          check UPSTASH_REDIS_REST_URL
+          check UPSTASH_REDIS_REST_TOKEN
           if [ "$MISSING" = "1" ]; then exit 1; fi
 
       - name: Cache Playwright browsers
