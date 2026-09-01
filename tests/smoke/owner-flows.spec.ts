@@ -33,7 +33,18 @@ test.describe('Owner flows (authenticated)', () => {
     await input.fill('What is the name of my business?')
     await page.keyboard.press('Enter')
 
-    const response = page.locator('[class*="message"], [class*="response"], [class*="chat"]')
+    // S10 PHASE 2 — TEST DEFECT, not a product one. This was
+    //   [class*="message"], [class*="response"], [class*="chat"]
+    // which matches NOTHING on the surface it is pointed at. Since the S5 swap,
+    // /dashboard/ask-aria renders AskAriaTransition, whose class names come from the lifted design
+    // contract: `.m` (a message row), `.m.me` (the owner's), `.bub` (the bubble), `.talk`, `.flow`.
+    // Not one contains the substrings "message", "response" or "chat". The selector was written
+    // against the OLD /classic DOM and this assertion had never once executed against a real page,
+    // so nothing ever told us.
+    //
+    // `.m:not(.me) .bub` is Aria's side specifically — matching `.bub` alone would happily pass on
+    // the echo of the owner's OWN question, which is the failure mode this test exists to catch.
+    const response = page.locator('.m:not(.me) .bub')
       .filter({ hasText: /\S{10,}/ })
       .last()
     await expect(response).toBeVisible({ timeout: 45_000 })
@@ -182,7 +193,11 @@ test.describe('Bookings (authenticated, DB-verified, self-cleaning)', () => {
     // transition (confirmed -> cancelled) is correctly readable end-to-end rather than re-testing
     // a UI form path that public/bookings/[business_id] (a different, public-facing route) already
     // covers for creation.
-    const { data: booking } = await dbAdmin.from('bookings').insert({
+    // S10 PHASE 2 — RULE 7, IN A TEST. This destructured only `data`, so when the insert failed
+    // the assertion below reported `expect(booking).not.toBeNull()` and NOTHING about why — a
+    // constraint, a missing column and an RLS refusal all look identical. Same move that turned
+    // S9's opaque login timeout into "Invalid login credentials" in one run.
+    const { data: booking, error: bookingErr } = await dbAdmin.from('bookings').insert({
       business_id: businessId,
       customer_name: SMOKE_TAG,
       booking_date: new Date(Date.now() + 86400_000).toISOString().slice(0, 10),
@@ -190,6 +205,7 @@ test.describe('Bookings (authenticated, DB-verified, self-cleaning)', () => {
       source: SMOKE_TAG,
       notes: SMOKE_TAG,
     }).select('id').single()
+    expect(bookingErr?.message ?? null, 'bookings insert was rejected').toBeNull()
     expect(booking).not.toBeNull()
     createdBookingId = booking!.id as string
 
