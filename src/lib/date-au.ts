@@ -64,6 +64,105 @@ function auDateOf(shifted: Date): string {
   return shifted.toISOString().slice(0, 10);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// TZ-RAIL-1 — THE CANONICAL BUSINESS-TIME RAIL.
+//
+// ── WHY THIS IS HERE AND NOT IN A NEW FILE ─────────────────────────────────────────────────────
+// The sprint asked for a new `lib/business-time.ts` exporting `businessToday()`. That would have
+// been a FOURTH implementation of "what day is it for this business", beside `todayAEST()` in this
+// file (already tz-parameterised by TZ-3, already imported by 50 files, already DST-aware with a
+// two-pass offset refinement for the transition edge). Creating it would have been the exact
+// N-copies drift this sprint exists to remove, so the rail is added to the module that already
+// owns the concept.
+//
+// `businessToday()` therefore DELEGATES to `todayAEST()`. It is a name, not a second algorithm —
+// there is still exactly one place that decides what day it is, and a test asserts the two can
+// never disagree.
+//
+// ── THE BUG THIS EXISTS TO STOP ────────────────────────────────────────────────────────────────
+// Anything computing "today" in UTC returns the PREVIOUS day for most of the Melbourne trading
+// morning: at 8am Melbourne it is still yesterday in UTC. 280 `toISOString().slice(0,…)` call
+// sites exist in this repo; migrating them is TZ-RAIL-1b, not this sprint.
+//
+// ── WHAT IS DELIBERATELY NOT READ ──────────────────────────────────────────────────────────────
+// `pos_settings.timezone`. It is a third copy of one fact with no defined authority over the other
+// two. It is NOT deleted (RULE 0) and NOT consulted — recorded as a follow-up decision. All three
+// columns currently hold 'Australia/Melbourne', so nothing is visibly broken today; three copies
+// and no precedence is the problem.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** The fallback when neither an outlet nor a business names a zone. */
+export const DEFAULT_TZ = MEL;
+
+/**
+ * Resolution order: outlet → business → default.
+ *
+ * Callers pass whatever they already have; the rail decides precedence, so no call site has to
+ * hold an opinion about which column wins. This is not hypothetical — Sip runs TWO outlets, so a
+ * per-outlet zone can already differ from the business's in production.
+ *
+ * An invalid IANA string is treated as absent rather than trusted, which is why this goes through
+ * the same `isValidZone` check every other helper here uses.
+ */
+export function resolveTimezone(
+  outletTz?: string | null,
+  businessTz?: string | null,
+): string {
+  const outlet = outletTz?.trim();
+  if (outlet && isValidZone(outlet)) return outlet;
+  const business = businessTz?.trim();
+  if (business && isValidZone(business)) return business;
+  return DEFAULT_TZ;
+}
+
+export type BusinessNow = {
+  /** YYYY-MM-DD in the business's timezone. */
+  date: string;
+  /** e.g. "Tuesday" */
+  dayName: string;
+  /** e.g. "Tue" */
+  dayShort: string;
+  /** e.g. "8:42 am" */
+  time: string;
+  timezone: string;
+  /** The underlying instant, unambiguous — so a reader can always recover the true moment. */
+  iso: string;
+};
+
+/**
+ * The only sanctioned way to ask what day it is for a business.
+ *
+ * `at` defaults to now; pass an instant to ask "which business day was this?" — which is the
+ * question a `timestamptz` row needs answered before it can be bucketed into a day.
+ */
+export function businessNow(timezone?: string | null, at: Date = new Date()): BusinessNow {
+  const tz = resolveZone(timezone);
+  return {
+    // NOT a second date implementation. `toAESTWallClock` + `auDateOf` is literally what
+    // `todayAEST` does for "now" (auDateOf(shiftedNow(zone))) — reused here so an arbitrary
+    // instant is bucketed by exactly the same rule as today is. A test pins them together.
+    date: auDateOf(toAESTWallClock(at.toISOString(), tz)),
+    dayName: new Intl.DateTimeFormat('en-AU', { timeZone: tz, weekday: 'long' }).format(at),
+    dayShort: new Intl.DateTimeFormat('en-AU', { timeZone: tz, weekday: 'short' }).format(at),
+    time: new Intl.DateTimeFormat('en-AU', {
+      timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true,
+    }).format(at),
+    timezone: tz,
+    iso: at.toISOString(),
+  };
+}
+
+/**
+ * The business's date string only — the common case.
+ *
+ * Delegates to `todayAEST`, which is this module's single source of a business date. Kept as a
+ * separate name because "todayAEST" reads as a fixed offset and is now misleading for a
+ * multi-zone product; this is the name new code should reach for.
+ */
+export function businessToday(timezone?: string | null, at?: Date): string {
+  return at ? businessNow(timezone, at).date : todayAEST(timezone);
+}
+
 // Add/subtract whole days to a YYYY-MM-DD (UTC-safe calendar math).
 export function addDaysYmd(ymd: string, days: number): string {
   const dt = new Date(`${ymd}T00:00:00.000Z`);

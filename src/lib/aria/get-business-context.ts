@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST, businessNow } from '@/lib/date-au'
 import { resolveBusinessTimezone } from '@/lib/aria/business-timezone'
 import { getWeatherContext } from './get-weather-context'
 import { CANONICAL_COLS } from './schema-registry'
@@ -238,12 +238,27 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     console.error('[get-business-context] house rules non-fatal:', (e as Error).message)
   }
 
+  // TZ-RAIL-1 (RULE 9) — the council path gets the same date facts as the tool-loop path, because
+  // "what day is it" must not depend on WHICH path answered. `businessNow` reuses the `tz` this
+  // file already resolved at line 15; no new query.
+  const bn = businessNow(tz, now)
+
   return JSON.stringify({
     _meta: {
-      snapshot_date: now.toISOString().split('T')[0],
+      // TZ-RAIL-1 — WAS `now.toISOString().split('T')[0]`, a UTC date sitting inside the council's
+      // own ground truth, four lines from a correctly-computed `todayStr`. For most of the
+      // Melbourne trading morning that stamped the council's snapshot with YESTERDAY: at 8am
+      // Melbourne it is still the previous day in UTC. This is the exact bug the rail exists for,
+      // and it was in the one place where being wrong contaminates every strategic answer.
+      snapshot_date: bn.date,
       has_sales_data: hasSalesData,
       business_id: businessId,
     },
+    // The four date facts, stated rather than left for the model to assume.
+    today: bn.date,
+    day_name: bn.dayName,
+    local_time: bn.time,
+    timezone: bn.timezone,
     house_rules: houseRulesForCouncil.length > 0 ? houseRulesForCouncil : undefined,
     house_rules_note: houseRulesForCouncil.length > 0
       ? 'HOUSE RULES are the owner\u2019s stated operating rules, in their words. Honour them in every recommendation. Never propose an action that breaks one without saying plainly that it breaks it and why you are raising it anyway.'

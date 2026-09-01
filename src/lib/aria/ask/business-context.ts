@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
+import { todayAEST, toAESTStart, startOfWeekAEST, businessNow, resolveTimezone } from '@/lib/date-au'
+import { resolveBusinessTimezone } from '@/lib/aria/business-timezone'
 import { computeStockValue } from '@/lib/inventory/stock-value'
 import { velocitySummary } from '@/lib/inventory/velocity'
 import { reorderSummary } from '@/lib/inventory/par-levels'
@@ -23,6 +24,21 @@ export interface ConversationSummary {
 export type ContextScope = 'quick' | 'standard' | 'full'
 
 export interface AskAriaContext {
+  /**
+   * TZ-RAIL-1 (RULE 9) — WHAT DAY IT IS, FOR THIS BUSINESS, AS A FACT RATHER THAN AN ASSUMPTION.
+   *
+   * Aria must never answer a "today" question from the model's own notion of the date. Without
+   * these, the only date in the prompt was whatever the model believed, and anything computing a
+   * day in UTC is a day BEHIND for most of the Melbourne trading morning — at 8am Melbourne it is
+   * still yesterday in UTC.
+   *
+   * `local_time` is included because "is it too late to run lunch specials?" is a real question and
+   * the hour is not recoverable from the date alone.
+   */
+  today: string        // YYYY-MM-DD in the business's timezone
+  day_name: string     // e.g. "Tuesday"
+  local_time: string   // e.g. "8:42 am"
+  timezone: string     // the IANA zone these were computed in
   business_id: string
   business_name: string
   industry: string
@@ -109,13 +125,27 @@ export async function buildAskAriaContext(
 ): Promise<AskAriaContext> {
   const isQuick = scope === 'quick'
   const now = new Date()
-  // TZ-1: AEST-midnight boundaries via date-au (true instants with +10:00 offset)
-  const todayStartIso = toAESTStart(todayAEST())
-  const monthStartIso = toAESTStart(todayAEST().slice(0, 7) + '-01')
-  const [tzYear, tzMonth] = todayAEST().slice(0, 7).split('-').map(Number)
-  const lastMonthStartIso = toAESTStart(`${tzMonth === 1 ? tzYear - 1 : tzYear}-${String(tzMonth === 1 ? 12 : tzMonth - 1).padStart(2, '0')}-01`)
-  // WEEK-1: "this week" = calendar week, Monday 00:00 AEST → now (was rolling 7 days)
-  const weekStart = new Date(toAESTStart(startOfWeekAEST().toISOString().slice(0, 10)))
+
+  // ── TZ-RAIL-1 — RESOLVE THE BUSINESS'S ZONE BEFORE COMPUTING ANY BOUNDARY ────────────────────
+  // These calls used to be `todayAEST()` with NO argument, so every "today" boundary in Ask Aria's
+  // context was computed from the Melbourne default rather than the business's own zone. Harmless
+  // while all five businesses are in Melbourne; wrong the moment one is not, and silently so.
+  //
+  // No new query: `resolveBusinessTimezone` is the existing cached (10-min) resolver built for
+  // exactly this hot path. The outlet slot is passed as null because this builder does not load an
+  // outlet row — the rail decides precedence, so the caller does not have to, and adding an outlet
+  // fetch here would be the "fetch a timezone everywhere" sprint this one is explicitly not.
+  const businessTz = await resolveBusinessTimezone(businessId)
+  const tz = resolveTimezone(null, businessTz)
+  const bn = businessNow(tz, now)
+
+  // TZ-1: local-midnight boundaries via date-au (true instants, DST-aware via the IANA zone)
+  const todayStartIso = toAESTStart(todayAEST(tz), tz)
+  const monthStartIso = toAESTStart(todayAEST(tz).slice(0, 7) + '-01', tz)
+  const [tzYear, tzMonth] = todayAEST(tz).slice(0, 7).split('-').map(Number)
+  const lastMonthStartIso = toAESTStart(`${tzMonth === 1 ? tzYear - 1 : tzYear}-${String(tzMonth === 1 ? 12 : tzMonth - 1).padStart(2, '0')}-01`, tz)
+  // WEEK-1: "this week" = calendar week, Monday 00:00 local → now (was rolling 7 days)
+  const weekStart = new Date(toAESTStart(startOfWeekAEST(tz).toISOString().slice(0, 10), tz))
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30)
 
   const competitorRes = supabaseAdmin
@@ -131,7 +161,7 @@ export async function buildAskAriaContext(
     saleItemsRes, topCustomersRes, recentTxnsRes, pendingPOsRes, loyaltyRes, activeCustomersRes, lastMonthSalesRes, subscriptionRes,
     actionsExecutedRes,
   ] = await Promise.all([
-    supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
+    supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews,timezone').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStartIso).neq('status', 'voided'),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()).neq('status', 'voided'),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStartIso).neq('status', 'voided'),
@@ -507,6 +537,11 @@ export async function buildAskAriaContext(
   } catch (e) { console.error('[business-context] ops counts failed (non-fatal):', (e as Error).message) }
 
   return {
+    // TZ-RAIL-1 — the four date/time facts, first so they are impossible to miss in a prompt dump.
+    today: bn.date,
+    day_name: bn.dayName,
+    local_time: bn.time,
+    timezone: bn.timezone,
     business_id: businessId,
     business_name: biz?.name ?? 'Your business',
     industry: biz?.industry ?? 'retail',
