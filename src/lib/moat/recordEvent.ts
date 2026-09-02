@@ -9,7 +9,12 @@ export type BusinessEventEntityType = 'decision' | 'job'
 export type BusinessEventType =
   | 'proposed' | 'approved' | 'declined' | 'expired'
   | 'job_created' | 'job_completed' | 'job_failed'
-export type BusinessEventActor = 'aria' | 'owner' | 'cron'
+// TS-1 PHASE 3 — 'staff' added at FIRST USE. business_events.actor has accepted it since
+// migration 20260901103017 (teamspace_extend_existing dropped and re-added the CHECK); the
+// TypeScript union simply had not caught up, so a team-originated event could not be typed.
+// WIDENING ONLY: no existing call site changes, and every other declaration of this union was
+// swept for (there is exactly one other, in createDecision.ts, widened in the same commit).
+export type BusinessEventActor = 'aria' | 'owner' | 'cron' | 'staff'
 
 export interface RecordEventParams {
   business_id: string

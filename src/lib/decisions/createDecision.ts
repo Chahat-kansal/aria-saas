@@ -61,7 +61,8 @@ export interface CreateDecisionParams {
   /** Only for the rare caller that genuinely needs a non-'pending' status. Defaults to 'pending'. */
   status?: string
 
-  actor?: 'aria' | 'cron' | 'owner'
+  /** TS-1 PHASE 3 — 'staff' added at first use; see recordEvent.ts for the full note. */
+  actor?: 'aria' | 'cron' | 'owner' | 'staff'
   /** Emit the 'proposed' business_events row. Default true — opt out explicitly, never silently. */
   emit?: boolean
   /** Fire the decision_waiting push. Default true — opt out explicitly, never silently. */
