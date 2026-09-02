@@ -17,6 +17,7 @@ import { segmentFigures } from '@/lib/aria/figure-provenance'
 import { advisorShortfallNote } from '@/lib/aria/council-advisors'
 import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
 import { readDraft, writeDraft, clearDraft, adoptDraft } from '@/lib/aria/draft-store'
+import { readThreadId, syncThreadUrl, restoreThread, rememberScroll, recallScroll } from '@/lib/aria/thread-session'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
 import type { AskBlock } from '@/lib/aria/ask-types'
@@ -146,8 +147,28 @@ export default function AskAriaTransition() {
     return () => { cancelled = true }
   }, [])
 
+  /**
+   * M11 PHASE 1 — the offset a restore should land on, when the owner had scrolled up.
+   *
+   * Null in the ordinary case, and the ordinary case is the bottom: a new message arriving must
+   * always pull the view to it. This is set ONCE by the reload restore below and consumed by the
+   * very next run of the scroll effect, so it can never hold a live conversation away from its
+   * newest turn.
+   */
+  const pendingScrollRef = useRef<number | null>(null)
+
   useEffect(() => {
-    if (flowRef.current) flowRef.current.scrollTop = 9e9
+    if (!flowRef.current) return
+    const pending = pendingScrollRef.current
+    if (pending !== null) {
+      pendingScrollRef.current = null
+      // Clamp: the thread may render shorter than it did last time (S2B pages the tail at 50
+      // messages), and an offset past the end would silently become the bottom anyway.
+      const max = Math.max(0, flowRef.current.scrollHeight - flowRef.current.clientHeight)
+      flowRef.current.scrollTop = Math.min(pending, max)
+      return
+    }
+    flowRef.current.scrollTop = 9e9
   }, [turns.length, text, room])
 
   /**
@@ -242,6 +263,10 @@ export default function AskAriaTransition() {
       // A draft typed before the thread existed belongs to the thread it produced.
       adoptDraft(result.conversation_id)
       setConversationId(result.conversation_id)
+      // M11 phase 1 — the first answer is what creates the thread, so this is the moment the URL
+      // becomes able to point at it. It also strips the `?q=` that may have started this
+      // conversation, so reloading never re-asks the question.
+      syncThreadUrl(result.conversation_id)
     }
 
     // Migrated: API-RESILIENCE-1/1B. Backup provider = amber, total outage = red. Only what the
@@ -363,6 +388,8 @@ export default function AskAriaTransition() {
   /** Restore a past conversation — migrated from `loadConversation` (page.tsx:610). */
   const openThread = useCallback((id: string, messages: Array<{ role: string; content: string; provenance?: ProvenanceInput }>) => {
     setConversationId(id)
+    // M11 phase 1 — the address bar now carries the open thread, so a refresh comes back here.
+    syncThreadUrl(id)
     setRoom('ask')
     setWorking(true)
     setTurns(messages.map(m => ({
@@ -399,17 +426,70 @@ export default function AskAriaTransition() {
   useEffect(() => {
     if (autoSentRef.current) return
     if (typeof window === 'undefined') return
+    // M11 PHASE 1 — a thread URL asks nothing. `?c=` means "put me back where I was"; auto-sending
+    // on top of that would append a question the owner never typed to a conversation they were only
+    // returning to. `threadSearch` strips `q` when it writes `c`, so the two should never co-occur;
+    // this is the second lock, for a hand-assembled or bookmarked URL carrying both.
+    if (readThreadId(window.location.search)) return
     const q = new URLSearchParams(window.location.search).get('q')
     if (!q || !q.trim()) return
     autoSentRef.current = true
     void ask(q)
   }, [ask])
 
+  /**
+   * M11 PHASE 1 — A REFRESH MUST NOT LOSE THE CONVERSATION.
+   *
+   * Before this, the open thread lived only in `useState`, so F5 returned the owner to the welcome
+   * screen with their work still in the database and no sign of it on screen. Nothing new is stored
+   * to fix that: the thread's identity rides in the URL, and this effect hands it to the SAME route
+   * and the SAME `openThread` the Threads panel uses, so a URL restore and a click restore cannot
+   * produce different screens.
+   *
+   * WORKING IS ENTERED IMMEDIATELY, before the fetch resolves. Waiting would show the welcome
+   * screen for as long as the round trip takes and then snap away — a flash of the exact wrong
+   * state. If the thread turns out to be gone (deleted, another business's, a mangled link) the
+   * screen falls back to welcome and the stale id is dropped from the URL.
+   *
+   * Fires ONCE, guarded by a ref for the same reason the `?q=` effect is: `openThread` is stable
+   * but a re-run would re-fetch and stamp over whatever the owner had since typed.
+   */
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current) return
+    if (typeof window === 'undefined') return
+    const id = readThreadId(window.location.search)
+    if (!id) return
+    restoredRef.current = true
+    setRoom('ask')
+    setWorking(true)
+    let cancelled = false
+    void (async () => {
+      const restored = await restoreThread(id, (u) => fetch(u))
+      if (cancelled) return
+      if (!restored) {
+        // The link no longer resolves for this owner. Say nothing alarming — a stale thread link is
+        // an ordinary thing to click — but do not leave the id in the URL pretending otherwise.
+        setWorking(false)
+        syncThreadUrl(null)
+        return
+      }
+      // Where they had scrolled to, if this tab remembers. Read BEFORE openThread so the scroll
+      // effect that fires on the new turns finds it already waiting.
+      pendingScrollRef.current = recallScroll(restored.id)
+      openThread(restored.id, restored.messages)
+    })()
+    return () => { cancelled = true }
+  }, [openThread])
+
   const home = useCallback(() => setWorking(false), [])
 
   const newChat = useCallback(() => {
     setTurns([])
     setConversationId(null)
+    // M11 phase 1 — leaving a thread must clear it from the URL too, or the next refresh would
+    // reopen the conversation the owner just stepped out of.
+    syncThreadUrl(null)
     setRoom('ask')
     setWorking(false)
   }, [])
@@ -701,7 +781,17 @@ export default function AskAriaTransition() {
           {room === 'made' && <MadeForYouRoom onPrompt={(p, ref) => void ask(p, undefined, ref)} />}
 
           {room === 'ask' && (
-            <div className="flow" ref={flowRef}>
+            <div
+              className="flow"
+              ref={flowRef}
+              /**
+               * M11 phase 1 — remember where in the thread the owner is reading, so a refresh
+               * returns them to it rather than to the bottom. Per thread, this tab only, and never
+               * while a reply is streaming: the view is being pulled to the newest token then, and
+               * recording that would remember the machine's position instead of the owner's.
+               */
+              onScroll={e => { if (!isBusy) rememberScroll(conversationId, (e.target as HTMLDivElement).scrollTop) }}
+            >
               {turns.map((t, i) => {
                 const live = t.streaming ? text : t.text
                 if (t.role === 'user') {
