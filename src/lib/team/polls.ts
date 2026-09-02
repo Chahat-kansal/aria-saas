@@ -35,6 +35,26 @@ export interface PollOption {
   /** Stable key stored on the vote row. Never the label — labels get edited. */
   key: string
   label: string
+  /**
+   * TS-1 PHASE 4 — what this option would PROPOSE if it won. Optional: a poll that only asks a
+   * question ("early or late start?") carries none, and closing it drafts nothing.
+   */
+  drafts?: PollDraftSpec[]
+}
+
+/**
+ * A draft the winning option proposes. Deliberately NARROW: there is no `status` here, so no
+ * caller can ask for a draft that is already approved or executed, and no `amount_cents` —
+ * a poll cannot commit money. Both omissions are the point, not an oversight.
+ */
+export interface PollDraftSpec {
+  /** Machine key for the decision type, e.g. 'roster_publish'. */
+  kind: string
+  title: string
+  subtitle?: string | null
+  /** Optional override; defaults to the poll's own domain. */
+  domain?: PollDomain
+  payload?: Record<string, unknown>
 }
 
 /**
@@ -137,7 +157,7 @@ interface PollRow {
   kind: string | null
   status: string | null
   expires_at: string | null
-  action_data: { options?: Array<{ key?: string }> } | null
+  action_data: { options?: Array<{ key?: string; drafts?: PollDraftSpec[] }> } | null
 }
 
 /**
@@ -198,7 +218,7 @@ export interface Tally {
 }
 
 export type CloseResult =
-  | { ok: true; outcome: 'winner'; winner: string; tally: Tally[] }
+  | { ok: true; outcome: 'winner'; winner: string; tally: Tally[]; drafted: string[] }
   /** Nobody voted, or the top two tied. Neither invents a winner. */
   | { ok: true; outcome: 'no_votes' | 'tie'; tied?: string[]; tally: Tally[] }
   | { ok: false; reason: 'poll_not_found' | 'already_closed' }
@@ -293,7 +313,39 @@ export async function closePoll(pollId: string, closedBy?: string | null): Promi
     payload_summary: { kind: 'team_poll', domain: poll.domain, decided_vs_proposed: false },
   })
 
+  // ── TS-1 PHASE 4 — EXECUTION BINDING ─────────────────────────────────────────────────────────
+  // The winning option DRAFTS through createDecision, the same propose path every other decision
+  // uses. Each draft lands 'pending' and waits for a human.
+  //
+  // WHAT THIS DELIBERATELY DOES NOT DO, and each omission is load-bearing:
+  //   · it never passes `status`, so createDecision's 'pending' default stands. A poll cannot
+  //     produce an approved or executed row.
+  //   · PollDraftSpec has no amount_cents field at all, so a poll cannot commit money. Not
+  //     "validated to zero" — absent from the type, so it cannot be expressed.
+  //   · it never calls an executor. Winning a vote proposes; it does not do.
+  // A tie or a no-vote close drafts NOTHING: there is no winner, so there is nothing to propose.
+  const drafted: string[] = []
+  if (outcome === 'winner') {
+    const winningOption = (poll.action_data?.options ?? [])
+      .find(o => o?.key === top!.option_key) as (PollOption | undefined)
+    for (const spec of winningOption?.drafts ?? []) {
+      const id = await createDecision({
+        business_id: poll.business_id,
+        domain: spec.domain ?? ((poll.domain ?? 'people') as PollDomain),
+        kind: spec.kind,
+        title: spec.title,
+        subtitle: spec.subtitle ?? null,
+        payload: { ...(spec.payload ?? {}), from_poll: pollId, winning_option: top!.option_key },
+        aria_reason: `The team chose "${top!.option_key}" (${top!.votes} of ${total} votes).`,
+        actor: 'staff',
+        // NO status. NO amount_cents. See the note above — both are omissions by design.
+      })
+      if (id) drafted.push(id)
+      else console.error('[polls] draft failed for kind', spec.kind, 'on poll', pollId)
+    }
+  }
+
   return outcome === 'winner'
-    ? { ok: true, outcome, winner: top!.option_key, tally }
+    ? { ok: true, outcome, winner: top!.option_key, tally, drafted }
     : { ok: true, outcome, ...(outcome === 'tie' ? { tied } : {}), tally }
 }

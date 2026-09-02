@@ -14,29 +14,35 @@ const state: {
   votesSelect: Res
   updateRes: Res
   inserted: Array<Record<string, unknown>>
-} = { pollRow: {}, voteInsert: {}, votesSelect: {}, updateRes: {}, inserted: [] }
+  updates: Array<Record<string, unknown>>
+} = { pollRow: {}, voteInsert: {}, votesSelect: {}, updateRes: {}, inserted: [], updates: [] }
 
 vi.mock('@/lib/supabase-admin', () => {
+  // `.select().eq()` is used two ways in polls.ts: chained again then .maybeSingle() (the poll
+  // lookup), and awaited directly (the votes lookup). This object is BOTH — chainable and
+  // thenable — so one fake serves both without branching on the table name.
+  const eqNode = () => {
+    const node: Record<string, unknown> = {
+      eq: () => ({ maybeSingle: async () => state.pollRow }),
+      maybeSingle: async () => state.pollRow,
+      then: (res: (v: unknown) => unknown) => Promise.resolve(state.votesSelect).then(res),
+    }
+    return node
+  }
   const api = {
-    from(table: string) {
+    from() {
       return {
-        select: () => ({
-          eq: () => ({
-            eq: () => ({ maybeSingle: async () => state.pollRow }),
-            // votes lookup: .select('option_key').eq('poll_id', …) resolves directly
-            then: undefined,
-            ...(table === 'team_poll_votes'
-              ? { }
-              : { }),
-          }),
-        }),
+        select: () => ({ eq: eqNode }),
         insert: async (row: Record<string, unknown>) => {
           state.inserted.push(row)
           return state.voteInsert
         },
-        update: () => ({
-          eq: () => ({ eq: () => ({ select: () => ({ maybeSingle: async () => state.updateRes }) }) }),
-        }),
+        update: (patch: Record<string, unknown>) => {
+          state.updates.push(patch)
+          return {
+            eq: () => ({ eq: () => ({ select: () => ({ maybeSingle: async () => state.updateRes }) }) }),
+          }
+        },
       }
     },
   }
@@ -48,7 +54,7 @@ vi.mock('@/lib/decisions/createDecision', () => ({
 }))
 vi.mock('@/lib/moat/recordEvent', () => ({ recordEvent: vi.fn(async () => undefined) }))
 
-import { castVote, domainForSubject, priorityForDomain } from './polls'
+import { castVote, closePoll, domainForSubject, priorityForDomain } from './polls'
 import { createDecision } from '@/lib/decisions/createDecision'
 import { createPoll } from './polls'
 
@@ -65,6 +71,9 @@ beforeEach(() => {
   state.pollRow = OPEN_POLL
   state.voteInsert = { error: null }
   state.inserted = []
+  state.updates = []
+  state.votesSelect = { data: [], error: null }
+  state.updateRes = { data: { id: 'p1' }, error: null }
   vi.clearAllMocks()
 })
 
@@ -204,5 +213,103 @@ describe('TS-1 phase 3 · uniqueness is the database’s job', () => {
   it('no select(*) — staff_members carries TFN and bank details', () => {
     expect(src).not.toMatch(/\.select\('\*'\)/)
     expect(src).toContain('POLL_COLUMNS')
+  })
+})
+
+describe('TS-1 phase 4 · closing a poll PROPOSES; it never executes and never spends', () => {
+  const WITH_DRAFTS = {
+    data: {
+      id: 'p1', business_id: 'b1', kind: 'team_poll', status: 'pending', domain: 'people',
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      action_data: {
+        options: [
+          { key: 'early', label: 'Early', drafts: [{ kind: 'roster_publish', title: 'Publish early roster' }] },
+          { key: 'late', label: 'Late' },
+        ],
+      },
+    },
+    error: null,
+  }
+
+  it('a WINNER drafts through createDecision with NO status and NO amount_cents', async () => {
+    state.pollRow = WITH_DRAFTS
+    state.votesSelect = { data: [{ option_key: 'early' }, { option_key: 'early' }], error: null }
+    const r = await closePoll('p1')
+
+    expect(r).toMatchObject({ ok: true, outcome: 'winner', winner: 'early', drafted: ['created-decision-id'] })
+    const arg = vi.mocked(createDecision).mock.calls[0]![0]
+    expect(arg.kind).toBe('roster_publish')
+    // THE TWO OMISSIONS THAT MATTER. `status` absent → createDecision's 'pending' default stands.
+    // `amount_cents` absent → a poll cannot commit money. Neither is "validated to a safe value";
+    // both are simply never passed.
+    expect(Object.prototype.hasOwnProperty.call(arg, 'status')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(arg, 'amount_cents')).toBe(false)
+    // the draft carries its provenance so the decision is traceable to the vote that caused it
+    expect(arg.payload).toMatchObject({ from_poll: 'p1', winning_option: 'early' })
+    expect(arg.aria_reason).toContain('2 of 2 votes')
+  })
+
+  it('the poll row leaves pending, so the phase-2 sweep can never touch it afterwards', async () => {
+    state.pollRow = WITH_DRAFTS
+    state.votesSelect = { data: [{ option_key: 'early' }], error: null }
+    await closePoll('p1')
+    expect(state.updates[0]!.status).toBe('executed')
+    expect(state.updates[0]!.status).not.toBe('pending')
+  })
+
+  it('A TIE DRAFTS NOTHING and invents no winner', async () => {
+    state.pollRow = WITH_DRAFTS
+    state.votesSelect = { data: [{ option_key: 'early' }, { option_key: 'late' }], error: null }
+    const r = await closePoll('p1')
+    expect(r).toMatchObject({ ok: true, outcome: 'tie', tied: ['early', 'late'] })
+    expect(r).not.toHaveProperty('winner')
+    expect(vi.mocked(createDecision)).not.toHaveBeenCalled()
+    expect(state.updates[0]!.status).toBe('dismissed')
+  })
+
+  it('NO VOTES drafts nothing', async () => {
+    state.pollRow = WITH_DRAFTS
+    state.votesSelect = { data: [], error: null }
+    const r = await closePoll('p1')
+    expect(r).toMatchObject({ ok: true, outcome: 'no_votes' })
+    expect(vi.mocked(createDecision)).not.toHaveBeenCalled()
+    expect(state.updates[0]!.status).toBe('dismissed')
+  })
+
+  it('a winning option with no draft spec closes cleanly and drafts nothing', async () => {
+    state.pollRow = {
+      data: { ...WITH_DRAFTS.data, action_data: { options: [{ key: 'a' }, { key: 'b' }] } },
+      error: null,
+    }
+    state.votesSelect = { data: [{ option_key: 'a' }], error: null }
+    const r = await closePoll('p1')
+    expect(r).toMatchObject({ ok: true, outcome: 'winner', winner: 'a', drafted: [] })
+    expect(vi.mocked(createDecision)).not.toHaveBeenCalled()
+  })
+
+  it('LOSING the close race is answered, not thrown', async () => {
+    // Another close claimed the row first: the .eq('status','pending') on the update returns
+    // nothing, and this must not tally twice or draft twice.
+    state.pollRow = WITH_DRAFTS
+    state.votesSelect = { data: [{ option_key: 'early' }], error: null }
+    state.updateRes = { data: null, error: null }
+    const r = await closePoll('p1')
+    expect(r).toEqual({ ok: false, reason: 'already_closed' })
+    expect(vi.mocked(createDecision)).not.toHaveBeenCalled()
+  })
+
+  it('THE TYPE FORBIDS IT — PollDraftSpec has no status and no amount_cents field', () => {
+    const src = strip(read('src/lib/team/polls.ts'))
+    const at = src.indexOf('export interface PollDraftSpec')
+    expect(at, 'PollDraftSpec is gone').toBeGreaterThan(-1)
+    const body = src.slice(at, src.indexOf('}', at))
+    expect(body).not.toMatch(/status/)
+    expect(body).not.toMatch(/amount_cents/)
+    // and the close path never passes either
+    const closeAt = src.indexOf('const drafted: string[] = []')
+    expect(closeAt).toBeGreaterThan(-1)
+    const closeBody = src.slice(closeAt)
+    expect(closeBody).not.toMatch(/status:/)
+    expect(closeBody).not.toMatch(/amount_cents:/)
   })
 })
