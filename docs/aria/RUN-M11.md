@@ -161,6 +161,87 @@ product decision, not a repair, and inventing one would be inventing scope.
 
 ---
 
-## PHASE 2 — CAN A PLAN LIVE IN THE EXISTING TABLES?
+## PHASE 2 — CAN A PLAN LIVE IN THE EXISTING TABLES? ⚠️ PARTLY — DDL PROPOSED, THREAD PARKED
 
-*(in progress)*
+**Commit:** `<phase-2>` · **no code.** `docs/aria/M11-PHASE-2-PLAN-STORAGE.md` (the answer, with
+evidence) and `docs/aria/M11-MIGRATION-PROPOSAL.sql` (the DDL, **not applied, not in
+`supabase/migrations/`**).
+
+### The answer
+
+**The steps can. The plan cannot, and the order cannot.**
+
+`aria_autopilot_actions` is the right step registry and must stay the only one. Its
+`status` CHECK — `pending | approved | rejected | executed | dismissed | expired | superseded` — is a
+better step vocabulary than anything a new table would invent, and `requires_stepup`,
+`amount_cents`, `expires_at`, `superseded_by`, `outcome_note` and `resolved_by/at` are all already
+there and already used.
+
+**Two things have nowhere to live, and only two:**
+
+1. **An order.** There is no ordinal column on any candidate table. Ordering by `created_at` breaks
+   silently the moment anyone batches the insert (`now()` is the transaction timestamp — identical
+   for every row in one statement) and cannot express a re-ordered plan; a `step_index` inside
+   `action_data` jsonb is the smuggling the sprint forbids by name. Neither is taken.
+2. **The owner's request, the conversation it came from, and the plan's own state.**
+
+**`proposal_id` is not the grouping the sprint hoped for.** It is a `uuid` with **no FK, no index,
+and NULL on all 817 rows** — never written successfully, so it groups nothing and never has.
+
+### Three live findings the phase turned up
+
+- ⚠️ **`council-executor.ts:17`'s audit insert has never landed.** It writes `proposal_id`,
+  `outcome_data`, `executed_at` and `status:'executed'` on every executed proposal. Live: those
+  three columns are non-null on **0 of 817 rows**. Its error is never read — `await
+  supabase.insert()` inside a `try` that only catches throws. RULE 7 exactly.
+- ⚠️ **Every row that says `executed` has a NULL `executed_at`** — 5 of 5. The column recording
+  *when* something ran is empty on 100% of the rows claiming to have run.
+- ⚠️ **91 of 92 `agent_council_sessions` produced zero proposals; 2 proposals exist in total; 0
+  have ever executed; all 92 are marked `completed`.** It runs nightly (latest 1 Sep) and completes
+  with nothing in it. This pair is a genuine plan/step split the sprint did not mention — and it is
+  dead, and it is the wrong shape anyway (keyed on `session_date`, no owner request, no
+  conversation link, and `council_decision` is the council's verdict rather than the owner's
+  approval).
+
+Also: **`aria_actions` has no status CHECK at all** and `'completed'` is legal there, while
+`aria_autopilot_actions` rejects it — very likely the whole origin of TS-DEFECT-1/M120, and carried
+forward to that sprint rather than fixed here.
+
+### What already existed that the sprint did not mention
+
+**`/api/aria/plan` exists** — 224 lines, `preview` / `save` / `execute` / `undo`, called from the
+daily briefing in four places. So does `buildPlan()` returning `steps: string[]`, `executeProposal()`
+with a real switch over action types, and `action-executor.ts` / `action-rollback.ts` writing
+`aria_action_log` — **64 real rows of executed, reversible actions on real data**, the decision
+table's "record how to undo it", already built.
+
+**The difference is the point.** `RadarPlan.steps` is display prose; the whole plan executes as ONE
+`action_type`. No per-step status, no per-step approval, no per-step outcome, and it is fired by a
+detector rather than by an owner describing an outcome. **The loop's shape exists for a single
+action. M11 is that loop for a multi-step plan from a request** — an extension, not a second thing.
+
+### What this parks
+
+| phase | depends on the parked DDL? | outcome |
+|---|---|---|
+| 3 — the plan | **No** — the plan is shown *before* anything runs | **BUILD** |
+| 4 — execute | **Yes** — idempotency needs a step record with an id to claim, and there is no unique index that could stand in | **PARKED, chain** |
+| 5 — the report | **Yes** for real data; the renderer itself is a pure function of recorded outcomes | **PARTIAL** |
+| 6 — history | **Yes** — reopening a job needs the job to exist | **PARKED, chain** |
+
+Standing table, applied literally: *"They genuinely cannot → propose the DDL and PARK that thread.
+Build what does not depend on it."*
+
+### NOT done, and why
+
+- **No DDL was applied and no file was written to `supabase/migrations/`.** RULE 10a.
+- **Per-job cost has no honest source.** `aria_ai_calls` has **no** linking column — no
+  `conversation_id`, `request_id` or `trace_id` (confirmed by querying its columns). 11,029 rows
+  carry `cost_usd_cents` and none can be attributed to a job except by a time window, which would
+  be a fabricated number. Proposed as a separate optional column; until it exists a job's cost
+  renders **unknown**, never 0.
+
+### Gates
+
+**No source file changed in this commit**, so phase 1's gate result stands unchanged: tsc 0, build
+`BUILD_EXIT=0`, vitest 103/1327. The pre-push hook re-ran tsc and the unit suite on the push.
