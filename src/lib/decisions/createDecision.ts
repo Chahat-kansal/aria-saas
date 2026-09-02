@@ -14,8 +14,20 @@ import type { Domain } from '@/lib/owner-app/decisions'
 //
 // ★ SCOPE — THIS IS FOR GENUINE DECISIONS ONLY. DO NOT USE FOR AUDIT/TELEMETRY ROWS. ★
 // aria_autopilot_actions is DUAL-USE: it is both the owner's decision queue (status 'pending' —
-// the owner must act) AND an agent audit log (status 'executed'/'completed'/'approved' — already
-// happened, recorded for history). Of the 34 insert sites, 16 are decisions and 18 are audit.
+// the owner must act) AND an agent audit log (status 'executed'/'approved' — already happened,
+// recorded for history). Of the 34 insert sites, 16 are decisions and 18 are audit.
+//
+// ⚠️ TS-DEFECT-1 (TS-1 preflight, 1 Sep 2026) — 'completed' USED TO BE LISTED ABOVE AND IT IS NOT
+// A VALID STATUS. aria_autopilot_actions_status_check allows exactly:
+//   pending | approved | rejected | executed | dismissed | expired | superseded
+// Live data confirms it: ZERO rows have ever carried status='completed'. Three writers use it and
+// their writes are being REJECTED by the constraint, silently —
+//   src/app/api/aria/action-feedback/route.ts        (.update)
+//   src/app/api/cron/send-scheduled-campaigns/route.ts (.insert)
+//   src/lib/aria/hypothesis/outcome-learning.ts      (.insert/.update)
+// The comment is corrected here because it is what would send the next person down the wrong path.
+// THE THREE WRITERS ARE DELIBERATELY NOT FIXED: that is a behaviour change on three unrelated
+// paths and it earns its own review. See CLAUDE.md, open findings.
 // Routing an audit row through here would:
 //   (a) PUSH the owner about telemetry ("your SEO scan finished") — the exact spurious-buzz failure
 //       PH-4's whole dedupe design exists to prevent; and worse,

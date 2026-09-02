@@ -717,6 +717,32 @@ A task is NOT done when it compiles. For anything user-facing, you must verify t
 - The user should NEVER be the one to discover that the output is broken. If you cannot render/inspect the output in this environment, say so explicitly and list exactly what the user must check — do not silently mark done.
 - "It builds" and "the DB row exists" are necessary but NOT sufficient. The rendered result is the deliverable.
 
+## OPEN FINDINGS — recorded, deliberately not fixed
+
+### TS-DEFECT-1 — three writers use a status the CHECK rejects (found TS-1 preflight, 1 Sep 2026)
+
+`aria_autopilot_actions_status_check` allows exactly:
+`pending | approved | rejected | executed | dismissed | expired | superseded`.
+
+**`completed` is not in it.** Three writers set it, and their writes have been failing silently:
+
+| file | operation |
+|---|---|
+| `src/app/api/aria/action-feedback/route.ts` | `.update({ status: 'completed' })` |
+| `src/app/api/cron/send-scheduled-campaigns/route.ts` | `.insert({ status: 'completed' })` |
+| `src/lib/aria/hypothesis/outcome-learning.ts` | `.insert` / `.update` |
+
+**Confirmed against production, not inferred:** `select status, count(*) from
+aria_autopilot_actions group by 1` returns **zero** rows with `completed`. Supabase `.update()`
+returns `{ error }` rather than throwing, so every one of these has been discarded by a caller that
+did not check it — the silent-failure shape RULE 7 exists for.
+
+**NOT FIXED, deliberately.** It is a behaviour change on three unrelated paths (feedback,
+campaigns, hypothesis learning) and each needs its own decision about what the correct terminal
+status is — `executed`? `approved`? something else? That is a review, not a sweep. The stale
+comment in `createDecision.ts` naming `'completed'` as valid **was** corrected, because that
+comment is what would send the next person down the wrong path.
+
 ## Local skills (read-only, advisory)
 - /aria-cso — security audit. REPORT ONLY: never edits code, never pushes, never makes live HTTP requests. Only write allowed: prompts/security-audit-<date>.md.
 - /aria-review — pre-push diff review. REPORT ONLY: never edits, never commits, never pushes. Run before every push; owner approves fixes.
