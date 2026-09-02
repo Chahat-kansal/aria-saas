@@ -31,7 +31,18 @@ async function _GET(req: Request) {
   const table = TABLE_MAP[type];
   if (!table) return NextResponse.json({ error: 'Invalid type. Use: brand, family, tag' }, { status: 400 });
 
-  const { data, error } = await supabase.from(table).select('*').eq('business_id', bid).order('name');
+  // TS-1 PHASE 5 — TAGS ONLY: drop labels whose expiry has passed.
+  // pos_tags gained expires_at in 20260901103017. This route was its ONLY reader and had no
+  // filter, so an expired label would keep being returned as if it still applied — the exact
+  // thing "expired labels drop out of reads" forbids. Scoped to `type=tag` so brands and
+  // families are byte-for-byte unchanged; `select('*')` is left alone (narrowing it would drop
+  // fields an existing client may read). A null expires_at means "never expires" and must still
+  // be returned, which is why this is an OR and not `gt` alone.
+  let query = supabase.from(table).select('*').eq('business_id', bid);
+  if (table === 'pos_tags') {
+    query = query.or('expires_at.is.null,expires_at.gt.' + new Date().toISOString());
+  }
+  const { data, error } = await query.order('name');
   if (error) {
     if (error.code === '42P01') return NextResponse.json({ items: [] });
     return NextResponse.json({ error: error.message }, { status: 500 });
