@@ -20,14 +20,54 @@ function previousModelFor(task: AriaTask): string {
 
 const ALL_TASKS = Object.keys(TASK_JOB) as AriaTask[]
 
+/**
+ * ── AMENDED BY M11 PHASE 3, AND WHY ────────────────────────────────────────────────────────────
+ *
+ * The two assertions below said "not one model choice changed" and compared EVERY task against the
+ * pre-MS15 ternary. That property was true and worth holding at MS15 — but it can only ever be
+ * asserted of the tasks that existed then. A task added later has no "model it used before", so the
+ * original form would fail for every future task purely for being new, which turns a real guard
+ * into a tax on adding anything.
+ *
+ * NOT DELETED, AND NOT WEAKENED. The MS15 property is still asserted in full, over exactly the
+ * fourteen tasks it was written about (`MS15_TASKS`). What is added is the other half: every task
+ * introduced since must appear in `ADDED_SINCE_MS15` with its job stated here, so a new task cannot
+ * quietly join the judgement set — the most expensive one — without that being a line in this file.
+ *
+ *   work_plan (M11 phase 3, 3 Sep 2026) → judgement. The owner acts on the plan it produces, it is
+ *   the lowest-volume call in the set, and a cheap model that silently drops a step from a plan is
+ *   worse than no plan at all.
+ */
+const ADDED_SINCE_MS15: Partial<Record<AriaTask, AriaJob>> = {
+  work_plan: 'judgement',
+}
+const MS15_TASKS = ALL_TASKS.filter(t => !(t in ADDED_SINCE_MS15))
+
 describe('NOT ONE MODEL CHOICE CHANGED — this phase changed how, not what', () => {
-  it.each(ALL_TASKS.map(t => [t] as const))('%s resolves to exactly the model it used before', task => {
+  it.each(MS15_TASKS.map(t => [t] as const))('%s resolves to exactly the model it used before', task => {
     expect(modelForTask(task)).toBe(previousModelFor(task))
   })
 
-  it('the judgement set is exactly the old SMART_TASKS set', () => {
+  it('the judgement set is the old SMART_TASKS set, plus only what is declared above', () => {
     const judgement = ALL_TASKS.filter(t => jobForTask(t) === 'judgement').sort()
-    expect(judgement).toEqual([...PREVIOUS_SMART_TASKS].sort())
+    const expected = [
+      ...PREVIOUS_SMART_TASKS,
+      ...(Object.keys(ADDED_SINCE_MS15) as AriaTask[]).filter(t => ADDED_SINCE_MS15[t] === 'judgement'),
+    ].sort()
+    expect(judgement).toEqual(expected)
+  })
+
+  it('ANTI-VACUITY — the MS15 set is still the bulk of it, and is actually being checked', () => {
+    // If ADDED_SINCE_MS15 ever grew to swallow the original set, the assertion above would pass
+    // over almost nothing and this file would look green while checking air.
+    expect(MS15_TASKS.length).toBeGreaterThanOrEqual(14)
+    expect(Object.keys(ADDED_SINCE_MS15).length).toBeLessThan(MS15_TASKS.length)
+  })
+
+  it('every task added since MS15 declares the job the code actually gives it', () => {
+    for (const [task, job] of Object.entries(ADDED_SINCE_MS15) as Array<[AriaTask, AriaJob]>) {
+      expect(jobForTask(task), task + ' is declared ' + job + ' above but the code says ' + jobForTask(task)).toBe(job)
+    }
   })
 })
 

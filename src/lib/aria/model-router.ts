@@ -72,6 +72,10 @@ export type AriaTask =
   | 'chat'
   | 'csv_mapping'
   | 'sms_draft'
+  // M11 phase 3 — planning a delegated job. A judgement task (see jobs.ts): the owner acts on the
+  // plan, it is the lowest-volume call in the set, and a cheap model that drops a step is worse
+  // than no plan. Added rather than borrowing 'explain' so the cost ledger says what it paid for.
+  | 'work_plan'
   | 'fallback';
 
 type RunInput = {

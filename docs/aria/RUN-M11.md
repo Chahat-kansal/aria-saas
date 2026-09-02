@@ -245,3 +245,159 @@ Build what does not depend on it."*
 
 **No source file changed in this commit**, so phase 1's gate result stands unchanged: tsc 0, build
 `BUILD_EXIT=0`, vitest 103/1327. The pre-push hook re-ran tsc and the unit suite on the push.
+
+---
+
+## PHASE 3 — THE PLAN ✅
+
+**Commit:** `<phase-3>` · `src/lib/aria/works/capabilities.ts` (new), `src/lib/aria/works/plan.ts`
+(new), `src/lib/aria/works/plan.test.ts` (new, 29 tests), `src/app/api/aria/works/plan/route.ts`
+(new), `src/lib/aria/model-router.ts` (+1 task), `src/lib/aria/jobs.ts` (+1 mapping),
+`src/lib/aria/jobs.test.ts` (amended, see below), `scripts/ai-cost-model.json` (+1 entry).
+
+### The shape
+
+The owner describes an outcome. `buildWorkPlan` returns ordered steps in plain English, each saying
+what it will do and whether it needs the owner — or says the request **cannot be planned**, which is
+a first-class answer rather than a failure. Nothing runs; nothing is written.
+
+**THE ONE PROPERTY EVERYTHING RESTS ON: the model picks a capability id, and the REGISTRY decides
+everything else.** Gate, "needs approval", reversibility, "Aria may not do this" — all by lookup in
+`CAPABILITIES`. A model that returns `{"gate":"auto"}` on a price change is ignored, because the
+field is never read. A model that invents `send_sms_campaign` produces a step marked NEEDS A PERSON,
+because the lookup returns null. This is what makes prompt injection in a review, a supplier note or
+a customer name unable to talk a plan into executing anything — and it is asserted from both
+directions in the tests.
+
+The prompt is checked to **not leak the gates to the model at all**, asserted as an exact
+reconstruction of the menu rather than a keyword scan (`approve` is a substring of the real id
+`approve_po_draft`, so a keyword scan would either false-positive or be loosened until it proved
+nothing — my first attempt did exactly that and failed).
+
+### The capabilities are not invented
+
+**11 writes = exactly `PlannedAction['type']`**, every one of which already has a working branch in
+`executeAction` — which has its own kill switch, role gate, mass-mutation backstop and append-only
+audit. The registry adds **no new power**; it describes what exists and says what a plan may do with
+it. A test reads `action-executor.ts` and fails if the two sets differ, and another reads every
+capability's named module and fails if the function is not in it. **A capability cannot be added by
+describing it.**
+
+**4 reads**, each naming a real exported function (`getRevenueSnapshot`, `getRevenueForRange`,
+`getRevenueComparison`, `detectLosses`).
+
+| gate | capabilities | meaning |
+|---|---|---|
+| `auto` | 4 reads · `adjust_stock` · `set_low_stock_threshold` | safe and reversible; a runner may do it once the plan is approved |
+| `approve` | `mark_products` | in the executor's own DESTRUCTIVE set; approving "the plan" is not enough |
+| `propose_only` | `bulk_price_update` · `apply_category_discount` · `create_promotion` · `update_promotion` · `create_invoice` · `approve_po_draft` · `create_roster` · `create_agent` | **money, sending or authorisation. Proposed and never carried out by a plan.** |
+
+`create_roster` is `propose_only` on authorisation grounds — publishing a roster tells people to
+turn up. TS-1 phase 4 reached the same conclusion from the other direction.
+
+### Provenance
+
+Step detail goes through **`segmentFigures`, the same segmenter the answers use, fed the same
+`ProvenanceInput` the turn produced.** A step resting on a grounded number renders it verified; a
+step resting on an ungrounded one renders it plain. No second notion of "verified" was invented, and
+a test asserts the module never sets a tier itself.
+
+**Found while testing:** `FIGURE_RE` matches currency and percentages only, so a bare `1204.50` is
+not a figure at all and carries no tier. That is deliberate and correct — but it means dropping the
+`A$` from a step silently loses the tier with it, so an assertion now pins it.
+
+### Cost — RULE 11
+
+`scripts/ai-cost-model.json` gains `m11_work_plan`. Recomputed with `npx tsx scripts/ai-cost-model.ts`:
+
+```
+BEFORE   AI as-is $0.4508/biz/day   ·  total COGS $0.61/day  $18.31/mo
+AFTER    AI as-is $0.4622/biz/day   ·  total COGS $0.62/day  $18.65/mo
+DELTA    +$0.0114 per business per day
+```
+
+One call per plan, owner-initiated only — no cron, no retry, no fan-out. ~1,800 in / ~400 out.
+
+> ⚠️ **THE RATE IS A PROXY AND I DID NOT ADD ONE.** `work_plan` is a judgement task, so `jobs.ts`
+> routes it to `claude-sonnet-4-6` — and **`claude-sonnet-4-6` is not a key in `cost.ts` PRICING.**
+> The $3/$15 above is the sonnet-4-5 rate, taken on the authority of PRICING's own comment
+> ("Anthropic — 4.5 / 4.6 / 4.7 generation share the same rates within tier"). **No rate was
+> invented and none was added**: MS15 phase 1 requires a founder-verified rate for anything entering
+> that table, and a rate is a money number. Until the key exists, `computeCostCentsOrNull` records
+> these calls as **null (unknown), not 0 (free)** — the correct behaviour, and also why this estimate
+> cannot yet be replaced by measurement. **This is a pre-existing gap, and phase 3 is the first
+> thing that would exercise it** — see the discovered section.
+
+### The superseded test, rewritten not deleted
+
+Adding an `AriaTask` turned `jobs.test.ts` red on exactly the two assertions it should have, and no
+others:
+
+```
+× work_plan resolves to exactly the model it used before
+× the judgement set is exactly the old SMART_TASKS set
+Tests  2 failed | 21 passed (23)
+```
+
+Those said "not one model choice changed" and compared **every** task to the pre-MS15 ternary — a
+property that can only ever be asserted of the tasks that existed then, so in its original form it
+would fail for every future task purely for being new. Rewritten to assert the MS15 property in full
+over exactly those fourteen tasks, **plus** a new half: anything added since must be declared in
+`ADDED_SINCE_MS15` with its job, so a new task cannot quietly join the judgement set — the most
+expensive one — without that being a line in the test file. Two assertions added: an anti-vacuity
+floor (the MS15 set must still be ≥14 and larger than the additions, so the guard cannot be hollowed
+out by growing the exception list) and a check that each declared job matches what the code does.
+**Nothing was deleted and nothing was weakened**; the reason is written in the file.
+
+### Mutation check
+
+`markFor` mutated so a NEEDS-A-PERSON step renders as "Aria can do this" — the sprint's named
+mutation, in the real file:
+
+```
+MUTATED: a step needing a person now renders unmarked, as if Aria will do it
+ × every step that Aria may not carry out carries a mark
+ × MUTATION — an unexecutable step rendered unmarked makes this suite RED
+Tests  2 failed | 27 passed (29)
+```
+
+Reverted; 29/29.
+
+### Gates
+
+tsc **0** · vitest **104 files / 1358 tests, exit 0** · `next build` **BUILD_EXIT=0**, read from
+`build.log:1964`.
+
+And the route is genuinely in the build, as a dynamic function rather than a prerendered page —
+which is the S9 finding #11 concern (`force-dynamic` missing on a session-reading route wrote 2,272
+false failure rows over three months). Observed, not assumed:
+
+```
+build.log:583   ├ ƒ /api/aria/works/plan          0 B    0 B
+```
+
+### NOT done, and why
+
+- **No surface calls the route.** `/api/aria/works/plan` exists, is authorised and returns a plan;
+  nothing in the product links to it. Deliberate: approve/execute/report/history are parked on the
+  phase 2 DDL, and putting a plan in front of an owner who then cannot approve or run it is a worse
+  experience than not offering it. Wiring it into the composer means deciding, on every turn,
+  whether a message is a delegation or a question — a change to every answer, unattended. **Called
+  out here rather than buried, because "exists, looks correct, does nothing" is this repo's #1
+  failure pattern and this is one commit away from being an instance of it.**
+- **The planner has never been run against a live model.** Every test drives `assemblePlan` with
+  hand-written model output. The model call itself, and therefore the quality of a real plan, is
+  unverified — see "what needs a person".
+- No `ask/route.ts` change, no UI, no persistence, no execution.
+
+### Discovered
+
+- ⚠️ **`claude-sonnet-4-6` has no rate in `cost.ts` PRICING**, and `UNPRICED_MODELS_SEEN` does not
+  list it — reasonably, because it has **0 calls in the last 30 days** and MS15 could only list what
+  it had seen. Which is the second finding: **the current judgement model has never been called.**
+  All four judgement tasks (`reorder_plan`, `profit_leak`, `supplier_risk`, `explain`) route to it
+  through `runAriaModel`, and 30 days of `aria_ai_calls` contain zero rows for that model id. Either
+  those tasks are not being invoked, or they are not going through the router. **Not chased here** —
+  it is a measurement, not a repair, and it belongs with the cost sprint.
+- 30-day model census, for whoever picks that up: haiku 1,761 · gemini-2.5-flash 1,388 ·
+  **`model_id` NULL 792** · gpt-4o-mini 130 · sonnet-4-5 107 · literal `'unknown'` 54.

@@ -50,6 +50,17 @@
   ],
   "estimatedComponents": [
     {
+      "key": "m11_work_plan",
+      "label": "M11 phase 3 — work_plan (delegated-job planner, judgement task via model-router)",
+      "source": "estimate",
+      "includeInProjection": true,
+      "usdPerBusinessPerDayLow": 0.0023,
+      "usdPerBusinessPerDayMid": 0.0114,
+      "usdPerBusinessPerDayHigh": 0.0342,
+      "basis": "ONE call per plan, owner-initiated only — there is no cron, no retry and no fan-out; a plan is produced when an owner asks for one and never otherwise. Tokens: ~1,800 input (the capability menu is 15 lines plus the rules block, plus the caller optional context block) and ~400 output (JSON, capped at 8 steps, maxTokens 1600 so the ceiling cannot be the cost). Rate: the sonnet tier, $3/M in and $15/M out, giving $0.0114 per call. Low = 0.2 calls/biz/day, mid = 1, high = 3.",
+      "rateCaveat": "⚠️ THE RATE IS A PROXY, NOT A LOOKUP. work_plan is a judgement task, so jobs.ts routes it to claude-sonnet-4-6 — and claude-sonnet-4-6 IS NOT A KEY IN src/lib/aria/cost.ts PRICING. The $3/$15 used here is the sonnet-4-5 rate, taken on the authority of PRICING own comment (\"Anthropic — 4.5 / 4.6 / 4.7 generation share the same rates within tier\"). No rate was invented and none was added to PRICING: MS15 phase 1 requires a founder-verified rate for any model added there, and a rate is a money number. Until the key exists, computeCostCentsOrNull records these calls as NULL (unknown) rather than 0 (free) — which is the correct behaviour and is also why this estimate cannot yet be replaced by measurement. See RUN-M11.md."
+    },
+    {
       "key": "model_router_business_brain",
       "label": "business-brain analyse() via model-router.ts",
       "source": "estimate",

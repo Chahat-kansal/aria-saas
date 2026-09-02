@@ -57,6 +57,8 @@ export const TASK_JOB: Record<AriaTask, AriaJob> = {
   profit_leak: 'judgement',
   supplier_risk: 'judgement',
   explain: 'judgement',
+  // M11 phase 3. Added AFTER MS15, so it has no "previous model" — see jobs.test.ts.
+  work_plan: 'judgement',
 
   // J2 — scheduled/high-volume; nobody is waiting on them.
   daily_briefing: 'precompute',
