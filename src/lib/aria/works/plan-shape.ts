@@ -278,3 +278,102 @@ function reasonText(r: GateReason | undefined): string {
 export function planStepSegments(step: PlanStep, provenance: ProvenanceInput = {}): FigureSegment[] {
   return segmentFigures(step.detail || step.title, provenance)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// M11B PHASE 5 — REOPENING A PAST JOB.
+//
+// A stored plan is rows, and the card renders a `PlanResult`. This turns one into the other, PURELY
+// — no fetch, no model, no second store — so a job reopened from history renders through exactly
+// the same `PlanCard` and the same `markFor` as the one that was just created. Two renderers for
+// "a plan" is how the history view and the live view start disagreeing about what a step is.
+//
+// Everything comes from the rows. The gate is re-derived from the REGISTRY by capability id rather
+// than read from the stored payload — a row whose `action_data.gate` was somehow wrong must not be
+// able to render a money step as safe a month later.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** The plan columns this needs. A subset of persist.ts's PlanRow, so a caller passes that straight in. */
+export interface StoredPlanRow {
+  id: string
+  request: string
+  title: string
+  status: string
+  unplannable_reason: string | null
+  report: string | null
+  created_at: string
+}
+
+/** The step columns this needs. A subset of persist.ts's StepRow. */
+export interface StoredStepRow {
+  step_index: number
+  title: string | null
+  description: string | null
+  status: string
+  action_type: string | null
+  action_data: Record<string, unknown> | null
+  requires_stepup: boolean
+  outcome_note: string | null
+  resolved_at: string | null
+}
+
+export interface RehydratedPlan {
+  planId: string
+  result: PlanResult
+  status: string
+  report: string | null
+  outcomes: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
+  created_at: string
+}
+
+/**
+ * Rebuild a renderable plan from its stored rows.
+ *
+ * An unplannable plan comes back as the refusal it was — `unplannable_reason` is the column that
+ * exists for it, and the owner sees the same sentence they saw at the time rather than an empty
+ * plan where a refusal used to be.
+ */
+export function rehydratePlan(plan: StoredPlanRow, steps: StoredStepRow[]): RehydratedPlan {
+  const outcomes: RehydratedPlan['outcomes'] = []
+
+  if (plan.unplannable_reason) {
+    return {
+      planId: plan.id,
+      result: { ok: false, request: plan.request, reason: plan.unplannable_reason },
+      status: plan.status, report: plan.report, outcomes, created_at: plan.created_at,
+    }
+  }
+
+  const ordered = [...steps].sort((a, b) => a.step_index - b.step_index)
+  const planSteps: PlanStep[] = ordered.map(s => {
+    // From the registry, by id — never from the stored payload's own `gate`.
+    const cap = findCapability(s.action_type)
+    const payload = { ...(s.action_data ?? {}) }
+    delete payload.capability
+    delete payload.gate
+    const step = toStep(s.step_index, s.title ?? '(untitled step)', s.description ?? '', cap, payload)
+
+    // The same three states the report uses, from the same row facts, so the card and the report
+    // cannot say different things about the same step.
+    if (s.status === 'executed') outcomes.push({ step_index: s.step_index, title: step.title, result: 'ran', note: s.outcome_note ?? 'Done.' })
+    else if (s.resolved_at && s.outcome_note) outcomes.push({ step_index: s.step_index, title: step.title, result: 'failed', note: s.outcome_note })
+    else if (s.requires_stepup) outcomes.push({ step_index: s.step_index, title: step.title, result: 'skipped', note: 'Waiting for you.' })
+
+    return step
+  })
+
+  const counts = {
+    total: planSteps.length,
+    runnable_by_aria: planSteps.filter(s => s.runnable_by_aria).length,
+    needs_approval: planSteps.filter(s => s.needs_approval).length,
+    needs_person: planSteps.filter(s => s.needs_person).length,
+  }
+
+  return {
+    planId: plan.id,
+    result: { ok: true, request: plan.request, title: plan.title, steps: planSteps, counts, blocked_reason: blockedReason(counts) },
+    status: plan.status,
+    report: plan.report,
+    outcomes,
+    created_at: plan.created_at,
+  }
+}

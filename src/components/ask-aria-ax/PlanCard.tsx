@@ -127,6 +127,16 @@ export default function PlanCard({ result, planId, status, onApprove, approving,
           {status === 'proposed' || !status
             ? 'Nothing has run. This is the plan.'
             : 'Plan ' + status + '.'}
+          {/* M11B PHASE 5 — COST IS UNKNOWN, AND THAT IS THE HONEST ANSWER, not a gap.
+              `aria_ai_calls` has no linking column — no conversation_id, no request_id, no
+              trace_id — so nothing ties a model call to a plan. 11,029 rows carry a cost and not
+              one can be attributed. A time-window guess would be a fabricated number, and the
+              ledger is already known to undercount by roughly half. GROUNDING-TEETH.
+              Shown only once a plan has actually run, because before that there is nothing to
+              have cost anything. */}
+          {status && status !== 'proposed' && (
+            <> · cost <b style={{ color: 'rgba(255,255,255,0.5)' }}>unknown</b></>
+          )}
         </span>
         {canApprove && (
           <button

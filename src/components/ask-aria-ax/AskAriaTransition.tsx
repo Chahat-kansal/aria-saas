@@ -19,7 +19,7 @@ import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
 import { readDraft, writeDraft, clearDraft, adoptDraft } from '@/lib/aria/draft-store'
 import { readThreadId, syncThreadUrl, restoreThread, rememberScroll, recallScroll } from '@/lib/aria/thread-session'
 import PlanCard from './PlanCard'
-import type { PlanResult } from '@/lib/aria/works/plan-shape'
+import { rehydratePlan, type PlanResult, type StoredPlanRow, type StoredStepRow } from '@/lib/aria/works/plan-shape'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
 import type { AskBlock } from '@/lib/aria/ask-types'
@@ -607,6 +607,36 @@ export default function AskAriaTransition() {
    * Fires ONCE, guarded by a ref for the same reason the `?q=` effect is: `openThread` is stable
    * but a re-run would re-fetch and stamp over whatever the owner had since typed.
    */
+  /**
+   * M11B PHASE 5 — HISTORY.
+   *
+   * Reopen the jobs that belong to a conversation. `rehydratePlan` rebuilds a renderable plan from
+   * the stored rows PURELY, so a job reopened from history renders through exactly the same
+   * `PlanCard` and the same `markFor` as one just created — two renderers for "a plan" is how a
+   * history view and a live view start disagreeing about what a step is.
+   *
+   * No parallel store: the link is `aria_plans.conversation_id` and the `?c=` thread URL.
+   */
+  const loadPlansFor = useCallback(async (conversationId: string) => {
+    if (!ctx?.businessId) return
+    try {
+      const res = await fetch('/api/aria/works/plans?business_id=' + encodeURIComponent(ctx.businessId)
+        + '&conversation_id=' + encodeURIComponent(conversationId))
+      if (!res.ok) return
+      const j = await res.json() as { plans?: Array<{ plan: StoredPlanRow; steps: StoredStepRow[] }> }
+      const rows = j.plans ?? []
+      if (rows.length === 0) return
+      // Oldest first, so they read in the order they happened.
+      const revived = [...rows].reverse().map(r => rehydratePlan(r.plan, r.steps))
+      setTurns(prev => [...prev, ...revived.map(p => ({
+        role: 'aria' as const, text: '', streaming: false,
+        plan: { planId: p.planId, result: p.result, status: p.status, outcomes: p.outcomes, report: p.report },
+      }))])
+    } catch {
+      // History is additive: a conversation that cannot load its jobs still shows its messages.
+    }
+  }, [ctx])
+
   const restoredRef = useRef(false)
   useEffect(() => {
     if (restoredRef.current) return
@@ -631,9 +661,13 @@ export default function AskAriaTransition() {
       // effect that fires on the new turns finds it already waiting.
       pendingScrollRef.current = recallScroll(restored.id)
       openThread(restored.id, restored.messages)
+      // M11B PHASE 5 — the jobs delegated in this conversation come back with it. Appended after
+      // the messages, so a reload lands the owner on the same thread WITH its plans, their step
+      // outcomes and their reports intact.
+      void loadPlansFor(restored.id)
     })()
     return () => { cancelled = true }
-  }, [openThread])
+  }, [openThread, loadPlansFor])
 
   const home = useCallback(() => setWorking(false), [])
 
@@ -1172,7 +1206,10 @@ export default function AskAriaTransition() {
       <ThreadsPanel
         open={threadsOpen}
         onClose={() => setThreadsOpen(false)}
-        onOpenThread={openThread}
+        // M11B phase 5 — clicking a thread brings its jobs back too, the same way a reload does.
+        // Composed here rather than in a wrapper callback: `loadPlansFor` is declared after
+        // `openThread`, and a hook that referenced it earlier would be used before it exists.
+        onOpenThread={(id, messages) => { openThread(id, messages); void loadPlansFor(id) }}
         activeId={conversationId}
       />
 
