@@ -1,13 +1,114 @@
 # RUN-M11B · THE PLAN GETS A SURFACE
 
-3 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**3–4 September 2026 · autonomous run, RULE 20 · six phases, six commits, zero parks. All pushed.**
+
+**The loop is closed.** An owner describes an outcome, gets a plan, approves it, Aria runs the safe
+steps in order, and reports what she did — what worked, what did not, what still needs them. Proven
+end to end against production, not replayed.
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ The first live run found a real defect and changed one number in your data.** A test step
+carrying `adjust_stock` with an **empty payload** was supposed to refuse. Instead `executeAction`
+applied no filter, took **the first ten products of the business**, and reported "Done — 10 changes"
+— the executor's mass backstop did not fire because ten is under its threshold of twenty. Measured:
+10 `updated_at` bumped, 0 stock adjustments, 0 inventory rows changed. No stock value moved, because
+`quantity` was missing too. **But `Cortado` — active, tracked — had its legacy `stock_quantity` set
+to 0, and the prior value is not recoverable.** The canonical figure (`items_on_hand`) never existed
+for it, so only the legacy mirror moved. **Had that step carried `{adjust_type:'set', quantity:0}`
+it would have zeroed ten products' stock.** Fixed in the runner; **the executor defect is still
+live for its other callers and is parked for you** — it is reachable from the Ask Aria chat path
+today, with no plan involved.
+
+**2. Production was ahead of `supabase/migrations/` again, and no longer is.** The migration existed
+only in the database; its exact SQL was read back and committed byte-identical. Two differences from
+the proposal are recorded rather than absorbed — the `do $$` existence guards (which you told me
+about) and, **not** in the hand-over, the two `comment on column` texts having been shortened when
+applied. The committed file carries the live text.
+
+**3. One schema change would make the record cleaner, and it is yours.**
+`aria_autopilot_actions_status_check` has **no `failed`**. A step that was tried and broke therefore
+keeps `status='pending'` — true, since it has not happened — with the failure in `outcome_note`.
+Inventing a value would be TS-DEFECT-1 exactly. Adding `failed` to that CHECK is the one thing this
+sprint would ask for.
+
+## WHAT AN OWNER CAN DO NOW THAT THEY COULD NOT BEFORE
+
+Press **🗂 Delegate**, describe an outcome, and get back ordered steps — each marked with whether
+Aria can do it, whether it needs them, or whether it needs a person. Approve it, and the safe steps
+run in order. Then read a report that puts the failures first.
+
+An example, verbatim out of `aria_plans.report` after the real run:
+
+```
+⚠️ 1 of 4 steps did not go through.
+
+You asked: tidy up before the weekend
+
+3. Fix a count with no product named — DID NOT GO THROUGH
+   Could not run this step — it was not told product_id or product_name, adjust_type, quantity.
+   Nothing was changed.
+1. Read yesterday's takings — DONE
+   Read takings for 2026-09-02: A$0.00 across 0 sales.
+2. Discount the pastries — WAITING FOR YOU
+   Aria proposed this and did not do it. It needs you.
+4. Ring the baker — NOT RUN
+   Nothing was attempted.
+
+1 done · 1 did not go through · 1 waiting for you · 1 not attempted
+```
+
+**Money never executes.** The discount step was proposed and left `pending` with its `requires_stepup`
+intact — approving the plan does not clear a step's own gate, and that is asserted from both sides.
+
+| phase | outcome | commit |
+|---|---|---|
+| 0 · gate + migration | ✅ seven objects verified; migration committed | `9f2cba00` |
+| 1 · the plan on the surface | ✅ | `39cae1c4` |
+| 2 · approve | ✅ | `74395822` |
+| 3 · execute one step at a time | ✅ **found a live defect** | `73d3fd9f` |
+| 4 · the report | ✅ | `11834af1` |
+| 5 · history | ✅ | `369eb77c` |
+
+## DID ANY OF THE THREE M11 FINDINGS REPEAT HERE?
+
+**No — and one of them was fixed, because avoiding it was not enough.** `recordEvent`, the spine's
+*one* writer, had exactly the council-executor bug: `await …insert()` inside a `try` that only
+catches throws, while Supabase **resolves** with `{ error }`. It now reads and logs the error, and
+is still non-fatal. M11B writes `job_created` / `job_completed` / `job_failed` through it, so "do not
+repeat their shape" could not be satisfied by calling a helper that has it. Every insert and update
+in the new modules destructures its error, and a test asserts there is **no unassigned write**.
+
+**And nothing marks itself complete having done nothing.** The report is generated from the step
+rows every time; a plan with no steps says "no steps, so nothing was done" rather than reporting a
+clean run.
+
+## WHAT NEEDS A PERSON
+
+1. **The `adjust_stock` / `set_low_stock_threshold` executor defect** — still live for the Ask Aria
+   chat path, independent of plans.
+2. **`failed` on the status CHECK** — the one DDL this sprint would ask for.
+3. **`Cortado`'s `stock_quantity`** — 0 from my proof run, unrestorable.
+4. **The browser was never opened.** Every phase is proven in process against production, and every
+   surface component is held by a source rail — but nobody has pressed Delegate. vitest here is
+   `environment: 'node'` with no testing-library, and adding one is the dependency change that
+   killed CI for three days in August.
+5. **The planner has still never run against a live model**, so plan *quality* is unverified. Every
+   proof used the model's output shape, hand-written.
+
+**Cost renders `unknown`, deliberately.** Nothing links a model call to a plan — `aria_ai_calls` has
+no `conversation_id`, `request_id` or `trace_id`. The one nullable column that would fix it is in
+`M11-MIGRATION-PROPOSAL.sql`, still unapplied.
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
 ## PHASE 0 — GATE ✅
 
-**Commit:** `<phase-0>` · `supabase/migrations/20260903010832_m11_aria_plans.sql` (new),
+**Commit:** `9f2cba00` · `supabase/migrations/20260903010832_m11_aria_plans.sql` (new),
 `docs/aria/M11-MIGRATION-PROPOSAL.sql` (updated to match what ran).
 
 ### All seven objects verified live, with my own query
@@ -68,7 +169,7 @@ and that is asserted.
 
 ## PHASE 1 — THE PLAN ON THE SURFACE ✅
 
-**Commit:** `<phase-1>` · `src/lib/aria/works/persist.ts` (new),
+**Commit:** `39cae1c4` · `src/lib/aria/works/persist.ts` (new),
 `src/components/ask-aria-ax/PlanCard.tsx` (new), `src/lib/aria/works/plan-surface.test.ts`
 (new, 27 tests), plus `plan.ts` (+payload), `createDecision.ts` (+2 optional params),
 `recordEvent.ts` (reads its error), `ax-context.ts` / `ax-context-types.ts` (+`businessId`),
@@ -244,7 +345,7 @@ file.
 
 ## PHASE 2 — APPROVE
 
-**Commit:** `<phase-2>` · `src/lib/aria/works/approve.ts` (new),
+**Commit:** `74395822` · `src/lib/aria/works/approve.ts` (new),
 `src/app/api/aria/works/plan/[id]/approve/route.ts` (new),
 `src/lib/aria/works/approve.test.ts` (new, 22 tests), `AskAriaTransition.tsx` (approve wired).
 
@@ -342,7 +443,7 @@ tsc **0** · vitest **107 files / 1428 tests, exit 0** · `next build` **BUILD_E
 
 ## PHASE 3 — EXECUTE, ONE STEP AT A TIME ✅ — and it found a live defect
 
-**Commit:** `<phase-3>` · `src/lib/aria/works/run.ts` (new),
+**Commit:** `73d3fd9f` · `src/lib/aria/works/run.ts` (new),
 `src/app/api/aria/works/plan/[id]/run/route.ts` (new), `src/lib/aria/works/run.test.ts`
 (new, 19 tests), `capabilities.ts` (+`requires`, +`missingArgs`), `PlanCard.tsx` (renders outcomes),
 `AskAriaTransition.tsx` (approve then run).
@@ -494,7 +595,7 @@ tsc **0** · vitest **108 files / 1447 tests, exit 0** · `next build` **BUILD_E
 
 ## PHASE 4 — THE REPORT ✅ *(the deliverable)*
 
-**Commit:** `<phase-4>` · `src/lib/aria/works/finish.ts` (new),
+**Commit:** `11834af1` · `src/lib/aria/works/finish.ts` (new),
 `src/lib/aria/works/report-plan.test.ts` (new, 21 tests), `report.ts` (+`renderPlanReport`,
 `stepState`, `planReportAnchors`), the run route (closes the plan), `PlanCard.tsx` (renders it).
 
@@ -592,7 +693,7 @@ tsc **0** · vitest **109 files / 1468 tests, exit 0** · `next build` **BUILD_E
 
 ## PHASE 5 — HISTORY ✅
 
-**Commit:** `<phase-5>` · `src/app/api/aria/works/plans/route.ts` (new),
+**Commit:** `369eb77c` · `src/app/api/aria/works/plans/route.ts` (new),
 `src/lib/aria/works/history.test.ts` (new, 16 tests), `plan-shape.ts` (+`rehydratePlan`),
 `AskAriaTransition.tsx` (jobs come back with the thread), `PlanCard.tsx` (cost).
 
