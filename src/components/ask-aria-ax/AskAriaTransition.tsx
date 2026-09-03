@@ -130,6 +130,9 @@ export default function AskAriaTransition() {
   const [editing, setEditing] = useState<{ index: number; text: string } | null>(null)
   // M11B phase 1 — a plan is being built. Separate from isBusy: the planner is not the stream.
   const [planning, setPlanning] = useState(false)
+  // M11B phase 2 — which plan is mid-approval. Per plan id, not a boolean: two plans can be on
+  // screen and only the one being approved should show as busy.
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   const { send, cancel, retry, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
@@ -351,6 +354,46 @@ export default function AskAriaTransition() {
       setPlanning(false)
     }
   }, [conversationId, ctx, isBusy, planning])
+
+  /**
+   * M11B PHASE 2 — APPROVE A PLAN.
+   *
+   * Approving does not execute; it records that the owner said yes. The card's state is refreshed
+   * from what the SERVER says the plan is now, never from an assumption that the click worked —
+   * a second tab may have approved it already, and the route answers that honestly rather than
+   * erroring.
+   */
+  const approvePlan = useCallback(async (planId: string, turnIndex: number) => {
+    if (approvingId) return
+    setApprovingId(planId)
+    try {
+      const res = await fetch('/api/aria/works/plan/' + encodeURIComponent(planId) + '/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: ctx?.businessId }),
+      })
+      const j = await res.json() as {
+        approved?: boolean; already?: boolean; note?: string; error?: string
+        stored?: { plan?: { status?: string } } | null
+      }
+      if (!res.ok) {
+        setTurns(prev => [...prev, { role: 'aria', streaming: false, text: j.error ?? 'That approval did not go through. Nothing has run.' }])
+        return
+      }
+      const status = j.stored?.plan?.status ?? null
+      setTurns(prev => prev.map((t, i) => (
+        i === turnIndex && t.plan ? { ...t, plan: { ...t.plan, status } } : t
+      )))
+      // An already-approved plan is a true answer, not an error, and the owner is told plainly.
+      if (j.already && j.note) {
+        setTurns(prev => [...prev, { role: 'aria', streaming: false, text: j.note as string }])
+      }
+    } catch {
+      setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'Could not reach the approval. Nothing has run.' }])
+    } finally {
+      setApprovingId(null)
+    }
+  }, [approvingId, ctx])
 
   /**
    * Regenerate — migrated from the old surface (page.tsx:830). Drops the last Aria turn and re-asks
@@ -901,13 +944,15 @@ export default function AskAriaTransition() {
                         <div className="a aria">A</div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div className="who">Aria</div>
-                          {/* No onApprove in phase 1: approving is phase 2, and a button that
-                              looks live and does nothing is the fake control this surface was
-                              cleaned of ten times over. PlanCard renders it only when handed one. */}
+                          {/* M11B phase 2 — the approve button is live. PlanCard renders it only
+                              for a plan that has a row AND is still 'proposed', so an approved or
+                              abandoned plan shows its state rather than a button that would no-op. */}
                           <PlanCard
                             result={t.plan.result}
                             planId={t.plan.planId}
                             status={t.plan.status}
+                            approving={approvingId !== null && approvingId === t.plan.planId}
+                            onApprove={id => void approvePlan(id, i)}
                           />
                         </div>
                       </div>

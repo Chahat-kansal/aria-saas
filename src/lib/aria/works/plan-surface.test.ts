@@ -73,11 +73,21 @@ describe('M11B phase 1 · every unexecutable step carries a mark, on the surface
     expect(code(mutated)).not.toContain('{markFor(step)}')
   })
 
-  it('phase 1 ships NO approve button — a control that does nothing is a fake control', () => {
-    // Approving is phase 2. PlanCard only renders the button when handed an onApprove, and the
-    // surface does not hand it one yet.
-    expect(code(AX)).not.toMatch(/onApprove=\{/)
-    expect(code(CARD)).toContain('typeof onApprove === ')
+  it('NO FAKE CONTROL — the approve button exists only where it actually does something', () => {
+    // AMENDED BY M11B PHASE 2. This asserted `onApprove` was ABSENT from the surface, which was
+    // true and right for phase 1: approving did not exist yet, and a button that looks live and
+    // does nothing is the fake control this surface was cleaned of ten times over. Phase 2 ships
+    // the approval, so the assertion is rewritten to the property it was always protecting rather
+    // than deleted — the button must be WIRED, and must not render where it would no-op.
+    const c = code(AX)
+    const card = code(CARD)
+    expect(c).toMatch(/onApprove=\{id => void approvePlan\(id, i\)\}/)
+    expect(c).toContain('const approvePlan = useCallback')
+    // Still gated three ways in the card: a real row, still 'proposed', and a handler was passed.
+    expect(card).toContain('Boolean(planId)')
+    expect(card).toContain("status === 'proposed'")
+    expect(card).toContain('typeof onApprove === ')
+    expect(card).toMatch(/\{canApprove && \(/)
   })
 })
 

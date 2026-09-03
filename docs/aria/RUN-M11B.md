@@ -239,3 +239,101 @@ card imports it rather than re-deriving the mark in JSX.
 was invented` read `plan.ts`; it now checks `plan-shape.ts` **and** `plan.ts` (so the tier logic
 cannot reappear in the server half either) plus the re-export line, with the reason written in the
 file.
+
+---
+
+## PHASE 2 — APPROVE
+
+**Commit:** `<phase-2>` · `src/lib/aria/works/approve.ts` (new),
+`src/app/api/aria/works/plan/[id]/approve/route.ts` (new),
+`src/lib/aria/works/approve.test.ts` (new, 22 tests), `AskAriaTransition.tsx` (approve wired).
+
+### One predicate, exported once
+
+`canRun(plan)` is the single definition of "may this execute", exported from `approve.ts` rather
+than inlined in phase 3 — one in the runner, one in the route and one in a component is how three
+answers to the same question start disagreeing. A plan may run only from `approved` **and** only
+with an `approved_at` recorded: a row claiming approval with no timestamp is a half-applied update
+or a hand edit, and running real work off it means acting on an approval nobody can point at.
+
+`whyNotRunnable` returns the owner's sentence, and a test asserts it is null **exactly** when
+`canRun` is true, so the two can never disagree.
+
+### Live proof — approval, twice
+
+```
+FIRST attempt   status=approved  approved_by=…aa  has_time=true
+SECOND attempt  claimed 0 rows   approved_by STILL …aa (not overwritten)  status=approved
+```
+
+⚠️ **My first version of this proof was wrong and I re-ran it.** I put both UPDATEs in one statement
+as two CTEs, which reported `second_attempt_claimed = 0` — but data-modifying CTEs share one
+snapshot and Postgres skips a row already updated by the same command, so the 0 came from a
+different mechanism than the one being tested. Re-run as **two separate statements**, the way the
+route issues them. Same answer, and now it means what it says. (This is the CTE-visibility trap that
+already caught me once in TS-1 phase 5.)
+
+**And the plan-level yes did not clear the step-level gate:**
+
+```
+steps_still_pending 2      steps_still_gated (requires_stepup) 1
+```
+
+Approving the plan says "do the safe parts". The money step stays `pending` with its own gate — the
+worst bug this sprint could ship would be a plan-level yes silently approving a price change, and
+`approve.ts` does not reference `aria_autopilot_actions`, `requires_stepup` or `step_index` at all.
+That is asserted as an absence.
+
+### Mutation check
+
+The sprint's named mutation for this phase, against the real predicate:
+
+```
+canRun({status:'proposed'})                      → false
+a permissive version (anything but 'abandoned')  → true   ← what the mutation would allow
+```
+
+The suite goes red on the difference.
+
+### Teardown and residue
+
+```
+marker M11B-APPROVE in plans .... 0     STRUCTURAL: any aria_plans row .......... 0
+marker M11B-APPROVE in apa ...... 0     STRUCTURAL: any apa row with plan_id .... 0
+```
+
+⚠️ **`aria_autopilot_actions` read 830, not the 819 it started at — and none of the extra 11 are
+mine.** Checked rather than assumed: all 11 are `kind='brain_observation'`, `created_by='aria'`,
+`status='pending'`, written between 02:01:21 and 02:01:48 by a live cron while this run was
+happening. No marker of mine, no `plan_id`. Recorded because a residue count that moved for an
+unrelated reason is exactly the kind of thing that gets misread as a leak later — and because S9
+had the same shape when a simultaneous CI build made three cron rows look like a failed fix.
+
+### A phase-1 assertion was superseded, and rewritten rather than deleted
+
+Phase 1 asserted `onApprove` was **absent** from the surface — true and right then, because
+approving did not exist and a button that looks live and does nothing is the fake control this
+surface was cleaned of ten times over. Phase 2 ships it, so the full suite went red on exactly that
+one assertion:
+
+```
+FAIL  plan-surface.test.ts > phase 1 ships NO approve button
+      expected the surface not to match /onApprove=\{/
+Tests  1 failed | 1427 passed (1428)
+```
+
+Rewritten to the property it was always protecting: the button must be **wired**, and must not
+render where it would no-op — gated three ways (a real row, still `proposed`, and a handler
+passed). The reason is written in the test file. Nothing was deleted or weakened.
+
+### Gates
+
+tsc **0** · vitest **107 files / 1428 tests, exit 0** · `next build` **BUILD_EXIT=0**
+(`build.log:1965`).
+
+### NOT done
+
+- Approving does not execute. That is phase 3, and the route says `executed: false` in its payload
+  as well as in the prose.
+- The browser was not opened; the button is held by source rails and the route by the live proof
+  above.
