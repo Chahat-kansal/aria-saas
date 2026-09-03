@@ -1,7 +1,68 @@
 # RUN-M11 · ARIA WORKS (part 1)
 
-Started 3 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still
-leaves a readable log.
+**3 September 2026 · autonomous run, RULE 20 · 4 phases done, 2 parked, 4 commits, all pushed.**
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. A plan needs two columns and one small table, and DDL is not mine.** The steps fit
+`aria_autopilot_actions` perfectly — its seven-value status CHECK is a better step vocabulary than
+anything a new table would invent, and `requires_stepup`, `amount_cents`, `expires_at`,
+`superseded_by` and the outcome columns are all already there and used. **What has nowhere to live
+is an ORDER and the owner's request.** There is no ordinal column anywhere, and both ways to fake
+one are traps the sprint names. `docs/aria/M11-MIGRATION-PROPOSAL.sql` has the whole thing: one
+table (`aria_plans`), two nullable columns on the existing registry, a partial unique index that
+gives the sprint's idempotency to the database rather than to code. **Nothing else in M11 is blocked
+by anything but that file.**
+
+**2. The report the sprint told me not to build was already shipped.** `AuditLogCard`, live on the
+default surface and on `/classic`, renders every action Aria has ever taken as `Bulk price update ·
+2 items`. The route fetched `after_state` and never rendered it, and never fetched `before_state`
+at all — so the change was in the row and on the screen it said "2 items". Phase 5 fixes it against
+the 64 real rows that exist, and the rendered output is in this log.
+
+**3. Two things exist, look correct, and do nothing — both found by measurement, neither fixed.**
+`council-executor.ts`'s audit insert has **never once landed** (`proposal_id`, `outcome_data` and
+`executed_at` are non-null on **0 of 817 rows**) because its error is never read. And **91 of 92
+`agent_council_sessions` produced zero proposals**, 2 exist in total, 0 have ever executed, and all
+92 are marked `completed` — it runs nightly and completes with nothing in it.
+
+## WHAT THE OWNER CAN DO TODAY THAT THEY COULD NOT YESTERDAY
+
+- **Refresh Ask Aria without losing the conversation.** It also makes a conversation linkable.
+- **See what Aria actually changed** — `[V3] A: 55 → 50 (-5)` instead of "1 item" — on both surfaces.
+
+**And what they still cannot:** delegate a job. The planner exists, is authorised and returns real
+plans over real capabilities, but **no surface calls it**, deliberately — approve, execute, report
+and history are parked on the DDL, and a plan you cannot approve or run is worse than no plan.
+
+| phase | outcome | commit |
+|---|---|---|
+| 0 · gate | register read: 4 open · 6 parked · 13 closed | — |
+| 1 · refresh must not lose the conversation | ✅ | `69ade342` |
+| 2 · can a plan live in the existing tables? | ⚠️ partly — **DDL proposed, thread PARKED** | `67da439b` |
+| 3 · the plan | ✅ | `2ba68699` |
+| 4 · execute one step at a time | ⛔ **PARKED** — idempotency needs a step record to claim | — |
+| 5 · the report | ✅ built, against real data | `58471063` |
+| 6 · history | ⛔ **PARKED** — reopening a job needs the job to exist | — |
+
+**Cost of the one new LLM call (RULE 11): +$0.0114 per business per day.** Total COGS $0.61 →
+$0.62/day, $18.31 → $18.65/mo. ⚠️ The rate is a **proxy** — `claude-sonnet-4-6` has no entry in
+`cost.ts` PRICING, so I used the sonnet-4-5 rate on the authority of that file's own comment, and
+**added no rate**, because a rate is a money number.
+
+**What needs a person:**
+1. **Approve or reject `M11-MIGRATION-PROPOSAL.sql`.** Everything parked unparks on it.
+2. **`claude-sonnet-4-6` has no price and has never been called** — zero rows in 30 days, though all
+   four judgement tasks route to it. Either those tasks are not running or they are not going
+   through the router.
+3. **Two browser behaviours are unverified**: the actual F5 on Ask Aria, and the audit card's
+   render. Both mechanisms are proven at the module level and both gestures are unpressed — vitest
+   here is `environment: 'node'` with no testing-library, and adding one is the dependency change
+   that killed CI for three days in August.
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -34,7 +95,7 @@ the previous run left open already have sprints of their own, so neither is pick
 
 ## PHASE 1 — A REFRESH MUST NOT LOSE THE CONVERSATION ✅
 
-**Commit:** `<phase-1>` · **files:** `src/lib/aria/thread-session.ts` (new, 148),
+**Commit:** `69ade342` · **files:** `src/lib/aria/thread-session.ts` (new, 148),
 `src/lib/aria/thread-refresh.test.ts` (new, 29 tests), `src/components/ask-aria-ax/AskAriaTransition.tsx`
 (+70/−3).
 
@@ -163,7 +224,7 @@ product decision, not a repair, and inventing one would be inventing scope.
 
 ## PHASE 2 — CAN A PLAN LIVE IN THE EXISTING TABLES? ⚠️ PARTLY — DDL PROPOSED, THREAD PARKED
 
-**Commit:** `<phase-2>` · **no code.** `docs/aria/M11-PHASE-2-PLAN-STORAGE.md` (the answer, with
+**Commit:** `67da439b` · **no code.** `docs/aria/M11-PHASE-2-PLAN-STORAGE.md` (the answer, with
 evidence) and `docs/aria/M11-MIGRATION-PROPOSAL.sql` (the DDL, **not applied, not in
 `supabase/migrations/`**).
 
@@ -250,7 +311,7 @@ Build what does not depend on it."*
 
 ## PHASE 3 — THE PLAN ✅
 
-**Commit:** `<phase-3>` · `src/lib/aria/works/capabilities.ts` (new), `src/lib/aria/works/plan.ts`
+**Commit:** `2ba68699` · `src/lib/aria/works/capabilities.ts` (new), `src/lib/aria/works/plan.ts`
 (new), `src/lib/aria/works/plan.test.ts` (new, 29 tests), `src/app/api/aria/works/plan/route.ts`
 (new), `src/lib/aria/model-router.ts` (+1 task), `src/lib/aria/jobs.ts` (+1 mapping),
 `src/lib/aria/jobs.test.ts` (amended, see below), `scripts/ai-cost-model.json` (+1 entry).
@@ -429,7 +490,7 @@ built (phase 5). What is missing is the two columns and the partial unique index
 
 ## PHASE 5 — THE REPORT ✅ (built, and against real data — but not for plans yet)
 
-**Commit:** `<phase-5>` · `src/lib/aria/works/report.ts` (new), `src/lib/aria/works/report.test.ts`
+**Commit:** `58471063` · `src/lib/aria/works/report.ts` (new), `src/lib/aria/works/report.test.ts`
 (new, 21 tests), `src/app/api/aria/ask/audit/route.ts` (+1 field),
 `src/components/aria/AuditLogCard.tsx` (renders the changes).
 
