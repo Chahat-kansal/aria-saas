@@ -20,7 +20,12 @@ async function _GET(_req: Request) {
   if (!bid) return NextResponse.json({ log: [] })
 
   const { data } = await supabase.from('aria_action_log')
-    .select('id,action_type,entity_type,entity_ids,after_state,triggered_by,executed_at,rolled_back_at,message_excerpt')
+    // M11 phase 5 — before_state ADDED. The card said "2 items" and could not say what changed,
+    // because half the truth was never fetched: a bulk_price_update records the OLD prices in
+    // before_state and only the rule and counts in after_state. Purely additive — the one consumer
+    // (AuditLogCard, mounted on the default surface and on /classic) is in this repo and changes in
+    // the same commit; no field was removed, renamed or retyped.
+    .select('id,action_type,entity_type,entity_ids,before_state,after_state,triggered_by,executed_at,rolled_back_at,message_excerpt')
     .eq('business_id', bid)
     .order('executed_at', { ascending: false })
     .limit(50)

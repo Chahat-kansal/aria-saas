@@ -1,11 +1,20 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { describeStep } from '@/lib/aria/works/report'
 
+/**
+ * M11 PHASE 5 — this card used to say "Bulk price update · 2 items" and stop there. That is "done"
+ * without saying what changed, which is the one thing the report was told not to be. Everything
+ * needed was already in the row: `after_state.moves` records `[V3] A 55 → 50`, and before_state
+ * records the old prices. Both are now rendered, through the shared describer so the wording cannot
+ * drift from the plan report's.
+ */
 interface LogEntry {
   id: string
   action_type: string
   entity_type: string
   entity_ids: string[]
+  before_state?: Record<string, unknown> | null
   after_state: Record<string, unknown>
   triggered_by: string
   executed_at: string
@@ -80,6 +89,37 @@ export default function AuditLogCard() {
                 "{entry.message_excerpt}"
               </p>
             )}
+            {/* WHAT ACTUALLY CHANGED. Every line traces to a value in before_state/after_state —
+                nothing is inferred, and a row that does not record its change says so. */}
+            {(() => {
+              const d = describeStep({
+                id: entry.id, action_type: entry.action_type,
+                before_state: entry.before_state ?? null, after_state: entry.after_state,
+                executed_at: entry.executed_at, rolled_back_at: entry.rolled_back_at,
+              })
+              if (d.changes.length === 0) {
+                return (
+                  <p className="text-[11px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    {d.status === 'unrecorded' ? 'No record of what this changed.' : d.headline}
+                  </p>
+                )
+              }
+              return (
+                <ul className="mt-1 space-y-0.5">
+                  {d.changes.map((c, i) => (
+                    <li key={i} className="text-[11px]"
+                      style={{ color: d.status === 'failed' || d.status === 'partly_failed' ? '#f59e0b' : 'rgba(255,255,255,0.55)' }}>
+                      {c}
+                    </li>
+                  ))}
+                  {d.failed_count !== null && d.failed_count > 0 && (
+                    <li className="text-[11px] font-medium" style={{ color: '#f59e0b' }}>
+                      {d.failed_count} did not go through
+                    </li>
+                  )}
+                </ul>
+              )
+            })()}
             <div className="flex justify-between items-center mt-1">
               <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                 {entry.entity_ids.length} item{entry.entity_ids.length !== 1 ? 's' : ''}

@@ -401,3 +401,152 @@ build.log:583   ├ ƒ /api/aria/works/plan          0 B    0 B
   it is a measurement, not a repair, and it belongs with the cost sprint.
 - 30-day model census, for whoever picks that up: haiku 1,761 · gemini-2.5-flash 1,388 ·
   **`model_id` NULL 792** · gpt-4o-mini 130 · sonnet-4-5 107 · literal `'unknown'` 54.
+
+---
+
+## PHASE 4 — EXECUTE, ONE STEP AT A TIME ⛔ PARKED (chain, on the phase 2 DDL)
+
+**Not attempted, and no code was written toward it.**
+
+The sprint's own requirement is what parks it: *"Idempotent. A refresh or double-approve must never
+run a step twice."* Idempotency needs a **step record with an id and a status to claim** — the
+atomic `.update(...).eq('status','pending').select()` pattern TS-1 used three times. There is no
+such record: `aria_autopilot_actions` has no `plan_id` and no `step_index`, and **no unique index
+anywhere on either action table could stand in** (checked: `pg_indexes` returns only the pkeys, the
+partial `superseded_by` index, and four `(business_id, status, …)` read indexes).
+
+The alternative — running steps and relying on the caller not to double-submit — is the failure
+this repo has already had on the send path (M4). It is not a smaller version of the phase; it is the
+phase without the property that makes it safe.
+
+**When the DDL lands, this is wiring rather than design.** The executor exists (`executeAction`,
+with its kill switch, role gate and mass-mutation backstop), the undo ledger exists
+(`aria_action_log`, 64 real rows), the gate is decided (`CAPABILITIES`), and the report renderer is
+built (phase 5). What is missing is the two columns and the partial unique index in
+`M11-MIGRATION-PROPOSAL.sql`.
+
+---
+
+## PHASE 5 — THE REPORT ✅ (built, and against real data — but not for plans yet)
+
+**Commit:** `<phase-5>` · `src/lib/aria/works/report.ts` (new), `src/lib/aria/works/report.test.ts`
+(new, 21 tests), `src/app/api/aria/ask/audit/route.ts` (+1 field),
+`src/components/aria/AuditLogCard.tsx` (renders the changes).
+
+### The defect was already shipped, on two surfaces
+
+Phase 5 said: *"A report saying 'done' without saying what changed is exactly what the founder asked
+not to build."* **That report already existed.** `AuditLogCard` — mounted on the default Ask Aria
+surface and on `/classic` — rendered every recorded action as its type and a count:
+
+```
+Bulk price update                     14:32
+2 items                                    [Undo]
+```
+
+And the truth was in the row the whole time. The route fetched `after_state` and **never rendered
+it**, and did not fetch `before_state` **at all**. The row behind that card says
+`[V3] A was A$10.00 · [V3] B was A$10.00 · rule: set 0.0001`.
+
+So phase 5 was not built speculatively against a table that does not exist. It was built against
+**the only recorded outcomes this product has** — `aria_action_log`, 64 real rows, five action
+types — and the same `describeStep` will describe a plan's steps when phase 4 records them.
+
+### Rendered from five REAL production rows
+
+Not a fixture, not a mock. These are `aria_action_log` rows copied verbatim (ids, values and
+oddities included) and put through `renderRunReport`:
+
+```
+=== RENDERED FROM 5 REAL aria_action_log ROWS ===
+Adjust stock — 1 change.
+   · [V3] A: 55 → 50 (-5)
+Bulk price update — 3 changes.
+   · [V3] A: was A$10.00
+   · [V3] B: was A$10.00
+   · Rule applied: set 0.0001
+Update promotion — 1 change.
+   · 10% Off Iced Coffee: 15% → 18%
+Apply category discount — 3 changes.
+   · Created "Free Coffee Promotion"
+   · Applies to the Coffee category
+   · 100% off
+Create promotion — 2 changes.
+   · Created "[RC4] DiffA"
+   · 10% off
+
+5 changed
+```
+
+No sentinels, no `undefined`, no `null`, no placeholder fallback. Against those same rows the
+shipped card renders "1 item", "2 items", "1 item", "1 item", "1 item".
+
+### What it refuses to say
+
+- **`bulk_price_update` never states a NEW price**, because the row does not record one — only the
+  old prices and the rule. Deriving `A$10.00 → A$0.0001` would be arithmetic presented as a reading,
+  and a misread rule would show the owner a price that was never applied. Asserted.
+- **An unrecognised action type says "Aria recorded this action but not what it changed"** — not
+  "completed successfully", which the row does not support. The five branches are the five types
+  that exist in production; a sixth written speculatively would be a guess about a shape nobody has
+  seen, and would render confidently wrong the first time it fired.
+- **A missing count is `null`, never `0`.** "We do not know" is not "none".
+- **`adjust_type` is never interpreted.** A real row carries `adjust_type: "garbage_mode"`; the
+  describer reads `from`/`to` and ignores the verb entirely.
+- **A deduped create says it created nothing.**
+
+### Failures first
+
+`after_state.failed` is a real recorded number. `failed > 0 && affected === 0` is **failed**;
+`failed > 0 && affected > 0` is **partly failed** — different sentences, and neither is "done". The
+run report's first line is the failure count, and failing steps print before successful ones.
+Unrecorded steps are counted separately from changed ones in the summary.
+
+### Mutation check
+
+```
+MUTATION — dropping the failed step from the report makes this suite RED
+honest  → "⚠️ 1 of 3 steps did not complete." + "PARTLY FAILED"
+mutated → neither line present
+```
+
+The sprint's named mutation, asserted against the real renderer rather than a copy of it.
+
+### Sibling sweep
+
+`/api/aria/ask/audit` has **one** consumer (`AuditLogCard`), and the card has **two** mounts
+(`AskAriaTransition:778`, `classic/page.tsx:1572`). All in this repo, all changed in the same commit,
+none of them a cached PWA — so under the settled consumer test this **proceeds unattended**. The
+change is additive anyway: one field added, none removed, renamed or retyped. RULE 0 — the item
+count and its Undo button are **kept**, with the changes rendered above them.
+
+### NOT done, and why
+
+- **It does not report on a PLAN yet**, because no plan is recorded — phase 4 is parked. When it is,
+  the plan report is `renderRunReport` over the plan's recorded steps, unchanged.
+- **The React render was not verified in a browser.** The module's output is pasted above from a
+  real run; the card's JSX is asserted by source rail only. Same limitation as phase 1.
+- **Figure tiers are not applied inside the audit card.** Those values come straight out of the
+  record rather than from a model, so they are not model claims needing a tier — but the plan report
+  will need `planStepSegments` when it renders model-written step text. Named so it is not forgotten.
+
+---
+
+## PHASE 6 — HISTORY ⛔ PARKED (chain, on the phase 2 DDL)
+
+Reopening a past delegated job needs the job to exist. It does not: there is no plan record, and
+**neither action table has a `conversation_id`** (only `support_tickets`, `aria_action_log` and
+`aria_task_outputs` have one, confirmed against `information_schema`).
+
+Two things worth carrying into it:
+
+- **The thread half is already done.** Phase 1 put the conversation id in the URL, so once a plan
+  carries a `conversation_id` the job is reachable from its thread and the thread from the job —
+  with the reload behaviour phase 6's VERIFY depends on already working.
+- ⚠️ **"The owner sees what it cost" has no honest source, and I did not invent one.**
+  `aria_ai_calls` has **no linking column at all** — no `conversation_id`, no `request_id`, no
+  `trace_id` (columns listed by query). 11,029 rows carry `cost_usd_cents` and not one can be
+  attributed to a job except by a time window, which would be a fabricated number. The optional
+  column is in `M11-MIGRATION-PROPOSAL.sql`, separated from the rest because it touches the cost
+  ledger AI-COST-AUDIT-1 found was already undercounting real spend by roughly half. **Until it
+  exists, a job's cost must render `unknown`, never 0.**
