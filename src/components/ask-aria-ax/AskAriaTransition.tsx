@@ -77,7 +77,11 @@ interface Turn {
    * list) so it scrolls, restores and re-renders with everything else, and so a thread that had a
    * plan in it still has one after a reload.
    */
-  plan?: { planId: string | null; result: PlanResult; status: string | null }
+  plan?: {
+    planId: string | null; result: PlanResult; status: string | null
+    /** M11B phase 3 — what each step actually did, once the plan has been run. */
+    outcomes?: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
+  }
 }
 
 /** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
@@ -387,7 +391,35 @@ export default function AskAriaTransition() {
       // An already-approved plan is a true answer, not an error, and the owner is told plainly.
       if (j.already && j.note) {
         setTurns(prev => [...prev, { role: 'aria', streaming: false, text: j.note as string }])
+        return
       }
+      if (!j.approved) return
+
+      // M11B PHASE 3 — the button says "approve and run the safe steps", so it runs them. A
+      // separate request against a separate route: the approval is a fact worth recording on its
+      // own, and runPlan claims the plan atomically, so this cannot start a second run.
+      const runRes = await fetch('/api/aria/works/plan/' + encodeURIComponent(planId) + '/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: ctx?.businessId }),
+      })
+      const r = await runRes.json() as {
+        ran?: boolean; note?: string; outcomes?: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
+        stored?: { plan?: { status?: string } } | null
+      }
+      if (!runRes.ok) {
+        setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'The plan was approved, but running it did not start. Nothing was changed.' }])
+        return
+      }
+      // "Already running" / "not approved yet" come back ran:false with a true sentence.
+      if (!r.ran && r.note) {
+        setTurns(prev => [...prev, { role: 'aria', streaming: false, text: r.note as string }])
+      }
+      setTurns(prev => prev.map((t, i) => (
+        i === turnIndex && t.plan
+          ? { ...t, plan: { ...t.plan, status: r.stored?.plan?.status ?? t.plan.status, outcomes: r.outcomes } }
+          : t
+      )))
     } catch {
       setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'Could not reach the approval. Nothing has run.' }])
     } finally {
@@ -951,6 +983,7 @@ export default function AskAriaTransition() {
                             result={t.plan.result}
                             planId={t.plan.planId}
                             status={t.plan.status}
+                            outcomes={t.plan.outcomes}
                             approving={approvingId !== null && approvingId === t.plan.planId}
                             onApprove={id => void approvePlan(id, i)}
                           />

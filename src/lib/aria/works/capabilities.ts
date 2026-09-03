@@ -68,11 +68,27 @@ export interface Capability {
   reversible: boolean
   /** The module and function that would actually carry this out. Asserted to exist by the test. */
   executor: string
+  /**
+   * M11B PHASE 3 — WHAT THE STEP MUST BE TOLD BEFORE IT MAY RUN.
+   *
+   * Each entry is a required argument; an array means "at least one of these". A step missing any
+   * of them FAILS rather than executing, and this is not defensive politeness — it is a measured
+   * defect:
+   *
+   *   In this phase's own live proof, `adjust_stock` with an EMPTY payload did not refuse. It fell
+   *   through to `.limit(10)` with no filter, took the first ten products of the business, and
+   *   reported "Done — 10 changes". Nothing was told which product, and it acted on ten.
+   *
+   * The executor's mass-mutation backstop did not catch it because ten is under its threshold of
+   * twenty. So the runner refuses first, on arguments, before the executor is ever called.
+   */
+  requires?: Array<string | string[]>
 }
 
 const W = (
   id: ActionType, label: string, gate: StepGate, reversible: boolean, gate_reason?: GateReason,
-): Capability => ({ id, label, kind: 'write', gate, reversible, executor: 'src/lib/aria/ask/action-executor.ts#executeAction', ...(gate_reason ? { gate_reason } : {}) })
+  requires?: Array<string | string[]>,
+): Capability => ({ id, label, kind: 'write', gate, reversible, executor: 'src/lib/aria/ask/action-executor.ts#executeAction', ...(gate_reason ? { gate_reason } : {}), ...(requires ? { requires } : {}) })
 
 const R = (id: ReadCapabilityId, label: string, executor: string): Capability =>
   ({ id, label, kind: 'read', gate: 'auto', reversible: true, executor })
@@ -90,8 +106,14 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
 
   // ── WRITES THAT ARE SAFE AND REVERSIBLE ───────────────────────────────────────────────────────
   // Both record a before_state, so `rollbackAction` can put them back.
-  adjust_stock: W('adjust_stock', 'Correct the stock count on one product', 'auto', true),
-  set_low_stock_threshold: W('set_low_stock_threshold', 'Set the level at which a product counts as low', 'auto', true),
+  // Both carry `requires`, because both are the ones a plan runner may execute unattended.
+  // adjust_stock with no product named takes the first ten products (measured, see `requires`).
+  adjust_stock: W('adjust_stock', 'Correct the stock count on one product', 'auto', true, undefined,
+    [['product_id', 'product_name'], 'adjust_type', 'quantity']),
+  // set_low_stock_threshold with no category or brand targets every active product up to 500 (the
+  // executor's mass backstop stops it above 20), and an absent threshold would write NaN.
+  set_low_stock_threshold: W('set_low_stock_threshold', 'Set the level at which a product counts as low', 'auto', true, undefined,
+    [['category', 'brand'], 'threshold']),
 
   // ── A WRITE THE OWNER MUST SAY YES TO SPECIFICALLY ────────────────────────────────────────────
   // `mark_products` is in the executor's own DESTRUCTIVE_ACTION_TYPES set and is gated there by a
@@ -130,6 +152,29 @@ export function findCapability(id: unknown): Capability | null {
   return Object.prototype.hasOwnProperty.call(CAPABILITIES, id)
     ? CAPABILITIES[id as CapabilityId]
     : null
+}
+
+/**
+ * The required arguments this payload does NOT have.
+ *
+ * Empty means the step may run. A non-empty list is the reason it must not, in words the report can
+ * use. Present-but-empty and present-but-null both count as missing: `quantity: null` tells the
+ * executor nothing, and `Number(null) || 0` would quietly become a zero nobody asked for.
+ */
+export function missingArgs(cap: Capability, payload: Record<string, unknown>): string[] {
+  const has = (k: string): boolean => {
+    const v = payload[k]
+    return v !== undefined && v !== null && v !== '' && !(typeof v === 'number' && Number.isNaN(v))
+  }
+  const missing: string[] = []
+  for (const req of cap.requires ?? []) {
+    if (Array.isArray(req)) {
+      if (!req.some(has)) missing.push(req.join(' or '))
+    } else if (!has(req)) {
+      missing.push(req)
+    }
+  }
+  return missing
 }
 
 /** True only for a registered capability a plan runner is allowed to carry out itself. */

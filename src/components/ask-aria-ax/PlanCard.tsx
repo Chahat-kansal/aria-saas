@@ -29,6 +29,14 @@ export interface PlanCardProps {
   status?: string | null
   onApprove?: (planId: string) => void
   approving?: boolean
+  /**
+   * M11B phase 3 — what each step actually did. Absent until the plan has run.
+   *
+   * Rendered from the OUTCOMES the server returned, which are themselves read back off the step
+   * rows — so what the owner sees cannot disagree with what was recorded. A step that failed is
+   * shown as failed, in amber, with the executor's own sentence.
+   */
+  outcomes?: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
 }
 
 const GREEN = '#7FB897'
@@ -38,7 +46,7 @@ function markColour(step: PlanStep): string {
   return step.runnable_by_aria ? GREEN : AMBER
 }
 
-export default function PlanCard({ result, planId, status, onApprove, approving }: PlanCardProps) {
+export default function PlanCard({ result, planId, status, onApprove, approving, outcomes }: PlanCardProps) {
   if (!result.ok) {
     // THE HONEST REFUSAL. `unplannable_reason` is a column and this is the sentence in it — the
     // owner sees why, rather than the request disappearing. Half a plan presented as whole is the
@@ -77,6 +85,19 @@ export default function PlanCard({ result, planId, status, onApprove, approving 
               <div style={{ fontSize: 10, color: markColour(step), marginTop: 3, letterSpacing: '0.02em' }}>
                 {markFor(step)}
               </div>
+              {/* M11B phase 3 — WHAT ACTUALLY HAPPENED, once it has. Straight from the recorded
+                  outcome, so the screen cannot claim more than the row does. */}
+              {(() => {
+                const o = outcomes?.find(x => x.step_index === step.index)
+                if (!o) return null
+                const colour = o.result === 'failed' ? AMBER : o.result === 'ran' ? GREEN : 'rgba(255,255,255,0.4)'
+                const label = o.result === 'failed' ? 'DID NOT GO THROUGH' : o.result === 'ran' ? 'DONE' : 'NOT RUN'
+                return (
+                  <div style={{ fontSize: 11, color: colour, marginTop: 4 }}>
+                    <b>{label}</b> — {o.note}
+                  </div>
+                )
+              })()}
             </div>
           </li>
         ))}

@@ -114,8 +114,18 @@ describe('M11B phase 1 · delegation is an EXPLICIT gesture', () => {
   })
 
   it('a plan lives ON THE TURN, so it scrolls and restores with the conversation', () => {
-    expect(c).toMatch(/plan\?: \{ planId: string \| null; result: PlanResult; status: string \| null \}/)
+    // AMENDED BY M11B PHASE 3. This pinned the exact one-line shape of `Turn.plan`, which phase 3
+    // widened with `outcomes` — so it broke on a change that did not touch the property it was
+    // guarding. Rewritten to assert the property itself: the plan (and now its outcomes) hangs off
+    // the turn rather than a parallel list, which is what makes it scroll and restore with the
+    // conversation. A shape assertion that fails on any addition is a tax, not a guard.
+    expect(c).toMatch(/plan\?: \{[\s\S]{0,400}planId: string \| null/)
+    expect(c).toMatch(/plan\?: \{[\s\S]{0,400}result: PlanResult/)
+    expect(c).toMatch(/plan\?: \{[\s\S]{0,400}status: string \| null/)
+    expect(c).toMatch(/plan\?: \{[\s\S]{0,400}outcomes\?:/)
     expect(c).toContain('if (t.plan) {')
+    // And NOT a parallel store keyed by plan id, which would not survive a thread switch.
+    expect(c).not.toMatch(/const \[plans, setPlans\]/)
   })
 
   it('a route failure is stated, never smoothed into a plan that is not there', () => {

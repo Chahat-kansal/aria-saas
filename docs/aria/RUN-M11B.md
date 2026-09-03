@@ -337,3 +337,155 @@ tsc **0** · vitest **107 files / 1428 tests, exit 0** · `next build` **BUILD_E
   as well as in the prose.
 - The browser was not opened; the button is held by source rails and the route by the live proof
   above.
+
+---
+
+## PHASE 3 — EXECUTE, ONE STEP AT A TIME ✅ — and it found a live defect
+
+**Commit:** `<phase-3>` · `src/lib/aria/works/run.ts` (new),
+`src/app/api/aria/works/plan/[id]/run/route.ts` (new), `src/lib/aria/works/run.test.ts`
+(new, 19 tests), `capabilities.ts` (+`requires`, +`missingArgs`), `PlanCard.tsx` (renders outcomes),
+`AskAriaTransition.tsx` (approve then run).
+
+### ⚠️ THE FIRST LIVE RUN FOUND A REAL DEFECT, AND IT CHANGED PRODUCTION DATA
+
+The proof plan deliberately included an `adjust_stock` step with an **empty payload**, expecting it
+to refuse. It did not:
+
+```
+step 1  RAN      Read takings for 2026-09-02: A$0.00 across 0 sales.
+step 2  RAN      Looked for where money is leaking: 4 signals found.
+step 3  SKIPPED  Left for you — money. Nothing was done to it.
+step 4  RAN      Done — 10 changes.        ← THIS WAS SUPPOSED TO FAIL
+```
+
+**`executeAction`'s `adjust_stock` branch, given no `product_id` and no `product_name`, applies no
+filter at all.** It runs `.limit(10)` and takes **the first ten products of the business**. The
+executor's own mass-mutation backstop did not fire, because ten is under its threshold of twenty.
+
+**What it actually did, measured — not reasoned about:**
+
+```
+pos_products rows with updated_at bumped ....... 10
+pos_stock_adjustments written .................. 0
+pos_outlet_inventory rows changed .............. 0
+pos_promotions created ......................... 0
+aria_action_log rows written ................... 0
+```
+
+No stock value moved, because `quantity` was missing too: `Number(undefined) || 0` made the delta
+zero, and `-0 !== 0` is false in JavaScript, so the atomic adjust was never called. The ten writes
+were `pos_products.stock_quantity` being set to the value it already had.
+
+**But one product is not quite unchanged.** Four of the ten have no `pos_outlet_inventory` row, so
+the code's `invRow ? … : 0` branch made `prev = 0` and wrote `stock_quantity = 0`. Three are
+inactive `[COV-OLD]` test rows. **The fourth is `Cortado` — active, `track_inventory` true.** Its
+prior `stock_quantity` is not recoverable; the canonical figure (`pos_outlet_inventory.items_on_hand`,
+RULE 6) never existed for it and is still absent, so only the legacy mirror moved. Stated plainly
+rather than rounded off: my proof changed one number on one real product in the founder's test
+business, and I cannot put it back.
+
+**Had that step carried `{adjust_type:'set', quantity:0}` with no product, it would have set ten
+products' stock to zero.** That is the finding.
+
+### The fix, and what is parked
+
+**In my domain — fixed.** The registry now declares what a capability must be told, and the runner
+refuses **before the executor is called**:
+
+```
+adjust_stock            requires  [product_id or product_name] · adjust_type · quantity
+set_low_stock_threshold requires  [category or brand] · threshold
+```
+
+`missingArgs` treats `null`, `''` and `NaN` as missing — `Number(null) || 0` becoming a zero nobody
+asked for is the same class of bug — while a real `quantity: 0` is allowed, because "set the count
+to zero" is a legitimate instruction.
+
+⚠️ **PARKED, and it should be looked at: the executor defect is still there for its other callers.**
+`adjust_stock` with no product named is reachable from the Ask Aria chat path today, entirely
+independently of plans, and `set_low_stock_threshold` with no scope targets every active product up
+to 500 (its mass backstop stops it above 20, so 1–20 products go through silently). Changing
+`executeAction` alters behaviour for existing callers on a money- and stock-adjacent path — that is
+a behaviour change outside this sprint's domain, and it wants a person. **Named here rather than
+taken.**
+
+### The run, re-done with the guard in place
+
+```
+=== RUN 1 — the real runner, against production ===
+  step 1  RAN      Read takings for 2026-09-02: A$0.00 across 0 sales.
+  step 2  SKIPPED  Left for you — money. Nothing was done to it.
+  step 3  FAILED   Could not run this step — it was not told product_id or product_name,
+                   adjust_type, quantity. Nothing was changed.
+  step 4  SKIPPED  Aria has no way to do this one — it needs a person.
+  plan status now: running
+
+=== RUN 2 — re-submitting the SAME approved plan ===
+  ok: false | This plan is already running.
+
+=== THE RECORD, read back off the step rows ===
+  step 1  status=executed  stepup=false resolved=yes  Read takings for 2026-09-02: A$0.00 …
+  step 2  status=pending   stepup=true  resolved=no   (no note)
+  step 3  status=pending   stepup=false resolved=yes  Could not run this step — it was not told …
+  step 4  status=pending   stepup=false resolved=no   (no note)
+```
+
+**This is a genuine end-to-end execution**, not a replay: `runPlan` ran in process against
+production through the service role, step 1 really read `pos_sales`, and the record above is read
+back off the rows afterwards. **Zero products were touched by this run** — confirmed by the most
+recent `pos_products.updated_at` for the business being 205 seconds old, i.e. from the *earlier*
+run. (My first check used a four-minute window and caught that earlier run; the window was the
+error, not the guard. Sanity-checking my own diagnostic, failure pattern #5.)
+
+### Idempotency, and a plan is not a transaction
+
+The plan-level claim `.update({status:'running'}).eq('status','approved')` is what makes a
+re-submit safe — the second call gets no row and is told the plan is already running. **No preceding
+SELECT.** There is deliberately no rollback of the whole run: unwinding step 1 because step 3 failed
+would be a second action nobody asked for. What is guaranteed instead is that the record says
+exactly what state things are in, and the report is generated from those rows.
+
+### ⚠️ A FAILED STEP KEEPS `status = 'pending'` — and this is a PARK
+
+`aria_autopilot_actions_status_check` allows exactly
+`pending | approved | rejected | executed | dismissed | expired | superseded`. **There is no
+`failed`.** Of the values that exist, `executed` would claim it ran — the lie this sprint exists to
+avoid — and `rejected`/`dismissed` both say the *owner* decided against it, which is not what
+happened. Inventing one would be TS-DEFECT-1 exactly: three writers already use a status the CHECK
+rejects and have been failing silently ever since.
+
+So a failed step stays `pending` (true: it has not happened and still needs someone) with the
+failure in `outcome_note` and `outcome_data`, where the report reads it. **Adding `failed` to that
+CHECK is DDL and is the founder's** — it would make the record cleaner and it is the one schema
+change this sprint would ask for.
+
+### Mutation check
+
+```
+if (missing.length > 0)  →  if (false)     [the argument guard, removed]
+run.test.ts goes red; and the property lost is measurable: missingArgs(adjust_stock, {}) = 3
+```
+
+### NOT done
+
+- **No `aria_action_log` row was written for the executed steps** in the proof run, because the
+  `aria_actions` insert inside `executeAction` failed its `executed_by_user_id` FK — my proof used a
+  fabricated user id, not a real `auth.users` row. That is an artefact of the proof, **not** a
+  product defect, and the executor *did* read and log that error. Worth naming so nobody reads the
+  empty audit as a finding.
+- The browser was not opened. The run is proven in process; the card's outcome rendering is held by
+  a source rail.
+
+### A second phase-1 assertion was superseded, and rewritten
+
+`a plan lives ON THE TURN` pinned the exact one-line shape of `Turn.plan`, which phase 3 widened
+with `outcomes` — so it broke on a change that did not touch the property it was guarding. Rewritten
+to assert the property: the plan and its outcomes hang off the turn rather than a parallel list
+(which would not survive a thread switch), with the reason in the test file. A shape assertion that
+fails on any addition is a tax, not a guard.
+
+### Gates
+
+tsc **0** · vitest **108 files / 1447 tests, exit 0** · `next build` **BUILD_EXIT=0**
+(`build.log:1965`).
