@@ -42,6 +42,11 @@ export interface AxNotice {
 
 export interface AxContext {
   /**
+   * M11B — the business this payload was built for. Present so the surface can name it when
+   * delegating a job, instead of resolving it a seventh time.
+   */
+  businessId: string
+  /**
    * How many decisions are ACTUALLY pending — not how many this payload carries.
    * `awaiting` is capped for the panel; this is the real count, and it is what the badge shows.
    * They differed 6 vs 55 on the first live screenshot, which is a number reporting a page size.

@@ -71,6 +71,18 @@ export interface CreateDecisionParams {
   /** Legacy provenance column some agents set (e.g. 'parallel_orchestrator'). */
   triggered_by?: string | null
   /** Only for the rare caller that genuinely needs a non-'pending' status. Defaults to 'pending'. */
+  /**
+   * M11B — the plan this decision is a step OF, and its 1-based position in that plan.
+   *
+   * Both or neither: `aria_autopilot_actions_plan_step_together` is a CHECK, so passing one alone
+   * is rejected by the database rather than by a guess here. Omitted (the case for every caller
+   * that existed before M11B) means a standalone decision, which is what all 819 existing rows are.
+   *
+   * A plan step is normally created with `emit: false, notify: false` — the plan emits ONE
+   * job_created event and the owner is told about the plan, not pinged five times for its steps.
+   */
+  plan_id?: string | null
+  step_index?: number | null
   status?: string
 
   /** TS-1 PHASE 3 — 'staff' added at first use; see recordEvent.ts for the full note. */
@@ -103,6 +115,7 @@ export async function createDecision(params: CreateDecisionParams): Promise<stri
     category = null, action_type = null, agent_type = null,
     customer_id = null, estimated_impact = null, confidence = null, summary = null,
     triggered_by = null,
+    plan_id = null, step_index = null,
     status = 'pending',
     actor = 'aria', emit = true, notify = true,
   } = params
@@ -134,6 +147,9 @@ export async function createDecision(params: CreateDecisionParams): Promise<stri
   if (confidence !== null) row.confidence = confidence
   if (summary !== null) row.summary = summary
   if (triggered_by !== null) row.triggered_by = triggered_by
+  // M11B — set together or not at all; the DB CHECK enforces it either way.
+  if (plan_id !== null) row.plan_id = plan_id
+  if (step_index !== null) row.step_index = step_index
 
   const { data: created, error } = await supabaseAdmin
     .from('aria_autopilot_actions')

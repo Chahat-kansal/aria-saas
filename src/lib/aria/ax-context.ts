@@ -224,5 +224,10 @@ export async function buildAxContext(businessId: string): Promise<AxContext> {
   // the headline counts everything Aria noticed, which includes notices that are not decisions
   // (a zero-till day, lines below reorder). Different questions, differently labelled, both true.
   const noticedTotal = awaitingTotal + (noticed.length - awaiting.length)
-  return { ownerName, businessName, awaitingTotal, noticedTotal, today, awaiting, didToday, tags, noticed, quiet: noticed.length === 0 }
+  // M11B — businessId ADDED. The surface needs to name the business when it delegates a job, and
+  // the alternative was a SEVENTH copy of the "which business is this user in" resolver (failure
+  // pattern #4 counted six). This payload was already built for exactly one business; saying which
+  // one costs nothing and duplicates nothing. Purely additive: the one consumer is
+  // AskAriaTransition, in this repo, and no field was removed, renamed or retyped.
+  return { businessId, ownerName, businessName, awaitingTotal, noticedTotal, today, awaiting, didToday, tags, noticed, quiet: noticed.length === 0 }
 }

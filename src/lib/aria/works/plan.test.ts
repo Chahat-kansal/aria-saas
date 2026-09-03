@@ -298,10 +298,21 @@ describe('M11 phase 3 · a step resting on a number carries that number’s tier
   })
 
   it('no second notion of "verified" was invented', () => {
-    const src = read('src/lib/aria/works/plan.ts')
-    expect(src).toContain("from '@/lib/aria/figure-provenance'")
-    expect(src).toContain('segmentFigures(')
-    expect(src).not.toMatch(/tier\s*[:=]\s*'verified'/)
+    // AMENDED BY M11B PHASE 1. This read plan.ts. The pure half of that module — types, the registry
+    // lookup, assembly, rendering and this segmenter call — moved to plan-shape.ts because
+    // PlanCard is a client component and importing plan.ts dragged model-router and the Anthropic
+    // SDK (which imports node:path) into the browser bundle, failing the webpack build. The
+    // assertion follows the code rather than being deleted: plan.ts still re-exports every symbol,
+    // so nothing else changed, and BOTH files are checked so the tier logic cannot reappear in the
+    // server half either.
+    const shape = read('src/lib/aria/works/plan-shape.ts')
+    const server = read('src/lib/aria/works/plan.ts')
+    expect(shape).toContain("from '@/lib/aria/figure-provenance'")
+    expect(shape).toContain('segmentFigures(')
+    expect(shape).not.toMatch(/tier\s*[:=]\s*'verified'/)
+    expect(server).not.toMatch(/tier\s*[:=]\s*'verified'/)
+    // The re-export is what keeps every existing import path working.
+    expect(server).toContain("export * from './plan-shape'")
   })
 })
 

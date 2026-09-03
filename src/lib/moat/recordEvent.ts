@@ -37,7 +37,7 @@ export interface RecordEventParams {
 
 export async function recordEvent(params: RecordEventParams): Promise<void> {
   try {
-    await supabaseAdmin.from('business_events').insert({
+    const { error } = await supabaseAdmin.from('business_events').insert({
       business_id: params.business_id,
       entity_type: params.entity_type,
       entity_id: params.entity_id,
@@ -47,8 +47,23 @@ export async function recordEvent(params: RecordEventParams): Promise<void> {
       actor: params.actor,
       payload_summary: params.payload_summary ?? {},
     })
+    // M11B — THE ERROR IS NOW READ. It was not: `await supabase.insert()` RESOLVES with { error }
+    // rather than throwing, so a CHECK violation on entity_type/event_type/actor landed in a
+    // variable nobody looked at and the catch below never ran. The spine has exactly one writer, so
+    // a rejected insert here is a hole in the moat with no symptom.
+    //
+    // This is the shape that gave council-executor.ts ZERO audit inserts against 819 rows. It is
+    // fixed here rather than merely avoided, because M11B writes job_created/job_completed/
+    // job_failed through this function and "do not repeat their shape" cannot be satisfied by
+    // calling a helper that has it.
+    //
+    // STILL NON-FATAL, deliberately and unchanged: the spine must never block a real decision or
+    // job flow from completing. What changed is only that a failure is now visible.
+    if (error) {
+      console.error('[recordEvent] REJECTED', params.entity_type, params.event_type, error.message)
+    }
   } catch (e) {
-    // Non-fatal by design — the spine must never block a real decision/job flow from completing.
+    // A thrown failure (network, client) — the original arm, kept.
     console.error('[recordEvent] failed', params.entity_type, params.event_type, e)
   }
 }

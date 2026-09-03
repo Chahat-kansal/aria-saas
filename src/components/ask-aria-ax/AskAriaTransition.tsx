@@ -18,6 +18,8 @@ import { advisorShortfallNote } from '@/lib/aria/council-advisors'
 import { toClipboardMarkdown } from '@/lib/aria/copy-markdown'
 import { readDraft, writeDraft, clearDraft, adoptDraft } from '@/lib/aria/draft-store'
 import { readThreadId, syncThreadUrl, restoreThread, rememberScroll, recallScroll } from '@/lib/aria/thread-session'
+import PlanCard from './PlanCard'
+import type { PlanResult } from '@/lib/aria/works/plan-shape'
 import { formatAxFigure, type AxContext } from '@/lib/aria/ax-context-types'
 import type { AutonomyMode, AutonomyState } from '@/lib/aria/autonomy'
 import type { AskBlock } from '@/lib/aria/ask-types'
@@ -70,6 +72,12 @@ interface Turn {
    * every figure in it renders plain — the honest outcome, not a degraded one.
    */
   provenance?: ProvenanceInput
+  /**
+   * M11B PHASE 1 — this turn IS a plan rather than an answer. Carried on the turn (not a parallel
+   * list) so it scrolls, restores and re-renders with everything else, and so a thread that had a
+   * plan in it still has one after a reload.
+   */
+  plan?: { planId: string | null; result: PlanResult; status: string | null }
 }
 
 /** The rooms that survived phase 3. "Routines" is absent — see RUN-MS17.md. */
@@ -120,6 +128,8 @@ export default function AskAriaTransition() {
   const [copied, setCopied] = useState<number | null>(null)
   // S1 phase 3 — which rendered message is being edited, and its working text.
   const [editing, setEditing] = useState<{ index: number; text: string } | null>(null)
+  // M11B phase 1 — a plan is being built. Separate from isBusy: the planner is not the stream.
+  const [planning, setPlanning] = useState(false)
 
   const { send, cancel, retry, text, stage, error, isBusy } = useAriaStream()
   const flowRef = useRef<HTMLDivElement>(null)
@@ -289,6 +299,58 @@ export default function AskAriaTransition() {
       setDegraded(null)
     }
   }, [conversationId, isBusy, send])
+
+  /**
+   * M11B PHASE 1 — DELEGATE A JOB.
+   *
+   * An EXPLICIT gesture, never an inference. Deciding on every turn whether a message is a question
+   * or a delegation would silently change every answer the owner gets; a button changes only the
+   * turns they press it on.
+   *
+   * Writes nothing on its own — the route persists the plan and returns its id, and NOTHING runs
+   * until the owner approves it.
+   */
+  const delegate = useCallback(async (prompt: string) => {
+    const msg = prompt.trim()
+    if (!msg || isBusy || planning) return
+    setPlanning(true)
+    setRoom('ask')
+    setWorking(true)
+    setInput('')
+    setWelcomeInput('')
+    clearDraft(conversationId)
+    setTurns(prev => [...prev, { role: 'user', text: msg }])
+    try {
+      const res = await fetch('/api/aria/works/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request: msg, business_id: ctx?.businessId, conversation_id: conversationId }),
+      })
+      const j = await res.json() as {
+        plan?: PlanResult | null; plan_id?: string | null
+        stored?: { plan?: { status?: string } } | null; error?: string
+      }
+      if (!res.ok || !j.plan) {
+        // The route says what went wrong; it is never smoothed into a plan that is not there.
+        setTurns(prev => [...prev, {
+          role: 'aria', streaming: false,
+          text: j.error ?? 'Aria could not plan that just now. Nothing was attempted.',
+        }])
+        return
+      }
+      const built: PlanResult = j.plan
+      setTurns(prev => [...prev, {
+        role: 'aria', text: '', streaming: false,
+        // The status comes from the STORED row, so the card shows the database's state rather than
+        // an assumption about what the write did.
+        plan: { planId: j.plan_id ?? null, result: built, status: j.stored?.plan?.status ?? null },
+      }])
+    } catch {
+      setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'Aria could not reach the planner. Nothing was attempted.' }])
+    } finally {
+      setPlanning(false)
+    }
+  }, [conversationId, ctx, isBusy, planning])
 
   /**
    * Regenerate — migrated from the old surface (page.tsx:830). Drops the last Aria turn and re-asks
@@ -829,6 +891,29 @@ export default function AskAriaTransition() {
                     </div>
                   )
                 }
+                // M11B PHASE 1 — a plan turn. Rendered in the flow like any other turn, so it
+                // scrolls, restores and sits in the conversation it belongs to.
+                if (t.plan) {
+                  return (
+                    <div key={i}>
+                      <div className="skill"><i>✦</i> <b>A plan</b> · nothing has run</div>
+                      <div className="m">
+                        <div className="a aria">A</div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div className="who">Aria</div>
+                          {/* No onApprove in phase 1: approving is phase 2, and a button that
+                              looks live and does nothing is the fake control this surface was
+                              cleaned of ten times over. PlanCard renders it only when handed one. */}
+                          <PlanCard
+                            result={t.plan.result}
+                            planId={t.plan.planId}
+                            status={t.plan.status}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
                 return (
                   <div key={i}>
                     {t.skill && (
@@ -937,6 +1022,17 @@ export default function AskAriaTransition() {
                 {/* Was a <span> dressed as a dropdown that did nothing. It now opens the skill
                     picker — the real one from the old surface, backed by /api/aria/skills. */}
                 <button className="mode" onClick={() => setSkillsOpen(v => !v)}>💬 Skills ⌄</button>
+
+                {/* M11B PHASE 1 — DELEGATE. An explicit gesture: this is how the owner says "do
+                    this" rather than "tell me about this". Nothing is inferred from the wording of
+                    a message, because that guess would change every turn rather than this one. */}
+                <button
+                  className="mode"
+                  disabled={planning || isBusy || !input.trim()}
+                  title="Describe an outcome and Aria will plan it. Nothing runs until you approve."
+                  onClick={() => void delegate(input)}
+                  style={{ opacity: (planning || isBusy || !input.trim()) ? 0.4 : 1 }}
+                >{planning ? '⏳ Planning…' : '🗂 Delegate'}</button>
 
                 {/* Real attach: same route and FormData shape as the old surface. */}
                 <input
