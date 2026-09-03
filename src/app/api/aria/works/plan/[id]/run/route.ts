@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { runPlan } from '@/lib/aria/works/run'
 import { loadPlan } from '@/lib/aria/works/persist'
+import { finishPlan } from '@/lib/aria/works/finish'
 import { toNullableUuid } from '@/lib/utils/uuid-helpers'
 
 /**
@@ -49,9 +50,22 @@ async function _POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
     return NextResponse.json({ ran: false, note: result.reason, stored })
   }
 
+  // M11B PHASE 4 — the run is over, so the plan is reported. Reported is NOT succeeded: a plan
+  // whose every step failed still gets a report, and that report is the deliverable. It is
+  // generated from the step rows, so it cannot disagree with them.
+  const finished = await finishPlan(planId, claimed)
+  if (!finished.ok) {
+    // The steps DID run — say so, and say the report could not be written, rather than losing one
+    // fact to report the other.
+    console.error('[works/run] could not close the plan:', finished.reason)
+  }
+
   return NextResponse.json({
     ran: true,
     outcomes: result.outcomes,
+    report: finished.ok ? finished.report : null,
+    had_failures: finished.ok ? finished.had_failures : null,
+    report_error: finished.ok ? null : finished.reason,
     // Counted from the outcomes themselves, never tracked separately — a summary kept alongside
     // the record is a summary that can disagree with it.
     summary: {

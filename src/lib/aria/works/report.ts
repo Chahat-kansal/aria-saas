@@ -249,3 +249,133 @@ function summaryLine(changed: number, failed: number, rolledBack: number, unreco
   if (unrecorded > 0) parts.push(unrecorded + ' with no record of what changed')
   return parts.join(' · ')
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// M11B PHASE 4 — THE PLAN'S REPORT.
+//
+// Added to THIS module rather than a second one, because there must be one vocabulary for "what
+// happened". The audit describer above reads `aria_action_log`; this reads the plan's own step rows
+// (`aria_autopilot_actions.outcome_note` / `outcome_data`). Both put failures first and neither
+// says "done" without saying what changed.
+//
+// ── THE REPORT IS GENERATED FROM THE ROWS, EVERY TIME ─────────────────────────────────────────
+// Nothing is carried over from the run that produced it. If the rows and the report ever disagree,
+// the report is wrong by construction — which is the property the sprint asked for, and the reason
+// `renderPlanReport` takes rows and returns a string rather than being handed a summary.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** The step columns this report needs. A subset of `StepRow`, so a caller can pass those straight in. */
+export interface ReportableStep {
+  step_index: number
+  title: string | null
+  status: string
+  requires_stepup: boolean
+  outcome_note: string | null
+  outcome_data: Record<string, unknown> | null
+  resolved_at: string | null
+}
+
+export type StepState =
+  /** It ran and the record says what it did. */
+  | 'done'
+  /** It was tried and did not work. `status` is still `pending` — see run.ts on why. */
+  | 'failed'
+  /** Money, sending or authorisation: proposed, never run here. Waiting for the owner. */
+  | 'waiting_for_you'
+  /** Nothing tried it — no capability, or the run stopped before reaching it. */
+  | 'not_run'
+
+/**
+ * What state one step is in, read from the row alone.
+ *
+ * The order of these tests matters: a step that was ATTEMPTED (it has a `resolved_at` and a note)
+ * but is not `executed` is a failure, and that has to be decided before "still pending" is read as
+ * "waiting for you" — otherwise a step that broke would be reported as merely awaiting the owner,
+ * which is the quietest possible way to lose a failure.
+ */
+export function stepState(step: ReportableStep): StepState {
+  if (step.status === 'executed') return 'done'
+  if (step.resolved_at && step.outcome_note) return 'failed'
+  if (step.requires_stepup) return 'waiting_for_you'
+  return 'not_run'
+}
+
+const STATE_LABEL: Record<StepState, string> = {
+  done: 'DONE',
+  failed: 'DID NOT GO THROUGH',
+  waiting_for_you: 'WAITING FOR YOU',
+  not_run: 'NOT RUN',
+}
+
+/**
+ * The plan's report.
+ *
+ * ⚠️ FAILURES ARE THE FIRST LINE. A run where step 3 broke is a run the owner must know about
+ * before they read anything else, and `report-plan.test.ts` drops the failed step and requires the
+ * suite to go red.
+ *
+ * ⚠️ AND `reported` IS NOT `succeeded`. A plan whose every step failed still gets a report, and
+ * that report is the deliverable. The closing line never says "done" on its own — it counts each
+ * state separately, because "we did not try this" and "this broke" and "this needs you" are three
+ * different sentences and none of them is success.
+ */
+export function renderPlanReport(request: string, steps: ReportableStep[]): string {
+  const states = steps.map(s => ({ step: s, state: stepState(s) }))
+  const failed = states.filter(s => s.state === 'failed')
+  const done = states.filter(s => s.state === 'done')
+  const waiting = states.filter(s => s.state === 'waiting_for_you')
+  const notRun = states.filter(s => s.state === 'not_run')
+
+  const lines: string[] = []
+
+  if (steps.length === 0) {
+    // Never "done". A plan with no steps did nothing, and says so.
+    return 'You asked: ' + request + '\n\nThis plan had no steps, so nothing was done.'
+  }
+
+  if (failed.length > 0) {
+    lines.push('⚠️ ' + failed.length + ' of ' + steps.length + ' step'
+      + (steps.length === 1 ? '' : 's') + ' did not go through.', '')
+  }
+
+  lines.push('You asked: ' + request, '')
+
+  // Failures first in the body too, so the order on screen matches the order of importance.
+  for (const { step, state } of [...failed, ...done, ...waiting, ...notRun]) {
+    lines.push(step.step_index + '. ' + (step.title ?? '(untitled step)') + ' — ' + STATE_LABEL[state])
+    if (step.outcome_note) lines.push('   ' + step.outcome_note)
+    else if (state === 'waiting_for_you') lines.push('   Aria proposed this and did not do it. It needs you.')
+    else if (state === 'not_run') lines.push('   Nothing was attempted.')
+  }
+
+  lines.push('', summarise(done.length, failed.length, waiting.length, notRun.length))
+  return lines.join('\n')
+}
+
+function summarise(done: number, failed: number, waiting: number, notRun: number): string {
+  const parts: string[] = [done + ' done']
+  if (failed > 0) parts.push(failed + ' did not go through')
+  if (waiting > 0) parts.push(waiting + ' waiting for you')
+  if (notRun > 0) parts.push(notRun + ' not attempted')
+  return parts.join(' · ')
+}
+
+/**
+ * The figures in a plan's outcomes that were READ from real data, with what they were read from.
+ *
+ * Fed to `segmentFigures` so a number in the report carries its tier — the same rail the answers
+ * use. Only values a read step actually recorded are anchored; a number that appears in a note
+ * without a recorded source stays plain, which is the honest outcome rather than a degraded one.
+ */
+export function planReportAnchors(steps: ReportableStep[]): Array<{ value: number | null | undefined; label: string }> {
+  const out: Array<{ value: number | null | undefined; label: string }> = []
+  for (const s of steps) {
+    const d = s.outcome_data
+    if (!d || typeof d !== 'object') continue
+    const source = typeof d.source === 'string' ? d.source : null
+    if (!source) continue
+    if (typeof d.revenue === 'number') out.push({ value: d.revenue, label: source })
+    if (typeof d.transaction_count === 'number') out.push({ value: d.transaction_count, label: source })
+  }
+  return out
+}

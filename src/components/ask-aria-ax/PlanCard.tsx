@@ -37,6 +37,13 @@ export interface PlanCardProps {
    * shown as failed, in amber, with the executor's own sentence.
    */
   outcomes?: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
+  /**
+   * M11B phase 4 — the report, once the plan is finished. Generated server-side FROM the step
+   * rows, so it cannot disagree with the per-step lines above it. Rendered verbatim: its first
+   * line is the failure count when there is one, and re-wrapping it here would be a second
+   * chance to lose that.
+   */
+  report?: string | null
 }
 
 const GREEN = '#7FB897'
@@ -46,7 +53,7 @@ function markColour(step: PlanStep): string {
   return step.runnable_by_aria ? GREEN : AMBER
 }
 
-export default function PlanCard({ result, planId, status, onApprove, approving, outcomes }: PlanCardProps) {
+export default function PlanCard({ result, planId, status, onApprove, approving, outcomes, report }: PlanCardProps) {
   if (!result.ok) {
     // THE HONEST REFUSAL. `unplannable_reason` is a column and this is the sentence in it — the
     // owner sees why, rather than the request disappearing. Half a plan presented as whole is the
@@ -102,6 +109,18 @@ export default function PlanCard({ result, planId, status, onApprove, approving,
           </li>
         ))}
       </ol>
+
+      {report && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.04em', marginBottom: 4 }}>
+            WHAT HAPPENED
+          </div>
+          {/* Verbatim. The report's own first line is the failure count when there is one. */}
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', margin: 0, color: 'rgba(255,255,255,0.7)', fontFamily: 'inherit' }}>
+            {report}
+          </pre>
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12 }}>
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>

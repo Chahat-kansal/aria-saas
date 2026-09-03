@@ -81,6 +81,8 @@ interface Turn {
     planId: string | null; result: PlanResult; status: string | null
     /** M11B phase 3 — what each step actually did, once the plan has been run. */
     outcomes?: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
+    /** M11B phase 4 — the report, generated from the step rows. */
+    report?: string | null
   }
 }
 
@@ -405,7 +407,8 @@ export default function AskAriaTransition() {
       })
       const r = await runRes.json() as {
         ran?: boolean; note?: string; outcomes?: Array<{ step_index: number; title: string; result: 'ran' | 'skipped' | 'failed'; note: string }>
-        stored?: { plan?: { status?: string } } | null
+        report?: string | null; report_error?: string | null
+        stored?: { plan?: { status?: string; report?: string | null } } | null
       }
       if (!runRes.ok) {
         setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'The plan was approved, but running it did not start. Nothing was changed.' }])
@@ -417,9 +420,22 @@ export default function AskAriaTransition() {
       }
       setTurns(prev => prev.map((t, i) => (
         i === turnIndex && t.plan
-          ? { ...t, plan: { ...t.plan, status: r.stored?.plan?.status ?? t.plan.status, outcomes: r.outcomes } }
+          ? {
+            ...t,
+            plan: {
+              ...t.plan,
+              status: r.stored?.plan?.status ?? t.plan.status,
+              outcomes: r.outcomes,
+              // From the STORED row first — that is the copy the report was written into.
+              report: r.stored?.plan?.report ?? r.report ?? null,
+            },
+          }
           : t
       )))
+      // The steps ran but the report could not be written. Both facts, not one instead of the other.
+      if (r.report_error) {
+        setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'The steps ran, but I could not write the report: ' + r.report_error }])
+      }
     } catch {
       setTurns(prev => [...prev, { role: 'aria', streaming: false, text: 'Could not reach the approval. Nothing has run.' }])
     } finally {
@@ -984,6 +1000,7 @@ export default function AskAriaTransition() {
                             planId={t.plan.planId}
                             status={t.plan.status}
                             outcomes={t.plan.outcomes}
+                            report={t.plan.report}
                             approving={approvingId !== null && approvingId === t.plan.planId}
                             onApprove={id => void approvePlan(id, i)}
                           />

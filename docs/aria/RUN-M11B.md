@@ -489,3 +489,101 @@ fails on any addition is a tax, not a guard.
 
 tsc **0** · vitest **108 files / 1447 tests, exit 0** · `next build` **BUILD_EXIT=0**
 (`build.log:1965`).
+
+---
+
+## PHASE 4 — THE REPORT ✅ *(the deliverable)*
+
+**Commit:** `<phase-4>` · `src/lib/aria/works/finish.ts` (new),
+`src/lib/aria/works/report-plan.test.ts` (new, 21 tests), `report.ts` (+`renderPlanReport`,
+`stepState`, `planReportAnchors`), the run route (closes the plan), `PlanCard.tsx` (renders it).
+
+### The report, read back off `aria_plans.report` after the real run
+
+Not composed for this log — this is the column's contents, from the plan phase 3 actually executed:
+
+```
+⚠️ 1 of 4 steps did not go through.
+
+You asked: M11B-RUN2-4d81 tidy up before the weekend
+
+3. M11B-RUN2 Fix a count with no product named — DID NOT GO THROUGH
+   Could not run this step — it was not told product_id or product_name, adjust_type, quantity.
+   Nothing was changed.
+1. M11B-RUN2 Read yesterday's takings — DONE
+   Read takings for 2026-09-02: A$0.00 across 0 sales.
+2. M11B-RUN2 Discount the pastries — WAITING FOR YOU
+   Aria proposed this and did not do it. It needs you.
+4. M11B-RUN2 Ring the baker — NOT RUN
+   Nothing was attempted.
+
+1 done · 1 did not go through · 1 waiting for you · 1 not attempted
+
+status=reported  completed_at=set  had_failures=true
+```
+
+Failure on the first line and first in the body. The owner's own words quoted back, so the report
+can be judged against what was actually asked. **And the closing line never just says "done"** —
+"we did not try this", "this broke" and "this needs you" are three different sentences and none of
+them is success.
+
+### `reported` is not `succeeded`
+
+`finishPlan` has no success path and no failure path. It has **one** path, which writes what
+happened. The guard against the council's bug — 91 of 92 sessions marked `complete` having produced
+nothing — is that **the report is generated from the step rows every time**, never from anything the
+runner remembered. A plan that did nothing produces a report that says nothing was done, and a plan
+with no steps at all says exactly that rather than reporting a clean run.
+
+**The spine gets the truth too.** Confirmed live on the real plan:
+
+```
+business_events: entity_type=job  event_type=job_failed  actor=aria
+```
+
+`job_failed`, not `job_completed`, because one step failed — whatever else the run managed. Both
+values are already in `business_events_event_type_check`; no CHECK is extended.
+
+### A failed step is not a waiting step
+
+The order of the state tests is load-bearing. A failed step keeps `status='pending'` (the CHECK has
+no `failed` — phase 3), so if "still pending" were read before "was attempted", **a step that broke
+would be reported as merely awaiting the owner** — the quietest possible way to lose a failure.
+`stepState` decides attempted-and-broken first, and a test holds it with a step that is both
+`requires_stepup` and failed.
+
+### Closing is atomic, and cannot happen twice
+
+```
+SECOND close attempt → refused: This plan was not running, so there was nothing to report.
+```
+
+`.eq('status','running')` — only the run that started the plan closes it, so two callers cannot
+both write a report, and a plan that was never run cannot be reported as though it had been.
+
+### Figures carry their tier
+
+`planReportAnchors` builds anchors **only** from what a read step actually recorded (`outcome_data`
+with a `source`), and they go through the same `buildProvenance` → `segmentFigures` rail the answers
+use. A figure with no recorded source stays **plain** — asserted from both sides. No second notion
+of "verified" was invented.
+
+### Mutation check
+
+```
+report from the real 4 steps        → "⚠️ 1 of 4 steps did not go through." + "DID NOT GO THROUGH"
+report with the failed step dropped → neither line present
+```
+
+### NOT done
+
+- The report is rendered verbatim in the card (`<pre>`), not re-wrapped — re-formatting it client
+  side would be a second chance to lose the first line. **The figure tiers are therefore not
+  currently applied in the card's own rendering**; the anchors exist and are tested, and wiring
+  `segmentFigures` into that block is the one thing this phase leaves for the surface.
+- The browser was not opened.
+
+### Gates
+
+tsc **0** · vitest **109 files / 1468 tests, exit 0** · `next build` **BUILD_EXIT=0**
+(`build.log:1966`).
