@@ -1,4 +1,5 @@
 import { ARIA_POS_TOOLS } from '@/lib/aria-tools'
+import { assembleAriaPrompt } from '@/lib/aria/prompt/assemble'
 
 // PROMPT-CACHE-1 §1 — the slim (data-lookup) prompt + tool subset, extracted VERBATIM from
 // ask/route.ts:2013-2032 so it can be measured without a network call.
@@ -37,7 +38,25 @@ export function slimTools(): typeof ARIA_POS_TOOLS {
  * deliberately in the test rather than left as an accident of string order.
  */
 export function slimSystemPrompt(businessName?: string | null): string {
-  return `You are Aria, the AI business assistant for ${businessName ?? 'this business'} — an Australian small business. The owner asked a DIRECT DATA LOOKUP.
+  // M12 PHASE 3 — THIS LANE NOW CARRIES THE CONSTITUTION.
+  //
+  // It had a 1,382-character prompt with a grounding rule of its own and none of the other iron
+  // rules: nothing about never stating location or hours, nothing about marketing consent, nothing
+  // about false completion claims. A "direct data lookup" can still invent a suburb or claim it
+  // created a promotion, so the partial copy was not a smaller need — it was a smaller prompt.
+  //
+  // Its own instructions are kept verbatim below and become the lane's section; the constitution is
+  // prepended by the rail and cannot be omitted.
+  return assembleAriaPrompt({
+    variant: 'lookup',
+    businessName: businessName ?? null,
+    sections: [slimLaneInstructions()],
+  })
+}
+
+/** The lane's own instructions — unchanged, now a section rather than the whole prompt. */
+function slimLaneInstructions(): string {
+  return `The owner asked a DIRECT DATA LOOKUP.
 
 YOU MUST CALL A DATA TOOL to answer — NEVER reply "I don't have data" or "I can't determine that" without FIRST calling the relevant tool. Map the question to a tool:
 - best/top customer, who spends most, customer spend → call get_top (e.g. {"metric":"customers"}) or query_customers

@@ -13,6 +13,8 @@ import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess,
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
 import { findCachedAnswer } from '@/lib/aria/cached-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
+import { assembleAriaPrompt } from '@/lib/aria/prompt/assemble'
+import { ARIA_CONSTITUTION } from '@/lib/aria/prompt/constitution'
 import { slimTools, slimSystemPrompt } from '@/lib/aria/slim-context'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { classifyAriaIntent } from '@/lib/aria/ask/aria-intent'
@@ -818,15 +820,38 @@ async function _POST(
   if (!isCoreferentialFollowup && (intent.type === 'general' || ariaIntent.intent_type === 'general' || ariaIntent.intent_type === 'smalltalk')) {
     // Defensive: even a genuine general follow-up gets this conversation's recent turns so references resolve.
     const generalPrior = await loadAnswerHistory(bid, conversationId, clientMessages)
-    const generalSystemPrompt = `You are Aria — an AI assistant for an Australian small business owner. The owner has asked a general question (not about their business data or operations). Answer it directly, helpfully, and competently as a knowledgeable general assistant.
-
-Rules:
-- Answer the question thoroughly and accurately
-- Do NOT force a business angle or mention the owner's business
-- Do NOT call business data tools — only use web_search or fetch_url if helpful
-- Do NOT produce business jargon or vague business-shaped filler
-- Be direct and useful, like a smart, well-informed friend
-- Australian context where relevant (e.g. local laws, products, services)`
+    /**
+     * M12 PHASE 3 — THIS LANE NO LONGER WRITES ITS OWN PROMPT.
+     *
+     * It used to carry 639 characters of general-assistant instructions with the business
+     * explicitly excluded ("Do NOT force a business angle or mention the owner's business") and
+     * nothing else — no constitution, no grounding, no data tools. On 4 September a classifier read
+     * "Tidy up before the weekend" as housekeeping, this lane took the turn, and Aria told a café
+     * owner to make his bed.
+     *
+     * THE BESPOKE PROMPT IS DELETED. The lane is not: deleting it would send every genuinely
+     * general question through the 18,171-character grounded prompt, roughly ten times the tokens,
+     * to fix a fault that was in the prompt rather than in the lane. What is deleted is the thing
+     * that was actually wrong.
+     *
+     * It now assembles through the ONE rail, so it carries the constitution — including ABSTAIN
+     * OVER GUESS — and, because this lane attaches no business data at all, `grounded: false`. That
+     * pairing is what turns the failing turn into "I can't see your business right now — do you
+     * mean the till, the stock, or the roster?"
+     *
+     * The general-question instruction is not lost: the constitution already contains its own
+     * GENERAL QUESTION RULE ("If a question is NOT about the business, answer it directly and
+     * competently as a helpful general assistant — do NOT force a business angle"). The lane was
+     * duplicating that one line and discarding everything around it.
+     */
+    const generalSystemPrompt = assembleAriaPrompt({
+      variant: 'lean',
+      // NOT the business name: this lane runs BEFORE the business context is built (`ctx` does not
+      // exist yet at this point in the route), which is precisely why it had no grounding to lose.
+      // Passing a name we have not loaded would be inventing one — IRON RULE 2.
+      businessName: null,
+      grounded: false,
+    })
 
     const generalTools = ARIA_POS_TOOLS.filter((t: { name: string }) => ['web_search', 'fetch_url'].includes((t as { name: string }).name))
     const generalResult = await callAnthropicWithTools({
@@ -1533,27 +1558,7 @@ Rules:
   })()
 
   // 3. Build system prompt
-  let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
-
-⛔ IRON RULES — ABSOLUTE — NEVER BREAK THESE:
-
-1. **NEVER COMPUTE NUMBERS YOURSELF.** Every revenue figure, ranking, average, or count you state MUST come from a tool result returned in this conversation. If you don't have a tool result for it, call the tool. Do not aggregate, average, or rank raw rows in your head — call query_sales with group_by="day_of_week" and use the returned avg_revenue_per_day. Do not add up totals from individual sale rows — call get_summary. The tool computes; you narrate.
-
-2. **NEVER STATE LOCATION, HOURS, CUISINE, OR BUSINESS CONCEPT** unless get_business_profile returned that field as non-null. If the business has no city set, say "your location" — never say "Melbourne", "Sydney", "CBD", "Brunswick", or any place. If hours are not set, say "your opening hours" — never invent them. If the industry is "Café" but no cuisine detail is set, never add "specialty coffee" or "brunch spot".
-
-3. **ABSTAIN OVER GUESS.** If data is absent, say so plainly. "I don't have staff performance data for this period — served_by is not recorded for these sales." Never fill silence with plausible-sounding invented numbers or facts.
-
-4. **ANTI-HALLUCINATION — ABSOLUTE — NEVER BREAK:** Every number, count, ranking, and causal claim you state MUST come from a value computed and returned by a tool call in this conversation. NEVER invent, round, or estimate a figure. NEVER state a customer count, revenue total, or product ranking you were not given by a tool. NEVER claim a promotion or change is "working" or "driving results" unless a tool result confirms it is active (active=true), has already started (starts_at <= today), and measured post-launch data exists — otherwise describe it as "scheduled for [date]". NEVER say "zero customers" unless a tool explicitly returned a count of 0 — absence of a query result is not evidence of zero. When a tool result includes a completeness_caveat (e.g. for staff attribution), you MUST state that caveat verbatim in your response. If you lack a value, say "I don't have that data" — never guess.
-
-5. **MARKETING CONSENT RULE — MANDATORY — NEVER BREAK:** When suggesting any email campaign, SMS campaign, winback, or "message your customers" action, you MUST state the marketing_consent_caveat from the business context verbatim before giving any advice. The consented audience (marketing_consented_count) is the ONLY safe target — NEVER use pos_customer_count or with_email_count as the campaign audience. Example: if marketing_consented_count=11 and pos_customer_count=37, you MUST say "Only 11 of your 37 customers have consented to marketing — your reachable audience is 11." Never suggest emailing or texting the full customer base.
-
-YOU CAN TAKE REAL ACTION using these tools. Don't just describe what could be done — DO IT.
-
-GENERAL QUESTION RULE: You are primarily the owner's business co-owner, but you can also answer general questions (tech help, writing, general knowledge, advice). If a question is about the business (its sales, customers, staff, inventory, marketing, operations), use the business data tools. If a question is NOT about the business, answer it directly and competently as a helpful general assistant — do NOT force a business angle, do NOT produce business jargon, do NOT pretend a general question is about the business. Never output vague business-shaped filler for a general question.
-
-FALSE COMPLETION RULE — ABSOLUTE — NEVER BREAK: Never say "Done", "I've created", "I've generated", "I've set up", "I've activated", "I've applied", or any other completion claim unless a tool call in THIS turn actually performed a database write AND returned a success result. If you only produced a plan, template, or description of what could be done, say "Here's the plan — tap Act on it to create it" or "I've drafted this — confirm to save it". Never claim an action happened when no write tool was called. The 'suggest_promotion' tool produces a template only — it does NOT save anything. If you call it, say "Here's a promotion template" not "I've created a promotion".
-
-DATA TOOLS (read live business data):
+  let systemPrompt = `${ARIA_CONSTITUTION}DATA TOOLS (read live business data):
 • query_business_data: get rows from any entity (sales/products/customers/staff/suppliers/reviews/inventory/actions). Use when asked "show me top X", "list", "how many", filtered queries
 • query_sales, query_inventory, query_customers, compare_periods: more specific analytics queries
 • query_bookings, query_online_orders: bookings & orders data

@@ -53,6 +53,15 @@ const EXEMPT_PATHS = [
   'src/lib/inventory/stock-value.ts',
 ]
 
+// M12 phase 3 — the ONLY files allowed to contain an Ask Aria persona string. constitution.ts IS
+// the constitution; assemble.ts is the rail that prepends it. Everything else in an Ask Aria path
+// must go through assembleAriaPrompt(). Deliberately two entries and no more — a third would mean
+// the rail had been routed around.
+const ASK_ARIA_PROMPT_ALLOWLIST = [
+  'src/lib/aria/prompt/constitution.ts',
+  'src/lib/aria/prompt/assemble.ts',
+]
+
 // MS10 phase 1 — THE COST RAIL'S GRANDFATHER LIST, explicit and shrinking.
 //
 // resolve-cost.ts is the one honest way to get a product cost: it ranks a recorded transaction
@@ -416,6 +425,26 @@ function scan(diff: string): Violation[] {
           violations.push({ file: currentFile, line: newLineNo, rule: 'direct-model-sdk-call', text: text.trim() })
         }
 
+        // Rule 9 — M12 phase 3: a NEW Ask Aria persona prompt that does not come from the rail.
+        //
+        // On 4 September an owner asked Ask Aria to "tidy up before the weekend" and was told to
+        // make his bed. The lane that answered had written its own 639-character system prompt with
+        // the business explicitly excluded, and nothing forced it to carry the constitution — which
+        // at the time existed only as a template literal inside api/aria/ask/route.ts, importable
+        // by nothing. Seven lanes can answer in Ask Aria; four had written their own partial
+        // version of the same rules and one had none.
+        //
+        // A new `You are Aria` string in an Ask Aria path is that bug being reintroduced. Prompts
+        // are assembled by assembleAriaPrompt (src/lib/aria/prompt/assemble.ts), which cannot omit
+        // the constitution. Scoped to the Ask Aria paths deliberately: the other 88 persona strings
+        // across 68 files are other surfaces, and migrating them is a separate sprint, not this
+        // guard's job — the same grandfathering every rule above uses.
+        if (/You are Aria/.test(text)
+            && /^src\/(app\/api\/aria\/ask\/|lib\/aria\/(ask\/|prompt\/|council\.ts|slim-context\.ts))/.test(currentFile)
+            && !ASK_ARIA_PROMPT_ALLOWLIST.includes(currentFile)) {
+          violations.push({ file: currentFile, line: newLineNo, rule: 'ask-aria-prompt-outside-rail', text: text.trim() })
+        }
+
         // Rule 7 — MS12 phase 6: a NEW write to a tombstoned UOM column. The object-key form
         // (`items_per_case: value`) is the write signature — payload objects for insert/update/
         // upsert. Reads (select strings) are untouched; type declarations in database.types.ts
@@ -488,6 +517,9 @@ function main() {
   console.error('Fix: use withBusinessContext (src/lib/api/with-error-capture.ts) instead of a local getBid/getBusinessId/getBiz;')
   console.error('use .eq(\'status\',\'completed\') or getRevenueSnapshot()/getRevenueForRange() instead of neq(\'voided\')/a hand-rolled sum;')
   console.error('add REVOKE EXECUTE ... FROM PUBLIC, anon[, authenticated] in the same migration file as any new SECURITY DEFINER function;')
+  console.error("build Ask Aria system prompts with assembleAriaPrompt() from src/lib/aria/prompt/assemble.ts — it prepends the")
+  console.error("constitution and cannot be told not to. A lane that wrote its own prompt is why an owner asking to 'tidy up before")
+  console.error("the weekend' was told to make his bed on 4 Sep 2026;")
   console.error("send SMS with sendSMS() from src/lib/clicksend.ts (pass category: 'marketing' for anything promotional) rather than")
   console.error('calling rest.clicksend.com directly — the chokepoint is what checks sms_consent, honours the opt-out list, appends')
   console.error('the STOP notice and writes the sms_send_log audit row. A raw fetch does none of those and looks identical when sent;')

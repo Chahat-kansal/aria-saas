@@ -64,7 +64,7 @@ describe('slim path — the cached prefix', () => {
     expect(tokens).toBeGreaterThan(MIN_CACHEABLE_TOKENS['claude-sonnet-4-5-20250929'] * 1.15)
   })
 
-  it('(a) the TOOLS dominate the prefix — 87% of it, so trimming the prompt cannot fix caching', () => {
+  it('(a) the tools are 62% of the prefix — trimming the prompt CAN now move caching (it could not before)', () => {
     // ⚠ FOUND BY A MUTATION CHECK THAT REFUSED TO FAIL. The brief predicted that shrinking the slim
     // prompt to one line would turn (a) red. It did not — and that is a property of the system, not
     // a bug in the test. Tools are ~2,268 of the ~2,620 tokens; the system prompt is ~338. Deleting
@@ -73,11 +73,37 @@ describe('slim path — the cached prefix', () => {
     // The consequence, which is the actionable half: NO amount of editing the slim PROMPT changes
     // whether this path caches. Only the tool set can, and shrinking the tool set makes it worse.
     // Anyone who tries to fix caching by rewriting the prompt is working on the wrong term.
+    // ── AMENDED BY M12 PHASE 3, AND THE CONCLUSION ABOVE IS NOW FALSE ──────────────────────────
+    // The slim lane now carries the constitution (it had a partial one: a grounding rule and none
+    // of the other iron rules, so a "direct data lookup" could still invent a suburb or claim it
+    // had created a promotion). That moved the system prompt from ~338 tokens to ~1,570.
+    //
+    // So tools no longer dominate: 2,520 of 4,090 tokens, 61.6%, not 87%. And the actionable claim
+    // — "no amount of editing the prompt changes whether this path caches" — IS NO LONGER TRUE.
+    // The prompt is now 38% of the prefix and editing it absolutely can cross the threshold.
+    //
+    // It also moved the prefix a long way toward haiku's cacheable minimum without meaning to:
+    // 3,715 estimated tokens against 4,096, i.e. 381 short, where before it was ~1,476 short. The
+    // constitution closed roughly three quarters of that gap as a side effect.
+    //
+    // ⚠️ I FIRST WROTE "SIX TOKENS SHORT" HERE AND IT WAS WRONG. My probe divided characters by
+    // 3.6; THIS FILE'S estimator divides by 4, and its choice is the one the surrounding arithmetic
+    // uses. Measuring with the wrong divisor turned a 381-token gap into a 6-token one — a
+    // dramatic, false claim that would have invited exactly the padding the DOCUMENTED DECISION
+    // test below forbids. Recorded rather than quietly fixed.
+    //
+    // Still NOT acted on. 381 tokens of new instruction would have to be written, not moved, and
+    // that changes what ask_aria answers for a caching outcome nobody has measured against the real
+    // tokeniser.
     const toolTokens = estimateTokens(JSON.stringify(slimTools()))
     const sysTokens = estimateTokens(slimSystemPrompt('Sip'))
-    expect(toolTokens / (toolTokens + sysTokens)).toBeGreaterThan(0.8)
-    // Pinned so a tool-set change — the only lever that moves the total — is surfaced deliberately.
+    const share = toolTokens / (toolTokens + sysTokens)
+    expect(share).toBeGreaterThan(0.55)
+    expect(share).toBeLessThan(0.70)
+    // Both pinned, so either term moving is surfaced deliberately.
     expect(toolTokens).toBe(2268)
+    expect(sysTokens).toBe(1413)
+    expect(estimateTokens(prefix())).toBeLessThan(MIN_CACHEABLE_TOKENS['claude-haiku-4-5-20251001'])
   })
 
   it('(a) DOCUMENTED DECISION — below the haiku minimum, knowingly, and NOT worth padding', () => {
@@ -141,7 +167,12 @@ describe('slim path — the cached prefix', () => {
     // The null/undefined fallback must be stable too, or an owner with no business name set gets a
     // third variant per request.
     expect(slimSystemPrompt(null)).toBe(slimSystemPrompt(undefined))
-    expect(slimSystemPrompt(null)).toContain('for this business —')
+    // AMENDED BY M12 PHASE 3. The prompt no longer OPENS with "for this business —": the
+    // constitution comes first and the name, when known, is added by the rail as "THE BUSINESS: X."
+    // The property this asserted is unchanged and is what matters — a missing name must produce ONE
+    // stable string, not a third per-request variant — so it is asserted directly instead.
+    expect(slimSystemPrompt(null)).not.toContain('THE BUSINESS:')
+    expect(slimSystemPrompt('Sip')).toContain('THE BUSINESS: Sip.')
   })
 
   it('(b) the prompt contains no date, time, or number that would vary between calls', () => {
@@ -193,10 +224,20 @@ describe('slim path — the cached prefix', () => {
     expect(p).toContain('The owner asked a DIRECT DATA LOOKUP.')
     expect(p).toContain('GROUNDING (absolute)')
     expect(p).toContain('Currency A$ (never USD). Australian spelling.')
-    // 1351 with 'Sip' substituted. Verified byte-for-byte against git HEAD's ask/route.ts:2018-2031
-    // before this extraction was committed — not merely asserted to match. Update ONLY alongside a
-    // deliberate prompt change.
-    expect(p.length).toBe(1351)
+    // AMENDED BY M12 PHASE 3 — A DELIBERATE PROMPT CHANGE, which is the one condition this pin
+    // was written to allow. PROMPT-CACHE-1 pinned 1,351 chars to prove its extraction had not
+    // edited the string. That guarantee still holds and is asserted above: every line of the
+    // original prompt is still present, now as the lane's own section.
+    //
+    // What changed is that the constitution is prepended by the rail, taking it to 5,650. The lane
+    // previously carried a grounding rule and NONE of the other iron rules — a data lookup could
+    // still state a suburb the business had not set, or claim it had created a promotion. That was
+    // not a smaller need; it was a smaller prompt.
+    expect(p.length).toBe(5650)
+    // And the constitution really is what accounts for the difference — not drift in the lane's
+    // own text, which is the property the original pin existed to protect.
+    expect(p).toContain('IRON RULES')
+    expect(p.indexOf('IRON RULES')).toBeLessThan(p.indexOf('DIRECT DATA LOOKUP'))
   })
 
   // ── THE MEASUREMENT, PRINTED ─────────────────────────────────────────────────────────────────

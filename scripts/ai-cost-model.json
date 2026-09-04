@@ -50,6 +50,17 @@
   ],
   "estimatedComponents": [
     {
+      "key": "m12_general_lane_constitution",
+      "label": "M12 phase 3 — the Ask Aria general lane now carries the constitution",
+      "source": "measured",
+      "includeInProjection": true,
+      "usdPerBusinessPerDayLow": 0.0005,
+      "usdPerBusinessPerDayMid": 0.0015,
+      "usdPerBusinessPerDayHigh": 0.0049,
+      "basis": "MEASURED, not estimated, by sending the same message through the lane before and after: input 1,089 -> 2,264 tokens (+1,175), output 350 -> 212 (-138, the honest answer is shorter than the invented one). At the haiku rate ($1/M in, $5/M out) that is +$0.001175 input and -$0.00069 output = +$0.000485 NET per general-lane turn. Low/mid/high = 1/3/10 general-lane turns per business per day. The lane was deliberately KEPT rather than deleted: routing general questions through the 18,171-character grounded prompt instead would have been roughly ten times the tokens to fix a fault that was in the prompt, not the lane.",
+      "rateCaveat": "Haiku IS in cost.ts PRICING, so unlike M11's work_plan entry this rate is a lookup rather than a proxy. The two aria_ai_calls rows behind it (agent_key m12_repro and m12_after) both record cost_usd_cents 0 — sub-cent rounding, documented by MS15 phase 1, not free."
+    },
+    {
       "key": "m11_work_plan",
       "label": "M11 phase 3 — work_plan (delegated-job planner, judgement task via model-router)",
       "source": "estimate",
