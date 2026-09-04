@@ -55,9 +55,17 @@ Rules:
 - Australian context where relevant (e.g. local laws, products, services)
 ```
 
-That is **781 characters**. Tools attached: **2** (`fetch_url`, `web_search` — 1,595 characters of
-schema). User message: `Tidy up before the weekend`. Nothing else. No business context, no
-groundTruth, no data tools, no iron rules.
+That is **639 characters** — measured twice off the source literal. Tools attached: **2**
+(`fetch_url`, `web_search` — 1,595 characters of schema). User message:
+`Tidy up before the weekend`. Nothing else. No business context, no groundTruth, no data tools, no
+iron rules.
+
+> ⚠️ **I first wrote 781 here and it was not supported by anything I observed.** The probe printed a
+> character count, my captured output was truncated before that line, and I published a number
+> anyway. Caught by re-measuring the source literal and finding 639. **The token count is the
+> claim that matters and it is measured: 1,089, matching the founder's turn exactly.** Recorded
+> rather than quietly corrected — GROUNDING-TEETH applies to my own reports, and a fabricated
+> figure in a run log is the same defect this sprint is about.
 
 **What is absent, checked key by key:** `café`/`cafe` ✗ · `Sip` ✗ · `takings` ✗ · `revenue` ✗ ·
 `stock` ✗ · `roster` ✗ · `till` ✗ · `constitution` ✗. The word "business" appears — **inside the
@@ -68,7 +76,7 @@ instruction not to mention it**.
 | | this turn | council synthesis (median, last 30) |
 |---|---|---|
 | input tokens | **1,089** | **10,323** |
-| system prompt | 781 chars, general-assistant | full grounding rules + advisor findings + business context |
+| system prompt | 639 chars, general-assistant | full grounding rules + advisor findings + business context |
 | tools | 2 (web only) | the full data-tool set |
 | business data | **none** | the turn's queried rows |
 
@@ -139,3 +147,71 @@ not have produced this.
 `ask_aria` calls. Both classifiers run on every turn and neither is logged. AI-COST-AUDIT-1 found
 three unlogged call paths and said the true spend was unknowable after the fact; this is a fourth,
 running twice per turn. **Not fixed here** — it is a cost-ledger change, and this sprint has enough.
+
+---
+
+## PHASE 2 — HOW MANY PATHS BUILD AN ASK ARIA PROMPT? ✅
+
+**Commit:** `<phase-2>` · report only, no code.
+
+### ⚠️ THE BRIEF'S PREMISE ABOUT THE COUNCIL IS WRONG, AND IT MATTERS
+
+> *"The council path is known to carry the constitution."*
+
+**It does not.** `IRON RULES` appears **zero times** in `council.ts`. The council carries its *own*
+grounding rules — a separately worded 16,596-character block headed `GROUNDING RULES — ABSOLUTE —
+NEVER BREAK` — which overlaps the iron rules in intent and matches none of them in wording.
+
+**There is no constitution in this codebase.** There are five differently-worded partial ones and
+one lane with none. That changes phase 3 from "attach the existing constitution everywhere" to
+"there is nothing to attach yet — extract one first."
+
+### Every path that can answer in Ask Aria
+
+Measured from the source; character counts are of the literal.
+
+| # | lane | file:line | constitution | grounding | tools | model |
+|---|---|---|---|---|---|---|
+| 1 | **general fast-path** | `ask/route.ts:818-866` | ✗ **none** | ✗ **none** | 2 (web only) | **haiku**, hardcoded |
+| 2 | main grounded tool-loop | `ask/route.ts:1536` → `:2380` | ✓ the iron rules, 18,171 chars | ✓ business ctx + groundTruth | full set | router |
+| 3 | slim data-lookup | `slim-context.ts:39` via `route.ts:2311` | ~ **partial**, 1,382 chars | ✓ must call a tool | `slimTools()` subset | router |
+| 4 | council synthesis | `council.ts:387` + `:555` | ~ **its own**, 16,596 + 6,706 chars | ✓ advisor findings | none | router |
+| 5 | council sub-brains x4 | `council.ts:256` etc. | ~ per-brain rules | ✓ the data passed in | none | haiku |
+| 6 | action planner | `action-planner.ts:141` | ✗ none | ✓ `contextSummary` | none | **sonnet**, hardcoded |
+| 7 | accuracy verifier | `ask/route.ts:2528` | n/a — a reviewer | ✓ the context it checks | none | — |
+
+**Four of the seven carry a different, partial version of the same idea. One carries none at all.**
+Only lane 2 has the iron rules, and only lane 2 has them because they are typed inline in the route
+as a template literal — **not a module, not an import, nothing else can reach them.**
+
+### The wider picture, for scale
+
+`grep -rn "You are Aria" src` (excluding tests): **88 persona strings across 68 files.** Most are
+other surfaces (POS chat, daily briefing, roster, studio, staff-talk…) and are out of this sprint's
+scope, but they are the same pattern at product scale: every feature that ever needed Aria to speak
+wrote its own Aria.
+
+### The classifier is a copy too
+
+Two independent classifiers run **in parallel on every turn** — `classifyIntent` (`intent.ts`) and
+`classifyAriaIntent` (`aria-intent.ts`) — with overlapping vocabularies (`general` and `smalltalk`
+in both) and different rules. The route then ORs them:
+
+```ts
+intent.type === 'general' || ariaIntent.intent_type === 'general' || ariaIntent.intent_type === 'smalltalk'
+```
+
+**An OR across two classifiers doubles the chance of the destructive misclassification** and halves
+the chance of the safe one. Note the asymmetry: `intent.type === 'smalltalk'` is *not* in the
+condition, but `ariaIntent.intent_type === 'smalltalk'` is — so the two classifiers' identically
+named verdicts are treated differently, and nothing documents why.
+
+### What this settles for phase 3
+
+- The rail cannot just "attach the constitution": **the constitution must be extracted into one
+  module first**, because it exists only as an inline literal in one route.
+- The general fast-path is **redundant, not merely wrong**. Lane 2's prompt already contains a
+  `GENERAL QUESTION RULE` covering exactly this case — *"If a question is NOT about the business,
+  answer it directly and competently as a helpful general assistant — do NOT force a business
+  angle"*. Aria can already answer a general question **while remaining Aria**. The fast-path
+  duplicates that one instruction and throws away everything else.
