@@ -121,3 +121,47 @@ export function assembleFullPrompt(rest: string): string {
 }
 
 export { ARIA_CONSTITUTION }
+
+/**
+ * The minimum a turn must know about the business to be answering FROM it.
+ *
+ * Structural, not a full `AskAriaContext`, so this stays pure and testable and does not drag the
+ * context builder into every caller.
+ */
+export interface GroundingSignals {
+  business_name?: string | null
+  revenue_today_cents?: number | null
+  staff_count?: number | null
+  pending_aria_actions?: number | null
+}
+
+/**
+ * M12 PHASE 4 — CAN ARIA SEE THIS BUSINESS AT ALL?
+ *
+ * ⚠️ ZERO IS NOT ABSENT, AND THIS IS THE WHOLE DISTINCTION.
+ *
+ * Sip has taken A$0.00 today. That is a FACT, it came from `pos_sales`, and the honest answer to
+ * "how are we doing" is "you've taken nothing yet today" — not "I can't see your business". A
+ * predicate that treated zero revenue as no-data would make Aria refuse to answer on every quiet
+ * morning, which is worse than the bug this sprint is fixing and would look identical to it.
+ *
+ * So the test is whether the context was actually LOADED, and the marker for that is the business's
+ * own identity: if we do not even know its name, nothing else in the object can be trusted to mean
+ * what it says. `revenue_today_cents: 0` on a named business is grounded. The same field on a
+ * context with no name is an empty shell.
+ */
+export function isGrounded(ctx: GroundingSignals | null | undefined): boolean {
+  if (!ctx) return false
+  return typeof ctx.business_name === 'string' && ctx.business_name.trim().length > 0
+}
+
+/**
+ * The block to splice into a lane's own prompt when it cannot see, or '' when it can.
+ *
+ * Returned with its trailing separator so a caller can interpolate it directly into a template
+ * literal without deciding about whitespace — the decision that gets fumbled when a block is
+ * "optional".
+ */
+export function groundingNotice(ctx: GroundingSignals | null | undefined): string {
+  return isGrounded(ctx) ? '' : CANNOT_SEE_BLOCK + '\n\n'
+}

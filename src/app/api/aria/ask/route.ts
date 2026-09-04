@@ -13,7 +13,7 @@ import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess,
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
 import { findCachedAnswer } from '@/lib/aria/cached-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
-import { assembleAriaPrompt } from '@/lib/aria/prompt/assemble'
+import { assembleAriaPrompt, groundingNotice } from '@/lib/aria/prompt/assemble'
 import { ARIA_CONSTITUTION } from '@/lib/aria/prompt/constitution'
 import { slimTools, slimSystemPrompt } from '@/lib/aria/slim-context'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
@@ -1558,7 +1558,17 @@ async function _POST(
   })()
 
   // 3. Build system prompt
-  let systemPrompt = `${ARIA_CONSTITUTION}DATA TOOLS (read live business data):
+  // M12 PHASE 4 — WHEN ARIA CANNOT SEE, SHE SAYS SO, ON THIS LANE TOO.
+  //
+  // The footer under every answer promises "Connected records only — she won't invent missing
+  // data". `groundingNotice` returns '' when the context loaded and the cannot-see block when it
+  // did not, spliced in immediately after the iron rules and before the tool catalogue — the same
+  // position the rail puts it in for the other lanes, so a lane cannot bury it under its own
+  // instructions.
+  //
+  // ZERO IS NOT ABSENT: a business that has taken A$0.00 today is grounded, and Aria should say so.
+  // The predicate keys off whether the business's identity loaded at all. See isGrounded().
+  let systemPrompt = `${ARIA_CONSTITUTION}${groundingNotice(ctx)}DATA TOOLS (read live business data):
 • query_business_data: get rows from any entity (sales/products/customers/staff/suppliers/reviews/inventory/actions). Use when asked "show me top X", "list", "how many", filtered queries
 • query_sales, query_inventory, query_customers, compare_periods: more specific analytics queries
 • query_bookings, query_online_orders: bookings & orders data

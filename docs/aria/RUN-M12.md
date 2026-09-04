@@ -215,3 +215,160 @@ named verdicts are treated differently, and nothing documents why.
   answer it directly and competently as a helpful general assistant — do NOT force a business
   angle"*. Aria can already answer a general question **while remaining Aria**. The fast-path
   duplicates that one instruction and throws away everything else.
+
+---
+
+## PHASE 3 — ONE ASSEMBLY POINT ✅ *(the sprint)*
+
+**Commits:** `ffba10ce` + `ffac26a9` (the rail catching its own test — see below).
+
+### The answer to the turn that started this sprint
+
+Same message, same lane, same model, after the change:
+
+```
+I don't have access to your business records right now — no sales data, stock levels, roster,
+bookings, or operational details are attached to this conversation.
+
+To help you tidy up before the weekend, I need to know what you're referring to. Are you asking
+about:
+- Your till/takings — reconciling sales, checking cash drawer, reviewing the week's revenue?
+- Your stock — cleaning up inventory records, checking for damaged items, organizing shelves?
+- Your roster — confirming weekend staff are scheduled, updating shift assignments?
+- Your bookings — reviewing reservations, cancellations, or appointment confirmations?
+- Your general admin — organizing files, clearing clutter in the office or workspace?
+
+Or is this just a general question about tidying up your physical space before the weekend?
+```
+
+Against `Make the bed. Put dirty clothes in the wash.`
+
+### Moved, not rewritten
+
+The constitution existed only as the first 4,168 characters of a template literal inside
+`api/aria/ask/route.ts`. Those characters were lifted **byte-for-byte by a script**, not retyped,
+into `src/lib/aria/prompt/constitution.ts`; the route now interpolates the constant, so the grounded
+lane's 18,171-character prompt is character-for-character what it was. A test asserts every iron
+rule is in the constant and **no longer duplicated in the route**.
+
+### The rail
+
+`assembleAriaPrompt()` prepends `ARIA_CONSTITUTION` unconditionally. **There is no parameter that
+removes it, and a test asserts no such parameter exists** — a flag would recreate the bug with an
+opt-out. Sections append *after* it, so a lane cannot bury it.
+
+### What was deleted, and what was kept
+
+**Deleted:** the general lane's bespoke 639-character prompt, including the line that caused this —
+*"Do NOT force a business angle or mention the owner's business"*.
+
+**Kept:** the lane itself. Deleting it would route every genuinely general question through the
+18,171-character grounded prompt — roughly ten times the tokens — to fix a fault that was in the
+prompt, not the lane. Its general-question instruction is not lost: the constitution already
+contains a `GENERAL QUESTION RULE` saying the same thing. The lane was duplicating one line and
+discarding everything around it.
+
+The **slim data-lookup lane** is routed through the rail too. It had a grounding rule and none of
+the other iron rules, so a "direct data lookup" could still state a suburb the business had not set
+or claim it had created a promotion. Not a smaller need — a smaller prompt.
+
+The general lane passes `businessName: null` deliberately: it runs **before** the business context
+is built (`ctx` does not exist at that point in the route), which is precisely why it had no
+grounding to lose. Passing a name we have not loaded would be inventing one — IRON RULE 2.
+
+### Enforced, not merely available — and it caught me first
+
+Canon rail guard **rule 9** fails a build that adds a `You are Aria` string under an Ask Aria path
+outside the two files that *are* the rail. **Proven to fire, not assumed:**
+
+```
+src/lib/aria/ask/bypass-probe.ts:1  [ask-aria-prompt-outside-rail]
+```
+
+⚠️ **Then it blocked my own push.** The rule flagged `assemble.test.ts`, whose assertions have to
+quote the phrase the rule blocks in order to hold the rule. Test files are now excluded — precision,
+not a loosening: no production path gains an exemption, and the probe still fires afterwards.
+Committed separately rather than amended, so the record shows the rail catching its author rather
+than a guard that looks like it was right first time.
+
+### Cost — RULE 11, measured not estimated
+
+```
+input   1,089 → 2,264  (+1,175)
+output    350 →   212  (−138 — the honest answer is SHORTER than the invented one)
+        = +$0.000485 net per general-lane turn at the haiku rate
+AI as-is $0.4622 → $0.4637/biz/day · total COGS $18.65 → $18.70/mo
+```
+
+Haiku **is** in `cost.ts` PRICING, so unlike M11's `work_plan` this rate is a lookup, not a proxy.
+
+### Three superseded assertions, rewritten not deleted
+
+PROMPT-CACHE-1 had measured the **old** slim prompt: tools were 87% of the cache prefix, and it
+concluded *"no amount of editing the prompt changes whether this path caches"*. **That conclusion is
+now false.** Tools are 61.6%; the prompt is 38%; editing it can cross the threshold. The prefix moved
+from ~1,476 tokens short of haiku's 4,096 minimum to **381 short** — the constitution closed three
+quarters of that gap as a side effect. **Not acted on:** 381 tokens would have to be *written*, not
+moved, and that changes a live answer path for a caching outcome nobody has measured against the
+real tokeniser.
+
+> ⚠️ **I first wrote "six tokens short" and it was wrong.** My probe divided characters by 3.6; the
+> file's own estimator divides by 4, and its choice is what the surrounding arithmetic uses. The
+> wrong divisor turned a 381-token gap into a 6-token one — a dramatic, false claim that would have
+> invited exactly the padding that file forbids. **Second measurement error of mine this sprint**,
+> recorded in the test file rather than quietly fixed.
+
+The RULE 0 extraction-fidelity pin (1,351 chars) is updated to 5,650 under the one condition it was
+written to allow — a deliberate prompt change — with an added assertion that the constitution
+accounts for the difference rather than drift in the lane's own text.
+
+---
+
+## PHASE 4 — IT MUST SAY WHEN IT CANNOT SEE ✅
+
+**Commit:** `<phase-4>` · `assemble.ts` (+`isGrounded`, +`groundingNotice`),
+`ask/route.ts` (main lane spliced), `cannot-see.test.ts` (new, 11 tests).
+
+### ⚠️ ZERO IS NOT ABSENT — the distinction the whole phase turns on
+
+Sip has taken **A$0.00 today**. That is a fact, it came from `pos_sales`, and the honest answer to
+"how are we doing" is *"you've taken nothing yet today"* — **not** "I can't see your business". A
+predicate that read zero revenue as no-data would make Aria refuse on every quiet morning, which is
+worse than the bug being fixed **and would look identical to it**.
+
+So `isGrounded` tests whether the context was **loaded**, and the marker is the business's own
+identity: if we do not know its name, nothing else in the object can be trusted. `revenue_today_cents: 0`
+on a named business is grounded; the same field with no name is an empty shell.
+
+### The answer changes, it is not disclaimed
+
+`CANNOT_SEE_BLOCK` forbids substituting general advice for the answer — *"generic tips presented in
+place of an answer are worse than saying nothing, because the owner cannot tell them apart from a
+grounded one"* — and requires Aria to **ask which part of the business** is meant, naming the till,
+the stock, the roster, the bookings and the suppliers. That is why the reply above names them.
+
+It also permits answering a genuinely general question briefly, **labelled as such**. Without that
+this becomes a refusal machine, which is a different failure.
+
+### Both lanes
+
+| lane | how |
+|---|---|
+| general fast-path | `grounded: false` hardcoded — it never has data to lose |
+| main grounded lane | `${'$'}{groundingNotice(ctx)}` spliced between the iron rules and the tool catalogue |
+
+Same position on both, so a lane cannot bury it and the footer is not true on one lane and false on
+the other.
+
+### Mutation check
+
+`groundingNotice` always returning `''` is exactly the pre-fix state; the suite goes red on the
+difference, and on the route no longer splicing it.
+
+### NOT done
+
+- **The browser was not opened.** The new answer above came from a live model through the real
+  assembly in process, not from a click in the UI.
+- `isGrounded` keys off the business name alone. A context that loaded the name but failed every
+  data query would read as grounded. That is the right call today — the iron rules already force
+  abstention on a missing figure — but it is a judgement, not a proof.

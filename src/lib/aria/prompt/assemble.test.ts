@@ -35,7 +35,10 @@ describe('M12 phase 3 · the constitution was MOVED, not rewritten', () => {
     // The extraction was done by a script, not retyped, and this is what proves it — and what
     // notices if either half is edited later. The route now interpolates the constant, so the
     // assembled prompt is character-for-character what it was before this commit.
-    expect(ROUTE).toContain('let systemPrompt = `${ARIA_CONSTITUTION}DATA TOOLS (read live business data):')
+    // AMENDED BY M12 PHASE 4, which spliced groundingNotice(ctx) between the constitution and the
+    // tool catalogue so the main lane also says when it cannot see. The property this asserts is
+    // unchanged: the route no longer carries the constitution's text, it interpolates the constant.
+    expect(ROUTE).toContain('let systemPrompt = `${ARIA_CONSTITUTION}${groundingNotice(ctx)}DATA TOOLS (read live business data):')
     // Every iron rule still present, in the constant rather than the route.
     for (const rule of [
       'NEVER COMPUTE NUMBERS YOURSELF',
