@@ -439,7 +439,12 @@ function scan(diff: string): Violation[] {
         // the constitution. Scoped to the Ask Aria paths deliberately: the other 88 persona strings
         // across 68 files are other surfaces, and migrating them is a separate sprint, not this
         // guard's job — the same grandfathering every rule above uses.
+        // Test files are excluded: they SCAN and ASSERT prompts, they do not assemble one at
+        // runtime, and the assertions that hold this very rule have to quote the phrase it blocks.
+        // Caught by the rule firing on its own test file on the first push — precision, not a
+        // loosening: no production path gains an exemption.
         if (/You are Aria/.test(text)
+            && !/\.test\.tsx?$/.test(currentFile)
             && /^src\/(app\/api\/aria\/ask\/|lib\/aria\/(ask\/|prompt\/|council\.ts|slim-context\.ts))/.test(currentFile)
             && !ASK_ARIA_PROMPT_ALLOWLIST.includes(currentFile)) {
           violations.push({ file: currentFile, line: newLineNo, rule: 'ask-aria-prompt-outside-rail', text: text.trim() })
