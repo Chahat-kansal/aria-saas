@@ -53,6 +53,22 @@ const EXEMPT_PATHS = [
   'src/lib/inventory/stock-value.ts',
 ]
 
+// WALL 6 (M13 phase 1) — THE READ-THE-ERROR GRANDFATHER LIST.
+//
+// Only NEW diff lines are scanned, so pre-existing violations are already grandfathered without
+// being named. This list is for whole AREAS that are exempt by nature rather than by age:
+//
+//   · generated types — no runtime calls at all
+//   · the Supabase client factories themselves — they construct the client, they do not query
+//
+// It is deliberately tiny. A file added here is a file allowed to fail silently, and the migration
+// backlog (counted by directory in RUN-M13.md) is meant to shrink, not this list to grow.
+const READ_THE_ERROR_ALLOWLIST = [
+  'src/types/database.types.ts',
+  'src/lib/supabase-admin.ts',
+  'src/lib/supabase-server.ts',
+]
+
 // M12 phase 3 — the ONLY files allowed to contain an Ask Aria persona string. constitution.ts IS
 // the constitution; assemble.ts is the rail that prepends it. Everything else in an Ask Aria path
 // must go through assembleAriaPrompt(). Deliberately two entries and no more — a third would mean
@@ -425,6 +441,42 @@ function scan(diff: string): Violation[] {
           violations.push({ file: currentFile, line: newLineNo, rule: 'direct-model-sdk-call', text: text.trim() })
         }
 
+        // ── WALL 6 (M13 phase 1) — READ THE ERROR ────────────────────────────────────────────
+        //
+        // Supabase RESOLVES with { data, error }. It does not throw. So `try { await supabase... }
+        // catch {}` catches nothing, and `const { data } = await supabase...` throws the error away
+        // before anyone can look at it. Five sprints in a row found the same consequence:
+        //
+        //   · council-executor.ts's audit insert: proposal_id non-null on 0 of 854 rows. It has
+        //     never once landed, and nothing noticed because the error went into a discarded field.
+        //   · 95 agent_council_sessions marked 'complete' with 2 proposals between them, ever.
+        //   · 2,275 false nightly-sync failure rows.
+        //   · recordEvent — the moat spine's ONE writer — swallowed CHECK violations until M11B.
+        //   · /api/customers/merge soft-deleted the source row after a rejected write, and returned
+        //     200 (RULE 7's incident record).
+        //
+        // Rule 10a — a destructure that takes `data` and drops `error`.
+        // Rule 10b — a bare awaited write whose result is assigned to nothing at all.
+        //
+        // ONLY NEW LINES ARE SCANNED, so the ~800 pre-existing sites are grandfathered exactly as
+        // every rule above grandfathers its predecessors; the backlog is counted by directory in
+        // RUN-M13.md. Reads are included deliberately: an unread error on a SELECT is how a caller
+        // reports "no rows" when the truth is "we could not find out" — RULE 7, and the reason
+        // listLabels/loadPlan throw rather than return [].
+        if (currentFile && !/\.(test|spec)\.tsx?$/.test(currentFile) && !READ_THE_ERROR_ALLOWLIST.some(a => currentFile!.startsWith(a))) {
+          // 10a: `const { data } = await supabase…` / `const { data: x } = await supabaseAdmin…`
+          const destructure = text.match(/const\s*\{([^}]*)\}\s*=\s*await\s+(?:supabase|supabaseAdmin|db)\b/)
+          if (destructure && !/\berror\b/.test(destructure[1])) {
+            violations.push({ file: currentFile, line: newLineNo, rule: 'supabase-error-not-read', text: text.trim() })
+          }
+          // 10b: `await supabase.from(...).insert(...)` as a STATEMENT — nothing catches the result.
+          // This is council-executor.ts:17 exactly, and recordEvent before M11B.
+          if (/^\s*(?:void\s+)?await\s+(?:supabase|supabaseAdmin)\b/.test(text)
+              && !/=\s*await/.test(text)) {
+            violations.push({ file: currentFile, line: newLineNo, rule: 'supabase-write-result-discarded', text: text.trim() })
+          }
+        }
+
         // Rule 9 — M12 phase 3: a NEW Ask Aria persona prompt that does not come from the rail.
         //
         // On 4 September an owner asked Ask Aria to "tidy up before the weekend" and was told to
@@ -522,6 +574,10 @@ function main() {
   console.error('Fix: use withBusinessContext (src/lib/api/with-error-capture.ts) instead of a local getBid/getBusinessId/getBiz;')
   console.error('use .eq(\'status\',\'completed\') or getRevenueSnapshot()/getRevenueForRange() instead of neq(\'voided\')/a hand-rolled sum;')
   console.error('add REVOKE EXECUTE ... FROM PUBLIC, anon[, authenticated] in the same migration file as any new SECURITY DEFINER function;')
+  console.error("READ THE ERROR: Supabase RESOLVES with { data, error } and never throws, so a discarded result is a")
+  console.error("silent failure. Destructure `const { data, error } = await supabase...` and check it — log it at minimum.")
+  console.error("A deliberate non-fatal write still logs: silence is never correct, non-fatal is. This is how")
+  console.error("council-executor.ts got 0 audit inserts out of 854 and 95 councils marked complete having done nothing;")
   console.error("build Ask Aria system prompts with assembleAriaPrompt() from src/lib/aria/prompt/assemble.ts — it prepends the")
   console.error("constitution and cannot be told not to. A lane that wrote its own prompt is why an owner asking to 'tidy up before")
   console.error("the weekend' was told to make his bed on 4 Sep 2026;")
