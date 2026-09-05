@@ -1,7 +1,110 @@
 # RUN-M13 · THE FIRST TWO WALLS
 
-6 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**6 September 2026 · autonomous run, RULE 20 · seven phases, seven commits, one park. All pushed.**
+
+**Both walls stand.** No new file in Aria can call a model without the gateway, and no new Supabase
+write can fail silently. That is the first day those two things have been true.
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ The audit file does not exist in this repo.** `docs/aria/ARIA-ARCHITECTURE-AUDIT.md` is not
+there — searched by name, by pattern, and through `docs/aria/`, `docs/reports/` and the root. It may
+live outside the repo. So every number was re-measured. **The big ones are exact** — `new Anthropic(`
+**171**, `.messages.create` **162**, `nano.ts` **60 lines**, **13** empty catches, **2,275** false
+cron failures, **0 of 854** rows with a `proposal_id`. Three drifted, all reported in place.
+
+**2. The W6 backlog is 4,512, not 82.** The audit counted *`catch` shapes*; the defect it describes
+is the **unread result**, and that is everywhere — 3,307 unread destructures + 1,205 discarded write
+results across 1,267 files. **The set that matters is the writes: ~1,262 writes whose error is never
+read.** None of it blocks anything: only new diff lines are scanned.
+
+**3. ⚠️ The headline example is a dead code path, not a swallowed error — and my own RUN-M11 said
+otherwise.** "819/819 audit inserts never landed" reads like a rejected write. Attempting that exact
+insert against production **succeeds**. `executeProposal` has simply **never run**: 2 proposals ever,
+0 executed, 0 decisions, and `aria_campaigns` empty. The unread error is real and is fixed — as a
+*latent* defect. A row count is evidence of a shape, not of a cause.
+
+## THE TWO WALLS
+
+| | W6 · read-the-error | W1 · one model gateway |
+|---|---|---|
+| **the door** | — | `callModel()` in `src/lib/ai/gateway.ts` |
+| **the guard** | `supabase-error-not-read` + `supabase-write-result-discarded` | `model-call-outside-gateway` |
+| **where** | `canon-rail-guard.ts` — already in the pre-push hook **and** CI |
+| **grandfathered** | 4,512 (by diff-scan, no list needed) | **177 → 176**, by explicit list |
+| **red/green proven** | ✅ both directions, probe removed | ✅ both directions, probe removed |
+
+**Both guards were proven to fail in both directions by observation**, not reasoning. The W1 probe
+that matters used `.messages.create(` — MS15's older rule 8 is **silent** on that, which is what
+proves the new rule is not redundant.
+
+## THE GATEWAY'S SIGNATURE
+
+```ts
+callModel<T>(req, fallback?) → { ok, data, raw, cost_cents, latency_ms, provider,
+                                 tool_calls, iterations, outcome, success, thinking_tokens }
+req = { businessId /* REQUIRED */, agentKey, role, model /* passed through UNCHANGED */,
+        systemPrompt, userPrompt, maxTokens, tools?, executeTool?, priorMessages?, … }
+```
+
+`businessId` **throws if absent** — never defaulted, because a default id is a fabricated
+attribution. That is the precondition the provider gates its `aria_ai_calls` insert on, and omitting
+it is exactly how `intent_classifier` ran twice a turn across 412 turns with **zero** rows.
+**Verified live: 2 calls → 2 rows, right tokens.**
+
+## WHICH SILENT FAILURES ARE NOW LOUD
+
+Four writes in `council-executor.ts` (three used `.then(onOk, onErr)` with two empty bodies —
+discarding success *and* failure on purpose) and five app-code catches: an order-status update that
+left the screen showing an order the kitchen had no record of, a POS settings save that showed the
+operator *nothing*, a customer-facing order poll that froze silently, and two cosmetic ones. **Eight
+`layout.tsx` catches were deliberately left** — they guard `serviceWorker`/`caches`/`sessionStorage`
+in an inline browser script and are not database calls at all.
+
+## WHAT NEEDS A PERSON
+
+1. ⚠️ **`lib/aria/council.ts` is parked** — 1,391 lines, its own backoff and streaming, four
+   importers including `ask/route.ts`. Migrating it needs the gateway to grow a retry contract
+   first. Doing it at the end of a seven-phase run on the hero answer path is how a wall becomes an
+   outage.
+2. **Two UI decisions I did not take.** `online-orders` still leaves its optimistic update in place
+   after a failed write; `SettingsTab` still shows nothing on a failed save. Logging made them
+   visible, not correct.
+3. **The two councils should be renamed, not merged.** Different jobs, identical import lines. And
+   `agents/council.ts` is **alive and produces nothing** — 95 sessions, 2 proposals ever, 0 executed.
+4. **The W6 backlog needs a migration sprint** — ~1,262 writes, concentrated in `src/app/api` (3,504
+   of the 4,512).
+
+## MY OWN ERRORS THIS RUN
+
+Four, each caught by a guard or an assertion and recorded where it happened:
+
+- A patch script asserted "expected 2 swallows, found 5" — the extra three were **my own comments**
+  quoting the pattern.
+- The allow-list parser closed on the first `]` and read **82 of 177** entries — Next.js route
+  segments put brackets inside paths.
+- I asserted `providers/gemini.ts` was on the list; it calls the Gemini REST API directly and never
+  matched.
+- The gateway classified a prose reply of `"OK"` as **`unparseable`** — found by running it, not by
+  reading it.
+
+And once the rail caught me: the pre-push hook blocked my own push because my test file quotes the
+pattern its rule blocks. **The literal was split; the guard was not loosened** — the decision table's
+instruction exactly.
+
+| phase | outcome | commit |
+|---|---|---|
+| 0 · gate | audit absent; numbers re-measured | — |
+| 1 · W6 rule | ✅ backlog 4,512 | `ca808965` |
+| 2 · W6 fixes | ✅ 9 writes, 5 catches | `8140feca` |
+| 3 · the gateway | ✅ one row per call, live | `1f0e0492` |
+| 4 · the W1 guard | ✅ both directions | `f0c5edb5` + `4ae77cba` |
+| 5 · migrate | ✅ 5 sites · 177 → 176 · 1 parked | `04745948` |
+| 6 · two councils | ✅ report | `04745948` |
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -45,7 +148,7 @@ and the live database rather than read**, which the brief asked for anyway.
 
 ## PHASE 1 — W6: THE READ-THE-ERROR RULE ✅
 
-**Commit:** `<phase-1>` · `scripts/canon-rail-guard.ts` (+2 rules, +1 allow-list, +remediation text).
+**Commit:** `ca808965` · `scripts/canon-rail-guard.ts` (+2 rules, +1 allow-list, +remediation text).
 
 ### Built into the existing rail, not beside it
 
@@ -120,7 +223,7 @@ green above is not a green that came from the rule silently failing to run.
 
 ## PHASE 2 — W6: FIX THE FIVE THAT ALREADY COST YOU ✅
 
-**Commit:** `<phase-2>` · `council-executor.ts` (4 writes), `OrderTrackingClient.tsx`,
+**Commit:** `8140feca` · `council-executor.ts` (4 writes), `OrderTrackingClient.tsx`,
 `SettingsTab.tsx`, `online-orders/page.tsx` (×3), `council-executor-silence.test.ts` (new, 9 tests).
 
 ### ⚠️ THE HEADLINE EXAMPLE HAS A DIFFERENT CAUSE — AND I GOT IT WRONG TOO
@@ -201,7 +304,7 @@ matched its own comment — third time this run.
 
 ## PHASE 3 — W1: THE GATEWAY  *(the sprint)* [OK]
 
-**Commit:** `<phase-3>` · `src/lib/ai/gateway.ts` (new), `src/lib/ai/gateway.test.ts` (new, 9 tests).
+**Commit:** `1f0e0492` · `src/lib/ai/gateway.ts` (new), `src/lib/ai/gateway.test.ts` (new, 9 tests).
 
 ### The one call signature
 
@@ -274,7 +377,7 @@ tsc **0** · vitest **116 files / 1541 tests, exit 0** · `next build` **BUILD_E
 
 ## PHASE 4 — W1: THE GUARD [OK]
 
-**Commit:** `<phase-4>` · `scripts/canon-rail-guard.ts` (+rule 11, +allow-list, +homes),
+**Commit:** `f0c5edb5` · `scripts/canon-rail-guard.ts` (+rule 11, +allow-list, +homes),
 `src/lib/ai/w1-allowlist.test.ts` (new, 5 tests).
 
 **No NEW file may contain `new Anthropic(`, `.messages.create(`, `GoogleGenerativeAI` or
@@ -323,7 +426,7 @@ tsc **0** · vitest **117 files / 1546 tests, exit 0** · `next build` **BUILD_E
 
 ## PHASE 5 — W1: MIGRATE THE ASK ARIA LANES ✅ (partly — one council parked, with the reason)
 
-**Commit:** `<phase-5>` · `ask/route.ts` (3 call sites), `action-planner.ts`,
+**Commit:** `04745948` · `ask/route.ts` (3 call sites), `action-planner.ts`,
 `agents/council.ts` (migrated + own telemetry removed), `gateway.ts` (widened), `types.ts`,
 `agents.ts`, `router.ts`, `canon-rail-guard.ts`, `w1-allowlist.test.ts`.
 
