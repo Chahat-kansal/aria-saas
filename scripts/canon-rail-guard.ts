@@ -219,7 +219,6 @@ const MODEL_GATEWAY_ALLOWLIST = [
   'src/app/dashboard/social-calendar/page.tsx',
   'src/lib/agents/aeo-monitor.ts',
   'src/lib/agents/base-agent.ts',
-  'src/lib/agents/council.ts',
   'src/lib/ai-router.ts',
   'src/lib/ai/gateway.test.ts',
   'src/lib/aria-insights.ts',

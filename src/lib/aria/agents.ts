@@ -75,6 +75,10 @@ Return ONLY valid JSON. No prose. No code fences.`
     // I11: counterfactual runs via its own grounded simulator (lib/aria/hypothesis/counterfactual.ts),
     // not this schema path; entry present only to keep the AgentKey map exhaustive.
     counterfactual: `Schema: { "type": "insight", "title": "max 60 chars", "description": "prediction", "rationale": "1 sentence", "confidence": "high"|"medium"|"low", "estimated_impact_dollars": number, "payload": {} }`,
+    // M13 phase 5 — NOT a recommendation agent. agents_council is the nightly council chair
+    // (lib/agents/council.ts), which carries its own prompt and never reaches this map. Present
+    // only because the Record is exhaustive over AgentKey; an empty schema is the honest entry.
+    agents_council: '',
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -123,6 +127,10 @@ export async function runAgent(
     aria_intent_classifier: 'haiku',
     heal: 'haiku',
     counterfactual: 'haiku',
+    // Sonnet, matching what the council chair actually asks for — this map does not route it
+    // (it passes its own model to the gateway), so the value records the truth rather than
+    // setting it.
+    agents_council: 'sonnet',
   }
 
   const result = await callAnthropic<Recommendation>({

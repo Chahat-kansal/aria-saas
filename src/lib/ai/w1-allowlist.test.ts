@@ -28,7 +28,9 @@ function allowlist(): string[] {
  * the list and lower this number. It must never be raised — raising it is adding a file that is
  * allowed to bypass the gateway, which is the wall coming down one brick at a time.
  */
-const CEILING = 177
+// M13 phase 5 lowered this from 177 to 176 by migrating src/lib/agents/council.ts onto the
+// gateway. THIS IS HOW THE NUMBER MOVES: migrate a file, delete its entry, lower the ceiling.
+const CEILING = 176
 
 describe('M13 phase 4 · the W1 allow-list ratchets down, never up', () => {
   it('ANTI-VACUITY — the list is real and was actually parsed', () => {

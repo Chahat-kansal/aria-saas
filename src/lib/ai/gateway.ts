@@ -72,7 +72,12 @@ export interface AriaModelRequest {
   /** Passed through UNCHANGED. The gateway never re-routes; that is M14. */
   model: AriaModel
   systemPrompt: string
-  userPrompt: string
+  /**
+   * Matches the PROVIDER's own width rather than narrowing it. Ask Aria sends multimodal content
+   * blocks (an array) when the owner attaches an image; a `string`-only gateway would have forced
+   * that lane to keep bypassing the door, which is the opposite of the point.
+   */
+  userPrompt: string | unknown[]
   maxTokens?: number
   /**
    * Accepted on the request for callers that set it today, and NOT forwarded: the provider's
@@ -111,6 +116,13 @@ export interface AriaModelResult<T = Record<string, unknown>> {
    */
   outcome: ModelOutcome
   error_message?: string | null
+  /**
+   * Carried through from the provider rather than dropped. A gateway that returns LESS than the
+   * thing it wraps forces callers to keep the old path for the one field they need — the surest way
+   * to end up with a door people walk around.
+   */
+  success: boolean
+  thinking_tokens: number
 }
 
 /**
@@ -134,7 +146,7 @@ export async function callModel<T = Record<string, unknown>>(
     const res: ToolLoopResult = await callAnthropicWithTools({
       model: req.model,
       systemPrompt: req.systemPrompt,
-      userPrompt: req.userPrompt,
+      userPrompt: req.userPrompt as never,
       priorMessages: req.priorMessages as never,
       tools: req.tools as never,
       executeTool: req.executeTool as never,
@@ -163,6 +175,8 @@ export async function callModel<T = Record<string, unknown>>(
       // 'ok'. Claiming a truncation check it did not perform would be worse than not claiming one.
       outcome: res.success ? 'ok' : 'unparseable',
       error_message: res.error_message ?? null,
+      success: res.success,
+      thinking_tokens: res.thinking_tokens,
     }
   }
 
@@ -170,7 +184,7 @@ export async function callModel<T = Record<string, unknown>>(
     {
       model: req.model,
       systemPrompt: req.systemPrompt,
-      userPrompt: req.userPrompt,
+      userPrompt: req.userPrompt as string,
       maxTokens: req.maxTokens,
       businessId: req.businessId,
       agentKey: req.agentKey,
@@ -205,5 +219,8 @@ export async function callModel<T = Record<string, unknown>>(
     iterations: 1,
     outcome,
     error_message: res.success ? null : 'provider call failed',
+    success: res.success,
+    // The plain path does not run a tool loop, so no extended thinking is requested or spent.
+    thinking_tokens: 0,
   }
 }

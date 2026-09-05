@@ -23,6 +23,8 @@ function agentToCategory(key: AgentKey): string {
     aria_intent_classifier: 'sales',
     heal: 'sales',
     counterfactual: 'sales',
+    // The council chair coordinates every domain rather than belonging to one.
+    agents_council: 'operations',
   }
   return map[key] ?? 'sales'
 }

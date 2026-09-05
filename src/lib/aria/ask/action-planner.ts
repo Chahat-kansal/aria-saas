@@ -1,4 +1,4 @@
-import { callAnthropic } from '@/lib/aria/providers/anthropic'
+import { callModel } from '@/lib/ai/gateway'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 
@@ -131,7 +131,9 @@ LAST_PROMOTION (the promo just created/discussed — for "actually make it X"/"c
 RECENT_CONVERSATION (resolve "it"/"that promo"/"her favourite"/"actually" against this — most recent last):
 ${ctx.recentTurns.slice(-10).join('\n')}` : ''}`
 
-  const result = await callAnthropic<PlannedAction>(
+  // M13 phase 5 — through the gateway. Same sonnet, same prompt; businessId is now required at
+  // the boundary rather than optional, so this call cannot silently miss the ledger.
+  const result = await callModel<PlannedAction>(
     {
       model: 'sonnet',
       systemPrompt: PLANNER_SYSTEM,

@@ -8,7 +8,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { waitUntil } from '@vercel/functions'
 import { withBusinessContext, type BusinessContext } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { callAnthropic, callAnthropicWithTools, type ToolLoopResult } from '@/lib/aria/providers/anthropic'
+import { type ToolLoopResult } from '@/lib/aria/providers/anthropic'
+import { callModel } from '@/lib/ai/gateway'
 import { isAnthropicCircuitOpen, recordAnthropicFailure, recordAnthropicSuccess, recordAnthropicFallbackProvider, recordTotalOutage, isAnthropicUnreachable } from '@/lib/aria/circuit-breaker'
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
 import { findCachedAnswer } from '@/lib/aria/cached-answer'
@@ -878,7 +879,11 @@ async function _POST(
     })
 
     const generalTools = ARIA_POS_TOOLS.filter((t: { name: string }) => ['web_search', 'fetch_url'].includes((t as { name: string }).name))
-    const generalResult = await callAnthropicWithTools({
+    // M13 PHASE 5 — through the gateway. Same model, same prompt, same tools: callModel passes
+    // the model through unchanged and delegates to the same provider entry point this called
+    // directly a moment ago. What changes is that businessId is now REQUIRED at the boundary,
+    // so this call cannot become one of the unlogged ones.
+    const generalResult = await callModel({
       model: 'haiku',
       systemPrompt: generalSystemPrompt,
       userPrompt: message,
@@ -2416,7 +2421,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
   } else {
     try {
-    toolResult = await callAnthropicWithTools({
+    toolResult = await callModel({
       // MS16 phase 4 — the only streaming call site.
       // S1 phase 1 — the sink accumulates so a stop can persist the partial, and `signal` carries
       // the owner's cancellation into the SDK call itself.
@@ -2561,7 +2566,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // silent delete) and log the contradiction. Complementary to V2 Check 6 / advisor_guard (which run later).
   if (intent.complexity === 'complex' && routedModel !== 'haiku' && !isImageRequest && !degradedProvider && cleanResponse.length > 100) {
     try {
-      const verifierResult = await callAnthropic<{ verdict: string }>(
+      const verifierResult = await callModel<{ verdict: string }>(
         {
           model: 'haiku',
           systemPrompt: 'You are a factual accuracy reviewer for an AI business assistant. Given the business context, question, and response — check only for clear numerical errors or invented facts. If accurate, respond "OK". If you find an error, respond "CORRECTION: [brief description]". Be lenient — only flag obvious factual errors. Do NOT restate or assert any numbers yourself.',

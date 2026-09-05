@@ -18,6 +18,11 @@ export type AgentKey =
   | 'ask_aria_verifier' | 'action_planner' | 'aria_intent_classifier'
   | 'heal'
   | 'counterfactual'
+  // M13 phase 5 — the nightly agent council's chair call, migrated onto the gateway. Added rather
+  // than reusing 'generic': the whole point of the ledger row is being able to say later which
+  // thing spent the money. `aria_ai_calls.agent_key` has no CHECK constraint (verified — the M12
+  // and M13 probe keys inserted cleanly), so this is a code-side convention, not DDL.
+  | 'agents_council'
 
 export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document' | 'forecast'
 

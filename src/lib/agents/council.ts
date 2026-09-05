@@ -1,7 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart } from '@/lib/date-au'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { callModel } from '@/lib/ai/gateway'
 import type { AgentType, AgentDecision, AgentCouncilSession, AgentCouncilProposal } from './types'
 
 // Explicit agent registry — maps each AgentType to its real class.
@@ -398,23 +397,35 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
 
   if (proposals.length > 0 && process.env.ANTHROPIC_API_KEY) {
     try {
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-      const msg = await trackAICall(
-        { route: 'agents/council', model: MODEL, businessId: business_id, purpose: 'council_plan' },
-        () => anthropic.messages.create({
-          model: MODEL,
-          max_tokens: 2000,
-          system: 'You are the Aria Revenue Council chair for an Australian small business. Your role is to evaluate all agent proposals for today and produce a single coordinated action plan that maximises ' + priority + ' without agents working against each other. Be specific. Reference actual $ amounts and product names from the proposals. Resolve conflicts by choosing the higher-impact option that aligns with the owner\'s priority. Respond with valid JSON only, no markdown fences.',
-          messages: [{ role: 'user', content: JSON.stringify(councilContext) }],
-        })
+      // M13 PHASE 5 — THROUGH THE GATEWAY. This file constructed its own Anthropic client and did
+      // its own cost logging via trackAICall; both are gone. Same model (MODEL is the sonnet id and
+      // 'sonnet' is what the provider maps it from), same system prompt, same single user message,
+      // same 2,000-token ceiling. What changes is that the call now lands in aria_ai_calls once, at
+      // the boundary, with provider/model/tokens/latency/cost/outcome — instead of whatever this
+      // call site remembered to record.
+      //
+      // trackAICall is removed IN THE SAME EDIT rather than left alongside, so the cost is counted
+      // once and not twice. That is the brief's rule and it is the whole reason a gateway is worth
+      // having: one place that knows what a call cost.
+      const res = await callModel<Record<string, unknown>>(
+        {
+          businessId: business_id,
+          agentKey: 'agents_council',
+          role: 'analysis',
+          model: 'sonnet',
+          maxTokens: 2000,
+          systemPrompt: 'You are the Aria Revenue Council chair for an Australian small business. Your role is to evaluate all agent proposals for today and produce a single coordinated action plan that maximises ' + priority + ' without agents working against each other. Be specific. Reference actual $ amounts and product names from the proposals. Resolve conflicts by choosing the higher-impact option that aligns with the owner\'s priority. Respond with valid JSON only, no markdown fences.',
+          userPrompt: JSON.stringify(councilContext),
+          requestSummary: 'council plan: ' + priority,
+        },
+        {},
       )
-      const raw = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : '{}'
-      const parsed = JSON.parse(raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, ''))
-      if (parsed && typeof parsed === 'object') {
+      const parsed = res.data
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
         planResult = { ...planResult, ...parsed }
       }
     } catch (e) {
-      console.warn('[council] sonnet call failed:', (e as Error).message)
+      console.warn('[council] chair call failed:', (e as Error).message)
     }
   }
 

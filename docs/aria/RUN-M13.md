@@ -318,3 +318,121 @@ test file.
 
 tsc **0** · vitest **117 files / 1546 tests, exit 0** · `next build` **BUILD_EXIT=0**
 (`build.log:1967`).
+
+---
+
+## PHASE 5 — W1: MIGRATE THE ASK ARIA LANES ✅ (partly — one council parked, with the reason)
+
+**Commit:** `<phase-5>` · `ask/route.ts` (3 call sites), `action-planner.ts`,
+`agents/council.ts` (migrated + own telemetry removed), `gateway.ts` (widened), `types.ts`,
+`agents.ts`, `router.ts`, `canon-rail-guard.ts`, `w1-allowlist.test.ts`.
+
+### THE ALLOW-LIST: 177 → 176
+
+⚠️ **And the honest reason it only moved by one.** The four Ask Aria call sites — the general lane,
+the main tool loop, the accuracy verifier and the action planner — **were never on the list**. They
+already went through `providers/anthropic.ts`; they were not among the 177 files constructing their
+own client. Migrating them puts the hero surface behind the door, which is the point, but **it does
+not shrink the backlog**, because the backlog counts a different thing.
+
+The number moved because **`lib/agents/council.ts` was migrated off its own `new Anthropic(`** — one
+real entry removed, and `w1-allowlist.test.ts`'s ceiling lowered from 177 to 176 in the same commit.
+That is the ratchet working, demonstrated once end to end.
+
+### What was migrated
+
+| lane | file | before | after |
+|---|---|---|---|
+| general fast-path | `ask/route.ts:881` | `callAnthropicWithTools` | `callModel` |
+| main tool loop | `ask/route.ts:2419` | `callAnthropicWithTools` | `callModel` |
+| accuracy verifier | `ask/route.ts:2564` | `callAnthropic` | `callModel` |
+| action planner | `action-planner.ts:134` | `callAnthropic` | `callModel` |
+| **agent council chair** | `agents/council.ts:401` | **its own `new Anthropic(`** + `trackAICall` | `callModel`, **own telemetry deleted** |
+
+**Behaviour preserved: same model, same prompt, same tools.** `trackAICall` was removed **in the
+same edit** as the migration, so the cost is counted once and never twice — the brief's rule, and
+the whole reason a gateway is worth having.
+
+### VERIFIED LIVE — a migrated lane, end to end, one row
+
+The action planner, through the gateway, against production:
+
+```
+planAction → {"type":"adjust_stock","title":"Set stock of Flat White to 24"}
+
+aria_ai_calls: agent_key=ask_aria · claude-sonnet-4-5-20250929 · role chat
+               3,682 in / 259 out · success true          ← exactly ONE row
+```
+
+Same model it used before (`'sonnet'` passed through unchanged), same output shape, one ledger row.
+
+### The gateway had to grow to be worth using
+
+Two things the migration exposed, both fixed in the gateway rather than worked around at the call
+site:
+
+- **`userPrompt` was `string`.** Ask Aria sends **multimodal content blocks** (an array) when the
+  owner attaches an image. A string-only gateway would have forced that lane to keep bypassing the
+  door — the exact opposite of the point. It now matches the provider's own width.
+- **The result was lossy.** It dropped `success` and `thinking_tokens`. A gateway that returns
+  *less* than the thing it wraps makes callers keep the old path for the one field they need. It is
+  now a superset.
+
+### ⚠️ PARKED — `lib/aria/council.ts`, and why
+
+**1,391 lines, two `.messages.create` call sites, its own `withBackoff`, its own streaming and
+timeout semantics, and four importers including `ask/route.ts` itself.** It is the live Ask Aria
+council — the single highest-risk file in the repo to touch — and migrating it means the gateway
+must first grow a retry/backoff contract it does not have.
+
+**That is a design decision, not a mechanical swap**, and doing it at the end of a seven-phase run
+on the hero answer path is how a wall becomes an outage. Named, not taken. It stays on the
+allow-list; the ceiling stays at 176 until it moves.
+
+---
+
+## PHASE 6 — THE TWO COUNCILS ✅ (report)
+
+**No code in this phase.**
+
+### ⚠️ THE IMPORTER COUNTS IN THE BRIEF ARE BOTH WRONG
+
+| | brief | measured (real `import … from` statements) |
+|---|---|---|
+| `lib/agents/council.ts` | 487 lines, **10 importers** | 487 lines ✅, **1 importer** |
+| `lib/aria/council.ts` | 1,391 lines, **12 importers** | 1,391 lines ✅, **4 importers** |
+
+Line counts exact; importer counts appear to have counted grep hits on the word "council"
+(route files, dashboard fetches) rather than imports of the module.
+
+### They are genuinely different things, badly named
+
+| | `lib/agents/council.ts` | `lib/aria/council.ts` |
+|---|---|---|
+| exports | `runCouncilSession(business_id)` | `runAriaCouncil()`, `insertCouncilRun()` |
+| importers | `api/cron/council-session/route.ts` — **1** | `ask/route.ts`, `briefing/route.ts`, `customers/[id]/summarise`, `reports/weekly-ai.ts` — **4** |
+| trigger | a nightly **cron** | an owner **asking a question** |
+| produces | rows in `agent_council_sessions` + `agent_council_proposals` | a synthesised **answer** from four advisor brains |
+| writes | proposals for later execution | nothing — it returns text and blocks |
+
+**Neither is a duplicate of the other.** One is a scheduled proposal generator; the other is the
+synthesis behind Ask Aria's answers. The shared name is the whole problem: `import { … } from
+'@/lib/…/council'` reads identically at the call site and means something completely different.
+
+### The verdict: neither is dead, but one is inert
+
+`agents/council.ts` **runs** — 95 sessions, the most recent within days. And in 95 sessions it has
+produced **2 proposals, ever**, with **0 executed** and **0 carrying a `council_decision`**. Its
+executor (`council-executor.ts`) has never been called. **It is alive and produces nothing.**
+
+That is not dead code — deleting it would be deleting a feature that runs — but it is a feature that
+has never worked. **Recommendation, not taken here:**
+
+1. **Do not merge them.** They do different jobs. Merging two live councils is a design sprint.
+2. **Rename, so the next reader cannot confuse them** — `agents/proposal-council.ts` and
+   `aria/answer-council.ts`, or similar. This is the cheap fix and it is the one that pays.
+3. **Then decide what `agents/council.ts` is for.** 95 runs and 2 proposals is either a broken
+   generator or a feature nobody wants. Both answers are fine; not knowing which is not.
+
+Migration was not attempted for either beyond phase 5's chair call, per the brief: *report; migrate
+only if one is demonstrably dead.* **Neither is.**
