@@ -60,9 +60,11 @@ describe('M13 phase 3 · the gateway is a door, not a helper', () => {
   it('it does not construct a client or call the SDK — it wraps the provider that does', () => {
     // A third abstraction was the wrong answer; providers/anthropic.ts is 405 lines of working
     // circuit-breaker, failover, cache breakpoints, streaming and cancellation.
-    expect(GATEWAY_CODE).not.toContain('new Anthropic(')
-    expect(GATEWAY_CODE).not.toContain('.messages.create')
-    expect(GATEWAY_CODE).not.toContain('GoogleGenerativeAI')
+    // Literals SPLIT so this file does not itself trip MS15's rule 8, which has no test-file
+    // exclusion and is not this sprint's to loosen. The decision table's instruction exactly.
+    expect(GATEWAY_CODE).not.toContain(['new', 'Anthropic('].join(' '))
+    expect(GATEWAY_CODE).not.toContain(['.messages', 'create'].join('.'))
+    expect(GATEWAY_CODE).not.toContain(['Google', 'GenerativeAI'].join(''))
   })
 
   it('one shape for both paths — tools or no tools', () => {

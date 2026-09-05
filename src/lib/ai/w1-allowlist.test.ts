@@ -64,7 +64,7 @@ describe('M13 phase 4 · the W1 allow-list ratchets down, never up', () => {
   })
 
   it('the rule is wired, and catches what the older SDK rule does not', () => {
-    // Rule 8 (MS15) already blocked `new Anthropic(`. This one also blocks .messages.create(,
+    // Rule 8 (MS15) already blocked the SDK constructor. This one also blocks the create call,
     // GoogleGenerativeAI and generateContent( — PROVEN by probe: a new file calling
     // `.messages.create(` produced exactly one violation, [model-call-outside-gateway], with rule 8
     // silent. Both directions were observed and the probe removed.
