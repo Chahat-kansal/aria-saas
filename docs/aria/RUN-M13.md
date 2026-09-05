@@ -196,3 +196,76 @@ My first patch script asserted "expected 2 remaining swallows, found 5" and stop
 were **the literal appearing inside comments I had just written** describing what was removed. The
 assert did its job; the fix was to stop putting the pattern in prose. Same class as the M12 test that
 matched its own comment — third time this run.
+
+---
+
+## PHASE 3 — W1: THE GATEWAY  *(the sprint)* [OK]
+
+**Commit:** `<phase-3>` · `src/lib/ai/gateway.ts` (new), `src/lib/ai/gateway.test.ts` (new, 9 tests).
+
+### The one call signature
+
+```ts
+callModel<T>(req: AriaModelRequest, fallback?: T): Promise<AriaModelResult<T>>
+
+AriaModelRequest = {
+  businessId   // REQUIRED — not optional, and that is the point
+  agentKey, role, model            // model is passed through UNCHANGED
+  systemPrompt, userPrompt, maxTokens, requestSummary
+  tools?, executeTool?, priorMessages?, maxIterations?, thinking?, toolChoice?,
+  onToken?, signal?, timeoutMs?    // supplying tools selects the tool loop
+}
+AriaModelResult = { ok, data, raw, cost_cents, latency_ms, provider, tool_calls, iterations,
+                    outcome /* the shared truncation rail */, error_message }
+```
+
+### Built over the provider, not beside it
+
+`providers/anthropic.ts` is 405 lines of working circuit-breaker, Gemini failover, prompt-cache
+breakpoints, streaming, cancellation and cost accounting. **A third abstraction was the wrong
+answer** — the gateway wraps it.
+
+### VERIFIED LIVE — one row per call
+
+```
+ok: true | provider: anthropic | outcome: ok | iterations: 1 | raw: "OK"
+
+aria_ai_calls, agent_key=m13_gateway_probe:
+  2 calls -> 2 rows · haiku · role chat · 20 in / 4 out each · success true
+```
+
+**Exactly one row per call, with the right tokens.** (`cost_usd_cents` 0 on both — sub-cent
+rounding, MS15 phase 1; the column is integer cents and the call is worth ~0.2 of one.)
+
+### The guarantee, and where the insert actually lives
+
+`businessId` is **required and throws if absent** — never defaulted, because a default id is a
+fabricated attribution. That is the precondition `providers/anthropic.ts` gates its `aria_ai_calls`
+insert on (`if (params.businessId)`), and omitting it is exactly how `intent_classifier` ran twice
+per turn across 412 turns with **zero** rows (M12 phase 5).
+
+**The insert itself stays in the provider, deliberately** — it is already correct there and already
+covers the thirteen files importing the provider directly. Moving it up into the gateway would
+silence every one of them until they migrated. The brief asked for logging *once, here*; one row per
+call is what that is for, and that is what is measured above.
+
+### What it deliberately does not do
+
+**It does not choose the model.** A test asserts `model: req.model` on both paths and that no
+routing vocabulary appears in the file. Routing is M14.
+
+### A defect the live run caught that reading would not have
+
+The first version classified a plain-prose reply of `"OK"` as **`unparseable`** — because no JSON
+came back from a call that never asked for any. Prose and JSON are now judged separately:
+`wantedJson = fallback !== undefined`. Found by running it.
+
+### Mutation check
+
+The gateway does not perform the insert; it guarantees the insert&#39;s precondition. Removing the
+`businessId` guard is therefore precisely "skip the log", and the suite goes red on it.
+
+### Gates
+
+tsc **0** · vitest **116 files / 1541 tests, exit 0** · `next build` **BUILD_EXIT=0**
+(`build.log:1967`).
