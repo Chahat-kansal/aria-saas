@@ -441,3 +441,73 @@ true spend was unknowable after the fact, keeps being re-earned.
 
 `sonnetExhausted → haiku` silently downgrades judgement work when the sonnet budget runs out. That
 is a real behaviour an owner would never see, but changing it is a spend decision. Named, not taken.
+
+---
+
+## PHASE 6 — MAKE DELEGATE REACHABLE ✅
+
+**Commit:** `<phase-6>` · `AskAriaTransition.tsx`, `delegate-reachable.test.ts` (new, 7 tests).
+
+### ⚠️ IT WAS NOT UNREACHABLE — IT WAS ON THE WRONG SCREEN
+
+The brief says nothing on the surface calls the planner. **A Delegate control does exist**, added by
+M11B phase 1 — in the **working** composer, the one you see *after* you have already sent a message.
+
+**The welcome composer had none.** That is where a fresh conversation begins, it is where the owner
+was when he typed "Tidy up before the weekend", and its placeholder literally reads *"Ask Aria
+anything, or tell her to do it…"* — with no way to tell her to do it.
+
+So `aria_plans` has 0 rows not because the loop is broken but because the door is on the second
+screen. This is the `/ax` shape again: four sprints of work behind a door nobody opens.
+
+### The fix
+
+A `🗂` control in the welcome composer, beside voice and send. **The same `delegate()` callback, the
+same route, the same guarantees** — a test asserts there are exactly two call sites and exactly one
+callback, because two delegation paths is how the two start disagreeing about what a plan is.
+
+RULE 0: the working composer's control is untouched. This adds a second entry point; it does not
+move the first.
+
+### ⚠️ VERIFY — WHAT I COULD NOT DO, AND WHAT A HUMAN MUST CLICK
+
+**The sprint asks for a delegated job from the browser creating an `aria_plans` row. I could not do
+that, and I have substituted nothing.** I have no authenticated browser session: the test account's
+password is a founder-held secret (register #12), and driving the UI needs a real login.
+
+What is proven, in process against production, is the layer beneath: M11B's own run log records a
+plan and its four steps written to `aria_plans` / `aria_autopilot_actions`, both database guards
+firing with real sqlstates, a genuine end-to-end run, a report generated from the step rows, and the
+job reopening from its conversation. What is unproven is the click that starts it.
+
+**Exactly what to click, in order:**
+
+1. Open `/dashboard/ask-aria` — the **welcome** screen, not an existing thread.
+2. Type an outcome, e.g. `get the shop ready for the long weekend`.
+3. Press **🗂** (beside the microphone and the ↑ send arrow) — **not** ↑. Pressing ↑ asks a question;
+   🗂 delegates a job.
+4. Expect a plan card: ordered steps, each marked *Aria can do this* / *NEEDS YOU* / *NEEDS A
+   PERSON*, and the line **"Nothing has run. This is the plan."**
+5. Press **Approve and run the safe steps**.
+6. Expect per-step outcomes and a report whose first line is the failure count when there is one.
+
+**Then confirm it landed** — this is the check that settles it:
+
+```sql
+select id, status, request, (report is not null) as has_report
+from aria_plans order by created_at desc limit 1;
+
+select step_index, status, requires_stepup, action_type, outcome_note
+from aria_autopilot_actions
+where plan_id = (select id from aria_plans order by created_at desc limit 1)
+order by step_index;
+```
+
+A row in `aria_plans` with its steps is the whole of phase 6's VERIFY. **If it is not there, this
+phase failed regardless of what the tests say**, and the first thing to check is the browser console
+for the `POST /api/aria/works/plan` response.
+
+### Mutation check
+
+Replacing `delegate(welcomeInput)` with `ask(welcomeInput)` puts Delegate back behind the first
+message and drops the entry-point count from two to one. The suite goes red.

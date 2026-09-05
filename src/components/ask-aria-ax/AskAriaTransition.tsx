@@ -901,6 +901,23 @@ export default function AskAriaTransition() {
             />
             {/* Real voice, migrated from the old surface's VoiceInput. */}
             <VoiceInput onTranscript={t => setWelcomeInput(t)} disabled={isBusy} />
+
+            {/* M12 PHASE 6 — DELEGATE, ON THE SCREEN THE OWNER ACTUALLY STARTS FROM.
+                M11B built plan → approve → execute → report and put the Delegate control in the
+                WORKING composer only — the one you see after you have already sent a message. The
+                welcome screen, which is where a fresh conversation begins and where the placeholder
+                literally says "or tell her to do it", had no way to reach it. aria_plans has 0 rows.
+                This is the /ax shape again: four sprints of work behind a door nobody opens.
+                Same callback, same route, same guarantees — nothing runs until the owner approves. */}
+            <button
+              className="cb"
+              aria-label="Delegate this as a job"
+              title="Describe an outcome and Aria will plan it. Nothing runs until you approve."
+              disabled={planning || isBusy || !welcomeInput.trim()}
+              onClick={() => void delegate(welcomeInput)}
+              style={{ opacity: (planning || isBusy || !welcomeInput.trim()) ? 0.4 : 1 }}
+            >{planning ? '⏳' : '🗂'}</button>
+
             {isBusy ? (
               <button className="send stop" onClick={cancel} aria-label="Stop generating">■</button>
             ) : (
