@@ -222,7 +222,10 @@ export default function OrderTrackingClient({
           }
         }
         if (d.estimated_ready_at !== undefined) setEta(d.estimated_ready_at ?? null)
-      } catch (_) {}
+      // M13 phase 2 — was silent. This poll is what a CUSTOMER is watching to see their order
+      // progress; when it stops working the page simply freezes on the last known state and
+      // neither they nor anyone else is told. Still non-fatal — the tracker must not crash.
+      } catch (e) { console.error('[order-tracking] poll failed:', (e as Error).message) }
     }
 
     poll()                          // immediate — no 10 s blind spot on mount

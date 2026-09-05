@@ -79,7 +79,9 @@ function playBeep() {
     gain.gain.setValueAtTime(0.25, ctx.currentTime)
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
     osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35)
-  } catch (_) {}
+  // M13 phase 2 — was silent. A WebAudio beep: autoplay policy or a missing AudioContext makes this
+  // throw legitimately, so it stays non-fatal. It still says so rather than saying nothing.
+  } catch (e) { console.warn('[online-orders] order beep unavailable:', (e as Error).message) }
 }
 
 // ── Build config display ──────────────────────────────────────────────────────
@@ -225,7 +227,8 @@ export default function OnlineOrdersPage() {
         playBeep()
       }
       prevCountRef.current = pendingCount
-    } catch (_) {}
+    // M13 phase 2 — was silent. Cosmetic (the new-order badge and beep), so it stays non-fatal.
+    } catch (e) { console.error('[online-orders] badge/beep refresh failed:', (e as Error).message) }
   }, [])
 
   useEffect(() => {
@@ -245,7 +248,11 @@ export default function OnlineOrdersPage() {
       if (status === 'accepted' || status === 'confirmed') {
         prevCountRef.current = Math.max(0, prevCountRef.current - 1)
       }
-    } catch (_) {}
+    // M13 phase 2 — was silent, and this is the costly one of the five. The row above updates the
+    // order's status in LOCAL state optimistically; if the write failed, the screen shows the order
+    // as accepted when the kitchen has no such record. Logging does not undo the optimistic update
+    // — that is a product decision, named in RUN-M13.md — but the failure is no longer invisible.
+    } catch (e) { console.error('[online-orders] status update failed:', id, status, (e as Error).message) }
   }
 
   const filtered = orders.filter(o => {

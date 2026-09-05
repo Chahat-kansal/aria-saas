@@ -115,3 +115,84 @@ GREEN — the same file with `const { data, error } = …` and `if (error) conso
 
 The probe was removed and the tree reset. The rule was re-proven after a null-safety fix, so the
 green above is not a green that came from the rule silently failing to run.
+
+---
+
+## PHASE 2 — W6: FIX THE FIVE THAT ALREADY COST YOU ✅
+
+**Commit:** `<phase-2>` · `council-executor.ts` (4 writes), `OrderTrackingClient.tsx`,
+`SettingsTab.tsx`, `online-orders/page.tsx` (×3), `council-executor-silence.test.ts` (new, 9 tests).
+
+### ⚠️ THE HEADLINE EXAMPLE HAS A DIFFERENT CAUSE — AND I GOT IT WRONG TOO
+
+The brief lists *"819/819 audit inserts never landed"* as a read-the-error failure. **My own
+`RUN-M11.md` said the same thing**, in those words.
+
+**It is wrong.** Attempting that exact insert against production inside a rolled-back `DO` block
+**succeeds** — the database accepts it. What is actually true, measured beside it:
+
+```
+agent_council_proposals   2 rows ever · 0 executed · 0 with a council_decision
+aria_campaigns            0 rows            (the sibling write in the same file)
+aria_autopilot_actions    0 with outcome_data · 0 with executed_at · 0 with proposal_id
+```
+
+**`executeProposal` has never run in production.** The column is empty because the function was
+never called, not because the write was rejected. Don't-guess applies to a row count as much as to a
+model: 0-of-854 looks like a failing write and is a dead code path.
+
+The unread error is still real and is fixed — but it is a **latent** defect, and the day the executor
+first runs is precisely the day nobody would notice it failing.
+
+### Four writes in `council-executor.ts`, all now reading their error
+
+Three of them used `.then(onOk, onErr)` with **two empty bodies** — discarding success *and* failure
+on purpose. Each records something the owner is told has been queued:
+
+| write | what a lost row means |
+|---|---|
+| `aria_autopilot_actions` (the audit) | no record that a proposal executed |
+| `aria_campaigns` | the campaign is reported queued and is not queued |
+| `labour_optimisation_actions` | a staff SMS is reported queued and is not queued |
+| `review_requests` | a review request is reported queued and is not queued |
+
+**Nothing became fatal.** Every fix logs and continues — a write failure must not start throwing out
+of an executor that is midway through real changes. A test asserts none of them `throw` or `return`
+on error.
+
+### The 13 empty catches, read one at a time — 5 fixed, 8 correctly left
+
+**Not 13 database bugs.** Reading each:
+
+- **8 in `layout.tsx`** — inside an inline browser `<script>`, guarding `serviceWorker`, `caches`
+  and `sessionStorage`: APIs that legitimately do not exist in some browsers, where a throw is the
+  expected control flow. **Not Supabase, not app code.** Counting them as W6 violations was the
+  audit conflating "empty catch" with "unread database error". Left alone, and a test asserts the
+  file contains no database call at all — the property that makes leaving them correct.
+- **5 in app code — all now log, none changed behaviour:**
+
+| file | cost of the silence |
+|---|---|
+| `online-orders:248` — order status update | **the costly one.** Local state is updated optimistically; on a failed write the screen shows an order as accepted that the kitchen has no record of |
+| `SettingsTab:63` — POS settings save | a failed save showed the operator **nothing** — no error, and no "Saved" either, indistinguishable from not having pressed the button |
+| `OrderTrackingClient:225` — order poll | a **customer** watching their order sees the page freeze on the last known state, and nobody is told |
+| `online-orders:228` — new-order badge/beep | cosmetic; still logs, because silence is never correct even when the cost is small |
+| `online-orders:82` — the beep itself | autoplay policy makes this throw legitimately; `console.warn`, stays non-fatal |
+
+⚠️ **Two of these need a product decision I did not take.** Logging stops the failure being
+invisible; it does not fix the *UI*. `online-orders` still leaves the optimistic update in place
+after a failed write, and `SettingsTab` still shows nothing at all. Both are user-facing behaviour
+changes — **named here rather than taken.**
+
+### Mutation check
+
+Re-silencing the audit insert (`const { error: auditErr } = …` → bare `await`) is detectable, and
+the **W6 rail added in phase 1 would now catch it as a new violation** — the rule exists for exactly
+this shape.
+
+### A measurement error of my own, caught by an assertion
+
+My first patch script asserted "expected 2 remaining swallows, found 5" and stopped. The extra three
+were **the literal appearing inside comments I had just written** describing what was removed. The
+assert did its job; the fix was to stop putting the pattern in prose. Same class as the M12 test that
+matched its own comment — third time this run.

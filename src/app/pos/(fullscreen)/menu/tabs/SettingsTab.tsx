@@ -60,7 +60,11 @@ export default function SettingsTab({ businessId }: Props) {
       setInitial(settings)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
-    } catch (_) {}
+    // M13 phase 2 — was silent. A failed settings save showed the operator NOTHING: no error, and
+    // no "Saved" either, which is indistinguishable from not having pressed the button. Logging
+    // does not fix the missing UI state — that is a product decision and is named in RUN-M13.md —
+    // but it stops the failure being invisible everywhere.
+    } catch (e) { console.error('[pos/settings] save failed:', (e as Error).message) }
     setSaving(false)
   }, [settings])
 

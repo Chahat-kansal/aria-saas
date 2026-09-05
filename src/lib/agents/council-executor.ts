@@ -14,7 +14,21 @@ async function logAutopilotAction(
   success: boolean
 ) {
   try {
-    await supabase.from('aria_autopilot_actions').insert({
+    // M13 PHASE 2 — THE ERROR IS NOW READ. It was not: Supabase RESOLVES with an error field rather
+    // than throwing, so the catch below only ever saw network faults and a rejected write went into
+    // a discarded field.
+    //
+    // AND THE ROW COUNT IS NOT EVIDENCE THIS WAS FAILING. proposal_id is non-null on 0 of 854
+    // aria_autopilot_actions rows, which reads like a write that never lands — and M11's run log
+    // said exactly that. IT IS WRONG. Attempting this exact insert against production inside a
+    // rolled-back DO block SUCCEEDS. The real reason the column is empty is that this function has
+    // NEVER BEEN CALLED: agent_council_proposals holds 2 rows ever, 0 executed, 0 with a
+    // council_decision, and aria_campaigns below has 0 rows. executeProposal has not run in
+    // production.
+    //
+    // So this is a LATENT defect, not the active cause — fixed because the day the executor does
+    // run is exactly the day nobody would notice it failing.
+    const { error: auditErr } = await supabase.from('aria_autopilot_actions').insert({
       action_type: proposal.proposal_type,
       business_id: proposal.business_id,
       agent_type: proposal.agent_type,
@@ -23,7 +37,8 @@ async function logAutopilotAction(
       outcome_data: outcome,
       executed_at: new Date().toISOString(),
     })
-  } catch (e) { console.error('[non-fatal]', e) }
+    if (auditErr) console.error('[council-executor] audit insert REJECTED:', proposal.proposal_type, auditErr.message)
+  } catch (e) { console.error('[council-executor] audit insert threw (non-fatal):', e) }
 }
 
 export async function executeProposal(
@@ -56,14 +71,17 @@ export async function executeProposal(
         const message = String(d.message ?? '')
         if (!message) return { success: false, outcome: {}, error: 'Missing campaign message' }
         const outcome = { customer_count: customerIds.length, message_preview: message.slice(0, 80), queued: true }
-        await supabase.from('aria_campaigns').insert({
+        // M13 phase 2 — this write discarded BOTH outcomes explicitly. A lost row means the
+        // owner is told this was queued when it was not.
+        const { error: campErr } = await supabase.from('aria_campaigns').insert({
           business_id: proposal.business_id,
           agent_type: proposal.agent_type,
           message,
           customer_ids: customerIds,
           status: 'queued',
           created_at: new Date().toISOString(),
-        }).then(() => {}, () => {})
+        })
+        if (campErr) console.error('[council-executor] camp insert REJECTED:', campErr.message)
         await logAutopilotAction(proposal, supabase, outcome, true)
         return { success: true, outcome }
       }
@@ -116,14 +134,17 @@ export async function executeProposal(
         const message = String(d.message ?? '')
         if (!message) return { success: false, outcome: {}, error: 'Missing message' }
         const outcome = { phone_last4: phone.slice(-4), message_preview: message.slice(0, 80), sms_queued: true }
-        await supabase.from('labour_optimisation_actions').insert({
+        // M13 phase 2 — this write discarded BOTH outcomes explicitly. A lost row means the
+        // owner is told this was queued when it was not.
+        const { error: labourErr } = await supabase.from('labour_optimisation_actions').insert({
           business_id: proposal.business_id,
           action_type: proposal.proposal_type,
           recipient_phone: phone,
           message,
           status: 'queued',
           created_at: new Date().toISOString(),
-        }).then(() => {}, () => {})
+        })
+        if (labourErr) console.error('[council-executor] labour insert REJECTED:', labourErr.message)
         await logAutopilotAction(proposal, supabase, outcome, true)
         return { success: true, outcome }
       }
@@ -165,13 +186,16 @@ export async function executeProposal(
         const phone = String(d.customer_phone ?? '')
         const message = String(d.message ?? '')
         const outcome = { phone_last4: phone.slice(-4), message_preview: message.slice(0, 80), queued: true }
-        await supabase.from('review_requests').insert({
+        // M13 phase 2 — this write discarded BOTH outcomes explicitly. A lost row means the
+        // owner is told this was queued when it was not.
+        const { error: reviewErr } = await supabase.from('review_requests').insert({
           business_id: proposal.business_id,
           customer_phone: phone,
           message,
           status: 'queued',
           created_at: new Date().toISOString(),
-        }).then(() => {}, () => {})
+        })
+        if (reviewErr) console.error('[council-executor] review insert REJECTED:', reviewErr.message)
         await logAutopilotAction(proposal, supabase, outcome, true)
         return { success: true, outcome }
       }
