@@ -1,7 +1,94 @@
 # RUN-M12 · ARIA STOPPED BEING ARIA
 
-5 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**5 September 2026 · autonomous run, RULE 20 · six phases, seven commits, zero parks. All pushed.**
+
+## THE ANSWER NOW, TO THE SAME MESSAGE
+
+```
+I don't have access to your business records right now — no sales data, stock levels, roster,
+bookings, or operational details are attached to this conversation.
+
+To help you tidy up before the weekend, I need to know what you're referring to. Are you asking
+about:
+- Your till/takings — reconciling sales, checking cash drawer, reviewing the week's revenue?
+- Your stock — cleaning up inventory records, checking for damaged items, organizing shelves?
+- Your roster — confirming weekend staff are scheduled, updating shift assignments?
+- Your bookings — reviewing reservations, cancellations, or appointment confirmations?
+```
+
+Against `Make the bed. Put dirty clothes in the wash.` **Same message, same lane, same model** — the
+model was never the problem.
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. It was not an omission. A lane deliberately stripped the business.** The prompt said *"You are
+Aria"* — the identity string was there. What it also said was *"Do NOT force a business angle or
+mention the owner's business."* 639 characters of general-assistant instructions, working exactly as
+designed. **The design was the defect**, which is why there was no missing `+ constitution` to add
+back.
+
+**2. There was no constitution to attach.** The brief said the council carries it. It does not —
+`IRON RULES` appears **zero times** in `council.ts`. Of the **seven lanes** that can answer in Ask
+Aria, one had the rules (typed inline in a route, importable by nothing), four had written their own
+partial version, and one had none. So phase 3 had to *extract* one before it could attach it.
+
+**3. No router ran.** The brief's fault #2 says judgement work was routed to Haiku. `routedModel` is
+computed 1,400 lines *after* the lane returns — **the lane hardcodes haiku**. And haiku was right:
+with the constitution attached it produced the answer above. Raising it to sonnet would have cost
+three times as much and fixed nothing.
+
+## WHAT CHANGED
+
+| | |
+|---|---|
+| **One assembly point** | `assembleAriaPrompt()` prepends the constitution unconditionally. No parameter removes it, and a test asserts no such parameter exists. |
+| **Enforced** | Canon rail guard rule 9 fails a build that writes a new Ask Aria prompt outside the rail. **Proven to fire — then it blocked my own push**, and test files were excluded (precision, not a loosening). |
+| **Moved, not rewritten** | The 4,168 characters were lifted **byte-for-byte by a script**; the grounded lane's prompt is character-for-character what it was. |
+| **It says when it cannot see** | Both lanes. And **zero is not absent** — Sip's A$0.00 today is a *fact*, and a predicate that read it as no-data would make Aria refuse every quiet morning. |
+| **Delegate reachable** | It existed — **on the wrong screen**. The welcome composer, where a fresh conversation starts, had none. |
+
+## WHAT NEEDS A PERSON
+
+1. ⚠️ **Nobody has clicked Delegate.** I have no authenticated browser session, and I substituted
+   nothing. `RUN-M12.md` phase 6 lists exactly what to click and the SQL that settles it. **A row in
+   `aria_plans` is the whole of that phase's VERIFY** — if it is not there, phase 6 failed whatever
+   the tests say.
+2. **Measured AI spend will rise ~4%** when this ships — `$0.4622 → $0.4824/biz/day`. **Not new
+   spend.** Two intent classifiers ran on every turn, twice, and were invisible to the ledger
+   because neither passed a `businessId`. The fourth unlogged path after AI-COST-AUDIT-1's three.
+3. **`sonnetExhausted → haiku`** silently downgrades judgement work when the budget runs out.
+   Invisible to the owner. A spend decision — named, not taken.
+4. **The classifiers still disagree.** `classifyIntent` said `smalltalk`, `classifyAriaIntent` said
+   `general`, and the lane fires on an **OR** of the two. That is now survivable rather than
+   destructive, because the lane carries the constitution — but it is still two classifiers and one
+   OR.
+5. **88 "You are Aria" persona strings across 68 files.** Other surfaces, out of scope, grandfathered
+   by the rail exactly as every rule in that guard grandfathers its predecessors.
+
+## MY OWN ERRORS THIS RUN
+
+Two published numbers were wrong and both are recorded where they were made, not quietly fixed:
+
+- **"781 characters"** for the general prompt — nothing I observed supported it; my captured output
+  was truncated before that line and I published it anyway. Re-measured twice: **639**.
+- **"six tokens short"** of haiku's cache minimum — my probe divided characters by 3.6, the file's
+  estimator divides by 4. The real gap is **381**. The wrong divisor would have invited exactly the
+  padding that file forbids.
+
+The claim that mattered was measured and stands: **1,089 input tokens, reproduced exactly.**
+
+| phase | outcome | commit |
+|---|---|---|
+| 1 · reproduce it | ✅ 1,089 tokens, same bedroom advice | `2ad49237` |
+| 2 · how many paths | ✅ seven lanes, no constitution | `b81bd40a` |
+| 3 · one assembly point | ✅ | `ffba10ce` + `ffac26a9` |
+| 4 · it must say when it cannot see | ✅ | `04ea4fa6` |
+| 5 · the router | ✅ no router ran | `5a92a290` |
+| 6 · make Delegate reachable | ✅ code · ⚠️ **unclicked** | `6785113d` |
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -26,7 +113,7 @@ one iteration, no tool ever called.
 
 ## PHASE 1 — REPRODUCED, NOT REASONED ABOUT ✅
 
-**Commit:** `<phase-1>` · report only, no code.
+**Commit:** `2ad49237` · report only, no code.
 
 ### The path
 
@@ -152,7 +239,7 @@ running twice per turn. **Not fixed here** — it is a cost-ledger change, and t
 
 ## PHASE 2 — HOW MANY PATHS BUILD AN ASK ARIA PROMPT? ✅
 
-**Commit:** `<phase-2>` · report only, no code.
+**Commit:** `b81bd40a` · report only, no code.
 
 ### ⚠️ THE BRIEF'S PREMISE ABOUT THE COUNCIL IS WRONG, AND IT MATTERS
 
@@ -326,7 +413,7 @@ accounts for the difference rather than drift in the lane's own text.
 
 ## PHASE 4 — IT MUST SAY WHEN IT CANNOT SEE ✅
 
-**Commit:** `<phase-4>` · `assemble.ts` (+`isGrounded`, +`groundingNotice`),
+**Commit:** `04ea4fa6` · `assemble.ts` (+`isGrounded`, +`groundingNotice`),
 `ask/route.ts` (main lane spliced), `cannot-see.test.ts` (new, 11 tests).
 
 ### ⚠️ ZERO IS NOT ABSENT — the distinction the whole phase turns on
@@ -377,7 +464,7 @@ difference, and on the route no longer splicing it.
 
 ## PHASE 5 — THE ROUTER ✅
 
-**Commit:** `<phase-5>` · `intent.ts`, `aria-intent.ts`, `ask/route.ts`, `routing.test.ts` (new,
+**Commit:** `5a92a290` · `intent.ts`, `aria-intent.ts`, `ask/route.ts`, `routing.test.ts` (new,
 7 tests), `ai-cost-model.json`.
 
 ### ⚠️ THE BRIEF'S FAULT #2 IS WRONG. NO ROUTER RAN.
@@ -446,7 +533,7 @@ is a real behaviour an owner would never see, but changing it is a spend decisio
 
 ## PHASE 6 — MAKE DELEGATE REACHABLE ✅
 
-**Commit:** `<phase-6>` · `AskAriaTransition.tsx`, `delegate-reachable.test.ts` (new, 7 tests).
+**Commit:** `6785113d` · `AskAriaTransition.tsx`, `delegate-reachable.test.ts` (new, 7 tests).
 
 ### ⚠️ IT WAS NOT UNREACHABLE — IT WAS ON THE WRONG SCREEN
 
