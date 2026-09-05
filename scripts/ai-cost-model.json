@@ -50,6 +50,17 @@
   ],
   "estimatedComponents": [
     {
+      "key": "m12_intent_classifiers_now_logged",
+      "label": "M12 phase 5 — the two Ask Aria intent classifiers, which ran unlogged on every turn",
+      "source": "measured",
+      "includeInProjection": true,
+      "usdPerBusinessPerDayLow": 0.0075,
+      "usdPerBusinessPerDayMid": 0.0187,
+      "usdPerBusinessPerDayHigh": 0.0374,
+      "basis": "NOT NEW SPEND — spend that was already happening and was invisible. callAnthropic gates its aria_ai_calls insert on `if (params.businessId)` and neither classifier passed one, so agent_key='intent_classifier' had ZERO rows ever across 412 ask_aria turns while running TWICE per turn. First real row after the fix: aria_intent_classifier, 1,469 input / 80 output on haiku = $0.00187 per call, so ~$0.0037 per Ask Aria turn for the pair. Low/mid/high = 2/5/10 turns per business per day. THE LEDGER'S MEASURED AI SPEND WILL RISE when this ships; the true figure did not change.",
+      "rateCaveat": "Haiku is in cost.ts PRICING, so this is a lookup. This is the FOURTH unlogged call path found after AI-COST-AUDIT-1's three — that audit's conclusion, that the true spend was unknowable after the fact, keeps being re-earned."
+    },
+    {
       "key": "m12_general_lane_constitution",
       "label": "M12 phase 3 — the Ask Aria general lane now carries the constitution",
       "source": "measured",

@@ -372,3 +372,72 @@ difference, and on the route no longer splicing it.
 - `isGrounded` keys off the business name alone. A context that loaded the name but failed every
   data query would read as grounded. That is the right call today — the iron rules already force
   abstention on a missing figure — but it is a judgement, not a proof.
+
+---
+
+## PHASE 5 — THE ROUTER ✅
+
+**Commit:** `<phase-5>` · `intent.ts`, `aria-intent.ts`, `ask/route.ts`, `routing.test.ts` (new,
+7 tests), `ai-cost-model.json`.
+
+### ⚠️ THE BRIEF'S FAULT #2 IS WRONG. NO ROUTER RAN.
+
+> *"Wrong model. Judgement work routed to Haiku…"*
+
+`routedModel` is computed at `route.ts:2272`. **The general fast-path returns at `:866`** — more than
+fourteen hundred lines earlier. The model was `haiku` because **the lane hardcodes it**, not because
+anything classified the request as simple. Establishing that from the code is what this phase was
+for, and it changes the remedy: **there was no misrouting to correct.**
+
+### The rule, for the record
+
+```
+intent.type === 'escalate'  → opus
+sonnetExhausted             → haiku      (budget spent, silently downgraded)
+needsSonnet                 → sonnet     (regex over the message + complexity/type signals)
+otherwise                   → haiku      ← the default
+```
+
+### Haiku was not the fault, and nothing was raised to hide a symptom
+
+With the constitution attached and grounding declared absent, **haiku produced the correct answer**
+for the failing message (phase 3). Raising this lane to sonnet would have cost roughly three times
+as much and fixed nothing, because the prompt was the fault. A test asserts the lane still asks for
+haiku, so a later "fix" by model escalation is a visible change rather than a quiet one.
+
+### What was actually broken here: the decision left no record
+
+- **The general lane logged nothing.** The `[ask-aria] route` line lives 1,400 lines downstream of
+  this lane's return, so a turn that took the fast-path left no trace of the decision at all. It now
+  logs its lane, model, grounding, both classifier verdicts, `routing_reason`, and **which**
+  classifier triggered it — because the condition is an OR and the two disagreed: `classifyIntent`
+  said `smalltalk`, `classifyAriaIntent` said `general`, and only the second is in the condition.
+- ⚠️ **Both classifier calls were invisible to the cost ledger.** `callAnthropic` gates its
+  `aria_ai_calls` insert on `if (params.businessId)` and **neither classifier passed one**, so
+  `agent_key='intent_classifier'` had **zero rows, ever**, across 412 `ask_aria` turns while running
+  **twice per turn**. Not a bug in the logger — a bug in the call sites. That is why this sprint had
+  to re-run the classifiers by hand to find out what chose the lane.
+
+**Fixed and verified live.** The first `aria_intent_classifier` row ever written:
+
+```
+agent_key aria_intent_classifier · haiku · role classify · 1,469 in / 80 out · success true
+```
+
+### Cost — RULE 11
+
+**This is not new spend. It is spend that was already happening and was invisible.**
+
+```
+1,469 in / 80 out on haiku = $0.00187 per call × 2 per turn ≈ $0.0037 per Ask Aria turn
+AI as-is $0.4637 → $0.4824/biz/day · total COGS $18.70 → $19.26/mo
+```
+
+**The ledger's measured AI spend will rise when this ships; the true figure did not change.** This is
+the **fourth** unlogged call path found after AI-COST-AUDIT-1's three — that audit's conclusion, that
+true spend was unknowable after the fact, keeps being re-earned.
+
+### PARKED
+
+`sonnetExhausted → haiku` silently downgrades judgement work when the sonnet budget runs out. That
+is a real behaviour an owner would never see, but changing it is a spend decision. Named, not taken.

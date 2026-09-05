@@ -112,7 +112,21 @@ function detectComparisonPeriodDeterministic(message: string): ComparisonPeriod 
   return null
 }
 
-export async function classifyAriaIntent(message: string): Promise<AriaIntent> {
+/**
+ * M12 PHASE 5 — businessId, so the call is LOGGED.
+ *
+ * `callAnthropic` gates its aria_ai_calls insert on `if (params.businessId)`. Neither classifier
+ * passed one, so `agent_key='intent_classifier'` had ZERO rows in the ledger — ever — across 412
+ * ask_aria turns, while running TWICE per turn. Not a bug in the logger: a bug in the call sites.
+ *
+ * This is why "why did that turn go to haiku?" had to be reconstructed by re-running the
+ * classifiers by hand instead of read off the ledger, and it is the fourth unlogged call path after
+ * AI-COST-AUDIT-1's three.
+ *
+ * ⚠️ MEASURED AI SPEND WILL RISE when this ships. Nothing new is being called — this records what
+ * was already happening and was undercounted.
+ */
+export async function classifyAriaIntent(message: string, businessId?: string): Promise<AriaIntent> {
   try {
     const result = await callAnthropic<AriaIntent>(
       {
@@ -122,6 +136,7 @@ export async function classifyAriaIntent(message: string): Promise<AriaIntent> {
         maxTokens: 200,
         agentKey: 'aria_intent_classifier',
         role: 'classify',
+        businessId,
       },
       FALLBACK,
     )
@@ -138,6 +153,7 @@ export async function classifyAriaIntent(message: string): Promise<AriaIntent> {
           maxTokens: 200,
           agentKey: 'aria_intent_classifier',
           role: 'classify',
+          businessId,
         })
         if (gemResult.raw) {
           const parsed = parseLLMJsonOr<AriaIntent>(gemResult.raw, FALLBACK, 'aria-intent/classify-gemini')

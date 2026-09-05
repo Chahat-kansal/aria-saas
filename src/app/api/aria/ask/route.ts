@@ -440,8 +440,11 @@ async function _POST(
 
   // 1. Classify intent + detect output format preference
   const [intent, ariaIntent] = await Promise.all([
-    classifyIntent(message),
-    classifyAriaIntent(message),
+    // M12 phase 5 — bid is passed so BOTH classifier calls are recorded in aria_ai_calls. They ran
+    // twice per turn, unlogged, across 412 turns; that is why this sprint had to re-run them by
+    // hand to find out what chose the general lane.
+    classifyIntent(message, undefined, bid),
+    classifyAriaIntent(message, bid),
   ])
   console.log('[ask-aria] ariaIntent', JSON.stringify({ intent_type: ariaIntent.intent_type, comparison_period: ariaIntent.comparison_period, routing_reason: ariaIntent.routing_reason }), 'bid', bid)
   const outputFmt = detectOutputFormat(message)
@@ -844,6 +847,27 @@ async function _POST(
      * competently as a helpful general assistant — do NOT force a business angle"). The lane was
      * duplicating that one line and discarding everything around it.
      */
+    // M12 PHASE 5 — SAY WHICH LANE TOOK THE TURN, AND WHY.
+    //
+    // The main lane logs `[ask-aria] route {...}` at :2283 — but it returns at :866, so a turn that
+    // took this fast-path left NO record of the decision at all. Reconstructing why the founder's
+    // turn went to haiku meant re-running both classifiers by hand. It now says so, including which
+    // classifier triggered it, because the condition is an OR and the two disagree in practice:
+    // on the failing message classifyIntent said 'smalltalk' while classifyAriaIntent said
+    // 'general', and only the second one is in this condition.
+    console.log('[ask-aria] route', {
+      bid,
+      lane: 'general-fast-path',
+      model: 'haiku',
+      grounded: false,
+      intent: intent.type,
+      aria_intent: ariaIntent.intent_type,
+      triggered_by: intent.type === 'general' ? 'classifyIntent'
+        : ariaIntent.intent_type === 'general' ? 'classifyAriaIntent:general'
+        : 'classifyAriaIntent:smalltalk',
+      routing_reason: ariaIntent.routing_reason,
+    })
+
     const generalSystemPrompt = assembleAriaPrompt({
       variant: 'lean',
       // NOT the business name: this lane runs BEFORE the business context is built (`ctx` does not
