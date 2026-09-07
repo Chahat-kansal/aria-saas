@@ -73,10 +73,24 @@ describe('M13 phase 3 · the gateway is a door, not a helper', () => {
     expect(GATEWAY_CODE).toContain('await callAnthropic<T>(')
   })
 
-  it('truncation comes from the SHARED rail, not a per-caller guess', () => {
+  // M13B PHASE 3 REWROTE THIS TEST, AND THE REASON MATTERS MORE THAN THE TEST.
+  //
+  // It used to assert `inspectTruncation(res)` — the literal call — and it passed, and the call was
+  // BLIND. `res` was callAnthropic's return value, which carried neither `stop_reason` nor `usage`,
+  // so the rail reported "no ceiling" on every model call in the product and the two ceiling
+  // outcomes were unreachable. This test asserted the import and the call spelling; it could not
+  // have noticed. Presence, not behaviour.
+  //
+  // Now it asserts what is actually handed to the rail. The behavioural proof — that the two
+  // outcomes are reachable at all — lives in gateway-truncation.test.ts, which runs the function.
+  it('truncation comes from the SHARED rail, and is fed fields that EXIST', () => {
     expect(GATEWAY_CODE).toContain("from '@/lib/aria/truncation'")
-    expect(GATEWAY_CODE).toContain('inspectTruncation(res)')
+    expect(GATEWAY_CODE).toContain('const check = inspectTruncation({')
+    expect(GATEWAY_CODE).toContain('stop_reason: res.stop_reason,')
+    expect(GATEWAY_CODE).toContain('usage: { input_tokens: res.input_tokens, output_tokens: res.output_tokens },')
     expect(GATEWAY_CODE).toContain('classifyOutcome(check, parsed)')
+    // The old spelling must NOT come back: it is the shape that read absent fields.
+    expect(GATEWAY_CODE).not.toContain('inspectTruncation(res)')
   })
 
   it('PROSE AND JSON ARE JUDGED SEPARATELY — the defect the live run caught', () => {

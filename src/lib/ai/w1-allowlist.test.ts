@@ -30,7 +30,11 @@ function allowlist(): string[] {
  */
 // M13 phase 5 lowered this from 177 to 176 by migrating src/lib/agents/proposal-council.ts onto the
 // gateway. THIS IS HOW THE NUMBER MOVES: migrate a file, delete its entry, lower the ceiling.
-const CEILING = 176
+//
+// M13B phase 3 lowered it again, 176 -> 175, by migrating src/lib/aria/answer-council.ts — the hero
+// answer path, the file M13 explicitly PARKED because the gateway had no retry contract yet. Phase 1
+// built the contract; this is it being spent. One file, one commit, one notch.
+const CEILING = 175
 
 describe('M13 phase 4 · the W1 allow-list ratchets down, never up', () => {
   it('ANTI-VACUITY — the list is real and was actually parsed', () => {

@@ -12,12 +12,12 @@
  * reason for the rename — there is deliberately no re-export shim, and `.eslintrc.json` blocks the
  * old specifier so it cannot come back by muscle memory.
  */
-import Anthropic from '@anthropic-ai/sdk'
+import { callModel } from '@/lib/ai/gateway'
 import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
 import { toAESTStart, startOfWeekAEST } from '@/lib/date-au'
-import { computeCostCentsWithCache } from './cost'
 import type { AskBlock } from './ask-types'
-import { inspectTruncation, classifyOutcome, truncationSignal, type ModelOutcome } from './truncation'
+import type { AgentKey } from './types'
+import { classifyOutcome, truncationSignal, type ModelOutcome } from './truncation'
 import { renderAdvisorSection, lostAdvisors, lostAdvisorRule } from './council-advisors'
 import { safeParseJSON } from './safe-json'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
@@ -91,26 +91,39 @@ export type CouncilOutput = CouncilResult & {
 }
 
 // ── Utilities ──────────────────────────────────────────────────────
-function callWithTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    fn(),
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(label + ' timed out after ' + ms + 'ms')), ms)
-    ),
-  ])
-}
+/**
+ * M13B PHASE 3 — callWithTimeout AND withBackoff ARE GONE, NOT REPLACED. Both now live behind the
+ * gateway, in `providers/anthropic.ts`, and this file no longer decides either.
+ *
+ * WHAT CHANGED, EXACTLY, AND IT IS SMALL:
+ *   retries      2 attempts, before and after. Identical transient test (/529|503|overload|
+ *                rate.?limit/i), identical "throw on anything else".
+ *   backoff      was min(800 * 2^n, 3000)ms; is min(1000 * 2^n, 4000)ms. A retry now waits 200ms
+ *                longer. That is the ENTIRE behavioural difference in the retry path, it was
+ *                measured against both implementations in M13B phase 1 before this move, and it
+ *                changes WHEN a retry happens, never WHETHER one does.
+ *   timeout      was a Promise.race in this file; is the provider's own `timeoutMs`, which also
+ *                ABORTS the underlying request instead of merely abandoning it. The old race left
+ *                the model generating and billing after this file had stopped listening.
+ *   retry safety NEW, and it could not be expressed here: a call that has already delivered a token
+ *                is never retried. This council does not stream, so it gains nothing today — but it
+ *                stops the next caller inheriting a duplicate-answer bug from a copied helper.
+ *
+ * The models, prompts, max_tokens (4000 advisors / 6000 synthesis) and temperatures (0.25 / 0.2)
+ * are unchanged. The temperature forwarding that makes that true was built in phase 1 for exactly
+ * this move.
+ */
 
-async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
-  let lastErr: Error | null = null
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try { return await fn() } catch (e) {
-      lastErr = e as Error
-      const isTransient = /529|503|overload|rate.?limit/i.test(lastErr.message ?? '')
-      if (!isTransient || attempt === maxAttempts - 1) throw lastErr
-      await new Promise(r => setTimeout(r, Math.min(800 * Math.pow(2, attempt), 3000)))
-    }
-  }
-  throw lastErr ?? new Error('All retries failed')
+/**
+ * The council names models by their full ids; the gateway names them by alias and maps back to the
+ * same ids. Checked against MODEL_IDS in the provider, so this is a lookup, not a guess — an
+ * unrecognised id would silently become haiku, so it throws instead.
+ */
+function modelAlias(modelId: string): 'haiku' | 'sonnet' | 'opus' {
+  if (modelId === 'claude-haiku-4-5-20251001') return 'haiku'
+  if (modelId === 'claude-sonnet-4-5-20250929') return 'sonnet'
+  if (modelId === 'claude-opus-4-5-20251101') return 'opus'
+  throw new Error('[council] no gateway alias for model id ' + modelId)
 }
 
 // S9 PHASE 4 (#4) — safeParseJSON moved to ./safe-json. THIS implementation is the one that
@@ -118,58 +131,28 @@ async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T>
 // engine. context-brain.ts's near-copy was proven equivalent over a corpus first (safe-json.test.ts)
 // rather than assumed, then deleted. Nothing about the behaviour here changed.
 
-async function logAICall(params: {
-  agent_key: string; model_id: string; provider: string
-  input_tokens: number; output_tokens: number; success: boolean
-  business_id: string; error_message?: string; request_summary?: string
-}) {
-  try {
-    // COUNCIL-LOG-FIX-1: role was 'council' — NOT a valid AgentRole. supabaseAdmin bypasses RLS, so the
-    // only thing that can reject a service-role insert is a CHECK constraint; 'council' (and the cache-hit
-    // 'cache') are the only roles in the codebase outside the AgentRole set every WORKING logger uses
-    // ('guard','validator','chat',…). Supabase .insert() returns {error} WITHOUT throwing, so the old
-    // try/catch never fired and the rejection was invisible (also why LOGGING-FIX-1's fallback never ran).
-    // Fix: valid role ('analysis' — council synthesis IS analysis) + CHECK the returned error.
-    // AI-COST-2 — this insert previously never computed cost_usd_cents at all, so every
-    // council row landed at $0 regardless of real token volume (AI-COST-AUDIT-1 §3.1: ~$1.94
-    // of real Sip spend was invisible to the cost ledger this way). Same pricing fn every
-    // other logger uses — no cache read/write tracked in this file, so those default to 0.
-    const cost = computeCostCentsWithCache(params.model_id, params.input_tokens, params.output_tokens)
-    const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
-      business_id: params.business_id,
-      agent_key: params.agent_key,
-      provider: params.provider,
-      model_id: params.model_id,
-      role: 'analysis',
-      input_tokens: params.input_tokens,
-      output_tokens: params.output_tokens,
-      cost_usd_cents: cost,
-      success: params.success,
-      error_message: params.error_message ?? null,
-      request_summary: params.request_summary ?? null,
-    })
-    if (error) {
-      console.error('[council-log] aria_ai_calls insert REJECTED for agent_key=' + params.agent_key + ':', error.message)
-      // Functional fallback (the LOGGING-FIX-1 version was dead — .insert() returns {error}, never throws,
-      // so its catch never ran). role='other' + provider='other' are both in the verified pg_constraint
-      // CHECK lists (1083 production rows on role='other' prove it lands; 'guard'/'internal' are NOT in the
-      // lists — which is why sql_guard/summarizer_guard never wrote either). Carries the exact rejection
-      // reason into the DB so it's queryable without Vercel log access.
-      await supabaseAdmin.from('aria_ai_calls').insert({
-        business_id: params.business_id,
-        agent_key: 'council_log_failure',
-        provider: 'other',
-        role: 'other',
-        input_tokens: 0, output_tokens: 0, success: false,
-        request_summary: params.agent_key,
-        learning_signal: ('council_log_rejected:' + error.message).slice(0, 120),
-      })
-    }
-  } catch (e) {
-    // genuine network/throw path (kept — Supabase normally returns {error} rather than throwing)
-    console.error('[council-log] aria_ai_calls insert threw for agent_key=' + params.agent_key + ':', (e as Error).message)
-  }
-}
+/**
+ * M13B PHASE 3 — THIS FILE'S OWN `logAICall` IS DELETED. The gateway logs once, at the boundary.
+ *
+ * Nothing it did is lost. Its two hard-won corrections were carried, not discarded:
+ *   COUNCIL-LOG-FIX-1  a valid AgentRole plus CHECKING the returned error — the provider already
+ *                      does both (LOGGING-AUDIT-3 Part 3).
+ *   the failure row    on a REJECTED insert it wrote a `council_log_failure` row carrying the
+ *                      rejection reason, so a CHECK violation stayed queryable without Vercel log
+ *                      access. That was the one thing the provider did NOT do, so it was LIFTED
+ *                      INTO THE PROVIDER in this same commit as `ai_log_failure` — every caller now
+ *                      gets it, not just the one that thought of it.
+ *   AI-COST-2          cost_usd_cents computed with the shared pricing fn: the provider does this
+ *                      too, and better — it also accounts for cache read/write tokens, which this
+ *                      file explicitly defaulted to 0.
+ *
+ * ONE MEANING DID CHANGE, AND IT IS RECORDED RATHER THAN QUIETLY ACCEPTED. `aria_ai_calls.success`
+ * on a `council_*` row used to mean "the JSON parsed". Through the gateway it means "the model call
+ * succeeded" — the same thing it means for every other agent key in the table. A parse failure on a
+ * healthy call is no longer a row that says the call failed. The parse outcome is not lost: a
+ * `council_outcome` row is written whenever an advisor's structure does not survive, alongside the
+ * `council_ceiling` row M8 built. Forward-only; historical rows keep their old meaning.
+ */
 
 // ── Learning Context (LRN-1) ───────────────────────────────────────
 // Fetches last 5 resolved learning signals for this business and formats a
@@ -286,7 +269,6 @@ Return ONLY valid JSON:
 
 // ── Brain Runner ───────────────────────────────────────────────────
 async function callBrain(
-  client: Anthropic,
   model: string,
   systemPrompt: string,
   userPrompt: string,
@@ -296,9 +278,14 @@ async function callBrain(
   requestSummary?: string,
 ): Promise<BrainOutput> {
   try {
-    const res = await callWithTimeout(
-      () => withBackoff(() => client.messages.create({
-        model,
+    const res = await callModel(
+      {
+        businessId,
+        agentKey: ('council_' + role) as AgentKey,
+        // 'analysis' — council synthesis IS analysis. The same valid AgentRole COUNCIL-LOG-FIX-1
+        // established after 'council' was found to be rejected by the CHECK constraint.
+        role: 'analysis',
+        model: modelAlias(model),
         // S8 PHASE 1 — WAS 1200, AND THE DISTRIBUTION WAS VISIBLY CLIPPED AGAINST IT.
         // Measured over 1,016 real advisor calls (billing-outage rows excluded): avg 896,
         // p50 878, p90 1160, p99 1200, max 1200, and 8% pinned exactly at the cap. A p90 at
@@ -310,27 +297,43 @@ async function callBrain(
         //
         // 4000 is ~4.5x the median, so it costs nothing for the 92% that never approach it —
         // max_tokens is a cap, not a reservation, and output is billed on what is produced.
-        max_tokens: 4000,
+        maxTokens: 4000,
         temperature: 0.25,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      })),
-      timeoutMs,
-      'council brain ' + role
+        systemPrompt,
+        userPrompt,
+        timeoutMs,
+        requestSummary,
+      },
     )
-    const text = res.content.filter((b: {type:string}) => b.type === 'text').map((b: {type:string,text?:string}) => (b as {text:string}).text).join('')
+    const text = res.raw
     const parsed = safeParseJSON(text)
     // S8 PHASE 1 — the two facts together, never either alone. `res.stop_reason` is the model's
     // own account of why it stopped; `!!parsed` is whether OUR parser survived it. Only the pair
     // distinguishes "ran out of room and lost the structure" from "ran out of room having already
     // finished it" — and 69 of the 81 historical ceiling-hits are the second kind.
-    const trunc = inspectTruncation(res)
+    // The RAW facts from the gateway, then classified HERE against safeParseJSON — deliberately not
+    // taking the gateway's own `outcome`. The gateway judges a prose reply on whether any text came
+    // back; this council judges an advisor on whether its JSON survived, which is a stricter and
+    // different question. Taking the gateway's answer would have quietly widened what counts as a
+    // working advisor.
+    //
+    // ⚠️ `res.truncation` only carries real values because phase 3 made the provider return
+    // `stop_reason` and `usage`. Before that the gateway's check read fields that were not on the
+    // object and reported "no ceiling" every single time — proven by running it. Migrating onto the
+    // gateway as it stood would have silently deleted M8's ceiling detection from the hero path.
+    const trunc = res.truncation
     const outcome = classifyOutcome(trunc, !!parsed)
-    await logAICall({
-      agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
-      input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
-      success: !!parsed, business_id: businessId, request_summary: requestSummary,
-    })
+    // The ledger row is the gateway's now — one per call, written at the boundary. What is NOT the
+    // gateway's is this council's own reading of whether the structure survived, so that is what
+    // gets its own row, and only when the answer is bad news.
+    if (!parsed) {
+      await logAICallSafe({
+        business_id: businessId, agent_key: 'council_outcome', provider: 'other', role: 'other',
+        success: false, request_summary: 'council_' + role,
+        response_summary: 'outcome=' + outcome + ' stop_reason=' + (trunc.stopReason ?? 'null'),
+        learning_signal: 'council_unparsed:' + role,
+      })
+    }
     if (trunc.hitCeiling) {
       // Queryable without Vercel log access — the same reason council's log-failure fallback
       // writes its rejection reason into a row rather than console.error alone.
@@ -357,10 +360,14 @@ async function callBrain(
       outcome,
     }
   } catch (e) {
-    await logAICall({
-      agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
-      input_tokens: 0, output_tokens: 0, success: false, business_id: businessId,
-      error_message: (e as Error).message, request_summary: requestSummary,
+    // The gateway does not throw for a failed model call — the provider catches it and returns
+    // success:false, with its own ledger row already written. This catch is now for the genuine
+    // throws: a missing businessId, or an unrecognised model id from modelAlias.
+    await logAICallSafe({
+      business_id: businessId, agent_key: 'council_outcome', provider: 'other', role: 'other',
+      success: false, request_summary: 'council_' + role,
+      response_summary: (e as Error).message.slice(0, 120),
+      learning_signal: 'council_threw:' + role,
     })
     // An exception is not a truncation. 1,904 of the ~1,920 historical exceptions on these four
     // agent keys were "credit balance is too low" — a billing condition, not a budget one — and
@@ -775,7 +782,6 @@ export async function runAriaCouncil(
   question?: string,
 ): Promise<CouncilOutput | null> {
   const start = Date.now()
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
   const HAIKU = 'claude-haiku-4-5-20251001'
 
@@ -1047,10 +1053,10 @@ export async function runAriaCouncil(
 
   // Run all 6 in parallel — 4 brains + bizInfo fetch + gemini chain
   const [growth, risk, strategy, context, ctxOutput, bizInfo] = await Promise.all([
-    callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion)   + growthSkills.text,   userPrompt, 'growth',   businessId, 18000, activeQuestion.slice(0, 100)),
-    callBrain(client, HAIKU, buildRiskPrompt(activeQuestion)     + riskSkills.text,     userPrompt, 'risk',     businessId, 18000, activeQuestion.slice(0, 100)),
-    callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion) + strategySkills.text, userPrompt, 'strategy', businessId, 18000, activeQuestion.slice(0, 100)),
-    callBrain(client, HAIKU, CONTEXT_PROMPT                      + contextSkills.text,  userPrompt, 'context',  businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(HAIKU, buildGrowthPrompt(activeQuestion)   + growthSkills.text,   userPrompt, 'growth',   businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(HAIKU, buildRiskPrompt(activeQuestion)     + riskSkills.text,     userPrompt, 'risk',     businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(HAIKU, buildStrategyPrompt(activeQuestion) + strategySkills.text, userPrompt, 'strategy', businessId, 18000, activeQuestion.slice(0, 100)),
+    callBrain(HAIKU, CONTEXT_PROMPT                      + contextSkills.text,  userPrompt, 'context',  businessId, 18000, activeQuestion.slice(0, 100)),
     geminiPromise,
     bizInfoPromise,
   ])
@@ -1218,18 +1224,23 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
   )
 
   try {
-    const res = await callWithTimeout(
-      () => withBackoff(() => client.messages.create({
-        model: synthesisModel,
-        max_tokens: 6000,
+    const res = await callModel(
+      {
+        businessId,
+        agentKey: 'council_synthesis',
+        role: 'analysis',
+        // Passed through UNCHANGED by the gateway — classifyQuestionComplexity still chooses this,
+        // and the wall deliberately never re-routes. That is M14's job, not this commit's.
+        model: modelAlias(synthesisModel),
+        maxTokens: 6000,
         temperature: 0.2,
-        system: synthesisSystemPrompt,
-        messages: [{ role: 'user', content: synthesisInput }],
-      })),
-      45000,
-      'council synthesis'
+        systemPrompt: synthesisSystemPrompt,
+        userPrompt: synthesisInput,
+        timeoutMs: 45000,
+        requestSummary: activeQuestion.slice(0, 100),
+      },
     )
-    const text = res.content.filter((b: {type:string}) => b.type === 'text').map((b: {type:string,text?:string}) => (b as {text:string}).text).join('')
+    const text = res.raw
     const parsed = safeParseJSON(text)
 
     // S8 PHASE 1 — DETECTION ONLY. THE SYNTHESIS BUDGET IS NOT CHANGED, AND THAT IS A MEASURED
@@ -1237,7 +1248,7 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
     // failures. Nothing in the data says 6000 is tight, so nothing here moves it — the sprint's
     // own rule is that observed output beats static analysis. But detection costs nothing and the
     // day this DOES clip, it will say so instead of silently returning half an answer.
-    const synthTrunc = inspectTruncation(res)
+    const synthTrunc = res.truncation
     const synthOutcome = classifyOutcome(synthTrunc, !!parsed)
     if (synthTrunc.hitCeiling) {
       await logAICallSafe({
@@ -1251,11 +1262,16 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
         + ' output_tokens=' + (synthTrunc.outputTokens ?? '?'))
     }
 
-    await logAICall({
-      agent_key: 'council_synthesis', model_id: synthesisModel, provider: 'anthropic',
-      input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
-      success: !!parsed, business_id: businessId, request_summary: activeQuestion.slice(0, 100),
-    })
+    // Ledger row: the gateway's, written at the boundary. This one records only what the gateway
+    // cannot know — whether THIS council's parser survived the reply.
+    if (!parsed) {
+      await logAICallSafe({
+        business_id: businessId, agent_key: 'council_outcome', provider: 'other', role: 'other',
+        success: false, request_summary: 'council_synthesis',
+        response_summary: 'outcome=' + synthOutcome + ' stop_reason=' + (synthTrunc.stopReason ?? 'null'),
+        learning_signal: 'council_unparsed:synthesis',
+      })
+    }
 
     if (!parsed) {
       return {
@@ -1346,10 +1362,11 @@ ${conflictBlock ? conflictBlock + '\n' : ''}MODE: ${mode}
   } catch (e) {
     // LOGGING-FIX-1 Part 2 (LOGGING-AUDIT-1): this fallback previously returned a CouncilOutput
     // with ZERO synthesis logging — a council answer could reach the user with no synthesis row
-    await logAICall({
-      agent_key: 'council_synthesis', model_id: synthesisModel, provider: 'anthropic',
-      input_tokens: 0, output_tokens: 0, success: false, business_id: businessId,
-      error_message: (e as Error).message.slice(0, 200), request_summary: activeQuestion.slice(0, 100),
+    await logAICallSafe({
+      business_id: businessId, agent_key: 'council_outcome', provider: 'other', role: 'other',
+      success: false, request_summary: 'council_synthesis',
+      response_summary: (e as Error).message.slice(0, 120),
+      learning_signal: 'council_threw:synthesis',
     })
     // Synthesis failed — build fallback from brain outputs directly
     const fallbackBriefing = [

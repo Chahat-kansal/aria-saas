@@ -36,31 +36,36 @@ const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\
 describe('S8 phase 1 · the token-ceiling rail', () => {
   const council = read('src/lib/aria/answer-council.ts')
 
+  // M13B PHASE 3 — the council moved behind the gateway, so its budget is now spelled `maxTokens`
+  // (the gateway's field) rather than `max_tokens` (the SDK's). The ceiling itself did not move and
+  // must not: 4000 is S8 phase 1's measured floor. Only the spelling the scan looks for changed.
   it('the council advisor ceiling is at or above the measured floor', () => {
     // 1,016 real calls: avg 896, p50 878, p90 1160, p99 1200, 8% pinned exactly at 1200.
     // A p90 sitting at 97% of the cap is a clipped distribution, not a comfortable one.
-    const m = strip(council).match(/max_tokens:\s*(\d+),/)
+    const m = strip(council).match(/maxTokens:\s*(\d+),/)
     expect(m, 'no advisor max_tokens literal found — the scan is broken, not the code').toBeTruthy()
     const ceiling = Number(m![1])
     expect(ceiling, 'advisor ceiling regressed toward the clipped 1200').toBeGreaterThanOrEqual(4000)
   })
 
-  it('THE RAIL — every Anthropic call in council.ts inspects its own stop_reason', () => {
-    // The property, not the instance: a fifth advisor added tomorrow without this is caught.
+  // M13B PHASE 3 — SAME RAIL, NEW CALL SHAPE. The council no longer calls `messages.create` at all;
+  // it calls the gateway, which returns the truncation facts alongside the answer. So the scan
+  // walks `callModel(` sites and requires each to read `res.truncation`.
+  //
+  // The property is unchanged and still the point: a fifth advisor added tomorrow that cannot
+  // notice its own truncation is caught. What the migration removed was the council's ability to
+  // get this WRONG — the check now cannot be forgotten at a call site without this going red.
+  it('THE RAIL — every model call in the answer council reads its own truncation', () => {
     const src = strip(council)
-    const sites = [...src.matchAll(/messages\.create\(\{/g)]
-    // ANTI-VACUITY. A scan that matches nothing passes this test while proving nothing — the
-    // failure this repo produces most often in its own tooling. Two sites exist today: the shared
-    // advisor runner and synthesis.
+    const sites = [...src.matchAll(/await callModel\(/g)]
+    // ANTI-VACUITY. A scan that matches nothing passes while proving nothing — the failure this
+    // repo produces most often in its own tooling. Two sites today: advisors and synthesis.
     expect(sites.length, 'the call-site scan found nothing').toBeGreaterThanOrEqual(2)
 
     const unchecked: string[] = []
     for (const site of sites) {
-      // The response is inspected within the same block that reads `res.content`. 3,000 chars is
-      // comfortably past the longest of the two, and short enough that a check in a DIFFERENT
-      // function cannot be mistaken for this one's.
       const after = src.slice(site.index ?? 0, (site.index ?? 0) + 3000)
-      if (!after.includes('inspectTruncation(res)')) {
+      if (!after.includes('res.truncation')) {
         unchecked.push(src.slice(Math.max(0, (site.index ?? 0) - 90), site.index ?? 0).trim().slice(-70))
       }
     }
@@ -142,20 +147,20 @@ describe('S8 phase 1 · the token-ceiling rail', () => {
   })
 
   it('MUTATION PROBE — restoring the 1200 ceiling makes the floor assertion red', () => {
-    const mutated = strip(council).replace(/max_tokens:\s*4000,/, 'max_tokens: 1200,')
+    const mutated = strip(council).replace(/maxTokens:\s*4000,/, 'maxTokens: 1200,')
     expect(mutated, 'the mutation did not apply — the probe proves nothing').not.toBe(strip(council))
-    const ceiling = Number(mutated.match(/max_tokens:\s*(\d+),/)![1])
+    const ceiling = Number(mutated.match(/maxTokens:\s*(\d+),/)![1])
     expect(ceiling).toBe(1200)
     expect(ceiling).toBeLessThan(4000)   // exactly what the first assertion would report
   })
 
-  it('MUTATION PROBE — removing a stop_reason check makes the rail red', () => {
+  it('MUTATION PROBE — removing a truncation read makes the rail red', () => {
     const src = strip(council)
-    const mutated = src.replace('inspectTruncation(res)', 'noopTruncation(res)')
-    expect(mutated).not.toBe(src)
-    const sites = [...mutated.matchAll(/messages\.create\(\{/g)]
+    const mutated = src.replace('res.truncation', 'res.noTruncation')
+    expect(mutated, 'the mutation did not apply — the probe proves nothing').not.toBe(src)
+    const sites = [...mutated.matchAll(/await callModel\(/g)]
     const unchecked = sites.filter(s =>
-      !mutated.slice(s.index ?? 0, (s.index ?? 0) + 3000).includes('inspectTruncation(res)'))
+      !mutated.slice(s.index ?? 0, (s.index ?? 0) + 3000).includes('res.truncation'))
     expect(unchecked.length, 'the rail would not have noticed the removal').toBeGreaterThan(0)
   })
 })

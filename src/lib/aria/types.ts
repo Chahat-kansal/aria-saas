@@ -23,6 +23,14 @@ export type AgentKey =
   // thing spent the money. `aria_ai_calls.agent_key` has no CHECK constraint (verified — the M12
   // and M13 probe keys inserted cleanly), so this is a code-side convention, not DDL.
   | 'agents_council'
+  // M13B phase 3 — the ANSWER council's five calls, migrated onto the gateway. These agent_key
+  // values are NOT new: they have been written to aria_ai_calls by the council's own logger since
+  // COUNCIL-LOG-FIX-1, and the union is only now catching up with production. Keeping the exact
+  // strings is the point — renaming them would orphan every historical row and silently reset the
+  // cost history for the hero answer path. `aria_ai_calls.agent_key` has no CHECK constraint
+  // (verified in M13), so this is a code-side convention, not DDL.
+  | 'council_growth' | 'council_risk' | 'council_strategy' | 'council_context'
+  | 'council_synthesis'
 
 export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document' | 'forecast'
 

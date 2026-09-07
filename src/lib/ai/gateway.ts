@@ -3,7 +3,7 @@ import {
   callAnthropicWithTools,
   type ToolLoopResult,
 } from '@/lib/aria/providers/anthropic'
-import { inspectTruncation, classifyOutcome, type ModelOutcome } from '@/lib/aria/truncation'
+import { inspectTruncation, classifyOutcome, type ModelOutcome, type TruncationCheck } from '@/lib/aria/truncation'
 
 /**
  * WALL 1 (M13 phase 3) — THE MODEL GATEWAY. THE ONLY DOOR.
@@ -123,6 +123,19 @@ export interface AriaModelResult<T = Record<string, unknown>> {
    */
   success: boolean
   thinking_tokens: number
+  /**
+   * M13B PHASE 3 — THE RAW TRUNCATION FACTS, not only the classified outcome.
+   *
+   * The answer council does not just want to know THAT it hit a ceiling; M8's disclosure writes the
+   * verbatim `stop_reason` and the output-token count into a `council_ceiling` row so the budget
+   * can be argued about later from data. A gateway that returned only `outcome` would have forced
+   * that lane to keep its own client to keep its own disclosure — which is precisely how a door
+   * ends up with people walking around it.
+   */
+  truncation: TruncationCheck
+  /** Carried so a caller that logged its own token counts does not lose them at the boundary. */
+  input_tokens: number
+  output_tokens: number
 }
 
 /**
@@ -177,6 +190,11 @@ export async function callModel<T = Record<string, unknown>>(
       error_message: res.error_message ?? null,
       success: res.success,
       thinking_tokens: res.thinking_tokens,
+      // Same honesty as the outcome above: the tool loop does not surface a per-turn stop_reason,
+      // so this says "not known here" rather than fabricating a clean one.
+      truncation: { hitCeiling: false, stopReason: null, outputTokens: null },
+      input_tokens: 0,
+      output_tokens: 0,
     }
   }
 
@@ -190,6 +208,11 @@ export async function callModel<T = Record<string, unknown>>(
       businessId: req.businessId,
       agentKey: req.agentKey,
       role: req.role,
+      // M13B phase 3 — both were accepted by the gateway and then dropped on this path. The answer
+      // council needs each: it logs a per-call request summary, and it runs its advisors under an
+      // explicit per-role timeout rather than the provider's 30s default.
+      requestSummary: req.requestSummary,
+      timeoutMs: req.timeoutMs,
     },
     (fallback ?? null) as T,
   )
@@ -202,7 +225,16 @@ export async function callModel<T = Record<string, unknown>>(
   // `unparseable`, because no JSON came back — from a call that never asked for any. Caught by
   // running it rather than reading it. A caller that supplied a `fallback` wanted JSON and is judged
   // on whether it got some; a caller that did not is judged on whether it got any text at all.
-  const check = inspectTruncation(res)
+  // M13B PHASE 3 — THIS NOW READS REAL FIELDS. It did not before, and the difference was not
+  // visible in the code: `res` carried neither `stop_reason` nor `usage`, so `inspectTruncation`
+  // returned `{hitCeiling:false, stopReason:null, outputTokens:null}` on EVERY call and the two
+  // ceiling outcomes were unreachable. Proven by running it against the shape the provider actually
+  // returned, not by reading. The provider now returns both, and this reshapes them into what the
+  // shared rail expects rather than duplicating its logic here.
+  const check = inspectTruncation({
+    stop_reason: res.stop_reason,
+    usage: { input_tokens: res.input_tokens, output_tokens: res.output_tokens },
+  })
   const wantedJson = fallback !== undefined
   const parsed = wantedJson
     ? (res.data !== null && res.data !== undefined && res.data !== fallback)
@@ -223,5 +255,8 @@ export async function callModel<T = Record<string, unknown>>(
     success: res.success,
     // The plain path does not run a tool loop, so no extended thinking is requested or spent.
     thinking_tokens: 0,
+    truncation: check,
+    input_tokens: res.input_tokens,
+    output_tokens: res.output_tokens,
   }
 }

@@ -75,13 +75,17 @@ describe('the gateway rail — no NEW direct provider SDK', () => {
     expect(GUARD).toMatch(/model-router\.ts/)
   })
 
-  it('the grandfather list holds the 174 pre-existing sites — the adoption number to shrink', () => {
+  // M13B phase 3 — WAS 174. The answer council was removed from BOTH allow-lists when it moved
+  // behind the gateway, so this number and the W1 ceiling (176 -> 175) each dropped by one, in the
+  // same commit as the migration. That is the ratchet doing its job: the count is not decoration,
+  // it is the thing a migration is measured by.
+  it('the grandfather list holds the 173 pre-existing sites — the adoption number to shrink', () => {
     const i = GUARD.indexOf('const MODEL_SDK_ALLOWLIST = [')
     const j = GUARD.indexOf('\n]', i)
     const n = (GUARD.slice(i, j).match(/^  'src\//gm) ?? []).length
     // Counted against a closing bracket on its own line — a naive indexOf(']') lands inside the
     // first [id] route path and reports 1 (the MS10 measurement bug, memorialised).
-    expect(n).toBe(174)
+    expect(n).toBe(173)
   })
 
   it('the gateway itself is on the list — it MUST instantiate SDKs; that is its job', () => {

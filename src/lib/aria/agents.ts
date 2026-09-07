@@ -79,6 +79,16 @@ Return ONLY valid JSON. No prose. No code fences.`
     // (lib/agents/proposal-council.ts), which carries its own prompt and never reaches this map. Present
     // only because the Record is exhaustive over AgentKey; an empty schema is the honest entry.
     agents_council: '',
+    // M13B phase 3 — the ANSWER council's four advisors and its synthesis, migrated onto the
+    // gateway. Each carries its own hand-built prompt (buildBrainPrompt / buildSynthesisPrompt) and
+    // never reaches this map; the entries exist only because the Record is exhaustive over
+    // AgentKey. An empty schema is the honest value — inventing one here would suggest a routing
+    // path that does not exist.
+    council_growth: '',
+    council_risk: '',
+    council_strategy: '',
+    council_context: '',
+    council_synthesis: '',
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -131,6 +141,15 @@ export async function runAgent(
     // (it passes its own model to the gateway), so the value records the truth rather than
     // setting it.
     agents_council: 'sonnet',
+    // M13B phase 3 — RECORDS what the answer council asks for; it does not set it. The advisors run
+    // on the caller's chosen model and the synthesis escalates haiku -> sonnet through
+    // classifyQuestionComplexity, which this map has no part in. Both are passed to the gateway
+    // explicitly and passed through unchanged.
+    council_growth: 'haiku',
+    council_risk: 'haiku',
+    council_strategy: 'haiku',
+    council_context: 'haiku',
+    council_synthesis: 'haiku',
   }
 
   const result = await callAnthropic<Recommendation>({

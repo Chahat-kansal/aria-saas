@@ -25,6 +25,14 @@ function agentToCategory(key: AgentKey): string {
     counterfactual: 'sales',
     // The council chair coordinates every domain rather than belonging to one.
     agents_council: 'operations',
+    // M13B phase 3 — the answer council's advisors are named for the LENS they apply, not a domain.
+    // Growth and strategy read as sales; risk and context read as operations. The synthesis speaks
+    // for all of them, so it takes the same coordinating value the chair does.
+    council_growth: 'sales',
+    council_risk: 'operations',
+    council_strategy: 'sales',
+    council_context: 'operations',
+    council_synthesis: 'operations',
   }
   return map[key] ?? 'sales'
 }

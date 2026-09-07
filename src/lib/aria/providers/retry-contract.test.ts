@@ -120,14 +120,21 @@ describe('M13B phase 1 · the gate is actually wired to the stream', () => {
 })
 
 describe('M13B phase 1 · it matches what the answer council does today', () => {
-  it('the council backoff this must replace has the SAME shape', () => {
-    // Read before writing, as the brief required. The council's own withBackoff: 2 attempts, the
-    // identical transient regex, throw on anything else. It differs ONLY in the delay constants
-    // (800/3000 against the provider's 1000/4000) — so migrating it in phase 3 changes when a
-    // retry happens by 200ms, and changes nothing about whether one happens.
-    expect(COUNCIL).toContain('maxAttempts = 2')
-    expect(COUNCIL).toMatch(/529\|503\|overload\|rate\.\?limit/)
-    expect(COUNCIL).toContain('Math.min(800 * Math.pow(2, attempt), 3000)')
+  // M13B PHASE 3 REWROTE THIS. Phase 1 asserted the council's OWN withBackoff had the same shape
+  // as the provider's, because that comparison is what made phase 3 safe to attempt: 2 attempts
+  // both sides, the identical transient regex, throw on anything else, differing ONLY in the delay
+  // constants (800/3000 against 1000/4000). Phase 3 then spent that finding — the council's copy is
+  // deleted and it uses the provider's.
+  //
+  // The assertion is inverted rather than removed: what phase 1 proved equivalent, phase 3 proves
+  // absent. A test that still looked for the council's backoff would now be asserting the bug.
+  it('the council backoff phase 1 measured is GONE — it uses the provider now', () => {
+    expect(COUNCIL).not.toContain('Math.min(800 * Math.pow(2, attempt), 3000)')
+    expect(COUNCIL).not.toContain('async function withBackoff')
+    expect(COUNCIL).not.toMatch(/529\|503\|overload\|rate\.\?limit/)
+    expect(COUNCIL).toContain("import { callModel } from '@/lib/ai/gateway'")
+    // The single surviving definition is the provider's, and it is the one phase 1 documented.
+    expect(PROVIDER).toContain('Math.min(1000 * Math.pow(2, attempt), 4000)')
   })
 
   it('temperature is now carried, so the council keeps its 0.25 and 0.2', () => {

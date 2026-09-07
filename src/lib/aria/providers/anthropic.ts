@@ -30,6 +30,13 @@ interface CallParams {
    * plumbing, which the decision table forbids.
    */
   temperature?: number
+  /**
+   * M13B phase 3 — ACCEPTED AND LOGGED. The gateway already took a `requestSummary` and had
+   * nowhere to put it on the plain path, so it was silently dropped. The answer council logged one
+   * per advisor call ("what was this call for"), and migrating it behind the wall would have lost
+   * that. It lands in `aria_ai_calls.request_summary`, the column that already existed for it.
+   */
+  requestSummary?: string
   businessId?: string
   agentKey: AgentKey
   role: AgentRole
@@ -131,7 +138,7 @@ async function tryGeminiFallback<T>(
   params: CallParams,
   fallback: T,
   incidentId: string | undefined,
-): Promise<{ data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean; provider: 'google' | 'none' }> {
+): Promise<{ data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean; provider: 'google' | 'none'; stop_reason: string | null; input_tokens: number; output_tokens: number }> {
   const g = await callGemini({
     systemPrompt: params.systemPrompt,
     userPrompt: params.userPrompt,
@@ -141,27 +148,52 @@ async function tryGeminiFallback<T>(
     role: params.role,
   })
   if (!g.success) {
-    return { data: fallback, raw: '', cost_cents: 0, latency_ms: g.latency_ms, success: false, provider: 'none' }
+    return { data: fallback, raw: '', cost_cents: 0, latency_ms: g.latency_ms, success: false, provider: 'none', stop_reason: null, input_tokens: 0, output_tokens: 0 }
   }
   if (incidentId) void recordAnthropicFallbackProvider(incidentId, 'google')
   const data = parseLLMJsonOr<T>(g.raw, fallback, `aria/gemini-fallback/${params.agentKey}`)
-  return { data, raw: g.raw, cost_cents: g.cost_cents, latency_ms: g.latency_ms, success: true, provider: 'google' }
+  return { data, raw: g.raw, cost_cents: g.cost_cents, latency_ms: g.latency_ms, success: true, provider: 'google', stop_reason: null, input_tokens: 0, output_tokens: 0 }
 }
 
 export async function callAnthropic<T = Record<string, unknown>>(
   params: CallParams,
   fallback: T,
-): Promise<{ data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean; provider: 'anthropic' | 'google' | 'none' }> {
+): Promise<{
+  data: T; raw: string; cost_cents: number; latency_ms: number; success: boolean
+  provider: 'anthropic' | 'google' | 'none'
+  /**
+   * M13B PHASE 3 — WHY THE MODEL STOPPED, AND HOW MUCH IT WROTE. Returned rather than swallowed.
+   *
+   * WARNING — THE GATEWAY'S TRUNCATION CHECK WAS VACUOUS WITHOUT THIS, AND IT WAS PROVEN BY
+   * OBSERVATION, NOT BY READING: `gateway.ts` called `inspectTruncation(res)` on THIS object,
+   * which carried neither `stop_reason` nor `usage`. Run against the real returned shape it gave
+   * `{hitCeiling:false, stopReason:null, outputTokens:null}` EVERY TIME, so `ok_at_ceiling` and
+   * `truncated_mid_structure` — the two outcomes M8 built the rail for — were UNREACHABLE on the
+   * plain path. The M13 test asserted only that the import existed: presence, not behaviour,
+   * which is failure pattern #1 in this repo.
+   *
+   * The answer council could not move behind the wall until this was true, because its
+   * lost-advisor and token-ceiling disclosure reads exactly these fields.
+   *
+   * Null on the Gemini path: there is no `stop_reason` there and inventing one would be worse than
+   * admitting it. Gemini's `finishReason` is its own concept with its own inspector.
+   */
+  stop_reason: string | null
+  input_tokens: number
+  output_tokens: number
+}> {
   const modelId = MODEL_IDS[params.model]
   const t0 = Date.now()
   let inputTokens = 0, outputTokens = 0, cachedReadTokens = 0, cachedWriteTokens = 0
   let raw = '', success = true, errorMessage: string | null = null
+  // M13B phase 3 — the model's own account of why it stopped, kept so the caller can be told.
+  let stopReason: string | null = null
   let data: T = fallback
 
   const circuit = await isAnthropicCircuitOpen()
   if (circuit.open) {
     const g = await tryGeminiFallback(params, fallback, circuit.incidentId)
-    return { ...g, latency_ms: Date.now() - t0, provider: g.success ? 'google' : 'none' }
+    return { ...g, latency_ms: Date.now() - t0, provider: (g.success ? 'google' : 'none') as 'google' | 'none' }
   }
 
   try {
@@ -203,6 +235,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
     ])
     clearTimeout(hardTimerId)
     raw = (response.content[0] as { type: string; text?: string }).text ?? ''
+    stopReason = (response as { stop_reason?: string | null }).stop_reason ?? null
     inputTokens = response.usage.input_tokens
     outputTokens = response.usage.output_tokens
     const usageAny = response.usage as unknown as Record<string, number>
@@ -234,11 +267,29 @@ export async function callAnthropic<T = Record<string, unknown>>(
         cost_usd_cents: cost,
         success,
         error_message: errorMessage,
+        request_summary: params.requestSummary ?? null,
         response_summary: cachedReadTokens > 0 ? `cached:${cachedReadTokens}r/${cachedWriteTokens}w` : null,
         cache_write_tokens: cachedWriteTokens,
         cache_read_tokens: cachedReadTokens,
       })
-      if (aiCallErr) console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
+      if (aiCallErr) {
+        console.error('[aria_ai_calls insert failed]', { agentKey: params.agentKey, role: params.role, reason: aiCallErr.message })
+        // M13B PHASE 3 — LIFTED FROM THE ANSWER COUNCIL SO ITS CAPABILITY SURVIVES THE MIGRATION.
+        // The council's own logger wrote this row when its insert was REJECTED (COUNCIL-LOG-FIX-1),
+        // which is how a CHECK rejection becomes queryable without Vercel log access. Deleting the
+        // council's logger without moving this here would have been a downgrade. Now every caller
+        // through the provider gets it, not only the one that thought of it.
+        // role='other' + provider='other' are both in the verified pg_constraint CHECK lists.
+        await supabaseAdmin.from('aria_ai_calls').insert({
+          business_id: params.businessId,
+          agent_key: 'ai_log_failure',
+          provider: 'other',
+          role: 'other',
+          input_tokens: 0, output_tokens: 0, success: false,
+          request_summary: params.agentKey,
+          learning_signal: ('ai_log_rejected:' + aiCallErr.message).slice(0, 120),
+        })
+      }
     } catch { /* non-fatal — table may not exist yet */ }
   }
 
@@ -250,12 +301,12 @@ export async function callAnthropic<T = Record<string, unknown>>(
     const tripped = isAnthropicUnreachable(errorMessage) ? await recordAnthropicFailure(errorMessage ?? '') : { tripped: false, incidentId: undefined }
     const g = await tryGeminiFallback(params, fallback, tripped.incidentId)
     if (g.success) {
-      return { data: g.data, raw: g.raw, cost_cents: cost + g.cost_cents, latency_ms: Date.now() - t0, success: true, provider: 'google' }
+      return { data: g.data, raw: g.raw, cost_cents: cost + g.cost_cents, latency_ms: Date.now() - t0, success: true, provider: 'google', stop_reason: null, input_tokens: inputTokens, output_tokens: outputTokens }
     }
-    return { data, raw, cost_cents: cost, latency_ms: Date.now() - t0, success: false, provider: 'none' }
+    return { data, raw, cost_cents: cost, latency_ms: Date.now() - t0, success: false, provider: 'none', stop_reason: stopReason, input_tokens: inputTokens, output_tokens: outputTokens }
   }
 
-  return { data, raw, cost_cents: cost, latency_ms: latency, success, provider: 'anthropic' }
+  return { data, raw, cost_cents: cost, latency_ms: latency, success, provider: 'anthropic', stop_reason: stopReason, input_tokens: inputTokens, output_tokens: outputTokens }
 }
 
 import type { Tool } from '@anthropic-ai/sdk/resources/messages'
