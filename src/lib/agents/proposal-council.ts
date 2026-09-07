@@ -55,12 +55,41 @@ const AGENT_REGISTRY: Record<string, AgentCtor> = {
 
 const MODEL = 'claude-sonnet-4-5-20250929'
 
+/**
+ * M13C PHASE 1 — WHY AN AGENT DID NOT REPORT, AS A RECORD RATHER THAN A LOCAL VARIABLE.
+ *
+ * `agentErrors` was a `string[]` collected in the loop and dropped on return. Ninety-four nights of
+ * failures went into it and nothing ever came out. This is the same information, typed, persisted
+ * and returned.
+ */
+export type AgentFailureKind = 'not_registered' | 'timed_out' | 'threw'
+
+export interface AgentFailure {
+  agent_type: string
+  kind: AgentFailureKind
+  reason: string
+}
+
+/**
+ * What the council can honestly say about its own run. Every number here is counted from the live
+ * arrays in this function — none of it is a constant, and phase 3's narrative is built from it.
+ */
+export interface CouncilAgentHealth {
+  agents_total: number
+  agents_reported: number
+  agents_failed: number
+  agents_skipped_disabled: number
+  failures: AgentFailure[]
+}
+
 export interface CouncilSession {
   session: AgentCouncilSession
   proposals: AgentCouncilProposal[]
   plan_narrative: string
   projected_revenue_impact: number
   projected_cost_saving: number
+  /** M13C phase 1 — returned, not just stored, so a caller can render it without a second query. */
+  agent_health: CouncilAgentHealth
 }
 
 interface ConflictDescription {
@@ -221,6 +250,53 @@ function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription
   return conflicts
 }
 
+/**
+ * Reads `agent_health` back off a stored session `plan`. Returns an UNKNOWN-shaped block for the 96
+ * historical sessions that predate this field rather than a confident zero — a session that never
+ * recorded its agents did not run zero agents, it ran an unknown number, and rendering that as 0 is
+ * the same fabrication the narrative is being fixed for.
+ */
+export function readStoredAgentHealth(plan: unknown): CouncilAgentHealth {
+  const h = (plan as { agent_health?: Partial<CouncilAgentHealth> } | null)?.agent_health
+  if (!h || typeof h.agents_total !== 'number') {
+    return { agents_total: -1, agents_reported: -1, agents_failed: -1, agents_skipped_disabled: -1, failures: [] }
+  }
+  return {
+    agents_total: h.agents_total,
+    agents_reported: h.agents_reported ?? -1,
+    agents_failed: h.agents_failed ?? -1,
+    agents_skipped_disabled: h.agents_skipped_disabled ?? 0,
+    failures: Array.isArray(h.failures) ? h.failures : [],
+  }
+}
+
+/**
+ * What kind of failure this was. `Promise.race` rejects with the literal message 'timeout' when the
+ * 25-second guard fires, and a timeout is a materially different fact from a crash: one says the
+ * agent is too slow for the window it is given, the other says it is broken. Reported as one
+ * category, they would stay indistinguishable — which is how this feature got here.
+ */
+export function classifyAgentFailure(err: unknown): AgentFailureKind {
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  return msg === 'timeout' ? 'timed_out' : 'threw'
+}
+
+/** The council's own account of its run. Counted, never assumed. */
+export function summariseAgentHealth(params: {
+  total: number
+  reported: string[]
+  skipped: string[]
+  failures: AgentFailure[]
+}): CouncilAgentHealth {
+  return {
+    agents_total: params.total,
+    agents_reported: params.reported.length,
+    agents_failed: params.failures.length,
+    agents_skipped_disabled: params.skipped.length,
+    failures: params.failures,
+  }
+}
+
 export async function runCouncilSession(business_id: string): Promise<CouncilSession> {
   const today = new Date().toISOString().split('T')[0]
 
@@ -243,6 +319,9 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
       plan_narrative: existing.plan_narrative ?? '',
       projected_revenue_impact: Number(existing.projected_revenue_impact ?? 0),
       projected_cost_saving: Number(existing.projected_cost_saving ?? 0),
+      // Replayed from the stored plan rather than recomputed — this branch ran no agents today, and
+      // claiming a fresh 14-of-14 here would be inventing a run that did not happen.
+      agent_health: readStoredAgentHealth(existing.plan),
     }
   }
 
@@ -267,8 +346,15 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   const mode = (settingsRow?.mode as string | null) ?? 'suggest'
 
   // STEP 3: RUN ALL ENABLED AGENTS IN PARALLEL
+  const agentPhaseStart = Date.now()
   const agentDecisions: AgentDecision[] = []
-  const agentErrors: string[] = []
+  // M13C PHASE 1 — WAS `const agentErrors: string[] = []`, pushed to at two sites and READ AT
+  // NEITHER. Every agent failure for 94 nights went in here and was discarded when the function
+  // returned: not logged, not stored, not returned. That single unread array is why "12 of 14
+  // agents did not report" was unanswerable from production.
+  const agentFailures: AgentFailure[] = []
+  const agentsReported: string[] = []
+  const agentsSkipped: string[] = []
 
   await Promise.allSettled(
     ALL_AGENT_TYPES.map(async (agentType) => {
@@ -280,12 +366,12 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
           .eq('agent_type', agentType)
           .maybeSingle()
 
-        if (agentSettings?.enabled === false) return
+        if (agentSettings?.enabled === false) { agentsSkipped.push(agentType); return }
 
         // Resolve agent from the explicit registry (no fragile string transforms).
         const AgentClass = AGENT_REGISTRY[agentType] ?? null
         if (!AgentClass) {
-          agentErrors.push(agentType + ': not registered')
+          agentFailures.push({ agent_type: agentType, kind: 'not_registered', reason: 'no class in AGENT_REGISTRY' })
           return
         }
 
@@ -295,12 +381,63 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
         ])
         if (result && 'decisions' in result) {
           agentDecisions.push(...result.decisions)
+          agentsReported.push(agentType)
+        } else {
+          // Reached the end of run() and returned nothing recognisable. Not an exception, and not a
+          // report either — which is exactly the state that used to be indistinguishable from calm.
+          agentFailures.push({ agent_type: agentType, kind: 'threw', reason: 'run() resolved without a decisions array' })
         }
       } catch (e) {
-        agentErrors.push(agentType + ': ' + (e as Error).message)
+        const msg = (e as Error)?.message ?? String(e)
+        agentFailures.push({
+          agent_type: agentType,
+          kind: classifyAgentFailure(e),
+          reason: msg.slice(0, 300),
+        })
       }
     })
   )
+
+  // ── M13C PHASE 1 · STEP 3b: THE FAILURES BECOME A RECORD ──────────────────────────────────────
+  //
+  // ⚠️ WHERE THIS GOES, AND WHY NOT WHERE THE SPRINT SAID.
+  //
+  // The sprint asked for `business_events` as the interim home. IT CANNOT BE: `business_events` has
+  // a CHECK constraint of `entity_type IN ('decision','job')` and `event_type IN ('proposed',
+  // 'approved','declined','expired','job_created','job_completed','job_failed')`. An
+  // `entity_type='council_session'` row is REJECTED WITH SQLSTATE 23514 — proven against production
+  // inside a rolled-back DO block, not inferred. Writing there would have reproduced the exact
+  // silent-rejection failure this sprint exists to end.
+  //
+  // `agent_runs` is the right home and already exists: one row per agent run, with an `errors` jsonb
+  // column built for precisely this. The same probe confirmed both shapes ACCEPTED.
+  //
+  // ⚠️ AND IT IS WRITTEN WITH supabaseAdmin, WHICH IS THE WHOLE POINT — see the parked finding in
+  // RUN-M13C.md. `BaseAgent` writes its own `agent_runs` row through the ANON, cookie-based client,
+  // which under RLS in a cron writes nothing. The council holds a service-role client, so it can
+  // record on the agents' behalf without changing anyone's authorisation.
+  const agentHealth = summariseAgentHealth({
+    total: ALL_AGENT_TYPES.length,
+    reported: agentsReported,
+    skipped: agentsSkipped,
+    failures: agentFailures,
+  })
+
+  if (agentFailures.length > 0) {
+    const failureRows = agentFailures.map(f => ({
+      business_id,
+      agent_type: f.agent_type,
+      started_at: new Date(agentPhaseStart).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_ms: Date.now() - agentPhaseStart,
+      decisions_count: 0,
+      errors: [f.kind + ': ' + f.reason],
+      triggered_by: 'council',
+    }))
+    const { error: runsErr } = await supabaseAdmin.from('agent_runs').insert(failureRows)
+    // W6. The record of a failure that fails to record is the failure this sprint is about.
+    if (runsErr) console.error('[council] agent_runs failure rows REJECTED:', runsErr.message, '— agents:', agentFailures.map(f => f.agent_type).join(','))
+  }
 
   // STEP 4: CONVERT DECISIONS TO PROPOSALS
   const proposalRows = agentDecisions.map(d => ({
@@ -458,7 +595,11 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   const { data: completedSession } = await supabaseAdmin
     .from('agent_council_sessions')
     .update({
-      plan: planResult as unknown as Record<string, unknown>,
+      // M13C phase 1 — `agent_health` rides in the `plan` jsonb because agent_council_sessions has
+      // no metadata/errors column and DDL is not mine to write. The dedicated column is proposed and
+      // PARKED in RUN-M13C.md; `plan` is written on every run including the zero-proposal ones, so
+      // nothing is lost in the meantime and the session row answers "what happened" on its own.
+      plan: { ...(planResult as unknown as Record<string, unknown>), agent_health: agentHealth },
       plan_narrative: planResult.plan_narrative,
       projected_revenue_impact: planResult.projected_revenue_impact,
       projected_cost_saving: planResult.projected_cost_saving,
@@ -507,5 +648,6 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
     plan_narrative: planResult.plan_narrative,
     projected_revenue_impact: planResult.projected_revenue_impact,
     projected_cost_saving: planResult.projected_cost_saving,
+    agent_health: agentHealth,
   }
 }
