@@ -17,6 +17,18 @@ function walk(dir: string, out: string[] = []): string[] {
 const SOURCES = [...walk('src'), ...walk('scripts')]
 
 /**
+ * Read every source ONCE, at module scope, shared by the tests below. The first version read them
+ * inside the test and took 11s against ~1,900 files, which blew vitest's 5s default and made the
+ * pre-push hook reject my own push. The assertion was right and the traversal was right; only the
+ * cost was wrong. Fixed by hoisting the reads and giving the scan an explicit, honest timeout —
+ * NOT by narrowing what it scans, which would have made it cheap by making it weaker.
+ */
+const CORPUS: Array<[string, string]> = SOURCES
+  .filter(f => !f.endsWith('council-names.test.ts'))   // this file quotes the old names
+  .map(f => [f, read(f)])
+const SCAN_TIMEOUT_MS = 30_000
+
+/**
  * M13B PHASE 2 — THE TWO COUNCILS ARE NAMED FOR THEIR JOBS.
  *
  * `lib/agents/council.ts` and `lib/aria/council.ts` were two live, unrelated features sharing one
@@ -29,6 +41,12 @@ const SOURCES = [...walk('src'), ...walk('scripts')]
  * decision table is explicit, and a shim would preserve the ambiguous import line that is the
  * entire defect. This file is the rail that stops the old names returning.
  */
+/** The four ways the retired names could be imported, as ONE expression so the rail and its own
+ *  mutation check can never drift apart. Anchored on the CLOSING quote — `council-advisors`,
+ *  `council-conflicts` and `council-executor` legitimately keep the prefix and must not match. */
+const OLD_SPECIFIER =
+  /(?:from\s*|require\(\s*)['"](?:@\/lib\/(?:aria|agents)|\.{1,2})\/council['"]/
+
 describe('M13B phase 2 · the retired council names are gone and stay gone', () => {
   it('ANTI-VACUITY — the scan actually reads the tree', () => {
     // A rail that scans an empty list passes forever. Failure pattern #1 in this repo.
@@ -38,28 +56,22 @@ describe('M13B phase 2 · the retired council names are gone and stay gone', () 
   })
 
   it('zero imports of the retired specifiers, anywhere', () => {
-    const OLD = [
-      /from\s+['"]@\/lib\/aria\/council['"]/,
-      /from\s+['"]@\/lib\/agents\/council['"]/,
-      /from\s+['"]\.{1,2}\/council['"]/,
-      /require\(\s*['"][^'"]*\/(?:aria|agents)\/council['"]\s*\)/,
-    ]
     const hits: string[] = []
-    for (const f of SOURCES) {
-      if (f.endsWith('council-names.test.ts')) continue   // this file quotes the old names
-      const src = read(f)
-      for (const re of OLD) if (re.test(src)) hits.push(f + ' :: ' + String(re))
-    }
+    for (const [f, src] of CORPUS) if (OLD_SPECIFIER.test(src)) hits.push(f)
     expect(hits).toEqual([])
-  })
+  }, SCAN_TIMEOUT_MS)
 
   it('MUTATION — the scan CAN go red, proven against a real old-name import', () => {
     // Without this the assertion above is indistinguishable from a regex that matches nothing.
-    const re = /from\s+['"]@\/lib\/aria\/council['"]/
-    expect(re.test(`import { runAriaCouncil } from '@/lib/aria/council'`)).toBe(true)
+    const re = () => new RegExp(OLD_SPECIFIER.source)
+    expect(re().test(`import { runAriaCouncil } from '@/lib/aria/council'`)).toBe(true)
+    expect(re().test(`import { runCouncilSession } from '@/lib/agents/council'`)).toBe(true)
+    expect(re().test(`import type { CouncilOutput } from '../council'`)).toBe(true)
     // And it must NOT fire on the siblings that legitimately keep the prefix.
-    expect(re.test(`import { lostAdvisors } from '@/lib/aria/council-advisors'`)).toBe(false)
-    expect(re.test(`import { x } from '@/lib/aria/council-conflicts'`)).toBe(false)
+    expect(re().test(`import { lostAdvisors } from '@/lib/aria/council-advisors'`)).toBe(false)
+    expect(re().test(`import { x } from '@/lib/aria/council-conflicts'`)).toBe(false)
+    expect(re().test(`import { executeProposal } from '@/lib/agents/council-executor'`)).toBe(false)
+    expect(re().test(`import { x } from '@/lib/aria/answer-council'`)).toBe(false)
   })
 
   it('the eslint rule blocks the old specifier at the linter too', () => {
