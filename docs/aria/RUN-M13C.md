@@ -286,3 +286,86 @@ protection against un-fixing these nine lines is the unit tests and review, not 
 **The behavioural mutation that does go red** is the one in `council-agent-health.test.ts`: a health
 block that forgets its failures, and one that cannot distinguish a rejected proposal insert from a
 quiet night. Both red on the returned value, not on source text.
+
+---
+
+## PHASE 3 — STOP SAYING STEADY STATE ✅ ← *the owner-facing line*
+
+**Commit:** `<phase-3>` · `proposal-council.ts`, `council-narrative.test.ts` (new, 12 tests).
+
+### What it said for 94 mornings
+
+```ts
+plan_narrative: proposals.length === 0
+  ? 'No agent proposals today — all systems are in steady state.'
+  : 'Aria reviewed N proposals and approved the highest-impact actions for today.'
+```
+
+**Two branches for at least five different nights.** Zero proposals and a healthy business rendered
+identically, so total agent failure and genuine calm produced the same reassuring sentence.
+
+### Six cases now — and here they are, rendered from real data, not described
+
+```
+quiet        All 14 overnight checks reported and nothing needs you today.
+
+incomplete   2 of 14 overnight checks reported. The other 12 did not, so last night's check is
+   ← LAST    incomplete — I have logged it and will flag it again if it repeats. Nothing in what
+     NIGHT   did report needs you today.
+
+nothing_ran  None of the 14 overnight checks reported back, so I have nothing to tell you about
+             last night. That is a fault, not a quiet night — it has been logged and I will flag
+             it again if it repeats.
+
+proposed     Reviewed 3 recommendations and approved the highest-impact actions for today.
+
+lost         Overnight checks produced recommendations but they could not be saved, so there is
+             nothing to show you. This is a fault on my side, not a quiet night — it has been
+             logged.
+
+unknown      This session did not record which overnight checks ran, so I cannot tell you whether
+             nothing needed doing or nothing reported.
+```
+
+**The `incomplete` line is what Sip would have read this morning**, instead of "all systems are in
+steady state".
+
+`proposed` also carries a truthfulness clause the old sentence could not: with recommendations *and*
+failures it says *"4 of 14 checks did not report, so this is not the full picture — I have logged
+that."*
+
+### ⚠️ Every count comes from the health block. There is no `14` in this function
+
+`agents_total` is `ALL_AGENT_TYPES.length` **at the time of the run**, so a fifteenth agent changes
+the sentence with no code edit — asserted by a test that passes 15 and reads "All 15 overnight
+checks". An agent the owner switched off is subtracted from the expected total and named
+separately (*"(2 are switched off)"*) rather than counted as missing.
+
+### ⚠️ It refuses to guess, and that is a case of its own
+
+The 96 historical sessions have no health block, so `readStoredAgentHealth` returns **-1**. Rendering
+that as "0 of 0 checks" would be exactly the fabrication this function exists to remove, so -1
+produces the `unknown` sentence. A test asserts the output contains neither `-1` nor `0 of`.
+GROUNDING-TEETH, on the owner's own screen.
+
+### Ordering: `lost` outranks everything
+
+A rejected proposal insert is reported before any other case, because it is the only night where the
+owner is missing something that genuinely existed. Asserted: a night that is *both* lost and totally
+failed still reports `lost`.
+
+### Mutation — the old sentence, reproduced
+
+```
+old implementation, four different nights  →  ONE sentence   (Set size 1)
+buildCouncilNarrative, same four nights    →  FOUR sentences (Set size 4)
+```
+
+That is the bug in one assertion. **Anti-vacuity:** all six cases are reachable (a `Set` of six
+distinct `case` values), each string is over 20 characters, and **"steady state" appears in none of
+them.**
+
+Every assertion in the file **calls `buildCouncilNarrative` and reads the returned string.** Nothing
+in it reads source text.
+
+**Gates:** tsc 0 · vitest **122 files / 1600 tests, exit 0** · `next build` **BUILD_EXIT=0**.

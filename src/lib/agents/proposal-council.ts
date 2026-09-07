@@ -306,6 +306,117 @@ export function summariseAgentHealth(params: {
   }
 }
 
+/**
+ * M13C PHASE 3 — THE SENTENCE THE OWNER READS.
+ *
+ * ── WHAT IT SAID FOR 94 MORNINGS ───────────────────────────────────────────────────────────────
+ *     proposals.length === 0
+ *       ? 'No agent proposals today — all systems are in steady state.'
+ *       : 'Aria reviewed N proposals and approved the highest-impact actions for today.'
+ *
+ * Two branches for at least five different nights. **Zero proposals and a healthy business rendered
+ * identically**, so total agent failure and genuine calm produced the same reassuring sentence. 96
+ * of 97 sessions said steady state; the council has produced 2 proposals in its entire life.
+ *
+ * ── WHAT SEPARATES THEM NOW ────────────────────────────────────────────────────────────────────
+ *   proposed          agents ran and produced something.
+ *   quiet             agents ran, all of them, and found nothing. THE ONLY CASE THAT IS CALM.
+ *   incomplete        some agents did not report. Not a quiet night — an unfinished check.
+ *   nothing_ran       none reported. A fault, stated as one.
+ *   lost              proposals were produced and the insert was REJECTED. The worst case, and the
+ *                     one that previously looked exactly like calm.
+ *   unknown           the session did not record its agents. Says so, and invents no counts.
+ *
+ * ⚠️ EVERY NUMBER COMES FROM THE HEALTH BLOCK, WHICH IS COUNTED FROM THE LIVE ARRAYS. There is no
+ * constant "14" in this function — `agents_total` is `ALL_AGENT_TYPES.length` at the time of the
+ * run, so adding a fifteenth agent changes the sentence without anyone editing it.
+ *
+ * ⚠️ AND IT REFUSES TO GUESS. `readStoredAgentHealth` returns -1 for the 96 historical sessions that
+ * predate the health block. Rendering those as "0 of 0 agents checked" would be exactly the
+ * fabrication this function exists to remove, so -1 produces the `unknown` sentence instead.
+ * GROUNDING-TEETH: an honest "I did not record that" beats a plausible number.
+ */
+export type CouncilNarrativeCase =
+  | 'proposed' | 'quiet' | 'incomplete' | 'nothing_ran' | 'lost' | 'unknown'
+
+export interface CouncilNarrative {
+  case: CouncilNarrativeCase
+  text: string
+}
+
+function plural(n: number, one: string, many: string): string {
+  return n === 1 ? one : many
+}
+
+export function buildCouncilNarrative(health: CouncilAgentHealth, proposalsCount: number): CouncilNarrative {
+  const { agents_total: total, agents_reported: reported, agents_failed: failed,
+          agents_skipped_disabled: skipped, proposal_persist_error: lostErr } = health
+
+  // The council produced work and could not save it. Said first, because it is the only case where
+  // the owner is missing something that actually existed.
+  if (lostErr) {
+    return {
+      case: 'lost',
+      text: 'Overnight checks produced recommendations but they could not be saved, so there is '
+        + 'nothing to show you. This is a fault on my side, not a quiet night — it has been logged.',
+    }
+  }
+
+  // No health was recorded. Do not invent a count for it.
+  if (total < 0 || reported < 0) {
+    return {
+      case: 'unknown',
+      text: proposalsCount > 0
+        ? 'Reviewed ' + proposalsCount + ' ' + plural(proposalsCount, 'recommendation', 'recommendations')
+          + ' from overnight checks. This session did not record which checks ran.'
+        : 'This session did not record which overnight checks ran, so I cannot tell you whether '
+          + 'nothing needed doing or nothing reported.',
+    }
+  }
+
+  const expected = total - skipped
+  const off = skipped > 0 ? ' (' + skipped + ' ' + plural(skipped, 'is', 'are') + ' switched off)' : ''
+
+  if (reported === 0 && expected > 0) {
+    return {
+      case: 'nothing_ran',
+      text: 'None of the ' + expected + ' overnight ' + plural(expected, 'check', 'checks') + ' reported back'
+        + off + ', so I have nothing to tell you about last night. That is a fault, not a quiet night '
+        + '— it has been logged and I will flag it again if it repeats.',
+    }
+  }
+
+  const incomplete = failed > 0
+  const ran = reported + ' of ' + expected + ' overnight ' + plural(expected, 'check', 'checks')
+
+  if (proposalsCount > 0) {
+    return {
+      case: incomplete ? 'incomplete' : 'proposed',
+      text: 'Reviewed ' + proposalsCount + ' ' + plural(proposalsCount, 'recommendation', 'recommendations')
+        + ' and approved the highest-impact actions for today.'
+        + (incomplete
+            ? ' ' + failed + ' of ' + expected + ' ' + plural(failed, 'check', 'checks')
+              + ' did not report, so this is not the full picture — I have logged that.'
+            : ''),
+    }
+  }
+
+  if (incomplete) {
+    return {
+      case: 'incomplete',
+      text: ran + ' reported' + off + '. The other ' + failed + ' did not, so last night\'s check is '
+        + 'incomplete — I have logged it and will flag it again if it repeats. Nothing in what did '
+        + 'report needs you today.',
+    }
+  }
+
+  return {
+    case: 'quiet',
+    text: 'All ' + expected + ' overnight ' + plural(expected, 'check', 'checks') + ' reported' + off
+      + ' and nothing needs you today.',
+  }
+}
+
 export async function runCouncilSession(business_id: string): Promise<CouncilSession> {
   const today = new Date().toISOString().split('T')[0]
 
@@ -573,9 +684,10 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
     conflicts_resolved: string[]
   } = {
     decisions: [],
-    plan_narrative: proposals.length === 0
-      ? 'No agent proposals today — all systems are in steady state.'
-      : 'Aria reviewed ' + proposals.length + ' proposals and approved the highest-impact actions for today.',
+    // M13C phase 3 — WAS a two-branch ternary in which zero proposals rendered as
+    // "all systems are in steady state", so 94 nights of total agent failure read as calm.
+    // Six cases now, every count taken from the health block rather than assumed.
+    plan_narrative: buildCouncilNarrative(agentHealth, proposals.length).text,
     projected_revenue_impact: proposals.reduce((s, p) => s + p.projected_impact_dollars, 0),
     projected_cost_saving: 0,
     priority_focus: priority,
