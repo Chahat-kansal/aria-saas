@@ -369,3 +369,96 @@ Every assertion in the file **calls `buildCouncilNarrative` and reads the return
 in it reads source text.
 
 **Gates:** tsc 0 · vitest **122 files / 1600 tests, exit 0** · `next build` **BUILD_EXIT=0**.
+
+---
+
+## PHASE 4 — PRESENCE TESTS BECOME BEHAVIOUR TESTS ✅
+
+**Commit:** `<phase-4>` · `gateway-behaviour.test.ts` (new, 13 tests), `gateway.test.ts`,
+`gateway-truncation.test.ts`.
+
+### The test that started this rule
+
+```ts
+expect(GATEWAY_CODE).toContain("from '@/lib/aria/truncation'")
+```
+
+It passed. It kept passing for weeks. And the function it named was **structurally blind** — the
+gateway handed `inspectTruncation` an object with neither `stop_reason` nor `usage`, so it returned
+`{hitCeiling:false}` on every model call in the product. **A presence test passes on dead code**: it
+cannot fail for the reason you care about, because it never asks the question you care about.
+
+### `gateway-behaviour.test.ts` — the wall, called
+
+A controlled provider stands behind the gateway (`vi.mock`, the pattern already used in three test
+files here) and every assertion reads a **return value**:
+
+| what it proves | how |
+|---|---|
+| a clipped call that parsed → `ok_at_ceiling` | provider returns `stop_reason: 'max_tokens'`, assert `res.outcome` and the whole `truncation` object |
+| a clipped call that did not → `truncated_mid_structure` | same, unparseable body |
+| a finished call → `ok` | `stop_reason: 'end_turn'` |
+| token counts survive the boundary | `input_tokens: 1234` in, `1234` out |
+| prose vs JSON judged differently | `"OK"` with no fallback is `ok`; empty with a fallback is `unparseable` |
+| `requestSummary` / `timeoutMs` **arrive** | read off the provider mock's received arguments |
+| the model is passed through unchanged | ask for `opus`, assert the provider got `opus` |
+| `temperature` forwarded only when set | present when given, `undefined` when not |
+| `businessId` required | rejects, **and the provider is never called** |
+| tools select the tool path | the two provider entry points, asserted by which mock fired |
+| a failed call is `ok:false` with a reason | not a silent empty answer |
+
+**Every one of these would have gone red on the M13 gateway the day it shipped.**
+
+### The anti-vacuity probe — the M13 bug, reproduced end to end
+
+The provider mock returns the **pre-M13B shape** (no `stop_reason`, no tokens) with a body that
+parses cleanly. The gateway then reports `{hitCeiling:false, stopReason:null, outputTokens:null}` and
+`outcome: 'ok'` — blind. The same logical call with the fields present reports `ok_at_ceiling`. The
+pair is the point: **the assertion is sensitive to the provider's fields**, which is exactly what the
+presence test it replaces could not be.
+
+### The required mutation, run
+
+Reverted the gateway to the blind `inspectTruncation(res)`: **red**, on
+`a clipped call that still parsed is ok_at_ceiling`.
+
+⚠️ **And it goes red for a narrower reason than expected, which is worth knowing.** After M13B the
+provider returns `stop_reason` at the **top level** — which is precisely where `inspectTruncation`
+looks — so the blind version still gets `hitCeiling` right and loses only the **token count**. The
+gateway's reshaping is load-bearing for `usage`, not for `stop_reason`. The assertion was
+strengthened to compare the whole `truncation` object rather than just `hitCeiling`, so the rail is
+sensitive to the part that actually breaks. The fully-blind case is covered by the probe above,
+which is the only place the pre-M13B shape still exists.
+
+### The census — before and after, measured both times
+
+| file | presence before | presence after | behaviour after |
+|---|---|---|---|
+| `gateway.test.ts` | 2 | **1** | 8 |
+| `gateway-truncation.test.ts` | 8 | 8 *(re-labelled)* | 3 |
+| `gateway-behaviour.test.ts` | — | **0** | **13** |
+| `w1-allowlist.test.ts` | 0 | 0 | 5 |
+| `cost-truth.test.ts` | 7 | 7 | 9 |
+| `council-executor-silence.test.ts` | 3 | 3 | 6 |
+| **under the walls** | **20** | **19** | **44** |
+
+### ⚠️ Why 19 remain, and why deleting them would be wrong
+
+**The decision table forbids deleting a guard to make the count go down**, and it is right to. Some
+of these assertions are **structural by nature**: *"this file no longer constructs an Anthropic
+client"*, *"these two call sites exist and go through the door"*, *"the allow-list holds 173
+entries"*. A structural property is exactly what W1 guarantees, so a source scan is the correct
+instrument — there is no return value that expresses "nothing in this file constructs a client".
+
+What changed is that they are now **labelled** as structural and each names its behavioural
+counterpart. `gateway-truncation.test.ts`'s header says it plainly: *this file says the door was
+built in the right place; `gateway-behaviour.test.ts` says the door opens.* Read as a pair they are
+honest. Read alone, the first was the thing that let M13's hole ship.
+
+### Elsewhere in the repo — reported, not converted
+
+**393 source-scanning `it()` blocks across 70 of 123 test files.** Outside the walls, and the
+sprint's scope says do not convert them. That number is the size of the problem this rule exists
+for; it is not a defect list, because many of those are legitimately structural too.
+
+**Gates:** tsc 0 · vitest **123 files / 1613 tests, exit 0** · `next build` **BUILD_EXIT=0**.

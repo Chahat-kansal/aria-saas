@@ -23,7 +23,20 @@ const COUNCIL = read('src/lib/aria/answer-council.ts')
  * there. The behaviour was not. That is failure pattern #1 of this codebase, committed by the
  * commit that added the wall, and it was found by RUNNING the function rather than reading it.
  *
- * These tests exist so it cannot come back silently.
+ * ── M13C PHASE 4 — WHAT THIS FILE IS NOW, AND WHAT IT IS NOT ───────────────────────────────────
+ * The first two `it`s below CALL `inspectTruncation` and `classifyOutcome` and assert on returned
+ * values; they were always behaviour tests and they stay.
+ *
+ * The rest assert on SOURCE TEXT, and phase 4 is honest about what that can and cannot prove. They
+ * are STRUCTURAL assertions — "this file no longer constructs a client", "these two call sites exist
+ * and go through the door" — and a structural property is exactly what W1 guarantees, so a source
+ * scan is the right instrument for it. What they must never be mistaken for is proof that the wall
+ * WORKS. That proof now lives in `gateway-behaviour.test.ts`, which stands a controlled provider
+ * behind `callModel`, asserts on what comes back, and reproduces the M13 bug end to end as its
+ * anti-vacuity probe.
+ *
+ * Read the pair together: this file says the door was built in the right place; that file says the
+ * door opens.
  */
 describe('M13B phase 3 · truncation is read from real fields, not absent ones', () => {
   it('THE BUG, REPRODUCED — the old return shape made the rail structurally blind', () => {
@@ -46,6 +59,8 @@ describe('M13B phase 3 · truncation is read from real fields, not absent ones',
     expect(classifyOutcome(clean, true)).toBe('ok')
   })
 
+  // STRUCTURAL — the behavioural counterpart is gateway-behaviour.test.ts's
+  // 'token counts reach the caller' and the OLD-shape probe, which both call callModel.
   it('the provider actually returns those fields, on every path', () => {
     expect(PROVIDER).toContain('stop_reason: string | null')
     expect(PROVIDER).toContain("stopReason = (response as { stop_reason?: string | null }).stop_reason ?? null")
@@ -54,6 +69,8 @@ describe('M13B phase 3 · truncation is read from real fields, not absent ones',
     expect((PROVIDER.match(/stop_reason: null/g) ?? []).length).toBeGreaterThanOrEqual(3)
   })
 
+  // STRUCTURAL — behavioural counterpart: 'a clipped call that still parsed is ok_at_ceiling',
+  // which goes RED if this reshaping is removed. Verified by applying that exact mutation.
   it('the gateway reshapes them for the rail instead of re-implementing it', () => {
     expect(GATEWAY).toContain('const check = inspectTruncation({')
     expect(GATEWAY).toContain('stop_reason: res.stop_reason,')
@@ -62,6 +79,8 @@ describe('M13B phase 3 · truncation is read from real fields, not absent ones',
     expect(GATEWAY).toContain('truncation: check,')
   })
 
+  // STRUCTURAL — behavioural counterpart: 'requestSummary and timeoutMs actually arrive', which
+  // reads them off the provider mock's received arguments rather than off the source.
   it('the gateway stopped dropping requestSummary and timeoutMs on the plain path', () => {
     // Both were in AriaModelRequest and forwarded only on the tool path. The council needs each.
     expect(GATEWAY).toContain('requestSummary: req.requestSummary,')

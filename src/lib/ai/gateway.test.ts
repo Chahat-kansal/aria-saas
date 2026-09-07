@@ -25,10 +25,19 @@ const PROVIDER = read('src/lib/aria/providers/anthropic.ts')
  * worth about two thousandths of one.)
  */
 describe('M13 phase 3 · the gateway is a door, not a helper', () => {
-  it('ANTI-VACUITY — it is real and wraps the real provider', () => {
-    expect(GATEWAY.length).toBeGreaterThan(4000)
-    expect(GATEWAY_CODE).toContain("from '@/lib/aria/providers/anthropic'")
-    expect(GATEWAY_CODE).toContain('export async function callModel')
+  // M13C PHASE 4 — CONVERTED. This asserted that a string appeared in a source file, which is true
+  // of a gateway nobody calls and of a gateway that returns garbage. It now imports the function and
+  // uses it. The behavioural half of this file's job lives in gateway-behaviour.test.ts, which
+  // stands a controlled provider behind the wall and asserts on return values.
+  it('ANTI-VACUITY — callModel is a real callable, and reaches the real provider', async () => {
+    expect(typeof callModel).toBe('function')
+    // A gateway that swallowed its precondition would resolve here. It must reject, and the message
+    // must say why — this is the only assertion in the file that can distinguish a live door from a
+    // dead one without a provider standing behind it.
+    await expect(callModel({
+      businessId: '', agentKey: 'ask_aria' as never, role: 'chat' as never,
+      model: 'haiku', systemPrompt: 's', userPrompt: 'u',
+    })).rejects.toThrow(/businessId is required/)
   })
 
   it('businessId is REQUIRED — the precondition that makes the ledger row a guarantee', async () => {
@@ -100,6 +109,11 @@ describe('M13 phase 3 · the gateway is a door, not a helper', () => {
     expect(GATEWAY_CODE).toMatch(/parsed = wantedJson[\s\S]{0,160}Boolean\(res\.raw\)/)
   })
 
+  // M13C phase 4 — KEPT AS A SOURCE ASSERTION, deliberately, and labelled as one. The behaviour it
+  // guards (a missing businessId rejects before the provider is reached) is proven by calling the
+  // function in gateway-behaviour.test.ts. What THIS one adds is that the guard is a `throw` and not
+  // a default — a property of the code's shape that no return value can express, because a gateway
+  // that defaulted the id would return a perfectly ordinary success.
   it('MUTATION — dropping the businessId requirement is what would skip the log', () => {
     // The sprint's named mutation for this phase. The gateway does not perform the insert; it
     // guarantees the insert's precondition. Removing the guard is therefore exactly "skip the log".
