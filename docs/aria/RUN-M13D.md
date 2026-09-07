@@ -240,3 +240,74 @@ the fix works: with the client a cron now passes, both writes land and the produ
 
 Nothing was committed. **The first real run is tonight at 20:00 UTC**, and phase 5 says exactly what
 to look at.
+
+---
+
+## PHASE 4 — WHAT THE THREE BLIND AGENTS CAN NOW SEE ✅ (report)
+
+**No code in this phase.** Row counts, not conclusions — measured in one rolled-back transaction
+that reads each table twice: once as `anon` (what these three agents have been seeing every night
+since 4 June) and once as service role (what they will see tonight).
+
+### Every table the three read, both ways
+
+| table | as `anon` — what they saw | as service role — what they get |
+|---|---|---|
+| `pos_products` (active) | **0** | **74** |
+| `pos_sales` (completed) | **0** | **1,802** |
+| `pos_sale_items` | **0** | **3,510** |
+| `pos_suppliers` | **0** | **2** |
+| `pos_outlets` | **0** | **2** |
+| `pos_staff` (active) | **0** | **5** |
+| `staff_members` | **0** | **4** |
+| `pos_rosters` | 0 | **0** — genuinely empty, not hidden |
+| `competitor_price_cache` | 0 | **0** — genuinely empty, not hidden |
+
+**Every zero in the left column is a lie the database was telling them.** The two zeros in the right
+column are true.
+
+### Can each one now complete its own logic?
+
+**`reorder` — YES, fully unblocked.** Its first line is
+`if (!products?.length) return { decisions: [] }`, and that guard has fired on every single run for
+94 days. It now sees **74 products, 1,802 completed sales, 3,510 sale items and 2 suppliers** — its
+statistical safety-stock path (Z·σ_D·√LT, built in June) has never once had data to run on.
+
+**`pricing` — YES, via its own documented fallback.** Its product guard now passes (74). Its
+competitor cache is **genuinely empty (0 rows, both roles)**, and the agent already handles that:
+*"Fallback: internal margin+velocity pricing when competitor cache is empty"*, computed from
+`pos_sale_items` — 3,510 rows now visible. So it completes, on the internal path rather than the
+competitive one.
+
+**`schedule` — YES.** Both read gates pass: `pos_outlets` (2) and `pos_staff` (5). `pos_rosters` is
+**not a read gate** — it is a *write target*.
+
+### ⚠️ ONE NEW WRITE TO SURFACE, and it is the thing to watch tonight
+
+`schedule-agent.ts:178` upserts into **`pos_rosters`**, a table with **0 rows**. That write has
+never succeeded — it went through the same rejected client. Tonight it can. The rows it creates are
+`generated_by_agent: true` and **`published: false`**, so they are drafts and nothing reaches staff
+until a human publishes them. **Reported, not acted on**, per the decision table.
+
+### Nothing can execute, and that is verified rather than assumed
+
+The sprint's rule is *"if an agent now produces a proposal, say what it is and do not execute it."*
+**I cannot run the agents** — no model key, no local environment — so there is no proposal to name
+yet. What I can verify is the safety property behind that rule, from live data:
+
+```
+agent_settings for Sip — all 9 configured agents:  enabled = true,  mode = 'suggest',
+                                                   auto_approve_below_cents = 0
+```
+
+`proposal-council.ts` executes only inside `if (mode === 'auto')`, and **no agent is in `auto`**. So
+tonight's run can propose a great deal and **`executeProposal` still will not be called** — which is
+also consistent with M13C's finding that it has never been called in its life. Propose-then-approve
+is intact.
+
+### What this means for tonight
+
+For the first time, the three agents that read through the broken client will see a real café: 74
+products, 1,802 sales, 3,510 line items, 5 staff across 2 outlets. **A first run on 94 days of
+unseen data may well produce a lot of proposals.** That is the point, it is not a fault, and none of
+it executes.
