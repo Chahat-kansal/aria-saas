@@ -214,3 +214,82 @@ There is no dev server and no authenticated session available to this run, so
 rendered**. What IS observed is the engine's real output on Sip's real recorded inputs, printed
 above. **A human must open the page while signed in as Sip to confirm the render**; phase 6 lists
 that alongside the approval steps.
+
+---
+
+## PHASE 2 — THE MARGIN HIT, PER ITEM ✅
+
+**Commit:** `<phase-2>` · `aria/compute/item-card-impact.ts` (new), `item-card-impact.test.ts`
+(new, 15 tests), `api/pricing/item-impact/route.ts` (new).
+
+### ⚠️ THE INSIGHT THAT MAKES THIS WORK WITHOUT ANY COST DATA
+
+A venue that surcharges is about to stop collecting it. The revenue it loses is
+
+```
+surcharge rate × share of takings on card
+```
+
+**and the price rise that recovers it exactly is the same figure.** A 1.5% surcharge where 88% of
+takings are on card is a 1.32% hole, and a 1.32% rise fills it.
+
+**None of that needs a cost price.** It is arithmetic over the venue's own settings and its own
+sales. So the single most useful number in this sprint is fully grounded even though Sip's cost data
+is worthless — **the opposite of what the brief assumed, and much better news.**
+
+What genuinely does need a cost is *"what share of this item's margin does the card cost eat"*, and
+that is `not_connected` here rather than guessed.
+
+### The per-item table, rendered from Sip's real prices and real 90-day units
+
+```
+SIP AS RECORDED (surcharge_enabled = false → 0%)
+  recovery_pct 0% [estimated] · total_surcharge_lost 0 · cost_quality {total:8, usable:0, back_calculated:8, missing:0}
+  Avocado Toast       $16.00  units 3  rev $48.00  → $16.00   margin null [not_connected]
+  Bacon and Egg Roll  $12.00  units 2  rev $24.00  → $12.00   margin null [not_connected]
+  Affogato            $ 7.00  units 3  rev $21.00  → $ 7.00   margin null [not_connected]
+  Chicken Wrap        $14.00  units 1  rev $14.00  → $14.00   margin null [not_connected]
+  Apple Juice         $ 6.00  units 2  rev $12.00  → $ 6.00   margin null [not_connected]
+  Banana Bread Slice  $ 7.00  units 1  rev $ 7.00  → $ 7.00   margin null [not_connected]
+  Brownie             $ 6.00  units 1  rev $ 6.00  → $ 6.00   margin null [not_connected]
+  Chai Tea            $ 4.50  units 1  rev $ 4.50  → $ 4.50   margin null [not_connected]
+  UNKNOWNS: 8 of 8 products have a cost that is exactly 40% of the price — the signature of a
+  number that was derived from the price rather than recorded. We will not compute a margin from those.
+```
+
+**Sip's prices do not move, because Sip loses nothing.** That is the correct output, not an empty one.
+
+The same engine on a venue that *does* surcharge at 1.5% — **a worked example, not Sip's data** —
+returns `recovery_pct 1.323%` and moves Avocado Toast $16.00 → **$16.21**, Chai Tea $4.50 →
+**$4.56**. Every margin still `null [not_connected]`, because the cost problem is unchanged.
+
+### ⚠️ The mutation, and why it is the finding
+
+A naive engine reads `cost_price` and computes the margin. On Sip's two heaviest sellers that gives
+**Avocado Toast $3.00** and **Toastie $7.50** — confident, precise, and fabricated, because all 72
+costs are exactly `price × 0.4`. The engine returns **`null`** for both.
+
+```
+naive   [{ Flat White, margin: 3 }, { Toastie, margin: 7.5 }]
+honest  [{ Flat White, margin: null }, { Toastie, margin: null }]
+```
+
+Two confident numbers against two honest nulls, asserted as unequal. **The grounding rail goes red
+on exactly the invented cost the sprint named.**
+
+### The rail is not simply always-null
+
+`isCostUsableForMargin()` is tested in both directions: an **outlet-recorded** cost produces a real
+margin (`Beans 1kg $30 − $18 = $12`, tier `verified`), and a catalogue cost that does *not* match the
+signature (41.7%, the case `resolve-cost.ts` documents) is accepted as a genuine estimate. Only the
+`catalogue` + `price × 0.4` combination is rejected — a weak tier alone is not disqualifying, and a
+suspicious ratio alone is not either.
+
+### Honest on thin data, which is the sprint's own test
+
+An item with **no sales line** in the window returns `revenue: null` / `not_connected` — but its
+**recovering price is still computed**, because that needs no sales. An item with **zero units** is
+`revenue: 0` / `verified`, because zero is a real answer. Returns are netted off units, so a
+refunded coffee does not inflate the item.
+
+**Gates:** tsc 0 · vitest **15/15** on this file · canon rail pass.
