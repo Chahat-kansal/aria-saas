@@ -1,7 +1,104 @@
 # RUN-M13B · THE HERO PATH BEHIND THE WALL
 
-7 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**7 September 2026 · autonomous run, RULE 20 · five phases, five done, none parked, six commits.
+All pushed.**
+
+**The file M13 called "the single highest-risk file in the repo to touch" is behind the wall.**
+`lib/aria/council.ts` — the council that answers when an owner asks Aria anything — no longer owns
+an Anthropic client, a retry policy, a timeout, or a cost logger. It calls one function. The W1
+allow-list went **176 → 175**, and that notch is the whole point of a ratchet.
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ The wall M13 built had a hole in it, and this sprint could not proceed until it was closed.**
+The gateway classified truncation by reading `stop_reason` and `usage` off an object that had
+**neither**. Run against the real shape it returned `{hitCeiling:false, stopReason:null,
+outputTokens:null}` — **every call, always.** `ok_at_ceiling` and `truncated_mid_structure`, the two
+outcomes M8 built the entire rail for, were **unreachable**. M13's own test asserted the *import*
+existed. Presence, not behaviour — failure pattern #1, committed by the commit that built the wall,
+and found only by running the function. Migrating the council onto the gateway as it stood **would
+have silently deleted ceiling detection from the hero answer path.** Fixed, and both directions now
+proven by observation.
+
+**2. ⚠️ The nightly council has produced nothing for 94 days and tells you it is steady state every
+morning.** 97 sessions, all complete. **2 proposals ever, both on 4 June.** 96 of 97 narrate *"No
+agent proposals today — all systems are in steady state."* The agents do run and do reach the model
+— two of them logged successful calls at 20:00 last night — but **12 of 14 leave no trace at all**,
+because `proposal-council.ts:271` collects every agent failure into `agentErrors` and **never reads
+it**. Whether those twelve threw, timed out, or genuinely had nothing to say is *unknowable from
+production*. Diagnosed, not fixed: all three fixes change what the owner reads.
+
+**3. The retry contract already existed — and it duplicated streamed answers.** `withBackoff`
+wrapped the *entire streaming closure*, so a transient failure **after** tokens had reached the
+client opened a second stream and replayed the answer from the start. The owner would read a partial
+answer followed by a complete one, concatenated. The main Ask Aria lane is the only streaming call
+site in the codebase, so the exposed path was the one that answers you.
+
+## WHAT LANDED
+
+| phase | outcome | commit |
+|---|---|---|
+| 1 · the retry contract | ✅ written down, tested, **duplicate-stream bug fixed** | `89f20cdc` |
+| 2 · rename the councils | ✅ `proposal-council` / `answer-council`, no shim, two rails | `597f3e40` + `3cc8c84f` |
+| 3 · hero council onto the gateway | ✅ **176 → 175**, gateway bug fixed first | `c50eebb7` + `834c29af` |
+| 4 · the council that produces nothing | ✅ diagnosed to the line; nothing deleted | `c50eebb7` |
+| 5 · replay 30 real messages | ✅ **301 comparisons, 0 diffs** | `c50eebb7` |
+
+## THE COUNCILS ARE NAMED FOR THEIR JOBS NOW
+
+`agents/council.ts` → **`agents/proposal-council.ts`** (nightly cron, writes proposals).
+`aria/council.ts` → **`aria/answer-council.ts`** (an owner asks, it answers).
+
+Two live, unrelated features shared one name, so `import { … } from '@/lib/…/council'` read
+identically at every call site and meant completely different things. **No re-export shim** — that
+would have preserved the ambiguous import line that is the entire defect. Two rails stop the old
+names returning: an ESLint `no-restricted-imports` entry each, and a scan of all ~1,900 source files.
+
+## WHAT THE MIGRATION ACTUALLY CHANGED — almost nothing, and that is the claim
+
+Models, prompts, `max_tokens` (4000 advisors / 6000 synthesis), temperatures (0.25 / 0.2) and
+timeouts (18s / 45s) are **unchanged**. **The only behavioural difference is that a retry now waits
+200 ms longer** — measured against both implementations in phase 1, before the move.
+
+Proven by replaying **30 real owner messages** from `aria_conversations` through the pre- and
+post-migration code: **91 advisor prompts, 120 synthesis prompts, 90 model choices — 0 diffs.**
+A diff of model *output* would have been the wrong test: the council runs at temperature 0.25, so two
+runs of unchanged code differ anyway, and it would have cost 300 billed calls on the hero path to
+measure sampling noise.
+
+Two capabilities were **moved up rather than deleted**: the council's rejected-insert audit row is
+now in the provider as `ai_log_failure`, so every caller gets it; and M8's ceiling disclosure and
+lost-advisor accounting survive intact and are asserted.
+
+**One meaning changed, deliberately and recorded:** `aria_ai_calls.success` on a `council_*` row used
+to mean "the JSON parsed"; it now means "the call succeeded", as everywhere else. Forward-only —
+historical rows keep their old meaning, and a query spanning both eras must know that.
+
+## WHAT NEEDS YOU
+
+1. **The nightly council** (item 2 above). Three fixes, all owner-facing: read `agentErrors`; stop
+   claiming steady state on zero proposals; then decide what it is for.
+2. **`retry_of` on `aria_ai_calls`** — DDL, parked. The exact `ALTER` is in the phase 1 section.
+   Without it, retries are billed but cannot be linked to the call they retried.
+3. **`total_variance_cents` and anything else touching the cached-PWA consumers** is still the
+   standing park; nothing in this run went near it.
+4. **`docs/aria/ARIA-ARCHITECTURE-AUDIT.md` still does not exist in the repo** — third sprint
+   running. Every number here was re-measured from the code and the live database instead.
+
+## MY OWN ERRORS THIS RUN
+
+- **My name rail blocked my own push** — 1,900 synchronous reads blew vitest's 5s default. The
+  assertion was right and the traversal was right; only the cost was wrong. Fixed by caching the
+  corpus and setting an honest timeout, **not** by narrowing the scan.
+- **The canon rail caught two of my new lines, and was right about both.** One was a real defect: my
+  new fallback audit row discarded its own error. The other was my test quoting the pattern its rule
+  blocks — literal split, guard untouched, third time in this series.
+- **A scan matched its own prose again** (phase 1): I counted the transient regex, found two, and the
+  second was my own doc comment quoting the contract. Fourth instance across M12/M13/M13B.
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
