@@ -80,6 +80,12 @@ export interface CouncilAgentHealth {
   agents_failed: number
   agents_skipped_disabled: number
   failures: AgentFailure[]
+  /**
+   * M13C phase 2 — set when the proposal insert itself was REJECTED. Without this, N rejected
+   * proposals and zero proposals are the same empty array, and the narrative would report a quiet
+   * night for a night in which the council lost everything it produced.
+   */
+  proposal_persist_error: string | null
 }
 
 export interface CouncilSession {
@@ -259,7 +265,7 @@ function detectConflicts(proposals: AgentCouncilProposal[]): ConflictDescription
 export function readStoredAgentHealth(plan: unknown): CouncilAgentHealth {
   const h = (plan as { agent_health?: Partial<CouncilAgentHealth> } | null)?.agent_health
   if (!h || typeof h.agents_total !== 'number') {
-    return { agents_total: -1, agents_reported: -1, agents_failed: -1, agents_skipped_disabled: -1, failures: [] }
+    return { agents_total: -1, agents_reported: -1, agents_failed: -1, agents_skipped_disabled: -1, failures: [], proposal_persist_error: null }
   }
   return {
     agents_total: h.agents_total,
@@ -267,6 +273,7 @@ export function readStoredAgentHealth(plan: unknown): CouncilAgentHealth {
     agents_failed: h.agents_failed ?? -1,
     agents_skipped_disabled: h.agents_skipped_disabled ?? 0,
     failures: Array.isArray(h.failures) ? h.failures : [],
+    proposal_persist_error: typeof h.proposal_persist_error === 'string' ? h.proposal_persist_error : null,
   }
 }
 
@@ -287,6 +294,7 @@ export function summariseAgentHealth(params: {
   reported: string[]
   skipped: string[]
   failures: AgentFailure[]
+  proposalPersistError?: string | null
 }): CouncilAgentHealth {
   return {
     agents_total: params.total,
@@ -294,6 +302,7 @@ export function summariseAgentHealth(params: {
     agents_failed: params.failures.length,
     agents_skipped_disabled: params.skipped.length,
     failures: params.failures,
+    proposal_persist_error: params.proposalPersistError ?? null,
   }
 }
 
@@ -301,18 +310,22 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   const today = new Date().toISOString().split('T')[0]
 
   // STEP 1: GET OR CREATE TODAY'S SESSION
-  const { data: existing } = await supabaseAdmin
+  const { data: existing, error: existingErr } = await supabaseAdmin
     .from('agent_council_sessions')
     .select('*')
     .eq('business_id', business_id)
     .eq('session_date', today)
     .maybeSingle()
+  // A failed lookup here reads as "no session today" and starts a duplicate one. Non-fatal — the
+  // upsert below is idempotent on (business_id, session_date) — but never silent again.
+  if (existingErr) console.error('[council] session lookup failed:', existingErr.message)
 
   if (existing?.status === 'complete') {
-    const { data: existingProposals } = await supabaseAdmin
+    const { data: existingProposals, error: existingProposalsErr } = await supabaseAdmin
       .from('agent_council_proposals')
       .select('*')
       .eq('session_id', existing.id)
+    if (existingProposalsErr) console.error('[council] replay proposal read failed:', existingProposalsErr.message)
     return {
       session: existing as AgentCouncilSession,
       proposals: (existingProposals ?? []) as AgentCouncilProposal[],
@@ -336,12 +349,15 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   }
 
   // STEP 2: GET OWNER PRIORITY
-  const { data: settingsRow } = await supabaseAdmin
+  const { data: settingsRow, error: settingsErr } = await supabaseAdmin
     .from('agent_settings')
     .select('config, mode')
     .eq('business_id', business_id)
     .eq('agent_type', 'council')
     .maybeSingle()
+  // A failed read silently falls back to 'balanced'/'suggest' — which is the safe default, but the
+  // owner's actual choice being unreadable is worth knowing about.
+  if (settingsErr) console.error('[council] council settings read failed, using defaults:', settingsErr.message)
   const priority = (settingsRow?.config as Record<string,unknown> | null)?.priority as string ?? 'balanced'
   const mode = (settingsRow?.mode as string | null) ?? 'suggest'
 
@@ -359,13 +375,19 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   await Promise.allSettled(
     ALL_AGENT_TYPES.map(async (agentType) => {
       try {
-        const { data: agentSettings } = await supabaseAdmin
+        const { data: agentSettings, error: agentSettingsErr } = await supabaseAdmin
           .from('agent_settings')
           .select('enabled')
           .eq('business_id', business_id)
           .eq('agent_type', agentType)
           .maybeSingle()
 
+        // ⚠️ A failed read here defaults the agent to ENABLED, so a broken settings query silently
+        // runs an agent the owner switched off. Recorded as a failure rather than swallowed.
+        if (agentSettingsErr) {
+          agentFailures.push({ agent_type: agentType, kind: 'threw', reason: 'settings read failed: ' + agentSettingsErr.message.slice(0, 200) })
+          return
+        }
         if (agentSettings?.enabled === false) { agentsSkipped.push(agentType); return }
 
         // Resolve agent from the explicit registry (no fragile string transforms).
@@ -416,13 +438,6 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   // RUN-M13C.md. `BaseAgent` writes its own `agent_runs` row through the ANON, cookie-based client,
   // which under RLS in a cron writes nothing. The council holds a service-role client, so it can
   // record on the agents' behalf without changing anyone's authorisation.
-  const agentHealth = summariseAgentHealth({
-    total: ALL_AGENT_TYPES.length,
-    reported: agentsReported,
-    skipped: agentsSkipped,
-    failures: agentFailures,
-  })
-
   if (agentFailures.length > 0) {
     const failureRows = agentFailures.map(f => ({
       business_id,
@@ -453,12 +468,34 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
     synergises_with: null as string[] | null,
   }))
 
-  const { data: insertedProposals } = await supabaseAdmin
+  // M13C PHASE 2 — W6 ON THE PROPOSAL INSERT. It discarded its error, so a REJECTED insert and a
+  // genuinely empty night produced the identical empty array, and the narrative called both steady
+  // state. Now the rejection is carried into the health block and said out loud by phase 3.
+  //
+  // Not thrown: the session is still worth completing and the chair still has something to say
+  // about what the agents found. What must never happen is reporting the night as quiet.
+  let proposalPersistError: string | null = null
+  const { data: insertedProposals, error: proposalInsertErr } = await supabaseAdmin
     .from('agent_council_proposals')
     .insert(proposalRows)
     .select()
+  if (proposalInsertErr) {
+    proposalPersistError = proposalInsertErr.message.slice(0, 300)
+    console.error('[council] agent_council_proposals insert REJECTED —', proposalRows.length, 'proposals lost:', proposalInsertErr.message)
+  }
 
   const proposals = (insertedProposals ?? []) as AgentCouncilProposal[]
+
+  // Built HERE, after the insert, so it carries whether the proposals actually landed. Built before
+  // it, the block could only ever say `proposal_persist_error: null` — a health report that cannot
+  // express the failure it is meant to report is the shape this whole sprint is about.
+  const agentHealth = summariseAgentHealth({
+    total: ALL_AGENT_TYPES.length,
+    reported: agentsReported,
+    skipped: agentsSkipped,
+    failures: agentFailures,
+    proposalPersistError,
+  })
 
   // STEP 5: CONFLICT DETECTION
   const conflicts = detectConflicts(proposals)
@@ -592,7 +629,7 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   }
 
   // STEP 8: UPDATE SESSION
-  const { data: completedSession } = await supabaseAdmin
+  const { data: completedSession, error: completeErr } = await supabaseAdmin
     .from('agent_council_sessions')
     .update({
       // M13C phase 1 — `agent_health` rides in the `plan` jsonb because agent_council_sessions has
@@ -612,6 +649,11 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
     .eq('id', session.id)
     .select()
     .single()
+  // ⚠️ THE MOST IMPORTANT ONE IN THIS FILE. This update is what marks the session complete and
+  // stores the narrative and the health block. Discarded, a rejection meant the session stayed
+  // 'running' for ever while the function returned as though the night had gone fine — reporting
+  // success for work that was not saved.
+  if (completeErr) console.error('[council] SESSION COMPLETION UPDATE REJECTED — narrative and agent_health NOT saved:', completeErr.message)
 
   // STEP 9: EXECUTE APPROVED PROPOSALS (if mode='auto')
   let executedActions = 0
@@ -637,10 +679,11 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
   }
 
   // Refresh proposals after council decisions
-  const { data: finalProposals } = await supabaseAdmin
+  const { data: finalProposals, error: finalErr } = await supabaseAdmin
     .from('agent_council_proposals')
     .select('*')
     .eq('session_id', session.id)
+  if (finalErr) console.error('[council] final proposal re-read failed, returning the pre-decision set:', finalErr.message)
 
   return {
     session: (completedSession ?? session) as AgentCouncilSession,

@@ -57,8 +57,39 @@ describe('M13C phase 1 · the council counts its own run', () => {
       agents_failed: 12,
       agents_skipped_disabled: 0,
       failures: h.failures,
+      // M13C phase 2 added this field. Asserted rather than loosened to a partial match: a health
+      // block that cannot say the proposals were lost is the shape this sprint exists to remove.
+      proposal_persist_error: null,
     })
     expect(h.failures).toHaveLength(12)
+  })
+
+  it('PHASE 2 — a REJECTED proposal insert is not the same fact as a quiet night', () => {
+    // Before this field, N rejected proposals and zero proposals were the identical empty array,
+    // and the narrative called both steady state.
+    const lost = summariseAgentHealth({
+      total: 14, reported: ['reorder', 'pricing'], skipped: [], failures: [],
+      proposalPersistError: 'new row violates row-level security policy',
+    })
+    const quiet = summariseAgentHealth({ total: 14, reported: ['reorder', 'pricing'], skipped: [], failures: [] })
+    expect(lost.proposal_persist_error).toContain('row-level security')
+    expect(quiet.proposal_persist_error).toBeNull()
+    // The two nights are now distinguishable, which they were not.
+    expect(lost).not.toEqual(quiet)
+    // And the agent counts are identical in both — proving the difference is carried by this field
+    // alone, not smuggled in through a count.
+    expect(lost.agents_reported).toBe(quiet.agents_reported)
+    expect(lost.agents_failed).toBe(quiet.agents_failed)
+  })
+
+  it('PHASE 2 — the persist error survives the round-trip to the session row', () => {
+    const h = summariseAgentHealth({
+      total: 14, reported: [], skipped: [], failures: [], proposalPersistError: 'permission denied for table',
+    })
+    const stored = JSON.parse(JSON.stringify({ decisions: [], agent_health: h }))
+    expect(readStoredAgentHealth(stored).proposal_persist_error).toBe('permission denied for table')
+    // A legacy session has no such field and must read null, not an invented message.
+    expect(readStoredAgentHealth({ agent_health: { agents_total: 3 } }).proposal_persist_error).toBeNull()
   })
 
   it('a disabled agent is SKIPPED, not failed — the owner turned it off on purpose', () => {

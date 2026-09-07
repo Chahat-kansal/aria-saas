@@ -182,3 +182,107 @@ them. Red, on the count and on the array.
 `readStoredAgentHealth` returns **-1 (unknown)**, never 0. A session that never recorded its agents
 did not run zero agents — rendering that as "0 of 0" would be the same fabrication the narrative is
 being fixed for, and phase 3 refuses to build a sentence from -1.
+
+---
+
+## PHASE 2 — READ THE OTHER TWO ✅ (three named, nine fixed)
+
+**Commit:** `<phase-2>` · `base-agent.ts`, `proposal-council.ts`, `council-agent-health.test.ts`.
+
+### The three the sprint named
+
+| site | was | is |
+|---|---|---|
+| `base-agent.ts:46` `saveDecisions` | `const { data } = …insert(rows).select()` → `data ?? []` | reads `error`, records it, **throws** |
+| `base-agent.ts:52` `logRun` | `try { await …insert(…) } catch` | reads `error`, records it, **stays non-fatal** |
+| `proposal-council.ts:319` proposal insert | `const { data: insertedProposals } = …` | reads `error`, carries it into the health block |
+
+**`saveDecisions` throws, and that is the sprint's "do not report success" applied literally.**
+Returning `[]` after failing to save real decisions says *"this agent had nothing to propose"* about
+an agent that had plenty and lost it. Every route that constructs an agent is wrapped in
+`withErrorCapture`, so a throw lands in this repo's **existing** error shape rather than inventing
+one — no new response shape, and the M13B consumer test is satisfied.
+
+**`logRun` stays non-fatal.** Losing run telemetry must never take down an agent that otherwise
+worked. Silence was the defect, not the non-fatality.
+
+**The proposal insert does not throw either.** The session is still worth completing and the chair
+still has something to say about what the agents found. What must never happen is reporting the
+night as quiet — so `CouncilAgentHealth` gained `proposal_persist_error`, and phase 3 says it out
+loud.
+
+⚠️ **The health block is now built AFTER the insert.** Built before it — where it naturally wanted to
+go — it could only ever record `proposal_persist_error: null`. A health report structurally unable to
+express the failure it exists to report is this sprint's own bug, one layer up.
+
+### Why the diagnostic writes use `supabaseAdmin`
+
+`BaseAgent`'s own client cannot write (phase 0, finding 2). A record of a failure that fails to
+record is the failure this sprint is about, so the **diagnostic** row goes through the client that
+can write. This is not an authorisation change: the agent's own reads and writes still go through
+its own client, and the parked fix is unchanged.
+
+### Sibling sweep — searched 2 files, found 6 more, fixed all 6
+
+| file | unread destructures before | after |
+|---|---|---|
+| `proposal-council.ts` | 6 of 8 | **0 of 8** |
+| `base-agent.ts` | 1 of 2 (+ a bare `catch {}`) | **0 of 2** |
+
+The sweep found the same defect five more times in the same file, so all of them were fixed — the
+decision table's "fix the ones in the declared file domain". Two are worth naming:
+
+- **`completedSession` (STEP 8) — the most important unread error in the file.** That update is what
+  marks the session complete and stores the narrative *and* the health block. Discarded, a rejection
+  left the session `'running'` for ever while the function returned as though the night had gone
+  fine.
+- **`agentSettings`** — a failed read fell through to `enabled: true`, so a broken settings query
+  **silently ran an agent the owner had switched off.** Now recorded as a failure and skipped.
+
+`getSettings`'s bare `catch { return defaults }` also now logs; same class, same file.
+
+### ⚠️ The W6 override list did not change, because it never contained these
+
+**Before: 3. After: 3.** `READ_THE_ERROR_ALLOWLIST` holds `database.types.ts`, `supabase-admin.ts`
+and `supabase-server.ts` — and nothing else, ever. See phase 0, correction 3: W6 grandfathers by
+diff, not by list. Every line touched here became a **new** line and had to satisfy the rule to pass
+the pre-push hook, which is the ratchet working exactly as designed with no list to edit.
+
+### Verification
+
+`agent_runs` receiving a row on the next real run is **phase 5's** live check — the row shape is
+already proven ACCEPTED against production (phase 0), and the client that must write it is the
+parked finding, so the council writes on the agents' behalf.
+
+**Mutation:** re-silencing one of the fixed lines and re-running `canon-rail-guard` — reported below
+with the observed output.
+
+### ⚠️ THE MUTATION FAILED TO FAIL — and that is a real property of the guard, reported loudly
+
+The sprint's mutation is *"re-silence one → the W6 rule goes red."* **It does not.** Re-silenced
+`completedSession` and ran the guard in both modes:
+
+```
+  default (origin/main...HEAD):  no new canonical-path violations introduced. Pass.
+  --working-tree:                no new canonical-path violations introduced. Pass.
+```
+
+**The guard is not broken and the fix is not fake. The mutation is the wrong shape.** W6 is a
+*diff-scan* rule over **added** lines. Re-silencing a line restores its **original** text, so the
+line stops being a change at all and there is nothing for the scan to see. A regression that returns
+a file to exactly how it was is, by construction, invisible to this guard.
+
+Proven not to be vacuous, by a probe that IS a new line:
+
+```
+  [canon-rail-guard] 1 new violation(s) found
+    src/lib/agents/proposal-council.ts:658  [supabase-error-not-read]
+```
+
+Probe removed; clean again. **So: the rule fires on new code, exactly as designed, and it cannot
+catch a revert.** That is worth knowing before anyone relies on it as a regression detector — the
+protection against un-fixing these nine lines is the unit tests and review, not the rail.
+
+**The behavioural mutation that does go red** is the one in `council-agent-health.test.ts`: a health
+block that forgets its failures, and one that cannot distinguish a rejected proposal insert from a
+quiet night. Both red on the returned value, not on source text.

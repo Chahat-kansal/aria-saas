@@ -15,18 +15,22 @@ export abstract class BaseAgent {
 
   protected async getSettings(business_id: string): Promise<AgentSettings> {
     try {
-      const { data } = await this.supabase
+      const { data, error } = await this.supabase
         .from('agent_settings')
         .select('enabled,auto_approve_below_cents,config')
         .eq('business_id', business_id)
         .eq('agent_type', this.type)
         .maybeSingle();
+      // M13C phase 2, sibling sweep. A failed read falls through to enabled:true — so a broken
+      // query silently RUNS an agent the owner switched off. Still non-fatal, no longer silent.
+      if (error) console.error('[base-agent] agent_settings read failed, defaulting to enabled', { agent: this.type, reason: error.message });
       return {
         enabled: data?.enabled ?? true,
         auto_approve_below_cents: data?.auto_approve_below_cents ?? 0,
         config: (data?.config as Record<string, unknown>) ?? {},
       };
-    } catch {
+    } catch (e) {
+      console.error('[base-agent] agent_settings read threw, defaulting to enabled', { agent: this.type, reason: (e as Error)?.message });
       return { enabled: true, auto_approve_below_cents: 0, config: {} };
     }
   }
@@ -43,13 +47,54 @@ export abstract class BaseAgent {
       expires_at: d.expires_at,
       status: 'pending',
     }));
-    const { data } = await this.supabase.from('agent_decisions').insert(rows).select();
+    // M13C PHASE 2 — W6, BY HAND, ON A LINE THAT HAS BEEN LYING SINCE 4 JUNE.
+    //
+    // This discarded its error and returned `data ?? []`. A REJECTED insert therefore looked
+    // exactly like "this agent had nothing to propose" — and under RLS in a cron it is rejected
+    // every single night, because `this.supabase` is the ANON cookie client (see the parked finding
+    // in RUN-M13C.md). `agent_decisions` has held 2 rows since 4 June for this reason.
+    //
+    // The rejection is now recorded where it can be queried, and then THROWN. Returning [] after
+    // failing to save real decisions is reporting success for work that did not happen — the
+    // sprint's rule, and the difference between an agent that found nothing and an agent that lost
+    // everything it found. Every route that constructs an agent is wrapped in withErrorCapture, so
+    // a throw lands in this repo's existing error shape rather than inventing one.
+    const { data, error } = await this.supabase.from('agent_decisions').insert(rows).select();
+    if (error) {
+      console.error('[base-agent] agent_decisions insert REJECTED', { agent: this.type, count: rows.length, reason: error.message });
+      // supabaseAdmin, not this.supabase — the diagnostic must land even when the agent's own
+      // client is the thing that cannot write. This is a NEW record, not a change of who may write
+      // what: the agent's own reads and writes still go through its own client.
+      const { error: auditErr } = await supabaseAdmin.from('agent_runs').insert({
+        business_id: rows[0]?.business_id,
+        agent_type: this.type,
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_ms: 0,
+        decisions_count: 0,
+        errors: ['save_rejected: ' + error.message + ' (' + rows.length + ' decisions lost)'],
+        triggered_by: 'save_failed',
+      });
+      if (auditErr) console.error('[base-agent] the save-failure record was ALSO rejected:', auditErr.message);
+      throw new Error('agent_decisions insert rejected for ' + this.type + ': ' + error.message);
+    }
     return (data ?? []) as AgentDecision[];
   }
 
   protected async logRun(business_id: string, result: AgentRunResult, triggered_by = 'cron') {
+    // M13C PHASE 2 — WHY agent_runs STOPPED ON 4 JUNE, ANSWERED.
+    //
+    // Not because this insert fails: the exact shape below was proven ACCEPTED against production
+    // in a rolled-back DO block. It stopped because `this.supabase` is the ANON cookie client and
+    // RLS rejects it in a cron, where there are no cookies. 4 June is the last day these agents ran
+    // from the dashboard with a real session.
+    //
+    // The try/catch around it could never have told anyone: Supabase RESOLVES with { error } and
+    // never throws, so the catch has never once fired. The error is now destructured and read. The
+    // CLIENT itself is parked as an authorisation change (RUN-M13C.md) — this commit makes the
+    // failure loud, which is what lets the next person fix it in one line instead of guessing.
     try {
-      await this.supabase.from('agent_runs').insert({
+      const { error } = await this.supabase.from('agent_runs').insert({
         business_id,
         agent_type: this.type,
         started_at: new Date(Date.now() - result.duration_ms).toISOString(),
@@ -59,8 +104,25 @@ export abstract class BaseAgent {
         errors: result.errors.length > 0 ? result.errors.map(e => e.message) : null,
         triggered_by,
       });
+      if (error) {
+        console.error('[base-agent] agent_runs insert REJECTED', { agent: this.type, triggered_by, reason: error.message });
+        // Same reasoning as saveDecisions: the record of the failure goes through the client that
+        // can actually write. Non-fatal — losing run telemetry must never take down an agent that
+        // otherwise worked. Silence is what was wrong here, not the non-fatality.
+        const { error: auditErr } = await supabaseAdmin.from('agent_runs').insert({
+          business_id, agent_type: this.type,
+          started_at: new Date(Date.now() - result.duration_ms).toISOString(),
+          completed_at: new Date().toISOString(),
+          duration_ms: result.duration_ms,
+          decisions_count: result.decisions.length,
+          errors: ['logrun_rejected: ' + error.message],
+          triggered_by: triggered_by + '_retry',
+        });
+        if (auditErr) console.error('[base-agent] the logRun-failure record was ALSO rejected:', auditErr.message);
+      }
     } catch (e: unknown) {
-      console.warn('[base-agent] logRun failed:', (e as Error).message);
+      // Kept for a genuine network throw. It has never fired for a rejected insert and never could.
+      console.warn('[base-agent] logRun threw:', (e as Error).message);
     }
   }
 
