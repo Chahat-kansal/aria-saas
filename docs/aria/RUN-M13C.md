@@ -1,7 +1,126 @@
 # RUN-M13C · THE COUNCIL THAT SAYS STEADY STATE
 
-7 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**7 September 2026 · autonomous run, RULE 20 · five phases, five done, none parked as work, five
+commits. All pushed. Build verified green.**
+
+**"All systems are in steady state" is gone.** It had been the answer to 94 consecutive mornings in
+which the council produced nothing, and it is now six sentences — one per thing that can actually
+happen overnight, each built from counts the council took of its own run.
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ The whole feature is broken by ONE FIELD, and it is not the one the sprint expected.**
+
+```ts
+// src/lib/agents/base-agent.ts:11
+protected supabase = createServerSupabaseClient();   // anon key + cookies. A cron has no cookies.
+```
+
+RLS is on. So **every agent's decisions and run-logs have been silently rejected since 4 June** —
+which is the day these last ran from a browser, with a real session. `agent_decisions` holds 2 rows;
+`agent_runs` holds 7. And for three agents (`reorder`, `pricing`, `schedule`) their **reads** go
+through it too: Sip has **74 active products, 2 outlets, 5 staff and 1,802 completed sales**, and
+those three cannot see one of them.
+
+**PARKED, because changing it is an authorisation change (RULE 18), not because it is hard.** The
+fix is to *inject* the client — service-role for cron and council, the caller's for a route — not to
+swap it for `supabaseAdmin`, which would make every agent bypass RLS inside six user-facing routes.
+
+**2. The sprint's premise about `logRun` was wrong, and the truth is better.** The brief says it
+"failed silently inside a try/catch that cannot catch a resolved `{ error }`". The try/catch part is
+true; the conclusion is not. **The exact insert `logRun` performs was ACCEPTED by production** in a
+rolled-back probe. It was never failing — it was never *allowed*. Same for the proposal insert. Two
+more corrections in the same class: **`business_events` cannot be the interim home** (its CHECK
+rejects `entity_type='council_session'` with SQLSTATE 23514 — writing there would have re-created
+this sprint's own silent-failure bug), and **there was nothing to remove from the W6 override list**,
+which has three entries and never contained either file.
+
+**3. The first real diagnosis arrives on its own tonight.** Phase 2 made `saveDecisions` **throw**
+with the rejection message instead of returning `[]`. Phases 1–3 are deployed. At 20:00 UTC the
+council will record, per agent, what happened and why — into `agent_runs` and into the session row —
+and the narrative will say *"N of 14 checks did not report"* instead of "steady state". The two
+queries to run afterwards are at the end of the phase 5 section.
+
+## THE SIX SENTENCES — rendered from real data, not described
+
+```
+quiet        All 14 overnight checks reported and nothing needs you today.
+
+incomplete   2 of 14 overnight checks reported. The other 12 did not, so last night's check is
+  ← what     incomplete — I have logged it and will flag it again if it repeats. Nothing in what
+    last     did report needs you today.
+    night
+    was
+
+nothing_ran  None of the 14 overnight checks reported back, so I have nothing to tell you about
+             last night. That is a fault, not a quiet night — it has been logged and I will flag
+             it again if it repeats.
+
+proposed     Reviewed 3 recommendations and approved the highest-impact actions for today.
+
+lost         Overnight checks produced recommendations but they could not be saved, so there is
+             nothing to show you. This is a fault on my side, not a quiet night — it has been
+             logged.
+
+unknown      This session did not record which overnight checks ran, so I cannot tell you whether
+             nothing needed doing or nothing reported.
+```
+
+There is no literal `14` in the function — every count comes from the health block, so a fifteenth
+agent changes the sentence with no code edit. The 96 historical sessions read **-1 (unknown)**, never
+0: a session that did not record its agents did not run zero of them.
+
+## WHAT IT COSTS AND WHETHER TO KEEP IT
+
+| | |
+|---|---|
+| model calls, 5 Jun → 6 Sep | 281 |
+| `aria_ai_calls` says it cost | **$0.00** — and that is rounding, not free |
+| **actually cost, priced from real tokens** | **≈ US$0.20** |
+| calls that failed | 144 (51%) — **all one cause**: "credit balance is too low", last seen 26 Aug |
+| proposals produced, ever | **2**, both 4 June. 0 executed. |
+
+**RECOMMENDATION: FIX, DO NOT RETIRE.** The machinery is complete — 14 registered agents all with
+real model call sites, a chair, a conflict detector, an executor, a settings surface, and an owner
+with all nine configured agents switched on. Four agents demonstrably reach the model and answer.
+Nothing here is a stub. It costs twenty cents a quarter to leave running while it is fixed. **A
+feature that has never worked because of one mis-wired client is not a feature nobody wants; it is a
+feature nobody has seen.**
+
+## THE NUMBERS THE SPRINT ASKED FOR
+
+| | before | after |
+|---|---|---|
+| W6 override list | **3** | **3** — it never contained these files; W6 grandfathers by diff, not by list |
+| unread Supabase errors in the two files | 7 of 10 | **0 of 10** — 3 named by the sprint, **6 more found by the sweep, all fixed** |
+| presence tests under the walls | 20 | **19**, alongside **44** behaviour tests (13 of them new) |
+| presence tests elsewhere in the repo | — | **393 across 70 of 123 files** — reported, out of scope |
+
+## TWO THINGS THAT DID NOT GO TO PLAN, REPORTED RATHER THAN SMOOTHED OVER
+
+- **⚠️ The sprint's phase-2 mutation failed to fail.** *"Re-silence one → the W6 rule goes red."* It
+  does not, in either guard mode. W6 scans **added** lines; re-silencing restores the *original*
+  text, so the line stops being a change at all. **A regression that returns a file to exactly how it
+  was is invisible to this rail by construction.** Proven non-vacuous with a probe that *is* a new
+  line (1 violation, correct file and rule, then removed). The protection against un-fixing those
+  nine lines is the unit tests, not the guard.
+- **⚠️ I could not trigger a live run** — it needs `CRON_SECRET` and a production cron trigger, which
+  is not something to do unattended. Everything in phase 5 is measured from the live database and
+  the code paths instead, and the one question only a run can answer is named with the query for it.
+
+## MY OWN ERRORS THIS RUN
+
+- **I over-stated phase 0's finding and corrected it in phase 5.** I wrote that "the agents' reads go
+  through the anon client". Measured per file, that is true of **3 of 14**, not all of them — the
+  other eleven read with `supabaseAdmin` and see the data fine. The *writes* are anon for all
+  fourteen, which is the part that stands. Corrected in place rather than left to be re-reported.
+- **My anti-vacuity probe asserted the wrong outcome** and went red on its first run: I gave the
+  legacy provider shape a body that did not parse, so `unparseable` was the correct answer and my
+  expected `ok` was wrong. The probe was fixed, not the code.
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -462,3 +581,140 @@ sprint's scope says do not convert them. That number is the size of the problem 
 for; it is not a defect list, because many of those are legitimately structural too.
 
 **Gates:** tsc 0 · vitest **123 files / 1613 tests, exit 0** · `next build` **BUILD_EXIT=0**.
+
+---
+
+## PHASE 5 — WHAT IT COSTS AND WHAT IT'S FOR ✅ (report)
+
+**No code in this phase.**
+
+### ⚠️ I DID NOT TRIGGER A LIVE RUN, AND HERE IS EXACTLY WHY AND WHAT TO CHECK INSTEAD
+
+The sprint says *"Run it once, deliberately, and read the errors."* I could not. The council runs
+behind `/api/cron/dispatch/h20`, which requires `CRON_SECRET`; triggering a production cron
+unattended, and handling that secret, are both outside what an autonomous run should do. There is no
+local environment for it either — the standing instruction here is Supabase MCP and pure-function
+tests, not `.env.local` scripts.
+
+**So the diagnosis below is built from the live database and the code paths, not from a run I
+performed.** Everything in it is measured. The one thing only a run can give — *which* of the seven
+silent agents stops where — is named at the bottom with the query that answers it, and **the next
+scheduled run at 20:00 UTC tonight will answer it**, because phases 1–3 are deployed.
+
+### What it has cost — and the ledger's own number is wrong
+
+| | |
+|---|---|
+| model calls, 5 Jun → 6 Sep | **281** |
+| recorded in `aria_ai_calls.cost_usd_cents` | **0 on all 281 rows → $0.00** |
+| **actual cost, priced from real tokens** | **≈ US$0.20** (5c haiku + 15c sonnet) |
+| tokens | 19,579 in / 16,321 out |
+| calls that failed | **144 of 281 (51%)** |
+
+**The $0.00 is not free — it is rounding.** Every individual call is worth well under one cent and
+`cost_usd_cents` is an integer, so each row rounds to zero and the total is zero. The real figure is
+computed with the repo's own `computeCostCentsWithCache` over the actual token counts. GROUNDING-
+TEETH: the ledger's zero would have been a fabricated number to quote.
+
+**All 144 failures are one cause**, and it is not a code fault:
+`"Your credit balance is too low to access the Anthropic API"` — last seen **26 August**. The
+billing outage M13B already documented on the answer-council keys. It has recovered.
+
+### What it has produced
+
+**2 proposals. Ever.** Both on 4 June 2026. 0 executed, 0 carrying a `council_decision`.
+`council-executor.ts` has never been called. 97 sessions, 96 of them narrating steady state.
+
+### ⚠️ THE PER-AGENT PICTURE — and a correction to my own phase 0 finding
+
+**Phase 0 said the agents' reads go through the anon client. That is true of THREE of them, not
+fourteen, and I am correcting it here rather than leaving it to be re-reported as fact.** Measured
+per file:
+
+| agent | reads with | ever reached a model | last model call | what that means |
+|---|---|---|---|---|
+| `bas_compliance` | admin | ✅ | **2026-09-06** | working |
+| `inventory_financing` | admin | ✅ | **2026-09-06** | working |
+| `reconciliation` | admin | ✅ | 2026-09-01 | working |
+| `clv` | admin | ✅ | 2026-07-22 | stopped in July; has its own weekly cron |
+| **`reorder`** | **anon** | ❌ never | — | **74 active products exist and it cannot see one** |
+| **`pricing`** | **anon** | ❌ never | — | same client, same blindness |
+| **`schedule`** | **anon** | ❌ never | — | **2 outlets and 5 active staff, invisible** |
+| `customer_acquisition` | admin | ❌ never | — | reads fine — stops at its own data threshold |
+| `flash_revenue` | admin | ❌ never | — | ” |
+| `labour_optimisation` | admin | ❌ never | — | ” |
+| `menu_engineering` | admin | ❌ never | — | ” |
+| `reputation_defence` | admin | ❌ never | — | ” |
+| `supplier_negotiation` | admin | ❌ never | — | ” |
+| `waste_elimination` | admin | ❌ never | — | ” |
+
+All fourteen **have** a model call site, so the ten that never logged one are returning before
+reaching it. For `reorder`, `pricing` and `schedule` the cause is proven: their first line is
+`if (!products?.length) return { decisions: [] }`, the read is `this.supabase` (anon), RLS is on
+`pos_products` — and Sip has **74 active products, 2 outlets, 5 staff and 1,802 completed sales**.
+They are not finding a quiet business; they are looking at an empty one.
+
+### ⚠️ AND THE PART THAT AFFECTS EVERY AGENT, INCLUDING THE ELEVEN THAT CAN READ
+
+`BaseAgent.saveDecisions` and `logRun` write with the **anon** client, all fourteen of them. So an
+agent that *does* produce decisions has them **rejected by RLS and returned as `[]`** — which the
+council read as "nothing to propose". That is why `agent_decisions` holds 2 rows and `agent_runs`
+holds 7, all from the one day these ran from a browser with a real session.
+
+**Phase 2 changed that: `saveDecisions` now throws with the rejection message instead of returning
+`[]`.** So on tonight's run, an agent that produces decisions and cannot save them becomes a
+recorded `threw` failure carrying the real Postgres error, the narrative says *"N of 14 checks did
+not report"*, and the founder can read the reason. **That is the first diagnosis of this feature that
+has ever been possible, and it arrives on its own tonight.**
+
+### THE RECOMMENDATION: FIX, DO NOT RETIRE. And it is one line.
+
+**Evidence for fixing:** the machinery is complete and correct — 14 registered agents, all with
+model call sites, a chair, a conflict detector, an executor, a settings surface, and an owner who has
+all nine configured agents switched on. Four agents demonstrably reach the model and answer. Nothing
+here is a stub. **It has cost 20 cents in three months**, so the price of leaving it running while it
+is fixed is nil.
+
+**Evidence for what is actually broken:** one field.
+
+```ts
+// src/lib/agents/base-agent.ts:11
+protected supabase = createServerSupabaseClient();   // anon key + cookies; no cookies in a cron
+```
+
+**The fix — parked here because it is an authorisation change (RULE 18), not because it is hard:**
+inject the client rather than defaulting it. Service-role when a cron or the council constructs the
+agent; the caller's client when a route does. Six call sites to audit:
+`/api/agents/bas/draft`, `/api/agents/clv/trigger`, `/api/agents/financing/run`,
+`/api/finance/generate`, `/api/cron/bas-monitor`, `/api/cron/inventory-financing`, plus the council.
+**Do not simply swap it to `supabaseAdmin`** — that would make every agent bypass RLS inside
+user-facing routes, which is a real security change and the reason this is parked rather than done.
+
+**Retiring it would be the wrong call on this evidence.** A feature that has never worked because of
+one mis-wired client is not a feature nobody wants; it is a feature nobody has seen.
+
+### What to check after tonight's 20:00 UTC run
+
+```sql
+-- the narrative the owner will read, and the health block behind it
+select session_date, plan_narrative,
+       plan->'agent_health'->>'agents_reported' as reported,
+       plan->'agent_health'->>'agents_failed'   as failed,
+       plan->'agent_health'->'failures'         as failures
+from agent_council_sessions
+where business_id = 'ff5055a0-c351-4ada-817a-1804961035f3'
+order by session_date desc limit 3;
+
+-- per-agent reasons, written by the council on the agents' behalf
+select agent_type, triggered_by, errors, started_at
+from agent_runs
+where business_id = 'ff5055a0-c351-4ada-817a-1804961035f3'
+  and started_at > now() - interval '2 days'
+order by started_at desc;
+```
+
+**If tonight's narrative reads "All 14 overnight checks reported and nothing needs you today", that
+is still not the truth** — it means every agent returned an empty result without failing, which for
+`reorder`, `pricing` and `schedule` is the RLS blindness above. The health block will say
+`agents_failed: 0`, and *that* is the tell. The narrative can now express the difference; the client
+fix is what makes it able to see it.
