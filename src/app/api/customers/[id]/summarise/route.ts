@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { waitUntil } from '@vercel/functions'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { runAriaCouncil } from '@/lib/aria/council'
+import { runAriaCouncil } from '@/lib/aria/answer-council'
 
 type Params = { params: { id: string } }
 

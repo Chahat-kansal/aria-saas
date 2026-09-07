@@ -98,23 +98,23 @@ describe('S9 phase 4 · the two safeParseJSON implementations were equivalent �
   })
 
   it('THE N-COPIES RAIL — exactly one definition of safeParseJSON survives', () => {
-    for (const f of ['src/lib/aria/council.ts', 'src/lib/aria/context-brain.ts']) {
+    for (const f of ['src/lib/aria/answer-council.ts', 'src/lib/aria/context-brain.ts']) {
       const src = strip(read(f))
       expect(src, f + ' still defines its own safeParseJSON')
         .not.toMatch(/function safeParseJSON\s*\(/)
       expect(src, f + ' does not import the shared one').toMatch(/from '\.\/safe-json'/)
     }
     // ANTI-VACUITY: the scan must be looking at real files, and the survivor must actually exist.
-    expect(read('src/lib/aria/council.ts').length).toBeGreaterThan(1000)
+    expect(read('src/lib/aria/answer-council.ts').length).toBeGreaterThan(1000)
     expect(read('src/lib/aria/context-brain.ts').length).toBeGreaterThan(500)
     expect(strip(read('src/lib/aria/safe-json.ts'))).toMatch(/export function safeParseJSON/)
   })
 
   it('MUTATION PROBE — reintroducing a second definition goes red', () => {
     // Prove the rail above can fail, by running its own check against a mutated copy.
-    const mutated = strip(read('src/lib/aria/council.ts'))
+    const mutated = strip(read('src/lib/aria/answer-council.ts'))
       + '\nfunction safeParseJSON(text: string) { return null }\n'
     expect(mutated).toMatch(/function safeParseJSON\s*\(/)
-    expect(strip(read('src/lib/aria/council.ts'))).not.toMatch(/function safeParseJSON\s*\(/)
+    expect(strip(read('src/lib/aria/answer-council.ts'))).not.toMatch(/function safeParseJSON\s*\(/)
   })
 })

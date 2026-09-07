@@ -296,7 +296,7 @@ describe('phase 4 (16B) · Co-pilot grants no permission Suggest does not', () =
     // paths that send SMS to customers and spend money. If anyone ever writes one, this goes red.
     const AGENT_FILES = [
       'src/lib/agents/clv-agent.ts',
-      'src/lib/agents/council.ts',
+      'src/lib/agents/proposal-council.ts',
       'src/lib/agents/flash-revenue-agent.ts',
       'src/lib/agents/base-agent.ts',
       'src/lib/aria/labour-realtime.ts',
@@ -310,7 +310,7 @@ describe('phase 4 (16B) · Co-pilot grants no permission Suggest does not', () =
 
   it('the three gated actions still test for auto positively', () => {
     expect(read('src/lib/agents/clv-agent.ts')).toMatch(/if \(mode === 'auto'\)/)
-    expect(read('src/lib/agents/council.ts')).toMatch(/if \(mode === 'auto'\)/)
+    expect(read('src/lib/agents/proposal-council.ts')).toMatch(/if \(mode === 'auto'\)/)
     expect(read('src/lib/agents/flash-revenue-agent.ts')).toMatch(/if \(mode === 'auto'\)/)
     expect(read('src/lib/agents/flash-revenue-agent.ts')).toMatch(/mode === 'auto' \? 'executed' : 'pending'/)
   })

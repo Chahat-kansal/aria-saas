@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { CouncilOutput } from '../council'
+import type { CouncilOutput } from '../answer-council'
 import { queryAgent } from './query-agent'
 import { messageAgent } from './message-agent'
 import { automationAgent } from './automation-agent'

@@ -34,7 +34,7 @@ const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\
  *   · Whether the truncation, once detected, is HANDLED well. Phase 2 is about that.
  */
 describe('S8 phase 1 · the token-ceiling rail', () => {
-  const council = read('src/lib/aria/council.ts')
+  const council = read('src/lib/aria/answer-council.ts')
 
   it('the council advisor ceiling is at or above the measured floor', () => {
     // 1,016 real calls: avg 896, p50 878, p90 1160, p99 1200, 8% pinned exactly at 1200.

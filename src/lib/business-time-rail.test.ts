@@ -153,7 +153,7 @@ describe('TZ-RAIL-1 · groundTruth carries the date (RULE 9)', () => {
     // `agent_council_sessions.session_date`, a bare `date` column. For the whole Melbourne morning
     // that reads YESTERDAY's row, which looks exactly like a bug worth a one-line fix.
     //
-    // IT IS NOT. The WRITER (src/lib/agents/council.ts:213) computes its `today` the same UTC way.
+    // IT IS NOT. The WRITER (src/lib/agents/proposal-council.ts:213) computes its `today` the same UTC way.
     // Reader and writer currently AGREE. Making the reader zone-aware on its own would ask for
     // 2 Sep while the writer had stamped 1 Sep — introducing the very mismatch this rail exists to
     // remove. Fixing it means changing both sides together AND deciding what happens to rows
@@ -162,7 +162,7 @@ describe('TZ-RAIL-1 · groundTruth carries the date (RULE 9)', () => {
     // This assertion exists so nobody "tidies" one half of the pair. If you change either, change
     // both, and handle the existing rows.
     const ctxSrc = read('src/lib/aria/ask/business-context.ts')
-    const writerSrc = read('src/lib/agents/council.ts')
+    const writerSrc = read('src/lib/agents/proposal-council.ts')
     expect(ctxSrc).toMatch(/const todayStr = new Date\(\)\.toISOString\(\)\.split\('T'\)\[0\]/)
     expect(writerSrc).toMatch(/const today = new Date\(\)\.toISOString\(\)\.split\('T'\)\[0\]/)
   })

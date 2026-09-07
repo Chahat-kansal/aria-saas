@@ -5,7 +5,7 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth/cron'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { runCouncilSession } from '@/lib/agents/council'
+import { runCouncilSession } from '@/lib/agents/proposal-council'
 
 export async function GET(req: Request) {
   const denied = verifyCronAuth(req)

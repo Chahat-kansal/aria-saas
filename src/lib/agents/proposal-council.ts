@@ -1,3 +1,16 @@
+/**
+ * THE PROPOSAL COUNCIL — named for its job, M13B phase 2. Was `lib/agents/council.ts`.
+ *
+ * Runs on a NIGHTLY CRON (`api/cron/council-session`), reads the business, and writes rows to
+ * `agent_council_sessions` + `agent_council_proposals`. It PROPOSES; it never answers anyone.
+ *
+ * It is not the other council. `lib/aria/answer-council.ts` is triggered by an owner asking a
+ * question and returns synthesised text. Both used to be called `council`, so
+ * `import { … } from '@/lib/…/council'` read identically at every call site and meant two
+ * completely different things. That is the whole reason for the rename — there is deliberately no
+ * re-export shim, and `.eslintrc.json` blocks the old specifier so it cannot come back by muscle
+ * memory.
+ */
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart } from '@/lib/date-au'
 import { callModel } from '@/lib/ai/gateway'

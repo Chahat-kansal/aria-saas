@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { runAriaCouncil, insertCouncilRun, type CouncilOutput } from '@/lib/aria/council'
+import { runAriaCouncil, insertCouncilRun, type CouncilOutput } from '@/lib/aria/answer-council'
 import { guardOutput, numbersIn } from '@/lib/aria/ground-guard'
 import type { WeeklyReportData } from './weekly-data'
 

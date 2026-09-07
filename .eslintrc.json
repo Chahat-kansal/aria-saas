@@ -13,6 +13,14 @@
         {
           "name": "@/lib/plans",
           "message": "Deprecated template pricing. Use '@/lib/billing/plans'."
+        },
+        {
+          "name": "@/lib/agents/council",
+          "message": "Renamed M13B phase 2 — it proposes, it does not answer. Use '@/lib/agents/proposal-council'. There is no shim: two live councils shared this name and the import line read identically at every call site."
+        },
+        {
+          "name": "@/lib/aria/council",
+          "message": "Renamed M13B phase 2 — it answers, it does not propose. Use '@/lib/aria/answer-council'. There is no shim: two live councils shared this name and the import line read identically at every call site."
         }
       ]
     }]

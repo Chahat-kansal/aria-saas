@@ -118,3 +118,60 @@ output bug exactly. The suite goes red on the difference.
 My first assertion counted the transient regex and found **2**, concluding there was a second copy.
 The second was **my own doc comment** quoting the contract. Counted with comments stripped: one.
 **The fourth time in this series that a scan has matched its own prose** — recorded in the test file.
+
+---
+
+## PHASE 2 — RENAME THE COUNCILS ✅
+
+**Commit:** `<phase-2>` · two `git mv`s, 6 importers, 9 test/guard files, `.eslintrc.json`,
+`council-names.test.ts` (new, 6 tests).
+
+| was | is | what it actually does |
+|---|---|---|
+| `src/lib/agents/council.ts` | **`src/lib/agents/proposal-council.ts`** | nightly cron → writes proposal rows. It **proposes**. |
+| `src/lib/aria/council.ts` | **`src/lib/aria/answer-council.ts`** | an owner asks → four advisors → one synthesised reply. It **answers**. |
+
+Two live, unrelated features shared one name, so `import { … } from '@/lib/…/council'` read
+identically at every call site and meant completely different things. M13 phase 6 recommended
+exactly this and did not take it; taken now.
+
+**NO SHIM.** The decision table is explicit, and a re-export shim would preserve the ambiguous
+import line that is the entire defect.
+
+### Every reference moved
+
+**6 module importers** — `aria/ask`, `aria/briefing`, `customers/[id]/summarise`,
+`reports/weekly-ai`, `agents/orchestrator` (a relative `'../council'`), `cron/council-session`.
+**9 files carrying the paths as strings** — `canon-rail-guard.ts` (both allow-lists),
+`w1-allowlist.test.ts`, `ax-1.test.ts`, `business-time-rail.test.ts`, `council-advisors.test.ts`,
+`retry-contract.test.ts`, `s9-gate.test.ts`, `safe-json.test.ts`, `token-ceiling-rail.test.ts`.
+One live code comment in `aria/agents.ts`.
+
+**Deliberately NOT renamed:** `council-advisors.ts`, `council-conflicts.ts`,
+`council-executor.ts`, the `/api/agents/council` routes, and the literal string values
+`'council'` (an `agent_type` in the database, a `pipelinePath`, a `modelId`). A blanket
+find-and-replace would have taken all of them — the seds were anchored on the closing quote.
+
+### Two rails, so the old names cannot come back
+
+1. **`.eslintrc.json`** — the two retired specifiers added to the existing `no-restricted-imports`
+   block, each with a message naming the replacement and why. The two pre-existing deprecations
+   are untouched, and a test asserts all four are present so this rule can only ever be extended.
+2. **`council-names.test.ts`** — scans every `.ts`/`.tsx` under `src/` and `scripts/` for the old
+   specifiers, with an **anti-vacuity assertion** (>1,500 files, both new paths present) so a scan
+   that silently reads nothing cannot pass.
+
+### Mutation check — it goes red
+
+Reintroduced `@/lib/aria/council` in `reports/weekly-ai.ts`: **1 failed, 5 passed**, and the
+failure named that exact file. Reverted; green again. The rail also proves it does **not** fire on
+`council-advisors` or `council-conflicts`, which legitimately keep the prefix.
+
+### The canon rail survived the move
+
+RULE 14 warns that a file move has previously tripped the guard on byte-identical code. Run
+against the staged rename: **"no new canonical-path violations introduced. Pass."** Both allow-list
+entries were updated in the same commit, so `answer-council.ts`'s `new Anthropic(` is still
+grandfathered — and phase 3 is what removes it.
+
+**Gates:** tsc 0 · vitest **119 files / 1564 tests, exit 0** · `next build` **BUILD_EXIT=0**.

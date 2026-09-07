@@ -6,7 +6,7 @@ import { shouldRetryModelCall, retryDelayMs } from './anthropic'
 const root = join(__dirname, '..', '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
 const PROVIDER = read('src/lib/aria/providers/anthropic.ts')
-const COUNCIL = read('src/lib/aria/council.ts')
+const COUNCIL = read('src/lib/aria/answer-council.ts')
 
 const decide = (errorMessage: string, mayRetry = true, attempt = 0, maxAttempts = 2) =>
   shouldRetryModelCall({ errorMessage, attempt, maxAttempts, mayRetry })

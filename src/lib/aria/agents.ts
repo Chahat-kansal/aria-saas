@@ -76,7 +76,7 @@ Return ONLY valid JSON. No prose. No code fences.`
     // not this schema path; entry present only to keep the AgentKey map exhaustive.
     counterfactual: `Schema: { "type": "insight", "title": "max 60 chars", "description": "prediction", "rationale": "1 sentence", "confidence": "high"|"medium"|"low", "estimated_impact_dollars": number, "payload": {} }`,
     // M13 phase 5 — NOT a recommendation agent. agents_council is the nightly council chair
-    // (lib/agents/council.ts), which carries its own prompt and never reaches this map. Present
+    // (lib/agents/proposal-council.ts), which carries its own prompt and never reaches this map. Present
     // only because the Record is exhaustive over AgentKey; an empty schema is the honest entry.
     agents_council: '',
   }

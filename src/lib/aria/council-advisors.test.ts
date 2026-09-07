@@ -79,7 +79,7 @@ describe('S8 phase 2 · a lost advisor reads as lost, not as "found nothing"', (
 
 describe('S8 phase 2 · the failure reaches the prompt and the owner', () => {
   it('council.ts renders every advisor through the guarded renderer', () => {
-    const src = strip(read('src/lib/aria/council.ts'))
+    const src = strip(read('src/lib/aria/answer-council.ts'))
     for (const label of ['GROWTH', 'RISK', 'STRATEGY', 'CONTEXT']) {
       expect(src, label + ' is not rendered through renderAdvisorSection')
         .toContain("renderAdvisorSection('" + label + "'")

@@ -81,7 +81,7 @@ describe('S9 phase 0 · the premises, re-checked from source', () => {
     // register. safe-json.test.ts proved that difference immaterial over a corpus BEFORE the merge,
     // so this now asserts the outcome the phase was for.
     const cb = read('src/lib/aria/context-brain.ts')
-    const co = read('src/lib/aria/council.ts')
+    const co = read('src/lib/aria/answer-council.ts')
     for (const [name, src] of [['context-brain', cb], ['council', co]] as const) {
       expect(src, name + ' grew its own safeParseJSON back').not.toMatch(/function safeParseJSON\s*\(/)
       expect(src, name + ' does not use the shared one').toMatch(/from '\.\/safe-json'/)
@@ -115,7 +115,7 @@ describe('S9 phase 0 · the premises, re-checked from source', () => {
     for (const f of [
       'src/components/auth/AuthScene.tsx',
       'src/lib/aria/context-brain.ts',
-      'src/lib/aria/council.ts',
+      'src/lib/aria/answer-council.ts',
       'src/app/dashboard/ask-aria/classic/page.tsx',
       'src/app/api/cron/nightly-sync/route.ts',
     ]) {
