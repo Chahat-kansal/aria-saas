@@ -35,6 +35,10 @@
 // Exit code 0 = no new violations. Exit code 1 = at least one new violation (printed to stdout).
 
 import { execSync } from 'node:child_process'
+// WALL 8 (M13D phase 3) — the predicate lives in src/ so a TEST CAN CALL IT. This script runs
+// main() at module scope, so importing the script itself would run the whole guard and no test
+// could drive one rule in isolation.
+import { isAgentServiceRoleViolation } from '../src/lib/agents/service-role-rule'
 
 const EXEMPT_PATHS = [
   'src/lib/community/resolveOwnerBusinessId.ts', // the canonical resolver itself
@@ -651,6 +655,13 @@ function scan(diff: string): Violation[] {
             && !MODEL_GATEWAY_ALLOWLIST.includes(currentFile)
             && /new\s+Anthropic\s*\(|\.messages\.create\s*\(|GoogleGenerativeAI|generateContent\s*\(/.test(text)) {
           violations.push({ file: currentFile, line: newLineNo, rule: 'model-call-outside-gateway', text: text.trim() })
+        }
+
+        // ── WALL 8 (M13D phase 3) — SERVICE ROLE INTO AN AGENT IS A CRON-ONLY MOVE ───────────
+        // The decision is isAgentServiceRoleViolation(), imported rather than re-implemented, so
+        // the rule the guard enforces and the rule the tests drive cannot drift apart.
+        if (isAgentServiceRoleViolation(currentFile ?? '', text)) {
+          violations.push({ file: currentFile!, line: newLineNo, rule: 'agent-service-role-outside-cron', text: text.trim() })
         }
 
         // ── WALL 6 (M13 phase 1) — READ THE ERROR ────────────────────────────────────────────

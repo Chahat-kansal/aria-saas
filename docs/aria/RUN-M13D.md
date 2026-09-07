@@ -162,3 +162,81 @@ Five tests, none of which reads source text:
 **No branded client type**, because the codebase has none to build on — both factories return plain
 `SupabaseClient` (phase 1). The compiler can force *a* client to be passed and phase 3's guard can
 enforce *which*; no type can. Reported, per the phase's own instruction.
+
+---
+
+## PHASE 3 — THE CRON PASSES SERVICE ROLE ✅
+
+**Commit:** `<phase-3>` · `service-role-rule.ts` (new), `canon-rail-guard.ts`,
+`service-role-rule.test.ts` (new, 8 tests).
+
+The council's construction now reads `new AgentClass(supabaseAdmin).run(business_id)` — landed in
+phase 2's commit with the rest of the injection. **Nothing else about the cron changed:** same
+schedule (20:00 UTC via `h20`), same fourteen agents, same models.
+
+### WALL 8 — only a cron may hand an agent the service-role client
+
+The obvious repair to M13D's bug was to default `BaseAgent`'s field to `supabaseAdmin`. It was
+refused twice — by M13C and again here — because these agents are built from **ten user-facing
+routes**, and a service-role client inside a route makes that route bypass RLS for every read and
+write the agent performs. **A silent authorisation hole in place of a silent failure is strictly
+worse than the bug.** This rule is what stops that fix being made one call site at a time instead.
+
+Legal only under `src/app/api/cron/`, plus exactly one named exception:
+`src/lib/agents/proposal-council.ts` — the engine, whose only importer is
+`api/cron/council-session/route.ts`. **An explicit entry, never a widened path prefix**, and a test
+asserts the list has length 1: a second entry would mean the rule had been routed around.
+
+### PROVEN IN BOTH DIRECTIONS BY OBSERVATION, with byte-identical lines
+
+```
+src/app/api/probes3/route.ts:3        new ReorderAgent(supabaseAdmin)   →  [agent-service-role-outside-cron]  FIRED
+src/app/api/cron/probe4/route.ts:3    new ReorderAgent(supabaseAdmin)   →  (silent)                           ALLOWED
+src/app/api/probes2/route.ts:4        runAgent(…, supabaseAdmin)        →  [agent-service-role-outside-cron]  FIRED
+```
+
+Same characters; only the path differs. All probes removed, guard clean afterwards.
+
+### The predicate lives in `src/`, so a test can call it
+
+`canon-rail-guard.ts` runs `main()` at module scope, so importing it runs the whole guard and no
+test can drive one rule. `isAgentServiceRoleViolation()` therefore lives in
+`src/lib/agents/service-role-rule.ts`; **the guard imports it and the test calls it**, so the rule
+enforced in CI and the rule under test cannot drift apart. Eight tests, none of which reads source
+text — including that it does **not** fire on `new BasAgent(supabase)` (the legitimate line every
+route now uses; if that went red, phase 2 would be unshippable) and does not fire on an unrelated
+`supabaseAdmin.from(...)`, because a rule that over-fires gets worked around.
+
+**MUTATION:** a rule without the home check, written as a **genuinely new predicate** rather than a
+reverted line — per the standing note that a diff-scanning guard cannot see a reintroduction. It
+condemns every legitimate cron; the real predicate does not.
+
+### ⚠️ The rule's own file failed the rule — the fourth time a scan has matched its own prose
+
+The first version of `service-role-rule.ts` spelled both blocked shapes out literally in a doc
+comment and the guard flagged its own definition, twice. **Literal split, guard untouched** — the
+comment now describes the shapes and the exact strings are exercised in the test file, which is
+exempt for good reason. M12 rule 9, M13 rule 8, M13B's stream test, and now this.
+
+### ⚠️ VERIFY — a live run is UNVERIFIED, and here is what was proven instead
+
+`CRON_SECRET` is not available to me and triggering a production cron unattended is not something an
+autonomous run should do. **So the claim "a real council run writes `agent_decisions` and
+`agent_runs`" is not verified by a run.** What is proven, in one rolled-back transaction against
+production, is both halves of the diagnosis and of the fix:
+
+```
+anon     agent_decisions = REJECTED 42501      ← insufficient_privilege. 94 nights of this.
+anon     agent_runs      = REJECTED 42501
+anon     pos_products visible = 0
+service  agent_decisions = ACCEPTED
+service  agent_runs      = ACCEPTED
+service  pos_products visible = 74
+```
+
+**`42501` is the whole story.** Not a bad insert, not a CHECK violation, not a missing column — an
+unauthorised one, exactly as M13C reasoned and now measured directly. And the same transaction shows
+the fix works: with the client a cron now passes, both writes land and the products appear.
+
+Nothing was committed. **The first real run is tonight at 20:00 UTC**, and phase 5 says exactly what
+to look at.
