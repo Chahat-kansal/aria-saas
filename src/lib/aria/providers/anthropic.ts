@@ -280,7 +280,11 @@ export async function callAnthropic<T = Record<string, unknown>>(
         // council's logger without moving this here would have been a downgrade. Now every caller
         // through the provider gets it, not only the one that thought of it.
         // role='other' + provider='other' are both in the verified pg_constraint CHECK lists.
-        await supabaseAdmin.from('aria_ai_calls').insert({
+        // W6 — and the rail caught this line, correctly, on the way in. The council's original
+        // discarded this result; that copy was grandfathered, mine was a new line, and a fallback
+        // whose own failure is invisible is not a fallback. If even THIS is rejected there is
+        // nowhere left to write, so the console is the honest last resort.
+        const { error: fallbackErr } = await supabaseAdmin.from('aria_ai_calls').insert({
           business_id: params.businessId,
           agent_key: 'ai_log_failure',
           provider: 'other',
@@ -289,6 +293,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
           request_summary: params.agentKey,
           learning_signal: ('ai_log_rejected:' + aiCallErr.message).slice(0, 120),
         })
+        if (fallbackErr) console.error('[aria_ai_calls] the FALLBACK row was rejected too', { agentKey: params.agentKey, reason: fallbackErr.message })
       }
     } catch { /* non-fatal — table may not exist yet */ }
   }

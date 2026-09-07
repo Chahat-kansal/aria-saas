@@ -73,8 +73,18 @@ describe('M13B phase 3 · truncation is read from real fields, not absent ones',
 
 describe('M13B phase 3 · the hero council is behind the wall', () => {
   it('the answer council owns no client, no backoff and no logger of its own', () => {
-    for (const gone of ['new Anthropic(', 'messages.create', 'async function withBackoff', 'async function logAICall']) {
-      expect(COUNCIL.includes(gone), gone).toBe(false)
+    // The literals are SPLIT, not the guard loosened. canon-rail-guard blocked this file's first
+    // version because it quoted the very patterns its rules block — the third time in this series
+    // (M12 rule 9, M13 rule 8, here). Each time the answer was the same one the decision table
+    // gives: split the literal, never weaken the rule.
+    const gone = [
+      ['new', 'Anthropic('].join(' '),
+      ['messages', 'create'].join('.'),
+      ['async function', 'withBackoff'].join(' '),
+      ['async function', 'logAICall'].join(' '),
+    ]
+    for (const g of gone) {
+      expect(COUNCIL.includes(g), g).toBe(false)
     }
     expect(COUNCIL).toContain("import { callModel } from '@/lib/ai/gateway'")
   })
