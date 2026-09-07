@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { computeCostCents } from '@/lib/aria/cost';
 import type { AgentType, AgentDecision, AgentDecisionInput, AgentRunResult, AgentSettings } from './types';
@@ -8,7 +8,48 @@ export abstract class BaseAgent {
   abstract type: AgentType;
   abstract run(business_id: string): Promise<AgentRunResult>;
 
-  protected supabase = createServerSupabaseClient();
+  /**
+   * M13D PHASE 2 — THE CLIENT IS INJECTED. THIS ONE FIELD IS THE WHOLE SPRINT.
+   *
+   * ── WHAT IT WAS ────────────────────────────────────────────────────────────────────────────
+   *     protected supabase = createServerSupabaseClient();
+   *
+   * The ANON key plus request cookies. In a cron there are no cookies, so it is unauthenticated,
+   * and RLS is on. Every agent's `agent_decisions` and `agent_runs` write has therefore been
+   * REJECTED since 4 June 2026 — the last day these ran from a browser with a real session — and
+   * three agents (reorder, pricing, schedule) read through it too, which is why they cannot see
+   * Sip's 74 active products, 2 outlets, 5 staff or 1,802 completed sales.
+   *
+   * It was never a failing insert. It was an unauthorised one. M13C proved the exact insert shape
+   * ACCEPTED by production in a rolled-back probe.
+   *
+   * ── WHY NOT JUST USE supabaseAdmin ─────────────────────────────────────────────────────────
+   * Because these agents are constructed from TEN user-facing routes as well as fifteen crons.
+   * Defaulting to the service-role client would make every one of those routes bypass RLS —
+   * trading a silent failure for a silent authorisation hole, which is strictly worse. M13C
+   * refused that fix and was right to.
+   *
+   * ── WHY THERE IS NO DEFAULT AT ALL ─────────────────────────────────────────────────────────
+   * A default of EITHER client is how this bug comes back: the next agent added to the registry
+   * inherits it silently and nothing goes red. An explicit argument at all 26 construction sites
+   * is not overhead — it is the fix. `tsc` now refuses a call site that does not name its client,
+   * and the throw below catches the JavaScript ones that `tsc` cannot see.
+   */
+  protected supabase: SupabaseClient;
+
+  constructor(supabase: SupabaseClient) {
+    // Not a type-system formality: a plain-JS caller, a `as any`, or a mock built from an object
+    // literal all reach here with undefined, and a silent undefined is exactly the shape that hid
+    // this defect for 94 days.
+    if (!supabase) {
+      throw new Error(
+        '[BaseAgent] a Supabase client is required. Pass supabaseAdmin from a cron, or the '
+        + "route's own createServerSupabaseClient() from a user-facing route. There is deliberately "
+        + 'no default — see M13D.',
+      );
+    }
+    this.supabase = supabase;
+  }
   protected anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY!,
   });

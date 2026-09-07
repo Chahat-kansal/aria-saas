@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
   if (!businesses?.length) return NextResponse.json({ ok: true, ran: 0 })
 
-  const agent = new InventoryFinancingAgent()
+  const agent = new InventoryFinancingAgent(supabaseAdmin)
   let succeeded = 0
   let failed = 0
 

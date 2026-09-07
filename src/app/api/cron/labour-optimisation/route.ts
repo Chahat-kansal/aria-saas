@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     .in('subscription_status', ['active', 'trialing'])
     .eq('is_active', true)
 
-  const agent = new LabourOptimisationAgent()
+  const agent = new LabourOptimisationAgent(supabaseAdmin)
   const results: Array<{ business_id: string; ok: boolean; decisions: number; error?: string }> = []
 
   for (const biz of businesses ?? []) {

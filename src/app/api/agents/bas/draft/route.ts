@@ -51,7 +51,7 @@ async function _POST(req: Request) {
     periodEnd = q.period_end
   }
 
-  const agent = new BasAgent()
+  const agent = new BasAgent(supabase)
   await agent.generateBasDraft(biz.id, periodStart, periodEnd)
 
   const { data: draft } = await supabaseAdmin

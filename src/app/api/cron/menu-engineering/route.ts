@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   }
 
   const results: Array<{ business_id: string; ok: boolean; decisions: number; error?: string }> = [];
-  const agent = new MenuEngineeringAgent();
+  const agent = new MenuEngineeringAgent(supabaseAdmin);
 
   for (const biz of (businesses ?? [])) {
     try {

@@ -37,7 +37,7 @@ async function _POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
   const { CustomerAcquisitionAgent } = await import('@/lib/agents/customer-acquisition-agent')
-  const agent = new CustomerAcquisitionAgent()
+  const agent = new CustomerAcquisitionAgent(supabase)
   await agent.run(biz.id)
 
   return NextResponse.json({ ok: true })

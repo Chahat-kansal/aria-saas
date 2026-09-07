@@ -124,7 +124,9 @@ async function _GET(req: Request, { params }: Params) {
     const runStart = new Date().toISOString();
     try {
       const result = await Promise.race([
-        runAgent(agentType, bid),
+        // M13D phase 2 — a CRON, verified by verifyCronAuth above, so it passes the service-role
+        // client. The orchestrator is called from both sides of the split and cannot choose for itself.
+        runAgent(agentType, bid, supabaseAdmin),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Agent timeout after 55s')), 55_000)
         ),

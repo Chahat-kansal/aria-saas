@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     .select('id')
     .eq('is_active', true)
 
-  const agent = new ReputationDefenceAgent()
+  const agent = new ReputationDefenceAgent(supabaseAdmin)
   let processed = 0
   let errors = 0
 

@@ -26,7 +26,7 @@ async function _POST(req: Request) {
 
   if (!biz) return NextResponse.json({ error: 'Business not found or unauthorized' }, { status: 403 });
 
-  const agent = new CLVAgent();
+  const agent = new CLVAgent(supabase);
   const result = await agent.run(biz.id);
 
   return NextResponse.json({

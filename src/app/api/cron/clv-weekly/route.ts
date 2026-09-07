@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const agent = new CLVAgent();
+  const agent = new CLVAgent(supabaseAdmin);
   const results: Array<{ business_id: string; ok: boolean; decisions: number; error?: string }> = [];
 
   for (const biz of (businesses ?? [])) {

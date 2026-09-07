@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     .select('id')
     .eq('is_active', true)
 
-  const agent = new WasteEliminationAgent()
+  const agent = new WasteEliminationAgent(supabaseAdmin)
   let processed = 0
 
   for (const biz of businesses ?? []) {

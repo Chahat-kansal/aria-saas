@@ -1,19 +1,25 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentType, AgentRunResult } from './types';
 import { ReorderAgent } from './reorder-agent';
 import { PricingAgent } from './pricing-agent';
 import { ScheduleAgent } from './schedule-agent';
 
-function makeAgent(type: AgentType) {
+function makeAgent(type: AgentType, supabase: SupabaseClient) {
   switch (type) {
-    case 'reorder': return new ReorderAgent();
-    case 'pricing': return new PricingAgent();
-    case 'schedule': return new ScheduleAgent();
+    case 'reorder': return new ReorderAgent(supabase);
+    case 'pricing': return new PricingAgent(supabase);
+    case 'schedule': return new ScheduleAgent(supabase);
     default: return null;
   }
 }
 
-export async function runAgent(type: AgentType, business_id: string): Promise<AgentRunResult> {
-  const agent = makeAgent(type);
+/**
+ * M13D phase 2 — `supabase` is REQUIRED and threaded through, because this function is called from
+ * BOTH sides of the split: `cron/[task]` (service role) and `pos/agents/[type]` (a signed-in
+ * owner's session client). It is the one place that genuinely cannot choose, so it does not.
+ */
+export async function runAgent(type: AgentType, business_id: string, supabase: SupabaseClient): Promise<AgentRunResult> {
+  const agent = makeAgent(type, supabase);
   if (!agent) return { decisions: [], errors: [new Error('Agent not implemented: ' + type)], duration_ms: 0 };
   return agent.run(business_id);
 }

@@ -229,7 +229,9 @@ async function _POST(req: Request, { params }: Params, { supabase, userId, busin
       try { track('agent_run_started', { agent_type: type, manual: true }); } catch { /* analytics is optional */ }
       try {
         const result = await Promise.race([
-          runAgent(type as AgentType, bid),
+          // M13D phase 2 — a USER-FACING route. It passes its OWN session client, so RLS applies
+          // exactly as it did before this sprint and the owner sees only their own business.
+          runAgent(type as AgentType, bid, supabase),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 55_000)),
         ]);
         try { track('agent_run_completed', { agent_type: type, decisions: result.decisions.length, duration_ms: result.duration_ms, errors_count: result.errors.length }); } catch { /* analytics is optional */ }

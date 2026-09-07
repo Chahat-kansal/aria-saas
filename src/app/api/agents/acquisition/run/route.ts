@@ -17,7 +17,7 @@ async function _POST() {
     .from('businesses').select('id').eq('user_id', user.id).eq('is_active', true).limit(1).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const agent = new CustomerAcquisitionAgent()
+  const agent = new CustomerAcquisitionAgent(supabase)
   const result = await agent.run(biz.id)
 
   return NextResponse.json({ ok: true, decisions: result.decisions.length, errors: result.errors.length })

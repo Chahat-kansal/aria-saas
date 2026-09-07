@@ -58,7 +58,7 @@ async function _POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Business not found or unauthorized' }, { status: 403 });
 
   // Manual trigger — runs the agent now
-  const agent = new MenuEngineeringAgent();
+  const agent = new MenuEngineeringAgent(supabase);
   const result = await agent.run(biz.id);
 
   return NextResponse.json({

@@ -22,7 +22,7 @@ async function _POST() {
     .maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const agent = new InventoryFinancingAgent()
+  const agent = new InventoryFinancingAgent(supabase)
   const result = await agent.run(biz.id)
 
   return NextResponse.json({ ok: true, decisions: result.decisions.length, errors: result.errors.length })

@@ -74,3 +74,91 @@ What that means concretely: the compiler can force *a* client to be passed (phas
 enforce *which* one (phase 3), but no type can. A branded type — `ServiceRoleClient` vs
 `SessionClient`, applied at the two factories — would make phase 3's guard redundant and is the
 better end-state. It touches every Supabase call site in the repo, so it is its own sprint.
+
+---
+
+## PHASE 2 — INJECT ✅ ← *the sprint*
+
+**Commit:** `<phase-2>` · `base-agent.ts`, `orchestrator.ts`, `proposal-council.ts`, **24 call
+sites**, `base-agent-injection.test.ts` (new, 5 tests).
+
+### The one field
+
+```ts
+// was
+protected supabase = createServerSupabaseClient();   // anon key + request cookies
+
+// is
+protected supabase: SupabaseClient;
+constructor(supabase: SupabaseClient) {
+  if (!supabase) throw new Error('[BaseAgent] a Supabase client is required…')
+  this.supabase = supabase;
+}
+```
+
+**No default — neither one.** A default of `supabaseAdmin` makes ten user-facing routes bypass RLS;
+a default of the session client is the original bug verbatim. Either way the next agent added to the
+registry inherits it silently and nothing goes red. **An explicit argument at all 26 sites is not
+overhead; it is the fix.**
+
+### `tsc` found the call sites I had not, which is exactly the VERIFY
+
+After updating the 22 direct sites, the compiler failed on precisely two:
+
+```
+src/app/api/cron/[task]/route.ts(127,9):        error TS2554: Expected 3 arguments, but got 2.
+src/app/api/pos/agents/[type]/route.ts(232,11): error TS2554: Expected 3 arguments, but got 2.
+```
+
+Both are `runAgent()` — the orchestrator, the one function called from **both** sides of the split.
+It now takes the client and threads it through, because it is the single place that genuinely cannot
+choose: `cron/[task]` passes `supabaseAdmin`, `pos/agents/[type]` passes its owner's session client.
+
+**That is the phase's verification, observed rather than asserted:** a call site with no client does
+not compile.
+
+### PROOF the ten routes behave identically — the whole diff, not a claim
+
+```diff
+### agents/acquisition/content     - new CustomerAcquisitionAgent()    + new CustomerAcquisitionAgent(supabase)
+### agents/acquisition/run         - new CustomerAcquisitionAgent()    + new CustomerAcquisitionAgent(supabase)
+### agents/bas/draft               - new BasAgent()                    + new BasAgent(supabase)
+### agents/clv/trigger             - new CLVAgent();                   + new CLVAgent(supabase);
+### agents/financing/run           - new InventoryFinancingAgent()     + new InventoryFinancingAgent(supabase)
+### agents/flash-revenue           - new FlashRevenueAgent();          + new FlashRevenueAgent(supabase);
+### agents/menu-engineering/actions- new MenuEngineeringAgent();       + new MenuEngineeringAgent(supabase);
+### agents/negotiation/briefs      - new SupplierNegotiationAgent()    + new SupplierNegotiationAgent(supabase)
+### finance/generate               - new ReconciliationAgent()         + new ReconciliationAgent(supabase)
+### pos/agents/[type]              - runAgent(type, bid),              + runAgent(type, bid, supabase),
+```
+
+**One changed line per route.** And in every one of the ten, `supabase` is
+`const supabase = createServerSupabaseClient()` — **the identical factory the old `BaseAgent` field
+called for itself.** So the agent receives the same anon-plus-cookies client it used to construct
+internally; the only difference is that it shares the route's instance instead of building a second
+one from the same cookie store. Same session, same user, same RLS.
+
+**Nothing else in those files changed.** That is the proof the sprint asked for, and it is a diff,
+not an assertion.
+
+### The rail — it builds agents and watches what happens
+
+Five tests, none of which reads source text:
+
+- the client handed in **is** the client the agent uses — asserted by tag, both directions
+- **two agents built with different clients do not share one** — the pre-M13D field was a
+  module-scope initialiser, so every agent in the process resolved the *same* anon client no matter
+  who built it. This is the assertion that would have caught the original defect.
+- a missing client **throws**, and the message names what to pass — this catches the callers `tsc`
+  cannot see: plain JS, an `as any`, a hand-built mock, a dynamic registry
+- **MUTATION:** a subclass with a default parameter is built and shown to construct happily with no
+  argument — the defect reproduced — while the real base class refuses. **A genuinely new class, not
+  a reverted line**, per the standing note that a diff-scanning guard cannot see a reintroduction.
+- **ANTI-VACUITY:** the probe is a real `BaseAgent` (`instanceof`, has `run`, has `type`) and
+  `BaseAgent.length === 1`, so a zero-arity constructor would make every assertion above vacuous.
+
+### Not done, and named
+
+**No branded client type**, because the codebase has none to build on — both factories return plain
+`SupabaseClient` (phase 1). The compiler can force *a* client to be passed and phase 3's guard can
+enforce *which*; no type can. Reported, per the phase's own instruction.

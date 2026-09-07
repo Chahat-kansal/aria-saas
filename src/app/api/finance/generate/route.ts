@@ -28,7 +28,7 @@ async function _POST() {
   const { data: owns } = await supabaseAdmin.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
   if (!owns) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const agent = new ReconciliationAgent()
+  const agent = new ReconciliationAgent(supabase)
   const result = await agent.run(bid, new Date(Date.now() - 86400000))
   return NextResponse.json({ ok: true, decisions: result.decisions.length, errors: result.errors.length })
 }

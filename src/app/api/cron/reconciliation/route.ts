@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     .select('id')
     .eq('is_active', true)
 
-  const agent = new ReconciliationAgent()
+  const agent = new ReconciliationAgent(supabaseAdmin)
   const yesterday = new Date(Date.now() - 86400000)
   let processed = 0
   let errors = 0

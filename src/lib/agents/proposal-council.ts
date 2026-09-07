@@ -11,6 +11,7 @@
  * re-export shim, and `.eslintrc.json` blocks the old specifier so it cannot come back by muscle
  * memory.
  */
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { todayAEST, toAESTStart } from '@/lib/date-au'
 import { callModel } from '@/lib/ai/gateway'
@@ -35,7 +36,7 @@ import { ReconciliationAgent } from './reconciliation-agent'
 import { CustomerAcquisitionAgent } from './customer-acquisition-agent'
 import { InventoryFinancingAgent } from './inventory-financing-agent'
 
-type AgentCtor = { new(): { run(bid: string): Promise<{ decisions: AgentDecision[] }> } }
+type AgentCtor = { new(supabase: SupabaseClient): { run(bid: string): Promise<{ decisions: AgentDecision[] }> } }
 const AGENT_REGISTRY: Record<string, AgentCtor> = {
   reorder: ReorderAgent as AgentCtor,
   pricing: PricingAgent as AgentCtor,
@@ -509,7 +510,12 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
         }
 
         const result = await Promise.race([
-          new AgentClass().run(business_id),
+          // M13D phase 3 — THE SERVICE-ROLE CLIENT, PASSED EXPLICITLY. This is the line that has
+          // been silently unauthorised since 4 June: the agent built its own anon cookie client, a
+          // cron has no cookies, and RLS rejected every decision and run-log it tried to write.
+          // The council already holds supabaseAdmin and is a cron-only path, so it is entitled to
+          // pass one — and phase 3's guard checks that nothing outside a cron does.
+          new AgentClass(supabaseAdmin).run(business_id),
           new Promise<null>((_, rej) => setTimeout(() => rej(new Error('timeout')), 25000)),
         ])
         if (result && 'decisions' in result) {

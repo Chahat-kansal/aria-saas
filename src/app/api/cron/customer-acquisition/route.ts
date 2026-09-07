@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     .select('id')
     .eq('is_active', true)
 
-  const agent = new CustomerAcquisitionAgent()
+  const agent = new CustomerAcquisitionAgent(supabaseAdmin)
   let processed = 0
   let errors = 0
 
