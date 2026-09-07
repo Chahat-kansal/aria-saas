@@ -23,6 +23,13 @@ interface CallParams {
   systemPrompt: string
   userPrompt: string
   maxTokens?: number
+  /**
+   * M13B phase 1 — added so a caller migrating onto the gateway does not silently lose it. The
+   * answer council runs its advisors at 0.25 and its synthesis at 0.2; without this, moving it
+   * behind the wall would have changed the model's behaviour in the same commit that changed its
+   * plumbing, which the decision table forbids.
+   */
+  temperature?: number
   businessId?: string
   agentKey: AgentKey
   role: AgentRole
@@ -34,17 +41,76 @@ interface CallParams {
   imageMimeType?: string
 }
 
-async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
+/**
+ * M13B PHASE 1 — THE RETRY CONTRACT, WRITTEN DOWN AND MADE SAFE FOR STREAMS.
+ *
+ * ── THE CONTRACT (it already existed; this documents and fixes it) ─────────────────────────────
+ *   attempts   2 — one retry, never more
+ *   retry on   /529|503|overload|rate.?limit/i, matched against the error MESSAGE
+ *   never on   anything else — an auth error or a bad request is not made truer by repeating it
+ *   backoff    min(1000 * 2^attempt, 4000) ms
+ *   cost       every attempt is a real provider call and is billed; the caller's aria_ai_calls row
+ *              covers the whole call, so a retried call is one row whose tokens are the SUCCESSFUL
+ *              attempt's. Linking the attempts individually needs a `retry_of` column that does not
+ *              exist — see RUN-M13B.md, parked as DDL.
+ *
+ * ── ⚠️ AND THE BUG IT CONTAINED, WHICH IS THE POINT OF THIS EDIT ───────────────────────────────
+ * This wrapped the ENTIRE closure below, including the streaming branch. A stream that delivered
+ * tokens to `params.onToken` and THEN hit a transient error was retried — opening a second stream
+ * that re-emitted from the beginning. **The owner would see a partial answer followed by a complete
+ * one, concatenated.** The main Ask Aria lane is the only streaming call site in the codebase, so
+ * the hero path was the one exposed.
+ *
+ * `canRetry` is the fix: the caller reports whether anything has already reached the client, and a
+ * call that has begun delivering is never retried. It fails honestly instead, into the classified
+ * error state M4 built for exactly this. Retry before the first token; after it, stop.
+ *
+ * NOTE the asymmetry, which is deliberate: this gates the RETRY, not the tool loop. Tool results
+ * are accumulated by the loop outside this function, so a retried model turn never re-executes a
+ * tool that already ran — the decision table's rule, and it was already true here.
+ */
+/**
+ * THE RETRY DECISION, EXTRACTED SO IT CAN BE TESTED FOR REAL.
+ *
+ * Kept as a pure function rather than left inline: a test of a re-implementation proves only the
+ * re-implementation. `retry-contract.test.ts` drives THIS, which is the code that runs.
+ */
+export function shouldRetryModelCall(params: {
+  errorMessage: string
+  attempt: number
+  maxAttempts: number
+  /** False once any token has reached the client. A delivered partial is never retryable. */
+  mayRetry: boolean
+}): boolean {
+  const isTransient = /529|503|overload|rate.?limit/i.test(params.errorMessage ?? '')
+  if (!isTransient) return false
+  if (!params.mayRetry) return false
+  return params.attempt < params.maxAttempts - 1
+}
+
+/** The delay before attempt N. Exported alongside the decision so the whole contract is testable. */
+export function retryDelayMs(attempt: number): number {
+  return Math.min(1000 * Math.pow(2, attempt), 4000)
+}
+
+async function withBackoff<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 2,
+  canRetry?: () => boolean,
+): Promise<T> {
   let lastErr: Error | null = null
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn()
     } catch (e) {
       lastErr = e as Error
-      const msg = lastErr.message ?? ''
-      const isTransient = /529|503|overload|rate.?limit/i.test(msg)
-      if (!isTransient || attempt === maxAttempts - 1) throw lastErr
-      await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 4000)))
+      if (!shouldRetryModelCall({
+        errorMessage: lastErr.message ?? '',
+        attempt,
+        maxAttempts,
+        mayRetry: canRetry ? canRetry() : true,
+      })) throw lastErr
+      await new Promise(r => setTimeout(r, retryDelayMs(attempt)))
     }
   }
   throw lastErr ?? new Error('All retries failed')
@@ -121,6 +187,10 @@ export async function callAnthropic<T = Record<string, unknown>>(
       withBackoff(() => client.messages.create({
         model: modelId,
         max_tokens: params.maxTokens ?? 800,
+        // M13B phase 1 — forwarded ONLY when the caller set one, so every existing caller keeps the
+        // API default exactly as before. Spread rather than `temperature: params.temperature`,
+        // because sending an explicit `undefined` is not the same as sending nothing.
+        ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
         system: [{
           type: 'text',
           text: params.systemPrompt,
@@ -327,15 +397,22 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
           rej(new Error(`Anthropic call timed out after ${iterTimeoutMs}ms`))
         }, iterTimeoutMs)
       })
+      // M13B phase 1 — set the instant ANY delta reaches the caller. Once true this turn can never
+      // be retried: a second stream would replay the answer from the start and the owner would read
+      // it twice. Scoped per iteration, because each tool-loop turn is its own stream.
+      let deliveredToClient = false
       const response = await Promise.race([
         withBackoff(async () => {
           if (!params.onToken) return client.messages.create(requestBody, { signal: iterAc.signal })
           // Streaming turn: deltas reach the caller immediately; finalMessage() gives the loop
           // exactly what messages.create() would have.
           const streamed = client.messages.stream(requestBody, { signal: iterAc.signal })
-          streamed.on('text', (delta: string) => { try { params.onToken!(delta) } catch { /* a broken sink must never kill the turn */ } })
+          streamed.on('text', (delta: string) => {
+            deliveredToClient = true
+            try { params.onToken!(delta) } catch { /* a broken sink must never kill the turn */ }
+          })
           return streamed.finalMessage()
-        }),
+        }, 2, () => !deliveredToClient),
         iterHardTimeout,
       ])
       clearTimeout(iterTimerId)

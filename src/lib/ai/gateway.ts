@@ -80,10 +80,10 @@ export interface AriaModelRequest {
   userPrompt: string | unknown[]
   maxTokens?: number
   /**
-   * Accepted on the request for callers that set it today, and NOT forwarded: the provider's
-   * CallParams has no temperature field, so passing it would be a compile error and silently
-   * dropping it without saying so would be worse. Named here rather than removed, because a caller
-   * that needs it needs the provider to grow it first.
+   * M13B phase 1 — NOW FORWARDED. M13 accepted this and dropped it, because the provider had no
+   * such field; that was recorded rather than hidden, and this is the commit that closes it. The
+   * answer council runs advisors at 0.25 and synthesis at 0.2, so migrating it behind the wall
+   * would otherwise have changed the model's behaviour in the same commit as its plumbing.
    */
   temperature?: number
   requestSummary?: string
@@ -186,6 +186,7 @@ export async function callModel<T = Record<string, unknown>>(
       systemPrompt: req.systemPrompt,
       userPrompt: req.userPrompt as string,
       maxTokens: req.maxTokens,
+      temperature: req.temperature,
       businessId: req.businessId,
       agentKey: req.agentKey,
       role: req.role,
