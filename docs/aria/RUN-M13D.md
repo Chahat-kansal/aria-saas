@@ -1,7 +1,133 @@
 # RUN-M13D · THE AGENTS CAN'T SEE OR WRITE
 
-7 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**7 September 2026 · autonomous run, RULE 20 · five phases, five done, none parked as work, five
+commits. All pushed. Build verified green.**
+
+**The agents can write again.** Ninety-five days after the last `agent_runs` row, one landed —
+**twenty-four minutes after phase 2 deployed**, from a real production cron, while this sprint was
+still running.
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ IT IS FIXED, AND IT IS OBSERVED, NOT ARGUED.** Phase 2 was pushed at 11:36 UTC. At 12:00:47
+UTC `/api/cron/[task]/reorder-daily` ran and wrote:
+
+```
+agent_type reorder · triggered_by cron · decisions_count 0 · errors null · 2026-09-07 12:00:47 UTC
+```
+
+**`agent_runs` rows written since 5 June: exactly this one.** Under the old code `logRun` wrote
+through the anon cookie client, RLS answered `42501`, and no row could appear — which is why the
+table stopped dead on 4 June. Under the new code the cron passes `supabaseAdmin` and the write lands.
+Nothing else changed between those two states, so **the row's existence is the proof.** Phase 3's
+verification came from production in the end, not from the fallback probe.
+
+**2. The whole diagnosis, measured in one rolled-back transaction.** Not inferred — run against
+production as both roles:
+
+```
+anon     agent_decisions = REJECTED 42501     ← insufficient_privilege
+anon     agent_runs      = REJECTED 42501
+anon     pos_products visible =     0
+service  agent_decisions = ACCEPTED
+service  agent_runs      = ACCEPTED
+service  pos_products visible =    74
+```
+
+**`42501` is the whole story.** Never a bad insert, never a missing column — an unauthorised one.
+
+**3. ⚠️ It was not six call sites, it was 26.** M13C recommended this fix and said *"six call sites
+to audit"* — that came from a partial grep, and this sprint would have been built on it. Measured:
+**ten user-facing routes and fifteen crons, 26 `new …Agent()` lines.** The good news inside that
+correction: **the split is perfectly clean.** Every route already builds a session client, every cron
+already holds `supabaseAdmin`. Both sides always held exactly the client they should pass — they had
+simply never passed it.
+
+## WHAT CHANGED
+
+```ts
+// was
+protected supabase = createServerSupabaseClient();   // anon key + cookies. A cron has no cookies.
+// is
+protected supabase: SupabaseClient;
+constructor(supabase: SupabaseClient) { if (!supabase) throw …; this.supabase = supabase }
+```
+
+**No default — neither one.** `supabaseAdmin` as a default makes ten routes bypass RLS; the session
+client as a default is the original bug verbatim. **`tsc` found the two call sites I had missed**
+(both `runAgent`, the orchestrator called from both sides), which is the phase's verification working.
+
+**WALL 8** now blocks a service-role client reaching an agent outside `src/app/api/cron/`, with one
+named exception (`proposal-council.ts`, whose only importer is the council cron). Proven both ways
+with byte-identical probe lines — fired in a route, silent under `cron/` — and the predicate lives in
+`src/` so the test **calls** it rather than grepping the guard.
+
+## PROOF THE TEN ROUTES BEHAVE IDENTICALLY
+
+**One changed line each**, every one of the form `new XAgent()` → `new XAgent(supabase)`, where
+`supabase` is `createServerSupabaseClient()` — **the identical factory the old field called for
+itself.** Same session, same user, same RLS; the agent now shares the route's instance instead of
+building a second one from the same cookie store. Nothing else in those files changed. That is a
+diff, not a claim.
+
+## WHAT THE THREE BLIND AGENTS CAN NOW SEE
+
+| table | as `anon` | as service role |
+|---|---|---|
+| `pos_products` (active) | **0** | **74** |
+| `pos_sales` (completed) | **0** | **1,802** |
+| `pos_sale_items` | **0** | **3,510** |
+| `pos_suppliers` · `pos_outlets` | **0** · **0** | **2** · **2** |
+| `pos_staff` (active) · `staff_members` | **0** · **0** | **5** · **4** |
+| `pos_rosters` · `competitor_price_cache` | 0 · 0 | **0** · **0** — genuinely empty |
+
+**Every zero on the left was a lie the database was telling them.** All three can now complete their
+logic: `reorder` fully, `pricing` through its own documented empty-competitor-cache fallback,
+`schedule` on both its read gates.
+
+**⚠️ One new write to watch:** `schedule-agent.ts:178` upserts `pos_rosters`, a table with 0 rows, and
+that write has never once succeeded. The rows are `published: false` drafts, so nothing reaches staff
+until a human publishes.
+
+**Nothing can execute.** All nine configured agents are `mode = 'suggest'`,
+`auto_approve_below_cents = 0`, and `executeProposal` runs only inside `if (mode === 'auto')`.
+Verified from live data, not assumed.
+
+## WHAT IS STILL UNPROVEN, SAID PLAINLY
+
+That 12:00 run wrote its row and produced **0 decisions with no model call**. Reading the agent,
+that means it stopped either at a per-product `continue` (nothing needed reordering) **or** at the
+`if (!products?.length)` guard. **Those two produce an identical row and I cannot tell them apart
+from this observation.** The reasoning says it saw the 74 products; reasoning is not observation.
+
+**Tonight's 20:00 UTC council distinguishes them**, because M13C's health block records per-agent
+outcomes and a rejected save now throws instead of returning `[]`. Four queries to run tomorrow are
+at the end of phase 5.
+
+**M13C's recommendation — fix, don't retire — still holds, and more strongly:** part of it has
+stopped being a prediction and become an observation.
+
+## TWO THINGS FOUND ON THE WAY, NEITHER IN SCOPE
+
+- **`docs/aria/ARIA-ARCHITECTURE-AUDIT.md` now exists** — dated 5 Sep, 13 KB, **untracked**. Three
+  sprints reported it missing and re-measured everything from the code instead. Not committed: it is
+  the founder's file to place.
+- **⚠️ `canon-rail-guard --working-tree` runs `git add -N .`**, intent-to-adding every untracked file
+  in the repo — about forty here, including `pw-report*-extracted/` and four `vt*.log`s. Deliberate
+  (it is how the guard sees new files) but it primes the index with exactly the junk CLAUDE.md warns
+  has been swept into a commit before. **I cleared the index after each use and verified every
+  commit's file list** — phase 3 committed 4 files, phase 4 committed 1.
+
+## MY OWN ERROR THIS RUN
+
+**The rule's own file failed the rule.** `service-role-rule.ts` spelled both blocked shapes out
+literally in a doc comment, and the guard flagged its own definition — twice. **Literal split, guard
+untouched.** That is the fourth time in this series a scan has matched its own prose (M12 rule 9,
+M13 rule 8, M13B's stream test, this).
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -311,3 +437,115 @@ For the first time, the three agents that read through the broken client will se
 products, 1,802 sales, 3,510 line items, 5 staff across 2 outlets. **A first run on 94 days of
 unseen data may well produce a lot of proposals.** That is the point, it is not a fault, and none of
 it executes.
+
+---
+
+## PHASE 5 — THE MORNING AFTER ✅
+
+**No code in this phase.**
+
+### ⚠️ IT ALREADY HAPPENED. THE FIRST `agent_runs` ROW SINCE 4 JUNE LANDED WHILE THIS SPRINT WAS RUNNING.
+
+I did not have to wait for tonight's council. Phase 2 was pushed at **11:36 UTC**; twenty-four
+minutes later, with the deploy live, `/api/cron/[task]/reorder-daily` was invoked and this appeared:
+
+```
+business_id      ff5055a0-…  (Sip Café)
+agent_type       reorder
+triggered_by     cron
+decisions_count  0
+errors           null
+started_at       2026-09-07 12:00:47 UTC
+```
+
+**`agent_runs` rows written since 5 June: 1. That is it.** Ninety-five days of nothing, then this,
+twenty-four minutes after the fix deployed.
+
+**The row's existence IS the proof.** Under the old code `logRun` wrote through the anon cookie
+client, RLS answered `42501`, and no row could appear — which is precisely why the table stopped on
+4 June. Under the new code `cron/[task]` passes `supabaseAdmin` and the write lands. Nothing else
+changed between those two states.
+
+**This is phase 3's VERIFY satisfied by a real production run rather than by the rolled-back probe I
+fell back to.** I am glad to withdraw the "unverified" caveat on the write path.
+
+### ⚠️ WHAT THAT RUN DOES *NOT* PROVE, stated plainly
+
+`decisions_count: 0`, `errors: null`, and **no `aria_ai_calls` row anywhere near 12:00** — so reorder
+completed cleanly and never reached its model call.
+
+Reading the agent, 0 decisions with no model call means it stopped at one of the per-product
+`continue`s — `avgDaily30 < MIN_AVG_DAILY` (too slow-moving) or `current >= reorderPoint` (enough
+stock) — **or** at the `if (!products?.length)` guard on line 67.
+
+**Those two produce an identical row, and I cannot tell them apart from this observation.** The chain
+of reasoning says it saw the products — the new code ran (the row proves it), that path passes
+`supabaseAdmin` (the code proves it), and service role sees 74 products (the probe proves it) — but
+**reasoning is not observation, and this row does not distinguish the two.**
+
+**Tonight's council will**, because M13C's health block records per-agent outcomes and phase 2 of
+M13C makes a rejected save throw rather than return `[]`. That is the run to read.
+
+### Against M13C's six sentences
+
+M13C gave the narrative six cases. Before today it could only ever have reached `quiet` or
+`unknown`, because agents that fail by returning an empty array are counted as having *reported*.
+**After M13D it can reach the others**, because a rejected `agent_decisions` insert now throws and is
+recorded as a failure with its Postgres reason.
+
+If tonight reads *"All 14 overnight checks reported and nothing needs you today"*, that sentence is
+now **earned** rather than fabricated — and the health block's `agents_failed: 0` is what makes the
+difference checkable. That was the tell M13C phase 5 named, and it still is.
+
+### Does "fix, don't retire" still hold? **Yes — more strongly than when it was written.**
+
+M13C recommended it on the strength of the machinery being complete. One thing has changed since:
+**the machinery has now demonstrably written to the database for the first time in 95 days.** The
+recommendation is no longer a prediction about what a fix would do; part of it is an observation.
+
+What remains unproven is the *output* — whether these agents, with sight restored, actually produce
+useful proposals. **Tonight answers that**, and it costs about twenty cents a quarter to find out.
+
+### What to run tomorrow morning
+
+```sql
+-- 1. the sentence the owner reads, and the health block behind it
+select session_date, plan_narrative,
+       plan->'agent_health'->>'agents_reported' as reported,
+       plan->'agent_health'->>'agents_failed'   as failed,
+       plan->'agent_health'->'failures'         as failures
+from agent_council_sessions
+where business_id = 'ff5055a0-c351-4ada-817a-1804961035f3'
+order by session_date desc limit 2;
+
+-- 2. per-agent, the first real picture in 95 days
+select agent_type, triggered_by, decisions_count, errors, started_at
+from agent_runs where started_at > now() - interval '1 day' order by started_at desc;
+
+-- 3. anything proposed — read it, do not execute it. mode is 'suggest' on all nine agents.
+select p.agent_type, p.proposal_type, p.urgency, p.projected_impact_dollars, p.proposal_data
+from agent_council_proposals p
+join agent_council_sessions s on s.id = p.session_id
+where s.session_date = current_date order by p.projected_impact_dollars desc;
+
+-- 4. the write that has never once succeeded
+select count(*) from pos_rosters where generated_by_agent;
+```
+
+**Nothing in tonight's run can execute.** All nine configured agents are `mode = 'suggest'` with
+`auto_approve_below_cents = 0`, and `proposal-council.ts` calls `executeProposal` only inside
+`if (mode === 'auto')`.
+
+### Two things found while working, neither in scope
+
+- **⚠️ `docs/aria/ARIA-ARCHITECTURE-AUDIT.md` now exists** — dated 5 Sep, 13 KB, **untracked**. Three
+  sprints (M13, M13B, M13C) reported it missing and re-measured every number from the code instead.
+  It is in the working tree but not in git, so nothing here depends on it and I have not committed
+  it — it is the founder's file to place.
+- **⚠️ `canon-rail-guard.ts --working-tree` runs `git add -N .`**, which intent-to-adds **every**
+  untracked file in the repo — about forty of them here, including `pw-report*-extracted/`,
+  `canopy/` and four `vt*.log`s. It is best-effort and deliberate (it is how the guard sees new
+  files), but it leaves the index primed with exactly the junk CLAUDE.md warns has been swept into a
+  commit before. **I cleared the index after each use and verified every commit's file list**; phase
+  3 committed 4 files and phase 4 committed 1. Worth knowing before someone runs the guard and then
+  `git commit -a`.
