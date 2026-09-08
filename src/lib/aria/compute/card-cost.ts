@@ -69,6 +69,28 @@ export const SURCHARGE_BAN_FACTS = {
 } as const
 
 /**
+ * M14 PHASE 5 — THE COMPLIANCE GATE. One predicate, and every customer-facing surcharge behaviour
+ * asks it.
+ *
+ * ⚠️ THE SPRINT SAYS "REMOVE IT". DATE-GATING IT IS STRICTLY BETTER AND THIS IS WHY.
+ *
+ * Surcharging is **entirely legal until 30 September 2026**. Deleting the checkout surcharge line
+ * today would break every venue that is lawfully surcharging for the next three weeks — a
+ * downgrade, and RULE 0 forbids it. Deleting it *later* needs a human to remember on the day.
+ *
+ * A date gate does both jobs: the feature keeps working right up to the deadline, and at midnight
+ * AEST on 1 October it stops **charging** and stops **displaying**, with nobody having to act. The
+ * owner's configuration is left untouched, so nothing is destroyed and the rules are still there if
+ * the RBA's expectation does not play out the way it expects.
+ *
+ * The boundary is Melbourne midnight, not UTC: 1 October 2026 is a Thursday and daylight saving
+ * does not start until the 4th, so AEST (+10) is correct for that instant.
+ */
+export function surchargingAllowedOn(now: Date = new Date()): boolean {
+  return now.getTime() < Date.parse(SURCHARGE_BAN_FACTS.effective + 'T00:00:00+10:00')
+}
+
+/**
  * How well a figure is known.
  *
  * ⚠️ Built ON `Grounding`, not beside it. The compute module already speaks

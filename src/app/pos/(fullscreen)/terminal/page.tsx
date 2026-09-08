@@ -1,5 +1,6 @@
 // force-recompile:1779337019
-'use client';
+'use client'
+import { surchargingAllowedOn } from '@/lib/aria/compute/card-cost';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { OrderType } from '@/components/pos/OrderTypeSelector';
 import type { CustomerDetails } from '@/components/pos/CustomerCaptureModal';
@@ -739,7 +740,11 @@ export default function TerminalPage() {
     const surchargeFetch = fetch('/api/pos/surcharge-rules')
       .then(r => r.json())
       .then((d: { rules?: Array<{ id:string; payment_type:string|null; amount_type:string|null; amount:number; is_active:boolean; day_of_week:number[]|null }> }) => {
-        setSurchargeRules((d.rules ?? []).filter(r => r.is_active));
+        // M14 phase 5 — from 1 October the card networks are expected to forbid surcharging under
+        // their scheme rules, so no rule is applied from that instant. Filtering here stops the
+        // CHARGE, not merely the line on screen; the surcharge row below renders only when
+        // surchargeAmt > 0, so both stop together. The owner's saved rules are untouched.
+        setSurchargeRules(surchargingAllowedOn() ? (d.rules ?? []).filter(r => r.is_active) : []);
       })
       .catch(() => null);
     const outletsFetch = import('@/lib/supabase').then(({ supabase: sb }) => {

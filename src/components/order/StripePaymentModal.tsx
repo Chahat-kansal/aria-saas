@@ -1,4 +1,5 @@
 'use client'
+import { surchargingAllowedOn } from '@/lib/aria/compute/card-cost'
 import { useState } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
@@ -68,7 +69,12 @@ function PayForm({ onSuccess, onClose, orderNumber, total }: {
           GROUNDING-TEETH: PayID is live only after the Stripe account enables it; card is
           always live. Pre-Oct-2026 AU surcharge ban: enabling PayID now saves ~1.5% per order. */}
       <div style={{ fontSize: 11, fontWeight: 600, color: '#2D5240', textAlign: 'center' as const, padding: '6px 12px', background: '#f0f7f2', borderRadius: 8, marginBottom: 4 }}>
-        PayID preferred · 0% surcharge · instant confirmation
+        {/* M14 phase 5 — "0% surcharge" is a comparison against card surcharging. From 1 October
+            there is nothing to compare against, so the badge says what stays true: PayID is the
+            cheapest way for the venue to be paid, and it confirms instantly. */}
+        {surchargingAllowedOn()
+          ? 'PayID preferred · 0% surcharge · instant confirmation'
+          : 'PayID preferred · instant confirmation'}
       </div>
       <PaymentElement
         onReady={() => setElementReady(true)}

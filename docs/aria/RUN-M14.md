@@ -454,3 +454,81 @@ of them is `created_at`.
 different feature and the sprint says fix only within scope. Named here with file and line.
 
 **Gates:** tsc 0 · vitest **25/25** on this file · canon rail pass.
+
+---
+
+## PHASE 5 — THE COMPLIANCE SWEEP ✅
+
+**Commit:** `<phase-5>` · `card-cost.ts` (the gate), `pos/(fullscreen)/terminal/page.tsx`,
+`menu/[slug]/MenuClient.tsx`, `components/order/StripePaymentModal.tsx`,
+`surcharge-compliance.test.ts` (new, 10 tests).
+
+### ⚠️ THE SPRINT SAYS "REMOVE IT". I DATE-GATED IT INSTEAD, AND THAT IS STRICTLY BETTER
+
+**Surcharging is entirely legal until 30 September 2026.** Deleting the checkout surcharge line
+today would break every venue lawfully surcharging for the next three weeks — a downgrade, which
+RULE 0 forbids. Deleting it *later* needs a human to remember on the day, and this sprint exists
+precisely because people will not.
+
+`surchargingAllowedOn(now)` does both jobs: the feature works right up to the deadline, and **at
+Melbourne midnight on 1 October it stops charging and stops displaying with nobody acting.** The
+owner's saved rules are left untouched — nothing is destroyed, and if the RBA's expectation does not
+play out as it expects, the configuration is still there.
+
+### The full census — every mention, classified
+
+| file:line | what it is | disposition |
+|---|---|---|
+| `menu/[slug]/MenuClient.tsx:927` | **"Pay with PayID — save 1.5%, no card surcharge"** — rendered to a customer | **gated.** After the date: *"the cheapest way to pay us"* |
+| `components/order/StripePaymentModal.tsx:70` | **"PayID preferred · 0% surcharge · instant confirmation"** — rendered to a customer | **gated.** After the date: *"PayID preferred · instant confirmation"* |
+| `pos/(fullscreen)/terminal/page.tsx:742` | loads the surcharge rules that produce the charge | **gated at load — stops the CHARGE, not just the line** |
+| `pos/(fullscreen)/terminal/page.tsx:2282` | the checkout surcharge row | renders only when `surchargeAmt > 0`, which the gate above forces to 0 |
+| `pos/settings/surcharging/page.tsx` · `pos/settings/payments/page.tsx:39` · `pos/settings/page.tsx:23` | **owner-facing configuration** | **left alone.** Legal until 30 Sep, and the owner's own settings are not customer-facing copy |
+| `api/pos/settings/route.ts:16-26` · `api/pos/surcharge-rules/*` | storage and CRUD | left alone |
+| `StripePaymentModal.tsx:69` · `terminal:1271` · `webhooks/stripe-orders:25` | **code comments**, never rendered | left alone |
+| `dashboard/staff/payroll`, `api/staff/award-rates`, `dashboard/bas` | **weekend penalty rates** — a completely different meaning of the word | **must not be swept** |
+
+### ⚠️ THE SWEEP FOUND A STRING MY OWN GREP HAD MISSED
+
+My first census searched for `card surcharge`, `no card surcharge` and `1.5%`. The rail — which
+searches for **any** surcharge mention in customer-facing files — caught
+`StripePaymentModal.tsx:70`, **"PayID preferred · 0% surcharge · instant confirmation"**. It is
+rendered in the payment modal, and after 1 October "0% surcharge" is a comparison against something
+that no longer exists.
+
+**The sweep did its job on its author.** That is the whole argument for a rail over a grep.
+
+### ⚠️ "Surcharge" means two unrelated things in this repo, and one must never be swept
+
+A **weekend penalty rate** is also called a surcharge, in payroll and award-rate code. Sweeping
+those would send someone hunting a compliance problem that is not one. The sweep is scoped to
+customer-facing directories, and a test asserts the payroll paths fall **outside** that scope.
+
+### The gate flips at the right instant, and the test proves the wrong one is wrong
+
+```
+30 Sep 23:59:59 +10:00  →  allowed
+ 1 Oct 00:00:00 +10:00  →  forbidden
+30 Sep 14:00:00 Z       →  forbidden   (that IS 1 October in Melbourne)
+30 Sep 13:59:00 Z       →  allowed
+```
+
+**A naive UTC-midnight gate would have said "allowed" for `30 Sep 14:00 Z`** — ten hours of unlawful
+surcharging. The test computes the naive answer alongside the real one and asserts they differ.
+AEDT (+11) is also tested and rejected: 1 October 2026 is a Thursday, daylight saving starts on the
+4th, so **+10 is the correct offset for that instant.**
+
+### MUTATION
+
+The pre-phase line — `Pay with PayID — save 1.5%, no card surcharge` in a file with no gate — is
+reproduced and shown to satisfy the offender condition exactly. Re-adding an ungated claim goes red.
+
+**ANTI-VACUITY:** the sweep asserts it read **more than 10** customer-facing files and that
+`MenuClient` is among them, so a scan over an empty list cannot pass.
+
+### One thing found and left alone
+
+**`surcharge_show_on_receipt` is a setting nothing reads.** It is stored, it is in the settings
+allowlist, and **no receipt template consults it** — so no receipt has ever printed a surcharge line.
+Toggling it does nothing today. Not this sprint's bug; recorded because the sprint asked about
+receipt templates and the honest answer is that there is no surcharge line on one to remove.

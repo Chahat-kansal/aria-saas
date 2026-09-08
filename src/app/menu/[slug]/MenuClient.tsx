@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
+import { surchargingAllowedOn } from '@/lib/aria/compute/card-cost'
 import { TEMPLATES, deriveTheme } from '@/lib/menu/menu-theme'
 import { resolveArchetype } from '@/lib/ordering/resolveArchetype'
 import { ArchetypeRenderer } from '@/components/ordering/archetypes/ArchetypeRenderer'
@@ -924,7 +925,12 @@ export default function MenuClient({
                 <span style={{ fontSize: 10, fontWeight: 900, color: INK, lineHeight: 1 }}>Pay<br/>ID</span>
               </div>
               <div style={{ fontSize: 14, color: INK, lineHeight: 1.4 }}>
-                Pay with <strong>PayID</strong> — save 1.5%, no card surcharge
+                {/* M14 phase 5 — "save 1.5%, no card surcharge" is a claim about avoiding a fee.
+                    From 1 October there is no card surcharge to avoid, so the claim stops being
+                    true and the line says what is still true instead: PayID costs the venue less. */}
+                {surchargingAllowedOn()
+                  ? <>Pay with <strong>PayID</strong> — save 1.5%, no card surcharge</>
+                  : <>Pay with <strong>PayID</strong> — the cheapest way to pay us</>}
               </div>
             </div>
 
