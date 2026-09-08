@@ -379,3 +379,78 @@ automatically"* — produces different state, asserted unequal.
 **And the load-bearing assertion is behavioural, not structural:** `isAutoRunnable(findCapability(
 'bulk_price_update'))` is called and must be `false`. That is what actually stops a plan runner
 carrying the price change out by itself.
+
+---
+
+## PHASE 4 — PUSH TO WHERE PRICES LIVE ✅
+
+**Commit:** `<phase-4>` · `ask/action-executor.ts`, `aria/compute/surcharge-policy.ts`,
+`surcharge-policy.test.ts` (+7 tests, 25 total).
+
+### ⚠️ THE EXECUTOR WOULD HAVE THROWN AWAY EVERY PRICE THE OWNER APPROVED
+
+`bulk_price_update`'s branch could only apply **one percentage across a filtered set** — category or
+brand, one `price_change_value`, no per-item prices. The whole point of phase 3's proposal is
+per-item **rounded** prices: $4.50 → **$4.60**, $16.00 → **$16.20**. Approving it would have applied
+a flat 1.32% and written **$4.5594**.
+
+**The owner would have approved one set of numbers and got another.** Found by tracing the payload
+into the branch rather than assuming it fit.
+
+**Fixed, additively:** the branch now accepts an optional `lines: [{ product_id, to }]`. When
+present it targets exactly those ids and writes exactly those prices; when absent **every existing
+caller behaves precisely as before**. The mass-mutation backstop, the before-state capture, the
+per-row error check and the rollback all apply identically. **This changes which prices are written,
+never who may write them.**
+
+A product **not** in the approved list is **skipped**, never repriced by the leftover percentage —
+and a `0`, negative or non-numeric price is refused rather than written, because a $0 shelf price is
+the most damaging thing a price writer can do.
+
+`explicitPriceFor()` is **one definition shared by the proposal that writes the lines and the
+executor that reads them**, so the two cannot drift.
+
+### ONE SOURCE OF TRUTH — proven by observation, not asserted
+
+A single `UPDATE` on `pos_products`, rolled back, read through each surface's own query shape:
+
+```
+BEFORE  pos_products=4.50 | public-menu-shape=4.50 | pos-terminal-shape=4.50
+AFTER   pos_products=4.60 | public-menu-shape=4.60 | pos-terminal-shape=4.60
+        | price-list override = none exists
+```
+
+Every price surface — `menu/[slug]`, `menu/[slug]/[menu_key]`, `pos/(fullscreen)/menu`,
+`api/public/menu/[business_id]`, `api/pos/products/*`, the in-store chat and recipe routes — reads
+`from('pos_products')`. **There is no cache and no second display copy**, so an approved change
+appears everywhere by construction.
+
+**No ESL or menu-board integration exists** to push to. Searched; nothing matched beyond unrelated
+words.
+
+### ⚠️ SIX OTHER TABLES CARRY A PER-PRODUCT PRICE COLUMN — the N-copies pattern, measured
+
+| table | rows | read by | verdict |
+|---|---|---|---|
+| **`pos_product_prices`** | **2** (both Sip's, both `0.00`, qty 1) | `pos/products/[id]/edit`, `lib/products/queries.ts` | **a real second table.** Quantity/outlet-tiered pricing. Not read by any customer surface, but a reprice leaves these rows stale. |
+| `pos_price_list_items` | 0 | `api/pos/price-lists`, `dashboard/promotions` | dormant |
+| `pos_price_points` · `pos_product_variants` · `pos_item_variations` · `marketplace_listings` | 0 each | — | dormant |
+| `booking_services` | 1 | bookings | a different product concept, not a menu item |
+
+**Parked, with the reason:** reconciling tiered/variant pricing with the base price is a pricing-model
+sprint, not this one. Today only `pos_products.price` reaches a customer, and that is what the
+proposal writes.
+
+### ⚠️ AND A LIVE DEFECT FOUND ON THE WAY — PARKED, out of scope
+
+`src/app/api/pos/price-lists/route.ts:33` selects **`override_price`**, a column that **does not
+exist** — the live table's column is `price`. The route's own POST handler documents this at line
+80 and maps it correctly on the way in; **the CSV export read was never fixed.** So that query
+errors, its error is discarded, and the export returns **a header row and nothing else**, silently.
+`.order('created_at')` on the same query is a second phantom — the table has four columns and none
+of them is `created_at`.
+
+**Two-line fix** (`override_price` → `price`, drop the `.order`) — **not taken**, because it is a
+different feature and the sprint says fix only within scope. Named here with file and line.
+
+**Gates:** tsc 0 · vitest **25/25** on this file · canon rail pass.

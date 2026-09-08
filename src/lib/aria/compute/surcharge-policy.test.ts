@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildPricingProposal, roundToPricePoint, policyFactor, stepUpDecision, policyComparison,
-  STEPUP_ANNUAL_DOLLARS, STEPUP_LINE_COUNT,
+  STEPUP_ANNUAL_DOLLARS, STEPUP_LINE_COUNT, explicitPriceFor,
   type RecoveryPolicy,
 } from './surcharge-policy'
 import type { ItemImpact } from './item-card-impact'
@@ -190,5 +190,71 @@ describe('M14 phase 3 · annualising is honest about its window', () => {
     const prices = [mk('recover_full'), mk('recover_half'), mk('absorb')]
     expect(new Set(prices).size).toBe(3)
     expect(prices).toEqual([4.68, 4.59, 4.5])
+  })
+})
+
+describe('M14 phase 4 · the approved price is the price that gets written', () => {
+  const lines = [
+    { product_id: 'chai', to: 4.6 },
+    { product_id: 'toast', to: 16.2 },
+  ]
+
+  it('⚠️ WITHOUT THIS the executor would apply a flat percentage and discard the rounding', () => {
+    // The proposal's whole point is per-item rounded prices. The executor could only apply ONE
+    // percentage across a filtered set, so an owner would have approved $4.60 and got $4.5594.
+    // explicitPriceFor is what makes the approved number the written number.
+    expect(explicitPriceFor(lines, 'chai')).toBe(4.6)
+    expect(explicitPriceFor(lines, 'toast')).toBe(16.2)
+    // The flat-percentage result, for contrast — it is not what the owner approved.
+    expect(Math.round(4.5 * 1.0132 * 10000) / 10000).toBe(4.5594)
+  })
+
+  it('a product the owner did not approve gets NO price — never a fallback rule', () => {
+    // The executor skips a null rather than repricing by the leftover percentage.
+    expect(explicitPriceFor(lines, 'not-in-the-proposal')).toBeNull()
+  })
+
+  it('an absent, empty or malformed list yields null, so the percentage path stays intact', () => {
+    expect(explicitPriceFor(null, 'chai')).toBeNull()
+    expect(explicitPriceFor(undefined, 'chai')).toBeNull()
+    expect(explicitPriceFor([], 'chai')).toBeNull()
+  })
+
+  it('a zero, negative or non-numeric price is refused rather than written', () => {
+    // A $0 shelf price is the single most damaging thing a price writer can do.
+    expect(explicitPriceFor([{ product_id: 'a', to: 0 }], 'a')).toBeNull()
+    expect(explicitPriceFor([{ product_id: 'a', to: -5 }], 'a')).toBeNull()
+    expect(explicitPriceFor([{ product_id: 'a', to: NaN }], 'a')).toBeNull()
+    expect(explicitPriceFor([{ product_id: 'a', to: 'abc' as unknown as number }], 'a')).toBeNull()
+  })
+
+  it('ids are compared as strings, so a uuid from JSON still matches', () => {
+    expect(explicitPriceFor([{ product_id: '123' as unknown as string, to: 9 }], 123 as unknown as string)).toBe(9)
+  })
+
+  it('MUTATION — a resolver that fell back to the percentage on a miss', () => {
+    // The mutant: when the product is not in the list, reprice it anyway. That silently changes
+    // prices the owner never saw, which is exactly what the explicit list exists to prevent.
+    const mutant = (ls: typeof lines, id: string, pct: number, current: number) =>
+      explicitPriceFor(ls, id) ?? Math.round(current * (1 + pct / 100) * 100) / 100
+    expect(mutant(lines, 'unapproved', 1.32, 5)).toBe(5.07)   // the mutant reprices it
+    expect(explicitPriceFor(lines, 'unapproved')).toBeNull()  // the real one refuses
+  })
+
+  it('the proposal and the executor agree on the payload shape, end to end', () => {
+    const built = buildPricingProposal({
+      items: [item('chai', 4.5), item('toast', 16.0)],
+      recovery_pct: 1.32, policy: 'recover_full', rounding: 'nearest_10c', window_days: 90,
+    })
+    if (!built.ok) throw new Error(built.reason)
+    // Exactly the mapping the route writes into the decision payload.
+    const payloadLines = built.data.lines
+      .filter(l => l.proposed_price !== l.current_price)
+      .map(l => ({ product_id: l.id, to: l.proposed_price }))
+    // …and exactly what the executor reads back out of it.
+    for (const l of payloadLines) {
+      expect(explicitPriceFor(payloadLines, l.product_id)).toBe(l.to)
+    }
+    expect(payloadLines).toEqual([{ product_id: 'chai', to: 4.6 }, { product_id: 'toast', to: 16.2 }])
   })
 })

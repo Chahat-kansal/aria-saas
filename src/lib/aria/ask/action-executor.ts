@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { explicitPriceFor } from '@/lib/aria/compute/surcharge-policy'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { PlannedAction } from './action-planner'
@@ -214,27 +215,62 @@ async function runAction(
   try {
     switch (action.type) {
       case 'bulk_price_update': {
-        const { category, brand, price_change_type, price_change_value } = action.payload as {
+        const { category, brand, price_change_type, price_change_value, lines } = action.payload as {
           category?: string; brand?: string
           price_change_type: 'set' | 'increase_pct' | 'decrease_pct' | 'increase_abs' | 'decrease_abs'
           price_change_value: number
+          /**
+           * M14 PHASE 4 — AN EXPLICIT PER-ITEM PRICE LIST, WHICH IS WHAT THE OWNER ACTUALLY APPROVED.
+           *
+           * Without this the branch could only apply ONE percentage across a filtered set, so a
+           * proposal whose whole point is per-item rounding ($4.50 → $4.60, $16.00 → $16.20) would
+           * have been executed as a flat 1.32% and every rounded price would have been silently
+           * discarded. The owner would have approved one set of numbers and got another.
+           *
+           * Additive: when `lines` is absent every existing caller behaves exactly as before. The
+           * mass-mutation backstop, the before-state capture, the per-row error check and the
+           * rollback all apply identically — this changes WHICH prices are written, never who may
+           * write them.
+           */
+          lines?: Array<{ product_id: string; to: number }>
         }
+        const byLine = Array.isArray(lines) && lines.length > 0
         let q = supabase.from('pos_products')
           .select('id,name,price,cost_price')
           .eq('business_id', businessId).eq('is_active', true)
-        if (category) q = q.eq('category', category)
-        if (brand) q = q.eq('brand', brand)
-        const { data: targets } = await q.limit(500)
+        if (byLine) q = q.in('id', lines!.map(l => String(l.product_id)))
+        else {
+          if (category) q = q.eq('category', category)
+          if (brand) q = q.eq('brand', brand)
+        }
+        const { data: targets, error: targetsErr } = await q.limit(500)
+        if (targetsErr) return { ok: false, affected_count: 0, error: 'Could not read the products to reprice: ' + targetsErr.message, rollback_available: false }
         if (!targets?.length) return { ok: false, affected_count: 0, error: 'No matching products found', rollback_available: false }
         { const mb = massBlock(targets.length); if (mb) return mb }
 
         beforeState = { products: targets.map((p: Record<string,unknown>) => ({ id: p.id, name: p.name, price: p.price })) }
         entityIds = targets.map((p: Record<string,unknown>) => String(p.id))
 
+        // Explicit prices win over the percentage, and a product missing from the list is skipped
+        // rather than silently repriced by a fallback rule.
+
         for (const product of targets as Array<Record<string,unknown>>) {
           const currentPrice = Number(product.price) || 0
           const costPrice = Number(product.cost_price) || 0
           let newPrice: number
+          if (byLine) {
+            // One definition, shared with the proposal that wrote these lines.
+            const explicit = explicitPriceFor(lines, String(product.id))
+            if (explicit == null) { failedCount++; continue }
+            newPrice = explicit
+            newPrice = Math.max(costPrice, +(newPrice).toFixed(2))
+            const { error: lineErr } = await supabase.from('pos_products')
+              .update({ price: newPrice, updated_at: new Date().toISOString() })
+              .eq('id', String(product.id)).eq('business_id', businessId)
+            if (lineErr) { failedCount++; continue }
+            affectedCount++
+            continue
+          }
           switch (price_change_type) {
             case 'set': newPrice = Number(price_change_value); break
             case 'increase_pct': newPrice = currentPrice * (1 + Number(price_change_value) / 100); break
@@ -252,7 +288,9 @@ async function runAction(
           affectedCount++
         }
         if (affectedCount === 0 && failedCount > 0) return { ok: false, affected_count: 0, failed_count: failedCount, error: `All ${failedCount} price updates failed.`, rollback_available: false }
-        afterState = { price_change_type, price_change_value, affected: affectedCount, failed: failedCount }
+        afterState = byLine
+          ? { mode: 'explicit_lines', lines: lines!.length, affected: affectedCount, failed: failedCount }
+          : { price_change_type, price_change_value, affected: affectedCount, failed: failedCount }
         break
       }
 

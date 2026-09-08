@@ -175,3 +175,22 @@ export function policyComparison(price: number, recoveryPct: number, rounding: R
     }
   })
 }
+
+/**
+ * M14 PHASE 4 — ONE DEFINITION OF "which price does this product get", shared by the proposal that
+ * writes the lines and the executor that reads them.
+ *
+ * Returns null when the product is not in the list, when the price is not a finite positive number,
+ * or when the list is empty. The executor SKIPS a null rather than falling back to the percentage —
+ * a product the owner did not approve a price for must not be repriced by a leftover rule.
+ */
+export function explicitPriceFor(
+  lines: Array<{ product_id: string; to: number }> | null | undefined,
+  productId: string,
+): number | null {
+  if (!Array.isArray(lines) || lines.length === 0) return null
+  const hit = lines.find(l => String(l.product_id) === String(productId))
+  if (!hit) return null
+  const v = Number(hit.to)
+  return Number.isFinite(v) && v > 0 ? v : null
+}
