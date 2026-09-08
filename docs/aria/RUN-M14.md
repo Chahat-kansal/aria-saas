@@ -293,3 +293,89 @@ An item with **no sales line** in the window returns `revenue: null` / `not_conn
 refunded coffee does not inflate the item.
 
 **Gates:** tsc 0 · vitest **15/15** on this file · canon rail pass.
+
+---
+
+## PHASE 3 — PROPOSE, DON'T PRICE ✅
+
+**Commit:** `<phase-3>` · `aria/compute/surcharge-policy.ts` (new), `surcharge-policy.test.ts`
+(new, 18 tests), `api/pricing/surcharge-proposal/route.ts` (new).
+
+### It goes through both gateways, and adds no new power
+
+**The action gateway:** the proposal is **one row** in `aria_autopilot_actions`, written through
+`createDecision` — the canonical propose path — carrying `action_type: 'bulk_price_update'`,
+`domain: 'money'`, `status: 'pending'`. That capability was already `propose_only` with gate reason
+`money`, already in `DESTRUCTIVE_ACTION_TYPES`, and already had a kill switch, a role gate, a
+mass-mutation backstop and an append-only audit log. **No second pricing engine and no new
+capability.**
+
+**The model gateway:** the reasoning sentence comes from `callModel` — M13's one door. A direct
+Anthropic call here would fail the canon rail, and that would be correct. Its system prompt carries
+the phase-0 correction verbatim: *never say surcharging becomes illegal*, and *do not invent any
+number*.
+
+### VERIFIED AGAINST PRODUCTION — the row lands, and no price moves
+
+Rolled-back `DO` block writing the exact row the route writes:
+
+```
+[decision row = ACCEPTED]  status=pending  domain=money  stepup=true
+                           action_type=bulk_price_update  lines=1
+| pos_products unchanged: avg=8.07
+```
+
+**Accepted, pending, and the menu is untouched.** `aria_autopilot_actions` has CHECKs on `domain`,
+`status` and `priority` only — `kind` and `action_type` are unconstrained, so
+`surcharge_ban_reprice` is safe. Checked before writing, not after.
+
+### ⚠️ Rounding is a proposal feature, and the drift is the proof
+
+A 1.32% rise turns $4.50 into $4.5594. Nobody prices a chai at $4.5594, so it must be rounded — and
+rounding always over- or under-recovers. **Every line carries its drift:**
+
+```
+Chai Tea       target $4.56  →  proposed $4.60   drift +$0.04   (recovers MORE than needed)
+Avocado Toast  target $16.21 →  proposed $16.20  drift −$0.01   (recovers LESS)
+                                        net rounding drift +$0.03
+```
+
+The owner sees the rounding rather than inheriting it. `exact` is offered and leaves zero drift — a
+legitimate choice, not a missing feature.
+
+### The three policies, on the owner's own item
+
+`policyComparison()` deliberately takes a real menu item rather than an invented $5.00 coffee. On a
+$4.50 chai at a 1.32% shortfall:
+
+| policy | applied | new price | absorbed per sale |
+|---|---|---|---|
+| recover fully | 1.32% | **$4.60** | −$0.01 (over-recovers, after rounding) |
+| recover half | 0.66% | $4.50 | $0.03 |
+| absorb | 0% | $4.50 | $0.06 |
+
+**`absorb` changes no price, so there is nothing to approve** — and the route creates no decision row
+at all in that case, rather than leaving an empty one for the owner to dismiss.
+
+### The step-up is demanded on amount OR on breadth
+
+`requires_stepup` when the annualised effect reaches **$1,000** — in either direction, because a
+price cut is a money decision too — **or** when **20 or more** prices move at once. *A small rise
+across the whole menu is not a small change.* Both thresholds are named constants and both edges are
+tested. A proposal that changes nothing never asks for one.
+
+### Annualising says which window it used
+
+A 90-day window scales by **365/90**, not by 4: `$5.00 → $5.10 × 100 units × 4.06 = $40.56`. An item
+with unknown units contributes `null` and the total **ignores it rather than guessing**; when every
+item is unknown the total is `null`, never `0`.
+
+### MUTATION — an engine that priced in place
+
+`buildPricingProposal` is pure, and the test asserts the input items' prices are **unchanged** after
+it runs. The mutant — applying the rise to the item itself, which is the decision table's *"Never
+automatically"* — produces different state, asserted unequal.
+
+**And the load-bearing assertion is behavioural, not structural:** `isAutoRunnable(findCapability(
+'bulk_price_update'))` is called and must be `false`. That is what actually stops a plan runner
+carrying the price change out by itself.
