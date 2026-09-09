@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { buildSurchargeBanCard } from '@/lib/aria/compute/surcharge-card'
 
 interface BasDraft {
   id: string; quarter: string | null; period_start: string; period_end: string
@@ -87,6 +88,10 @@ export default function CompliancePage() {
   const [calDate, setCalDate] = useState(new Date())
   const [calSelected, setCalSelected] = useState<number | null>(null)
   const [basData, setBasData] = useState<BasData | null>(null)
+  // The venue's own surcharge setting. null until read — the card treats that as "does not
+  // surcharge", which is the calm default rather than the loud one.
+  const [surchargeOn, setSurchargeOn] = useState<boolean | null>(null)
+  const [surchargeRate, setSurchargeRate] = useState<number | null>(null)
   const [basLoading, setBasLoading] = useState(false)
   const [basCopied, setBasCopied] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -121,6 +126,23 @@ export default function CompliancePage() {
   }, [business?.id, business?.industry])
 
   useEffect(() => { load() }, [load])
+
+  // M14 phase 6 — the venue's own surcharge position, for the card above. Deliberately its own
+  // effect: if this read fails the compliance page is unaffected and the card falls back to the
+  // calm "does not surcharge" wording, which is the honest default when nothing was read.
+  useEffect(() => {
+    if (!business?.id) return
+    let cancelled = false
+    fetch('/api/pricing/card-cost')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { assessment?: { action_required?: boolean; surcharge_today_pct?: number | null } } | null) => {
+        if (cancelled || !d?.assessment) return
+        setSurchargeOn(Boolean(d.assessment.action_required))
+        setSurchargeRate(d.assessment.surcharge_today_pct ?? null)
+      })
+      .catch(() => { /* non-fatal — the card has a correct default */ })
+    return () => { cancelled = true }
+  }, [business?.id])
 
   useEffect(() => {
     if (!business?.id) return
@@ -235,6 +257,34 @@ export default function CompliancePage() {
           </div>
         </div>
       )}
+
+      {/* ── M14 phase 6 — THE SURCHARGE CARD, on the surface every AU venue already visits for
+             deadlines. Deterministic: no model call, no fetch, no failure mode. It reads the
+             venue's own surcharge setting and says the one thing that is true for it — which for
+             most venues is that their card costs FALL, not that a deadline is coming. It stops
+             rendering by itself once the change is a month old. ── */}
+      {(() => {
+        const card = buildSurchargeBanCard(
+          surchargeOn == null ? null : { action_required: surchargeOn, surcharge_today_pct: surchargeRate },
+        )
+        if (card.days_until < -30) return null
+        const warn = card.severity === 'warning'
+        return (
+          <div style={{
+            background: warn ? 'rgba(245,158,11,0.06)' : 'rgba(45,82,64,0.06)',
+            border: '1px solid ' + (warn ? 'rgba(245,158,11,0.3)' : 'rgba(45,82,64,0.18)'),
+            borderRadius: 16, padding: '18px 22px', marginBottom: 24,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: warn ? '#B45309' : C.text, marginBottom: 6 }}>
+              💳 {card.title}
+            </div>
+            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: C.text, opacity: 0.8 }}>{card.body}</p>
+            <a href={card.cta_href} style={{ display: 'inline-block', marginTop: 10, fontSize: 13, fontWeight: 600, color: '#2D5240' }}>
+              {card.cta_label} →
+            </a>
+          </div>
+        )
+      })()}
 
       {/* ── AU Tax Calendar — always visible ── */}
       {basData?.tax_calendar && basData.tax_calendar.length > 0 && (

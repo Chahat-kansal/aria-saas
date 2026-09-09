@@ -1,7 +1,153 @@
 # RUN-M14 · SURCHARGE BAN — 1 OCTOBER
 
-7 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**7–9 September 2026 · autonomous run, RULE 20 · seven phases, seven commits, none parked as work.
+All pushed. Build verified green.**
+
+Aria can now tell an Australian venue what 1 October does to it, propose the exact prices that
+recover it, and stop its own surcharge copy the moment the change lands — **without inventing a
+single number.**
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ AN INTERCHANGE CAP IS NOT WHAT A MERCHANT PAYS, and nothing in the brief says so.**
+Interchange is the issuer's slice. The café pays a **merchant service fee** — interchange **plus**
+scheme fees **plus** the acquirer's margin. Telling an owner *"your card cost is now 0.3%"* is wrong
+by a factor that varies by acquirer, and it is exactly the mistake that misprices a menu. The engine
+computes how far interchange falls and **refuses to present that as the merchant's cost** on every
+path: `merchant_service_fee_pct` is `null`, `not_connected`, always.
+
+**2. ⚠️ THE RBA DOES NOT BAN MERCHANTS FROM SURCHARGING.** The paste says *"every Australian merchant
+loses the ability to surcharge"*. Verified against the RBA: it **lifts its own prohibition on the
+card networks' no-surcharge rules**, and the networks are *expected* to forbid it under **scheme
+rules** — and if surcharging continues the RBA *could recommend* legislation. Practical effect for a
+café is the same; the mechanism is a scheme rule, **not a law**. Aria must never tell a merchant
+surcharging becomes illegal — that is legal advice and it is wrong. A test forbids the word in every
+owner-facing string. *(Also unverified and therefore never asserted: "acquirers instructed to remove
+surcharging functionality" — not found in the RBA material.)*
+
+**3. ⚠️ SIP'S 72 RECORDED COSTS ARE ALL FABRICATED — and the useful number never needed them.**
+The brief says *"0 of 74 products have a recorded cost"*. **72 do — and 72 of 72 are exactly
+`price × 0.4`**, the back-calculation `looksBackCalculatedCost()` exists to catch, with **zero**
+deviating. More dangerous than having none, because a naive engine produces 72 confident margins from
+them.
+
+**But the number an owner actually needs does not use cost at all.** What a surcharging venue loses
+is `surcharge rate × card share`, **and the price rise that recovers it exactly is the same figure**.
+1.5% on an 88%-card venue is a 1.32% hole and a 1.32% rise fills it. Fully grounded, no cost data
+required.
+
+## WHAT SIP'S SCREEN SAYS — rendered from its real recorded data
+
+```
+surcharge_today_pct   0      [verified]        ← "we don't surcharge" is a read setting
+card_share_pct        88.2   [estimated]
+interchange_after     null   [not_connected]   ← range 0.16% – 0.80% instead
+merchant_service_fee  null   [not_connected]
+least_cost_routing    not_connected
+action_required       false
+
+UNKNOWNS (4) — rendered, not hidden:
+  1. Card share is measured from 54 of 1802 sales (3% of them).
+  2. Your POS records "card" without saying debit, credit or overseas.
+  3. Interchange is only part of what you pay…
+  4. Least-cost routing is set by your acquirer and is not visible to Aria.
+```
+
+**⚠️ Sip does not surcharge, so 1 October takes nothing away — its card costs simply fall.** That is
+the opposite of the sprint's framing and it is the truthful answer for the many cafés in the same
+position. Its proposed prices equal its current prices, and **no decision row is created at all**.
+
+## THE BEFORE/AFTER BLENDED RATE, WITH TIERS
+
+| | rate | tier |
+|---|---|---|
+| interchange before | **not computable** | `not_connected` — foreign cards were unregulated, so a "before" would be invented |
+| interchange after | **0.16% – 0.80%** (a range, not a rate) | `not_connected` — the POS cannot say debit vs credit vs overseas |
+| merchant service fee | **null** | `not_connected` — scheme fees and acquirer margin are unreadable |
+
+**No 1.5% was assumed anywhere.** A test reproduces that assumption and asserts it differs from what
+the engine returns.
+
+## DUPLICATED PRICE SOURCES FOUND
+
+Proven by one rolled-back `UPDATE` read through each surface's own query: `pos_products` → 4.60,
+public-menu shape → 4.60, POS-terminal shape → 4.60. **One source of truth today.**
+
+| table | rows | verdict |
+|---|---|---|
+| **`pos_product_prices`** | **2** (both Sip's, both `$0.00`) | a **real** second table — tiered/outlet pricing, read by the product-edit screen. Not customer-facing, but a reprice leaves it stale. **Parked.** |
+| `pos_price_list_items` · `pos_price_points` · `pos_product_variants` · `pos_item_variations` · `marketplace_listings` | 0 each | dormant |
+
+**⚠️ And a live defect, parked:** `api/pos/price-lists/route.ts:33` selects **`override_price`** — a
+column that **does not exist** (the real one is `price`). Its own POST handler documents this at line
+80 and maps it correctly; the CSV export read was never fixed, so it errors, discards the error, and
+exports **a header row and nothing else**. `.order('created_at')` on the same query is a second
+phantom. Two-line fix named, not taken — different feature.
+
+## EVERY SURCHARGE STRING, AND ITS DISPOSITION
+
+| where | what | disposition |
+|---|---|---|
+| `menu/[slug]/MenuClient.tsx:927` | "save 1.5%, no card surcharge" | **gated** → *"the cheapest way to pay us"* |
+| `order/StripePaymentModal.tsx:70` | "PayID preferred · 0% surcharge" | **gated** → *"PayID preferred · instant confirmation"* |
+| `terminal/page.tsx:742` | loads the rules that produce the charge | **gated at load — stops the CHARGE** |
+| `pos/settings/*` | owner configuration | left alone — legal until 30 Sep, not customer copy |
+| 3 code comments | never rendered | left alone |
+| payroll / award-rates / BAS | **weekend penalty rates** | a different meaning — **must not be swept** |
+
+**⚠️ The sprint said remove. I date-gated instead, and it is strictly better:** surcharging is legal
+until 30 September, so deleting today breaks every venue lawfully surcharging for three weeks (RULE
+0), and deleting later needs a human to remember. `surchargingAllowedOn()` keeps it working to the
+deadline and stops it at **Melbourne midnight** with nobody acting. A naive UTC gate would have
+flipped **ten hours early**; the test computes the naive answer alongside the real one and asserts
+they differ.
+
+**⚠️ The sweep caught a string my own grep had missed** — the Stripe modal's "0% surcharge". The rail
+did its job on its author.
+
+## THE HUMAN STEPS TO APPROVE
+
+1. Sign in as the owner → **Dashboard → Card surcharging changes on 1 October**
+   (`/dashboard/surcharge-ban`), or the card on **Dashboard → Compliance**.
+2. Read **"What we cannot see"**.
+3. **Sip stops here** — nothing to recover, no decision row created.
+4. A surcharging venue: pick **Recover fully / Recover half / Absorb**, pick the rounding, press
+   **"Prepare the price change for approval"**.
+5. **Dashboard → Decisions** → *"Reprice N items before 1 October"*, domain **money**, **pending**.
+6. Press **Approve**. A **step-up** is demanded if the annual effect reaches **$1,000** or **20+**
+   prices move.
+7. Prices write to `pos_products.price` and appear on menu, POS and online ordering at once.
+
+**Nothing in steps 1–5 changes a price. Only step 6 does.**
+
+## ⚠️ NOT VERIFIED IN A BROWSER
+
+No dev server and no authenticated session were available, so **every screen and route here is
+compiled and typechecked, not rendered**. What *is* observed is each engine's real output on Sip's
+real data, printed in each phase, plus four rolled-back production probes. **A human must walk steps
+1–3 signed in as Sip.**
+
+## PARKED
+
+- `pos_product_prices` tiered pricing vs the base price — a pricing-model sprint.
+- The `price-lists` CSV export phantom column — two lines, named above.
+- `surcharge_show_on_receipt` — a stored setting **nothing reads**; no receipt has ever printed a
+  surcharge line, so there was none to remove.
+- Wiring the card into the **daily briefing** — 700 lines of AI prose with no deterministic card
+  list; `buildSurchargeBanCard()` is pure and exported, so it is one import away.
+
+## MY OWN ERRORS
+
+- **A `-0` bug in the countdown** — a card would have read *"in -0 days"*. Caught by my own test,
+  fixed in the function.
+- **My probe's anti-vacuity expectation was wrong** in phase 1 (I gave the legacy shape a body that
+  did not parse, so `unparseable` was correct and my `ok` was not). Probe fixed, not the code.
+- **My DST assertion was backwards** in phase 5 — `+11:00` is *earlier* in absolute time, so the gate
+  correctly stays open. Test rewritten to assert the real property.
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -532,3 +678,103 @@ reproduced and shown to satisfy the offender condition exactly. Re-adding an ung
 allowlist, and **no receipt template consults it** — so no receipt has ever printed a surcharge line.
 Toggling it does nothing today. Not this sprint's bug; recorded because the sprint asked about
 receipt templates and the honest answer is that there is no surcharge line on one to remove.
+
+---
+
+## PHASE 6 — THE OWNER'S 22-DAY VIEW ✅
+
+**Commit:** `<phase-6>` · `aria/compute/surcharge-card.ts` (new), `surcharge-card.test.ts` (new, 8
+tests), `dashboard/surcharge-ban/page.tsx` (extended), `dashboard/compliance/page.tsx`.
+
+*(The sprint says 25 days. It was written on 6 September; today is the 9th, so **22**. The screen
+counts it rather than printing either number.)*
+
+### One screen, extended — not a second one
+
+`/dashboard/surcharge-ban` is the phase-1 screen grown into the whole thing: the RBA's own mechanism
+wording · the card for this venue · the interchange before/after or range · the four cap lines · the
+**"what we cannot see"** panel · the **per-item table** · the **policy and rounding choice** · and
+**one button**.
+
+### ⚠️ CALM AND FACTUAL — and the reason that is not just tone
+
+**Most venues do not surcharge at all.** For them 1 October is **good news**: their card costs fall.
+A red countdown would be *false for the majority* and would train every owner to ignore the card. So
+it says a different true thing to each of three venues, rendered here from the real function:
+
+```
+SIP (does not surcharge)
+  [info] Card costs fall on 1 October
+  You do not add a card fee, so nothing is taken away from you in 22 days. The interchange caps
+  drop on the same day, which makes the wholesale part of card payments cheaper.
+  Nothing to do — worth knowing.                         CTA: See the numbers
+
+a venue at 1.5%
+  [warning] Your card fee has to go in 22 days
+  You add 1.50% at the terminal. From 1 October the card networks are expected to forbid that
+  under their scheme rules, so it has to go into your prices or come out of your margin.
+  Aria can work out the exact rise that leaves you where you are.   CTA: Work out the prices
+
+nothing read yet
+  [info] Card costs fall on 1 October  … (the calm default, not the loud one)
+```
+
+**Nothing is ever `critical`.** `warning` appears only when a venue still surcharges *and* the date
+is within 30 days. A test asserts no card can contain *illegal · unlawful · against the law · urgent
+· act now · !* — and that an unread assessment produces the **calm** wording, because
+GROUNDING-TEETH cuts that way too: with nothing read, the honest default is not the alarming one.
+
+After the date the card turns **past tense** rather than becoming a stale countdown, and it stops
+rendering entirely once the change is a month old.
+
+### Where every AU venue actually sees it
+
+**`/dashboard/compliance`** — the surface owners already visit for deadlines, beside the AU tax
+calendar. Deterministic: no model call, no prose generation, and its data read is in **its own
+effect**, so a failure leaves the compliance page untouched and the card falls back to the calm
+wording.
+
+**Not wired into the daily briefing**, and that is deliberate: `api/aria/daily-briefing/route.ts` is
+700 lines of AI-generated prose on the hero path with no deterministic card list to append to.
+Adding one unattended is how a hero surface breaks. `buildSurchargeBanCard()` is pure and exported —
+wiring it in is one import.
+
+### ⚠️ The button does not change a price
+
+It POSTs to `/api/pricing/surcharge-proposal`, which writes **one pending decision**. The screen says
+so under the button in plain words: *"This does not change any price. It prepares a change for you to
+approve."* The result panel then shows the reasoning, the line count, the annual effect, **the
+rounding drift**, and — when the amount or breadth warrants — *"You will be asked to confirm it's
+you."*
+
+### ⚠️ A defect my own test caught
+
+`daysUntilChange` returned **`-0`** for any moment inside the final day, so a card would have read
+*"in -0 days"*. Normalised in the function, not papered over in the test.
+
+### THE HUMAN STEPS TO APPROVE, on the deployed site
+
+1. Sign in as the Sip owner → **Dashboard → Card surcharging changes on 1 October**
+   (`/dashboard/surcharge-ban`), or follow the card on **Dashboard → Compliance**.
+2. Read *"What we cannot see"*. For Sip it names four things, including that card share is measured
+   over **3% of sales**.
+3. **Sip stops here** — it does not surcharge, the proposed prices equal the current ones, and the
+   button will report *"You do not add a card fee today, so nothing is lost on 1 October and no price
+   needs to move."* **No decision row is created.**
+4. For a venue that *does* surcharge: choose **Recover it fully / Recover half / Absorb it**, choose
+   the rounding, press **"Prepare the price change for approval"**.
+5. Go to **Dashboard → Decisions**. The row reads *"Reprice N items before 1 October"*, domain
+   **money**, status **pending**.
+6. Press **Approve**. If the annual effect reaches **$1,000** or **20+** prices move, a **step-up**
+   is demanded — re-authenticate when asked.
+7. Prices are written to `pos_products.price` and appear on the menu, the POS and online ordering
+   immediately, because all three read that one row.
+
+**⚠️ Nothing in steps 1–5 changes a price.** Only step 6 does.
+
+### ⚠️ NOT VERIFIED IN A BROWSER
+
+No dev server and no authenticated session were available to this run, so **every screen and route
+in this sprint is compiled and typechecked, not rendered.** What is observed is each engine's real
+output on Sip's real data, printed in each phase. **A human must walk steps 1–3 signed in as Sip to
+confirm the render.**
