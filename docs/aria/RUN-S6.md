@@ -76,3 +76,83 @@ today, and phase 1 makes it explicit and asserted.
 | `e2e/helpers/auth.ts` · `session.ts` · `supabase.ts` · `global-setup.ts` | sign-in and client helpers |
 | `tests/smoke/` | `owner-flows.spec.ts`, `security-guards.spec.ts`, its own `global-setup.ts` |
 | `e2e/` | 12 specs including `ask-aria.spec.ts` |
+
+---
+
+## PHASE 1 — THE SEEDED TEST BUSINESS ✅
+
+**Commit:** `<phase-1>` · `src/lib/testing/test-business.ts` (new), `test-business.test.ts` (new, 7
+tests), `e2e/helpers/test-business.ts`, `e2e/helpers/seed.ts`.
+
+### ⚠️ CORRECTING MY OWN PHASE 0 WRITE-UP
+
+I reported the seed/resolver mismatch as the preflight's finding. **MS8 phase 5 had already
+diagnosed it**, and says so in `test-business.ts`'s own comment: *"SECURITY-P4 created a fixture for
+the SMOKE suite on 25 Jul; because it was newer than the e2e fixture, it silently repointed the
+entire e2e suite at a business `seed.ts` does not seed."*
+
+What is new is **why it is still live**: MS8's fix made `TEST_BUSINESS_ID` win outright and left the
+heuristic as a warned last resort — and **the variable was never set anywhere.** Not `.env.local`,
+not CI, not a workflow. **A fix that depends on someone exporting a variable, and nobody does, is
+not in force.** That is the same shape as everything else in this sprint's table.
+
+**Fixed properly:** the seeded id is now the *default*. If the business the seed writes exists and
+belongs to this user, it wins. The env var still overrides; the heuristic still warns; neither is
+load-bearing any more.
+
+### The fixture now has shape — sales, which it never had
+
+`seed.ts` provisioned a business, a staff member, two products, loyalty, an outlet, a register and
+an open cash session. **No sales.** So the fixture had **$0.00 of revenue**, and any question about
+money was unanswerable — a live check asking one would have asserted on an empty answer, which is
+this sprint's own failure mode.
+
+Three completed sales added, fixed UUIDs, idempotent, **dated to now on every run** so *"what did we
+take today"* has a real answer rather than one that ages out overnight:
+
+```
+1× Flat White  $5.50 (card) · 1× Croissant $6.00 (cash) · 2× Flat White $11.00 (card)
+SEEDED_TODAY_REVENUE = 22.50   ← the single place that number is written down
+```
+
+### VERIFIED — the seed ran, against the real database
+
+```
+[seed] Resolved TEST_USER_EMAIL to user_id=905b95db-…
+[seed] 3 completed sales ready — $22.50 today
+[seed] TEST_BUSINESS_ID should be 00000000-0000-4000-a000-000000000001
+```
+
+Read back:
+
+| | |
+|---|---|
+| `Sip (E2E Test)` | 2 products · **3 sales** · **$22.50** · 3 line items · 1 outlet · 1 staff |
+| **cross-tenant** | Sip still has **1,802** sales, and the two businesses have **different owners** |
+
+### ⚠️ THE OBVIOUS SAFETY GUARD IS THE WRONG ONE, and the test says why
+
+`id !== SIP` **passes for an empty string, for `undefined`, for a typo, and for every other real
+business in the database.** A check that resolved its business id to `''` and then asserted "not
+Sip" would sail through while testing nothing — this sprint's failure mode, reproduced inside the
+safety rail.
+
+So `isSafeTestBusiness()` demands the id **be** a fixture: allocated from the reserved
+`00000000-0000-4000-a000-` prefix, which `gen_random_uuid()` cannot produce. `assertSafeTestBusiness()`
+throws before any write, naming Sip explicitly if that is what it was handed.
+
+**MUTATION:** the naive guard is written out and run against `''`, `undefined`, `null`, a junk
+string and a real user's uuid — **it allows all five; the real guard refuses all five.**
+
+### ⚠️ A defect my own test caught on its first run
+
+My first `FIXTURE_ID` pattern matched only the `…0001xx` sub-block and therefore **rejected the
+seeded business itself** (`…000001`, allocated from `…0000xx`). Three tests went red immediately.
+Fixed to the reserved prefix, which is the real allocation marker.
+
+### One definition, not two
+
+The constants and the guard live in **`src/lib/testing/test-business.ts`**; `e2e/helpers/test-business.ts`
+re-exports them and `seed.ts` imports the id rather than declaring its own. **Vitest collects only
+`src/**`** — a guard living in `e2e/` would be a safety rail nothing can test, which is the other
+half of the same failure.

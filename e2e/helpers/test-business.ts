@@ -5,6 +5,27 @@ import { dbAdmin, hasDbAccess } from './supabase'
 export const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID ?? ''
 
 /**
+ * S6 PHASE 1 — THE BUSINESS `seed.ts` ACTUALLY PROVISIONS, and the guard that keeps a live check
+ * off real rows. Both RE-EXPORTED from src/lib/testing/test-business.ts rather than declared here:
+ * vitest collects only `src/**`, so a copy living in e2e/ would be a safety guard nothing can test.
+ *
+ * ⚠️ MS8 PHASE 5 DIAGNOSED THE MISMATCH BELOW AND ITS FIX NEVER TOOK EFFECT. It made
+ * `TEST_BUSINESS_ID` win outright and left the newest-wins heuristic as a warned last resort —
+ * correct, except that **the env var was never set anywhere**: not in `.env.local`, not in CI, not
+ * in any workflow. So the heuristic has been the live path ever since, and the e2e suite has gone
+ * on testing `…0101` while the seed carefully provisioned `…0001`. A fix that depends on someone
+ * setting a variable, and nobody sets it, is not in force — so the seeded id is now the default.
+ */
+export {
+  SEEDED_TEST_BUSINESS_ID,
+  SMOKE_TEST_BUSINESS_ID,
+  LIVE_SIP_BUSINESS_ID,
+  isSafeTestBusiness,
+  assertSafeTestBusiness,
+} from '../../src/lib/testing/test-business'
+import { SEEDED_TEST_BUSINESS_ID } from '../../src/lib/testing/test-business'
+
+/**
  * Resolve the business ID for the test suite.
  *
  * MS8 PHASE 5 — EXPLICIT FIRST. `TEST_BUSINESS_ID` now wins outright.
@@ -24,7 +45,18 @@ export async function resolveTestBusinessId(userId: string): Promise<string | nu
   if (TEST_BUSINESS_ID) return TEST_BUSINESS_ID
   if (!hasDbAccess || !dbAdmin) return null
 
-  // 2. Last resort: newest owned business. Local runs only; CI sets the env var.
+  // 2. S6 — the business the seed actually writes, when it exists and belongs to this user. This
+  //    is the step MS8's fix needed and did not have: it makes the seed and the suite agree without
+  //    anyone remembering to export a variable.
+  const { data: seeded } = await dbAdmin
+    .from('businesses')
+    .select('id')
+    .eq('id', SEEDED_TEST_BUSINESS_ID)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (seeded?.id) return seeded.id as string
+
+  // 3. Last resort: newest owned business. Local runs only; CI sets the env var.
   console.warn(
     '[test-business] TEST_BUSINESS_ID is not set — falling back to the newest business owned by ' +
     'the test user. This heuristic silently repointed the whole e2e suite once already ' +

@@ -26,7 +26,10 @@ const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? ''
 
 // Fixed UUIDs — idempotency key for every row this script writes. Never reuse
 // these in real data; they exist only so re-seeding always targets the same rows.
-const SIP_BUSINESS_ID = '00000000-0000-4000-a000-000000000001'
+// S6 phase 1 — imported, not re-declared. The seed and the resolver disagreeing about which
+// business this is cost the e2e suite two months of testing the wrong one.
+import { SEEDED_TEST_BUSINESS_ID } from './test-business'
+const SIP_BUSINESS_ID = SEEDED_TEST_BUSINESS_ID
 const SIP_STAFF_ID = '00000000-0000-4000-a000-000000000002'
 const SIP_PRODUCT_1_ID = '00000000-0000-4000-a000-000000000003'
 const SIP_PRODUCT_2_ID = '00000000-0000-4000-a000-000000000004'
@@ -36,6 +39,17 @@ const SIP_OUTLET_ID = '00000000-0000-4000-a000-000000000006'
 const SIP_REGISTER_ID = '00000000-0000-4000-a000-000000000007'
 const SIP_SESSION_ID = '00000000-0000-4000-a000-000000000008'
 const SIP_SLUG = 'sip-e2e-test'
+// S6 phase 1 — three completed sales, so the fixture can answer a question about money. Fixed
+// UUIDs keep it idempotent; the timestamps are refreshed to TODAY on every run so a "what did we
+// take today" question has a real answer rather than one that ages out overnight.
+const SIP_SALE_1_ID = '00000000-0000-4000-a000-000000000009'
+const SIP_SALE_2_ID = '00000000-0000-4000-a000-00000000000a'
+const SIP_SALE_3_ID = '00000000-0000-4000-a000-00000000000b'
+const SIP_LINE_1_ID = '00000000-0000-4000-a000-00000000000c'
+const SIP_LINE_2_ID = '00000000-0000-4000-a000-00000000000d'
+const SIP_LINE_3_ID = '00000000-0000-4000-a000-00000000000e'
+/** What the three sales below add up to. The live check asserts against this exact figure. */
+export const SEEDED_TODAY_REVENUE = 22.5
 
 async function main() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -167,6 +181,37 @@ async function main() {
   }, { onConflict: 'id' })
   if (sessErr) { console.error('[seed] pos_cash_sessions upsert failed:', sessErr.message); process.exit(1) }
   console.log('[seed] register session open')
+
+  // ── S6 PHASE 1 — SALES, WHICH THE FIXTURE HAS NEVER HAD ──────────────────────────────────────
+  //
+  // Without these the seeded business has $0.00 of revenue, so every question about money is
+  // unanswerable and a live check asking one would be asserting on an empty answer — which is
+  // exactly the shape this sprint exists to end. 1x Flat White + 1x Croissant + 2x Flat White
+  // = $22.50, and SEEDED_TODAY_REVENUE is the single place that number is written down.
+  //
+  // Dated to NOW on every run: a fixture whose sales are always "yesterday" answers "what did we
+  // take today" with zero, and the check would then be asserting on the wrong kind of nothing.
+  const now = new Date().toISOString()
+  const { error: salesErr } = await db.from('pos_sales').upsert([
+    { id: SIP_SALE_1_ID, business_id: SIP_BUSINESS_ID, outlet_id: SIP_OUTLET_ID, sale_number: 'E2E-0001',
+      total_amount: 5.5, payment_method: 'card', status: 'completed', created_at: now },
+    { id: SIP_SALE_2_ID, business_id: SIP_BUSINESS_ID, outlet_id: SIP_OUTLET_ID, sale_number: 'E2E-0002',
+      total_amount: 6.0, payment_method: 'cash', status: 'completed', created_at: now },
+    { id: SIP_SALE_3_ID, business_id: SIP_BUSINESS_ID, outlet_id: SIP_OUTLET_ID, sale_number: 'E2E-0003',
+      total_amount: 11.0, payment_method: 'card', status: 'completed', created_at: now },
+  ], { onConflict: 'id' })
+  if (salesErr) { console.error('[seed] pos_sales upsert failed:', salesErr.message); process.exit(1) }
+
+  const { error: linesErr } = await db.from('pos_sale_items').upsert([
+    { id: SIP_LINE_1_ID, sale_id: SIP_SALE_1_ID, business_id: SIP_BUSINESS_ID, product_id: SIP_PRODUCT_1_ID,
+      product_name: 'Flat White', quantity: 1, unit_price: 5.5, line_total: 5.5, created_at: now },
+    { id: SIP_LINE_2_ID, sale_id: SIP_SALE_2_ID, business_id: SIP_BUSINESS_ID, product_id: SIP_PRODUCT_2_ID,
+      product_name: 'Croissant', quantity: 1, unit_price: 6.0, line_total: 6.0, created_at: now },
+    { id: SIP_LINE_3_ID, sale_id: SIP_SALE_3_ID, business_id: SIP_BUSINESS_ID, product_id: SIP_PRODUCT_1_ID,
+      product_name: 'Flat White', quantity: 2, unit_price: 5.5, line_total: 11.0, created_at: now },
+  ], { onConflict: 'id' })
+  if (linesErr) { console.error('[seed] pos_sale_items upsert failed:', linesErr.message); process.exit(1) }
+  console.log('[seed] 3 completed sales ready — $' + SEEDED_TODAY_REVENUE.toFixed(2) + ' today')
 
   console.log('[seed] Done — Sip test business fully seeded and idempotent.')
   console.log(`[seed] TEST_BUSINESS_ID should be ${SIP_BUSINESS_ID}`)
