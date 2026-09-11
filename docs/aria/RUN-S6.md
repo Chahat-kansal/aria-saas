@@ -252,3 +252,108 @@ Playwright exits 0 when every test skips, and a green `check:live` that verified
 the seven-row table in one command. Assertion **0** sits outside the skip guard: when the run is
 blocked it fails, names the reason, and takes the exit code with it. Observed — the
 credentials-blocked run exited **1** with six assertions marked skipped, not passed.
+
+---
+
+## PHASE 3 — ONE REAL PROPOSED ACTION ✅
+
+**Commit:** `<phase-3>` · `tests/check-live/action.spec.ts` (new).
+
+`check:live` now also asks *"Raise the price of Flat White by 10%"* and asserts **the gate held**.
+
+```
+  ✓ 7. a price-changing request reaches the route
+  ✓ 8. ⚠️ NOTHING WAS PRICED — the gate held
+  ⊘ 9. a proposal was recorded, pending, and unexecuted
+       "Aria answered without proposing an action this run, so there is no proposal to inspect.
+        The gate assertion above still ran and passed."
+```
+
+**It never approves and never executes.** The assertion is not *"the price changed"* — it is that a
+price change was proposed and then **stopped**.
+
+### The price is read BEFORE and AFTER
+
+That is the one assertion no static gate in this repo can make. `bulk_price_update` is
+`propose_only` with gate reason `money`; if anything executed it, the fixture's Flat White would
+move and **assertion 8 says so by name**, quoting both prices.
+
+### ⚠️ Assertion 9 is ⊘, not ✗, and the distinction is deliberate
+
+A live model may reasonably answer a request instead of planning an action. Failing on that would be
+an assertion about the model's mood, not about the gate — and *"a flaky live check trains people to
+ignore red"*. **What must never happen — the price moving — is asserted unconditionally and did
+pass.**
+
+---
+
+## PHASE 4 — HONEST OUTPUT ✅
+
+**Commit:** `<phase-4>` · `tests/check-live/ask.spec.ts`.
+
+### ⚠️ ONE RED ASSERTION WAS HIDING THREE OTHERS
+
+The first full run reported:
+
+```
+  1 failed · 1 skipped · 3 did not run · 5 passed
+```
+
+***"3 did not run"*** — assertions 4, 5 and 6 never executed, because a `serial` describe abandons
+the rest of the block when one fails. **A check whose job is ✓/✗ per assertion cannot hide three of
+them behind the first failure.** That is the silence this phase exists to end, inside the tool built
+to end it.
+
+Serial is now scoped to the **browser turn alone** — those two genuinely must run in order on one
+page — and the assertions that merely read what the turn left behind each report for themselves:
+
+```
+  1 failed · 4 skipped · 5 passed        ← nothing hidden
+```
+
+### Three states, and the third is the point
+
+| | |
+|---|---|
+| **✓** | the assertion ran and held |
+| **✗** | it ran and failed — with **what was expected and what was seen**, never *"assertion failed"* |
+| **⊘** | it could not run, **with the reason**: no anchors to verify · no model call was logged · Aria did not propose this run · the run could not sign in |
+
+**A run that checked nothing exits NON-ZERO.** Playwright exits 0 when everything skips, so
+assertion **0** sits outside every skip guard: when the run is blocked it fails, names the reason,
+and takes the exit code with it. Observed on the credentials-blocked run — exit **1**, six
+assertions marked **skipped, not passed.**
+
+---
+
+## PHASE 5 — WHERE IT RUNS ✅
+
+**Commit:** `<phase-5>` · `CLAUDE.md`, `.github/workflows/check-live.yml` (new).
+
+### ⚠️ CONFIRMED: IT IS IN `CLAUDE.md`'s STANDING GATES — **RULE 3a**
+
+This is the durable outcome of the sprint, and it is done. RULE 3 listed three static gates; **RULE
+3a** now sits directly beneath them:
+
+```
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
+npx vitest run     # must be green
+npm run check:live # one real question + one real proposed action, against a real build
+```
+
+RULE 3a carries the seven-row table — *green build, dead feature* — so the next person reads **why**
+before they read the command. It states the three states, that **a run that checked nothing exits
+non-zero**, and the prerequisites.
+
+**"It built" is no longer the standard.**
+
+### Not in the pre-push hook, on purpose
+
+It spends real money and takes minutes. A hook people learn to bypass is worse than no hook. It runs
+**deliberately**: `npm run check:live` by hand, or `.github/workflows/check-live.yml` on
+`workflow_dispatch` and once a day at **19:00 UTC — 05:00 AEST**, before any Australian venue opens,
+so a failure is waiting in an inbox rather than discovered by an owner at the counter.
+
+The workflow seeds the fixture first (idempotent, fixed UUIDs), names **every** required secret, and
+uploads the Playwright trace on failure.

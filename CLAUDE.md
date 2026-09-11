@@ -136,6 +136,42 @@ npx vitest run     # must be green
 ```
 If the build breaks, FIX THE ERROR — never remove the feature causing it (see RULE 0).
 
+### 🔒 RULE 3a — `npm run check:live` IS THE LAST LINE OF EVERY SPRINT'S GATE LIST  *(S6, 2026-09-11)*
+
+**"It built" is no longer the standard.**
+
+The three gates above are STATIC. They prove the code compiles and matches patterns. **They do not
+prove a feature does anything**, and every serious failure in this repo has had the same shape —
+green build, dead feature:
+
+| passed every gate | what was actually true |
+|---|---|
+| Stop generating shipped | the surface never destructured `cancel` — unreachable |
+| four sprints shipped to `/ax` | nothing linked to `/ax`; the owner loaded the old page |
+| provenance chain "connected" | 0 of 288 conversations carried a tier |
+| the truncation rail wired into the gateway | it read fields that did not exist — `{hitCeiling:false}`, every call |
+| the nightly council: 97 sessions, all `complete` | 2 proposals ever; agents blocked by RLS since 4 June |
+| M13's own rail test | asserted the import existed, not that the function worked |
+| M14's seven phases | not verified in a browser — no session |
+
+```
+npm run check:live     # one real question + one real proposed action, against a real build
+```
+
+It sends **one real Ask Aria question** and **one real proposed action** end to end against the
+seeded fixture, then asserts the answer was grounded and the money gate held. A few cents a run.
+
+**It is deliberately NOT in the pre-push hook** — it costs money and minutes, and a hook people
+learn to bypass is worse than no hook. It is run by a human or by CI, on purpose.
+
+**Three states, and the third one matters most:** ✓ passed · ✗ failed, with what was expected and
+what was seen · **⊘ could not check** — no session, no credit, a skipped step. **A run that checked
+nothing exits NON-ZERO.** Silence is not success.
+
+Prerequisites: `.env.local` (loaded explicitly — Playwright does not load it), and a seeded fixture
+(`npx tsx e2e/helpers/seed.ts`). Full detail, including every assertion and the shipped failure it
+would have caught, is in `docs/aria/RUN-S6.md`.
+
 **⚠️ THE WRAPPER'S REPORTED EXIT CODE IS NOT EVIDENCE — `BUILD_EXIT` in the log is** (or the process
 exit read directly); when the two disagree, treat the gate as FAILED. *(2026-08-18: a backgrounded
 build exited 1 while its task notification reported "completed (exit code 0)" — only the

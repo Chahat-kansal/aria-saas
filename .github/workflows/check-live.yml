@@ -1,0 +1,66 @@
+# S6 PHASE 5 — check:live in CI.
+#
+# ⚠️ DELIBERATELY NOT ON PUSH. This command spends real money on a real model call and takes
+# minutes. Running it on every push would make it a tax on committing, and a gate people learn to
+# route around is worse than no gate. It runs when a human asks for it, and once a day so a
+# regression is found within 24 hours rather than by an owner.
+#
+# ⚠️ AND IT IS NOT IN THE PRE-PUSH HOOK EITHER — see CLAUDE.md RULE 3a.
+name: check:live
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 19:00 UTC = 05:00 AEST, before any Australian venue opens. A failure is waiting in the inbox
+    # rather than discovered by a café owner at the counter.
+    - cron: '0 19 * * *'
+
+jobs:
+  check-live:
+    runs-on: ubuntu-latest
+    # A real model call plus a production build. Generous, because a timeout that kills a healthy
+    # run teaches people to ignore the result.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      # The fixture must exist and carry sales before anything is asked of it. Idempotent: fixed
+      # UUIDs, so re-running upserts the same rows rather than accumulating.
+      - name: Seed the test fixture
+        run: npx tsx e2e/helpers/seed.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+
+      - name: check:live
+        run: npm run check:live
+        env:
+          # ⚠️ Every one of these is required. The command reports a missing credential as
+          # ⊘ COULD NOT CHECK and exits NON-ZERO — it never passes on silence.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Optional: pins the fixture explicitly. Without it the seeded id is the default.
+          TEST_BUSINESS_ID: ${{ secrets.TEST_BUSINESS_ID }}
+
+      - name: Upload the trace when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-live-trace
+          path: test-results/
+          retention-days: 7
