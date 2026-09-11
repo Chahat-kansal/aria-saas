@@ -156,3 +156,99 @@ The constants and the guard live in **`src/lib/testing/test-business.ts`**; `e2e
 re-exports them and `seed.ts` imports the id rather than declaring its own. **Vitest collects only
 `src/**`** — a guard living in `e2e/` would be a safety rail nothing can test, which is the other
 half of the same failure.
+
+---
+
+## PHASE 2 — ONE REAL QUESTION ✅ ← *the sprint*
+
+**Commit:** `<phase-2>` · `playwright.check-live.config.ts` (new), `tests/check-live/global-setup.ts`
+(new), `tests/check-live/ask.spec.ts` (new), `package.json` (`check:live`).
+
+`npm run check:live` signs in, opens Ask Aria, asks **one** question whose answer needs business
+data, and asserts on the wire, the screen, the stored turn and the ledger.
+
+### ⚠️ IT RAN. HERE IS WHAT IT FOUND.
+
+```
+[check:live] fixture "Sip (E2E Test)" (…0001), 3 completed sales
+[check:live] active business pinned to the fixture
+[check:live] WARNING TEST_USER_PASSWORD does not match smoke-test@ariaos.site (400 invalid_credentials)
+[check:live] signed in via an admin-minted session (the password path is broken)
+
+  ✓ 0. the run was able to check anything at all
+  ✓ 1. the request LEFT the client and reached the route — M12: the chat POST never fired
+  ✓ 2. the answer STREAMED and SETTLED — M4: the watchdog
+  ✗ 3. the STORED TURN carries provenance anchors — M3: 0 of 288 conversations did
+       "the stored turn carries no provenance — every figure in it renders unanchored"
+  1 failed · 3 passed
+```
+
+**The product works end to end.** The stored answer reads:
+
+> *"You've made **$22.50** this week with 2 days left — but without a weekly target, I can't tell if
+> that's on track or a concern. The bigger issue: you have zero customers on file…"*
+
+**$22.50 is exactly the seeded figure.** Seed → app → real model → the right number, with an honest
+hedge about the target it does not have. That is the whole chain, verified live for the first time.
+
+### ⚠️ AND THE FINDING: the figure is RIGHT and UNANCHORED
+
+```sql
+role       has_provenance   content
+assistant  false            "You've made $22.50 this week…"
+```
+
+`turnProvenance` is built **only** inside the strategic branch at `ask/route.ts:1234`. This question
+took a different branch, so the stored turn carries no `provenance` key at all and **every figure in
+it renders plain**. M3's failure — 0 of 288 conversations carrying a tier — is **still live on the
+path a real business question takes.**
+
+**The assertion stays red.** It is not flaky and it is not wrong: the product genuinely does not
+anchor here. Weakening it would be the exact habit this command exists to break.
+
+### Four defects found in my own check before it could find anything
+
+Each was caught by running it, and none by reading it:
+
+1. **`/api/auth/guard` returned `{"ok":true}` while Supabase returned `400`.** Watching only the
+   guard reports a healthy login that never happened. The check now watches
+   `/auth/v1/token` — the endpoint that actually decides.
+2. **The credentials in `.env.local` carry leading whitespace** — the email is
+   `" smoke-test@ariaos.site"`, 23 characters. Supabase was handed an address nobody has an account
+   for. Trimmed at read time; nothing else in the repo trims these, **so the smoke suite cannot
+   have authenticated either.**
+3. **Each Playwright test gets a fresh page**, so "the request fired" and "the answer settled" were
+   asserting against different pages and the second found an empty screen. One page for the block.
+4. **`.msg-reveal` no longer matches the surface.** It timed out while a perfectly good answer sat
+   on the page. Asserting on a class name is asserting on markup; the check now waits for the
+   **answer text** to arrive and stop changing.
+
+### ⚠️ A THIRD INDEPENDENT BUSINESS RESOLVER, and it answered as the wrong café
+
+The first live run answered as **"Smoke Test Café"** while every DB assertion queried the seeded
+fixture. The question and the verification were about **different businesses**.
+
+That is the phase-0 seed/resolver mismatch in a **third** place: `user_active_business` is what
+`resolveOwnerBusinessId` reads, and nothing had ever set it for this user. It is pinned in setup
+now, so the seed, the app and the assertions finally name one business.
+
+### ⚠️ THE PASSWORD IS WRONG, AND THAT IS REPORTED, NOT PAPERED OVER
+
+`TEST_USER_PASSWORD` does not match `smoke-test@ariaos.site`. Verified against `auth.users`: the
+user **exists, is confirmed, and has a password** — the stored one simply is not it.
+
+The run does **not** mock a session. It mints a **real** one (`admin.generateLink` → `verifyOtp` →
+the `sb-<ref>-auth-token` cookie) and **says loudly that the login form was not exercised.**
+Navigating the magic link cannot work here: Supabase rewrites `redirect_to` to the allowlisted site
+URL — observed, `http://localhost:3100/auth/callback` became `https://www.ariaos.site` — so the
+session would land on the wrong origin.
+
+**Resetting that password is an authorisation action. PARKED**, not taken. `scripts/set-smoke-test-password.ts`
+exists untracked in the tree and is presumably for exactly this; running it is the founder's call.
+
+### ⚠️ A RUN THAT CHECKS NOTHING EXITS NON-ZERO
+
+Playwright exits 0 when every test skips, and a green `check:live` that verified nothing would be
+the seven-row table in one command. Assertion **0** sits outside the skip guard: when the run is
+blocked it fails, names the reason, and takes the exit code with it. Observed — the
+credentials-blocked run exited **1** with six assertions marked skipped, not passed.
