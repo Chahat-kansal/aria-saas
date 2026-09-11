@@ -38,8 +38,6 @@ const turn: {
   storedProvenance: null, conversationId: null, askedAt: new Date().toISOString(),
 }
 
-test.describe.configure({ mode: 'serial' })
-
 /**
  * ⚠️ A RUN THAT CHECKED NOTHING MUST EXIT NON-ZERO.
  *
@@ -57,6 +55,10 @@ test('0. the run was able to check anything at all', () => {
 })
 
 test.describe('check:live · one real question', () => {
+  // Serial HERE ONLY: these two drive one browser turn and must run in order on one page. Scoping
+  // it to this block is what lets the assertions in the next describe each report for themselves.
+  test.describe.configure({ mode: 'serial' })
+
   // ⊘ — THE THIRD STATE. A run that could not sign in verified nothing, and reporting that as a
   // pass is the exact habit this command exists to break. Every assertion below skips with the
   // reason rather than going green on an empty page.
@@ -136,6 +138,20 @@ test.describe('check:live · one real question', () => {
       turn.answerText.length,
       'the turn never produced an answer beyond the question itself. Settled text: ' + previous.slice(-300),
     ).toBeGreaterThan(60)
+  })
+
+})
+
+/**
+ * ⚠️ DELIBERATELY NOT SERIAL. The browser turn above must run in order and share a page, but the
+ * assertions below only read what it produced — and in a serial block a single red assertion marks
+ * the remaining ones "did not run", which is exactly the silence phase 4 forbids. Observed: a
+ * failing assertion 3 hid 4, 5 and 6 entirely. Each of these now reports for itself.
+ */
+test.describe('check:live · what the turn left behind', () => {
+  test.beforeEach(() => {
+    test.skip(!!process.env.CHECK_LIVE_BLOCKED, process.env.CHECK_LIVE_BLOCKED ?? '')
+    test.skip(!turn.askRequestFired, 'the turn never reached the route, so it left nothing behind')
   })
 
   test('3. the STORED TURN carries provenance anchors — M3: 0 of 288 conversations did', async () => {
