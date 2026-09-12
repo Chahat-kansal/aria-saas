@@ -1,7 +1,126 @@
 # RUN-S6 · CHECK:LIVE
 
-10 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**10–12 September 2026 · autonomous run, RULE 20 · seven phases, seven commits, none parked as
+work. All pushed. Build verified green.**
+
+**`npm run check:live` exists, runs, and found things on its first outing.** One real Ask Aria
+question and one real proposed action, end to end, against a real production build — and it is now
+**RULE 3a in `CLAUDE.md`**, the last line of every sprint's gate list.
+
+**"It built" is no longer the standard.**
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⚠️ M13C + M13D ARE WORKING IN PRODUCTION — and the council is alive.** The feature that managed
+*"97 sessions, 2 proposals ever"* over 94 days now shows, in three days: **128 `agent_runs` rows**
+(was 7, frozen since 4 June), **32 agent decisions** (was 2 ever), **12 proposals** (was 2 ever), and
+an `agent_health` block on **2 of 2** sessions. The owner's line now reads *"Reviewed 4
+recommendations… **2 of 14 checks did not report**, so this is not the full picture."* And the first
+per-agent diagnosis this product has ever produced: **`pricing` and `clv` are timing out** at the
+25-second guard, named with the reason.
+
+**2. ⚠️ THE CHECK FOUND A LIVE GAP ON ITS FIRST RUN.** Ask Aria answered *"You've made **$22.50**
+this week…"* — exactly the seeded figure, with an honest hedge about the target it does not have. The
+whole chain works. **And the stored turn carries no `provenance` key at all**, so that correct figure
+renders unanchored. M3's failure — 0 of 288 conversations carrying a tier — **is still live on the
+path a real business question takes.** The assertion stays red.
+
+**3. ⚠️ THE CONSTITUTION AND THE ANCHORS LIVE ON DIFFERENT LANES, so no single turn can have both.**
+`assembleAriaPrompt()` has exactly two production callers — the **general** lane (which runs *before*
+business context exists) and `slim-context.ts`. `answer-council.ts` still contains **zero**
+references to the constitution. The lane that answers business questions is not constitution-
+governed. That is the deepest finding here and it needs a sprint of its own.
+
+## EACH ASSERTION, AND THE SHIPPED FAILURE IT WOULD HAVE CAUGHT
+
+| | assertion | the failure it catches |
+|---|---|---|
+| ✓ | **0.** the run could check anything at all | a green run that verified nothing |
+| ✓ | **1.** the request LEFT the client and reached the route | **M12** — the chat POST never fired |
+| ✓ | **2.** the answer STREAMED and SETTLED | **M4** — the watchdog |
+| ✗ | **3.** the STORED TURN carries provenance anchors | **M3** — 0 of 288 conversations carried a tier |
+| ⊘ | **4.** an anchored figure RESOLVES TO REAL ROWS | the moat — a number wearing a badge of truth |
+| ⊘ | **5.** the answer was CONSTITUTION-GOVERNED | **M12** — the bathroom answer |
+| ⊘ | **6.** the ledger records WHICH PROVIDER served it | **M8/M13B** — a call that cost money and appears nowhere |
+| ✓ | **7.** a price-changing request reaches the route | — |
+| ✓ | **8.** **NOTHING WAS PRICED — the gate held** | a money action that executes itself |
+| ⊘ | **9.** a proposal is pending and unexecuted | **M11** — `executeProposal` that never ran, unnoticed |
+
+**Assert on the STORED TURN, not the screen** — a rendered answer that persisted nothing is the
+`/ax` failure, and assertion 3 reads the database, not the page.
+
+## PROOF THE PROVENANCE MUTATION GOES RED
+
+**The mutation was not needed: the product is already in the mutated state.** Assertion 3 is red
+against production right now, for the real reason — `turnProvenance` is built only inside the
+strategic branch at `ask/route.ts:1234`, and a real business question takes a different one. The
+stored assistant turn has no `provenance` key.
+
+**A mutation proves an assertion can fail. This one is failing, on live data, for the exact cause it
+was written to detect.** That is stronger evidence than an induced failure, and it is why the
+assertion stays red rather than being softened.
+
+## WHAT `check:live` SAYS ABOUT THE LAST FIVE SPRINTS
+
+| sprint | live status |
+|---|---|
+| **M13C + M13D** | ✅ **working** — 128 agent runs, 12 proposals, health block present, two agents named as timing out |
+| **M14** | ✅ **screens verified in a browser** — `/dashboard/surcharge-ban` renders the RBA mechanism wording verbatim; the compliance card shows the correct **calm** variant. M14's own *"NOT VERIFIED IN A BROWSER"* caveat is discharged |
+| **M13B** | ⚠️ the answer council still carries **no constitution** — measured again, unchanged |
+| **M11B** | ⚠️ **the plan loop has never produced a step** — `aria_autopilot_actions` with a `plan_id`: **0**. Built, tested, green, never exercised |
+| **M3** | ⚠️ provenance still absent from a real business turn |
+
+## CONFIRMED: IT IS IN `CLAUDE.md`'s GATE LIST — **RULE 3a**
+
+```
+npx tsc --noEmit   · npm run build   · npx vitest run   · npm run check:live
+```
+
+RULE 3a carries the seven-row *green build, dead feature* table so the next reader gets the **why**
+before the command. **Not in the pre-push hook** — it costs money and minutes, and a hook people
+bypass is worse than no hook. It runs by hand or via `.github/workflows/check-live.yml`:
+`workflow_dispatch`, plus daily at **19:00 UTC = 05:00 AEST**, before any Australian venue opens.
+
+## ⚠️ WHAT THE RUN COULD NOT DO
+
+- **The login FORM is not exercised.** `TEST_USER_PASSWORD` does not match
+  `smoke-test@ariaos.site` — `auth.users` confirms the user exists, is confirmed and has a password.
+  The run mints a **real** session (`admin.generateLink` → `verifyOtp` → cookie), never a mock, and
+  says so every time. **Resetting that password is an authorisation action: PARKED.**
+  `scripts/set-smoke-test-password.ts` sits untracked in the tree and is presumably for exactly this.
+- **⚠️ `.env.local`'s credentials carry leading whitespace** — the email is
+  `" smoke-test@ariaos.site"`, 23 characters. `check:live` trims at read time; **nothing else in the
+  repo does, so the smoke suite cannot have authenticated either.**
+
+## FOUR DEFECTS IN MY OWN CHECK, ALL CAUGHT BY RUNNING IT
+
+1. Watching `/api/auth/guard` reported `{"ok":true}` while Supabase returned **400** — it now
+   watches the endpoint that actually decides.
+2. Each Playwright test gets a **fresh page**, so "the request fired" and "the answer settled" were
+   asserting against different pages.
+3. **`.msg-reveal` no longer matches the surface** — it timed out while a good answer sat on screen.
+   Asserting on a class name is asserting on markup.
+4. **One red assertion hid three others.** `serial` abandons the block on failure, so the first run
+   reported *"3 did not run"* — the exact silence phase 4 exists to end, inside the tool built to end
+   it.
+
+**And two the check would have had to defeat to stay honest:** the answer council **caches** on
+`questionHash + dataEpoch`, so a repeat run returns a stored answer and **never calls the model** —
+green, fast, proving nothing; and the app resolved **a third, different business** from the seed and
+the assertions, so the question and the verification were about different cafés.
+
+## MY OWN ERRORS
+
+- **A stale `next build` under a live server** cost three confusing runs: the server served HTML for
+  JS chunks because I rebuilt `.next` underneath it. My own standing rule, broken by me.
+- **My `FIXTURE_ID` pattern rejected the seeded business itself** — caught by its own test on the
+  first run.
+- **I reported the seed/resolver mismatch as my finding**; MS8 phase 5 had already diagnosed it. What
+  was new is that its fix depended on an env var **nobody ever set**.
+
+---
+
+Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -357,3 +476,96 @@ so a failure is waiting in an inbox rather than discovered by an owner at the co
 
 The workflow seeds the fixture first (idempotent, fixed UUIDs), names **every** required secret, and
 uploads the Playwright trace on failure.
+
+---
+
+## PHASE 6 — RUN IT AGAINST THE LAST FIVE SPRINTS ✅
+
+**The first honest live status of the product.** Failures below are **findings, not regressions**,
+and nothing outside this sprint's scope was fixed.
+
+### ⚠️ M13C + M13D — WORKING IN PRODUCTION. This is the headline.
+
+The nightly council was, for 94 days, *"97 sessions, all complete, 2 proposals ever"*. Measured now:
+
+| | before | **last 3 days** |
+|---|---|---|
+| `agent_runs` rows | **7, frozen since 4 June** | **128** |
+| `agent_decisions` | **2, ever** | **32** |
+| `agent_council_proposals` | **2, ever** | **12** |
+| sessions carrying `agent_health` | 0 | **2 of 2** |
+| distinct agents that ran | — | **8** |
+
+**The narrative an owner now reads:**
+
+> *"Reviewed 4 recommendations and approved the highest-impact actions for today. **2 of 14 checks
+> did not report**, so this is not the full picture…"*
+
+**And the first real per-agent diagnosis this product has ever produced:**
+
+```json
+[{ "kind": "timed_out", "reason": "timeout", "agent_type": "pricing" },
+ { "kind": "timed_out", "reason": "timeout", "agent_type": "clv" }]
+```
+
+**`pricing` and `clv` are hitting the 25-second guard.** Named, with the reason, in a row anyone can
+query. That is exactly what M13C phase 1 built and M13D unblocked — and it is a *new* finding,
+handed over rather than fixed here.
+
+### ✅ M14 — the screens are verified in a browser. That gap is closed.
+
+M14 shipped with *"NOT VERIFIED IN A BROWSER — no session"* at the top of its run log. Loaded live
+against a production build with a real session:
+
+| surface | | |
+|---|---|---|
+| `/dashboard/surcharge-ban` | **200**, 2,430 chars | renders the RBA mechanism wording **verbatim**: *"the Reserve Bank lifts its prohibition on card networks enforcing no-surcharge rules… expected to forbid surcharging under their own scheme rules"* |
+| `/dashboard/compliance` | **200** | the card is live: *"💳 **Card costs fall on 1 October** — You do not add a card fee, so nothing is taken away from you…"* — correctly the **calm** variant, because the fixture does not surcharge |
+| `/dashboard/agents` | **200** | *"Council hasn't run today yet. It runs at 6am AEST automatically."* |
+
+**M14's own caveat is now discharged**, by the tool this sprint built.
+
+### ⚠️ M11B — the plan loop has never produced a step
+
+```
+aria_autopilot_actions with plan_id IS NOT NULL:  0
+```
+
+M11B built the plan rail — `plan.ts`, `persist.ts`, `approve.ts`, `run.ts`, `report.ts` — and
+`savePlan` writes its steps as `aria_autopilot_actions` rows carrying `plan_id`/`step_index`.
+**Not one such row exists.** The loop has never been driven end to end in production.
+
+That is the seven-row table's shape again — built, tested, green, never exercised — and it is
+exactly what a live check is for. **Reported, not fixed:** driving the plan loop is its own sprint.
+
+### The Ask Aria turn itself
+
+```
+  ✓ 0. the run was able to check anything at all
+  ✓ 1. the request LEFT the client and reached the route
+  ✓ 2. the answer STREAMED and SETTLED
+  ✗ 3. the STORED TURN carries provenance anchors     ← the finding
+  ⊘ 4. an anchored figure RESOLVES TO REAL ROWS        (no anchors to verify)
+  ⊘ 5. the answer was CONSTITUTION-GOVERNED            (no model call was logged for this turn)
+  ⊘ 6. the ledger records WHICH PROVIDER served it     (same reason)
+  ✓ 7. a price-changing request reaches the route
+  ✓ 8. NOTHING WAS PRICED — the gate held
+  ⊘ 9. a proposal was recorded, pending, unexecuted    (Aria answered without proposing this run)
+
+  1 failed · 4 skipped · 5 passed
+```
+
+**Two findings sit behind those skips.**
+
+**⚠️ The turn logged no `aria_ai_calls` row**, which is why 5 and 6 could not run. A model call that
+cost money and appears nowhere is precisely how `intent_classifier` ran twice a turn across 412
+turns with zero rows (M12 phase 5). Either the turn was served from a cache the epoch-bump did not
+reach, or the lane that answered does not log. **Named; not chased here.**
+
+**⚠️ And the constitution question is structurally unanswerable on this path.**
+`assembleAriaPrompt()` has exactly two production callers — `ask/route.ts:872` (the **general** lane,
+which runs *before* business context exists) and `slim-context.ts`. `answer-council.ts` contains
+**zero** references to the constitution, still, as M13B measured. **The lane that carries the
+constitution and the lane that answers business questions are different lanes**, so no single turn
+can satisfy both assertion 3 and assertion 5. That is the deepest finding of this sprint and it
+belongs to a sprint of its own.
