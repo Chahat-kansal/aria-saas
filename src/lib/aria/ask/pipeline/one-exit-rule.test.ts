@@ -10,6 +10,7 @@ import {
   isScanned,
   oneExitIsIntact,
   stripComments,
+  stripBlockComments,
 } from './one-exit-rule'
 
 /**
@@ -115,6 +116,61 @@ describe('M17 phase 2 · wall 9 — one exit', () => {
 
   it('does not fire inside test files — they assert ON response shapes', () => {
     expect(isOneExitViolation('src/lib/aria/ask/strategies/council.test.ts', EXIT)).toBe(false)
+  })
+
+  describe('⚠️ multi-line block comments — the gap that fired on twelve innocent files', () => {
+    /**
+     * Found by running the guard, not by reasoning about it. Every strategy file opens with a doc
+     * block containing the sentence `return NextResponse.json(X) → return makeTurnResult(…)`, and
+     * the first version of this rule reported all twelve as violations. The fix was to teach the
+     * rule about block comments — NOT to stop writing the sentence.
+     */
+    const DOC_BLOCK = [
+      '/**',
+      ' * M17 — the lane, wrapped.',
+      ' *   · `return NextResponse.json(X)`  →  `return makeTurnResult(\'council\', X)`',
+      ' */',
+      "export const x = 1",
+    ].join('\n')
+
+    it('does NOT report a response mentioned inside a doc block', () => {
+      expect(findOneExitViolations([['src/lib/aria/ask/strategies/council.ts', DOC_BLOCK]])).toEqual([])
+    })
+
+    it('⚠️ STILL reports a real one in the same file, on the right line', () => {
+      // The whole point: stripping comments must not become "stop looking".
+      const withReal = DOC_BLOCK + '\n' + 'export function f() {\n  return NextResponse.json({ a: 1 })\n}'
+      const v = findOneExitViolations([['src/lib/aria/ask/strategies/council.ts', withReal]])
+      expect(v).toHaveLength(1)
+      expect(v[0]!.line).toBe(7)
+      expect(v[0]!.text).toBe('return NextResponse.json({ a: 1 })')
+    })
+
+    it('preserves line numbers across a long block', () => {
+      const text = '/**\n *\n *\n *\n */\nreturn NextResponse.json({})'
+      const v = findOneExitViolations([['src/lib/aria/ask/strategies/x.ts', text]])
+      expect(v).toHaveLength(1)
+      expect(v[0]!.line).toBe(6)
+    })
+
+    it('a `/*` inside a STRING does not open a phantom comment that swallows real code', () => {
+      const text = [
+        "const pattern = '/*'",
+        'return NextResponse.json({ a: 1 })',
+      ].join('\n')
+      const v = findOneExitViolations([['src/lib/aria/ask/strategies/x.ts', text]])
+      expect(v, 'a string containing /* must not blind the scanner').toHaveLength(1)
+      expect(v[0]!.line).toBe(2)
+    })
+
+    it('stripBlockComments blanks content but keeps the line count exactly', () => {
+      const text = 'a\n/* one\ntwo\nthree */\nb'
+      const stripped = stripBlockComments(text)
+      expect(stripped.split('\n')).toHaveLength(5)
+      expect(stripped.split('\n')[0]).toBe('a')
+      expect(stripped.split('\n')[4]).toBe('b')
+      expect(stripped).not.toContain('two')
+    })
   })
 
   it('findOneExitViolations reports file, line and the offending text', () => {

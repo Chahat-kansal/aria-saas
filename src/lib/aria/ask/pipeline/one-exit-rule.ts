@@ -68,9 +68,65 @@ const RESPONSE_CONSTRUCTION = /\bNextResponse\s*\.\s*(json|redirect|rewrite|next
 /**
  * Comments are stripped before matching — a rule that fires on the sentence describing it teaches
  * people to phrase around the guard instead of obeying it, and this file is full of such sentences.
+ *
+ * ⚠️ LINE-LEVEL ONLY. It cannot see a `/** … *\/` block that spans lines, because it is handed one
+ * line at a time. Use `stripBlockComments()` on the whole file first — `findOneExitViolations()`
+ * does, and `isOneExitViolation()` is the single-line API the tests drive.
  */
 export function stripComments(line: string): string {
   return line.replace(/\/\/.*$/, '').replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+/**
+ * ⚠️ ADDED AFTER THE GUARD FIRED ON ITS OWN DOCUMENTATION.
+ *
+ * Every strategy file opens with a doc block saying, in words, what the migration did:
+ *
+ *     *   · `return NextResponse.json(X)`  →  `return makeTurnResult('council', X)`
+ *
+ * Twelve files, twelve violations, none of them real. The first version of this rule stripped `//`
+ * comments and single-line `/* … *\/`, and a line inside a MULTI-LINE block looks like ordinary
+ * code when you only ever see one line of it.
+ *
+ * The fix is to make the rule understand block comments — **not** to stop writing the sentence. A
+ * guard you have to phrase around is a guard people route around, and the sentence explaining a
+ * migration is exactly the sentence the next reader needs.
+ *
+ * Line numbers are preserved: comment content is blanked, newlines are kept, so a violation still
+ * reports the line it is really on.
+ */
+export function stripBlockComments(text: string): string {
+  let out = ''
+  let i = 0
+  let inBlock = false
+  let inString: string | null = null
+  while (i < text.length) {
+    const c = text[i]!
+    if (inBlock) {
+      if (c === '*' && text[i + 1] === '/') { out += '  '; i += 2; inBlock = false; continue }
+      out += c === '\n' ? '\n' : ' '
+      i++
+      continue
+    }
+    if (inString) {
+      out += c
+      if (c === '\\') { out += text[i + 1] ?? ''; i += 2; continue }
+      if (c === inString) inString = null
+      i++
+      continue
+    }
+    if (c === '/' && text[i + 1] === '*') { out += '  '; i += 2; inBlock = true; continue }
+    // A `//` line comment is left for stripComments(); strings must be tracked so that a `/*`
+    // inside one (a regex, a URL) does not open a phantom block.
+    if (c === '"' || c === "'" || c === '`') { inString = c; out += c; i++; continue }
+    if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') { out += ' '; i++ }
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
 }
 
 /** True when `file` is inside the guarded tree at all. */
@@ -107,14 +163,21 @@ export interface OneExitViolation {
   text: string
 }
 
-/** Scan whole files. `files` is `[path, full text]` pairs — the script reads them off disk. */
+/**
+ * Scan whole files. `files` is `[path, full text]` pairs — the script reads them off disk.
+ *
+ * ⚠️ Block comments are stripped from the WHOLE FILE first, then each line is judged. Judging a line
+ * in isolation cannot tell code from the middle of a `/** … *\/`, which is how the first version of
+ * this guard reported twelve violations that were all the same explanatory sentence.
+ */
 export function findOneExitViolations(files: ReadonlyArray<readonly [string, string]>): OneExitViolation[] {
   const out: OneExitViolation[] = []
   for (const [file, text] of files) {
-    const lines = text.split('\n')
-    for (let i = 0; i < lines.length; i++) {
-      if (isOneExitViolation(file, lines[i]!)) {
-        out.push({ file: file.replace(/\\/g, '/'), line: i + 1, text: lines[i]!.trim() })
+    const original = text.split('\n')
+    const code = stripBlockComments(text).split('\n')
+    for (let i = 0; i < code.length; i++) {
+      if (isOneExitViolation(file, code[i]!)) {
+        out.push({ file: file.replace(/\\/g, '/'), line: i + 1, text: (original[i] ?? '').trim() })
       }
     }
   }
@@ -139,7 +202,9 @@ export function oneExitIsIntact(
   if (renderFileText === null) {
     return `${ONE_EXIT_ALLOWLIST[0]} does not exist — there is no single exit for this guard to be protecting`
   }
-  const constructs = renderFileText
+  // Same block-comment strip as the scan — render.ts's own header describes what it does, and a
+  // doc block must not be able to satisfy the check that render.ts still DOES it.
+  const constructs = stripBlockComments(renderFileText)
     .split('\n')
     .some(l => RESPONSE_CONSTRUCTION.test(stripComments(l)))
   if (!constructs) {
