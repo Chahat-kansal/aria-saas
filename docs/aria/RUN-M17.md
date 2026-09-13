@@ -56,10 +56,18 @@ against `src/app/api/aria/ask/route.ts` today:
 
 ### ⚠️ PREMISE CORRECTIONS — four, all of which change what a later phase builds
 
-**1 · "~15 regex heuristics" understates it. Measured: 22 named regex constants** assigned inside
-`_POST`, plus 3 more written inline (`isStrategicQuestion`, `isImageRequest`, the `/[\d%$]/` value
-cue inside `isEditIntent`) — **25 regexes**, feeding **18 derived booleans**. Stage 1's feature
-extraction has to carry 25, not 15. None are deleted or changed (M19 owns that).
+**1 · "~15 regex heuristics" understates it. Measured: 25 regexes** that test the raw message,
+feeding **18 derived booleans**.
+
+> ⚠️ **Split corrected in phase 2.** This paragraph first said "22 named + 3 inline". The **total of
+> 25 was right and the split was wrong**: the grep behind it (`^  const [A-Za-z_]+ = /`) also matched
+> `const isStrategicQuestion = /…/.test(message)` and `const isImageRequest = /…/.test(message)`,
+> which are inline uses, not named constants. Re-measured with a parser: **20 named UPPERCASE regex
+> constants + 5 written inline** (`isStrategicQuestion` 654, the `/[\d%$]/` value cue 663,
+> `isImageRequest` 2208, and one term each of `needsSonnet` 2294 and `needsTools` 2298). Retracted
+> here rather than quietly edited — RULE 16 #5.
+
+Stage 1's feature extraction has to carry 25, not 15. None are deleted or changed (M19 owns that).
 
 **2 · ⚠️ THERE IS NO TROUBLESHOOT LANE AND NO ESCALATE LANE.** The sprint's phase 3 names
 `troubleshoot` and `escalate` among the strategies to create. Against the code they do not exist:
@@ -111,10 +119,19 @@ Read so every sentence is true at once, the scope is **both** trees with **exact
 exception:
 
 ```
-SCAN         src/lib/aria/ask/pipeline/**  ·  src/lib/aria/ask/strategies/**  ·  src/app/api/aria/ask/**
+SCAN         src/lib/aria/ask/pipeline/**  ·  src/lib/aria/ask/strategies/**
+SCAN (file)  src/app/api/aria/ask/route.ts           ← named exactly, NOT by prefix — see below
 ALLOW        src/lib/aria/ask/pipeline/render.ts     ← the one exit, permanently
 GRANDFATHER  src/app/api/aria/ask/route.ts           ← phases 2–3 only; removed in phase 4
 ```
+
+> ⚠️ **Narrowed in phase 2, and the reason matters.** The obvious reading — scan the prefix
+> `src/app/api/aria/ask/` — is wrong: that directory holds **eleven other routes** (`action/`,
+> `audit/`, `delete/`, `escalate/`, `export/`, `history/`, `rollback/`, `search/`, `suggestions/`,
+> `thread/`, `upload/`), ordinary REST endpoints with no connection to the turn pipeline. Every one
+> of them legitimately constructs a response, so a prefix scan would have failed the push on eleven
+> innocent siblings — failure pattern #2 in guard form, and a rule that fires on the innocent gets
+> loosened until it fires on nothing. The turn route is named as a single file.
 
 **4 · The guard must be a FULL-FILE scan, not a diff scan.** `canon-rail-guard.ts` scans added lines
 only (`git diff --unified=0`), and the standing rule says a diff scanner cannot catch a reintroduced
@@ -133,3 +150,73 @@ M18 owns grounding-always and the verifier. M19 owns the single classifier. M20 
 constitution is not moved onto the council lane; no anchors are added to any turn.
 
 **GATE: PASS.** Continuing to phase 1.
+
+---
+
+## PHASE 1 — THE TYPES ✅
+
+**`TurnResult` was designed by reading all 28 exits, not by reading the paste.** A brace-aware
+parser pulled every exit body out of `route.ts` with its key order intact.
+
+**28 exits · 36 distinct top-level response keys.** Frequency, measured:
+
+| key | exits | | key | exits |
+|---|---|---|---|---|
+| `response` | 24 | | `ai_mode` · `error` · `followups` · `model_used` | 4 |
+| `conversation_id` · `intent` | 23 | | `served_by` | 3 |
+| `action` · `cost_usd_cents` | 20 | | `degraded_provider` · `healed` · `heal_reason` · `message` · `note` | 2 |
+| `used_council` | 10 | | the remaining 17 | 1 each |
+| `blocks` · `downloads` | 9 | | | |
+| `tool_calls` | 8 | | | |
+
+*(My first extraction pass reported 38 and included `actionResult` and `true` — artefacts of
+ternaries inside values, `action: Object.keys(actionResult).length > 0 ? actionResult : null` and
+`degraded_provider ? true : undefined`, where the `?` makes the next token look like a key. Caught by
+sanity-checking my own query before building on it — RULE 16 #5. The number is 36.)*
+
+### ⚠️ THE FINDING THAT DECIDED THE SHAPE: THE 28 EXITS DO NOT AGREE ON KEY ORDER
+
+```
+exit 1106   response, blocks, conversation_id, intent, action, …
+exit 1475   blocks, followups, used_council, advisors_lost, provenance, response, …
+```
+
+`JSON.stringify` preserves insertion order, and phase 3 has to prove the rendered body identical
+**byte-for-byte**. A canonical field order inside `TurnResult` would therefore change every byte of
+every answer while changing no behaviour — and would drown phase 6's replay in diffs that mean
+nothing.
+
+**So `body` is the lane's own object, verbatim, in the lane's own key order.** `render()` serialises
+that and nothing else. The typed fields are **projections derived from `body` by
+`makeTurnResult()`**, never set by hand — which is what stops them drifting from the thing actually
+sent. A lane cannot claim `usedCouncil` in a typed field while sending `used_council: false` to the
+client; the type gives it no way to express that.
+
+### ⚠️ NAME COLLISION — `Grounding` IS TAKEN
+
+The paste calls stage 2's output `Grounding`. **It already exists:**
+`src/lib/aria/compute/provenance.ts` exports `type Grounding = 'verified' | 'derived' | 'estimated'`
+— the provenance tier of a computed figure, with live consumers. A second `Grounding` meaning
+something else entirely is failure pattern #4 committed deliberately. Stage 2's type is
+**`TurnGrounding`**. Neither type is renamed.
+
+### ⚠️ `AskResponse` LOOKS LIKE IT SHOULD ALREADY BE THIS TYPE, AND IS NOT
+
+`src/lib/aria/ask-types.ts:176` declares `AskResponse` with 10 of the 36 keys. It has **zero
+consumers** anywhere in the repo. Left exactly as it is (RULE 0); recorded so the next reader does
+not mistake it for the union and build on it.
+
+### `verified` IS MANDATORY FROM TODAY, AND DELIBERATELY EMPTY
+
+`Verification = { ran: false; reason: string } | { ran: true; … }`. M18 changes `false` to `true`
+without touching the shape. `reason` is **required** on the not-run branch — a not-run verdict that
+says nothing would be the same silence in a new place.
+
+| | |
+|---|---|
+| **files changed** | `src/lib/aria/ask/pipeline/types.ts` (+327), `types.test.ts` (+186) |
+| **sibling sweep** | grep for any other `Understanding` / `TurnGrounding` / `TurnResult` / `VerifiedResult` / `Verification` / `TurnRecord` / `LaneName` declaration across `src/` — **0 hits** outside this file and its test. No fourth helper built. |
+| **mutation check** | Replaced the verbatim body with one re-composed in sorted key order — the design alternative this type exists to rule out. **"⚠️ THE BODY SURVIVES BYTE-FOR-BYTE" went red** on exit 399: `expected '{"action":…' to be '{"response":"Plan saved…'`. **1 failed, 11 passed.** Reverted → 12 passed. |
+| **anti-vacuity** | The suite asserts that exits 1106 and 1475 *genuinely start with different keys*, so the byte comparison is not comparing something to itself; that the fixture set is all 28 exits and covers all 20 lanes; and that all 36 keys survive a round trip. |
+| **gates** | tsc 0 · vitest 132 files / 1718 tests pass · `BUILD_EXIT=0` read from `build.log` · pre-push hook ran |
+| **NOT done** | **No code path changes.** Two new files; nothing imports them yet. The 28 exits are untouched. |
