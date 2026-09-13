@@ -16,6 +16,8 @@ node_modules/
 # suite's test accounts; never commit these.
 tests/smoke/.auth/
 e2e/.auth/
+# S6 — check:live mints a REAL owner session and writes it here. Same rule, same reason.
+tests/check-live/.auth/
 .vercel
 
 # Claude Code local skills (dev tooling, not product)
