@@ -11,6 +11,7 @@
     "test:e2e": "playwright test",
     "types:gen": "supabase gen types typescript --project-id nxfzippunqvqsvkmwtjv > src/types/database.types.ts",
     "test:unit": "vitest run",
+    "guard:one-exit": "tsx scripts/ask-one-exit-guard.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",

@@ -220,3 +220,138 @@ says nothing would be the same silence in a new place.
 | **anti-vacuity** | The suite asserts that exits 1106 and 1475 *genuinely start with different keys*, so the byte comparison is not comparing something to itself; that the fixture set is all 28 exits and covers all 20 lanes; and that all 36 keys survive a round trip. |
 | **gates** | tsc 0 · vitest 132 files / 1718 tests pass · `BUILD_EXIT=0` read from `build.log` · pre-push hook ran |
 | **NOT done** | **No code path changes.** Two new files; nothing imports them yet. The 28 exits are untouched. |
+
+---
+
+## PHASE 2 — THE SPINE ✅
+
+Six stages, and a wall that makes them unavoidable.
+
+```
+understand → decide → ground → act → verify → render
+```
+
+### ⚠️ TWO CORRECTIONS TO THE SPRINT DOCUMENT, BOTH FORCED BY THE CODE
+
+**1 · `ground` and `decide` are the other way round.** The sprint's diagram reads
+`understand → ground → decide`. Its own phase-2 text says `ground()` "builds whatever context each
+lane builds today, **keyed by strategy**". **Grounding keyed by strategy cannot run before the
+strategy is known** — the two sentences cannot both be obeyed. Measured: every lane condition in
+`_POST` is a boolean over `intent`, `ariaIntent`, the features and the conversation id, so
+`decide()` is a pure function and can run first. That is the reading that makes the rest true.
+
+> **This is the one place M17's structure is honest-but-not-yet-the-goal, and it is worth being
+> plain about.** Grounding still depends on the lane, which *is* flaw 2 of the logic read — "the
+> decision is made before grounding exists". **M18 is the sprint that inverts it:** once a lean
+> envelope loads unconditionally, `ground()` stops needing the strategy and moves back in front.
+> Doing it here would be a behaviour change, and a structural sprint that also changes behaviour
+> cannot prove it changed nothing.
+
+**2 · ⚠️ `decide()` returns an ORDERED LIST of candidates, not one name — because seven lanes decline
+or fall through.** Five catch their own errors and fall through to the next lane:
+
+| lane | route.ts | what its catch says |
+|---|---|---|
+| `inventory_agent` | 786 | *"RULE 0: non-fatal — fall through to main tool loop"* |
+| `multi_domain` | 936 | *"multi-domain parallel failed, falling back"* |
+| `deliverable` | 998 | *"deliverable generation failed, falling back to text"* |
+| `background_task` | 1050 | *"background task queue failed, falling through"* |
+| `council` | 1478 | *"council failed, falling back to single-model"* |
+
+And two decline without failing: `pending_action` only applies when a pending row exists, and
+`inventory_agent` only when `handleInventoryQuestion()` reports `handled`. **A single chosen name
+cannot express that, and flattening it would change behaviour on all seven paths.** So `act()` walks
+the candidates in source order until one produces a result — the waterfall, with the fall-through
+made explicit instead of implied by where a `try` block happens to end. `declined` is recorded.
+
+### THE THREE PURE CLASSIFIERS ARE CALLED IN `decide()`, NOT INSIDE THE LANES
+
+`isConfirmation()`, `classifyInventoryIntent()` and `classifyDeliverableKind()` all turned out to be
+**pure, synchronous functions of the message**. My first draft offered their lanes on every turn and
+let the lane decide — which the spine's own test caught immediately, by routing a strategic question
+through `inventory_agent` before the council. Calling them in `decide()` is both faithful to
+route.ts (same call, same point in the waterfall) and narrower.
+
+### WALL 9 — ONE EXIT
+
+`scripts/ask-one-exit-guard.ts`, wired into `package.json` (`npm run guard:one-exit`) **and into the
+pre-push hook, ahead of `tsc`**. The rule itself is `isOneExitViolation()` in
+`src/lib/aria/ask/pipeline/one-exit-rule.ts` — **the guard script imports it and the unit test calls
+it**, the WALL 8 pattern, so what CI enforces and what the test drives cannot drift apart. No
+assertion anywhere greps a source file to decide what the rule is.
+
+**Observed, both directions, with a genuinely new probe line** (a diff scanner cannot catch a
+reintroduced line — this one reads whole files):
+
+```
+$ npx tsx scripts/ask-one-exit-guard.ts
+[ask-one-exit-guard] 8 file(s) scanned whole, one exit intact (…/render.ts). Pass.
+[ask-one-exit-guard] ⚠️  still grandfathered, and this list can only shrink: src/app/api/aria/ask/route.ts
+GUARD_EXIT=0
+
+# plant src/lib/aria/ask/strategies/__probe.ts:3 — a line never in this repo before
+[ask-one-exit-guard] 1 response construction(s) outside the single exit:
+  src/lib/aria/ask/strategies/__probe.ts:3
+    return NextResponse.json({ probe: 'M17 phase 2 mutation — a genuinely new line, …' })
+GUARD_EXIT=1
+
+# probe removed
+[ask-one-exit-guard] 8 file(s) scanned whole, one exit intact. Pass.        GUARD_EXIT=0
+```
+
+**And the subtler direction — the one exit itself.** A guard that forbids every exit while the single
+exit has quietly disappeared is guarding a pipeline with no way out:
+
+```
+# render.ts changed to `return result.body as unknown as NextResponse`
+[ask-one-exit-guard] ⚠️  THIS RUN CHECKED NOTHING MEANINGFUL: …/render.ts constructs no response —
+                      the one exit is gone, so forbidding the others guards nothing
+[ask-one-exit-guard] A guard that cannot fail is worse than no guard. Exiting non-zero.
+GUARD_EXIT=1
+```
+
+It also exits non-zero if the walk found fewer than two files.
+
+### ⚠️ THE GUARD'S SCOPE WAS NARROWED, AND THE REASON MATTERS
+
+The obvious reading — scan the prefix `src/app/api/aria/ask/` — is **wrong**. That directory holds
+**eleven other routes**: `action/`, `audit/`, `delete/`, `escalate/`, `export/`, `history/`,
+`rollback/`, `search/`, `suggestions/`, `thread/`, `upload/`. Ordinary REST endpoints, no connection
+to the turn pipeline, every one of them legitimately constructing a response. A prefix scan would
+have failed the push on all eleven — failure pattern #2 in guard form, and **a rule that fires on
+the innocent gets loosened until it fires on nothing.** The turn route is named as a single file, and
+a test asserts all eleven siblings are ignored.
+
+### ⚠️ A THIRD CORRECTION, CAUGHT BEFORE THE COMMIT: `image` IS NOT A TOP-LEVEL LANE
+
+My first `decide()` offered `image` as a candidate ahead of `main`. Measured against the route, that
+is wrong. The image fast-path is at **route.ts:2362 — AFTER `buildAskAriaContext()` at 1517**, which
+is 19 DB queries, and it **never reads `ctx`** (checked: zero references between 2358 and 2392).
+Offering it earlier would render a **byte-identical body while skipping those 19 queries**.
+
+**Phase 6 compares rendered JSON and would have reported "no diff".** It is still a change, and
+"behaviour identical" is this sprint's entire standard — so this is precisely the class of silent
+drift a replay cannot catch and a reader has to.
+
+`stopped` (2470) and `total_outage` (2536) are inside the main lane's flow for the same reason. All
+three are **sub-exits of `main`**: the main strategy returns a `TurnResult` whose `lane` names
+whichever exit it took. `LANE_NAMES` still has 20 members — they are exit identities — but
+`decide()` offers only the 13 top-level lanes, and a test asserts the other seven never appear.
+
+### THE 25 REGEXES WERE EXTRACTED BY SCRIPT, NOT RETYPED
+
+Twenty-five patterns of that density cannot be transcribed by hand without introducing a difference
+nobody would ever find. A script pulled each one from `route.ts` with its line number, which is now
+a `// route.ts:NNN` comment on every line. **Verified: all 20 named constants byte-identical to the
+line they came from, 0 drifted.** A test re-checks that on every run and is marked **delete in phase
+4** — between phase 2 and phase 4 the regexes exist in two places, and two copies is failure pattern
+#4; the only honest way to run a migration through it is to assert they cannot diverge while both
+exist.
+
+| | |
+|---|---|
+| **files changed** | `pipeline/run-turn.ts` (+405) · `pipeline/features.ts` (+167, generated) · `pipeline/render.ts` (+43) · `pipeline/one-exit-rule.ts` (+150) · `scripts/ask-one-exit-guard.ts` (+103) · 3 test files (+419) · `package.json` (+1) · `scripts/git-hooks/pre-push` (+11) |
+| **sibling sweep** | Other pre-push-wired guards: `canon-rail-guard.ts` only — the new guard is added beside it, not instead of it. Other `Grounding` / `TurnResult` declarations: 0 (phase 1). Other files constructing a response under `pipeline/`: 1, and it is `render.ts`. |
+| **mutation check** | **Five, all observed.** Probe planted → guard red; probe removed → green; `render.ts` stripped of its response → guard red on anti-vacuity; `decide()` offering `inventory_agent` unconditionally → caught by the spine's own test before I noticed it myself; and `image` offered as a top-level candidate → caught by re-reading the route, not by a test. |
+| **gates** | tsc 0 · vitest 135 files / **1771** tests pass · `BUILD_EXIT=0` from `build.log` · one-exit guard 0 · hook ran |
+| **NOT done** | **The spine is not wired to the route** — nothing imports `runTurn()` yet; that is phase 4. The registry is empty, and `act()` throws loudly on a missing lane rather than answering with nothing. `verify()` stamps `{ ran: false, reason: 'M18 …' }`. No lane bodies moved yet (phase 3). |

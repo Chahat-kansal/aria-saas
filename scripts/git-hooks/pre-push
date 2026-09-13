@@ -44,6 +44,18 @@ if [ "$guard_failed" = "1" ]; then
   exit 1
 fi
 
+# M17 PHASE 2 — WALL 9: ONE EXIT. A response may be constructed in exactly ONE file in the Ask
+# Aria turn pipeline (src/lib/aria/ask/pipeline/render.ts). This is a FULL-FILE scan, not a diff
+# scan: canon-rail-guard reads added lines only, and an added-lines scanner cannot catch a
+# REINTRODUCED line. It also exits non-zero if it scanned nothing or if the single exit has
+# disappeared — a guard that cannot fail is worse than no guard.
+echo "[pre-push] one-exit guard: npx tsx scripts/ask-one-exit-guard.ts"
+if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsx scripts/ask-one-exit-guard.ts; then
+  echo "[pre-push] BLOCKED — a lane constructs its own HTTP response (see above). A lane returns a"
+  echo "[pre-push] TurnResult; render() turns it into HTTP, once, after every stage has run."
+  exit 1
+fi
+
 echo "[pre-push] typecheck: npx tsc --noEmit"
 if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit; then
   echo "[pre-push] BLOCKED — tsc found type errors (see above). Fix them, or"
@@ -66,7 +78,7 @@ fi
 # (see the header), so "OK" here must never be read as "all RULE 3 gates are green". A build that
 # exits non-zero is invisible to this hook, and on 2026-08-18 a backgrounded build exited 1 while
 # its wrapper reported success — the honest signal is BUILD_EXIT in the log, never the wrapper.
-echo "[pre-push] OK — canon-rail-guard clean, tsc 0 errors, unit tests green."
+echo "[pre-push] OK — canon-rail-guard clean, one-exit guard clean, tsc 0 errors, unit tests green."
 echo "[pre-push] NOT checked here: next build (CI-only). RULE 3 needs it green too — read"
 echo "[pre-push]                   BUILD_EXIT in build.log, not a wrapper's reported exit code."
 exit 0
