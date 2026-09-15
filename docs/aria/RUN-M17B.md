@@ -101,3 +101,77 @@ Proposed as an addition to RULE 20, immediately under its NEVER list:
 rejects it.
 
 **GATE: PASS.** Continuing to phase 1.
+
+---
+
+## PHASE 1 — LAND PHASE 3, WITH THE SIX FIXES ✅
+
+**The parked work is on `main`.** 15 files, 28 exits wrapped: 23 `TurnResult`s across 12 strategies
++ 5 admission gates → one `render()`. 11 of 12 strategies proven textually identical to the lanes
+they came from; `main.ts` differs on 14 lines, every one a declared feature-const removal.
+
+**⚠️ The push used the authorised bypass**, for the three enumerated lines and nothing else. Because
+`--no-verify` skips the whole hook, **tsc, vitest and the one-exit guard were run by hand** and are
+reported below — *the hook did not run on this push.*
+
+### THE SIX SILENT FAILURES, EACH WITH A TEST THAT FAILS WITHOUT THE FIX
+
+A discarded Supabase error is **invisible by nature**: Supabase resolves with `{ data, error }` and
+never throws, so the failure is dropped before anyone can look at it. No stack trace, no 500, no red
+anywhere — the feature just quietly does the wrong thing. **A fix with no test is a fix that comes
+back**, because nothing about the code looks different afterwards.
+
+`src/lib/aria/ask/strategies/silent-failures.test.ts` — 9 tests, each driving the **real strategy
+function** with a client that returns `{ error }`.
+
+| # | the silent failure | what it costs | test asserts |
+|---|---|---|---|
+| **1** | **the mass-confirm re-stage** | **the injection backstop's own write.** The gate looks present and cannot close | the rejection is reported **and the money gate still holds** — `mass_confirm`, never `execution_result` |
+| 2 | the pending-action read | reads as *"no pending action"*, so an approved action silently never runs | reported, **and the lane still declines** — behaviour unchanged |
+| 3 | the clear-after-execute | the action **has already run**; the next "yes" re-runs it | reported, and the owner is still told it is done, because it is |
+| 4 | save-plan's `aria_actions` INSERT | *"Plan saved"* with an empty dashboard | reported, with the CHECK-constraint message |
+| 5 | `upsertConversation`'s existing-thread read | falls through to INSERT → **a second conversation** | reported — **and the duplicate is demonstrated**: a new id comes back, not `c1` |
+| 6 | the per-minute rate-limit COUNT | null reads as "no calls", **the limit is let through** | reported, and the turn is still admitted |
+
+Two of these assert the **consequence**, not just the log: #5 shows the duplicate thread id, and #1
+shows the money gate holding while its own re-stage was refused.
+
+### MUTATION — ALL SIX, SWEPT AUTOMATICALLY
+
+Each report line deleted in turn, suite run, file restored:
+
+```
+silent failure                                       variable         verdict
+the mass-confirm re-stage (the injection backstop)   massStageErr     RED - 1 test(s) failed
+the pending-action read                              pendingErr       RED - 1 test(s) failed
+the clear-after-execute                              clearErr         RED - 1 test(s) failed
+save-plan's aria_actions INSERT                      planInsertErr    RED - 1 test(s) failed
+upsertConversation's existing-thread read            existingErr      RED - 1 test(s) failed
+the per-minute rate-limit COUNT                      recentErr        RED - 1 test(s) failed
+6 of 6 went red. All six are verified.
+```
+
+The one the sprint asked for by name, done first by hand:
+
+```
+MUTATED: the re-stage error is discarded again
+  × REPORTS a rejected re-stage — the assertion that fails if the error is re-discarded
+  AssertionError: the re-stage error was discarded — expected false to be true
+  Tests  1 failed | 8 passed (9)
+```
+
+> **On "use a genuinely new line":** that rule exists because a **diff scanner** cannot see a
+> reintroduced line. A unit test reads the code, not the diff, so a revert is fully visible to it —
+> which is precisely why these six needed unit tests rather than a guard. The mutation is therefore
+> the exact re-discard the sprint asked for.
+
+**Anti-vacuity:** the suite also asserts that a **clean** admission logs *nothing at all*. Without
+it, a harness that captured `console.error` wrongly would make all six pass for the wrong reason.
+
+| | |
+|---|---|
+| **files changed** | 15 landed from `m17-phase3-parked` + `silent-failures.test.ts` (+218) |
+| **sibling sweep** | other discarded Supabase errors in the landed files: **0** (canon rail clean apart from the 3 enumerated bypasses) |
+| **mutation** | 6 of 6 red, swept automatically; the mass-confirm one also done by hand |
+| **gates** | tsc 0 · vitest **136 files / 1787 tests** · one-exit guard 0 · `BUILD_EXIT=0` · ⚠️ **hook did NOT run — bypassed; all gates run manually** |
+| **NOT done** | the route is still unwired — that is phase 2. `_POST` still holds its 28 exits and the grandfather list is still populated. |
