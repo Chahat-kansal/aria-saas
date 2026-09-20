@@ -94,17 +94,20 @@ describe('M17 phase 2 · stage 3 — decide reproduces the waterfall', () => {
     }
   })
 
-  it('save_plan short-circuits to a SINGLE candidate — nothing else may claim that turn', async () => {
+  /**
+   * ⚠️ REWRITTEN IN M17B PHASE 2, NOT DELETED. It used to assert that `decide()` short-circuits to a
+   * single `save_plan` candidate. It no longer offers `save_plan` AT ALL, and that is the fix:
+   * route.ts:372 runs the sentinel BEFORE the spend gates (403) and BEFORE the classifiers (447).
+   * Offering it from `decide()` means `understand()` has already run — so a UI sentinel that makes
+   * no model call would have paid for two classifier calls, and could have been refused by a budget
+   * it never spends. It runs as `RunTurnOptions.savePlanGate` instead; see the runTurn block below.
+   */
+  it('⚠️ save_plan is NOT a candidate — it is a gate that runs before the classifiers', async () => {
     const u = await understandingFor('[ARIA_SAVE_PLAN]')
     const c = decide(u, INPUT({ message: '[ARIA_SAVE_PLAN]', conversationId: 'c1' }))
-    expect(c.map(x => x.name)).toEqual(['save_plan'])
-  })
-
-  it('save_plan needs a conversation — without one it falls through to the normal waterfall', async () => {
-    const u = await understandingFor('[ARIA_SAVE_PLAN]')
-    const c = decide(u, INPUT({ message: '[ARIA_SAVE_PLAN]', conversationId: null }))
-    expect(c.map(x => x.name)).not.toEqual(['save_plan'])
-    expect(c[c.length - 1]!.name).toBe('main')
+    expect(c.map(x => x.name)).not.toContain('save_plan')
+    // The feature still fires; nothing at this point reads it.
+    expect(u.features.isSavePlan).toBe(true)
   })
 
   it('a strategic question offers the council BEFORE main, and says why', async () => {
@@ -259,36 +262,126 @@ describe('M17 phase 2 · stage 5 — verify', () => {
   })
 })
 
-describe('M17 phase 2 · runTurn — six stages, one exit', () => {
+/**
+ * ⚠️ REWRITTEN IN M17B PHASE 2, NOT DELETED.
+ *
+ * `runTurn` took `(input, { registry, admit })`. It now takes `(envelope, { registry, beforeParse,
+ * parse, afterParse, savePlanGate, spendGates, registry })`, because wiring the real route showed
+ * that a single `admit()` before `understand()` would have silently changed two behaviours:
+ *
+ *   · the per-user rate limit runs BEFORE the body is read (route.ts:316 vs the parse at 330), so a
+ *     flood costs one Redis read rather than a multipart parse of up to five attachments;
+ *   · `save_plan` runs BEFORE the spend gates and BEFORE the classifiers (route.ts:372 vs 403/447),
+ *     so an owner over the daily AI budget can still save a plan — it makes no model call — and a
+ *     UI sentinel never pays for two classifier calls.
+ *
+ * NEITHER WOULD HAVE APPEARED IN A REPLAY THAT ONLY COMPARES RENDERED JSON. The assertions below
+ * are what hold them.
+ */
+const PARSED = (over: Record<string, unknown> = {}) => ({
+  message: 'hello', conversationId: null, attachments: [], clientMessages: [],
+  noticeRef: null, branchIntent: { mode: 'append' as const }, ...over,
+})
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ENV = (over: Record<string, any> = {}) => ({
+  req: new Request('http://localhost/api/aria/ask', { method: 'POST' }),
+  bid: 'b1', userId: 'u1', supabase: {} as never, ...over,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+}) as any
+
+describe('M17B phase 2 · runTurn — the whole order, in one place', () => {
   it('renders the lane body VERBATIM and with its status', async () => {
     classifyIntent.mockResolvedValue(INTENT())
     classifyAriaIntent.mockResolvedValue(ARIA())
     const body = { blocks: [], followups: [], used_council: true, response: 'answer', conversation_id: 'c1' }
-    const res = await runTurn(INPUT({ message: 'why are margins down' }), {
+    const res = await runTurn(ENV(), {
       registry: { council: async () => makeTurnResult('council', body) },
+      parse: async () => PARSED({ message: 'why are margins down' }),
     })
     expect(res.status).toBe(200)
     expect(JSON.stringify(await res.json())).toBe(JSON.stringify(body))
   })
 
-  it('⚠️ THE ADMISSION GATE STILL LEAVES THROUGH render() — and never pays for a classifier call', async () => {
-    const res = await runTurn(INPUT(), {
+  it('⚠️ THE PER-USER LIMIT RUNS BEFORE THE BODY IS EVEN PARSED', async () => {
+    // The reason beforeParse exists at all: a flood must cost one Redis read, not a multipart parse.
+    const parse = vi.fn(async () => PARSED())
+    const res = await runTurn(ENV(), {
       registry: {},
-      admit: async () => makeTurnResult('rate_limited_user', { error: 'Rate limit exceeded. Try again later.' }, 429),
+      beforeParse: async () => makeTurnResult('rate_limited_user', { error: 'Rate limit exceeded. Try again later.' }, 429),
+      parse,
     })
     expect(res.status).toBe(429)
     expect(await res.json()).toEqual({ error: 'Rate limit exceeded. Try again later.' })
-    // The reason stage 0 exists: a rate-limited request must not buy two classifier calls.
+    expect(parse, 'the body must not be read for a rate-limited request').not.toHaveBeenCalled()
     expect(classifyIntent).not.toHaveBeenCalled()
     expect(classifyAriaIntent).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ SAVE-PLAN RUNS BEFORE THE SPEND GATES — an owner over budget can still save a plan', async () => {
+    const spendGates = vi.fn(async () => makeTurnResult('cost_ceiling', { error: 'budget_exceeded' }, 402))
+    const res = await runTurn(ENV(), {
+      registry: {},
+      parse: async () => PARSED({ message: '[ARIA_SAVE_PLAN]', conversationId: 'c1' }),
+      savePlanGate: async () => makeTurnResult('save_plan', { response: 'Plan saved: "x".', intent: 'plan_saved' }),
+      spendGates,
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).intent).toBe('plan_saved')
+    // If the spend gates ran first this would be a 402 and the free action would be refused.
+    expect(spendGates, 'the spend gates must not run before the save-plan sentinel').not.toHaveBeenCalled()
+  })
+
+  it('⚠️ SAVE-PLAN NEVER PAYS FOR THE TWO CLASSIFIER CALLS', async () => {
+    await runTurn(ENV(), {
+      registry: {},
+      parse: async () => PARSED({ message: '[ARIA_SAVE_PLAN]', conversationId: 'c1' }),
+      savePlanGate: async () => makeTurnResult('save_plan', { response: 'Plan saved.', intent: 'plan_saved' }),
+    })
+    expect(classifyIntent).not.toHaveBeenCalled()
+    expect(classifyAriaIntent).not.toHaveBeenCalled()
+  })
+
+  it('the gates run in route.ts order, and the first one to answer wins', async () => {
+    const order: string[] = []
+    classifyIntent.mockResolvedValue(INTENT())
+    classifyAriaIntent.mockResolvedValue(ARIA())
+    await runTurn(ENV(), {
+      registry: {
+        // 'hello' with ariaIntent=analytical offers council before main; register both so the
+        // assertion is about ORDER, not about a missing lane.
+        council: async () => { order.push('council'); return null },
+        main: async () => { order.push('main'); return makeTurnResult('main', { response: 'x' }) },
+      },
+      beforeParse: async () => { order.push('beforeParse'); return null },
+      parse: async () => { order.push('parse'); return PARSED() },
+      afterParse: () => { order.push('afterParse'); return null },
+      savePlanGate: async () => { order.push('savePlanGate'); return null },
+      spendGates: async () => { order.push('spendGates'); return null },
+    })
+    expect(order).toEqual(['beforeParse', 'parse', 'afterParse', 'savePlanGate', 'spendGates', 'council', 'main'])
+  })
+
+  it('a bad request is refused after the parse and before anything is spent', async () => {
+    const spendGates = vi.fn(async () => null)
+    const res = await runTurn(ENV(), {
+      registry: {},
+      parse: async () => PARSED({ message: '' }),
+      afterParse: () => makeTurnResult('bad_request', { error: 'message or file required' }, 400),
+      spendGates,
+    })
+    expect(res.status).toBe(400)
+    expect(spendGates).not.toHaveBeenCalled()
+    expect(classifyIntent).not.toHaveBeenCalled()
   })
 
   it('emits a turn record naming the lane, the reason, the features and the grounding kind', async () => {
     classifyIntent.mockResolvedValue(INTENT())
     classifyAriaIntent.mockResolvedValue(ARIA())
     const records: unknown[] = []
-    await runTurn(INPUT({ message: 'how can I improve margins?' }), {
+    await runTurn(ENV(), {
       registry: { council: async () => makeTurnResult('council', { response: 'x' }) },
+      parse: async () => PARSED({ message: 'how can I improve margins?' }),
       onRecord: r => records.push(r),
     })
     expect(records).toHaveLength(1)
@@ -301,17 +394,19 @@ describe('M17 phase 2 · runTurn — six stages, one exit', () => {
     expect(typeof rec.totalMs).toBe('number')
   })
 
-  it('the admission record says the decision was made before the classifiers ran', async () => {
+  it('a gate record names WHICH gate answered, and says it beat the classifiers', async () => {
     const records: unknown[] = []
-    await runTurn(INPUT(), {
+    await runTurn(ENV(), {
       registry: {},
-      admit: async () => makeTurnResult('cost_ceiling', { error: 'budget_exceeded' }, 402),
+      spendGates: async () => makeTurnResult('cost_ceiling', { error: 'budget_exceeded' }, 402),
+      parse: async () => PARSED(),
       onRecord: r => records.push(r),
     })
     const rec = records[0] as Record<string, unknown>
     expect(rec.lane).toBe('cost_ceiling')
     expect(rec.status).toBe(402)
     expect(rec.intentType).toBe('n/a')
+    expect(rec.reason).toMatch(/admission \(spend\)/)
     expect(rec.reason).toMatch(/before the classifiers ran/)
   })
 })

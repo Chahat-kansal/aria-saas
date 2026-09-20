@@ -2,10 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assembleAriaPrompt, isGrounded, groundingNotice, CANNOT_SEE_BLOCK } from './assemble'
+import { readTurnSource } from '../ask/turn-source'
 
 const root = join(__dirname, '..', '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
-const ROUTE = read('src/app/api/aria/ask/route.ts')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ROUTE = readTurnSource()
 
 /**
  * M12 PHASE 4 — IT MUST SAY WHEN IT CANNOT SEE.
@@ -109,7 +115,7 @@ describe('M12 phase 4 · every lane that renders the footer carries it', () => {
     // The lane that DOES normally have data must still say so on the turn where the context failed
     // to load — otherwise the footer is true on one lane and false on the other.
     expect(ROUTE).toContain('${ARIA_CONSTITUTION}${groundingNotice(ctx)}DATA TOOLS')
-    expect(ROUTE).toContain("import { assembleAriaPrompt, groundingNotice } from '@/lib/aria/prompt/assemble'")
+    expect(ROUTE).toContain("import { groundingNotice } from '@/lib/aria/prompt/assemble'")
   })
 
   it('MUTATION — restoring the ungrounded answer makes this suite RED', () => {

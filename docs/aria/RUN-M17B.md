@@ -175,3 +175,126 @@ it, a harness that captured `console.error` wrongly would make all six pass for 
 | **mutation** | 6 of 6 red, swept automatically; the mass-confirm one also done by hand |
 | **gates** | tsc 0 · vitest **136 files / 1787 tests** · one-exit guard 0 · `BUILD_EXIT=0` · ⚠️ **hook did NOT run — bypassed; all gates run manually** |
 | **NOT done** | the route is still unwired — that is phase 2. `_POST` still holds its 28 exits and the grandfather list is still populated. |
+
+---
+
+## PHASE 2 — ROUTE `_POST` THROUGH THE SPINE ✅  *the sprint*
+
+### `route.ts`: **2,820 → 182 lines.** 28 exits → **0**.
+
+```
+- 2,820 lines · 28 `return NextResponse` · 22 of them before the council gate
++   182 lines · parse → runTurn() → done · ZERO responses constructed
+```
+
+The only three occurrences of the word `NextResponse` left in the file are in its doc comment
+explaining what used to be there. **Stripped of block comments — which is what the guard reads —
+route.ts contains 0.**
+
+### ⚠️ THE GRANDFATHER LIST IS EMPTY, AND THE MUTATION PROVES IT BITES
+
+```
+export const ONE_EXIT_GRANDFATHERED: readonly string[] = [
+  // ⚠️ EMPTIED IN M17B PHASE 2 …
+]
+```
+
+A **genuinely new** early exit added to `_POST` — a header probe that never existed in this repo:
+
+```
+[ask-one-exit-guard] 1 response construction(s) outside the single exit:
+  src/app/api/aria/ask/route.ts:115
+    return NextResponse.json({ probe: 'M17B phase 2 — a brand new early exit, never in this repo' })
+ONE_EXIT=1
+```
+
+Reverted → `27 file(s) scanned whole, one exit intact. Pass.` and **the "still grandfathered"
+warning line is gone.** From this commit the route cannot exit early.
+
+### ⚠️ TWO ORDERINGS A NAIVE `admit()` WOULD HAVE BROKEN SILENTLY
+
+The route's real order interleaves its gates with the parse and with one lane:
+
+```
+316  admitBeforeParse   the per-user limit — BEFORE the body is read
+330  parse
+366  admitBadRequest    needs the parsed message
+372  the save-plan lane            ← sits HERE, before the spend gates
+403  admitSpend         cost guard · per-minute · daily ceiling
+447  the classifiers
+```
+
+**1 · The per-user limit precedes the parse.** A flood costs one Redis read rather than a multipart
+parse of up to five attachments. A single `admit()` after parsing keeps the same 429 body and
+quietly does that work anyway.
+
+**2 · `save_plan` precedes the spend gates and the classifiers.** `[ARIA_SAVE_PLAN]` is a UI
+sentinel that makes **no model call and costs nothing**. Running the spend gates first would **block
+a free action for an owner who has exhausted the daily AI budget** — a real change to a real user
+path. And deciding it from `decide()` would mean `understand()` had already run, so a sentinel would
+pay for two classifier calls.
+
+**Neither would have appeared in a replay that only compares rendered JSON.** They are held by
+assertions instead: the parse function is a spy that must not be called for a rate-limited request,
+and the spend gates are a spy that must not be called for a sentinel.
+
+`decide()` no longer offers `save_plan` at all; it runs as `RunTurnOptions.savePlanGate`, and
+`save-plan.ts` exports the gate and the `StrategyFn` over **one implementation**.
+
+### THE FIVE LANES THAT DECLINE BY CATCHING THEIR OWN ERRORS — REPORTED
+
+| lane | route.ts | what its catch does |
+|---|---|---|
+| `inventory_agent` | 786 | logs, *"RULE 0: non-fatal — fall through to main tool loop"* |
+| `multi_domain` | 936 | logs, *"falling back"* |
+| `deliverable` | 998 | logs, *"falling back to text"* |
+| `background_task` | 1050 | logs, *"falling through"* |
+| `council` | 1478 | logs, *"falling back to single-model"* |
+
+Four of the five were already honest. **The fifth was not, and it is the one that matters.**
+
+### ⚠️ A SIXTH, SILENT CATCH — FOUND BY LOOKING, AND IT MAY BE WHY PROVENANCE IS NULL
+
+`answer-council.ts:343` was a **bare `catch { /* non-fatal — council proceeds without anchors */ }`**
+— no binding, no log — and it wraps **~245 lines**: all eighteen ground-truth queries, `anchorValues`,
+and `turnProvenance = buildProvenance(...)`.
+
+**If anything in there throws, the council answers with no `available_ground_truth` and
+`turnProvenance` stays null** — so the response carries `provenance: null` and not one figure can be
+tiered. That is **M3's 0-of-288 missing tiers and S6's live finding that a real business turn carried
+no provenance**, with a plausible mechanism — and nothing anywhere recorded that it had happened.
+
+S9 phase 6 fixed the **outer** catch immediately below it; its comment literally reads *"until now
+nothing recorded that it had happened"*. It left this inner one silent.
+
+Fixed to exactly what W6 requires — bind the error and log it. **Still non-fatal, no control flow
+changed, no response changed.** Only the silence is gone.
+
+### ⚠️ SIXTEEN TEST FILES WERE ASSERTING ON `route.ts`'s SOURCE TEXT
+
+The rewrite turned 47 tests red across 16 files, all one class: they `readFileSync` the route and
+assert particular code appears in it — the constitution splice, the anchor set, `advisors_lost`, the
+branch modes, the thread-title call. They were written when the turn **was** that one file.
+
+**Every one of those assertions is still about something real.** Pointing them at a fixed path would
+have left sixteen files quietly asserting nothing — failure pattern #1 in its purest form: a test
+that passes because it looks where the thing cannot be.
+
+So `src/lib/aria/ask/turn-source.ts` reads **the turn** — route + pipeline + strategies — and the
+tests read that. When a lane moves again, they follow it. It carries its own anti-vacuity check:
+under 50,000 characters it throws rather than letting every assertion pass against an empty string.
+
+Three assertions genuinely had to change, each with the reason written in the file:
+`const bid = businessId` → `bid: businessId`; one import line became two on two different lanes; and
+`features.test.ts`'s drift check **reached its stated expiry** — it existed only while the regexes
+lived in two places, so it is replaced by its inverse: **the route no longer carries a copy**, which
+is what keeps failure pattern #4 from returning.
+
+| | |
+|---|---|
+| **route.ts** | **2,820 → 182 lines**, 28 exits → 0 |
+| **files changed** | `route.ts` (−2,638) · `run-turn.ts` (+96) · `admission.ts` (+62) · `turn-record.ts` (+34) · `turn-source.ts` (+78) · `save-plan.ts` (+18) · `answer-council.ts` (+18) · `one-exit-rule.ts` (grandfather emptied) · 17 test files repointed |
+| **sibling sweep** | `NextResponse` in the guarded tree outside `render.ts`: **0**. Files still reading `route.ts` by path in a test: 3, all deliberate (the one-exit rule's own test, the types fixtures' doc comment, and the new duplicate-check). |
+| **mutation** | a brand-new early exit in `_POST` → guard **red at route.ts:115**; reverted → green, and the grandfathered warning is gone |
+| **gates** | tsc 0 · vitest **136 files / 1790 tests** · one-exit guard 0 · canon rail **PASS, no bypass needed** · `BUILD_EXIT=0` · hook ran |
+| **NOT done** | the turn record is a `console.log` — phase 3 decides where it is persisted, and proposes DDL rather than smuggling JSONB. No replay yet (phase 4), no `check:live` yet (phase 5). |

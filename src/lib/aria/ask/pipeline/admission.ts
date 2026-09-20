@@ -1,5 +1,5 @@
 /**
- * M17 · BRAIN-1 PHASE 3 — STAGE 0. ADMISSION.
+ * M17 · BRAIN-1 PHASE 3 / M17B PHASE 2 — STAGE 0. ADMISSION, AS ORDERED GATES.
  *
  * Moved from `src/app/api/aria/ask/route.ts:316–440`. Five gates, five exits:
  *
@@ -11,13 +11,33 @@
  *
  * ⚠️ WHY THESE ARE A STAGE AND NOT LANES. Every other lane is chosen by what the MESSAGE says.
  * These five are decided by LIVE STATE — a counter, a budget, a missing body — and in `_POST` they
- * all run BEFORE the two classifiers at line 441. That order is load-bearing: a rate-limited request
- * must not pay for two model calls to be told it is rate-limited. So they run as stage 0, ahead of
- * `understand()`.
+ * all run BEFORE the two classifiers at line 447. That order is load-bearing: a rate-limited request
+ * must not pay for two model calls to be told it is rate-limited.
  *
  * ⚠️ AND THEY STILL LEAVE THROUGH `render()`. They return a `TurnResult` like everything else, it
  * passes `verify()`, and stage 6 turns it into HTTP. "One exit" means one exit, including for the
  * turns that never reach a model.
+ *
+ * ⚠️ M17B PHASE 2 — SPLIT INTO THREE, BECAUSE THE ROUTE'S REAL ORDER INTERLEAVES THEM WITH OTHER
+ * WORK AND A SINGLE `admit()` WOULD SILENTLY CHANGE TWO BEHAVIOURS:
+ *
+ *     316  admitBeforeParse   the per-user limit — BEFORE the body is read
+ *     330  (parse)
+ *     366  admitBadRequest    needs the parsed message
+ *     372  (the save-plan lane)          ← sits HERE, before the spend gates
+ *     403  admitSpend         cost guard · per-minute · daily ceiling
+ *     447  (the classifiers)
+ *
+ * **1 · The per-user limit precedes the parse**, so a flood costs one Redis read rather than a
+ * multipart parse of up to five attachments. Collapsing the gates into one call after parsing keeps
+ * the same 429 body and quietly does that work anyway.
+ *
+ * **2 · `save_plan` precedes the spend gates**, so an owner who has exhausted the daily AI budget can
+ * still save a plan — it makes no model call and costs nothing. Running the spend gates first would
+ * block a free action, which is a real change to a real user path, invisible in the response body of
+ * any turn that is not over budget.
+ *
+ * Neither would have shown up in a replay that only compares rendered JSON.
  *
  * The four non-200 status codes in the whole route live here: 429, 400, 429, 402.
  */
@@ -26,33 +46,29 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { checkCostCeiling } from '@/lib/aria-cost-guard'
 import { makeTurnResult, type TurnResult } from './types'
 
-export interface AdmissionInput {
-  readonly bid: string
-  readonly userId: string
-  readonly message: string
-  readonly attachmentCount: number
-}
-
-/**
- * Returns a `TurnResult` when the turn is REFUSED, or null to admit it.
- *
- * ⚠️ The order is route.ts's order and must stay that way: the per-user limit is checked before the
- * body is even parsed, so a flood costs one Redis read rather than a multipart parse.
- */
-export async function admit(input: AdmissionInput): Promise<TurnResult | null> {
-  const { bid, userId, message, attachmentCount } = input
-
-  // route.ts:316-317
+/** route.ts:316-317 — runs BEFORE the request body is read. */
+export async function admitBeforeParse(userId: string): Promise<TurnResult | null> {
   const rl = await checkRateLimit('ai', userId)
   if (!rl.ok) {
     return makeTurnResult('rate_limited_user', { error: 'Rate limit exceeded. Try again later.' }, 429)
   }
+  return null
+}
 
-  // route.ts:366 — the only 400 in the route. `message` has already been trimmed by the caller.
+/** route.ts:366 — the only 400 in the route. `message` has already been trimmed by the parser. */
+export function admitBadRequest(message: string, attachmentCount: number): TurnResult | null {
   if (!message && attachmentCount === 0) {
     return makeTurnResult('bad_request', { error: 'message or file required' }, 400)
   }
+  return null
+}
 
+/**
+ * route.ts:402-440 — the three spend gates, in order.
+ *
+ * ⚠️ These run AFTER the save-plan lane. See the header.
+ */
+export async function admitSpend(bid: string): Promise<TurnResult | null> {
   // route.ts:402-412 — Cost guard — check daily spend before allowing chat
   const { checkSpendAllowed } = await import('@/lib/aria/cost-guard')
   const spendCheck = await checkSpendAllowed(bid, 'chat', 2) // ~$0.02 estimated
@@ -97,4 +113,23 @@ export async function admit(input: AdmissionInput): Promise<TurnResult | null> {
   }
 
   return null
+}
+
+/**
+ * The pre-M17B single entry point, kept because `silent-failures.test.ts` drives it and because a
+ * caller that does not need the interleaving should not have to know about it.
+ *
+ * ⚠️ NOT USED BY THE ROUTE. The route runs the three gates in their real positions — see the header.
+ */
+export interface AdmissionInput {
+  readonly bid: string
+  readonly userId: string
+  readonly message: string
+  readonly attachmentCount: number
+}
+
+export async function admit(input: AdmissionInput): Promise<TurnResult | null> {
+  return (await admitBeforeParse(input.userId))
+    ?? admitBadRequest(input.message, input.attachmentCount)
+    ?? (await admitSpend(input.bid))
 }

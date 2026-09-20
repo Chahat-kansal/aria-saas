@@ -5,6 +5,7 @@ import {
   renderAdvisorSection, lostAdvisors, lostAdvisorRule, advisorShortfallNote,
   type AdvisorLike,
 } from './council-advisors'
+import { readTurnSource } from './ask/turn-source'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
@@ -91,7 +92,7 @@ describe('S8 phase 2 · the failure reaches the prompt and the owner', () => {
   })
 
   it('the route carries advisors_lost, and always as an array', () => {
-    const src = strip(read('src/app/api/aria/ask/route.ts'))
+    const src = strip(readTurnSource())
     expect(src).toContain('advisors_lost:')
     // `?? []` — never omitted, so a client cannot read "absent" as "fine".
     expect(src).toMatch(/advisors_lost: \(council\.advisors_lost \?\? \[\]\)/)

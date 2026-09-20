@@ -31,27 +31,24 @@ const f = (message: string, over: Partial<FeatureInput> = {}) => extractFeatures
 
 describe('M17 phase 2 · feature extraction', () => {
   /**
-   * ⚠️ TEMPORARY, AND DELIBERATELY SO — DELETE THIS TEST IN PHASE 4.
+   * ⚠️ ITS EXPIRY ARRIVED. This was a DRIFT check: between M17 phase 2 and M17B phase 2 the regexes
+   * existed in TWO places — here, and still inline in `_POST` — and two copies is failure pattern
+   * #4, so the only honest way through the migration was to assert they could not diverge while
+   * both existed. It asserted each one was byte-identical to `route.ts:NNN`.
    *
-   * Between phase 2 and phase 4 the regexes exist in TWO places: here, and still inline in
-   * `_POST`. Two copies is failure pattern #4 ("N copies drift") and the only honest way to run a
-   * migration through it is to assert they cannot diverge while both exist. Phase 4 deletes
-   * route.ts's copies, at which point this assertion has nothing left to compare and goes with them.
+   * M17B phase 2 routed `_POST` through the spine and deleted its copies. There is nothing left to
+   * compare against, so the drift check is replaced by its inverse: THE DUPLICATE IS GONE. That is
+   * the assertion that keeps failure pattern #4 from coming back — a second copy reappearing in the
+   * route would fail here.
    */
-  it('⚠️ PHASES 2–3 ONLY — every moved regex is byte-identical to the line it came from', () => {
-    const route = readFileSync('src/app/api/aria/ask/route.ts', 'utf8').split('\n')
-    const feats = readFileSync('src/lib/aria/ask/pipeline/features.ts', 'utf8').split('\n')
-    let checked = 0
-    for (const line of feats) {
-      const m = /^export const ([A-Z][A-Z0-9_]*) = (\/.*\/[a-z]*) \/\/ route\.ts:(\d+)$/.exec(line)
-      if (!m) continue
-      checked++
-      const [, name, rx, ln] = m
-      expect(route[Number(ln) - 1], name + ' drifted from route.ts:' + ln).toBe(`  const ${name} = ${rx}`)
-    }
-    // Anti-vacuity: a regex that stops matching the `// route.ts:N` shape would silently drop out
-    // of this loop and the test would pass having checked nothing.
-    expect(checked, 'expected all 20 named regexes to carry a route.ts provenance comment').toBe(20)
+  it('⚠️ THE ROUTE NO LONGER CARRIES ITS OWN COPY OF ANY ROUTING REGEX', () => {
+    const route = readFileSync('src/app/api/aria/ask/route.ts', 'utf8')
+    const stillThere = Object.keys(ROUTING_REGEXES).filter(name => route.includes('const ' + name + ' = /'))
+    expect(stillThere, 'route.ts has grown a second copy of a routing regex').toEqual([])
+    // Anti-vacuity: the route must still be a real file with real content, or the check above
+    // passes for the wrong reason.
+    expect(route.length).toBeGreaterThan(2_000)
+    expect(route).toContain('runTurn(')
   })
 
   it('carries 25 routing regexes — 20 named in route.ts plus the 5 written inline there', () => {

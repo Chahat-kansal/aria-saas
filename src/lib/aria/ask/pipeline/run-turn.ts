@@ -162,10 +162,11 @@ export function decide(u: Understanding, input: TurnInput): Strategy[] {
   const fired = u.firedFeatures
   const out: Strategy[] = []
 
-  // route.ts:372 — [ARIA_SAVE_PLAN] sentinel, requires an existing conversation.
-  if (f.isSavePlan && input.conversationId) {
-    return [candidate('save_plan', 'message === "[ARIA_SAVE_PLAN]" && conversationId', fired)]
-  }
+  // ⚠️ `save_plan` IS NOT OFFERED HERE. route.ts:372 puts it BEFORE the classifiers and before the
+  // spend gates, so it runs as `RunTurnOptions.savePlanGate` — see the note there. Deciding it needs
+  // a string compare, not an `Understanding`, and offering it here would mean a UI sentinel paid for
+  // two classifier calls and could be refused by a budget it never spends.
+  // `features.isSavePlan` still exists and still fires; nothing reads it at this point.
 
   // route.ts:457 — `convPending?.pending_action && isConfirmation(message)`. The message half is a
   // pure function and is tested here; the DB half needs a read, so the lane DECLINES when no
@@ -366,38 +367,109 @@ export function verify(result: TurnResult): VerifiedResult {
  * runTurn
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
+/** What the route's parser hands back. Everything `_POST` used to read off the request inline. */
+export interface ParsedTurn {
+  readonly message: string
+  readonly conversationId: string | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly attachments: any[]
+  readonly clientMessages: Array<{ role: 'user' | 'assistant'; content: string }>
+  readonly noticeRef: NoticeRef | null
+  readonly branchIntent: { mode: 'append' | 'regenerate' | 'edit'; editLiveIndex?: number }
+}
+
+/** What the route knows before it has read the body. */
+export interface TurnEnvelope {
+  readonly req: Request
+  readonly bid: string
+  readonly userId: string
+  readonly supabase: SupabaseClient
+  readonly onToken?: (t: string) => void
+  readonly signal?: AbortSignal
+}
+
 export interface RunTurnOptions {
   readonly registry: StrategyRegistry
+
   /**
-   * Stage 0. Rate limits, the cost guard and the daily ceiling are decided by LIVE STATE rather
-   * than by the message, and today they run before the classifiers. Running them here keeps that
-   * order — a rate-limited request must not pay for two classifier calls — and their results still
-   * pass through `verify()` and `render()`, so they leave through the one exit like everything else.
+   * ⚠️ THE ORDERING LIVES HERE, AND THAT IS THE WHOLE POINT OF A SPINE.
+   *
+   * `_POST` interleaved its gates with its parse and with one lane. Reproducing that order inside
+   * one function is what lets the route become a single call without changing what happens:
+   *
+   *     route.ts:316   beforeParse   the per-user limit — BEFORE the body is read
+   *     route.ts:330   parse
+   *     route.ts:366   afterParse    needs the parsed message
+   *     route.ts:372   savePlanGate  a LANE, run here because it precedes the spend gates AND the
+   *                                  classifiers — see its own note below
+   *     route.ts:403   spendGates    cost guard · per-minute · daily ceiling
+   *     route.ts:447   understand …  the six stages
+   *
+   * Every one of these returns a `TurnResult` or null, and a `TurnResult` from any of them still
+   * passes `verify()` and leaves through `render()`.
    */
-  readonly admit?: (input: TurnInput) => Promise<TurnResult | null>
+  readonly beforeParse?: (userId: string) => Promise<TurnResult | null>
+  readonly parse: (req: Request) => Promise<ParsedTurn>
+  readonly afterParse?: (p: ParsedTurn) => TurnResult | null
+  /**
+   * ⚠️ A LANE RUN AS A GATE, ON PURPOSE.
+   *
+   * `[ARIA_SAVE_PLAN]` is a UI sentinel at route.ts:372 that makes NO model call and costs nothing.
+   * It sits before the spend gates and before the classifiers, and both matter:
+   *   · an owner who has exhausted the daily AI budget can still save a plan;
+   *   · a sentinel never pays for two classifier calls.
+   * Deciding it needs a string compare, not an `Understanding`, so it runs here rather than in
+   * `decide()` — which is also why `decide()` no longer offers it.
+   */
+  readonly savePlanGate?: (input: TurnInput) => Promise<TurnResult | null>
+  readonly spendGates?: (bid: string) => Promise<TurnResult | null>
   readonly onRecord?: (record: TurnRecord) => void
 }
 
 /** The spine. The only function the route calls, and the only path to `render()`. */
-export async function runTurn(input: TurnInput, opts: RunTurnOptions) {
+export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
   const t0 = Date.now()
   const stageMs: Record<string, number> = {}
   const mark = (name: string, from: number) => { stageMs[name] = Date.now() - from }
 
-  // ── stage 0 · admission ──────────────────────────────────────────────────────────────────────
-  let tAdmit = Date.now()
-  const admitted = opts.admit ? await opts.admit(input) : null
-  mark('admit', tAdmit)
-  if (admitted) {
-    const verified = verify(admitted)
-    opts.onRecord?.(recordOf(admitted, null, { kind: 'none' }, verified, stageMs, t0))
+  const leave = (r: TurnResult, lane: string) => {
+    const verified = verify(r)
+    opts.onRecord?.(recordOf(r, null, { kind: 'none' }, verified, stageMs, t0, undefined, undefined, lane))
     return render(verified)
   }
 
+  // ── stage 0a · before the body is read (route.ts:316) ────────────────────────────────────────
+  let t = Date.now()
+  const early = opts.beforeParse ? await opts.beforeParse(envelope.userId) : null
+  mark('admit_pre', t)
+  if (early) return leave(early, 'admission (pre-parse)')
+
+  // ── parse (route.ts:320-367) ─────────────────────────────────────────────────────────────────
+  t = Date.now()
+  const parsed = await opts.parse(envelope.req)
+  mark('parse', t)
+  const input: TurnInput = { ...envelope, ...parsed }
+
+  // ── stage 0b · needs the parsed body (route.ts:366) ──────────────────────────────────────────
+  const bad = opts.afterParse ? opts.afterParse(parsed) : null
+  if (bad) return leave(bad, 'admission (bad request)')
+
+  // ── the save-plan sentinel (route.ts:372) — before the spend gates AND the classifiers ───────
+  t = Date.now()
+  const saved = opts.savePlanGate ? await opts.savePlanGate(input) : null
+  mark('save_plan_gate', t)
+  if (saved) return leave(saved, 'save_plan sentinel')
+
+  // ── stage 0c · the spend gates (route.ts:403-440) ────────────────────────────────────────────
+  t = Date.now()
+  const spend = opts.spendGates ? await opts.spendGates(envelope.bid) : null
+  mark('admit_spend', t)
+  if (spend) return leave(spend, 'admission (spend)')
+
   // ── stage 1 · understand ─────────────────────────────────────────────────────────────────────
-  tAdmit = Date.now()
+  t = Date.now()
   const understanding = await understand(input)
-  mark('understand', tAdmit)
+  mark('understand', t)
 
   // ── stage 3 · decide (see the header — it precedes ground in M17) ────────────────────────────
   const tDecide = Date.now()
@@ -431,18 +503,20 @@ function recordOf(
   t0: number,
   u?: Understanding,
   declined?: readonly LaneName[],
+  gate?: string,
 ): TurnRecord {
   return {
     lane: result.lane,
-    reason: chosen?.reason ?? 'admission gate — decided before the classifiers ran',
+    reason: chosen?.reason ?? (gate ? gate + ' — decided before the classifiers ran' : 'admission gate — decided before the classifiers ran'),
     firedFeatures: u?.firedFeatures ?? [],
+    declined: declined ?? [],
     intentType: u?.intent.type ?? 'n/a',
     ariaIntentType: u?.ariaIntent.intent_type ?? 'n/a',
     complexity: u?.intent.complexity ?? 'n/a',
     groundingKind: grounding.kind,
     verified: verified.verified,
     status: result.status,
-    stageMs: { ...stageMs, ...(declined?.length ? { declined_lanes: declined.length } : {}) },
+    stageMs: { ...stageMs },
     totalMs: Date.now() - t0,
   }
 }

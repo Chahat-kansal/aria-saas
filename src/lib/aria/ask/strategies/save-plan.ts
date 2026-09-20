@@ -14,11 +14,26 @@
  * Nothing else changed: not the order of operations, not an error message, not a comment.
  */
 import { makeTurnResult } from '../pipeline/types'
-import type { StrategyFn } from '../pipeline/run-turn'
+import type { StrategyFn, TurnInput } from '../pipeline/run-turn'
+import type { TurnResult } from '../pipeline/types'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { upsertConversation } from '../pipeline/turn-persistence'
 
-export const savePlanStrategy: StrategyFn = async ({ input, understanding }) => {
+/**
+ * ⚠️ M17B PHASE 2 — THIS LANE RUNS AS A GATE, NOT AS A CANDIDATE, AND THE ORDER IS WHY.
+ *
+ * route.ts:372 put the `[ARIA_SAVE_PLAN]` sentinel BEFORE the spend gates (403) and BEFORE the two
+ * classifiers (447). Both matter:
+ *   · an owner who has exhausted the daily AI budget can still save a plan — it makes NO model call
+ *     and costs nothing, so refusing it on budget would block a free action;
+ *   · a UI sentinel must never pay for two classifier calls.
+ *
+ * Deciding it needs a string compare, not an `Understanding`, so it is exported as a plain function
+ * the route passes to `runTurn` as `savePlanGate`. `savePlanStrategy` below is the same code behind
+ * the `StrategyFn` shape, kept so the registry stays complete and the lane is dispatchable if a
+ * later sprint ever needs it from `decide()`. ONE implementation, two doors.
+ */
+export const savePlanGate: (input: TurnInput) => Promise<TurnResult | null> = async (input) => {
   const { bid, userId, message, conversationId } = input
   // ── Save-plan fast-path ────────────────────────────────────────────────────
   // When the UI sends [ARIA_SAVE_PLAN], save the pending_action to aria_actions
@@ -65,3 +80,6 @@ export const savePlanStrategy: StrategyFn = async ({ input, understanding }) => 
   // candidate. This is the `fall through` the original expressed by simply running on.
   return null
 }
+
+/** The same lane behind the `StrategyFn` shape. One implementation, two doors. */
+export const savePlanStrategy: StrategyFn = async ({ input }) => savePlanGate(input)

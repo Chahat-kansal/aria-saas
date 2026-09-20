@@ -125,7 +125,8 @@ describe('S7 phase 2 · one predicate, every call site', () => {
     for (const f of [
       'src/components/dashboard/BlockRenderer.tsx',
       'src/components/aria/BlockRenderer.tsx',
-      'src/app/api/aria/ask/route.ts',
+      // ⚠️ M17B PHASE 2 — the council lane moved here out of route.ts.
+      'src/lib/aria/ask/strategies/answer-council.ts',
     ]) {
       expect(code(read(f)), f).toMatch(/from '@\/lib\/aria\/block-content'/)
     }

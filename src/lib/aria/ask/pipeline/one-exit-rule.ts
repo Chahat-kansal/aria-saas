@@ -59,7 +59,8 @@ export const ONE_EXIT_ALLOWLIST = ['src/lib/aria/ask/pipeline/render.ts'] as con
  * It is an ARRAY rather than a constant so that emptying it is a one-line diff anyone can audit.
  */
 export const ONE_EXIT_GRANDFATHERED: readonly string[] = [
-  'src/app/api/aria/ask/route.ts',
+  // ⚠️ EMPTIED IN M17B PHASE 2. The route is now parse -> runTurn() -> done and constructs no
+  // response at all. From this commit it CANNOT exit early, and this list must stay empty.
 ]
 
 /** A line that constructs or returns an HTTP response. */

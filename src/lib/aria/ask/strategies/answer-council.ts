@@ -340,7 +340,26 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
               })
             }
           }
-        } catch { /* non-fatal — council proceeds without anchors */ }
+        } catch (anchorErr) {
+          /**
+           * ⚠️ M17B PHASE 2 — W6 INSIDE THE ROUTER. This was a BARE `catch { }` with no binding and
+           * no log, and it wraps ~245 lines: all eighteen ground-truth queries, `anchorValues`, and
+           * `turnProvenance = buildProvenance(...)`.
+           *
+           * If anything in there throws, the council answers with NO `available_ground_truth` and
+           * **`turnProvenance` stays null** — so the response carries `provenance: null` and not one
+           * figure in the answer can be tiered. That is M3's 0-of-288 missing tiers and S6's live
+           * finding that a real business turn carried no provenance, with a plausible cause: nothing
+           * anywhere recorded that it had happened.
+           *
+           * S9 phase 6 fixed the OUTER catch below — its comment even says "until now nothing
+           * recorded that it had happened" — and left this inner one silent.
+           *
+           * Still non-fatal, exactly as before: the council proceeds without anchors. Only the
+           * silence is gone. No control flow changed.
+           */
+          console.error('[aria/ask] council ground-truth anchors FAILED — answering with NO anchors and NO provenance:', (anchorErr as Error).message)
+        }
         augCtx = JSON.stringify(ctxParsed)
       } catch (e) {
         // S9 PHASE 6 (#7) — the council still answers, but WITHOUT the facts packet and the

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { conflictsWithHouseRules, neverDiscountSubjects, houseRuleRefusal } from './house-rule-guard'
+import { readTurnSource } from './ask/turn-source'
 
 // MS14 PHASE 6 — PERMANENT EVAL: "never discount coffee" means no coffee-discount card, ever.
 //
@@ -12,7 +13,12 @@ import { conflictsWithHouseRules, neverDiscountSubjects, houseRuleRefusal } from
 // The control case matters as much as the positive: with the rule ABSENT, behaviour is unchanged.
 
 const JUDGE = readFileSync(join(process.cwd(), 'src', 'lib', 'aria', 'judge.ts'), 'utf8')
-const ASK_ROUTE = readFileSync(join(process.cwd(), 'src', 'app', 'api', 'aria', 'ask', 'route.ts'), 'utf8')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ASK_ROUTE = readTurnSource()
 const ASK_CTX = readFileSync(join(process.cwd(), 'src', 'lib', 'aria', 'ask', 'business-context.ts'), 'utf8')
 const COUNCIL_CTX = readFileSync(join(process.cwd(), 'src', 'lib', 'aria', 'get-business-context.ts'), 'utf8')
 

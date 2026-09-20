@@ -3,12 +3,18 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { bestMatchingMessage, searchTerms, snippetAround } from './search-match'
 import type { ThreadMessage } from './conversation-branch'
+import { readTurnSource } from './ask/turn-source'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
 const SEARCH_ROUTE = read('src/app/api/aria/ask/search/route.ts')
 const THREAD_ROUTE = read('src/app/api/aria/ask/thread/route.ts')
-const ASK_ROUTE = read('src/app/api/aria/ask/route.ts')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ASK_ROUTE = readTurnSource()
 
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 

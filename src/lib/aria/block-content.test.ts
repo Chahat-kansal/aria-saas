@@ -3,13 +3,19 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isContentFreeBlock, dropContentFreeBlocks } from './block-content'
 import type { AskBlock } from './ask-types'
+import { readTurnSource } from './ask/turn-source'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
 const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 const DASH = read('src/components/dashboard/BlockRenderer.tsx')
 const ARIA = read('src/components/aria/BlockRenderer.tsx')
-const ROUTE = read('src/app/api/aria/ask/route.ts')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ROUTE = readTurnSource()
 
 const readouts = (items: unknown[]) => ({ type: 'brain_readouts', items } as unknown as AskBlock)
 

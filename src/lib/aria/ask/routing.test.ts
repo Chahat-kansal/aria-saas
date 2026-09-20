@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readTurnSource } from './turn-source'
 
 const root = join(__dirname, '..', '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
-const ROUTE = read('src/app/api/aria/ask/route.ts')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ROUTE = readTurnSource()
 const INTENT = read('src/lib/aria/ask/intent.ts')
 const ARIA_INTENT = read('src/lib/aria/ask/aria-intent.ts')
 const PROVIDER = read('src/lib/aria/providers/anthropic.ts')

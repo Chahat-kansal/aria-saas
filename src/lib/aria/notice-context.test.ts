@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { formatNoticeContext, isValidNoticeId, isValidNoticeSource, type NoticeRecord } from './notice-context'
+import { readTurnSource } from './ask/turn-source'
 
 const root = join(__dirname, '..', '..', '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
@@ -117,7 +118,7 @@ describe('S8 phase 3 · every deep link carries the reference, and the lookup is
     // Smoke Test Café, Global Liquor and Sip all have a row titled
     // "Briefing pipeline stalled — only 0 rows written in last 24h". An id-only lookup would be a
     // cross-business read waiting to happen.
-    const route = strip(read('src/app/api/aria/ask/route.ts'))
+    const route = strip(readTurnSource())
     const i = route.indexOf('noticeRef.source')
     expect(i, 'the notice lookup is not in the route').toBeGreaterThan(-1)
     const block = route.slice(i, i + 900)
@@ -128,7 +129,7 @@ describe('S8 phase 3 · every deep link carries the reference, and the lookup is
   })
 
   it('the route never trusts client-sent notice CONTENT', () => {
-    const route = strip(read('src/app/api/aria/ask/route.ts'))
+    const route = strip(readTurnSource())
     // Only an id and a source are read off the body; the row is re-read server-side.
     expect(route).toMatch(/notice_ref\?: \{ id\?: unknown; source\?: unknown \}/)
     expect(route).toMatch(/isValidNoticeId\(body\.notice_ref\?\.id\)/)

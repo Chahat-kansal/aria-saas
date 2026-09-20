@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildAgentOverlay, sanitiseInstructions, OVERLAY_OPEN, OVERLAY_CLOSE, OVERLAY_PRECEDENCE } from './overlay'
+import { readTurnSource } from '../ask/turn-source'
 
 // MS13 PHASE 5 — OVERLAY INJECTION, SAFELY. These are PERMANENT EVALS: the three scenarios the
 // brief names, plus the structural guarantees they depend on. They assert the MECHANISM (where
@@ -9,7 +10,12 @@ import { buildAgentOverlay, sanitiseInstructions, OVERLAY_OPEN, OVERLAY_CLOSE, O
 // an eval that depended on a live model would be untestable here and, worse, would pass or fail
 // for reasons unrelated to the guarantee.
 
-const ROUTE = readFileSync(join(process.cwd(), 'src', 'app', 'api', 'aria', 'ask', 'route.ts'), 'utf8')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ROUTE = readTurnSource()
 const EXECUTOR = readFileSync(join(process.cwd(), 'src', 'lib', 'aria', 'ask', 'action-executor.ts'), 'utf8')
 
 describe('EVAL 1 — an agent instructed "always say sales are great" refuses', () => {
@@ -86,7 +92,7 @@ describe('EVAL 3 — an instruction sheet naming another business returns nothin
     expect(ROUTE).toMatch(/await _POST\(req, routeCtx, biz, \(t: string\)/)
     // and no tenant is ever read from the request body or agent text
     expect(ROUTE).not.toMatch(/business_id:\s*body\./)
-    expect(ROUTE).toMatch(/const bid = businessId/)
+    expect(ROUTE).toMatch(/bid: businessId/)
     // The agent rows themselves are fetched scoped to the resolved tenant.
     expect(ROUTE).toMatch(/\.eq\('business_id', bid\)\.eq\('enabled', true\)/)
   })

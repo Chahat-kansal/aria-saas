@@ -293,6 +293,8 @@ export interface TurnRecord {
   readonly lane: LaneName
   readonly reason: string
   readonly firedFeatures: readonly FeatureName[]
+  /** ⚠️ The lanes that were OFFERED the turn and declined, in order — the waterfall, as a value. */
+  readonly declined: readonly LaneName[]
   readonly intentType: string
   readonly ariaIntentType: string
   readonly complexity: string

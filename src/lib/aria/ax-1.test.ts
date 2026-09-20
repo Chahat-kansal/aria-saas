@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { formatAxFigure, type AxFigure } from './ax-context-types'
 import { segmentFigures, hasProvenance } from './figure-provenance'
 import { resolveAutonomy, isPersistable, PERSISTABLE_MODES, mayActWithoutAsking } from './autonomy'
+import { readTurnSource } from './ask/turn-source'
 
 /**
  * MS16 · AX-1 — the mutation checks the sprint names, one describe block per phase.
@@ -22,7 +23,12 @@ const MOCKUP = read('docs/design/ask-aria-transition.html')
 const CSS = read('src/styles/ask-aria-transition.css')
 const SURFACE = read('src/components/ask-aria-ax/AskAriaTransition.tsx')
 const PROPOSAL = read('src/components/ask-aria-ax/ProposalCard.tsx')
-const ASK_ROUTE = read('src/app/api/aria/ask/route.ts')
+// ⚠️ M17B PHASE 2 — reads THE TURN, not a file. The Ask Aria turn is no longer one
+// 2,820-line route: it is a spine (lib/aria/ask/pipeline) and twelve strategies
+// (lib/aria/ask/strategies), with route.ts down to 182 lines that parse and delegate.
+// Every assertion below is still about something real; pointing it at a fixed path would
+// have meant asserting nothing. See lib/aria/ask/turn-source.ts.
+const ASK_ROUTE = readTurnSource()
 const PROVIDER = read('src/lib/aria/providers/anthropic.ts')
 const AX_PAGE = read('src/app/dashboard/ask-aria/ax/page.tsx')
 
