@@ -290,6 +290,8 @@ export interface VerifiedResult {
  * decision is spread across 25 regexes and lives only in the shape of the control flow.
  */
 export interface TurnRecord {
+  /** The tenant. Without it "which lane does Sip take" is not a question anyone can ask. */
+  readonly businessId: string
   readonly lane: LaneName
   readonly reason: string
   readonly firedFeatures: readonly FeatureName[]

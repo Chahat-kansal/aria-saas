@@ -434,7 +434,7 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
 
   const leave = (r: TurnResult, lane: string) => {
     const verified = verify(r)
-    opts.onRecord?.(recordOf(r, null, { kind: 'none' }, verified, stageMs, t0, undefined, undefined, lane))
+    opts.onRecord?.(recordOf(envelope.bid, r, null, { kind: 'none' }, verified, stageMs, t0, undefined, undefined, lane))
     return render(verified)
   }
 
@@ -487,7 +487,7 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
   mark('verify', tVerify)
 
   opts.onRecord?.(
-    recordOf(outcome.result, outcome.chosen, ground(input, understanding, outcome.chosen), verified, stageMs, t0, understanding, outcome.declined),
+    recordOf(envelope.bid, outcome.result, outcome.chosen, ground(input, understanding, outcome.chosen), verified, stageMs, t0, understanding, outcome.declined),
   )
 
   // ── stage 6 · render — THE ONLY EXIT ─────────────────────────────────────────────────────────
@@ -495,6 +495,7 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
 }
 
 function recordOf(
+  bid: string,
   result: TurnResult,
   chosen: Strategy | null,
   grounding: TurnGrounding,
@@ -506,6 +507,7 @@ function recordOf(
   gate?: string,
 ): TurnRecord {
   return {
+    businessId: bid,
     lane: result.lane,
     reason: chosen?.reason ?? (gate ? gate + ' — decided before the classifiers ran' : 'admission gate — decided before the classifiers ran'),
     firedFeatures: u?.firedFeatures ?? [],

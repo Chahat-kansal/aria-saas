@@ -298,3 +298,101 @@ is what keeps failure pattern #4 from returning.
 | **mutation** | a brand-new early exit in `_POST` → guard **red at route.ts:115**; reverted → green, and the grandfathered warning is gone |
 | **gates** | tsc 0 · vitest **136 files / 1790 tests** · one-exit guard 0 · canon rail **PASS, no bypass needed** · `BUILD_EXIT=0` · hook ran |
 | **NOT done** | the turn record is a `console.log` — phase 3 decides where it is persisted, and proposes DDL rather than smuggling JSONB. No replay yet (phase 4), no `check:live` yet (phase 5). |
+
+---
+
+## PHASE 3 — THE TURN RECORD ✅
+
+**The question nobody in this repo has ever been able to answer: *why did this message go to that
+lane, and what else was offered first?*** Reconstructing why the founder's *"tidy up before the
+weekend"* reached the general lane (M12) meant re-running both classifiers by hand, because the lane
+that took it returned before anything logged a thing.
+
+Every turn now emits one record carrying the lane, **the reason it won**, **which candidates were
+offered and declined**, the features that fired, the grounding kind, the verification verdict, the
+status and the per-stage timings.
+
+### ⚠️ NO DDL WAS INVENTED, AND NOTHING WAS SMUGGLED
+
+`aria_ai_calls` fits the core, **using its columns for exactly what they are for** — it is the
+canonical per-call ledger, written through `logAICallSafe()`, the one entry point that reads the
+returned error. (That matters here: whole `agent_key`s once wrote **zero rows for weeks** because a
+`role`/`provider` CHECK violation was rejected silently.)
+
+| column | carries |
+|---|---|
+| `agent_key` | `'ask_aria_router'` — a new key; only `role` and `provider` carry CHECKs |
+| `role` / `provider` | `'other'` / `'other'` — both on the CHECK list. No model was called to make this decision |
+| `business_id` | the tenant — without it *"which lane does Sip take"* is not a question anyone can ask |
+| `latency_ms` | the whole turn |
+| `request_summary` | `lane — reason`, readable at a glance |
+| `response_summary` | the decision as JSON: lane, **declined**, grounding, verified, status, both intents |
+| `learning_signal` | the features that fired |
+
+`response_summary` already carries compact JSON summaries on **five other agent keys in this very
+pipeline** — `health_signals`, `goal_context`, `open_loops`, `advice_weights`,
+`industry_benchmark`. This is that established pattern, not a new use of the column.
+
+### ⛔ PROPOSED DDL — PARKED (RULE 10a: schema is never mine to write)
+
+What does **not** fit is parked rather than smuggled. Per-stage timings, the full 18-boolean feature
+vector and a typed verification verdict want real columns you can aggregate on. *"What is the p95 of
+stage `act` on the council lane this week"* is a question M18 will want to ask and **cannot ask of a
+text blob.**
+
+```sql
+-- PROPOSED, NOT APPLIED. For the founder to review; Claude applies DDL via Supabase MCP, not this run.
+create table public.aria_turn_records (
+  id              uuid primary key default gen_random_uuid(),
+  business_id     uuid not null references public.businesses(id) on delete cascade,
+  created_at      timestamptz not null default now(),
+  lane            text not null,
+  reason          text not null,
+  declined        text[] not null default '{}',
+  fired_features  text[] not null default '{}',
+  intent_type     text,
+  aria_intent_type text,
+  complexity      text,
+  grounding_kind  text not null,
+  verified_ran    boolean not null default false,
+  verified_reason text,
+  status          int not null,
+  stage_ms        jsonb not null default '{}'::jsonb,
+  total_ms        int not null
+);
+create index aria_turn_records_biz_time on public.aria_turn_records (business_id, created_at desc);
+create index aria_turn_records_lane     on public.aria_turn_records (business_id, lane, created_at desc);
+alter table public.aria_turn_records enable row level security;
+-- RLS: owner-read only; writes are service-role (the route) — policy to be written with the founder.
+```
+
+Until that exists, **the console line carries the full record**, including the stage timings the
+table has no column for. It is one `[ask-aria] turn {...}` line per turn, greppable in Vercel logs.
+
+### VERIFY — DRIVEN BY RUNNING A TURN, NOT BY BUILDING A SHAPE
+
+The assertions run `runTurn()` with a registry whose council **declines**, exactly as it does in
+production when it fails or returns no briefing, and read what the spine emits:
+
+```
+lane:     'main'
+declined: ['council']          ← the council was offered, and declined, and the record says so
+reason:   'no earlier lane claimed the turn'
+fired:    [… 'isStrategicQuestion' …]
+```
+
+**Anti-vacuity:** a turn whose first candidate answers records `declined: []` — not a missing field.
+If `declined` were always populated or always absent it would carry no information.
+
+Also asserted: the row uses only CHECK-legal `role`/`provider` values; the stored decision names the
+lane *and* the declined candidates; and a long record stays inside the summary columns (500 / 200 /
+100). An empty `learning_signal` would read as *"not recorded"*, so nothing-fired writes `'none'` —
+recorded, and it was none.
+
+| | |
+|---|---|
+| **files changed** | `turn-record.ts` (+108, rewritten) · `turn-record.test.ts` (+175) · `types.ts` (`TurnRecord.businessId`) · `run-turn.ts` (carries the tenant) |
+| **sibling sweep** | other writers of a per-turn routing record: **0**. Other `aria_ai_calls` writers bypassing `logAICallSafe`: 0 in the turn pipeline. |
+| **mutation** | covered by the anti-vacuity pair — a turn whose first candidate answers must record `declined: []`, so a hard-coded list fails |
+| **gates** | tsc 0 · vitest **137 files / 1798 tests** · one-exit guard 0 · canon rail pass · `BUILD_EXIT=0` |
+| **PARKED** | `aria_turn_records` DDL above. The core record persists to `aria_ai_calls` today; the full record is in the log line. |
