@@ -117,7 +117,12 @@ describe('M13 phase 3 · the gateway is a door, not a helper', () => {
   it('MUTATION — dropping the businessId requirement is what would skip the log', () => {
     // The sprint's named mutation for this phase. The gateway does not perform the insert; it
     // guarantees the insert's precondition. Removing the guard is therefore exactly "skip the log".
-    const mutated = GATEWAY.replace(/if \(!req\.businessId\) \{[\s\S]*?\n  \}\n/, '')
+    // WARNING: `\r?\n`, not `\n`. core.autocrlf=true here and .gitattributes forces LF only
+    // for scripts/git-hooks/pre-push, so EVERY OTHER FILE IS CRLF ON A WINDOWS CHECKOUT — this
+    // regex then matched nothing, `mutated === GATEWAY`, and the mutation this test exists to
+    // perform never happened. It passed only because the working copy happened to be LF.
+    // Surfaced in M17B when a `git checkout` restored the file to CRLF.
+    const mutated = GATEWAY.replace(/if \(!req\.businessId\) \{[\s\S]*?\r?\n  \}\r?\n/, '')
     expect(mutated).not.toBe(GATEWAY)
     expect(code(mutated)).not.toContain('businessId is required')
     // And the provider's gate is what makes that consequential.

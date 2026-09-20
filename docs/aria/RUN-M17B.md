@@ -396,3 +396,148 @@ recorded, and it was none.
 | **mutation** | covered by the anti-vacuity pair — a turn whose first candidate answers must record `declined: []`, so a hard-coded list fails |
 | **gates** | tsc 0 · vitest **137 files / 1798 tests** · one-exit guard 0 · canon rail pass · `BUILD_EXIT=0` |
 | **PARKED** | `aria_turn_records` DDL above. The core record persists to `aria_ai_calls` today; the full record is in the log line. |
+
+---
+
+## PHASE 4 — REPLAY ✅ — and it compared more than the body
+
+**30 real messages from `aria_conversations`, sent to the pre-spine route and to the spine, on the
+same machine, against the same seeded fixture, with byte-identical instrumentation.**
+
+### ⚠️ THE RESULT THAT MATTERS: THE RESTRUCTURE IS QUIETER THAN THE NOISE
+
+| comparison | lanes differing, of 30 |
+|---|---|
+| **OLD vs OLD** — *the same code, run twice* | **9** |
+| **OLD vs NEW** — *the entire restructure* | **8** |
+
+**Running the unchanged code twice produces MORE lane differences than the whole restructure does.**
+
+- **6 of the 8** old-vs-new flips (`m03 m07 m08 m12 m17 m24`) **also flip old-vs-old** — provably noise.
+- Unique to old-vs-new: **2** (`m09 m18`). Unique to the control: **3** (`m19 m28 m29`).
+- **Direction is bidirectional in both**, which a regression never is:
+  control →council 5 / council→ 3; test →council 3 / council→ 4.
+
+| axis | OLD | NEW |
+|---|---|---|
+| status codes differing | — | **0 of 30** |
+| empty responses | 6 | **6** — identical |
+| model calls, total | 86 | 83 |
+| queries, total | 3,406 | 3,325 |
+| query delta, same-lane turns | control median **+0** (−13…+9) | test median **+1** (−15…+10) |
+
+**The one systematic difference is +1 query per turn, and it is confirmed, not inferred:** exactly
+**30 `ask_aria_router` rows for 30 turns**. That is phase 3's turn record writing one
+`aria_ai_calls` row per turn — a deliberate addition, not a regression.
+
+### ⚠️ THE SPRINT'S PREMISE HAD TO BE CORRECTED TWICE, BOTH TIMES BY MEASUREMENT
+
+**1 · A byte-for-byte body comparison is impossible for any lane that calls a model.** Checked
+against production rather than reasoned about: *"how are we doing?"* has been asked twice and has
+**two distinct stored answers, differing inside the first 80 characters.** Same code, same question.
+
+**2 · ⚠️ THE LANE ITSELF IS NON-DETERMINISTIC.** The classifiers are LLM calls, so the router
+inherits their variance. On the **pre-spine code alone**, *"Tidy up before the weekend"* routed
+`general → general → general → question` across four runs. **This sits underneath M12's entire
+investigation: part of why nobody could reproduce that lane choice is that it does not always
+happen.** It is also exactly what M19 exists to remove.
+
+So "differences are bugs in this sprint" cannot be applied literally to prose *or* to lanes. Both
+carry a measured noise floor, and the control is what makes the 8 interpretable.
+
+### TWO TURNS WORTH READING INDIVIDUALLY
+
+**`m24` — "generate a poster that says we are open from 3-7pm".** OLD: `general`, 14 queries — it
+never reached the image path at all, because the classifier said *general* and the general lane
+claims the turn at route.ts:824, long before the image fast-path at 2362. NEW: reached `main` and
+took the `image` sub-exit, 71 queries. **That the image path costs ~71 queries is direct
+confirmation that phase 2's refusal to hoist `image` into a top-level lane was right** — it really
+does sit behind the 19-query context build. Hoisting it would have rendered a byte-identical body
+while skipping them. *(It also flips in the control, so it is noise, not a spine change.)*
+
+**`m03` — "how are you".** OLD ran a **four-brain council**: 153 queries, 5 model calls, for *"how
+are you"*. NEW took the general lane: 15 queries, 1 model call. Classifier variance, not a spine
+change — but a vivid picture of the cost swing the regex/classifier router produces.
+
+### HOW THE COUNCIL CACHE WAS BEATEN — WITHOUT DELETING OR MUTATING ANYTHING
+
+The council caches on `questionHash + dataEpoch`, and `dataEpoch` is the newest sale's timestamp.
+Two obvious moves were both barred: **deleting `council_cache` rows is on RULE 20's NEVER list**, and
+**re-dating fixture sales (S6's approach) would have changed the very anchors under comparison.**
+
+`writeCouncilCache` sets `expires_at = now + 5 min` and `readCouncilCache` filters on it — so
+**letting the TTL expire busts the cache with no deletion, no data mutation, and an identical
+epoch.** Confirmed at the start: 0 live cache rows for the fixture. `served_by` distinguishes
+`council_fresh` from `council_cache` in every row, and **every council turn in both runs reports
+`council_fresh`.**
+
+### THE HARNESS — SYMMETRIC BY CONSTRUCTION, COMMITTED TO NEITHER TREE
+
+Queries have no ledger, so they were counted in-process via the existing `Proxy` in
+`supabase-lazy.ts`; model calls at `callModel`. **Applied byte-identically to both worktrees and
+verified with `diff`**, so it cannot bias the comparison. Reverted from the main tree afterwards;
+`git status src/` is clean.
+
+`pg_stat_statements` was rejected as the query source: it is database-wide, so crons and other
+traffic would pollute a per-turn delta.
+
+**The rate limiter had to be bypassed, and the gate was compared before it was.** `ai` is
+**20/hour, hard-coded**, with an in-memory per-process fallback — 30 turns × 2 sides cannot run under
+it. Before bypassing, the exhausted window was used to capture the real thing: OLD returned exactly
+`{"error":"Rate limit exceeded. Try again later."}` at 429, which is byte-for-byte what
+`admitBeforeParse` returns and what its unit test asserts.
+
+### ⛔ URGENT, AND NOT MINE TO FIX: THE ANTHROPIC ACCOUNT RAN OUT OF CREDIT
+
+```
+400 invalid_request_error — "Your credit balance is too low to access the Anthropic API.
+                             Please go to Plans & Billing to upgrade or purchase credits."
+```
+
+**First failure 07:09:25 today, on the fixture only. Sip's live business had 32 successful Anthropic
+calls and zero failures, last at 06:01. This replay consumed the remainder.** The classifiers fail
+over to Google and keep working — which is why lane selection stayed measurable — but the answer
+call empties: **6 of 30 turns returned `response: ""` on BOTH sides identically.**
+
+Fixing it is a **billing action**, which is money. **PARKED** per RULE 20. It will make phase 5's
+`check:live` red, and that is the honest outcome rather than a massaged one.
+
+### TWO OF MY OWN ERRORS, BOTH RECOVERED
+
+**1 · I deleted `node_modules`.** To avoid a second install I junctioned the old worktree's
+`node_modules` to the main one; `git worktree remove --force` followed the junction and deleted the
+real directory. Recovered with `npm ci --ignore-scripts` (1,651 packages) — plain `npm ci` fails on a
+**pre-existing Windows incompatibility**: `@met4citizen/headtts`'s postinstall runs a Unix
+`mkdir -p -m 777` under `cmd.exe`. The hook was reinstalled by hand afterwards, since
+`--ignore-scripts` skips `prepare`. **Source, git history and all four commits were untouched** —
+verified before reinstalling. *Never junction `node_modules` into a worktree you intend to remove.*
+
+**2 · The first OLD re-run returned 30 × 500.** Restarting the worktree server with the harness flag,
+I dropped the env sourcing it needs — the worktree cannot hold its own `.env.local` (correctly
+deny-protected), so it inherits the parent's. Diagnosed from the server log, not the exit code:
+*"Your project's URL and Key are required to create a Supabase client!"*. No credit burned — every
+one of those turns made zero model calls.
+
+### ⚠️ AND ONE LATENT DEFECT THE RECOVERY SURFACED
+
+Restoring files with `git checkout` re-materialised them as **CRLF** (`core.autocrlf=true`;
+`.gitattributes` forces LF **only** for `scripts/git-hooks/pre-push`). That turned
+`src/lib/ai/gateway.test.ts` red:
+
+```js
+GATEWAY.replace(/if \(!req\.businessId\) \{[\s\S]*?\n  \}\n/, '')   // \n never matches \r\n
+```
+
+**WALL 1's own mutation test fails on any fresh Windows checkout** — the regex matches nothing, so
+`mutated === GATEWAY` and the assertion trips. It goes **red**, not vacuously green, so nothing was
+being falsely claimed; but the mutation it exists to perform cannot run there. Fixed to `\r?\n`,
+which strengthens it rather than loosening it, with the reason written in the file.
+
+| | |
+|---|---|
+| **sample** | 30 real messages from `aria_conversations` (**635 conversations exist, not the 290 the paste states**), spanning general · smalltalk · council · data-lookup · brevity · action-planner · image · deliverable · spreadsheet · nav · non-business |
+| **runs** | OLD ×2 (baseline + control), NEW ×1 — 90 live turns, all 200 |
+| **three counts** | **lane/shape diffs 8 of 30** (control: 9) · **query delta median +1** (control: +0) · **model calls 86 → 83** |
+| **explained** | every one. 6 of 8 lane flips reproduce in the control; 2 are within a floor of 9; the +1 query is the turn record, proven by 30 `ask_aria_router` rows |
+| **gates** | tsc 0 · vitest **137 files / 1798 tests** · one-exit guard 0 · canon rail pass |
+| **NOT done** | prose was never compared — impossible for two independent, measured reasons. No production build was run for the replay: **both sides ran `next dev`**, which is fair because it is the same on both, and HEAD's production build is proven separately by `BUILD_EXIT=0`. |
