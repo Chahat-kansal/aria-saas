@@ -1,7 +1,132 @@
 # RUN-M17B · LAND THE SPINE
 
-16 September 2026. Autonomous run, RULE 20. Written incrementally — a halted run still leaves a
-readable log.
+**16–20 September 2026 · autonomous run, RULE 20 · six phases, six commits, all pushed. Build
+verified green.**
+
+**`route.ts` went from 2,820 lines and 28 exits to 182 lines and zero. No lane in Ask Aria can
+return without passing every stage — and the guard that enforces it now has an empty allow-list.**
+
+## THE THREE THINGS YOU MOST NEED TO KNOW
+
+**1. ⛔ THE ANTHROPIC ACCOUNT IS OUT OF CREDIT, AND MY REPLAY IS WHAT SPENT THE LAST OF IT.**
+`"Your credit balance is too low to access the Anthropic API."` First failure **07:09:25 on 20 Sep**,
+on the test fixture. Sip's live business had **32 successful calls and zero failures at 06:01**, so
+this is new. The classifiers fail over to Google and keep working, but the answer call empties:
+**Ask Aria's main lane returns `response: ""`** until credit is added. Fixing it is a **billing
+action — money — so it is PARKED.** It needs you, and it is the only thing in this run that does.
+
+**2. ⚠️ THE RESTRUCTURE IS QUIETER THAN THE NOISE — measured, with a control.**
+
+| | lanes differing, of 30 real messages |
+|---|---|
+| **the same code, run twice** | **9** |
+| **the entire restructure** | **8** |
+
+Running the *unchanged* code twice produces **more** lane differences than the whole spine migration.
+Six of the eight flips reproduce in the control; the flips go both directions in both; status diffs
+are **0**; empty responses are **6 vs 6, identical**. The single systematic difference is **+1 query
+per turn**, confirmed by exactly **30 `ask_aria_router` rows for 30 turns** — that is the new turn
+record, a deliberate addition.
+
+`check:live` agrees: **`1 failed · 4 skipped · 5 passed` — byte-for-byte what S6 reported**, the same
+five passing and the same one failing.
+
+**3. ⚠️ THE LANE ITSELF IS NON-DETERMINISTIC, AND THIS REFRAMES M12.**
+The classifiers are LLM calls, so the router inherits their variance. On the **pre-spine code
+alone**, *"Tidy up before the weekend"* routed **`general → general → general → question`** across
+four runs. **Part of the reason nobody could ever reproduce why that message reached the general
+lane is that it does not always.** That is precisely what **M19** exists to remove.
+
+## WHAT SHIPPED
+
+| phase | | |
+|---|---|---|
+| **0 · the bypass** | ✅ `5442557e` | three lines named with source→destination; `CLAUDE.md` wording proposed |
+| **1 · land the lanes** | ✅ `8b940694` | 28 exits wrapped; six silent failures, each with a test |
+| **2 · route `_POST`** | ✅ `3a796aef` | **2,820 → 182 lines**, 28 exits → 0, grandfather list emptied |
+| **3 · the turn record** | ✅ `255ef6ba` | which lane won, and **which candidates declined** |
+| **4 · the replay** | ✅ `b437b4dc` | 90 live turns, three counts, with a noise floor |
+| **5 · `check:live`** | ✅ this commit | identical to S6, assertion for assertion |
+
+## THE THREE BYPASSED LINES — NAMED, AS AUTHORISED
+
+Each **verified byte-identical between source and destination by script** — that identity is the
+entire justification, because it is what makes this a move rather than new code.
+
+| rule | source → destination |
+|---|---|
+| `ask-aria-prompt-outside-rail` | `route.ts:2149` → `strategies/main.ts:730` |
+| `ad-hoc-revenue-sum` | `route.ts:1168` → `strategies/answer-council.ts:147` |
+| `ad-hoc-revenue-sum` | `route.ts:1535` → `strategies/main.ts:116` |
+
+**No allow-list entry was added anywhere.** The bypass expired the moment phase 1 landed; phases 2–5
+pushed through the hook clean. The other **20 violations were fixed properly**, and six of them were
+hiding real defects.
+
+**The proposed `CLAUDE.md` wording is in phase 0** — a bypass is permitted *only* for a pure file
+move, *only* with byte-identity proved by script, *only* with every line enumerated, **never** for
+new code, **never** as an allow-list entry. It resolves the RULE 14 / RULE 20 contradiction that
+halted M17. **You decide whether to adopt it; this run did not edit `CLAUDE.md`.**
+
+## THE SIX SILENT FAILURES — ALL FIXED, ALL WITH A TEST THAT FAILS WITHOUT THE FIX
+
+A discarded Supabase error is invisible by nature — it never throws, so nothing goes red. **6 of 6
+went red** when their report line was deleted.
+
+1. **The mass-confirm re-stage** — *the injection backstop's own write*. If rejected, the owner is
+   asked to reply "confirm" against a re-stage that was never stored, **so the second confirmation
+   the mass-mutation gate depends on can never arrive. The gate looks present and cannot close.**
+2. **The pending-action read** — reads as *"no pending action"*, so an approved action never runs.
+3. **The clear-after-execute** — the action has already run; the next "yes" **re-runs it**.
+4. **save-plan's `aria_actions` INSERT** — *"Plan saved"*, and an empty dashboard.
+5. **`upsertConversation`'s existing-thread read** — creates a **second conversation**.
+6. **The per-minute rate-limit COUNT** — null reads as "no calls", **letting the limit through**.
+
+**And a seventh, found by looking:** `answer-council.ts:343` was a **bare `catch { }`** — no binding,
+no log — wrapping **245 lines**: all eighteen ground-truth queries *and*
+`turnProvenance = buildProvenance(...)`. If anything inside threw, the council answered with **no
+anchors and `provenance: null`**, and nothing recorded it. That is M3's 0-of-288 missing tiers with a
+plausible mechanism. S9 fixed the *outer* catch and left this one silent.
+
+## `route.ts` BEFORE AND AFTER
+
+```
+before   2,820 lines · 28 `return NextResponse` · 22 of them before the council gate
+after      182 lines · parse → runTurn() → done · ZERO responses constructed
+```
+
+A brand-new early exit added to `_POST` is caught at `route.ts:115` with the allow-list empty;
+removed, the guard passes over 28 files. **From this commit the route cannot exit early.**
+
+## FOUR MORE FINDINGS, NONE OF THEM MINE TO FIX
+
+- **`npm run check:live` cannot start its own server on Windows** — `'NODE_OPTIONS' is not
+  recognized`. **S6 only ever passed because a server happened to already be listening** and
+  Playwright reused it. RULE 3a makes this the last gate of every sprint. One-line fix, yours.
+- **`gateway.test.ts` — WALL 1's own mutation test — fails on any fresh Windows checkout**
+  (`core.autocrlf=true`, regex hard-codes `\n`). Fixed here to `\r?\n`.
+- **`npm ci` fails on Windows**: `@met4citizen/headtts`'s postinstall runs a Unix `mkdir -p -m 777`
+  under `cmd.exe`. `npm ci --ignore-scripts` works, but skips the git-hook install.
+- **`aria_conversations` holds 635 conversations, not the 290 the paste states.**
+
+## TWO OF MY OWN ERRORS
+
+- **I deleted `node_modules`.** I junctioned it into the throwaway worktree; `git worktree remove
+  --force` followed the junction. Recovered from the lockfile; **source, history and all commits
+  verified untouched first.** *Never junction `node_modules` into a worktree you will remove.*
+- **The first old-side replay returned 30 × 500** — I restarted the worktree server without the env
+  it inherits. Diagnosed from the server log, not the exit code. No credit burned.
+
+## WHAT THIS SPRINT DELIBERATELY DID NOT DO
+
+**Assertion 3 is still red, and assertion 5 is still ⊘ — the sprint expected both to change state,
+and they did not.** `verify()` is still a pass-through stamping `{ ran: false, reason: 'M18' }`;
+`turnProvenance` is still built only inside the council lane; the constitution is still not on that
+lane. **M17B built the place where grounding and verification become mandatory. M18 fills it.**
+
+---
+
+16–20 September 2026. Written incrementally as the run went — a halted run still leaves a readable log.
 
 ---
 
@@ -541,3 +666,113 @@ which strengthens it rather than loosening it, with the reason written in the fi
 | **explained** | every one. 6 of 8 lane flips reproduce in the control; 2 are within a floor of 9; the +1 query is the turn record, proven by 30 `ask_aria_router` rows |
 | **gates** | tsc 0 · vitest **137 files / 1798 tests** · one-exit guard 0 · canon rail pass |
 | **NOT done** | prose was never compared — impossible for two independent, measured reasons. No production build was run for the replay: **both sides ran `next dev`**, which is fair because it is the same on both, and HEAD's production build is proven separately by `BUILD_EXIT=0`. |
+
+---
+
+## PHASE 5 — `check:live` ✅ — and it reports EXACTLY what S6 reported
+
+Run against a **real production build** (`BUILD_EXIT=0`, `npx next start -p 3000`), with the fixture
+freshly seeded (`$22.50 today` — the same figure S6 verified).
+
+```
+Running 10 tests using 1 worker
+  ok  1  7. a price-changing request reaches the route                                 (19.8s)
+  ok  2  8. ⚠️ NOTHING WAS PRICED — the gate held                                      (196ms)
+  -   3  9. a proposal was recorded, pending, and unexecuted
+  ok  4  0. the run was able to check anything at all                                  (2ms)
+  ok  5  1. the request LEFT the client and reached the route — M12: the chat POST never fired  (6.9s)
+  ok  6  2. the answer STREAMED and SETTLED — M4: the watchdog                         (8.4s)
+  x   7  3. the STORED TURN carries provenance anchors — M3: 0 of 288 conversations did (197ms)
+  -   8  4. an anchored figure RESOLVES TO REAL ROWS — the moat
+  -   9  5. the answer was CONSTITUTION-GOVERNED — M12: the bathroom answer
+  -  10  6. the ledger records WHICH PROVIDER served it — M8/M13B
+
+  Error: the stored turn carries no provenance — every figure in it renders unanchored
+    expect(received).not.toBeNull()   Received: null
+    at tests\check-live\ask.spec.ts:177
+
+  1 failed · 4 skipped · 5 passed        CHECKLIVE_EXIT=1
+```
+
+### BEFORE AND AFTER — IT IS THE SAME, ASSERTION FOR ASSERTION
+
+| | assertion | S6 | M17B |
+|---|---|---|---|
+| 0 | the run could check anything at all | ✓ | **✓** |
+| 1 | the request LEFT the client and reached the route | ✓ | **✓** |
+| 2 | the answer STREAMED and SETTLED | ✓ | **✓** |
+| **3** | **the STORED TURN carries provenance anchors** | **✗** | **✗** |
+| 4 | an anchored figure RESOLVES TO REAL ROWS | ⊘ | **⊘** |
+| **5** | **the answer was CONSTITUTION-GOVERNED** | **⊘** | **⊘** |
+| 6 | the ledger records WHICH PROVIDER served it | ⊘ | **⊘** |
+| 7 | a price-changing request reaches the route | ✓ | **✓** |
+| 8 | **NOTHING WAS PRICED — the gate held** | ✓ | **✓** |
+| 9 | a proposal is pending and unexecuted | ⊘ | **⊘** |
+| | | `1 failed · 4 skipped · 5 passed` | `1 failed · 4 skipped · 5 passed` |
+
+**Byte-for-byte the same tally. For a sprint whose entire claim is that behaviour did not change,
+that is the strongest thing this tool can say.** A whole turn — request, stream, settle, store,
+propose — ran end to end through the new spine, and the money gate held.
+
+### ⚠️ ASSERTION 3 IS STILL RED. SAYING SO PLAINLY.
+
+The sprint said assertions 3 and 5 were expected to **change state**. **They did not.** M17B built
+the place where grounding and verification become mandatory; it did not fill it:
+
+- `verify()` is still a pass-through stamping `{ ran: false, reason: 'M18 …' }`;
+- `turnProvenance` is still built **only inside the council lane's anchor block**, so a turn on any
+  other lane stores no provenance;
+- the constitution is still **not** on the council lane.
+
+All three were declared out of scope at the top of this run and at the top of M17's. **M18 is where
+grounding becomes unconditional and the verifier moves onto stage 5.** Until then assertion 3 is red
+for the same reason it was red in S6, and it should stay red.
+
+Phase 4 found the mechanism that may also be feeding it: the council's anchor block was wrapped in a
+**bare `catch { }`** that swallowed everything — see phase 2. That is now logged.
+
+### ⚠️ `npm run check:live` CANNOT START ITS OWN SERVER ON WINDOWS — AND S6 ONLY PASSED BY ACCIDENT
+
+The first attempt died before testing anything:
+
+```
+[WebServer] 'NODE_OPTIONS' is not recognized as an internal or external command,
+Error: Process from config.webServer was not able to start. Exit code: 1
+```
+
+`webServer.command` is `npm run build && npm run start`, and `package.json`'s build script is
+`NODE_OPTIONS="--max-old-space-size=6144" next build` — a POSIX env prefix `cmd.exe` cannot parse.
+**Pre-existing; nothing to do with M17B.**
+
+**And it explains how S6 ever ran this gate:** `reuseExistingServer: !process.env.CI`. S6 had a
+server already listening on the port, so Playwright reused it and **never executed the broken build
+command**. RULE 3a makes `check:live` the last line of every sprint's gate list — and locally it has
+only ever run *because a server happened to already be there*.
+
+This run does the same thing **deliberately and says so**: `npx next build` (`BUILD_EXIT=0`), then
+`npx next start -p 3000` directly, bypassing the npm script. So it is a genuine run against a real
+production build. **The underlying defect is NOT fixed here** — `package.json`'s scripts are outside
+this sprint's file domain, and the fix (`cross-env`, or moving the flag into `.npmrc`/`NODE_OPTIONS`
+in CI) is a one-line change the founder should make knowingly. **Recorded, not smuggled.**
+
+### WHAT THE RUN ITSELF REPORTED, UNPROMPTED
+
+```
+[check:live] fixture "Sip (E2E Test)" (00000000-0000-4000-a000-000000000001), 3 completed sales
+[check:live] active business pinned to the fixture
+[check:live] fixture sales re-dated (moves the data epoch, defeats the council cache)
+[check:live] WARN TEST_USER_PASSWORD does not match smoke-test@ariaos.site (Invalid login
+             credentials). The login FORM was not exercised; this run used an admin-minted session.
+             Resetting that password is an authorisation action and is parked.
+```
+
+S6's two standing caveats are **both still true**: the login form is still not exercised, and the
+password is still wrong. Still parked — resetting it is an authorisation action.
+
+| | |
+|---|---|
+| **result** | `1 failed · 4 skipped · 5 passed`, exit 1 — **identical to S6** |
+| **assertion 3** | **still ✗**, and expected to be until M18 |
+| **assertion 5** | **still ⊘**, same reason |
+| **gates** | tsc 0 · vitest 137 files / 1798 tests · one-exit guard 0 · canon rail pass · `BUILD_EXIT=0` |
+| **NOT done** | the `npm run check:live` Windows defect is reported, not fixed (outside the file domain). The Anthropic credit remains exhausted and **parked** — it is a billing action. |
