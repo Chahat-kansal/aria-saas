@@ -570,6 +570,172 @@ test rather than by my word.
 
 ---
 
+### PHASE 3 — TESTS CANNOT SPEND MONEY (WALL 11) · commit `pending`
+
+**SCOPE** · convert the accident at the top of this log into a guarantee. **Lane D** (test config).
+**NOT-SCOPE** · `check:live`, which stays live by design.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `vitest.setup.ts` | **new**, 135 | WALL 11: scrubs provider keys, blocks provider hosts |
+| `vitest.config.ts` | +9 | `setupFiles`, with the one-commit warning in a comment |
+| `src/lib/live-model-guard.test.ts` | **new**, 112 | 12 tests, by **tripping** the guard |
+| `src/lib/__fixtures__/m18b-module-scope-key.ts` | **new**, 16 | a module that reads a key at import time |
+
+**TWO MECHANISMS, AND THE SECOND IS THE ONE THAT SURVIVES A FUTURE MISTAKE**
+
+1. **The provider keys are scrubbed from `process.env`**, so a client cannot be *built* with one even
+   if the environment supplies it — CI secrets, a shell export, or the `dotenv` line someone adds to
+   make a single integration test work. Scrubbed at setup **and** re-scrubbed in a `beforeEach`,
+   because `vi.stubEnv`, a stray assignment, or a module setting a default on import can put one back
+   mid-suite.
+2. **`fetch` to a provider host throws**, so a client built with a hard-coded or inlined key still
+   cannot reach anyone. Ten hosts, matched on hostname including subdomains.
+
+**The failure names the host, the file AND the test**, because *"something tried to call Anthropic"*
+across 147 files is not a diagnosis:
+
+```
+M18B WALL 11 — a unit test tried to reach a LIVE MODEL PROVIDER (api.anthropic.com).
+  in: src/lib/m18b-throwaway-live.test.ts › a test that tries to spend money > calls Anthropic for real
+  Unit tests must never spend money. Mock the provider, or the module that calls it —
+  every existing test in this repo does (see e.g. src/lib/ai-router-breaker.test.ts).
+  `npm run check:live` is where real calls belong: once per sprint, on purpose.
+  Deliberate exception, used by nothing in CI: ARIA_ALLOW_LIVE_MODELS=1
+```
+
+**⚠️ PROVIDER HOSTS ONLY, NOT ALL NETWORKING** — a blanket `fetch` ban would fail tests that
+legitimately stub or call non-provider URLs, and a guard people must disable to get work done is one
+that gets disabled permanently. A test asserts a non-provider host is *not* blocked.
+
+**⚠️ SUPABASE KEYS ARE DELIBERATELY NOT SCRUBBED.** They are not a spend risk, tests mock the client,
+and removing them could change behaviour where they are legitimately provided. This guard is about
+money.
+
+**⚠️ NOT A KEY, A FRAGMENT OR A LENGTH ANYWHERE.** The setup holds a list of variable **names** and
+never reads, logs or compares a value — this sprint's standing rule, applied to the file whose whole
+job is handling keys.
+
+**VERIFY — BOTH RUNS PASTED, as the brief asks**
+
+A throwaway test that tries two live calls. **Run 1 — the guard fires, suite fails:**
+
+```
+VITEST_EXIT=1
+⎯⎯⎯ Failed Tests 2 ⎯⎯⎯
+Error: M18B WALL 11 — a unit test tried to reach a LIVE MODEL PROVIDER (api.anthropic.com).
+  in: src/lib/m18b-throwaway-live.test.ts › a test that tries to spend money > calls Anthropic for real
+Error: M18B WALL 11 — a unit test tried to reach a LIVE MODEL PROVIDER (generativelanguage.googleapis.com).
+  in: src/lib/m18b-throwaway-live.test.ts › a test that tries to spend money > calls Gemini for real
+      Tests  2 failed (2)
+```
+
+**Run 2 — throwaway deleted, suite green:**
+
+```
+VITEST_EXIT=0
+ Test Files  147 passed (147)
+      Tests  1880 passed (1880)
+```
+
+**And the run that matters most — the whole suite with keys deliberately exported into the process:**
+
+```
+$ ANTHROPIC_API_KEY=pretend OPENAI_API_KEY=pretend GEMINI_API_KEY=pretend npx vitest run
+VITEST_WITH_KEYS_EXIT=0
+ Test Files  147 passed (147)
+      Tests  1880 passed (1880)
+```
+
+Identical. **The guard holds in the environment it exists for and breaks nothing.** A probe test under
+that same run reported `ANTHROPIC_API_KEY=ABSENT | OPENAI_API_KEY=ABSENT | GEMINI_API_KEY=ABSENT` — the
+scrub reaching into a process that was handed real-looking keys.
+
+**MUTATION CHECK — 6 of 6 red, and getting there corrected the harness twice**
+
+```
+mutation                                       verdict
+------------------------------------------------------------------------
+the fetch guard is removed entirely            RED - 5 failed
+subdomains are no longer matched                RED - 1 failed
+the key scrub at startup is removed             RED - 1 failed
+the per-test re-scrub is removed                RED - 1 failed
+the error stops naming the test file            RED - 1 failed
+the setup file is unwired from the config       RED - 9 failed
+------------------------------------------------------------------------
+6 of 6 went red. All verified.
+```
+
+**`the key scrub at startup is removed` stayed GREEN twice, for two different reasons, and both were
+mine:**
+
+1. First because the `beforeEach` re-scrub masked it — the two looked redundant and one was untested.
+   They are **not** redundant: a module that captures a key when it is **imported** runs before any
+   hook, and this repo has real ones (`base-agent.ts:53`, several route modules at module scope). The
+   `__fixtures__/m18b-module-scope-key.ts` fixture plus a **static** import is what makes the
+   setup-time scrub falsifiable.
+2. Then because **in this environment the key is absent anyway**, so no scrub is observable. The
+   mutation harness now runs every mutation **with provider keys present in the subprocess env** —
+   which is the environment the guard exists for, so the check finally measures the thing it claims to.
+
+**A third correction, to my own probe rather than to a test:** I first reported that the dotenv scan
+"STILL GREEN (bad)" against a real dotenv reference. It had not failed — my probe inserted
+`require('dotenv')`, which broke config *loading*, and my detection only looked for `Tests N failed`.
+Re-probed with a config-valid mutation (`env: { ARIA_FAKE: '.env.local' }`): **RED, 1 failed, exit 1.**
+*A diagnostic that cannot tell "the thing passed" from "the run never happened" is worse than none.*
+
+**And my own test fired on my own documentation** — the dotenv assertion matched the warning comment I
+had just written into `vitest.config.ts` explaining why dotenv must never be added. Fixed by stripping
+comments before matching, the convention this repo already uses (`provenance-chain.test.ts`), and then
+**proven to still bite** on a real reference. Precisely the failure M18's one-exit guard hit on its own
+header.
+
+**NO FIXTURES WERE BUILT, AND THAT IS A FINDING RATHER THAN AN OMISSION**
+
+The brief asks for recorded responses: *"Record once, commit the fixtures, replay forever."*
+
+**Nothing needed them.** The full suite — 147 files, 1,880 tests — passes with the guard active and
+with keys present. That is proof by execution that **no existing test wanted a live provider**: every
+one already mocks the provider or the module that calls it. Building a recorder now would be
+scaffolding with no consumer, which RULE 9 forbids shipping and which would rot before its first use.
+The guard's own message points the next person at the pattern (`ai-router-breaker.test.ts`), and if a
+future test genuinely needs replay, that is the moment to build it.
+
+**THE ESCAPE HATCH, verified rather than asserted**
+
+`ARIA_ALLOW_LIVE_MODELS=1`. Checked: **nothing in `.github/` or `package.json` sets it.** And
+`check:live` does not need it — it runs under Playwright with
+`globalSetup: ./tests/check-live/global-setup.ts` and never loads `vitest.setup.ts`, so it is
+untouched. Its job is to be live, once per sprint, on purpose.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| other test runners that could reach a provider | **2**: Playwright `check:live` and the smoke suite | `check:live` is **meant** to be live. The smoke suite runs a real production build and is Lane D-adjacent; it is named here, unchanged, because it reaches the app rather than a provider directly |
+| anything setting `ARIA_ALLOW_LIVE_MODELS` | **0** | as the brief requires |
+| `dotenv` / `loadEnv` already in a vitest path | **0** | and a test now fails if one appears |
+
+**gates** · `tsc` 0 errors · `vitest` 1880 passed in 147 files · same with keys present · canon rail
+clean · `BUILD_EXIT` in the commit line
+
+**NOT done, and why**
+
+- **No response-recording fixtures.** Nothing needs them; see above.
+- **`tests/smoke/**` was not given the guard.** It drives a real production build over HTTP, so the
+  provider call happens in the *server* process, not the test process — a `fetch` patch in the test
+  would not see it. Blocking it there would also defeat the suite's purpose. Named, not touched.
+- **The 180 raw client constructions were not migrated** to the gateway; that is WALL 1's ratchet.
+
+**discovered**
+
+- `environment: 'node'` plus no `setupFiles` meant the suite had **no** global hooks of any kind before
+  this. Anything a future sprint wants to enforce suite-wide now has a place to live.
+
+---
+
 ## 4 · FOUNDER CONSOLE CHECKLIST
 
 *Nothing here is executed by this sprint. Each line says what it unblocks.*

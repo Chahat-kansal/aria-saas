@@ -17,6 +17,14 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     exclude: ['**/node_modules/**', 'e2e/**', 'tests/**', '**/*.spec.ts'],
     environment: 'node',
+    // M18B PHASE 3 — WALL 11. A unit test cannot reach a live model provider, and cannot see a
+    // provider key even if the environment supplies one. Before this line the suite was free of
+    // charge BY ACCIDENT: no `setupFiles` meant no key was loaded, and a client therefore threw
+    // before the network — while `fetch` sat wide open with nothing in front of it. See
+    // vitest.setup.ts. ⚠️ THIS FILE MUST NOT GAIN A dotenv LOADER: that is the one commit that
+    // would have armed all 1,868 tests with live keys at once, and the scrub in the setup is what
+    // now stops it mattering.
+    setupFiles: ['./vitest.setup.ts'],
   },
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
 })
