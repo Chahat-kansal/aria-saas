@@ -227,12 +227,33 @@ async function callHaiku(task: AiTask, userPrompt: string, maxTokens: number, bu
 // Returns BOTH the text and which provider answered. opts.skipAnthropic drops claude+haiku from the
 // chain — used by API-RESILIENCE-1 when the Anthropic circuit is OPEN, so the degraded path never
 // re-hits a provider already known to be down (saves a wasted timeout per request).
+/** One leg of the fallback chain, and what it returned. M18B phase 2 — diagnostics only. */
+export interface ProviderAttempt {
+  readonly provider: string
+  readonly ok: boolean
+  /** The thrown message, truncated. Absent when the leg succeeded. */
+  readonly error?: string
+}
+
 export async function ariaChatWithProvider(
   task: AiTask,
   userPrompt: string,
   maxTokens = 800,
   opts: { skipAnthropic?: boolean; businessId?: string; agentKey?: string } = {},
-): Promise<{ text: string; provider: string }> {
+  /**
+   * M18B PHASE 2 — `attempts` IS ADDITIVE AND LOGGING-ONLY.
+   *
+   * 156 conversations ended in the every-provider-down reply, and nothing recorded WHICH providers
+   * had been tried or what each said. The outage log line carried one field: whether a cached answer
+   * was used. So the most consequential reply Aria gives — a fifth of everything an owner has been
+   * told — was also the least explained.
+   *
+   * ⚠️ NOTHING BRANCHES ON THIS. It is read by a log line and by one `aria_ai_calls` row. The
+   * condition that triggers the outage reply is NOT touched in this sprint — changing it alters what
+   * a fifth of conversations say, which is the founder's call (M18C), not a side effect of a spend
+   * sprint.
+   */
+): Promise<{ text: string; provider: string; attempts: ProviderAttempt[] }> {
   const primary = TASK_PROVIDERS[task]
   const providerFns: Record<string, () => Promise<string>> = {
     claude: () => callClaude(task, userPrompt, maxTokens, opts.businessId, opts.agentKey),
@@ -272,6 +293,7 @@ export async function ariaChatWithProvider(
   }
   if (opts.skipAnthropic) sequence = sequence.filter(p => p !== 'claude' && p !== 'haiku')
 
+  const attempts: ProviderAttempt[] = []
   for (const provider of sequence) {
     try {
       const result = await providerFns[provider]()
@@ -280,10 +302,12 @@ export async function ariaChatWithProvider(
         // than waiting out the TTL.
         if (provider === 'claude' || provider === 'haiku') void recordAnthropicSuccess()
         else if (anthropicIncidentId) void recordAnthropicFallbackProvider(anthropicIncidentId, provider)
-        return { text: result, provider }
+        attempts.push({ provider, ok: true })
+        return { text: result, provider, attempts }
       }
     } catch (e) {
       const msg = (e as Error).message ?? ''
+      attempts.push({ provider, ok: false, error: msg.slice(0, 200) })
       console.warn(`[ai-router] ${provider} failed for task="${task}":`, msg.slice(0, 120))
       /**
        * ⚠️ THE ROUTER NOW CONTRIBUTES TO THE SHARED BREAKER, not just reads it. Reading alone would
@@ -300,7 +324,7 @@ export async function ariaChatWithProvider(
       }
     }
   }
-  return { text: '', provider: 'none' }
+  return { text: '', provider: 'none', attempts }
 }
 
 export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800, businessId?: string, agentKey?: string): Promise<string> {

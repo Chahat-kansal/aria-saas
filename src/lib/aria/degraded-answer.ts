@@ -8,7 +8,7 @@
 //
 // GROUNDING-TEETH: the fallback answers ONLY from the supplied ground truth; the prompt forbids
 // inventing figures and tells it to say plainly when a number isn't in the snapshot.
-import { ariaChatWithProvider } from '@/lib/ai-router'
+import { ariaChatWithProvider, type ProviderAttempt } from '@/lib/ai-router'
 
 const DEGRADE_PREAMBLE =
   'IMPORTANT: Aria\'s live data tools are temporarily unavailable, so you cannot run any new lookups. ' +
@@ -26,7 +26,7 @@ export async function degradedGroundedAnswer(args: {
   skipAnthropic?: boolean
   /** AI-COST-2 — needed so a Claude call made in this degraded path lands in aria_ai_calls. */
   businessId?: string
-}): Promise<{ reply: string; provider: string }> {
+}): Promise<{ reply: string; provider: string; attempts: ProviderAttempt[] }> {
   const historyText = (args.history ?? [])
     .slice(-6)
     .map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : ''}`)
@@ -41,7 +41,7 @@ export async function degradedGroundedAnswer(args: {
     'OWNER QUESTION: ' + args.message,
   ].filter(Boolean).join('\n\n')
 
-  const { text, provider } = await ariaChatWithProvider('chat', prompt, args.maxTokens ?? 1200, {
+  const { text, provider, attempts } = await ariaChatWithProvider('chat', prompt, args.maxTokens ?? 1200, {
     skipAnthropic: args.skipAnthropic,
     businessId: args.businessId,
     agentKey: 'degraded_grounded_answer',
@@ -52,7 +52,10 @@ export async function degradedGroundedAnswer(args: {
     return {
       reply: 'Aria\'s thinking cap is off for a moment — your data is safe and everything else keeps working. Give it another go in a bit.',
       provider: 'none',
+      // M18B phase 2 — carried out so the outage log can say WHICH providers were tried and what each
+      // returned. The reply above is byte-identical to before; only the diagnostics beside it are new.
+      attempts,
     }
   }
-  return { reply: text, provider }
+  return { reply: text, provider, attempts }
 }

@@ -50,6 +50,7 @@ import {
   recordAnthropicFallbackProvider, recordTotalOutage, isAnthropicUnreachable,
 } from '@/lib/aria/circuit-breaker'
 import { degradedGroundedAnswer } from '@/lib/aria/degraded-answer'
+import type { ProviderAttempt } from '@/lib/ai-router'
 import { findCachedAnswer } from '@/lib/aria/cached-answer'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { groundingNotice } from '@/lib/aria/prompt/assemble'
@@ -985,6 +986,17 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // (systemPrompt) via the ariaChat fallback chain (gemini → openai → haiku). No NEW live queries,
   // but a real grounded answer from this session's snapshot. GROUNDING-TEETH still applies.
   let degradedProvider: string | null = null
+  /**
+   * M18B PHASE 2 — WHICH PROVIDERS WERE TRIED, AND WHAT EACH RETURNED. DIAGNOSTICS ONLY.
+   *
+   * 156 conversations have ended in the every-provider-down reply, and the log line for it carried
+   * exactly one field: whether a cached answer was served. Which providers had been tried, and what
+   * each said, was never recorded anywhere — so the reply a fifth of all conversations end on was
+   * also the only one nobody could explain after the fact.
+   *
+   * ⚠️ NOTHING BRANCHES ON THIS. See the outage block below: the condition is untouched.
+   */
+  let degradeAttempts: ProviderAttempt[] = []
   let toolResult: ToolLoopResult
 
   const circuit = await isAnthropicCircuitOpen()
@@ -993,6 +1005,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     console.warn('[aria/ask] Anthropic circuit OPEN — serving degraded grounded answer', 'business', bid)
     const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: true, businessId: bid })
     degradedProvider = deg.provider
+    degradeAttempts = deg.attempts
     if (circuit.incidentId) await recordAnthropicFallbackProvider(circuit.incidentId, deg.provider)
     toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
   } else {
@@ -1068,6 +1081,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       const rec = await recordAnthropicFailure(errMsg)
       const deg = await degradedGroundedAnswer({ groundTruth: systemPrompt, message, history: historyMessages, maxTokens, skipAnthropic: providerDown, businessId: bid })
       degradedProvider = deg.provider
+      degradeAttempts = deg.attempts
       if (rec.incidentId) await recordAnthropicFallbackProvider(rec.incidentId, deg.provider)
       console.warn('[aria/ask] degraded answer served by', deg.provider, 'business', bid, 'providerDown:', providerDown)
       toolResult = { raw: deg.reply, tool_calls: [], iterations: 0, thinking_tokens: 0, cost_cents: 0, latency_ms: 0, success: deg.provider !== 'none' }
@@ -1108,7 +1122,31 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     try { outageConvId = await upsertConversation(bid, userId, conversationId, message, reply, 'ai_outage', ...provenanceTail(grounding)) }
     catch (e) { console.error('[aria/ask] outage upsertConversation failed:', (e as Error).message) }
 
-    console.error('[aria/ask] TOTAL OUTAGE served', JSON.stringify({ cached: isCached }), 'business', bid)
+    /**
+     * ⚠️ M18B PHASE 2 — LOGGING ONLY. The `if (degradedProvider === 'none')` condition above is
+     * NOT touched, and the two `reply` strings are byte-identical to before. A test asserts both.
+     *
+     * Measured before adding this, over the 156 conversations that have ended here:
+     *   · 155 had a REAL model call succeed (google/openai/anthropic) within ±2 minutes
+     *   · 144 within ±30 SECONDS — google in 125 of them
+     * So the owner was told every provider was down while one was demonstrably answering. Fixing
+     * that changes what a fifth of conversations say, which is M18C and needs the founder's go.
+     * This line is what makes the next such case explainable instead of inferred from timestamps.
+     */
+    const triedSummary = degradeAttempts.map(a => a.provider + (a.ok ? ':ok' : ':' + (a.error ?? 'failed'))).join(' | ')
+    console.error('[aria/ask] TOTAL OUTAGE served', JSON.stringify({
+      cached: isCached,
+      tried: degradeAttempts.map(a => a.provider),
+      results: degradeAttempts.map(a => ({ provider: a.provider, ok: a.ok, error: a.error })),
+    }), 'business', bid)
+    // Countable, not just greppable: "how often does a total outage fire, and what had we tried"
+    // becomes a query rather than a log search. role/provider are CHECK-legal.
+    void logAICallSafe({
+      business_id: bid, agent_key: 'ask_aria', role: 'other', provider: 'other', success: false,
+      request_summary: 'total_outage' + (isCached ? ':cached' : ''),
+      response_summary: ('tried=' + (triedSummary || '(none recorded)')).slice(0, 500),
+      error_message: (toolResult.error_message ?? 'all providers returned empty').slice(0, 500),
+    })
     return makeTurnResult('total_outage', {
       response: reply,
       conversation_id: outageConvId ?? conversationId,

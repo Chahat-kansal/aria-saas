@@ -412,6 +412,164 @@ valuable half of a phase.
 
 ---
 
+### PHASE 2 — THE OUTAGE LANE: MEASURED, NOT CHANGED · commit `pending`
+
+**SCOPE** · report the condition verbatim, add logging only, count how many of the outages had a
+working provider available. **NOT-SCOPE** · the condition itself. The copy. Anything an owner reads.
+
+**THE CONDITION, VERBATIM, WITH FILE:LINE**
+
+`src/lib/aria/ask/strategies/main.ts:1098`:
+
+```ts
+  if (degradedProvider === 'none') {
+```
+
+with the comment immediately above it (`main.ts:1093–1097`):
+
+```
+  // ── API-RESILIENCE-1B — total outage (EVERY provider down) ───────────────
+  // The fallback chain returned provider 'none' → not a single hiccup, the whole AI layer is offline.
+  // Never return empty (the old bad-reply symptom) and never 500: serve a cached last-good answer if
+  // a recent similar one exists (clearly labelled stale), else a calm terminal message that reassures
+  // the owner their POS/payments/data are unaffected (those are Supabase/Stripe — no LLM dependency).
+```
+
+**⚠️ BOTH OF THE BRIEF'S HYPOTHESES ARE WRONG, AND THE TRUTH MATTERS MORE THAN EITHER.**
+
+The brief offered two possibilities: *"it checks all providers but the configured list has one entry,
+or it fires on the first failure."*
+
+Traced: `degradedProvider` is assigned at `main.ts:995` and `main.ts:1070`, both from
+`degradedGroundedAnswer()` → `src/lib/aria/degraded-answer.ts:44` → `ariaChatWithProvider('chat', …)`.
+`TASK_PROVIDERS.chat === 'claude'`, so the sequence is **`[claude, gemini, openai, haiku]`** and
+`'none'` is returned only after **all four legs have failed** (`ai-router.ts:327`).
+
+**So the condition is correct.** It does not fire on the first failure, and the list has four entries,
+not one. **The outage reply fires exactly when it says it does — and it was still wrong 155 times.**
+
+**THE NUMBER THE BRIEF SAYS DECIDES M18C**
+
+Over the **156** conversations whose `last_intent` is `ai_outage` (now 156; the brief measured 154):
+
+| window around the outage turn | conversations with a **real model** success (`google`/`openai`/`anthropic`) |
+|---|---|
+| ±2 minutes | **155 of 156** |
+| ±30 seconds | **144 of 156** |
+
+and which provider was demonstrably working within ±30s (overlapping):
+
+| provider | outage conversations where it was working |
+|---|---|
+| `google` | **125** |
+| `anthropic` | 81 |
+| `openai` | 26 |
+
+⚠️ **I tightened this before reporting it.** My first query counted *any* successful `aria_ai_calls`
+row, which includes `provider: 'other'` audit rows — `health_signals`, `open_loops`, `council_cache` —
+that are not model calls at all. Counting those would have inflated the figure and been exactly the
+measurement error RULE 16 #5 is about. Restricted to real model providers, the number barely moved
+(155/156 at ±2 min), which is itself worth knowing: it is not an artefact of loose counting.
+
+**What this means, stated plainly: the condition is right and the environment was broken.** All four
+legs really did fail on those turns — because in the environment where `ANTHROPIC_API_KEY` does not
+resolve, the other keys very likely do not either (Phase 1's discovery, reached independently). The
+owner was told "every provider is down" while a provider was answering *for a different call* seconds
+later. **M18C is strongly justified, and it is a different change from the one the brief imagined:**
+not "fix the condition", but "make the degrade chain's key resolution as reliable as the ledger's".
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/ai-router.ts` | +31 | `ProviderAttempt`, and the trail returned from `ariaChatWithProvider` |
+| `src/lib/aria/degraded-answer.ts` | +7 / −3 | passes the trail out, on **both** return paths |
+| `src/lib/aria/ask/strategies/main.ts` | +36 / −1 | the outage log line, plus one countable `aria_ai_calls` row |
+| `src/lib/aria/outage-attempts.test.ts` | **new**, 136 | 5 tests |
+
+**WHAT THE LOG NOW SAYS.** Before, the outage line carried one field — whether a cached answer was
+used:
+
+```ts
+console.error('[aria/ask] TOTAL OUTAGE served', JSON.stringify({ cached: isCached }), 'business', bid)
+```
+
+Now it carries which providers were tried and what each returned, and writes **one countable row**
+(`agent_key: 'ask_aria'`, `request_summary: 'total_outage'`, `response_summary: 'tried=claude:… |
+gemini:… | openai:… | haiku:…'`) so *"how often does a total outage fire, and what had we tried"*
+becomes a query instead of a log search. `role`/`provider` are CHECK-legal.
+
+**⚠️ NOTHING BRANCHES ON THE TRAIL.** It is read by a `console.error` and one diagnostic insert. The
+`if (degradedProvider === 'none')` condition is byte-for-byte unchanged, and so are both `reply`
+strings.
+
+**VERIFY — pasted**
+
+```
+ Test Files  146 passed (146)
+      Tests  1868 passed (1868)
+```
+
+- the trail records **all four legs in chain order** — `['claude','gemini','openai','haiku']` — and the
+  *distinct* error each returned, because "it broke" and "an auth error on one, a bad-key 400 on
+  another" are different diagnoses;
+- it records the **success** too, so a one-entry trail is unambiguous between "the first provider
+  worked" and "we only tried one";
+- **the all-providers-down reply is asserted `toBe` the literal string**, not `toContain`. A substring
+  check would pass through any rewording, which is the regression the hard rule forbids;
+- a working provider still answers normally, so the outage copy is not newly reachable.
+
+**MUTATION CHECK — 5 of 5 red, after one stayed green and found a real gap**
+
+```
+mutation                                       verdict
+--------------------------------------------------------------------------
+the attempt trail stops recording failures     RED - 4 failed
+the trail stops recording the success          RED - 3 failed
+the trail loses the per-leg error text         RED - 2 failed
+the all-down reply wording is changed          RED - 1 failed
+degraded-answer stops passing the trail out    RED - 1 failed
+--------------------------------------------------------------------------
+5 of 5 went red. All verified.
+```
+
+**`degraded-answer stops passing the trail out` came back `STILL GREEN` first**, and the test was at
+fault: I asserted `attempts` on the all-down path but not on the **success** path. So a failover that
+worked could have recorded nothing about the leg it skipped to get there — the single most useful line
+for diagnosing why a provider is being skipped at all. Assertion added; it now goes red.
+
+**The 4th mutation is the one worth noting**: changing the all-down wording from *"Give it another go
+in a bit."* to *"Please try again shortly."* turns the suite red. That is the hard rule enforced by a
+test rather than by my word.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| other producers of the outage reply | **1** — `degraded-answer.ts:53`, reached only via `main.ts:1098` | both covered; the string is pinned in the test |
+| callers of `degradedGroundedAnswer` | **2**, both in `main.ts` (:995 circuit-open, :1070 tool-loop failure) | both now capture the trail |
+| other `ariaChatWithProvider` destructures that would break on a new field | **2** (`turn-persistence.ts:278`, `degraded-answer.ts:44`) | additive field, neither affected; `tsc` confirms |
+
+**NOT done, and why**
+
+- **The condition was not changed.** The brief forbids it and so does RULE 18: it alters what a fifth
+  of conversations say. **M18C is justified by the 155/156 above and needs the founder's go.**
+- **No backfill of the 156.** They record what happened.
+- **The `aria_ai_calls` origin column** that would let a failure be attributed to local vs CI vs Vercel
+  is still absent — it is why "all four legs failed" cannot be tied to a specific environment from the
+  data. Founder console 6.
+
+**discovered**
+
+- The outage reply has two variants and only one is the "all down" text: when a recent similar answer
+  exists, `findCachedAnswer` serves it labelled stale. Of the 156, the split between cached and
+  terminal is not recorded anywhere — the new `request_summary: 'total_outage:cached'` suffix starts
+  recording it from now, forward-only.
+- `main.ts:1083` already logs a `cross_provider_fallback` row when a failover *succeeds*. The outage
+  case — the failover that failed — was the one without a row. That asymmetry is now gone.
+
+---
+
 ## 4 · FOUNDER CONSOLE CHECKLIST
 
 *Nothing here is executed by this sprint. Each line says what it unblocks.*
