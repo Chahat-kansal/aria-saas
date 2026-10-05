@@ -50,9 +50,32 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'npm run build && npm run start',
+    /**
+     * ⚠️ `npx next` DIRECTLY, NOT `npm run build && npm run start`.
+     *
+     * Those package.json scripts carry a POSIX `NODE_OPTIONS="..." ` prefix, which `cmd.exe` cannot
+     * parse. On Windows the web server died with
+     *
+     *     [WebServer] 'NODE_OPTIONS' is not recognized as an internal or external command
+     *     Error: Process from config.webServer was not able to start. Exit code: 1
+     *
+     * BEFORE a single assertion ran. And because `reuseExistingServer` is on, S6 and M17B only ever
+     * ran this gate because a server HAPPENED to already be listening — the broken command was
+     * never executed. RULE 3a makes `check:live` the last line of every sprint's gate list, so a
+     * gate that cannot start itself is a gate that runs by luck.
+     *
+     * The memory limit moves into `env`, which Playwright applies cross-platform. Nothing in
+     * package.json is touched — its scripts are outside this sprint's file domain.
+     *
+     * ⚠️ IT STILL FAILS RATHER THAN SKIPS. If the server cannot start, Playwright exits non-zero
+     * and no test runs — which is a red gate, not a silent pass. That is the S6 trap this must
+     * never repeat.
+     */
+    command: 'npx next build && npx next start',
+    env: { NODE_OPTIONS: '--max-old-space-size=8192' },
     url: BASE_URL,
-    timeout: 900_000,
+    // build + start on this machine is ~25 min cold; 15 was not enough to ever finish.
+    timeout: 1_800_000,
     reuseExistingServer: !process.env.CI,
   },
 })
