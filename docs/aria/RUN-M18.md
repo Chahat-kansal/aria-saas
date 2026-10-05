@@ -17,8 +17,8 @@ Both now do work, every lane writes provenance, and a new push gate keeps it tha
 
 1. **🔴 "Anthropic credit exhausted" was never true, and I had been repeating it since M17B.** Every
    local Anthropic call since **15 September** fails with the SDK's own *"Could not resolve
-   authentication method"* — 0 successes except 2 on 3 October. **The key is present in `.env.local`
-   (length 108).** It is not reaching the server process. A top-up buys nothing. Two consequences:
+   authentication method"* — 0 successes except 2 on 3 October. **The key is present in `.env.local`.**
+   It is not reaching the server process. A top-up buys nothing. Two consequences:
    **S6's and M17B's model calls ran on Google, not Anthropic**, so anything either sprint concluded
    about Anthropic came from a provider it never asked; and the Phase 5 replay was never
    credit-blocked. **Founder queue 1, rewritten. This is the first thing worth ten minutes.**
@@ -991,7 +991,7 @@ resolved**. It is not a balance error, not a 429, not an overage. Measured from 
 | 2026-10-02 … 09-28 | ~10/day | **0** | ~10/day | 8/day | 8/day |
 
 And the key **is present**: a presence-and-length check (never the value) reports
-`ANTHROPIC_API_KEY — present, length 108`. `ai-router.ts:124` and `:198` read
+`ANTHROPIC_API_KEY — present` (length redacted under M18B). `ai-router.ts:124` and `:198` read
 `process.env.ANTHROPIC_API_KEY` at call time, so the key exists in `.env.local` and is not reaching
 the server process. The **2 successes on 3 October** matter: they say the key itself can work, so this
 is environmental and intermittent rather than a bad secret.
@@ -1182,7 +1182,7 @@ show three more results instead of three blanks.
 
 | # | item | blocks | note |
 |---|---|---|---|
-| 1 | **⚠️ CORRECTED — `ANTHROPIC_API_KEY` does not reach the server process. THERE IS NO CREDIT PROBLEM.** Every local Anthropic call since 15 Sep fails with the SDK's own *"Could not resolve authentication method"* (`@anthropic-ai/sdk/src/client.ts:753`) — 0 successes bar 2 on 3 Oct. The key IS present in `.env.local` (length 108, value never printed). `ai-router.ts:124`/`:198` read it at call time. | Phase 5's replay, and every Anthropic-backed path | **A top-up fixes nothing.** All failing `agent_key`s are ask-path on one business — local, not production crons. Google is silently carrying these paths, so **S6's and M17B's model calls ran on Google**. The 2 successes on 3 Oct say the key itself works, so this is environmental. |
+| 1 | **⚠️ CORRECTED — `ANTHROPIC_API_KEY` does not reach the server process. THERE IS NO CREDIT PROBLEM.** Every local Anthropic call since 15 Sep fails with the SDK's own *"Could not resolve authentication method"* (`@anthropic-ai/sdk/src/client.ts:753`) — 0 successes bar 2 on 3 Oct. The key IS present in `.env.local` (present; M18B forbids recording a key length, so the figure M18 published here has been redacted). `ai-router.ts:124`/`:198` read it at call time. | Phase 5's replay, and every Anthropic-backed path | **A top-up fixes nothing.** All failing `agent_key`s are ask-path on one business — local, not production crons. Google is silently carrying these paths, so **S6's and M17B's model calls ran on Google**. The 2 successes on 3 Oct say the key itself works, so this is environmental. |
 | 2 | `package.json`'s POSIX `NODE_OPTIONS="…"` prefix on `build`/`start` | nothing now; it is the root cause Phase 0 worked around | outside Lane A. `npx next` + `webServer.env` is the local fix; the scripts themselves still break any `cmd.exe` caller |
 | 3 | The `CLAUDE.md` bypass wording proposed in `RUN-M17B.md` | nothing | still unapplied |
 | 4 | `aria_turn_records` DDL | nothing — **M18 does not need it** | parked proposal, see `RUN-M17B.md` |
