@@ -15,6 +15,24 @@ import { assertSafeTestBusiness, SEEDED_TEST_BUSINESS_ID } from '../../src/lib/t
 const AUTH_DIR = join(__dirname, '.auth')
 export const OWNER_STATE = join(AUTH_DIR, 'owner.json')
 
+/**
+ * M18 PHASE 5 — THE TURN STATE, ON DISK, BECAUSE A WORKER DOES NOT SURVIVE A FAILURE.
+ *
+ * `ask.spec.ts` carried its turn in a module-level object. Playwright TEARS DOWN AND RESPAWNS THE
+ * WORKER after a failing test, and module state does not survive that — so the moment assertion 3
+ * went red, `turn.askRequestFired` reset to false in the fresh worker and assertions 4, 5 and 6
+ * skipped on it, whatever their own logic said.
+ *
+ * Measured in the M18 phase 0 baseline: `1 failed · 4 skipped · 5 passed`, with
+ * `◇ injected env (0) from .env.local` printed between assertion 3 and assertion 4 — the new worker
+ * starting. The spec had already been restructured to a non-serial describe precisely so that
+ * "each of these now reports for itself", and it could not work: the thing being shared was gone.
+ *
+ * Three assertions were therefore unmeasured every time one of them failed, which is the worst
+ * possible moment to stop measuring.
+ */
+export const TURN_STATE = join(AUTH_DIR, 'turn.json')
+
 /** `test.use({ storageState })` needs a file even when the run is blocked and every test skips. */
 function writeEmptyState() {
   mkdirSync(AUTH_DIR, { recursive: true })
@@ -22,6 +40,10 @@ function writeEmptyState() {
 }
 
 export default async function globalSetup(config: FullConfig) {
+  // A stale turn from a previous run would let assertions 4-6 report on a turn that never happened
+  // in THIS run — which is worse than skipping, because it looks like a measurement.
+  mkdirSync(AUTH_DIR, { recursive: true })
+  writeFileSync(TURN_STATE, '{}')
   const baseURL = config.projects[0]?.use?.baseURL as string
 
   // ⚠️ TRIMMED, AND THIS WAS A REAL BUG. `.env.local` holds the email as 23 characters with a

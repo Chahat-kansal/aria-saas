@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { OWNER_STATE } from './global-setup'
+import { OWNER_STATE, TURN_STATE } from './global-setup'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { assertSafeTestBusiness } from '../../src/lib/testing/test-business'
 
 /**
@@ -36,6 +37,33 @@ const turn: {
 } = {
   askRequestFired: false, askStatus: null, answerText: '', storedContent: null,
   storedProvenance: null, conversationId: null, askedAt: new Date().toISOString(),
+}
+
+/**
+ * ⚠️ M18 PHASE 5 — THE TURN CROSSES A WORKER BOUNDARY, SO IT HAS TO GO TO DISK.
+ *
+ * Playwright tears down and respawns the worker after a FAILING test. The object above is module
+ * state and does not survive that — so when assertion 3 went red in the M18 baseline, the fresh
+ * worker saw `askRequestFired: false` and the guard below skipped assertions 4, 5 AND 6, each of
+ * which was perfectly able to report. `1 failed · 4 skipped · 5 passed`, with
+ * `◇ injected env (0) from .env.local` printed between 3 and 4: the new worker starting.
+ *
+ * This spec had ALREADY been split into a non-serial describe so that "each of these now reports
+ * for itself", and that could not work while the thing being shared lived only in memory. Three
+ * assertions went unmeasured exactly when one of them had found something.
+ */
+function saveTurn() {
+  try { writeFileSync(TURN_STATE, JSON.stringify(turn)) }
+  catch (e) { console.warn('[check:live] could not persist the turn state: ' + (e as Error).message) }
+}
+
+/** Re-reads the turn a previous worker recorded. A no-op when this worker already has it. */
+function restoreTurn() {
+  if (turn.askRequestFired) return
+  try {
+    const saved = JSON.parse(readFileSync(TURN_STATE, 'utf8')) as Partial<typeof turn>
+    if (saved && typeof saved === 'object') Object.assign(turn, saved)
+  } catch { /* no file yet, or this is the first worker — the guard below reports it */ }
 }
 
 /**
@@ -104,6 +132,7 @@ test.describe('check:live · one real question', () => {
     turn.askRequestFired = true
     turn.askStatus = res.status()
     expect(turn.askStatus, 'the ask route answered with a non-2xx').toBeLessThan(400)
+    saveTurn()
   })
 
   test('2. the answer STREAMED and SETTLED — M4: the watchdog', async () => {
@@ -138,6 +167,7 @@ test.describe('check:live · one real question', () => {
       turn.answerText.length,
       'the turn never produced an answer beyond the question itself. Settled text: ' + previous.slice(-300),
     ).toBeGreaterThan(60)
+    saveTurn()
   })
 
 })
@@ -151,6 +181,10 @@ test.describe('check:live · one real question', () => {
 test.describe('check:live · what the turn left behind', () => {
   test.beforeEach(() => {
     test.skip(!!process.env.CHECK_LIVE_BLOCKED, process.env.CHECK_LIVE_BLOCKED ?? '')
+    // ⚠️ READ THE TURN BACK FIRST. See saveTurn()/restoreTurn(): a failure upstream respawns the
+    // worker and wipes the module state these guards read, which silently skipped three live
+    // assertions in the M18 baseline.
+    restoreTurn()
     test.skip(!turn.askRequestFired, 'the turn never reached the route, so it left nothing behind')
   })
 
@@ -173,6 +207,9 @@ test.describe('check:live · what the turn left behind', () => {
     turn.conversationId = (data?.id as string) ?? null
     turn.storedContent = String(assistant?.content ?? '')
     turn.storedProvenance = (assistant?.provenance as typeof turn.storedProvenance) ?? null
+    // ⚠️ PERSIST BEFORE ASSERTING. The expectations below can throw, and assertion 4 needs what
+    // this one LEARNED even when this one fails — otherwise a red 3 keeps taking 4, 5 and 6 with it.
+    saveTurn()
 
     expect(turn.storedProvenance, 'the stored turn carries no provenance — every figure in it renders unanchored').not.toBeNull()
     expect(Array.isArray(turn.storedProvenance?.anchors), 'provenance.anchors is not an array').toBe(true)

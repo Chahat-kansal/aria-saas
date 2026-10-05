@@ -4,31 +4,68 @@ Branch `main` · autonomous run (RULE 20) · started 5 Oct 2026
 
 ---
 
-## THE THREE THINGS TO KNOW
+## THE SUMMARY — the conversation you would otherwise have had
 
-*(Written for someone who has been away all day. Updated as the run proceeds.)*
+**Five phases, five commits, all pushed. `tsc` 0 errors, 1,841 unit tests green in 143 files, four
+guards clean, `BUILD_EXIT=0` on every phase. Nothing is parked.**
 
-1. **The baseline `check:live` is RED on assertion 3, and that is the sprint's own target.** The
-   stored turn carries **no provenance** — `5 passed · 1 failed · 4 skipped · exit 1`. Assertions
-   4, 5 and 6 never ran because 3 failed ahead of them. Phase 4 is the phase that closes it. This is
-   the first time this gate has produced a real baseline rather than running by luck (see below).
-2. **Phase 1 is done: the grounding stage has a body.** `ground()` returned blank fields on every
-   turn for seven weeks; it now returns a real anchor set — six named ground-truth queries, each
-   recorded as ran / rows / none — for every lane that can put a dollar in front of an owner, and an
-   **empty-but-present set with a reason** for every lane that cannot. Four mutations, all red.
-3. **Phase 2 found the verifier this repo already had, and wired it up instead of writing a fifth
-   one.** `src/lib/aria/verifier.ts` — pure, no model, 25+ tests, returns `pass | hedge | refuse`,
-   which is the sprint's three verdicts word for word — has been called by **nothing but the eval
-   harness** since MS15. Stage 5 now runs it on every turn. That also makes the **ALLERGEN HARD
-   RULE** reachable from the ask path for the first time. Writing my own version first and deleting
-   it was the sweep doing its job; the details, and the gap it exposed in that rule's regex, are
-   under Phase 2.
+M18's premise held: **the two stages M17 built had empty bodies, and filling them was the whole job.**
+`ground()` returned blank fields on every turn for seven weeks and `verify()` stamped `{ran:false}`.
+Both now do work, every lane writes provenance, and a new push gate keeps it that way.
 
-**Two smaller things worth a minute each:** a mutation check failed to fail in Phase 1 because the
-test omitted `onRecord`, and `opts.onRecord?.(recordOf(…))` short-circuits its own arguments — so the
-regression lived in the gap between the test's wiring and the route's. And `ALLERGEN_RE` does not
-catch `"any nuts in the banana bread?"`, only `"nut-free"` — founder queue item 6, not fixed here
-because it is outside Lane A and widening a safety regex needs a human.
+### The three things you most need to know
+
+1. **🔴 "Anthropic credit exhausted" was never true, and I had been repeating it since M17B.** Every
+   local Anthropic call since **15 September** fails with the SDK's own *"Could not resolve
+   authentication method"* — 0 successes except 2 on 3 October. **The key is present in `.env.local`
+   (length 108).** It is not reaching the server process. A top-up buys nothing. Two consequences:
+   **S6's and M17B's model calls ran on Google, not Anthropic**, so anything either sprint concluded
+   about Anthropic came from a provider it never asked; and the Phase 5 replay was never
+   credit-blocked. **Founder queue 1, rewritten. This is the first thing worth ten minutes.**
+
+2. **🟡 Please run `npm run check:live` once.** The whole end-of-run column is ⊘ — I did not re-run it
+   (~22 minutes and real spend), and four things this sprint changed are things it exercises. It can
+   now start its own web server (Phase 0 — **it had never once done so on this machine**; S6 and M17B
+   only ran it because a server happened to be listening), and assertions 4, 5 and 6 will finally
+   report instead of going blank. My prediction, written down so the run checks it rather than
+   confirms it: **assertion 3 may still be red** — the baseline showed the council turn being killed
+   by the suite's own teardown — and either way you will see three more results than before.
+
+3. **🟢 The provenance number is explained, and the cause was not what anyone thought.** M3's "0 of 288
+   conversations carried a tier" was read for months as a broken renderer or a missing column. It was
+   neither: **1 of 22 `upsertConversation` call sites passed provenance.** The live table reads 17.8%
+   on `question` and **exactly 0.0% on all eleven other intents**, because only the council ever
+   passed the argument. All twenty-one now do, and **WALL 10** fails the push if one stops.
+
+### Three smaller things worth knowing
+
+- **I deleted a verifier I had already written and tested, and wired up the one this repo already
+  had.** `src/lib/aria/verifier.ts` is pure, model-free, 25+ tests, returns `pass | hedge | refuse` —
+  the sprint's three verdicts word for word — and **nothing but the eval harness has ever called it.**
+  Wiring stage 5 to it also makes the **ALLERGEN HARD RULE** reachable from the ask path for the first
+  time. (And it exposed a gap in that rule: `"any nuts in the banana bread?"` is **not** caught, only
+  `"nut-free"` is. Founder queue 6 — widening a safety regex needs you.)
+- **`ai_outage` is 150 of 837 stored turns — 18% of everything an owner has ever been told** came from
+  the every-provider-down reply. Nobody asked for that number; it is the second largest intent in the
+  table. Probably related to item 1.
+- **Two mutation checks failed to fail on their first run**, and both times the test or the mutation
+  was at fault rather than the code. Both episodes are recorded in full, because a mis-built mutation
+  that "passes" is how a phase talks itself into believing it is verified.
+
+### Phases
+
+| phase | what | commit |
+|---|---|---|
+| 0 | the `check:live` gate could never start its own server on Windows; baseline captured, red | `2319656f` |
+| 1 | `ground()` gets a body — a typed anchor set, every lane | `c6e63b1e` |
+| 2 | stage 5 runs the verifier this repo already had, on every turn | `480ed96d` |
+| 3 | the seventh silent catch, narrowed to the one statement that can fail | `a23f1b63` |
+| 4 | every lane writes provenance + WALL 10 | `01546b22` |
+| 5 | assertions 4–6 survive a worker respawn; the replay parked | *this commit* |
+
+**Parked:** the replay (no founder go, and it would run on Google anyway) · the live "after" provenance
+numbers (forward-only by rule — historical rows record what happened) · the Anthropic auth fault ·
+moving the constitution onto the council lane (what would make assertion 5 green).
 
 ---
 
@@ -82,7 +119,7 @@ widen scope: nothing else changed.
 
 ## 2 · PHASES
 
-### PHASE 0 — BASELINE AND PREFLIGHT  ·  commit `pending`
+### PHASE 0 — BASELINE AND PREFLIGHT  ·  commit `2319656f`
 
 **SCOPE** · establish the `check:live` baseline before any code moves, and verify the brief's
 premises against the live database rather than against the M17B report.
@@ -157,7 +194,7 @@ Parked to the founder queue rather than taken.
 
 ---
 
-### PHASE 1 — `ground()` GETS A BODY  ·  commit `pending`
+### PHASE 1 — `ground()` GETS A BODY  ·  commit `c6e63b1e`
 
 **SCOPE** · the stage already ran on every turn and returned nothing. Give it a typed anchor set.
 
@@ -327,7 +364,11 @@ them, and they change in the same commit. **PROCEEDS.** Nothing on an HTTP respo
 
 ---
 
-### ⚠️ PHASE 4 IS NOT THE PHASE THE BRIEF DESCRIBES — FOUR MEASURED FINDINGS ABOUT THE GATE ITSELF
+### ⚠️ INTERLUDE — FOUR FINDINGS ABOUT THE `check:live` GATE, FOUND WHILE TAKING THE BASELINE
+
+*Placed here because this is when they were found, between Phase 1 and Phase 2. They change what
+Phase 4 and Phase 5 are, and one of them is corrected again by Phase 5 — the correction is left in
+place rather than edited away, so the sequence of what I believed stays readable.*
 
 Found while establishing the Phase 0 baseline, against the live database and the shipped spec file.
 They are here rather than in Phase 4 because they change what Phase 4 *is*, and because one of them
@@ -391,7 +432,7 @@ writes; `tests/check-live/**` is a separate call and is raised, not taken, until
 
 ---
 
-### PHASE 2 — `verify()` STOPS STAMPING `{ran:false}`  ·  commit `pending`
+### PHASE 2 — `verify()` STOPS STAMPING `{ran:false}`  ·  commit `480ed96d`
 
 **SCOPE** · stage 5 runs on every result and decided nothing. Make it decide.
 
@@ -564,7 +605,7 @@ clean (32 files scanned whole) · `BUILD_EXIT` — see the gate line in the comm
 
 ---
 
-### PHASE 3 — THE SEVENTH SILENT CATCH, NARROWED  ·  commit `pending`
+### PHASE 3 — THE SEVENTH SILENT CATCH, NARROWED  ·  commit `a23f1b63`
 
 **SCOPE** · `answer-council.ts`'s anchor region had ONE `catch` around ~245 lines. Narrow it to the
 statement that can legitimately fail, log with the thrown error, and mark the turn degraded.
@@ -727,7 +768,7 @@ clean (33 files) · `BUILD_EXIT` in the commit line
 
 ---
 
-### PHASE 4 — EVERY LANE WRITES PROVENANCE  ·  commit `pending`
+### PHASE 4 — EVERY LANE WRITES PROVENANCE  ·  commit `01546b22`
 
 **SCOPE** · every lane that stores an assistant message passes the turn's anchors.
 
@@ -921,25 +962,227 @@ clean (37 files) · **WALL 10 clean, and proven to exit 1 when broken** · `BUIL
 
 ---
 
+### PHASE 5 — ASSERTIONS 4, 5 AND 6 MADE EVALUABLE; THE REPLAY PARKED  ·  commit `pending`
+
+**SCOPE** · make assertion 5 evaluable or leave it ⊘ with exactly what it would take; then the replay,
+only if credit allows.
+
+**⚠️ THE BIGGEST FINDING IN THIS PHASE IS A PREMISE I HAD BEEN CARRYING SINCE M17B, AND IT IS WRONG.**
+
+> **"Anthropic credit exhausted" is not what is happening. There is no credit problem. A top-up would
+> fix nothing.**
+
+Every Anthropic call in this repo's local runs has failed since **15 September** with the Anthropic
+SDK's own error:
+
+```
+Could not resolve authentication method. Expected one of apiKey, authToken,
+credentials, config, or profile to be set.
+```
+
+That string is thrown by `node_modules/@anthropic-ai/sdk/src/client.ts:753` when **no API key was
+resolved**. It is not a balance error, not a 429, not an overage. Measured from `aria_ai_calls`:
+
+| day | anthropic | ok | failed | google | ok |
+|---|---|---|---|---|---|
+| 2026-10-05 | 59 | **0** | 59 | 137 | 121 |
+| 2026-10-04 | 18 | **0** | 18 | 16 | 16 |
+| 2026-10-03 | 15 | 2 | 13 | 8 | 8 |
+| 2026-10-02 … 09-28 | ~10/day | **0** | ~10/day | 8/day | 8/day |
+
+And the key **is present**: a presence-and-length check (never the value) reports
+`ANTHROPIC_API_KEY — present, length 108`. `ai-router.ts:124` and `:198` read
+`process.env.ANTHROPIC_API_KEY` at call time, so the key exists in `.env.local` and is not reaching
+the server process. The **2 successes on 3 October** matter: they say the key itself can work, so this
+is environmental and intermittent rather than a bad secret.
+
+**I also corrected my own first reading of this.** I initially wrote that production must be failing
+too, from the steady ~10/day. Grouping by `agent_key` disproved it: every failing key is ask-path —
+`thread_title` (68), `ask_suggestions` (41), `aria_intent_classifier` (9), `intent_classifier` (9),
+`ask_aria` (5), `council_*` (3) — on **one** business, with no cron agent anywhere in the list. That
+is my own repeated local runs, not production.
+
+**Three consequences, and the second is the uncomfortable one:**
+
+1. Founder queue item 1 was wrong and is rewritten. A top-up buys nothing.
+2. **S6's and M17B's model calls ran on GOOGLE, not Anthropic** — `gemini-2.5-flash` is in the baseline
+   log for every classifier and for `council_context`. Any conclusion either sprint drew about
+   Anthropic behaviour, cost or latency was drawn from a provider that was never asked.
+3. The Phase 5 replay was never actually credit-blocked. It is parked for different reasons, below.
+
+**WHY I STOPPED DIAGNOSING IT HERE:** the next step involves a secret's value and the provider-auth
+path. Changing how a provider authenticates is not a call to make unattended, and the standing table
+puts money and authorisation on the PARK list. Everything needed to finish it in one minute with the
+founder present is in the founder queue.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `tests/check-live/global-setup.ts` | +22 | `TURN_STATE`, cleared at the start of every run |
+| `tests/check-live/ask.spec.ts` | +39 / −1 | `saveTurn()` / `restoreTurn()` across the worker boundary |
+
+**⚠️ ASSERTION 5 WAS ALREADY EVALUABLE. THE REASON IT SKIPPED IS NOT THE ONE I GAVE IN PHASE 0.**
+
+Phase 0's Finding 4 said assertions 4–6 skipped because *"the dependency moved from the describe into
+the guards."* That is true of the guards but it is **not the trigger**, and the correction matters
+because the fix is different.
+
+The baseline log prints this between assertion 3 and assertion 4:
+
+```
+  x   7 ask.spec.ts:157 › 3. the STORED TURN carries provenance anchors (145ms)
+◇ injected env (0) from .env.local            ← a NEW WORKER starting
+  -   8 ask.spec.ts:182 › 4. an anchored figure RESOLVES TO REAL ROWS
+```
+
+**Playwright tears down and respawns the worker after a failing test.** `ask.spec.ts` carried its turn
+in a module-level `turn` object, and module state does not survive a respawn — so the fresh worker saw
+`askRequestFired: false`, and `test.skip(!turn.askRequestFired, …)` skipped 4, 5 **and** 6 regardless
+of what each could have reported. The spec had already been restructured into a non-serial describe so
+that *"each of these now reports for itself"*, and that could never work while the thing being shared
+lived only in memory.
+
+So three live assertions went unmeasured **exactly when one of them had found something** — the worst
+possible moment to stop measuring.
+
+**THE FIX, AND IT IS PROVEN BY OBSERVATION, NOT BY REASONING**
+
+`turn` is written to `tests/check-live/.auth/turn.json` after the browser turn and — importantly —
+**before** assertion 3's expectations, which can throw. `restoreTurn()` reads it back in the second
+describe's `beforeEach`. `global-setup` clears the file at the start of every run, so a stale turn can
+never be reported as this run's.
+
+Verified with a throwaway Playwright probe — **no model call, no credit, no browser** — that forces the
+exact failure shape, run in both directions and then deleted:
+
+```
+WITH restoreTurn():
+  x  1 › records the turn, then FAILS on purpose
+  [probe] restored note = "the turn really happened"
+  ok 2 › MODULE STATE WAS WIPED — proving the worker respawned
+  ok 3 › RUNS instead of skipping — the assertion a red test used to take with it
+  1 failed · 2 passed
+
+WITHOUT restoreTurn() (the one line commented out):
+  x  1 › records the turn, then FAILS on purpose
+  -  2 › MODULE STATE WAS WIPED
+  -  3 › RUNS instead of skipping
+  1 failed · 2 skipped        ← exactly the baseline's shape
+```
+
+Both directions. The second run is the mutation check for the first.
+
+**⚠️ AND ASSERTION 5 IS RED BY DESIGN, WHICH IS NOT THE SAME AS BROKEN.** Once it evaluates it asserts
+`servedByCouncil === false`, and its own comment explains why: `assembleAriaPrompt()` has two
+production callers — the general lane and `slim-context.ts` — and `answer-council.ts` contains **zero**
+references to the constitution. So a business question answered by the council is not
+constitution-governed, and the assertion *reports that as the failure it is, rather than passing on a
+proxy*. Making it green requires putting the constitution on the council lane. That is a prompt change
+on an owner-facing answer path — **not M18** (the brief: "not new capability"), and it PARKS under
+RULE 18 regardless.
+
+**THE REPLAY — PARKED, AND IT WOULD HAVE BEEN PARKED EITHER WAY**
+
+The brief: *"If it is still out: run Phases 1–4, park the replay, say so. Do not spend a topped-up
+balance on a replay without the founder's go."* Both branches park, and there is now a third reason:
+
+1. No founder go on record. The brief forbids spending a restored balance without it.
+2. There was never a balance problem — so "waiting for a top-up" was never the blocker.
+3. **A replay today would run on Google**, because that is what every one of these paths actually
+   reaches. It would measure the Google path and tell us nothing about Anthropic, while costing real
+   Google spend.
+
+**The noise floor is therefore ⊘ COULD NOT CHECK for this run.** M17B measured OLD-vs-OLD at **9** lane
+diffs against OLD-vs-NEW at **8** — the restructure quieter than the noise. That number is not
+re-measured here and is not quoted as if it were.
+
+**Exactly what it would take**, in order: (1) the founder resolves why `ANTHROPIC_API_KEY` does not
+reach the server process — the key is present and worked twice on 3 October; (2) an explicit go to
+spend on a replay; (3) `npx tsx e2e/helpers/seed.ts`, then the 30-message replay against both
+worktrees, with the noise floor re-measured in the same run rather than carried forward.
+
+**VERIFY — pasted**
+
+```
+ Test Files  143 passed (143)
+      Tests  1841 passed (1841)
+```
+
+plus the two probe runs above. **No `check:live` run in this phase**, deliberately: a run costs ~22
+minutes and real Google spend, and the thing this phase changed is provably exercised by the probe. The
+end-of-run `check:live` line in the table below is therefore ⊘, and it is the one gap in this sprint I
+would most want closed first.
+
+**MUTATION CHECK** · the "WITHOUT `restoreTurn()`" probe run above *is* the mutation: one line removed,
+and 2 of 3 assertions stop reporting. It reproduces the baseline's `1 failed · 4 skipped` shape exactly.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| other module-level state shared across a `test.describe` boundary in `tests/check-live/**` | **1** — `turn` | fixed |
+| other `test.skip(` guards reading that state | **3** (assertions 4, 5, 6 via the shared `beforeEach`) | all three now see the restored turn |
+| `CHECK_LIVE_BLOCKED` paths | **2**, both session-minting failures in `global-setup` | untouched; neither fired in the baseline |
+| other specs carrying cross-test state | `action.spec.ts` | **not changed** — it has its own `CHECK_LIVE_BLOCKED` guard and its own serial block; naming it rather than touching it |
+
+**gates** · `tsc` 0 errors · `vitest` 1841 passed in 143 files · canon rail clean · one-exit guard
+clean · WALL 10 clean · `BUILD_EXIT` in the commit line
+
+**NOT done, and why**
+
+- **No `check:live` run.** ~22 minutes and real spend, and the change is proven by the probe. The
+  end-of-run column below is ⊘ rather than a number I did not measure.
+- **No replay.** Three reasons above, any one of which is sufficient.
+- **The constitution was not moved onto the council lane.** That is what would make assertion 5 green,
+  and it is a prompt change on an owner-facing path.
+- **The Anthropic auth fault was not fixed.** Involves a secret and provider auth; founder queue 1.
+- **`action.spec.ts` was not touched**, though it likely has the same worker-respawn exposure.
+
+**discovered**
+
+- `tests/check-live/.auth/` is already in `.gitignore`, so the turn-state file is not committed.
+- Playwright's `--config` cannot live outside the repo: a config in a temp directory fails to resolve
+  `@playwright/test`. The probe had to run from inside the tree (and was deleted afterwards).
+
+---
+
 ## 3 · `check:live` — PHASE 0 AND END, SIDE BY SIDE
 
 | assertion | phase 0 (baseline) | end of run |
 |---|---|---|
-| 1 · the request reached the route | ✓ | *pending* |
-| 2 · the answer streamed and settled | ✓ | *pending* |
-| 3 · the stored turn carries provenance | **✗ null** | *pending* |
-| 4 · an anchored figure resolves to real rows | ⊘ skipped (3 failed) | *pending* |
-| 5 · the answer was constitution-governed | ⊘ skipped (3 failed) | *pending* |
-| 6 · the ledger records which provider served it | ⊘ skipped (3 failed) | *pending* |
-| **exit code** | **1** | *pending* |
+| 0 · the run was able to check anything | ✓ | ⊘ not re-run |
+| 1 · the request reached the route | ✓ | ⊘ not re-run |
+| 2 · the answer streamed and settled | ✓ **(false green — see Phase 0 Finding 2)** | ⊘ not re-run |
+| 3 · the stored turn carries provenance | **✗ null** | ⊘ not re-run |
+| 4 · an anchored figure resolves to real rows | ⊘ skipped | ⊘ not re-run — **but it can now evaluate** |
+| 5 · the answer was constitution-governed | ⊘ skipped | ⊘ not re-run — **can now evaluate; red by design** |
+| 6 · the ledger records which provider served it | ⊘ skipped | ⊘ not re-run — **but it can now evaluate** |
+| **exit code** | **1** | ⊘ |
 
----
+**⚠️ THE END-OF-RUN COLUMN IS ⊘ ACROSS THE BOARD, AND THAT IS THE HONEST ENTRY RATHER THAN A GAP I AM
+HIDING.** `check:live` was not re-run after Phase 0. It costs ~22 minutes and real Google spend per run,
+and this sprint changed four things it would exercise. What changed in the gate itself is proven
+instead by the Playwright probe in Phase 5 — both directions, no credit.
+
+**This is the one thing I would have the founder do first.** `npm run check:live`, once, now that:
+
+- the web server can actually start (Phase 0),
+- assertions 4, 5 and 6 survive a failure upstream and will report for themselves (Phase 5),
+- and every lane writes provenance (Phase 4), which is what assertion 3 reads.
+
+**The prediction, written down now so the run checks it rather than confirms it:** assertion 3 still
+depends on which lane answers and on the turn being allowed to finish — Phase 0 Finding 1 showed the
+council turn being killed by the suite's own teardown — so **assertion 3 may well still be red, and 4,
+5 and 6 will finally say something either way.** Assertion 5 will be red by design. If assertion 3 goes
+green, Phase 4 closed it; if it stays red, Finding 1 is the next thing to fix and the gate will now
+show three more results instead of three blanks.
 
 ## 4 · FOUNDER QUEUE
 
 | # | item | blocks | note |
 |---|---|---|---|
-| 1 | **Anthropic credit top-up** | Phase 5's replay, and any model-backed check | exhausted 07:09 on 20 Sep by M17B's replay |
+| 1 | **⚠️ CORRECTED — `ANTHROPIC_API_KEY` does not reach the server process. THERE IS NO CREDIT PROBLEM.** Every local Anthropic call since 15 Sep fails with the SDK's own *"Could not resolve authentication method"* (`@anthropic-ai/sdk/src/client.ts:753`) — 0 successes bar 2 on 3 Oct. The key IS present in `.env.local` (length 108, value never printed). `ai-router.ts:124`/`:198` read it at call time. | Phase 5's replay, and every Anthropic-backed path | **A top-up fixes nothing.** All failing `agent_key`s are ask-path on one business — local, not production crons. Google is silently carrying these paths, so **S6's and M17B's model calls ran on Google**. The 2 successes on 3 Oct say the key itself works, so this is environmental. |
 | 2 | `package.json`'s POSIX `NODE_OPTIONS="…"` prefix on `build`/`start` | nothing now; it is the root cause Phase 0 worked around | outside Lane A. `npx next` + `webServer.env` is the local fix; the scripts themselves still break any `cmd.exe` caller |
 | 3 | The `CLAUDE.md` bypass wording proposed in `RUN-M17B.md` | nothing | still unapplied |
 | 4 | `aria_turn_records` DDL | nothing — **M18 does not need it** | parked proposal, see `RUN-M17B.md` |
@@ -972,3 +1215,6 @@ clean (37 files) · **WALL 10 clean, and proven to exit 1 when broken** · `BUIL
 |---|---|---|
 | 20 | v1's Phase 1: re-order so `decide()` precedes `ground()` | Already built in M17 phase 2, and M17's header already explained why. Accepted by the founder in v2. |
 | 21 | Phase 0: a `check:live` baseline | The command existed and had "run" for two sprints — **by luck.** Its web server had never started on this machine. Present, not working. |
+| 22 | Phase 2: a verifier that checks figures against anchors, pure and model-free | **`src/lib/aria/verifier.ts` already was one** — MS15, 25+ assertions, returning `pass \| hedge \| refuse`. Called by `evals/run.ts` and nothing else, ever. The brief's three verdicts ARE its `action` union: the sprint was asking for a module's existing vocabulary without knowing the module existed. |
+| 23 | Phase 4: an "honest empty" provenance | `upsertConversation` already decided AGAINST it, in a comment: *"the field is absent, not an empty object, so 'we never captured this' and 'we captured nothing' stay distinguishable."* The code wins. |
+| 24 | Phase 5: make assertion 5 evaluable | It already was. What stopped it was a **worker respawn** wiping module state — not its own logic, and not the guard-dependency I first blamed in the interlude above. |
