@@ -27,6 +27,15 @@ vi.mock('@/lib/aria/ask/aria-intent', () => ({
 vi.mock('@/lib/aria/log-ai-call', () => ({
   logAICallSafe: (...a: unknown[]) => logAICallSafe(...a) as unknown,
 }))
+/**
+ * ⚠️ M18 PHASE 1 — stage 2 now runs real ground-truth queries on figure-bearing lanes, and these
+ * tests drive the council and main lanes. Only the loader is replaced; `ANCHOR_PLAN` stays real, so
+ * `groundingKind` below is still produced by the production decision.
+ */
+vi.mock('./anchors', async orig => ({
+  ...(await orig<typeof import('./anchors')>()),
+  loadAnchorSet: async () => ({ figures: [], queries: [], emptyReason: 'stubbed in turn-record.test.ts' }),
+}))
 
 const { runTurn } = await import('./run-turn')
 const { makeTurnResult } = await import('./types')

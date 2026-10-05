@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ClassifiedIntent } from '@/lib/aria/ask/intent'
 import type { AriaIntent } from '@/lib/aria/ask/aria-intent'
+import type { TurnAnchorSet } from './types'
 
 /**
  * M17 PHASE 2 — THE SPINE, DRIVEN BY RUNNING IT.
@@ -24,6 +25,22 @@ vi.mock('@/lib/aria/ask/intent', () => ({
 }))
 vi.mock('@/lib/aria/ask/aria-intent', () => ({
   classifyAriaIntent: (...a: unknown[]) => classifyAriaIntent(...a) as unknown,
+}))
+
+/**
+ * ⚠️ M18 PHASE 1 — `loadAnchorSet` IS THE ONE PART OF `ground()` THAT TOUCHES THE DATABASE, and
+ * `act()` / `runTurn()` now reach it on every figure-bearing lane. Only that export is replaced:
+ * `ANCHOR_PLAN` and `emptyAnchorSet` stay REAL, so the lane-by-lane decision and the empty-set rule
+ * are the production ones in every test below. The real loader is exercised against mocked database
+ * and revenue modules in `ground.test.ts`.
+ */
+vi.mock('./anchors', async orig => ({
+  ...(await orig<typeof import('./anchors')>()),
+  loadAnchorSet: async (): Promise<TurnAnchorSet> => ({
+    figures: [{ value: 22.5, label: 'Completed sales, today.' }],
+    queries: [{ name: 'revenue_today', ran: true, rows: 3, anchors: [{ value: 22.5, label: 'Completed sales, today.' }] }],
+    emptyReason: null,
+  }),
 }))
 
 const { understand, decide, ground, act, verify, runTurn, assertRegistryComplete } = await import('./run-turn')
@@ -188,15 +205,53 @@ describe('M17 phase 2 · stage 3 — decide reproduces the waterfall', () => {
 })
 
 describe('M17 phase 2 · stage 2 — ground', () => {
+  /**
+   * ⚠️ UPDATED BY M18 PHASE 1, AND THE REASON IS WORTH KEEPING. This test asserted only `kind`,
+   * because in M17 `kind` was all `ground()` returned — the rest of every branch was blank fields and
+   * an `undefined as never` cast. It passed for seven weeks against a stage that did nothing.
+   *
+   * `kind` still means exactly what it meant (what business CONTEXT the lane loads), so those five
+   * assertions are UNCHANGED and still guard the routing. What is added is the second axis M18
+   * introduced: the anchor set, which must be present on every branch. `ground()` is now async, so
+   * the calls are awaited; the loader is injected so this file stays offline — the REAL loader is
+   * exercised against mocked modules in `ground.test.ts`.
+   */
+  const STUB: TurnAnchorSet = {
+    figures: [{ value: 22.5, label: 'Completed sales, today.' }],
+    queries: [{ name: 'revenue_today', ran: true, rows: 3, anchors: [{ value: 22.5, label: 'Completed sales, today.' }] }],
+    emptyReason: null,
+  }
+
   it('reports the kind each lane actually loads today — including none', async () => {
     const u = await understandingFor('hello')
-    const g = (name: LaneName) => ground(INPUT(), u, { name, reason: 'r', firedFeatures: [] })
-    expect(g('council').kind).toBe('council')
-    expect(g('main').kind).toBe('full')
-    // ⚠️ Not an aspiration: the general lane and the fast paths load NOTHING today.
-    expect(g('general').kind).toBe('none')
-    expect(g('save_plan').kind).toBe('none')
-    expect(g('action_planner').kind).toBe('none')
+    const g = (name: LaneName) => ground(INPUT(), u, { name, reason: 'r', firedFeatures: [] }, async () => STUB)
+    expect((await g('council')).kind).toBe('council')
+    expect((await g('main')).kind).toBe('full')
+    // ⚠️ Not an aspiration: the general lane and the fast paths load no business CONTEXT today.
+    expect((await g('general')).kind).toBe('none')
+    expect((await g('save_plan')).kind).toBe('none')
+    expect((await g('action_planner')).kind).toBe('none')
+  })
+
+  it('⚠️ EVERY LANE COMES BACK WITH AN ANCHOR SET — loaded, or empty with a reason', async () => {
+    const u = await understandingFor('hello')
+    const g = (name: LaneName) => ground(INPUT(), u, { name, reason: 'r', firedFeatures: [] }, async () => STUB)
+
+    // A figure-bearing lane is handed the figures themselves.
+    expect((await g('council')).anchorSet.figures).toEqual(STUB.figures)
+    expect((await g('main')).anchorSet.queries.map(q => q.name)).toEqual(['revenue_today'])
+    // `action_planner` loads too, even though its `kind` is 'none' — the two axes are independent,
+    // which is the distinction M17's single `kind` could not express.
+    expect((await g('action_planner')).anchorSet.figures).toEqual(STUB.figures)
+
+    // A lane with nothing to ground gets empty-BUT-PRESENT, and the reason is a real sentence.
+    for (const lane of ['general', 'save_plan', 'nav_fastpath', 'agent_composer'] as const) {
+      const set = (await g(lane)).anchorSet
+      expect(set.figures, lane).toEqual([])
+      expect(set.queries, lane).toEqual([])
+      expect(set.emptyReason, lane).toBeTruthy()
+      expect(set.emptyReason!.length, lane).toBeGreaterThan(20)
+    }
   })
 })
 

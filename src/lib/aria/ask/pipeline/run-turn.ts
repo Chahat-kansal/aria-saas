@@ -43,12 +43,14 @@ import { classifyDeliverableKind } from '@/lib/aria/deliverables'
 import type { NoticeRef } from '@/lib/aria/notice-context'
 import { extractFeatures, firedFeatures } from './features'
 import { render } from './render'
+import { ANCHOR_PLAN, emptyAnchorSet, loadAnchorSet } from './anchors'
 import {
   makeTurnResult,
   withVerification,
   type FeatureName,
   type LaneName,
   type Strategy,
+  type TurnAnchorSet,
   type TurnGrounding,
   type TurnRecord,
   type TurnResult,
@@ -261,29 +263,61 @@ export function decide(u: Understanding, input: TurnInput): Strategy[] {
 /**
  * WHAT THIS LANE LOADS BEFORE IT ANSWERS.
  *
- * In M17 it reports the KIND and the strategies build the context themselves, because the council's
- * context build lives inside a `try` whose `catch` falls back to the single-model path — hoisting it
- * out would change what happens when `getBusinessContext()` throws, which is a behaviour change.
- * "Move, don't rewrite" is the instruction and this is where it bites.
+ * ⚠️ M18 PHASE 1 — THIS FUNCTION HAD AN EMPTY BODY AND THAT WAS THE WHOLE DEFECT.
  *
- * ⚠️ SO THIS STAGE IS CHEAP TODAY, AND IT IS NEVER ABSENT. That distinction is the sprint's own:
- * "a stage may be cheap but never absent". M18 is where it starts loading the lean envelope and
- * `'none'` disappears from this function.
+ * M17 built the stage and nothing could get past it, which was its job. What it returned was
+ * `{ kind: 'council', bizCtx: '', augCtx: '', anchors: [], provenance: null }` and
+ * `{ kind: 'full', ctx: undefined as never }` — every field present, every field empty, on every
+ * turn, for seven weeks. A stage that runs unconditionally and returns nothing is the repo's #1
+ * failure pattern wearing the spine's clothes.
+ *
+ * It now returns a REAL ANCHOR SET: the lean ground-truth figures the answer will be checked
+ * against, with a per-query record of which ran, which returned rows and which returned none, and
+ * for a lane with nothing to ground, an EMPTY-BUT-PRESENT set carrying the reason. See
+ * `./anchors.ts` for why that set is lean rather than the council's own eighteen queries, and
+ * `ANCHOR_PLAN` for the lane-by-lane decision, which the compiler keeps total.
+ *
+ * ⚠️ `kind` IS UNCHANGED, DELIBERATELY. It still means "what business CONTEXT this lane loads" —
+ * `none` / `council` / `full` — and `'none'` still accurately describes the general lane, which
+ * loads no business context at all. The anchor set is a SEPARATE axis, so `kind: 'none'` with a
+ * loaded anchor set is coherent, the turn record's `groundingKind` distribution stays comparable
+ * with M17B's, and phase 5's replay can diff it like-for-like. M17's forecast that `'none'` would
+ * disappear here would have cost that comparison for no behavioural gain.
+ *
+ * ⚠️ STILL NOT HOISTED: `getBusinessContext()` and `buildAskAriaContext()` stay inside their lanes.
+ * Both sit in a `try` whose `catch` falls back, and moving them in front of the lane changes what
+ * happens when they throw. The brief is explicit — do not re-order the stages, do not re-architect
+ * reachability. The diff is this function's body and its type.
  */
-export function ground(_input: TurnInput, _u: Understanding, strategy: Strategy): TurnGrounding {
+export async function ground(
+  input: TurnInput,
+  _u: Understanding,
+  strategy: Strategy,
+  /**
+   * ⚠️ ONE LOAD PER TURN, NOT ONE PER CANDIDATE. `act()` passes a memoised loader because five lanes
+   * decline and fall through; without it a council turn that falls through to `main` would run the
+   * ground-truth queries twice, on exactly the turns that are already the slowest.
+   */
+  load: () => Promise<TurnAnchorSet> = () => loadAnchorSet(input.bid),
+): Promise<TurnGrounding> {
+  const emptyReason = ANCHOR_PLAN[strategy.name]
+  const anchorSet = emptyReason === null ? await load() : emptyAnchorSet(emptyReason)
+
   switch (strategy.name) {
     case 'council':
-      // getBusinessContext + buildFactsPacket + the live ground-truth anchors, built in the lane.
-      return { kind: 'council', bizCtx: '', augCtx: '', anchors: [], provenance: null }
+      // getBusinessContext + buildFactsPacket + the council's own wider anchor block, in the lane.
+      return { kind: 'council', bizCtx: '', augCtx: '', anchors: [], provenance: null, anchorSet }
     case 'main':
     case 'image':
-      // buildAskAriaContext at the scope the intent asked for, built in the lane.
-      return { kind: 'full', ctx: undefined as never }
+      // buildAskAriaContext at the scope the intent asked for, built in the lane — hence `ctx: null`
+      // here, which is the truth M17's `undefined as never` cast was hiding from the compiler.
+      return { kind: 'full', ctx: null, anchorSet }
     default:
       // ⚠️ NOT AN ASPIRATION — AN ACCURATE DESCRIPTION. The general lane and the fast paths load no
-      // business context at all. That is flaw 2 of the logic read, stated in a value for the first
-      // time instead of being implied by where a `return` happens to sit.
-      return { kind: 'none' }
+      // business CONTEXT at all. That is flaw 2 of the logic read, stated in a value instead of
+      // being implied by where a `return` happens to sit. The anchor set beside it is now present
+      // either way, which is what M18 changes.
+      return { kind: 'none', anchorSet }
   }
 }
 
@@ -294,6 +328,13 @@ export function ground(_input: TurnInput, _u: Understanding, strategy: Strategy)
 export interface ActOutcome {
   readonly result: TurnResult
   readonly chosen: Strategy
+  /**
+   * ⚠️ M18 PHASE 1 — THE GROUNDING THE WINNING LANE WAS ACTUALLY HANDED, RETURNED RATHER THAN
+   * REBUILT. `runTurn` used to call `ground()` a SECOND time to fill in the turn record. With M17's
+   * empty body that was free; with a body in it, it would have doubled every ground-truth query on
+   * every answered turn — invisible in the response, visible only on the database bill.
+   */
+  readonly grounding: TurnGrounding
   /** Lanes that were offered the turn and declined, in order. The waterfall, as a value. */
   readonly declined: readonly LaneName[]
 }
@@ -313,6 +354,11 @@ export async function act(
   u: Understanding,
 ): Promise<ActOutcome> {
   const declined: LaneName[] = []
+  // ⚠️ MEMOISED FOR THE WHOLE TURN. See `ground()`'s `load` parameter: the anchor set is identical
+  // for every candidate in one turn, and five lanes decline and fall through to the next one.
+  let once: Promise<TurnAnchorSet> | null = null
+  const load = () => (once ??= loadAnchorSet(input.bid))
+
   for (const strategy of candidates) {
     const fn = registry[strategy.name]
     if (!fn) {
@@ -322,9 +368,9 @@ export async function act(
         + 'see assertRegistryComplete().',
       )
     }
-    const grounding = ground(input, u, strategy)
+    const grounding = await ground(input, u, strategy, load)
     const result = await fn({ input, understanding: u, grounding, strategy })
-    if (result) return { result, chosen: strategy, declined }
+    if (result) return { result, chosen: strategy, grounding, declined }
     declined.push(strategy.name)
   }
   // Unreachable while 'main' is always last and never declines — but a silent undefined here would
@@ -434,7 +480,17 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
 
   const leave = (r: TurnResult, lane: string) => {
     const verified = verify(r)
-    opts.onRecord?.(recordOf(envelope.bid, r, null, { kind: 'none' }, verified, stageMs, t0, undefined, undefined, lane))
+    // ⚠️ A GATE GETS A GROUNDING TOO — EMPTY, PRESENT, AND EXPLAINED. It answered before the
+    // classifiers ran, so it must never pay for an anchor query; but an absent anchor set here would
+    // be the one shape the type exists to forbid. `ANCHOR_PLAN` holds the reason for each gate lane.
+    const gateGrounding: TurnGrounding = {
+      kind: 'none',
+      anchorSet: emptyAnchorSet(
+        ANCHOR_PLAN[r.lane]
+        ?? 'answered at an admission gate, before the classifiers and before grounding ran',
+      ),
+    }
+    opts.onRecord?.(recordOf(envelope.bid, r, null, gateGrounding, verified, stageMs, t0, undefined, undefined, lane))
     return render(verified)
   }
 
@@ -486,8 +542,10 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
   const verified = verify(outcome.result)
   mark('verify', tVerify)
 
+  // ⚠️ `outcome.grounding`, NOT A SECOND `ground()` CALL. See ActOutcome.grounding — re-grounding here
+  // would double every ground-truth query on every answered turn now that the stage has a body.
   opts.onRecord?.(
-    recordOf(envelope.bid, outcome.result, outcome.chosen, ground(input, understanding, outcome.chosen), verified, stageMs, t0, understanding, outcome.declined),
+    recordOf(envelope.bid, outcome.result, outcome.chosen, outcome.grounding, verified, stageMs, t0, understanding, outcome.declined),
   )
 
   // ── stage 6 · render — THE ONLY EXIT ─────────────────────────────────────────────────────────

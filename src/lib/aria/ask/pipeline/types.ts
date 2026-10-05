@@ -146,7 +146,7 @@ export interface Understanding {
  */
 export type TurnGrounding =
   /** The general / fast-path lanes: no business context is loaded at all. */
-  | { readonly kind: 'none' }
+  | { readonly kind: 'none'; readonly anchorSet: TurnAnchorSet }
   /** The council lane: getBusinessContext() + facts packet + the live ground-truth anchors. */
   | {
       readonly kind: 'council'
@@ -154,9 +154,65 @@ export type TurnGrounding =
       readonly augCtx: string
       readonly anchors: readonly number[]
       readonly provenance: TurnProvenance | null
+      readonly anchorSet: TurnAnchorSet
     }
-  /** The main tool loop: the full buildAskAriaContext() at the scope the intent asked for. */
-  | { readonly kind: 'full'; readonly ctx: AskAriaContext }
+  /**
+   * The main tool loop: the full buildAskAriaContext() at the scope the intent asked for.
+   *
+   * ⚠️ M18 PHASE 1 — `ctx` IS NULLABLE NOW, AND THAT IS THE TYPE STOPPING LYING RATHER THAN A
+   * CAPABILITY BEING REMOVED. M17 returned `ctx: undefined as never` here: the type claimed an
+   * `AskAriaContext` and the value was `undefined`, because `buildAskAriaContext()` runs INSIDE the
+   * main lane and hoisting it in front of the lane would change what happens when it throws. The
+   * cast made the compiler agree with a statement that was false on every turn. `| null` makes it
+   * true. The anchor set beside it is what the stage now actually returns.
+   *
+   * Sweep for readers of this field before widening it: ZERO. No strategy destructures `grounding`
+   * at all (checked across `src/lib/aria/ask/strategies/*.ts`); the only consumer of the whole type
+   * is `turn-record.ts`, which reads `kind`. So this widening cannot reach a caller, let alone a
+   * cached client — the consumer test in RULE 20 is satisfied inside this one commit.
+   */
+  | { readonly kind: 'full'; readonly ctx: AskAriaContext | null; readonly anchorSet: TurnAnchorSet }
+
+/* ── THE ANCHOR SET (M18 phase 1) ──────────────────────────────────────────────────────────────── */
+
+/** A ground-truth number and the sentence that says what it is. The label is what the owner reads. */
+export interface LabelledFigure {
+  readonly value: number
+  readonly label: string
+}
+
+/**
+ * One named ground-truth query, and what became of it. **A query that FAILED is in here as
+ * `ran: false` carrying the thrown message** — not missing, which would be indistinguishable from a
+ * business that genuinely has no sales.
+ */
+export interface AnchorQuery {
+  /** The name a report can print: `revenue_today`, `customers_on_record`. */
+  readonly name: string
+  readonly ran: boolean
+  /** Rows matched. `0` is a real answer ("no completed sales today"); `null` means it did not run. */
+  readonly rows: number | null
+  /** The labelled figures this query contributed. Empty when it ran and produced none. */
+  readonly anchors: readonly LabelledFigure[]
+  /** Why it failed, or why it ran and still produced no figure. */
+  readonly note?: string
+}
+
+/**
+ * WHAT THE ANSWER WILL BE CHECKED AGAINST — present on every lane, loaded on the ones that can put a
+ * dollar or a percentage in front of an owner.
+ *
+ * ⚠️ A LANE WITH NOTHING TO GROUND GETS AN EMPTY SET WITH A REASON, NEVER `undefined`. "Nothing to
+ * ground" is a result and reads as one; `undefined` reads as a bug, and in this repo's history that
+ * difference is the whole distance between a feature that works and one that was never reachable.
+ */
+export interface TurnAnchorSet {
+  readonly figures: readonly LabelledFigure[]
+  /** Which queries ran, which returned rows, which returned none. */
+  readonly queries: readonly AnchorQuery[]
+  /** Non-null ONLY when `figures` is empty, and then it says why. */
+  readonly emptyReason: string | null
+}
 
 /**
  * S3 phase 1's carrier, unchanged. Stored with the message so a reloaded thread can still tier its
