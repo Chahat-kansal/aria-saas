@@ -58,6 +58,18 @@ import { summariseConversation } from '@/lib/aria/memory/summarize'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { upsertConversation } from '../pipeline/turn-persistence'
 
+/**
+ * M18 PHASE 3 — "the queries already reported this".
+ *
+ * Narrowing the anchor region's single 245-line catch into two means the outer handler must be able
+ * to tell a failure IT is seeing for the first time from one the inner `.catch()` has already logged.
+ * Without this, narrowing would produce two log lines for one outage — which reads, to whoever greps
+ * next, as two separate faults.
+ */
+class AnchorsAlreadyReported extends Error {
+  constructor() { super('council ground-truth queries failed; already reported'); this.name = 'AnchorsAlreadyReported' }
+}
+
 export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
   const { bid, userId, message, conversationId, clientMessages, noticeRef } = input
   const { intent, ariaIntent, features } = understanding
@@ -89,6 +101,14 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
           intent: intent.type, action: null, cost_usd_cents: 0, downloads: null, tool_calls: [], used_council: false,
         })
       }
+      /**
+       * ⚠️ M18 PHASE 3 — WHICH PART OF THE GROUNDING FELL OVER, in the shape `advisors_lost` already
+       * established in this file: an EMPTY ARRAY means complete, and the field is never omitted, so a
+       * client cannot read "absent" as "fine". Same reasoning one layer down — S8 phase 2 did it for
+       * lost advisors so the owner is told the answer is narrower rather than handed a
+       * confident-looking partial. An answer with no anchors is narrower in exactly that way.
+       */
+      const anchorsDegraded: string[] = []
       let augCtx = bizCtx
       try {
         const ctxParsed = JSON.parse(bizCtx) as Record<string, unknown>
@@ -109,7 +129,20 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
           // month, feeding available_ground_truth — the block the model is told is "SAFE TO CITE")
           // used neq('voided'), admitting draft/refunded rows. status='completed' matches
           // getRevenueSnapshot()'s canonical rule (gt56d just below already used it correctly).
-          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights, gtOpenLoops, gtBenchmark, gtHypotheses] = await Promise.all([
+          /**
+           * ⚠️ M18 PHASE 3 — THE SEVENTH SILENT CATCH, NARROWED TO THE ONE STATEMENT THAT CAN FAIL.
+           *
+           * These eighteen reads are the only thing in this ~245-line region that depends on live
+           * state. Everything after the destructuring is arithmetic over what they returned. Until
+           * now BOTH shared one `catch (anchorErr)` 230 lines below, so a Supabase outage and a
+           * `.toFixed()` on an unexpected shape produced the identical log line and the identical
+           * outcome — no anchors, `provenance: null`, and no way to tell which had happened.
+           *
+           * The `.catch()` goes HERE, on the promise, rather than the block being re-wrapped: the
+           * query lines stay byte-identical, which matters because a file move of byte-identical
+           * lines has tripped the canon rail in this repo before and cost a whole phase.
+           */
+          const gtAll = await Promise.all([
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtTodayStart).eq('status', 'completed'),
             supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', bid).gte('created_at', gtWeekStart).eq('status', 'completed'),
             supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', bid).eq('marketing_consent', true),
@@ -143,7 +176,23 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
             // I11 COUNTERFACTUAL Part 1: top open hypotheses the nightly engine generated (so the
             // council can proactively surface testable ideas the owner has not seen).
             computeHypothesisContext(bid).catch(() => null),
-          ])
+          ]).catch((queryErr: unknown) => {
+            // Narrow, named, and COUNTABLE — `console.error` alone is a line nobody greps. This
+            // writes the failure where `health_signals` and `open_loops` already write theirs, so
+            // "how often do the council's anchors fail" becomes a query instead of a guess.
+            anchorsDegraded.push('ground_truth_queries')
+            const msg = queryErr instanceof Error ? queryErr.message : String(queryErr)
+            console.error('[aria/ask] council ground-truth QUERIES failed — no anchors, no provenance:', msg)
+            void logAICallSafe({
+              business_id: bid, agent_key: 'council_anchors', role: 'analysis', provider: 'other',
+              success: false, error_message: msg.slice(0, 500), request_summary: bid,
+              response_summary: 'ground_truth_queries failed — answering with no anchors and no provenance',
+            })
+            return null
+          })
+          // Reported already, so the `catch (anchorErr)` below must not report it a second time.
+          if (!gtAll) throw new AnchorsAlreadyReported()
+          const [gtToday, gtWeek, gtConsent, gtCompleted7, gtPaid7, gtLastWeek, gtSwlm, gt56d, gtTotalCust, gtTopCust, gtBiz, gtPromoActions, gtHealth, gtGoal, gtWeights, gtOpenLoops, gtBenchmark, gtHypotheses] = gtAll
           const gtSum = (rows: Array<{ total_amount: number | null }> | null) => (rows ?? []).reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
           const paidSaleIds = new Set(((gtPaid7.data ?? []) as Array<{ sale_id: string }>).map(r => r.sale_id))
           const completedSales7 = gtCompleted7.count ?? 0
@@ -342,23 +391,38 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
           }
         } catch (anchorErr) {
           /**
-           * ⚠️ M17B PHASE 2 — W6 INSIDE THE ROUTER. This was a BARE `catch { }` with no binding and
-           * no log, and it wraps ~245 lines: all eighteen ground-truth queries, `anchorValues`, and
-           * `turnProvenance = buildProvenance(...)`.
+           * ⚠️ M18 PHASE 3 — THIS HANDLER NOW HAS ONE JOB, AND THE HISTORY IS WORTH KEEPING.
            *
-           * If anything in there throws, the council answers with NO `available_ground_truth` and
-           * **`turnProvenance` stays null** — so the response carries `provenance: null` and not one
-           * figure in the answer can be tiered. That is M3's 0-of-288 missing tiers and S6's live
-           * finding that a real business turn carried no provenance, with a plausible cause: nothing
-           * anywhere recorded that it had happened.
+           * It began as a BARE `catch { }` — no binding, no log — wrapping ~245 lines: all eighteen
+           * ground-truth queries, `anchorValues`, and `turnProvenance = buildProvenance(...)`. When
+           * anything in there threw, the council answered with no `available_ground_truth` and
+           * `turnProvenance` stayed null, so the response carried `provenance: null` and not one figure
+           * could be tiered. That is M3's 0-of-288 missing tiers and S6's live finding that a real
+           * business turn carried no provenance — with a plausible cause nothing anywhere recorded.
+           * S9 phase 6 fixed the OUTER catch below, its comment noting "until now nothing recorded that
+           * it had happened", and left this inner one silent. M17B phase 2 gave it a binding and a log.
            *
-           * S9 phase 6 fixed the OUTER catch below — its comment even says "until now nothing
-           * recorded that it had happened" — and left this inner one silent.
+           * It still covered both halves, which is what M18 changes. **The queries now carry their own
+           * `.catch()`**, so anything arriving here is a failure in the ARITHMETIC over results that
+           * came back fine — a different fault with a different fix, and for the first time it says so.
+           * A `.toFixed()` on an unexpected shape no longer looks like a Supabase outage.
            *
-           * Still non-fatal, exactly as before: the council proceeds without anchors. Only the
-           * silence is gone. No control flow changed.
+           * Still non-fatal, exactly as before: the council proceeds without anchors. No control flow
+           * changed for either half — only who reports what.
            */
-          console.error('[aria/ask] council ground-truth anchors FAILED — answering with NO anchors and NO provenance:', (anchorErr as Error).message)
+          if (anchorErr instanceof AnchorsAlreadyReported) {
+            // The queries failed and their own handler logged it. Reporting again here would read as
+            // two faults; the degradation is already recorded in `anchorsDegraded`.
+          } else {
+            anchorsDegraded.push('anchor_derivation')
+            const msg = anchorErr instanceof Error ? anchorErr.message : String(anchorErr)
+            console.error('[aria/ask] council anchor DERIVATION failed (the queries returned fine) — no anchors, no provenance:', msg)
+            void logAICallSafe({
+              business_id: bid, agent_key: 'council_anchors', role: 'analysis', provider: 'other',
+              success: false, error_message: msg.slice(0, 500), request_summary: bid,
+              response_summary: 'anchor_derivation failed — queries returned, arithmetic over them threw',
+            })
+          }
         }
         augCtx = JSON.stringify(ctxParsed)
       } catch (e) {
@@ -490,6 +554,12 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
           // dashboard. Empty array = a complete council; the field is never omitted, so a client
           // cannot read "absent" as "fine".
           advisors_lost: (council.advisors_lost ?? []).map(a => a.role),
+          // M18 PHASE 3 — the same contract as `advisors_lost` directly above: [] means the grounding
+          // was complete, and the field is never omitted, so "absent" cannot be read as "fine".
+          // 'ground_truth_queries' = the eighteen reads threw; 'anchor_derivation' = they returned and
+          // the arithmetic over them threw. Either way `provenance` below is null and the renderer must
+          // not tier anything. ADDITIVE — no existing field changes name, type or presence.
+          anchors_degraded: anchorsDegraded,
           // S3 PHASE 1 — the anchors travel to the client so the renderer can tier the figures it
           // is about to draw. Null on paths that computed none; never fabricated to fill the field.
           provenance: turnProvenance,

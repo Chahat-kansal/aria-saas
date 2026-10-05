@@ -564,6 +564,169 @@ clean (32 files scanned whole) · `BUILD_EXIT` — see the gate line in the comm
 
 ---
 
+### PHASE 3 — THE SEVENTH SILENT CATCH, NARROWED  ·  commit `pending`
+
+**SCOPE** · `answer-council.ts`'s anchor region had ONE `catch` around ~245 lines. Narrow it to the
+statement that can legitimately fail, log with the thrown error, and mark the turn degraded.
+
+**NOT-SCOPE** · the council's 18 queries themselves · the outer `augCtx` catch · the other lanes'
+catches · extracting the derivation into a function.
+
+**WHAT WAS WRONG**
+
+One `catch (anchorErr)` covered all eighteen ground-truth queries, `anchorValues`, and
+`turnProvenance = buildProvenance(...)`. So a Supabase outage and a `.toFixed()` on an unexpected
+shape produced **the identical log line and the identical outcome** — no anchors, `provenance: null`,
+not one figure in the answer tierable. That is M3's 0-of-288 missing tiers and S6's live finding of a
+real business turn carrying no provenance, with a cause nothing anywhere recorded. S9 phase 6 fixed
+the OUTER catch — its comment reads *"until now nothing recorded that it had happened"* — and left
+this inner one silent. M17B phase 2 gave it a binding and a log, and it still covered both halves.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/aria/ask/strategies/answer-council.ts` | +70 / −18 | the queries' own `.catch`, the sentinel, the rewritten derivation handler, `anchors_degraded` |
+| `src/lib/aria/ask/strategies/council-anchors.test.ts` | **new**, 186 | 4 tests driving the real lane |
+
+**HOW IT WAS NARROWED, AND WHY THIS WAY**
+
+The `.catch()` went **on the `Promise.all` itself**, not around a re-wrapped block:
+
+```ts
+const gtAll = await Promise.all([ …18 reads… ]).catch((queryErr: unknown) => { …report…; return null })
+if (!gtAll) throw new AnchorsAlreadyReported()
+const [gtToday, gtWeek, …] = gtAll
+```
+
+**The eighteen query lines are byte-identical.** That was the deciding constraint: re-wrapping the
+block would have re-indented ~200 lines, and the canon rail scans *added* lines — a file move of
+byte-identical code has tripped it in this repo before and cost M17 phase 3 entirely. The rail and
+the one-exit guard both passed first time here, which is the point.
+
+A sentinel (`AnchorsAlreadyReported`) stops the outer handler reporting the same outage a second
+time. Two log lines for one fault reads, to whoever greps next, as two separate problems — there is a
+mutation for exactly that.
+
+**⚠️ WHAT I DID *NOT* ACHIEVE, MEASURED HONESTLY**
+
+`catch (anchorErr)` **still spans 275 lines.** It did not shrink — it grew, from the new handler and
+its comments. My first instinct was to report "narrowed from 245 lines to 1"; that would have been
+false. Measured with a brace-matching pass over the file (my first attempt was an `awk` one-liner
+that paired the wrong `try` with the wrong `catch` — RULE 16 #5, and I am not reporting its numbers):
+
+| try → catch | span | what can now reach it |
+|---|---|---|
+| `Promise.all(...).catch` | **1 statement** | a failed ground-truth read — the only live-state dependency in the region |
+| `117 → 392` `catch (anchorErr)` | 275 lines | **arithmetic only.** Still wide, but it can no longer be an outage, and it says so |
+| `113 → 428` `catch (e)` | 315 lines | the `JSON.parse`/`stringify` + facts packet wrapper, untouched |
+
+So what narrowed is **the set of faults that can reach the wide catch**, not its physical span.
+Shrinking the span needs the derivation extracted into a function — ~200 re-indented lines, the exact
+change `aria-minimal-change` forbids and the exact change that costs a phase to the rail. Named as
+the follow-on, not smuggled in.
+
+**MARKING THE TURN DEGRADED — using the contract this file already had**
+
+`anchors_degraded: string[]` sits directly beside `advisors_lost`, whose comment established the
+pattern: *"Empty array = a complete council; the field is never omitted, so a client cannot read
+'absent' as 'fine'."* Same reasoning one layer down. Values: `ground_truth_queries` (the reads threw)
+or `anchor_derivation` (they returned and the arithmetic threw).
+
+`degraded_via` was **not** reused: it exists only on the `main` lane and means "which provider
+degraded". Overloading it would be semantic drift, and nothing reads it anyway.
+
+**ADDITIVE, so it proceeds under the CONSUMER TEST:** no existing field changes name, type, presence
+or status code. RULE 20's settled reading is explicit that additive fields proceed even for a cached
+PWA consumer. Checked: `types.test.ts`'s 36-key inventory asserts over a static `EXITS` fixture, so
+it neither breaks nor silently drifts — but the live council body now has a 37th key, which is worth
+knowing before someone reads that number as current.
+
+**And the failure is now COUNTABLE, not just logged.** `logAICallSafe({ agent_key: 'council_anchors',
+success: false, error_message })` writes where `health_signals` and `open_loops` already write, so
+*"how often do the council's anchors fail"* becomes a query instead of a guess. `role: 'analysis'`
+and `provider: 'other'` are CHECK-legal — an off-list value is a silently rejected insert, which is
+how whole `agent_key`s wrote zero rows for weeks.
+
+**VERIFY — pasted**
+
+```
+ Test Files  140 passed (140)
+      Tests  1825 passed (1825)
+```
+
+The four new tests drive the **real `councilStrategy`**, not a regex over its source:
+
+- a healthy turn degrades nothing — `anchors_degraded: []`, zero audit rows, field present. Without
+  this the three below would prove nothing;
+- a failed query is named `ground_truth_queries`, carries `ECONNRESET` through to both the log and
+  the audit row, still answers, and `provenance` is null;
+- it is reported **once**, not twice;
+- a failed derivation is named `anchor_derivation` and its message says *"the queries returned
+  fine"* — the sentence that was impossible to write before this phase.
+
+**MUTATION CHECK — 4 of 4 red, after I wrote one that could not fail**
+
+```
+mutation                                                       verdict
+----------------------------------------------------------------------------------------------
+a query failure is reported as a derivation failure (pre-narrowing)  RED - 1 tests failed
+anchors_degraded is dropped from the response                       RED - 3 tests failed
+the query failure is logged but not recorded in aria_ai_calls        RED - 2 tests failed
+the sentinel goes, so one outage reports as two faults               RED - 2 tests failed
+----------------------------------------------------------------------------------------------
+4 of 4 went red. All verified.
+```
+
+My first mutation 1 came back `STILL GREEN`, and **the mutation was wrong, not the test**: I made the
+`.catch` re-throw into a second `.catch` that still ran the original reporting body, so nothing was
+un-narrowed. Replaced with one that collapses the two labels — which is precisely what the single
+245-line catch could only ever say — and it goes red. Recorded because a mis-built mutation that
+"passes" is how a phase talks itself into believing it is verified.
+
+**Two bugs in my own test, found by running it rather than by reading it:**
+
+1. `bizCtx` was 44 characters. `answer-council.ts:88` treats anything under 50 as "not enough data for
+   a strategic read" and returns from an **earlier exit that never reaches the anchor region** — so
+   all four assertions were being made against the wrong return.
+2. I tried to trigger the derivation failure by throwing from `computeHealthSignals`. It sits *inside*
+   the `Promise.all` behind its own `.catch(() => null)`, so it can never reach the derivation. The
+   poison has to be a **value**: a malformed `created_at`, which sails through the query layer and
+   throws `RangeError` in the 56-day bucketing loop. That is also a more honest fixture, because it is
+   the shape a real derivation fault takes.
+
+**And `tsc` caught two errors the green test run did not** — zero-argument `vi.fn()` mocks being
+spread. "Tests pass" is not "gates pass".
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| other wide try/catch in `src/lib/aria/ask/**` | **2** | `answer-council.ts:113→428` (315 lines, the `augCtx` wrapper — out of scope, already reported by S9 phase 6) and `background-task.ts:27→74` (47 lines) — **neither changed**, both named here |
+| bare `catch {` with no binding in the ask lane | **6** | `action-executor.ts` ×2, `turn-persistence.ts` ×3, `suggestions.ts` ×1 — all of them `return false` / `return null` / `return '[]'` on a parse failure, i.e. a deliberate default rather than a swallowed write. Left alone, listed so the count is known |
+| `logAICallSafe` failure rows in the lane | **2**, both the ones added here | the convention came from `health_signals`/`open_loops` audit rows in the same file |
+
+**gates** · `tsc` 0 errors · `vitest` 1825 passed in 140 files · canon rail clean · one-exit guard
+clean (33 files) · `BUILD_EXIT` in the commit line
+
+**NOT done, and why**
+
+- The derivation was not extracted into its own function, so the wide catch keeps its 275-line span.
+  ~200 re-indented lines, against `aria-minimal-change` and against the rail.
+- `background-task.ts`'s 47-line catch was not narrowed. In Lane A, but not this phase's scope, and
+  expanding into it unattended is what the standing table forbids.
+- The outer `catch (e)` at 428 was not touched. S9 phase 6 already made it report; its span is a
+  separate piece of work.
+
+**discovered**
+
+- **The council's `anchors_degraded` is the lever Phase 4 needs.** When it is non-empty,
+  `provenance` is null *by construction* — so Phase 4 can distinguish "this lane never writes
+  provenance" from "this turn's grounding fell over", which the baseline could not.
+- The live council body now carries **37** top-level keys, not the 36 `types.test.ts` documents.
+
+---
+
 ## 3 · `check:live` — PHASE 0 AND END, SIDE BY SIDE
 
 | assertion | phase 0 (baseline) | end of run |
