@@ -4,6 +4,72 @@ Branch `main` · autonomous run (RULE 20) · started 5 Oct 2026 · **Lane A + D*
 
 ---
 
+## THE SUMMARY — the conversation you would otherwise have had
+
+**Five phases, five commits, all pushed. `tsc` 0 errors, 1,893 unit tests green in 148 files, every
+guard clean, `BUILD_EXIT=0` on every phase. Owner-visible diff: none, and it is asserted by tests
+rather than claimed.**
+
+### The four things that matter most
+
+1. **🔴 The doomed calls were never costing money, and the sprint's title says otherwise.** 0 Anthropic
+   successes since 21 September means **0 Anthropic spend** since 21 September — an auth error never
+   reaches Anthropic, and a credit-balance 400 is a rejection, not a charge. The 346 attempts cost
+   **latency, ledger noise and a wrong picture**, not dollars. The work was still worth doing (your own
+   one-liner is the accurate justification: *"Aria must never call a provider it already knows is
+   dead"*), but I am not reporting that I stopped a spend that was already zero. **Real spend today is
+   Gemini: 354 successes of 379.**
+
+2. **🔴 Nothing in CI or testing was draining the balance either.** `ANTHROPIC_API_KEY` is **not set**
+   in Claude Code's shell, so founder console item 1 — *"the single change that stops testing from
+   draining Aria's balance"* — is already in the desired state. And no unit test could spend: every
+   provider key reads ABSENT under vitest. **But that was an accident, not a guard** — no `setupFiles`,
+   `fetch` wide open, and one plausible `dotenv` commit from arming all 1,893 tests. Phase 3 (WALL 11)
+   is what makes it a guarantee.
+
+3. **🟡 The outage reply was wrong 155 times out of 156 — and the condition is correct.** Of the 156
+   conversations ending in "every provider is down", **155 had a real model call succeed within ±2
+   minutes** (144 within ±30 seconds; Gemini working in 125). But `if (degradedProvider === 'none')`
+   fires only after **all four** legs fail, so it is behaving as designed. **The condition is right and
+   the environment was broken.** That makes M18C justified but a *different change* from the one the
+   brief imagined — not "fix the condition" but "make the degrade chain's key resolution as reliable as
+   the ledger's". **It needs your go separately.**
+
+4. **🟢 The ledger can tell you what Aria spends, from today.** Both faults were **DDL defaults**, not
+   code — `model_provider DEFAULT 'anthropic'` and `cost_usd_cents DEFAULT 0` — which is why no code
+   review would ever have found them. The canonical writer now sets both explicitly, so a Gemini call
+   records `google` and an unmeasured cost records `NULL`. **Old rows stay wrong and are documented as
+   wrong; the columns became trustworthy on 5 Oct 2026.** Dropping the defaults is DDL and therefore
+   yours — founder console 5, with the SQL.
+
+### Four corrections to the brief, and three to my own work
+
+The brief's **evidence all held** — I re-measured every figure independently before building on it. The
+corrections are to its **diagnosis**: the two faults do not split by model (§1a), the circuit breaker
+already existed and already recognised both errors (§1b), both ledger faults are DDL defaults (§1c), and
+the doomed calls cost nothing (§1d).
+
+My own: a mutation that could not fail because my test mocked the module it was testing (phase 1); a
+test that fired on my own documentation (phase 3); a teardown query that reported failure because a
+subquery read the pre-delete snapshot (phase 4). All three are written up where they happened.
+
+### Phases
+
+| phase | what | commit |
+|---|---|---|
+| 0 | where the money actually goes — five answers, four corrections | `7f6abdaf` |
+| 1 | the router joins the breaker it never consulted | `175d579d` |
+| 2 | the outage lane: measured, not changed | `18991138` |
+| 3 | WALL 11 — a unit test cannot spend money | `486ea5ec` |
+| 4 | the ledger tells the truth | *this commit* |
+| 5 | the founder console — nothing executed | *this commit* |
+
+**The single most useful thing you can do next** is founder console 5 (drop the two column defaults) —
+until then the ledger is honest only for rows that come through `logAICallSafe`, and the 175 WALL 1
+bypassers keep writing `anthropic` and `0`.
+
+---
+
 ## 🚨 URGENT — THE QUESTION THE SPRINT EXISTS FOR, ANSWERED FIRST
 
 > **No test in this repo can spend money today — and nothing in the repo prevents it.
@@ -736,6 +802,156 @@ clean · `BUILD_EXIT` in the commit line
 
 ---
 
+### PHASE 4 — THE LEDGER TELLS THE TRUTH · commit `pending`
+
+**SCOPE** · the three items the brief lists: `model_provider` derived, `cost_usd_cents` NULL-not-0, no
+backfill. **NOT-SCOPE** · DDL (RULE 10a) · any new ledger row.
+
+**⚠️ BOTH FAULTS WERE DDL DEFAULTS, WHICH IS WHY NO CODE REVIEW WOULD EVER HAVE FOUND THEM**
+
+```
+model_provider   DEFAULT 'anthropic'::text
+cost_usd_cents   DEFAULT 0
+```
+
+Over the 929 calls since 21 September: `model_provider` had **1 distinct value** — the literal
+`anthropic` — across 547 `gemini-2.5-flash` calls and 27 `gpt-4o-mini` calls; `sum(cost_usd_cents)`
+was **0**, with 885 rows literally `0` and 44 `NULL`. Nothing in the code said `anthropic` for those
+rows. **The database filled it in.**
+
+**AND `provider` WAS ALREADY CORRECT ALL ALONG — which is what made the fix one line.**
+
+| `provider` | rows | models seen |
+|---|---|---|
+| `google` | 547 | `gemini-2.5-flash` |
+| `anthropic` | 388 | `claude-haiku-4-5`, `claude-sonnet-4-5` |
+| `other` | 219 | `council_cache`, `openai/gpt-4o-mini` |
+| `openai` | 27 | `gpt-4o-mini` |
+
+`provider` is CHECK-constrained and set per call from the client that was used. So `model_provider`
+defaults to **it** rather than to a literal, and every row the canonical writer makes is fixed at once.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/aria/log-ai-call.ts` | +44 / −1 | both columns written explicitly; `model_provider?`, `cost_usd_cents: number \| null` |
+| `src/lib/ai-router.ts` | +13 / −1 | `provider`/`model_provider` derived from `model_id` |
+| `src/lib/aria/ledger-truth.test.ts` | **new**, 133 | 11 tests |
+| `src/lib/ai-router-breaker.test.ts` | +40 | 2 more — the router's own ledger rows |
+
+**VERIFY — the rows, pasted, as the brief asks**
+
+Two halves, and I am explicit that it is two rather than one end-to-end call, because Anthropic cannot
+currently succeed at all (founder console 1) so a real paired call is not available:
+
+**Half 1 — the payload the code now sends** (11 unit tests, mocked database). **Half 2 — the database
+storing it**, which is the half that proves an explicit value beats a default. Proof rows inserted with
+the exact shape `logAICallSafe` now produces, read back, then torn down:
+
+| provider | model_provider | model_id | success | cost_usd_cents | cost is NULL not 0 |
+|---|---|---|---|---|---|
+| `google` | **`google`** | `gemini-2.5-flash` | true | `null` | **true** |
+| `anthropic` | `anthropic` | `claude-haiku-4-5-20251001` | false | `null` | **true** |
+
+**The first row is the whole phase**: a Gemini call stored as `google`, on a column whose default would
+have written `anthropic`, with a cost of `NULL` on a column whose default would have written `0`.
+
+Torn down afterwards (RULE 10a blesses proof rows that you remove): `proof_rows_remaining: 0`. ⚠️ My
+first teardown query reported `still_present: 2` — a subquery in the same statement as the `DELETE`
+reads the pre-delete MVCC snapshot. Re-checked in a separate statement: **0**. Another diagnostic that
+would have reported a false failure if I had trusted it.
+
+**MUTATION CHECK — 5 of 5 red, after one could not fail and had to be rebuilt**
+
+```
+mutation                                               verdict
+--------------------------------------------------------------------------------------
+model_provider goes back to the column default         RED - 4 failed
+model_provider becomes a literal again                  RED - 2 failed
+an unmeasured cost goes back to the 0 default           RED - 1 failed
+a real measured 0 is turned into null                   RED - 1 failed
+the router's two provider columns disagree with the …   RED - 2 failed
+--------------------------------------------------------------------------------------
+5 of 5 went red. All verified.
+```
+
+**`the router hard-codes provider anthropic again` STAYED GREEN, and the finding is about my own
+change rather than the code.** That insert lives in a function called **`logClaudeCall`** — it is
+Anthropic-only *by design*, reached only from `callClaude` and `callHaiku`. So the literal
+`provider: 'anthropic'` was **correct by construction**, and replacing it with a derivation is a
+**hardening, not a bug fix** — unobservable today, and therefore unfalsifiable.
+
+I kept the derivation (the brief asks for "never a literal", and a literal one edit from being wrong is
+how `model_provider` came to describe 547 Gemini calls) and replaced the mutation with one that tests
+the invariant the code **actually** guarantees: that both provider columns agree with the row's own
+`model_id`. That form goes red. **Saying "5 of 5 red" without this paragraph would have been the
+dishonest version of the same table.**
+
+**⚠️ THE BIGGEST REMAINING SPEND-VISIBILITY GAP, FOUND HERE AND DELIBERATELY NOT CLOSED**
+
+`ai-router.ts` logs **only its Anthropic legs**. `callGemini` and `callOpenAI` write **no ledger row at
+all**. So on the ask path, the calls that actually *succeed* — and therefore the ones that actually
+cost money — are the ones not recorded.
+
+That is squarely "Aria cannot tell you what it spends", and it is tempting. **It is not in Phase 4's
+three bullets**, it adds *new rows* to the ledger (changing row volume and therefore every comparison
+made against it), and `callGemini` returns no token counts so every such row would carry
+`cost_usd_cents: NULL`. Adding it is a real improvement and a real decision — **founder console item 7**,
+with the shape written out. Doing it unasked inside a phase scoped to two columns is how a spend sprint
+becomes a ledger rewrite.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| writers of `model_provider` | **5**, all literals — `deliverable-email:90` and `deliverable-pdf:37` (`'other'`), `widget/chat:226`, `deliverables.ts:796`, `parallel-orchestrator.ts:119` (`'anthropic'`) | **not changed** — all outside Lane A, and each is correct for its own call. Named here so the count is known |
+| readers of `cost_usd_cents` | **8 files** | **every one already NULL-safe**: `?? 0`, `Number(…) \| 0`, and `.gt('cost_usd_cents', 0)` which correctly *excludes* unknowns. Checked before changing 0 → NULL, not after |
+| ledger writers that bypass `logAICallSafe` | the 175 WALL 1 bypassers + `ai-router.ts`'s own insert | the router's is fixed; the rest keep taking the defaults until the DDL lands |
+
+**gates** · `tsc` 0 errors · `vitest` 1893 passed in 148 files · canon rail clean · `BUILD_EXIT` in the
+commit line
+
+**NOT done, and why**
+
+- **The DDL defaults still stand.** RULE 10a: I do not write schema. Until they are dropped, **every
+  insert that does not come through `logAICallSafe` keeps lying** — founder console 5, with the SQL.
+- **No backfill.** 885 rows still say `0` and 1,181 still say `model_provider = 'anthropic'`. They are
+  wrong and are **documented as wrong, with the date the columns became trustworthy: 5 Oct 2026.**
+  Rewriting them would be inventing figures, which GROUNDING-TEETH forbids one layer up.
+- **`provider: 'other'` on 219 rows including real `openai/gpt-4o-mini` calls** is a pre-existing
+  inaccuracy in `provider` itself, per call site. Named, not swept.
+- **No new ledger rows** (see the gap above).
+
+**discovered**
+
+- `computeCostCentsOrNull()` already existed and already returned `null` for an unknown model —
+  `ai-router.ts:29` was already using it. **The NULL-not-0 principle was already implemented one layer
+  down and then thrown away by a column default.** That is the 27th thing this project has found
+  already built.
+
+---
+
+### PHASE 5 — THE FOUNDER CONSOLE · nothing executed
+
+**SCOPE** · a checklist, written down. **Nothing in this phase runs.** The four items the brief lists
+are below with what each unblocks and, where I could check something without touching a secret, what I
+found. Items 5–9 are additions this run discovered.
+
+| # | the brief's item | status after this run |
+|---|---|---|
+| 1 | *"Claude Code should bill the Max subscription, not the API. If `ANTHROPIC_API_KEY` is set in the shell Claude Code runs in, it bills the API instead. `/login` switches it."* | **⚠️ ALREADY IN THE DESIRED STATE — nothing to do.** Checked, presence only, never a value: `ANTHROPIC_API_KEY` is **NOT set** in the shell Claude Code runs in, and neither is `CLAUDE_CODE_OAUTH_TOKEN`. So this is not what has been draining anything. Worth a second look on your own machine if your profile differs from the shell this tool sees. |
+| 2 | a separate **spend-capped** key for the server only, monthly limit + alert | **Still worth doing**, and it is the only item here that bounds a *future* runaway. Nothing in this sprint can substitute for it. |
+| 3 | decide whether Anthropic is needed at all right now | **Not pre-empted, as instructed.** What this run adds is the two facts the decision needs: Gemini has served **354 of 379** calls successfully since 21 Sep, and Anthropic **0 of 346**. Phase 4 makes the next fortnight's ledger trustworthy, so the same question asked in two weeks will have a real cost column behind it. |
+| 4 | *"the two faults are separate"* | **Confirmed, with a correction.** A top-up fixes the credit 400s and does nothing for the auth error; fixing the auth wiring does nothing for the balance. The correction (§1a) is that they are **not two code paths** — the same `agent_key` and `model_id` produced a credit 400 at 00:36:44 and an auth error at 00:38:51, so it is one path in two environment states. |
+
+**And the one thing I would put above all four:** §1d. **The doomed calls were never costing money.** 0
+Anthropic successes since 21 September means 0 Anthropic spend. The 346 attempts cost latency, ledger
+noise and a wrong picture. Real spend today is Gemini. So this sprint bought **speed and clarity**, and
+the actual money question is item 3 — which is now answerable for the first time.
+
+---
+
 ## 4 · FOUNDER CONSOLE CHECKLIST
 
 *Nothing here is executed by this sprint. Each line says what it unblocks.*
@@ -748,6 +964,9 @@ clean · `BUILD_EXIT` in the commit line
 | 4 | **The two faults are separate.** A top-up fixes the credit 400s and does nothing for the auth error; fixing the auth wiring does nothing for the balance | Claude calls succeeding at all | Both are required. Confirmed, with the correction in §1a: it is one path in two environments, not two clients. |
 | 5 | **DDL (RULE 10a — mine to propose, yours to approve):** drop `aria_ai_calls.model_provider`'s `DEFAULT 'anthropic'` and change `cost_usd_cents`'s default from `0` to `NULL` | the ledger telling the truth for the **175 allow-listed bypassers** too, not only for rows Phase 4 touches | Phase 4 fixes the canonical writer in code; while the defaults stand, every insert that omits the column keeps lying |
 | 6 | **DDL:** add an origin/environment column to `aria_ai_calls` | attributing a failure to local vs CI vs Vercel — currently impossible (§Q5) | Optional, but it is why §1a took five queries |
+| 7 | **`ai-router.ts` logs only its Anthropic legs — `callGemini` and `callOpenAI` write NO ledger row at all** | knowing what Aria actually spends. On the ask path the calls that SUCCEED (and therefore cost money) are the ones not recorded | Found in phase 4 and deliberately not closed: it adds new rows, changing every comparison made against the ledger, and `callGemini` returns no token counts so each row would carry `cost_usd_cents: NULL`. A real improvement and a real decision |
+| 8 | **`base-agent.ts:53` and `src/app/api/aria/**` route handlers still bypass the circuit breaker** | the rest of the doomed-call latency | Phase 1 covers the ask path. The change is three lines each, written out in §PHASE 1. Outside Lane A |
+| 9 | **M18C · OUTAGE-TRUTH — justified, and it is NOT the change the brief imagined** | 19.9% of conversations ending in "every provider is down" | Phase 2 measured **155 of 156** with a real model success within ±2 min (144 within ±30s). But the CONDITION is correct — it fires only after all four legs fail. So M18C is *"make the degrade chain's key resolution as reliable as the ledger's"*, not *"fix the condition"*. Needs your go, separately |
 
 ---
 
@@ -765,10 +984,25 @@ here rather than edited silently, because quietly altering a committed report is
 
 ## 5 · OWNER-VISIBLE DIFF
 
-**none.**
+# none.
 
-Phase 0 changed no `src/` file, no copy, no lane, no answer, no response shape. The only file added is
-this log.
+Across all five phases: **no copy, no lane, no answer, no prompt, no response shape, no status code.**
+
+It is asserted rather than claimed, in three places:
+
+| what could have changed | the assertion that holds it |
+|---|---|
+| which provider answers a turn | Phase 1 runs the identical scenario with the breaker closed and open and asserts **same provider, same text** — `gemini` both times, 1 Anthropic call then 0 |
+| what an owner reads when everything is down | Phase 2 asserts the all-down reply `toBe` the **literal string**, not `toContain`. Mutation: changing *"Give it another go in a bit."* to *"Please try again shortly."* turns the suite **red** |
+| when the outage reply appears at all | Phase 2 asserts a working Gemini still answers normally, so the outage copy is not newly reachable |
+
+The only differences a user could notice are the two the brief permits: **some turns return sooner**
+(two doomed Anthropic round-trips removed from in front of the provider that was always going to
+answer), and **a failover that would have happened anyway happens faster**. Same model, same words.
+
+**Three things were PARKED rather than built, each because doing them would have changed what an owner
+reads:** the outage condition (M18C), applying `verifyResponse`'s `safeResponse` (carried over from
+M18), and anything touching prompts. None of them was a judgement call about difficulty.
 
 ---
 
@@ -782,4 +1016,6 @@ this sprint opened.)*
 |---|---|---|
 | 25 | Phase 1: "the circuit breaker the gateway never had" | **It has one.** `src/lib/aria/circuit-breaker.ts`, account-wide, already matching *both* of this sprint's error strings at line 47–51, tripping at 2-in-5-minutes, with **43 incidents since 21 Sep**. The fault is that `ai-router.ts` and `base-agent.ts` never consult it — 0 imports each. |
 | 26 | Phase 0: "the allow-list shrink check exists; use it" — correct, and stronger than implied | `w1-allowlist.test.ts` is a **ratchet with an anti-vacuity assertion**, CEILING 175, already lowered twice. It also records that its own first version parsed 95 entries short because Next.js route segments contain `]`, and that the anti-vacuity check is what caught it. |
+| 27 | Phase 4: `cost_usd_cents` should be NULL when unknown, never 0 | **`computeCostCentsOrNull()` already existed and already returned `null` for an unknown model**, and `ai-router.ts:29` was already calling it. The principle was implemented one layer down and then thrown away by a column default. |
+| 28 | Phase 3: "tests must not be able to spend money" | Half true already — the suite could not spend, **but only because no key was loaded.** No guard, no `setupFiles`, `fetch` wide open. The protection existed by accident, which is the thing the phase actually replaced. |
 

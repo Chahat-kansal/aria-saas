@@ -29,7 +29,13 @@ vi.mock('@anthropic-ai/sdk', () => ({
 vi.mock('openai', () => ({
   default: class { chat = { completions: { create: (...a: unknown[]) => openaiCreate(...a) as unknown } } },
 }))
-vi.mock('@/lib/supabase-lazy', () => ({ makeLazyServiceRoleClient: () => ({ from: () => ({ insert: async () => ({ error: null }) }) }) }))
+/** M18B phase 4 — captures the ledger rows the router writes, so `provider` can be asserted. */
+const ledgerRows: Array<Record<string, unknown>> = []
+vi.mock('@/lib/supabase-lazy', () => ({
+  makeLazyServiceRoleClient: () => ({
+    from: () => ({ insert: async (row: Record<string, unknown>) => { ledgerRows.push(row); return { error: null } } }),
+  }),
+}))
 vi.mock('@/lib/aria/cost', () => ({ computeCostCentsOrNull: () => null }))
 vi.mock('@/lib/aria/circuit-breaker', () => ({
   isAnthropicCircuitOpen: async () => circuitOpen,
@@ -59,6 +65,7 @@ beforeEach(() => {
   openaiCreate.mockReset()
   fetchMock.mockReset()
   recordHardDown.mockClear(); recordFailure.mockClear(); recordSuccess.mockClear(); recordFallbackProvider.mockClear()
+  ledgerRows.length = 0
   vi.stubGlobal('fetch', fetchMock)
   process.env.GEMINI_API_KEY = 'test-key-not-real'
   geminiAnswers()
@@ -209,5 +216,45 @@ describe('M18B phase 1 · the router consults the shared breaker', () => {
     expect(after.provider).toBe(before.provider)
     expect(after.provider).toBe('none')
     expect(after.text).toBe(before.text)
+  })
+})
+
+describe('M18B phase 4 · the router records WHICH provider served the call', () => {
+  it('⚠️ A CLAUDE CALL IS LOGGED AS anthropic — derived from model_id, not a literal', async () => {
+    circuitOpen = { open: false }
+    anthropicCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 10, output_tokens: 5 } })
+
+    await ariaChatWithProvider('chat', 'q', 64, { businessId: 'b1', agentKey: 'thread_title' })
+
+    const row = ledgerRows.find(r => String(r.model_id ?? '').startsWith('claude'))
+    expect(row, 'no ledger row was written for the claude call').toBeTruthy()
+    expect(row!.provider).toBe('anthropic')
+    expect(row!.model_provider).toBe('anthropic')
+  })
+
+  it('⚠️ AND IT IS DERIVED, NOT HARD-CODED — a haiku row proves the same path, a non-claude model would not say anthropic', async () => {
+    /**
+     * `provider: 'anthropic'` was a LITERAL at this insert. It was right by accident — only callClaude
+     * and callHaiku reach it today — but a literal is one edit from being wrong, and that is exactly
+     * how `model_provider` came to say `anthropic` about 547 Gemini calls.
+     *
+     * Asserted on the FAMILY DERIVATION rather than on the constant: every row the router writes must
+     * carry a provider that matches its own model_id.
+     */
+    circuitOpen = { open: false }
+    anthropicCreate.mockRejectedValue(new Error('529 overloaded_error'))
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'g' }] } }] }), text: async () => 'g' })
+
+    await ariaChatWithProvider('chat', 'q', 64, { businessId: 'b1', agentKey: 'thread_title' })
+
+    expect(ledgerRows.length).toBeGreaterThan(0)
+    for (const r of ledgerRows) {
+      const model = String(r.model_id ?? '')
+      const expected = model.startsWith('claude') ? 'anthropic'
+        : model.startsWith('gemini') ? 'google'
+        : model.startsWith('gpt') || model.includes('openai') ? 'openai' : 'other'
+      expect(r.provider, 'model ' + model + ' logged as provider ' + r.provider).toBe(expected)
+      expect(r.model_provider, 'model ' + model + ' logged as model_provider ' + r.model_provider).toBe(expected)
+    }
   })
 })

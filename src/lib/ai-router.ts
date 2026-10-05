@@ -27,10 +27,25 @@ async function logClaudeCall(params: {
   try {
     // MS15 PHASE 1 — unknown model → null (unknown), never 0 (free).
     const cost = computeCostCentsOrNull(params.model_id, params.input_tokens, params.output_tokens)
+    /**
+     * ⚠️ M18B PHASE 4 — `provider` WAS THE LITERAL `'anthropic'` HERE, WHATEVER SERVED THE CALL.
+     *
+     * It was right by accident: only `callClaude` and `callHaiku` reach this function today, so every
+     * row it has ever written really was Anthropic. But the literal is one edit away from being wrong —
+     * the moment a Gemini or OpenAI leg starts logging through here, every one of its rows would claim
+     * Anthropic, which is exactly how `model_provider` came to say `anthropic` about 547 Gemini calls.
+     *
+     * Derived from `model_id` instead, which is the client that was actually used.
+     */
+    const family = params.model_id.startsWith('claude') ? 'anthropic'
+      : params.model_id.startsWith('gemini') ? 'google'
+      : params.model_id.startsWith('gpt') || params.model_id.includes('openai') ? 'openai'
+      : 'other'
     const { error } = await supabaseAdmin.from('aria_ai_calls').insert({
       business_id: params.business_id,
       agent_key: params.agent_key ?? `ai_router_${params.task}`,
-      provider: 'anthropic',
+      provider: family,
+      model_provider: family,
       model_id: params.model_id,
       role: 'analysis',
       input_tokens: params.input_tokens,

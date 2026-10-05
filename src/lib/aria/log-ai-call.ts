@@ -30,7 +30,33 @@ export interface AiCallRow {
   input_tokens?: number
   output_tokens?: number
   latency_ms?: number
-  cost_usd_cents?: number
+  /**
+   * ⚠️ M18B PHASE 4 — OMIT THIS AND THE ROW SAYS **NULL (unknown)**, NOT 0 (free).
+   *
+   * `aria_ai_calls.cost_usd_cents` has `DEFAULT 0`, so every caller that left it out was recording a
+   * claim that the call cost nothing. Measured before this change: **929 calls since 21 September
+   * summed to 0** — 885 rows literally `0`, 44 `NULL`. That is why Aria could not tell you what it
+   * spends.
+   *
+   * `undefined` here is now written as an explicit `null`, so "we did not measure it" and "it was
+   * free" stop being the same row. Pass a number only when you actually computed one —
+   * `computeCostCentsOrNull()` is the canonical way, and it already returns null for an unknown model.
+   */
+  cost_usd_cents?: number | null
+  /**
+   * ⚠️ M18B PHASE 4 — DERIVED FROM `provider` WHEN OMITTED, NEVER LEFT TO THE COLUMN DEFAULT.
+   *
+   * `aria_ai_calls.model_provider` has `DEFAULT 'anthropic'::text`. Almost nothing set it, so the
+   * column read the literal string `anthropic` on **every row** — including 547 `gemini-2.5-flash`
+   * calls and every `gpt-4o-mini` call. A column that says the same thing about every row is not a
+   * record of anything.
+   *
+   * `provider` beside it IS accurate (it is CHECK-constrained and set per call from the client that
+   * was used: google 547, anthropic 388, openai 27). So this defaults to it rather than to a literal,
+   * which fixes every row this writer makes without a schema change. Pass it explicitly only when the
+   * model family genuinely differs from the client — e.g. a gateway fronting another vendor.
+   */
+  model_provider?: string | null
   success?: boolean
   error_message?: string | null
   request_summary?: string | null
@@ -45,7 +71,26 @@ export interface AiCallRow {
  */
 export async function logAICallSafe(row: AiCallRow): Promise<boolean> {
   try {
-    const { error } = await supabaseAdmin.from('aria_ai_calls').insert(row)
+    /**
+     * ⚠️ M18B PHASE 4 — THE TWO COLUMNS WHOSE DEFAULTS WERE LYING.
+     *
+     * Both are set EXPLICITLY here, because an omitted column takes the database default and both
+     * defaults assert something false: `model_provider DEFAULT 'anthropic'` and
+     * `cost_usd_cents DEFAULT 0`. Measured before this: 1 distinct `model_provider` across 929 calls,
+     * and a cost sum of 0.
+     *
+     * An explicit value overrides a default, so this needs no DDL — but **the defaults still stand for
+     * every insert that does not come through here**, including the 175 allow-listed bypassers. Dropping
+     * them is founder console item 5, and until then this writer is the only place the ledger is honest.
+     */
+    const toInsert = {
+      ...row,
+      // Derived from the client that was used, never a literal.
+      model_provider: row.model_provider ?? row.provider,
+      // Unknown is NULL. 0 is a claim that the call was free.
+      cost_usd_cents: row.cost_usd_cents ?? null,
+    }
+    const { error } = await supabaseAdmin.from('aria_ai_calls').insert(toInsert)
     if (error) {
       console.error('[aria_ai_calls insert failed]', { agentKey: row.agent_key, role: row.role, provider: row.provider, reason: error.message })
       return false
