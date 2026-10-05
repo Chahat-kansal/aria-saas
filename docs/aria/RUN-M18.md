@@ -727,6 +727,200 @@ clean (33 files) · `BUILD_EXIT` in the commit line
 
 ---
 
+### PHASE 4 — EVERY LANE WRITES PROVENANCE  ·  commit `pending`
+
+**SCOPE** · every lane that stores an assistant message passes the turn's anchors.
+
+**NOT-SCOPE** · backfilling historical rows (forward-only, RULE 20) · `tests/check-live/**` · the
+other surfaces that write `aria_conversations` · the response body's `provenance` field.
+
+**THE MEASUREMENT FIRST, BECAUSE IT IS THE WHOLE PHASE**
+
+Of the **22** `upsertConversation` call sites in the ask lane, **one** passed provenance —
+`answer-council.ts:522`. The live database agrees to the row:
+
+| intent | assistant turns | with provenance | % |
+|---|---|---|---|
+| `question` | 444 | 79 | **17.8** |
+| `ai_outage` | 150 | 0 | 0.0 |
+| `general` | 130 | 0 | 0.0 |
+| `deliverable` | 26 | 0 | 0.0 |
+| `action_request` | 23 | 0 | 0.0 |
+| `smalltalk` | 20 | 0 | 0.0 |
+| `action_executed` | 19 | 0 | 0.0 |
+| `troubleshoot` | 10 | 0 | 0.0 |
+| `generate_image` · `multi_domain` | 5 each | 0 | 0.0 |
+| `file_export` | 4 | 0 | 0.0 |
+| `navigation` | 1 | 0 | 0.0 |
+| **all turns** | **837** | **79** | **9.44** |
+
+**M3 recorded this as "0 of 288 conversations carried a tier", and it was read for months as a broken
+renderer or a missing column. It was neither.** Twenty-one lanes never passed the argument. Every
+intent except `question` is at exactly 0.0% because only the council ever passed it, and the council
+is a subset of `question`.
+
+*(Note on the two percentages: the brief's **19.13%** is 79/413 question-turns; **9.44%** is 79/837
+across all turns; **17.8%** is 79/444 on today's `question` count. Same numerator — the denominator is
+the choice, and all three are quoted so nobody reconciles them later as a discrepancy.)*
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/aria/ask/pipeline/turn-persistence.ts` | +48 | `provenanceOf()` and `provenanceTail()` |
+| `src/lib/aria/ask/pipeline/provenance-rule.ts` | **new**, 92 | WALL 10's rule, as a function |
+| `scripts/ask-provenance-guard.ts` | **new**, 73 | WALL 10's push gate |
+| `scripts/git-hooks/pre-push` | +11 | WALL 10 wired in, hook reinstalled |
+| 11 strategy files | +12 / −12 | each destructures `grounding`; 20 call sites gain the argument |
+| `src/lib/aria/ask/pipeline/provenance-wiring.test.ts` | **new**, 139 | 9 tests |
+| `src/lib/aria/ask/pipeline/persist-provenance.test.ts` | **new**, 108 | 4 tests |
+| `src/lib/aria/ask/strategies/general-provenance.test.ts` | **new**, 112 | 3 tests |
+
+**HOW, AND WHY NOT AN OPTIONS OBJECT**
+
+`provenance` is `upsertConversation`'s **10th positional parameter**, behind `downloads`, `incomplete`
+and `branch`. Twenty-one hand-written `undefined, undefined, undefined, p` tails is exactly how an
+argument ends up one slot out and is silently read as a branch descriptor. So:
+
+```ts
+upsertConversation(bid, userId, convId, message, text, 'general', ...provenanceTail(grounding))
+```
+
+A typed tuple, spread. The compiler enforces the slots. Converting the signature to an options object
+would be the better API and a 22-site refactor — which `aria-minimal-change` forbids and which would
+bury this phase's actual change in churn. Lanes that already pass middle arguments append
+`provenanceOf(grounding)` directly.
+
+**⚠️ THE BRIEF ASKED FOR AN "HONEST EMPTY". THE CODE HAD ALREADY DECIDED AGAINST IT, WITH A REASON.**
+
+`turn-persistence.ts` writes `...(provenance && provenance.anchors.length > 0 ? { provenance } : {})`,
+and its comment is explicit: *"the field is absent, not an empty object, so 'we never captured this'
+and 'we captured nothing' stay distinguishable in the JSONB."* An empty object would make every
+un-anchored turn look captured-but-empty and the 9.44% baseline unmeasurable. **The code wins** (RULE
+15 / the standing table), `provenanceOf` returns `undefined` for an empty set, and a test asserts the
+key is absent rather than `{}`.
+
+**WALL 10 — AND IT IS PROVEN ABLE TO FAIL**
+
+The rule is `findUnprovenancedCalls()` in `provenance-rule.ts`; the script imports it and the test
+calls it — the WALL 8 pattern, so the push gate and the test cannot drift. Full-file scan, because the
+regression shape is a **reintroduced** call line, which the canon rail's added-lines scan cannot see.
+
+```
+[ask-provenance-guard] 12 file(s) scanned whole, 22 upsertConversation call site(s),
+                       all carrying provenance (1 exempt: save-plan.ts). Pass.
+```
+
+and with `general.ts`'s argument removed:
+
+```
+[ask-provenance-guard] 1 lane(s) store an assistant message with NO anchors:
+  general.ts:111
+    generalConvId = await upsertConversation(bid, userId, conversationId, message, generalResult.raw, 'general')
+GUARD_EXIT_WHEN_BROKEN=1
+```
+
+It also **exits non-zero if it scanned nothing or found zero call sites** — a guard that passes
+because it looked at nothing is the pattern this repo has seven instances of.
+
+The one exemption is `save-plan.ts`, with its reason in code: it is wired as
+`RunTurnOptions.savePlanGate`, receives only `TurnInput`, runs before the classifiers and before stage
+2, and asserts no figure. A test asserts the exemption list is exactly that one entry *and* that the
+reason still matches the lane's actual wiring.
+
+**VERIFY — pasted**
+
+```
+ Test Files  143 passed (143)
+      Tests  1841 passed (1841)
+```
+
+**The chain is now behavioural end to end**, which it was not before:
+
+| link | how it is held |
+|---|---|
+| stage 2 loads an anchor set | `ground.test.ts` (Phase 1) |
+| `provenanceOf` converts it, dropping ambiguous values | `provenance-wiring.test.ts` |
+| every lane passes it | WALL 10, on the live tree |
+| a lane forwards *what stage 2 gave it* | `general-provenance.test.ts` — the real `generalStrategy` |
+| `upsertConversation` writes it into the row | `persist-provenance.test.ts` |
+
+**⚠️ THAT LAST LINK WAS PINNED BY A REGEX, NOT A TEST.** `provenance-chain.test.ts:42` asserts that
+`turn-persistence.ts` *contains the literal text* `...(provenance && provenance.anchors.length > 0 ?
+{ provenance } : {})`. That proves the line is present and nothing about what it does — the presence
+test the standing rules forbid. `persist-provenance.test.ts` now calls `upsertConversation` for real
+against a database double and reads the `messages` array it writes, asserting the exact path
+`check:live` assertion 3 reads: *messages → last assistant → .provenance → .anchors.length > 0*.
+
+**MUTATION CHECK — 5 of 5 red**
+
+```
+mutation                                                 verdict
+------------------------------------------------------------------------------------------
+the general lane stops passing provenance                RED - 3 tests failed
+main.ts's stopped turn stops passing provenance          RED - 1 tests failed
+an empty anchor set stores {} instead of omitting it     RED - 2 tests failed
+the positional tail is one slot out                      RED - 3 tests failed
+an ambiguous anchor is kept rather than dropped          RED - 1 tests failed
+------------------------------------------------------------------------------------------
+5 of 5 went red. All verified.
+```
+
+The multi-line mutation matters on its own: `main.ts`'s stopped-turn call spans five lines, and a rule
+reading only a call's first line would mark every multi-line call a violation while a rule reading
+only its last would miss them all. WALL 10 balances the parentheses and judges the whole argument
+list; a probe fixture asserts both directions.
+
+**⚠️ THE LIVE "AFTER" NUMBER IS ⊘ COULD NOT CHECK, AND THAT IS NOT A HEDGE**
+
+The brief asks for before/after live counts. **The after-numbers are unchanged, and must be**:
+
+- **This fix is forward-only.** RULE 20: *"Do not backfill. Historical rows record what happened."*
+  Those 837 turns were genuinely stored without anchors; rewriting them would be a lie about the past.
+- **No new turn has been generated**, because generating one needs a real model call and the Anthropic
+  balance is exhausted (founder queue 1). So the percentages cannot move in this run.
+
+**Exactly what it would take**: a credit top-up, then one real question per lane through
+`npm run check:live` or the surface, then re-run the per-intent query above. The prediction, stated now
+so it can be checked rather than claimed afterwards: **a `question` turn routed to the council keeps
+its anchors; a `general` turn stays at none (its anchor set is empty by design); and every
+figure-bearing lane — `action_request`, `multi_domain`, `deliverable`, `inventory`, `ai_outage` — moves
+off 0.0% for the first time.** If `general` moves, something is loading anchors it should not be.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| `upsertConversation` call sites outside `strategies/` | **0** | WALL 10's scan has no blind spot |
+| lanes destructuring `grounding` | **11 of 11** that need it | the 12th, `save-plan`, is the exemption |
+| other writers of `aria_conversations` | **3 outside Lane A** — `api/pos/ask`, `api/aria/business-chat`, `lib/aria/cached-answer.ts` | **not changed.** They are separate surfaces storing assistant turns with no anchors, so they dilute any future measurement of this number. Named in the founder queue |
+| the 2 lane catches that discard a failed write | `nav-fastpath.ts:34`, `pending-action.ts:46` — `catch (_e) { /* non-fatal */ }` | **left alone.** `upsertConversation` already `console.error`s *and* throws on both the UPDATE and INSERT branch, so the cause is in the logs; the lane adds nothing but loses nothing |
+
+**gates** · `tsc` 0 errors · `vitest` 1841 passed in 143 files · canon rail clean · one-exit guard
+clean (37 files) · **WALL 10 clean, and proven to exit 1 when broken** · `BUILD_EXIT` in the commit
+
+**NOT done, and why**
+
+- **No backfill.** Forward-only, per the standing table.
+- **The response body's `provenance` field was not changed on any lane but the council.** This phase
+  fixes what is STORED, which is what assertion 3 reads and what survives a reload. Putting anchors in
+  every lane's live response body is a 20-lane HTTP response change, and additive-but-wide; it belongs
+  to a phase with a human present.
+- **`pos/ask`, `business-chat` and `cached-answer.ts`** write `aria_conversations` outside Lane A.
+- **`provenance-chain.test.ts`'s regex assertions were not deleted.** They are weak but they are not
+  wrong, and removing a passing test to make a point is a downgrade. The behavioural test sits beside
+  them.
+
+**discovered**
+
+- **`ai_outage` is 150 of 837 stored turns — 18% of everything the owner has ever been told.** That
+  is `main.ts:1110`, the every-provider-down reply. Nobody asked for that number and it is the second
+  largest intent in the table. Worth a look well before any provenance target.
+- `save-plan` is structurally unable to carry provenance while it runs as a pre-classifier gate. If a
+  later sprint wants it anchored, the gate has to move — it is a wiring decision, not an omission.
+
+---
+
 ## 3 · `check:live` — PHASE 0 AND END, SIDE BY SIDE
 
 | assertion | phase 0 (baseline) | end of run |
@@ -752,6 +946,8 @@ clean (33 files) · `BUILD_EXIT` in the commit line
 | 5 | `TEST_USER_PASSWORD` reset | the smoke suite's positive half | authorisation action, parked under RULE 20 |
 | 6 | **`ALLERGEN_RE` does not catch a bare allergen noun** — `"any nuts in the banana bread?"` passes, `"nut-free"` is caught | the completeness of a LOCKED rule | `src/lib/aria/verifier.ts:81`, outside Lane A. Widening a safety regex needs someone to weigh the false positives — every "vegan"/"vegetarian" in a menu conversation. A labelled test in `verify.test.ts` holds the current behaviour and goes red when it is fixed. |
 | 7 | **Six copies of the 2% anchor tolerance, across three engines** (table in Phase 2) | nothing today; it is why the spine and the council can disagree about one figure | rail-first unification spanning `src/lib/manager/**` and `src/lib/aria/*`, both outside Lane A |
+| 9 | **`pos/ask`, `aria/business-chat` and `lib/aria/cached-answer.ts` store assistant turns outside Lane A** | any future measurement of the provenance number | they write `aria_conversations` directly and carry no anchors, so they dilute the percentage WALL 10 now protects on the ask lane |
+| 10 | **`ai_outage` is 150 of 837 stored turns — 18% of everything the owner has ever been told** | nothing in M18 | `main.ts:1110`, the every-provider-down reply. Second largest intent in the table and nobody asked for it. Worth a look before any provenance target |
 | 8 | **`aria/verifier.ts` was unreachable in production until this sprint** — `evals/run.ts` was its only caller | — | now wired at stage 5. Worth knowing that its rules (entities, cost provenance, house rules) are running against owner answers for the first time, so their false-positive rate has never been observed live |
 
 ---

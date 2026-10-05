@@ -68,11 +68,9 @@ import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
 import { gateSignals } from '@/lib/aria/signal-gate'
 import { logAICallSafe } from '@/lib/aria/log-ai-call'
 import { buildNavGrounding } from '@/lib/aria/nav-grounding'
-import {
-  extractAction, extractBlocks, stripBlocks, stripAction, upsertConversation,
-} from '../pipeline/turn-persistence'
+import { extractAction, extractBlocks, stripBlocks, stripAction, upsertConversation, provenanceTail, provenanceOf } from '../pipeline/turn-persistence'
 
-export const mainStrategy: StrategyFn = async ({ input, understanding }) => {
+export const mainStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const {
     bid, userId, supabase, message: rawMessage, conversationId, clientMessages, attachments,
     branchIntent, signal, onToken,
@@ -942,7 +940,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       : `Sorry, I couldn't generate the image. ${imgResult.error ?? 'Please try again.'}`
     let savedConvId = conversationId
     try {
-      savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'generate_image')
+      savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'generate_image', ...provenanceTail(grounding))
     } catch (e) { console.error('[aria/ask] upsertConversation failed (image):', (e as Error).message) }
     const downloads = imgResult.ok && imgResult.download_url ? [{
       filename: imgResult.filename ?? 'poster.png',
@@ -1040,7 +1038,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
           stoppedConvId = await upsertConversation(
             bid, userId, conversationId, message,
             partial || '(stopped before Aria wrote anything)',
-            'stopped', undefined, true,
+            'stopped', undefined, true, undefined, provenanceOf(grounding),
           )
         } catch (persistErr) {
           console.error('[aria/ask] could not persist the stopped turn:', (persistErr as Error).message)
@@ -1107,7 +1105,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       : 'Aria\'s thinking cap is off for a moment — your data is safe and everything else (POS, payments, stock, customers, bookings) keeps working as normal. Give it another go in a bit.'
 
     let outageConvId = conversationId
-    try { outageConvId = await upsertConversation(bid, userId, conversationId, message, reply, 'ai_outage') }
+    try { outageConvId = await upsertConversation(bid, userId, conversationId, message, reply, 'ai_outage', ...provenanceTail(grounding)) }
     catch (e) { console.error('[aria/ask] outage upsertConversation failed:', (e as Error).message) }
 
     console.error('[aria/ask] TOTAL OUTAGE served', JSON.stringify({ cached: isCached }), 'business', bid)
@@ -1223,7 +1221,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // 7. Save conversation
   let savedConvId = conversationId
   try {
-    savedConvId = await upsertConversation(bid, userId, conversationId, message, historyContent, intent.type, undefined, false, branchIntent)
+    savedConvId = await upsertConversation(bid, userId, conversationId, message, historyContent, intent.type, undefined, false, branchIntent, provenanceOf(grounding))
   } catch (e) {
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
@@ -1281,7 +1279,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // Persist downloads in conversation so they survive page reload
   if (savedConvId && downloads.length > 0) {
     try {
-      await upsertConversation(bid, userId, savedConvId, message, historyContent, intent.type, downloads, false, branchIntent)
+      await upsertConversation(bid, userId, savedConvId, message, historyContent, intent.type, downloads, false, branchIntent, provenanceOf(grounding))
     } catch (e) { console.error('[non-fatal]', e) }
   }
 

@@ -56,6 +56,18 @@ if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsx scripts/ask-one-exit-guard
   exit 1
 fi
 
+# M18 PHASE 4 — WALL 10: every lane that stores an assistant message passes the turn's provenance.
+# Before M18, 1 of 22 upsertConversation call sites did, and the live DB read 0.0% on every intent
+# but `question`. M3 called that "0 of 288 conversations carried a tier" and it was read for months
+# as a renderer fault. Full-file scan, because the regression shape is a REINTRODUCED call line,
+# which the canon rail's added-lines scan cannot see. Exits non-zero if it scanned nothing.
+echo "[pre-push] provenance guard: npx tsx scripts/ask-provenance-guard.ts"
+if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsx scripts/ask-provenance-guard.ts; then
+  echo "[pre-push] BLOCKED — a lane stores an assistant message with no anchors (see above). The"
+  echo "[pre-push] figures in that turn can never be tiered again: the ground truth for it is gone."
+  exit 1
+fi
+
 echo "[pre-push] typecheck: npx tsc --noEmit"
 if ! NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit; then
   echo "[pre-push] BLOCKED — tsc found type errors (see above). Fix them, or"
@@ -78,7 +90,7 @@ fi
 # (see the header), so "OK" here must never be read as "all RULE 3 gates are green". A build that
 # exits non-zero is invisible to this hook, and on 2026-08-18 a backgrounded build exited 1 while
 # its wrapper reported success — the honest signal is BUILD_EXIT in the log, never the wrapper.
-echo "[pre-push] OK — canon-rail-guard clean, one-exit guard clean, tsc 0 errors, unit tests green."
+echo "[pre-push] OK — canon-rail-guard clean, one-exit guard clean, provenance guard clean, tsc 0 errors, unit tests green."
 echo "[pre-push] NOT checked here: next build (CI-only). RULE 3 needs it green too — read"
 echo "[pre-push]                   BUILD_EXIT in build.log, not a wrapper's reported exit code."
 exit 0

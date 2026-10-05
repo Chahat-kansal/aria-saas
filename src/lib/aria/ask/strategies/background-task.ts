@@ -18,9 +18,9 @@ import type { StrategyFn } from '../pipeline/run-turn'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { waitUntil } from '@vercel/functions'
 import { recordEvent } from '@/lib/moat/recordEvent'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const backgroundTaskStrategy: StrategyFn = async ({ input, understanding }) => {
+export const backgroundTaskStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, message, conversationId } = input
   const { features } = understanding
   if (features.isBackgroundTask) {
@@ -58,7 +58,7 @@ export const backgroundTaskStrategy: StrategyFn = async ({ input, understanding 
         ],
         estimated_seconds: 120,
       }
-      const bgConvId = await upsertConversation(bid, userId, conversationId, message, 'Working on it in the background — I\'ll notify you when done.', 'background_task').catch(() => conversationId)
+      const bgConvId = await upsertConversation(bid, userId, conversationId, message, 'Working on it in the background — I\'ll notify you when done.', 'background_task', ...provenanceTail(grounding)).catch(() => conversationId)
       return makeTurnResult('background_task', {
         response: 'Working on it in the background — I\'ll notify you when done.',
         conversation_id: bgConvId ?? conversationId,

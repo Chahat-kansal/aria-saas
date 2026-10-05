@@ -18,9 +18,9 @@ import type { StrategyFn } from '../pipeline/run-turn'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { classifyDeliverableKind, generateDeliverable } from '@/lib/aria/deliverables'
 import { validateAndHeal } from '@/lib/aria/response-validator'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const deliverableStrategy: StrategyFn = async ({ input, understanding }) => {
+export const deliverableStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, message, conversationId } = input
   const { ariaIntent, features } = understanding
   const deliverableKind = classifyDeliverableKind(message)
@@ -33,7 +33,7 @@ export const deliverableStrategy: StrategyFn = async ({ input, understanding }) 
       const responseText = 'Here\'s your ' + result.title + ':\n\n[DELIVERABLE:' + result.outputId + ']'
       let savedConvId = conversationId
       try {
-        savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'deliverable')
+        savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'deliverable', ...provenanceTail(grounding))
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (deliverable):', (e as Error).message)
       }

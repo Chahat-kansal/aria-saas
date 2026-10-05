@@ -16,9 +16,9 @@
 import { makeTurnResult } from '../pipeline/types'
 import type { StrategyFn } from '../pipeline/run-turn'
 import { findProductByQuery } from '@/lib/aria/product-map'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const navFastpathStrategy: StrategyFn = async ({ input, understanding }) => {
+export const navFastpathStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, message, conversationId } = input
   const { features } = understanding
   // NAV fast-path — "where is X / how do I open X / where can I find X"
@@ -31,7 +31,7 @@ export const navFastpathStrategy: StrategyFn = async ({ input, understanding }) 
     if (match) {
       const navReply = `You can find **${match.feature}** at \`${match.route}\` in the sidebar.\n\n${match.blurb}.`
       let navConvId = conversationId
-      try { navConvId = await upsertConversation(bid, userId, conversationId, message, navReply, 'navigation') } catch (_e) { /* non-fatal */ }
+      try { navConvId = await upsertConversation(bid, userId, conversationId, message, navReply, 'navigation', ...provenanceTail(grounding)) } catch (_e) { /* non-fatal */ }
       return makeTurnResult('nav_fastpath', {
         response: navReply,
         conversation_id: navConvId ?? conversationId,

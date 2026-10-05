@@ -17,9 +17,9 @@ import { makeTurnResult } from '../pipeline/types'
 import type { StrategyFn } from '../pipeline/run-turn'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { classifyInventoryIntent, handleInventoryQuestion } from '@/lib/inventory/owner-agent'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const inventoryAgentStrategy: StrategyFn = async ({ input, understanding }) => {
+export const inventoryAgentStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, supabase, message, conversationId } = input
   // the full 19-query context build + 30-tool loop. Answers from real DB data; routes
   // PO approvals through the existing pending_action gate. SURFACE + ROUTE ONLY.
@@ -33,7 +33,7 @@ export const inventoryAgentStrategy: StrategyFn = async ({ input, understanding 
           const planned = invResult.approve_action
           let forkConvId = conversationId
           try {
-            forkConvId = await upsertConversation(bid, userId, conversationId, message, invResult.text, 'action_request')
+            forkConvId = await upsertConversation(bid, userId, conversationId, message, invResult.text, 'action_request', ...provenanceTail(grounding))
           } catch (e) { console.error('[aria/ask] inv_agent upsert failed:', (e as Error).message) }
           if (forkConvId) {
             const { error: invStageErr } = await supabase.from('aria_conversations').update({
@@ -55,7 +55,7 @@ export const inventoryAgentStrategy: StrategyFn = async ({ input, understanding 
         // Informational inventory answer — return directly.
         let invConvId = conversationId
         try {
-          invConvId = await upsertConversation(bid, userId, conversationId, message, invResult.text, 'inventory')
+          invConvId = await upsertConversation(bid, userId, conversationId, message, invResult.text, 'inventory', ...provenanceTail(grounding))
         } catch (e) { console.error('[aria/ask] inv_agent upsert failed:', (e as Error).message) }
         return makeTurnResult('inventory_agent', {
           response: invResult.text,

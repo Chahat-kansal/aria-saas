@@ -16,9 +16,9 @@
 import { makeTurnResult } from '../pipeline/types'
 import type { StrategyFn } from '../pipeline/run-turn'
 import { planAction } from '@/lib/aria/ask/action-planner'
-import { buildPlanContext, upsertConversation } from '../pipeline/turn-persistence'
+import { buildPlanContext, upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const actionPlannerStrategy: StrategyFn = async ({ input, understanding }) => {
+export const actionPlannerStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, supabase, message, conversationId, clientMessages } = input
   const { features } = understanding
   // route.ts:655-656 — declared just above the lane and used only inside it, so it moves with it.
@@ -39,7 +39,7 @@ export const actionPlannerStrategy: StrategyFn = async ({ input, understanding }
       // then attach pending_action to it — even for brand-new conversations (conversationId=null).
       let forkConvId = conversationId
       try {
-        forkConvId = await upsertConversation(bid, userId, conversationId, message, previewText, 'action_request')
+        forkConvId = await upsertConversation(bid, userId, conversationId, message, previewText, 'action_request', ...provenanceTail(grounding))
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (action_request):', (e as Error).message, 'conv_id:', conversationId)
       }
@@ -75,7 +75,7 @@ export const actionPlannerStrategy: StrategyFn = async ({ input, understanding }
     const clarifyReply = `I can help create that — I just need a couple of quick details: what type of promotion (e.g. 10% off, $5 off, buy-one-get-one) and when should it start?`
     let clarifyConvId = conversationId
     try {
-      clarifyConvId = await upsertConversation(bid, userId, conversationId, message, clarifyReply, 'action_request')
+      clarifyConvId = await upsertConversation(bid, userId, conversationId, message, clarifyReply, 'action_request', ...provenanceTail(grounding))
     } catch (_e) { /* non-fatal */ }
     return makeTurnResult('action_planner', {
       response: clarifyReply,

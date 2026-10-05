@@ -18,9 +18,9 @@ import type { StrategyFn } from '../pipeline/run-turn'
 import { callModel } from '@/lib/ai/gateway'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { assembleAriaPrompt } from '@/lib/aria/prompt/assemble'
-import { loadAnswerHistory, upsertConversation } from '../pipeline/turn-persistence'
+import { loadAnswerHistory, upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const generalStrategy: StrategyFn = async ({ input, understanding }) => {
+export const generalStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, message, conversationId, clientMessages } = input
   const { intent, ariaIntent, features } = understanding
   const { trackSpend } = await import('@/lib/aria/cost-guard')
@@ -108,7 +108,7 @@ export const generalStrategy: StrategyFn = async ({ input, understanding }) => {
 
     let generalConvId = conversationId
     try {
-      generalConvId = await upsertConversation(bid, userId, conversationId, message, generalResult.raw, 'general')
+      generalConvId = await upsertConversation(bid, userId, conversationId, message, generalResult.raw, 'general', ...provenanceTail(grounding))
     } catch (e) {
       console.error('[aria/ask] upsertConversation failed (general):', (e as Error).message)
     }

@@ -21,9 +21,9 @@ import { isConfirmation } from '@/lib/aria/ask/action-planner'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import { runAriaCouncil, type CouncilOutput } from '@/lib/aria/answer-council'
 import { getBusinessContext } from '@/lib/aria/get-business-context'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const pendingActionStrategy: StrategyFn = async ({ input, understanding }) => {
+export const pendingActionStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, supabase, message, conversationId } = input
 
   // 1a. Check if a pending action awaits confirmation
@@ -43,7 +43,7 @@ export const pendingActionStrategy: StrategyFn = async ({ input, understanding }
       if (expired) {
         const expiredText = "Your action plan has expired — please re-request the action and I'll set it up again."
         let expConvId = conversationId
-        try { expConvId = await upsertConversation(bid, userId, conversationId, message, expiredText, 'action_expired') } catch (_e) { /* non-fatal */ }
+        try { expConvId = await upsertConversation(bid, userId, conversationId, message, expiredText, 'action_expired', ...provenanceTail(grounding)) } catch (_e) { /* non-fatal */ }
         return makeTurnResult('pending_action', {
           response: expiredText,
           conversation_id: expConvId ?? conversationId,
@@ -83,7 +83,7 @@ export const pendingActionStrategy: StrategyFn = async ({ input, understanding }
           // saved and the id returned below points at a conversation that may not exist — the owner
           // loses the exchange with no trace anywhere. S2B found live data loss in exactly this
           // area. Answering is still the right thing to do; saying nothing about it was not.
-          try { massConvId = await upsertConversation(bid, userId, conversationId, message, massText, 'action_request') }
+          try { massConvId = await upsertConversation(bid, userId, conversationId, message, massText, 'action_request', ...provenanceTail(grounding)) }
           catch (e) { console.error('[aria/ask] mass-confirm conversation NOT saved:', (e as Error).message) }
           return makeTurnResult('pending_action', { response: massText, conversation_id: massConvId ?? conversationId, intent: 'action_request', action: { action: 'mass_confirm', affected: result.affected_preview }, cost_usd_cents: 0 })
         }
@@ -99,7 +99,7 @@ export const pendingActionStrategy: StrategyFn = async ({ input, understanding }
         if (!result.ok) {
           const errText = `Action failed: ${result.error ?? 'Unknown error'}`
           let failConvId = conversationId
-          try { failConvId = await upsertConversation(bid, userId, conversationId, message, errText, 'action_executed') } catch (e) { console.error('[silent-catch]', e) }
+          try { failConvId = await upsertConversation(bid, userId, conversationId, message, errText, 'action_executed', ...provenanceTail(grounding)) } catch (e) { console.error('[silent-catch]', e) }
           return makeTurnResult('pending_action', {
             response: errText,
             conversation_id: failConvId ?? conversationId,
@@ -178,7 +178,7 @@ export const pendingActionStrategy: StrategyFn = async ({ input, understanding }
         const responseText = confirmTextFinal
         let savedConvId = conversationId
         try {
-          savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'action_executed')
+          savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'action_executed', ...provenanceTail(grounding))
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (action_executed):', (e as Error).message)
         }

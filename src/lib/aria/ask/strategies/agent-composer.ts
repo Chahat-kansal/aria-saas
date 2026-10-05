@@ -15,9 +15,9 @@
  */
 import { makeTurnResult } from '../pipeline/types'
 import type { StrategyFn } from '../pipeline/run-turn'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const agentComposerStrategy: StrategyFn = async ({ input, understanding }) => {
+export const agentComposerStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, supabase, message, conversationId } = input
   const { features } = understanding
   // MS13 PHASE 4 — THE AGENT COMPOSER LANE. Describe → spec card (with the ALWAYS-TRUE box) →
@@ -30,7 +30,7 @@ export const agentComposerStrategy: StrategyFn = async ({ input, understanding }
     const cardText = 'Here\u2019s the agent I\u2019ll create:\n\n' + planned.preview.join('\n')
     let agentConvId = conversationId
     try {
-      agentConvId = await upsertConversation(bid, userId, conversationId, message, cardText, 'action_request')
+      agentConvId = await upsertConversation(bid, userId, conversationId, message, cardText, 'action_request', ...provenanceTail(grounding))
     } catch (e) { console.error('[aria/ask] composer upsert failed:', (e as Error).message) }
     if (agentConvId) {
       const { error: stageErr } = await supabase.from('aria_conversations').update({

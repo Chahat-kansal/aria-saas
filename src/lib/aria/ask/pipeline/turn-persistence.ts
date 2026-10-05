@@ -21,6 +21,8 @@ import {
 import {
   buildTitlePrompt, sanitiseTitle, fallbackTitle, shouldGenerateTitle,
 } from '@/lib/aria/thread-title'
+import { buildProvenance } from '@/lib/aria/figure-provenance'
+import type { TurnGrounding, TurnProvenance } from './types'
 
 /* ── route.ts:72–105 ──────────────────────────────────────────────────────────────────────── */
 
@@ -112,6 +114,55 @@ export function stripAction(text: string): string {
 }
 
 /* ── route.ts:150–292 ─────────────────────────────────────────────────────────────────────── */
+/**
+ * M18 · BRAIN-2 PHASE 4 — THE TURN'S PROVENANCE, FROM THE ANCHOR SET STAGE 2 LOADED.
+ *
+ * ⚠️ MEASURED BEFORE THIS PHASE: of the 22 `upsertConversation` call sites in the ask lane, **ONE**
+ * passed provenance — `answer-council.ts:522`. Every other lane stored its assistant message with
+ * none, and the live numbers say exactly that:
+ *
+ *     question        444 turns   79 with provenance   17.8%
+ *     ai_outage       150 turns    0                    0.0%
+ *     general         130 turns    0                    0.0%
+ *     deliverable      26 turns    0                    0.0%
+ *     action_request   23 turns    0                    0.0%
+ *     …and every other intent                           0.0%
+ *
+ * That is M3's "0 of 288 conversations carried a tier" with the cause named: not a broken renderer
+ * and not a missing column, but twenty-one lanes that never passed the argument.
+ *
+ * `buildProvenance` is the canonical builder (it dedupes by value and drops any value whose label is
+ * ambiguous), and `TurnAnchorSet.figures` is already `{ value, label }[]` — Phase 1 built it in that
+ * shape for this.
+ */
+export function provenanceOf(grounding: TurnGrounding): TurnProvenance | undefined {
+  const figures = grounding.anchorSet.figures
+  if (figures.length === 0) return undefined
+  const built = buildProvenance(figures.map(f => ({ value: f.value, label: f.label })))
+  // `buildProvenance` drops ambiguous and non-finite values, so it can legitimately return nothing
+  // from a non-empty input. Undefined then means "captured none", which is what the rule below wants.
+  return built.anchors.length > 0 ? built : undefined
+}
+
+/**
+ * The positional TAIL of `upsertConversation`, so twenty-one call sites cannot get the argument order
+ * wrong between them.
+ *
+ * ⚠️ WHY A TUPLE AND NOT AN OPTIONS OBJECT. `provenance` is the 10th positional parameter, behind
+ * `downloads`, `incomplete` and `branch`. Converting the signature to an options object would be the
+ * cleaner API and a 22-site refactor — which `aria-minimal-change` forbids, and which would bury this
+ * phase's actual change in churn. Spreading a typed tuple gets the same safety from the compiler:
+ *
+ *     upsertConversation(bid, userId, convId, message, text, 'general', ...provenanceTail(grounding))
+ *
+ * A lane that needs the middle arguments passes them itself and appends `provenanceOf(grounding)`.
+ */
+export function provenanceTail(
+  grounding: TurnGrounding,
+): [undefined, undefined, undefined, TurnProvenance | undefined] {
+  return [undefined, undefined, undefined, provenanceOf(grounding)]
+}
+
 export async function upsertConversation(
   businessId: string,
   userId: string,

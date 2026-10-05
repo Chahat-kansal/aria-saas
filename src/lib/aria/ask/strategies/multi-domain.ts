@@ -18,9 +18,9 @@ import type { StrategyFn } from '../pipeline/run-turn'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { runParallelAriaAgents } from '@/lib/aria/parallel-orchestrator'
 import { buildBriefingTasks } from '@/lib/aria/parallel-tasks'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
-export const multiDomainStrategy: StrategyFn = async ({ input, understanding }) => {
+export const multiDomainStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, message, conversationId } = input
   const { features } = understanding
   if (features.isMultiDomain) {
@@ -34,7 +34,7 @@ export const multiDomainStrategy: StrategyFn = async ({ input, understanding }) 
       const responseText = 'Here\'s your full business overview:\n\n' + parallelResult.merged
       let savedConvId = conversationId
       try {
-        savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'multi_domain')
+        savedConvId = await upsertConversation(bid, userId, conversationId, message, responseText, 'multi_domain', ...provenanceTail(grounding))
       } catch (e) {
         console.error('[aria/ask] upsertConversation failed (multi_domain):', (e as Error).message)
       }

@@ -56,7 +56,7 @@ import type { AskBlock as AskBlockType } from '@/lib/aria/ask-types'
 import { extractAndStoreMemories } from '@/lib/aria/memory/extract'
 import { summariseConversation } from '@/lib/aria/memory/summarize'
 import { todayAEST, toAESTStart, startOfWeekAEST } from '@/lib/date-au'
-import { upsertConversation } from '../pipeline/turn-persistence'
+import { upsertConversation, provenanceTail } from '../pipeline/turn-persistence'
 
 /**
  * M18 PHASE 3 — "the queries already reported this".
@@ -70,7 +70,7 @@ class AnchorsAlreadyReported extends Error {
   constructor() { super('council ground-truth queries failed; already reported'); this.name = 'AnchorsAlreadyReported' }
 }
 
-export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
+export const councilStrategy: StrategyFn = async ({ input, understanding, grounding }) => {
   const { bid, userId, message, conversationId, clientMessages, noticeRef } = input
   const { intent, ariaIntent, features } = understanding
 
@@ -92,7 +92,7 @@ export const councilStrategy: StrategyFn = async ({ input, understanding }) => {
         // S9 PHASE 6 (#7) — same class as the mass-confirm save above: still non-fatal, no longer
         // silent. The owner asked something and the answer is real; losing the record of it is not
         // a reason to fail the request, but it is a reason to be able to find out.
-        try { savedConvId = await upsertConversation(bid, userId, conversationId, message, noDataMsg, intent.type) }
+        try { savedConvId = await upsertConversation(bid, userId, conversationId, message, noDataMsg, intent.type, ...provenanceTail(grounding)) }
         catch (e) { console.error('[aria/ask] no-data conversation NOT saved:', (e as Error).message) }
         return makeTurnResult('council', {
           response: noDataMsg,
