@@ -267,6 +267,151 @@ began and nothing was touched.
 
 ---
 
+### PHASE 1 — A DEAD PROVIDER IS SKIPPED, NOT RETRIED · commit `pending`
+
+**SCOPE** · make the two hard faults stop a provider being dialled, with a configurable TTL.
+**NOT-SCOPE** · the fallback chain's order · 429/timeout behaviour · anything an owner reads.
+
+**WHAT WAS ACTUALLY WRONG** — not a missing breaker (§1b). `src/lib/ai-router.ts` imported
+`circuit-breaker` **0 times**, so every `thread_title`, `ask_suggestions` and classifier turn walked
+into Anthropic regardless of what the account already knew.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/aria/circuit-breaker.ts` | +96 / −14 | `isHardProviderError()`, `HARD_OPEN_SEC`, two-window `isAnthropicCircuitOpen()`, `recordAnthropicHardDown()` |
+| `src/lib/ai-router.ts` | +46 / −8 | consults the breaker, and **contributes** to it |
+| `src/lib/ai-router-breaker.test.ts` | **new**, 178 | 8 tests — the router's decisions |
+| `src/lib/aria/circuit-breaker-hard.test.ts` | **new**, 176 | 14 tests — the real classifier and the real TTLs |
+
+**THE DESIGN, AND WHY EACH PIECE IS THE SMALL ONE**
+
+- **A third classifier, deliberately narrower than the two that exist.** `isTransientError()` excludes
+  billing/auth so they surface; `isAnthropicUnreachable()` includes them *and* 429/5xx;
+  **`isHardProviderError()` is billing/auth ONLY.** The exclusion runs first, so
+  `"429 … upgrade your billing tier"` is **not** hard — a rate limit clears by waiting, an empty
+  balance does not. Collapsing any pair of the three is the one regression this phase could cause, and
+  a test holds each boundary.
+- **Two TTLs, chosen by what opened the incident, with no schema change.**
+  `aria_provider_incidents.trigger_error` already exists, so `isAnthropicCircuitOpen()` classifies at
+  read time: a hard incident counts as open for `HARD_OPEN_SEC`, a transient one for the unchanged
+  `OPEN_SEC = 120`. **Behaviour for 5xx is byte-identical** — a 529 from 30 minutes ago still reads
+  closed, and a test asserts exactly that at the same age as a hard one that reads open.
+- **`HARD_OPEN_SEC` is configurable, not hard-coded**: `ARIA_PROVIDER_HARD_DOWN_SEC`, default **3600**
+  (60 minutes, as specified), floored at 60s so a typo cannot disable it.
+- **A hard fault opens on the FIRST occurrence.** `recordAnthropicFailure()` waits for three strikes in
+  five minutes, which is right for a flaky provider and wrong here: one credit-balance 400 is
+  deterministic proof, and waiting for two more pays two more round-trips to be told the same thing.
+- **Observable, as required**: one `console.warn` per transition carrying the reason, one incident row,
+  and no second row or second log line while the same outage is open.
+- **The router now contributes, not just reads.** Reading alone would leave this path waiting for some
+  *other* caller to discover the outage — the "independent breakers each discovered the same outage on
+  its own" problem that `providers/anthropic.ts:126-132` records having already been fixed once.
+- **A success closes the incident** (`recordAnthropicSuccess`), so a top-up or a fixed key heals on the
+  next turn rather than waiting out the hour.
+
+**⚠️ IT IS IN THE ROUTER, NOT AT A CALL SITE.** The brief forbids a try/catch at the call site. One
+change in `ariaChatWithProvider` covers every caller of it — `turn-persistence.ts:278` (`thread_title`)
+and `degraded-answer.ts:44` — and reuses the `opts.skipAnthropic` mechanism **that already existed on
+this function**, so the filtering is not a new concept either.
+
+**VERIFY — pasted**
+
+```
+ Test Files  145 passed (145)
+      Tests  1863 passed (1863)
+```
+
+Call counts, not outcomes, because **the outcome was already correct** — the owner always got their
+answer from Gemini. What was wrong was how many doomed calls came first, and an outcome-only test
+passes just as happily with two wasted round-trips as with none.
+
+The load-bearing test runs the identical scenario twice and compares:
+
+| | Anthropic calls | provider that answered | text |
+|---|---|---|---|
+| circuit closed (today) | **1** | `gemini` | identical |
+| circuit open (after) | **0** | `gemini` | identical |
+
+and the ledger-pair case, where Gemini fails too:
+
+| | Anthropic calls | outcome |
+|---|---|---|
+| circuit closed | **2** (Sonnet *and* Haiku — the exact pair in the ledger) | `provider: 'none'` |
+| circuit open | **0** | `provider: 'none'`, **identical** |
+
+**That second table is the hard rule as an assertion:** even the bad outcome is unchanged. Phase 1
+removes doomed calls; it does not change what an owner is told when everything is genuinely down.
+
+**MUTATION CHECK — 5 of 5 red, after TWO stayed green and exposed a real hole**
+
+```
+mutation                                           verdict
+--------------------------------------------------------------------------------
+the router stops consulting the breaker            RED - 3 tests failed
+a hard fault waits for three strikes               RED - 2 tests failed
+a 429 is misclassified as a hard fault             RED - 1 tests failed
+the hard TTL collapses to OPEN_SEC                 RED - 2 tests failed
+a success no longer closes the incident            RED - 1 tests failed
+--------------------------------------------------------------------------------
+5 of 5 went red. All verified.
+```
+
+**First run: mutations 3 and 4 came back `STILL GREEN — NOT VERIFIED`, and the tests were at fault,
+not the mutations.** `ai-router-breaker.test.ts` *mocks* `@/lib/aria/circuit-breaker` — correct for
+testing the router's decisions, but it meant breaking `isHardProviderError` or collapsing the hard TTL
+changed nothing in the suite. **The classifier the entire phase pivots on was untested.**
+`circuit-breaker-hard.test.ts` (14 tests, nothing mocked but the database) closes it, and both
+mutations now go red. This is the third time in two sprints that the mutation check has been the more
+valuable half of a phase.
+
+**THREE THINGS MY OWN TESTS GOT WRONG, each corrected by running rather than reading**
+
+1. I asserted OpenAI would never be called. **`TASK_PROVIDERS.insight === 'openai'`** — the real chain
+   for a `thread_title` turn is `[openai, claude, gemini, haiku]`, so OpenAI legitimately *precedes*
+   Claude. The assertion was replaced with the invariant that actually matters: same provider, same
+   text, fewer Anthropic calls.
+2. I expected **2** Anthropic calls in the healthy-Gemini case. It is **1** — Gemini sits before Haiku
+   in the chain, so Haiku is never reached. The exact count is asserted, because a vague "fewer" is
+   what let 346 doomed calls look acceptable for two weeks.
+3. My mocked `isAnthropicUnreachable` regex had `timeout` but not `timed out`; the real one has both.
+   A mock that is a worse copy of the thing it stands for is how a test proves the wrong code correct.
+
+**And `tsc` caught two errors a green test run did not** — zero-argument `vi.fn()` mocks being spread.
+"Tests pass" is not "gates pass", twice in two sprints.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| provider-call paths not consulting the breaker | **1 left**: `src/lib/agents/base-agent.ts` (0 imports) | **NOT changed — outside Lane A.** Named below with the exact change |
+| callers of `ariaChatWithProvider` / `ariaChat` | **2**: `turn-persistence.ts:278`, `degraded-answer.ts:44` | both covered by the single router change |
+| files importing the breaker | 4 → **5** | `ai-router.ts` joins `providers/anthropic.ts`, `main.ts`, `cron/daily-briefing-submit`, `health/deep` |
+
+**NOT done, and why**
+
+- **`src/lib/agents/base-agent.ts:53` still bypasses the breaker.** It is where `pricing` (84 credit
+  400s), `generic` (42), `schedule` (28), `inventory_financing` (24) and `bas_compliance` (14) come
+  from. **It is not Lane A** (Lane A owns the gateway), so it is a request, not a diff. The change is
+  three lines, identical in shape to the router's: consult `isAnthropicCircuitOpen()` before
+  `this.anthropic.messages.create`, and call `recordAnthropicHardDown` / `recordAnthropicFailure` in
+  the catch. **Most of those agent keys last failed weeks ago**; today's live waste is the ask path,
+  which this phase does cover, plus `ops_narrative` (42 today) in `src/app/api/aria/**` route handlers
+  — also outside Lane A, same request.
+- **The 175 allow-listed bypassers were not migrated.** That is WALL 1's ratchet, not this sprint.
+
+**discovered**
+
+- **A likely large contributor to the 154 `ai_outage` conversations, found by writing a test rather
+  than by looking for it.** For Haiku to be reached at all, Gemini must have failed first — the chain
+  is `[openai, claude, gemini, haiku]`. The ledger shows 24 Sonnet+Haiku pairs today, so on those turns
+  **every** provider failed, which is precisely the outage path. In the environment where
+  `ANTHROPIC_API_KEY` does not resolve, `GEMINI_API_KEY` very likely does not either — and then all
+  four legs fail and the owner gets the outage reply. **Phase 2 should count exactly this.**
+
+---
+
 ## 4 · FOUNDER CONSOLE CHECKLIST
 
 *Nothing here is executed by this sprint. Each line says what it unblocks.*

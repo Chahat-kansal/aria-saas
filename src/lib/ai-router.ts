@@ -7,6 +7,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { makeLazyServiceRoleClient } from '@/lib/supabase-lazy'
 import { computeCostCentsOrNull } from '@/lib/aria/cost'
+import {
+  isAnthropicCircuitOpen, isAnthropicUnreachable, isHardProviderError,
+  recordAnthropicFailure, recordAnthropicFallbackProvider, recordAnthropicHardDown,
+  recordAnthropicSuccess,
+} from '@/lib/aria/circuit-breaker'
 
 // AI-COST-2 — this file's Claude call sites (callClaude/callHaiku) never wrote to aria_ai_calls
 // at all (AI-COST-AUDIT-1 §1: a confirmed blind spot). Lazy client — module-scope createClient()
@@ -238,14 +243,61 @@ export async function ariaChatWithProvider(
   // Order: primary first, then fallback sequence
   const fallbackOrder = ['claude', 'gemini', 'openai', 'haiku'].filter(p => p !== primary)
   let sequence = [primary, ...fallbackOrder]
+
+  /**
+   * ⚠️ M18B PHASE 1 — THIS ROUTER NEVER ASKED THE CIRCUIT BREAKER, AND THAT IS THE WHOLE BUG.
+   *
+   * `src/lib/aria/circuit-breaker.ts` has been account-wide and shared since AI-ROUTER-FAILOVER-1. It
+   * already recognises both of the faults that have kept Claude at **zero successes since 21
+   * September** — `credit balance` is the first alternative in `isAnthropicUnreachable`'s regex — and
+   * `providers/anthropic.ts:193` already skips Anthropic entirely while it is open. It works:
+   * `aria_provider_incidents` holds 43 incidents since 21 Sep.
+   *
+   * It is imported by four files, and **this was not one of them.** So every `thread_title`,
+   * `ask_suggestions` and classifier turn kept walking into Sonnet and then Haiku — visible in the
+   * ledger as pairs of failures in the same second — before Gemini answered. 346 attempts, 0 successes.
+   *
+   * ⚠️ THE CHAIN IS NOT REORDERED. `sequence` is built exactly as before and only `claude`/`haiku` are
+   * filtered out, through the `skipAnthropic` mechanism that already existed on this function. Whoever
+   * answers an owner today answers them after this change: those two fail anyway, and Gemini is next
+   * either way. Same provider, same model, same words — two round-trips sooner.
+   */
+  let anthropicIncidentId: string | undefined
+  if (!opts.skipAnthropic) {
+    const circuit = await isAnthropicCircuitOpen()
+    if (circuit.open) {
+      anthropicIncidentId = circuit.incidentId
+      sequence = sequence.filter(p => p !== 'claude' && p !== 'haiku')
+    }
+  }
   if (opts.skipAnthropic) sequence = sequence.filter(p => p !== 'claude' && p !== 'haiku')
 
   for (const provider of sequence) {
     try {
       const result = await providerFns[provider]()
-      if (result) return { text: result, provider }
+      if (result) {
+        // A success CLOSES the incident, so a top-up or a fixed key heals on the next turn rather
+        // than waiting out the TTL.
+        if (provider === 'claude' || provider === 'haiku') void recordAnthropicSuccess()
+        else if (anthropicIncidentId) void recordAnthropicFallbackProvider(anthropicIncidentId, provider)
+        return { text: result, provider }
+      }
     } catch (e) {
-      console.warn(`[ai-router] ${provider} failed for task="${task}":`, (e as Error).message?.slice(0, 120))
+      const msg = (e as Error).message ?? ''
+      console.warn(`[ai-router] ${provider} failed for task="${task}":`, msg.slice(0, 120))
+      /**
+       * ⚠️ THE ROUTER NOW CONTRIBUTES TO THE SHARED BREAKER, not just reads it. Reading alone would
+       * mean this path waits for some *other* caller to discover the outage first — which is the
+       * "independent breakers each discovered the same outage on its own" problem that
+       * `providers/anthropic.ts:126-132` records having already been fixed once.
+       *
+       * The split is the point: a HARD fault opens on the first occurrence; a 429 or a timeout goes
+       * through the unchanged three-strikes path. The sprint requires that distinction explicitly.
+       */
+      if (provider === 'claude' || provider === 'haiku') {
+        if (isHardProviderError(msg)) void recordAnthropicHardDown(msg)
+        else if (isAnthropicUnreachable(msg)) void recordAnthropicFailure(msg)
+      }
     }
   }
   return { text: '', provider: 'none' }
