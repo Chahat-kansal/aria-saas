@@ -61,7 +61,7 @@ Both now do work, every lane writes provenance, and a new push gate keeps it tha
 | 2 | stage 5 runs the verifier this repo already had, on every turn | `480ed96d` |
 | 3 | the seventh silent catch, narrowed to the one statement that can fail | `a23f1b63` |
 | 4 | every lane writes provenance + WALL 10 | `01546b22` |
-| 5 | assertions 4–6 survive a worker respawn; the replay parked | *this commit* |
+| 5 | assertions 4–6 survive a worker respawn; the replay parked | `9d1d1253` |
 
 **Parked:** the replay (no founder go, and it would run on Google anyway) · the live "after" provenance
 numbers (forward-only by rule — historical rows record what happened) · the Anthropic auth fault ·
@@ -962,7 +962,7 @@ clean (37 files) · **WALL 10 clean, and proven to exit 1 when broken** · `BUIL
 
 ---
 
-### PHASE 5 — ASSERTIONS 4, 5 AND 6 MADE EVALUABLE; THE REPLAY PARKED  ·  commit `pending`
+### PHASE 5 — ASSERTIONS 4, 5 AND 6 MADE EVALUABLE; THE REPLAY PARKED  ·  commit `9d1d1253`
 
 **SCOPE** · make assertion 5 evaluable or leave it ⊘ with exactly what it would take; then the replay,
 only if credit allows.
