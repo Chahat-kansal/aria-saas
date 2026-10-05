@@ -47,7 +47,12 @@ function decisionJson(record: TurnRecord): string {
     reason: record.reason,
     declined: record.declined,
     grounding: record.groundingKind,
-    verified: record.verified.ran ? 'ran' : 'not_run',
+    // ⚠️ M18 PHASE 2 — THE VERDICT, NOT JUST "ran". `'ran'` answered a question nobody was asking:
+    // of course it ran, the stage is unskippable. The question worth a column is WHAT IT FOUND, and
+    // `ok` / `hedged` / `refused` is now aggregatable — "how many answers this week asserted a figure
+    // that matched no anchor" becomes one GROUP BY instead of unanswerable. `'not_run'` is kept for
+    // the `{ ran: false }` branch, which stage 5 no longer produces but the type still permits.
+    verified: record.verified.ran ? record.verified.verdict : 'not_run',
     status: record.status,
     intent: record.intentType,
     aria_intent: record.ariaIntentType,

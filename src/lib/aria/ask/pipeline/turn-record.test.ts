@@ -111,7 +111,12 @@ describe('M17B phase 3 · the turn record', () => {
     })
     const rec = records[0]!
     expect(rec.groundingKind).toBe('council')
-    expect(rec.verified).toEqual({ ran: false, reason: expect.stringContaining('M18') })
+    // ⚠️ UPDATED BY M18 PHASE 2. This read `{ ran: false, reason: /M18/ }`, which was right for M17 —
+    // the stage was a deliberate pass-through naming the sprint that would fill it. This is that
+    // sprint, so `ran: false` would now be asserting the bug. The answer 'x' asserts no figure, so
+    // "ran, checked nothing, found nothing wrong" is the honest verdict — and it is a DIFFERENT fact
+    // from "did not run", which is the whole distinction the phase exists to draw.
+    expect(rec.verified).toMatchObject({ ran: true, verdict: 'ok', checkedFigures: 0 })
     expect(Object.keys(rec.stageMs)).toEqual(expect.arrayContaining(['parse', 'understand', 'decide', 'act', 'verify']))
     expect(typeof rec.totalMs).toBe('number')
   })
@@ -160,9 +165,27 @@ describe('M17B phase 3 · the turn record', () => {
       expect(decision.lane).toBe('main')
       expect(decision.declined).toEqual(['council', 'inventory_agent'])
       expect(decision.grounding).toBe('full')
+      // `REC` is hand-built with `{ ran: false }`, which stage 5 no longer produces but the type
+      // still permits — so 'not_run' is still the right rendering of it.
       expect(decision.verified).toBe('not_run')
       expect(row.request_summary).toContain('main')
       expect(row.learning_signal).toBe('isStrategicQuestion,isDataLookup')
+    })
+
+    it('⚠️ STORES THE VERDICT, NOT THE WORD "ran" — otherwise the column answers nothing', () => {
+      // Anti-vacuity for the assertion above: with only the `{ ran: false }` fixture, `decisionJson`'s
+      // new branch would be untested and could emit anything. "Did the verifier run" is not a
+      // question worth a column — the stage is unskippable. "What did it find" is, and `ok` /
+      // `hedged` / `refused` makes "how many answers this week asserted a figure that matched no
+      // anchor" one GROUP BY instead of unanswerable.
+      for (const verdict of ['ok', 'hedged', 'refused'] as const) {
+        const row = turnRecordRow({
+          ...REC,
+          verified: { ran: true, checkedFigures: 3, unsourcedFigures: verdict === 'ok' ? 0 : 1, verdict },
+        })
+        const decision = JSON.parse(row.response_summary) as Record<string, unknown>
+        expect(decision.verified, verdict).toBe(verdict)
+      }
     })
 
     it('stays inside the summary columns it is written to', () => {

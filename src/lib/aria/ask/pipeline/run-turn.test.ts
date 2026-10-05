@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ClassifiedIntent } from '@/lib/aria/ask/intent'
 import type { AriaIntent } from '@/lib/aria/ask/aria-intent'
-import type { TurnAnchorSet } from './types'
+import type { TurnAnchorSet, TurnGrounding } from './types'
 
 /**
  * M17 PHASE 2 — THE SPINE, DRIVEN BY RUNNING IT.
@@ -306,14 +306,57 @@ describe('M17 phase 2 · stage 4 — act walks the waterfall', () => {
   })
 })
 
+/** A council grounding carrying the given anchors — what stage 2 hands stage 5. */
+const GROUNDED = (figures: Array<{ value: number; label: string }>): TurnGrounding => ({
+  kind: 'council', bizCtx: '', augCtx: '', anchors: [], provenance: null,
+  anchorSet: {
+    figures,
+    queries: figures.map(f => ({ name: 'anchor_' + f.value, ran: true, rows: 1, anchors: [f] })),
+    emptyReason: figures.length ? null : 'no anchors in this fixture',
+  },
+})
+
 describe('M17 phase 2 · stage 5 — verify', () => {
-  it('⚠️ IS A PASS-THROUGH IN M17, AND SAYS SO IN THE VALUE', () => {
-    const r = makeTurnResult('main', { response: 'x' })
-    const v = verify(r)
+  /**
+   * ⚠️ REWRITTEN BY M18 PHASE 2, AND THE OLD ASSERTION IS WORTH RECORDING. It read:
+   *
+   *     expect(v.verified.ran).toBe(false)
+   *     expect(v.verified.ran === false && v.verified.reason).toMatch(/M18/)
+   *
+   * which was the CORRECT assertion for M17 — the stage was a deliberate pass-through and the test
+   * held it to carrying a reason rather than being silent. M18 phase 2 is the phase that was named in
+   * that reason, so asserting `ran: false` now asserts the bug. It is rewritten rather than deleted,
+   * and it still holds the same underlying rule: the stage must never be silent about what it found.
+   *
+   * `{ ran: false }` is still legal in the type and `withVerification` still enforces its reason —
+   * `types.test.ts` keeps that assertion. What changed is that THIS STAGE no longer produces it.
+   */
+  it('⚠️ RUNS, AND RETURNS A VERDICT — not a pass-through, and not `ran: false`', () => {
+    const r = makeTurnResult('main', { response: 'You took $822.40 today.' })
+    const anchored = GROUNDED([{ value: 822.4, label: 'Completed sales, today.' }])
+    const v = verify(r, anchored)
+
     expect(v.result).toBe(r)
-    expect(v.verified.ran).toBe(false)
-    // A not-run verdict with no reason would be the same silence in a new place.
-    expect(v.verified.ran === false && v.verified.reason).toMatch(/M18/)
+    expect(v.verified.ran).toBe(true)
+    // The verdict, not merely that it ran — `ran: true` is one word away from M17 and decides nothing.
+    expect(v.verified.ran === true && v.verified.verdict).toBe('ok')
+    expect(v.verified.ran === true && v.verified.checkedFigures).toBe(1)
+  })
+
+  it('⚠️ REFUSES a figure the anchors do not support — anti-vacuity for the test above', () => {
+    // If `verify()` returned 'ok' unconditionally the assertion above would still pass. This is the
+    // one that makes it mean something.
+    const r = makeTurnResult('main', { response: 'Tuesdays are costing you about $480 a week.' })
+    const v = verify(r, GROUNDED([{ value: 822.4, label: 'Completed sales, today.' }]))
+    expect(v.verified.ran === true && v.verified.verdict).toBe('refused')
+    expect(v.verified.ran === true && v.verified.unsourcedFigures).toBeGreaterThan(0)
+  })
+
+  it('a gate still passes through the stage, and comes out `ran: true` with nothing checked', () => {
+    const gate = makeTurnResult('rate_limited_user', { error: 'Rate limit exceeded. Try again later.' }, 429)
+    const v = verify(gate, { kind: 'none', anchorSet: { figures: [], queries: [], emptyReason: 'a gate' } })
+    expect(v.verified.ran).toBe(true)
+    expect(v.verified.ran === true && v.verified.checkedFigures).toBe(0)
   })
 })
 
@@ -445,7 +488,9 @@ describe('M17B phase 2 · runTurn — the whole order, in one place', () => {
     expect(rec.reason).toBe('isStrategicQuestion')
     expect(rec.groundingKind).toBe('council')
     expect(rec.firedFeatures).toContain('isStrategicQuestion')
-    expect(rec.verified).toEqual({ ran: false, reason: expect.stringContaining('M18') })
+    // M18 phase 2: the record carries the VERDICT. 'x' asserts no figure, so there is nothing to
+    // check and 'ok' is the honest answer — which is a different fact from `ran: false`.
+    expect(rec.verified).toMatchObject({ ran: true, verdict: 'ok', checkedFigures: 0 })
     expect(typeof rec.totalMs).toBe('number')
   })
 

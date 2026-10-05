@@ -16,10 +16,19 @@ Branch `main` · autonomous run (RULE 20) · started 5 Oct 2026
    turn for seven weeks; it now returns a real anchor set — six named ground-truth queries, each
    recorded as ran / rows / none — for every lane that can put a dollar in front of an owner, and an
    **empty-but-present set with a reason** for every lane that cannot. Four mutations, all red.
-3. **A mutation check failed to fail, and the cause was a test that did not reproduce production's
-   wiring.** `runTurn` builds the turn record as `opts.onRecord?.(recordOf(…))` — an optional CALL
-   short-circuits its own arguments, so the test, which omitted `onRecord`, could not see the
-   re-grounding regression inside it. Fixed, re-run, red. Recorded in full under Phase 1.
+3. **Phase 2 found the verifier this repo already had, and wired it up instead of writing a fifth
+   one.** `src/lib/aria/verifier.ts` — pure, no model, 25+ tests, returns `pass | hedge | refuse`,
+   which is the sprint's three verdicts word for word — has been called by **nothing but the eval
+   harness** since MS15. Stage 5 now runs it on every turn. That also makes the **ALLERGEN HARD
+   RULE** reachable from the ask path for the first time. Writing my own version first and deleting
+   it was the sweep doing its job; the details, and the gap it exposed in that rule's regex, are
+   under Phase 2.
+
+**Two smaller things worth a minute each:** a mutation check failed to fail in Phase 1 because the
+test omitted `onRecord`, and `opts.onRecord?.(recordOf(…))` short-circuits its own arguments — so the
+regression lived in the gap between the test's wiring and the route's. And `ALLERGEN_RE` does not
+catch `"any nuts in the banana bread?"`, only `"nut-free"` — founder queue item 6, not fixed here
+because it is outside Lane A and widening a safety regex needs a human.
 
 ---
 
@@ -382,6 +391,179 @@ writes; `tests/check-live/**` is a separate call and is raised, not taken, until
 
 ---
 
+### PHASE 2 — `verify()` STOPS STAMPING `{ran:false}`  ·  commit `pending`
+
+**SCOPE** · stage 5 runs on every result and decided nothing. Make it decide.
+
+**NOT-SCOPE** · no new model call · no rewriting of owner-facing prose · no change to any HTTP
+response · `main.ts`'s existing model-based `ask_aria_verifier` (untouched) · provenance writing
+(Phase 4).
+
+**⚠️ THE BIGGEST THING IN THIS PHASE IS WHAT I DID NOT SHIP.**
+
+I wrote a verifier here — anchor matching, three verdicts, nine green tests, all five mutations red.
+Then I ran the sibling sweep RULE 16 #2 requires, and it found that I had written **a fifth
+implementation of a rule this repo already has six copies of**:
+
+| where | tolerance | note |
+|---|---|---|
+| `response-validator.ts:77` `stripUngroundedNumbers` | 2%, sentence-level, owner-citation bypass | the council + the briefing cron |
+| `response-validator.ts:338` | 2% | a second copy in the same file |
+| `validate-summary.ts:31` | 2% | a third, identical |
+| `ground-guard.ts:14` `guardOutput` | 2%, `strip`/`redact`/`flag` modes | **~25 call sites** — the widely-adopted one |
+| `manager/review.ts:40` `matchesAnyAnchor` | 2% + 0.01 absolute, `>= 100` only | the manager |
+| `aria/verifier.ts:100` `matchesAnyAnchor` | **0.5%** | MS15's verifier |
+
+**And the last one is this stage's job description.** `src/lib/aria/verifier.ts`, from MS15, header
+verbatim: *"PURE ON PURPOSE. Ground truth is passed in; nothing here queries, and nothing here calls a
+model… IT SITS AFTER GENERATION… on failure it REFUSES or HEDGES."* It returns
+`action: 'pass' | 'hedge' | 'refuse'` — **the sprint's three verdicts, word for word.** It has 25+
+assertions in its own test file.
+
+**The only thing that has ever called it is `evals/run.ts`.** Never a production answer path. It is
+the seventh instance of this repo's #1 pattern: exists, well made, correct, unreached — and it has
+been sitting one function call away from the stage that needed it since MS15.
+
+So the file I had written was **deleted and replaced by a delegation**. Stage 5 now builds a
+`GroundTruth` from Phase 1's anchor set and hands it to `verifyResponse()`. That is both the smaller
+diff and the larger capability gain, because wiring it makes these reachable from Ask Aria **for the
+first time**:
+
+- **the ALLERGEN HARD RULE.** `CLAUDE.md` locks it — no model output may answer allergen or
+  dietary-safety questions on any surface, gated or disclaimed or not. `verifyResponse` fires it on
+  the QUESTION. Nothing on the ask path had ever asked it.
+- the unknown-entity rule · the weak-cost-provenance rule · the house-rule-conflict rule.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/aria/ask/pipeline/verify.ts` | **new**, 151 | the delegation, plus the two hedges `verifyResponse` cannot know about |
+| `src/lib/aria/ask/pipeline/verify.test.ts` | **new**, 190 | 13 tests |
+| `src/lib/aria/ask/pipeline/types.ts` | +26 / −1 | `verdict` union widened by `'hedged' \| 'refused'` |
+| `src/lib/aria/ask/pipeline/run-turn.ts` | +28 / −12 | `verify()` runs it; the question is threaded through for the allergen rule |
+| `src/lib/aria/ask/pipeline/turn-record.ts` | +6 / −1 | stores the VERDICT, not the word `'ran'` |
+| `src/lib/aria/ask/pipeline/run-turn.test.ts` | +44 / −7 | the M17 pass-through test rewritten, reason in-file |
+| `src/lib/aria/ask/pipeline/turn-record.test.ts` | +22 / −2 | updated, plus anti-vacuity for the new branch |
+
+**WHAT IS GENUINELY NEW HERE, AND IT IS THIN ON PURPOSE** — two hedges the delegated verifier cannot
+derive, because only the spine knows them:
+
+1. **A failed anchor query hedges, never refuses.** If `revenue_today` threw, today's revenue is not
+   in the anchor set — so a perfectly correct `$822.40` looks unverified. Refusing it would report the
+   loader's outage as the answer's dishonesty. **This is what Phase 1's per-query `ran` flag was for**,
+   and it is the reason that flag was worth carrying.
+2. **An empty anchor set hedges, and repeats the set's own reason.** "Unverifiable" and "wrong" are
+   different findings, and the anchor set already knows which it is.
+
+The allergen refusal is checked **before both**, so neither hedge can soften a locked rule. There is a
+mutation for exactly that.
+
+**DECISION 10 IS SETTLED: the verifier lives INSIDE THE SPINE, AT STAGE 5, BEFORE `render()`** — not
+behind a lane's booleans, not after an early return, not conditional on complexity or on which model
+served the turn. Every result passes through it, 429s included, and every one comes out `ran: true`.
+`{ ran: false }` is **not deleted** from the type: it stays legal, still requires a reason, and
+`types.test.ts` still holds that line. What changed is that this stage never produces it.
+
+**VERIFY — pasted**
+
+```
+ Test Files  139 passed (139)
+      Tests  1821 passed (1821)
+```
+
+Not one assertion checks that `verified.ran` is true and stops there — `ran: true` is one word away
+from M17 and would be a verifier that runs on every turn and decides nothing. Every test puts a real
+answer and a real anchor set in and asserts on the verdict and the counts.
+
+**MUTATION CHECK — 6 of 6 red**
+
+```
+mutation                                                     verdict
+----------------------------------------------------------------------------------------------
+verify() stamps {ran:false} again, as M17 did                RED - 5 tests failed
+verifyAnswer never consults the real verifier                RED - 10 tests failed
+a failed anchor query refuses instead of hedging             RED - 1 tests failed
+an empty anchor set refuses rather than hedging              RED - 1 tests failed
+the allergen refusal loses precedence over the hedges        RED - 1 tests failed
+the turn record stores 'ran' instead of the verdict          RED - 1 tests failed
+----------------------------------------------------------------------------------------------
+6 of 6 went red. All verified.
+```
+
+**⚠️ FINDING — A GAP IN THE ALLERGEN GUARD, FOUND BY MY OWN TEST, NOT FIXED**
+
+Writing the anti-vacuity test for the allergen precedence turned up this:
+
+```
+"any nuts in the banana bread?"   → NOT caught   (verdict: ok)
+"is the banana bread nut-free?"   → caught       (verdict: refused)
+```
+
+`verifier.ts`'s `ALLERGEN_RE` requires a **qualifying phrase** around the allergen noun — `nut-free`,
+`peanut`, `contains nuts`, `gluten-free`. **A bare allergen noun does not match.** Those are the same
+question from an owner's point of view, and the uncaught phrasing is the closer one to what a worried
+customer says at the counter.
+
+**NOT FIXED HERE, and the reason is not laziness:** `src/lib/aria/verifier.ts` is outside this
+sprint's file domain, and widening a safety regex needs a human to weigh the false-positive cost —
+every "vegan" and "vegetarian" in an ordinary menu conversation is a candidate. It is **founder queue
+item 6**, and the suite now carries a loudly-labelled test asserting the current behaviour so the gap
+is visible in CI rather than only in this document. That test goes red the moment the regex is
+widened, which is the right signal to delete it.
+
+**⚠️ TWO TOLERANCES NOW DISAGREE, RECORDED RATHER THAN QUIETLY PICKED**
+
+`verifyResponse` matches within **0.5%**; the council's own synthesis guard uses **2%**. A figure the
+council shipped can therefore be recorded as `refused` by the spine. Two tests assert that boundary
+explicitly ($826.00 passes, $834.70 refuses) rather than smoothing it over — a disagreement nobody
+wrote down is how six copies of one rule happened in the first place. It is harmless **today** only
+because this stage records and never edits. It stops being harmless the moment a phase applies the
+verdict.
+
+Same for the **owner-citation bypass**: `response-validator.ts` never strips a sentence citing the
+owner, because the owner stating a figure *is* grounding. `verifier.ts` has no such rule, so
+"You mentioned a $5,000 target" records as `refused`. A test asserts that, with a note that this is
+the case which would wrongly withhold an answer if the verdict were ever applied.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| callers of `verify()` | 1 production (`run-turn.ts`) + tests | both call sites threaded with the grounding and the question |
+| places producing `{ ran: false }` | **0 in stage 5**; 1 unrelated route (`works/plan/[id]/run`) with its own meaning | left alone |
+| anchor-matching rules | **6 copies, 3 engines** | reused the purpose-built one; the other five untouched and tabulated above |
+| does verification reach an HTTP body? | **no** — `render.ts` serialises `result.body` and nothing else | so no response-shape question arises at all |
+| existing verifier modules | **2** (`aria/verifier.ts`, `aria/ground-guard.ts`) | `verifier.ts` is now wired; `ground-guard.ts` left to its ~25 callers |
+
+**gates** · `tsc` 0 errors · `vitest` 1821 passed in 139 files · canon rail clean · one-exit guard
+clean (32 files scanned whole) · `BUILD_EXIT` — see the gate line in the commit
+
+**NOT done, and why**
+
+- **`safeResponse` is ignored.** `verifyResponse` returns replacement prose for a non-pass verdict.
+  Applying it would change what an owner reads, which is a customer-facing behaviour change and
+  PARKS under RULE 18. Phase 2 wires the DETECTION; the substitution needs a human present. The body
+  the client receives is byte-identical.
+- **Entities are passed empty.** `verifyResponse`'s entity rule is guarded by `known.size > 0`, so an
+  empty list disables it rather than flagging every Title-Case phrase. Populating it needs product,
+  supplier and staff names in the anchor set — a Phase 1 widening, not a Phase 2 smuggle.
+- **The six tolerance copies were not unified.** Rail-first work spanning `src/lib/manager/**` and
+  `src/lib/aria/*`, both outside Lane A. Founder queue item 7.
+- **`main.ts`'s `ask_aria_verifier` model call was not removed.** It flags contradictions a pure check
+  cannot see, and removing it would be a downgrade (RULE 0). The two are complementary: one is
+  arithmetic on every turn, the other is a model on complex turns.
+
+**discovered**
+
+- The brief's three verdicts came from `aria/verifier.ts`'s `action` union. They are not new
+  vocabulary — they are the existing vocabulary of a module nobody had wired up.
+- `verifyResponse` skips `value === 0` ("$0.00 states an absence, not a measurement"), which means a
+  dormant business's honest zeros never trip the verifier. That is the right call and worth knowing
+  before anyone reads a `refused` count.
+
+---
+
 ## 3 · `check:live` — PHASE 0 AND END, SIDE BY SIDE
 
 | assertion | phase 0 (baseline) | end of run |
@@ -405,6 +587,9 @@ writes; `tests/check-live/**` is a separate call and is raised, not taken, until
 | 3 | The `CLAUDE.md` bypass wording proposed in `RUN-M17B.md` | nothing | still unapplied |
 | 4 | `aria_turn_records` DDL | nothing — **M18 does not need it** | parked proposal, see `RUN-M17B.md` |
 | 5 | `TEST_USER_PASSWORD` reset | the smoke suite's positive half | authorisation action, parked under RULE 20 |
+| 6 | **`ALLERGEN_RE` does not catch a bare allergen noun** — `"any nuts in the banana bread?"` passes, `"nut-free"` is caught | the completeness of a LOCKED rule | `src/lib/aria/verifier.ts:81`, outside Lane A. Widening a safety regex needs someone to weigh the false positives — every "vegan"/"vegetarian" in a menu conversation. A labelled test in `verify.test.ts` holds the current behaviour and goes red when it is fixed. |
+| 7 | **Six copies of the 2% anchor tolerance, across three engines** (table in Phase 2) | nothing today; it is why the spine and the council can disagree about one figure | rail-first unification spanning `src/lib/manager/**` and `src/lib/aria/*`, both outside Lane A |
+| 8 | **`aria/verifier.ts` was unreachable in production until this sprint** — `evals/run.ts` was its only caller | — | now wired at stage 5. Worth knowing that its rules (entities, cost provenance, house rules) are running against owner answers for the first time, so their false-positive rate has never been observed live |
 
 ---
 
@@ -416,7 +601,9 @@ writes; `tests/check-live/**` is a separate call and is raised, not taken, until
 | Is "nothing to ground" a value or an absence? | **Settled.** A value: an empty set with a required reason. `emptyAnchorSet('')` throws. |
 | Does `kind` carry the anchor set, or is it a second axis? | **Settled — second axis.** See §1 for what collapsing them would have cost. |
 | Does the council's block move into the stage? | **Exposed, not settled.** Two measured reasons not to do it here; the follow-on is named above. |
-| Decision 10 — verifier placement | Phase 2. |
+| Decision 10 — verifier placement | **Settled. Inside the spine, stage 5, before `render()`** — every result, 429s included, and none of them `{ ran: false }`. |
+| Which anchor-matching engine is canonical for the ask path? | **Exposed, and it is worse than it looked.** Six copies, three engines. The spine delegates to the purpose-built one; the other five are tabulated and untouched. Founder queue 7. |
+| Does the verifier edit the answer? | **Settled: no.** It records. `safeResponse` is ignored — substituting owner-facing prose needs a human present. |
 
 ---
 

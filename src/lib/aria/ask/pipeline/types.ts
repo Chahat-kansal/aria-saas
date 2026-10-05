@@ -326,7 +326,30 @@ export type Verification =
       readonly ran: true
       readonly checkedFigures: number
       readonly unsourcedFigures: number
-      readonly verdict: 'ok' | 'corrected' | 'insufficient_data'
+      /**
+       * ⚠️ M18 PHASE 2 ADDS `'hedged'` AND `'refused'`. ADDITIVE — nothing is removed, and the
+       * reading is recorded because M17's comment above says M18 changes `ran: false` → `ran: true`
+       * "without touching this shape".
+       *
+       * It does not touch the SHAPE: the discriminator, the required fields and their names are
+       * untouched. It widens one union, because the brief's three verdicts do not map onto the three
+       * that were here. `'ok'` is the brief's `verified` under its existing name, so no consumer has
+       * to learn a new word for the good case. The other two had no honest home:
+       *
+       *   · `'corrected'` implies the text was CHANGED, and this verifier deliberately changes
+       *     nothing — rewriting owner-facing prose needs a human present.
+       *   · `'insufficient_data'` already means something narrower than "we could not check".
+       *
+       * Both are kept, unused by `verifyAnswer()`, for whichever phase does correct an answer.
+       *
+       * Sweep before widening: **`verdict` has ZERO readers** in `src/`, `tests/` or `scripts/` —
+       * `turn-record.ts` reads `.ran`, and `render.ts` serialises `result.body` and nothing else, so
+       * no verdict value has ever reached an HTTP response. Every consumer is in this repo and
+       * changes in this commit.
+       *
+       * `'ok'` → verified · `'hedged'` → could not check · `'refused'` → checked, and it did not match.
+       */
+      readonly verdict: 'ok' | 'corrected' | 'insufficient_data' | 'hedged' | 'refused'
       readonly note?: string
     }
 

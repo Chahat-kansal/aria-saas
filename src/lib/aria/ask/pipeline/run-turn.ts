@@ -44,6 +44,7 @@ import type { NoticeRef } from '@/lib/aria/notice-context'
 import { extractFeatures, firedFeatures } from './features'
 import { render } from './render'
 import { ANCHOR_PLAN, emptyAnchorSet, loadAnchorSet } from './anchors'
+import { verifyAnswer } from './verify'
 import {
   makeTurnResult,
   withVerification,
@@ -394,19 +395,29 @@ export function assertRegistryComplete(registry: StrategyRegistry, lanes: readon
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * ⚠️ A PASS-THROUGH, DELIBERATELY, AND THE REASON IS RECORDED IN THE VALUE.
+ * ⚠️ M18 PHASE 2 — NO LONGER A PASS-THROUGH. THIS IS DECISION 10, SETTLED.
  *
- * The verifier exists (route.ts:2567) behind five booleans, positioned after the council exit that
- * carries every request it was written for. M9 measured it running about once in three months.
- * M17's job is to put a stage here that nothing can get past; M18's job is to make it do something.
- * Returning `{ ran: false }` WITHOUT a reason would be the same silence in a new place, so the type
- * forbids it.
+ * The verifier exists (route.ts:2567, now `strategies/main.ts:1147`) behind five booleans, positioned
+ * after the council exit that carries every request it was written for. M9 measured it running about
+ * once in three months. Nobody broke it; it was never reachable. M17 put a stage here that nothing
+ * can get past and stamped `{ ran: false }` with a reason. This is where that stops.
+ *
+ * **Decision 10 — where does the verifier live? — is settled here: INSIDE THE SPINE, AT STAGE 5,
+ * BEFORE `render()`.** Not behind a lane's booleans, not after an early return, not conditional on
+ * complexity or on which model served the turn. Every result passes through `verifyAnswer()`,
+ * including the 429s, and every one comes out with `ran: true` — because "ran and found nothing to
+ * check" is a result and `{ ran: false }` is an absence.
+ *
+ * `{ ran: false }` is NOT deleted from the type. It stays legal for a caller that genuinely did not
+ * run a check, and the type still forces it to carry a reason. What changes is that this stage never
+ * produces it.
+ *
+ * ⚠️ THE GROUNDING IS A PARAMETER NOW, AND IT HAS TO BE: the check is "does this figure match an
+ * anchor stage 2 loaded", so a verifier without the anchor set is the M9 verifier again — present,
+ * reachable, and unable to answer. No model call, no query: see `./verify.ts`.
  */
-export function verify(result: TurnResult): VerifiedResult {
-  return withVerification(result, {
-    ran: false,
-    reason: 'M18 — the verifier is not on this stage yet; M17 built the stage it will run on',
-  })
+export function verify(result: TurnResult, grounding: TurnGrounding, question = ''): VerifiedResult {
+  return withVerification(result, verifyAnswer(result, grounding, question))
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -478,8 +489,12 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
   const stageMs: Record<string, number> = {}
   const mark = (name: string, from: number) => { stageMs[name] = Date.now() - from }
 
+  // ⚠️ READ LAZILY. `leave()` is defined before the body is parsed and is also called AFTER it, so
+  // the question is fetched at call time: '' at a pre-parse gate, the real message at a later one.
+  let parsedMessage = ''
+  const gateQuestion = () => parsedMessage
+
   const leave = (r: TurnResult, lane: string) => {
-    const verified = verify(r)
     // ⚠️ A GATE GETS A GROUNDING TOO — EMPTY, PRESENT, AND EXPLAINED. It answered before the
     // classifiers ran, so it must never pay for an anchor query; but an absent anchor set here would
     // be the one shape the type exists to forbid. `ANCHOR_PLAN` holds the reason for each gate lane.
@@ -490,6 +505,9 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
         ?? 'answered at an admission gate, before the classifiers and before grounding ran',
       ),
     }
+    // No question text at a pre-parse gate — the body has not been read yet. The allergen rule
+    // therefore cannot fire there, which is correct: nothing was answered.
+    const verified = verify(r, gateGrounding, gateQuestion())
     opts.onRecord?.(recordOf(envelope.bid, r, null, gateGrounding, verified, stageMs, t0, undefined, undefined, lane))
     return render(verified)
   }
@@ -505,6 +523,7 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
   const parsed = await opts.parse(envelope.req)
   mark('parse', t)
   const input: TurnInput = { ...envelope, ...parsed }
+  parsedMessage = parsed.message
 
   // ── stage 0b · needs the parsed body (route.ts:366) ──────────────────────────────────────────
   const bad = opts.afterParse ? opts.afterParse(parsed) : null
@@ -539,7 +558,7 @@ export async function runTurn(envelope: TurnEnvelope, opts: RunTurnOptions) {
 
   // ── stage 5 · verify ─────────────────────────────────────────────────────────────────────────
   const tVerify = Date.now()
-  const verified = verify(outcome.result)
+  const verified = verify(outcome.result, outcome.grounding, input.message)
   mark('verify', tVerify)
 
   // ⚠️ `outcome.grounding`, NOT A SECOND `ground()` CALL. See ActOutcome.grounding — re-grounding here
