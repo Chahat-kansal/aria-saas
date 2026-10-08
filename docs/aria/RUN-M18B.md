@@ -61,8 +61,8 @@ subquery read the pre-delete snapshot (phase 4). All three are written up where 
 | 1 | the router joins the breaker it never consulted | `175d579d` |
 | 2 | the outage lane: measured, not changed | `18991138` |
 | 3 | WALL 11 — a unit test cannot spend money | `486ea5ec` |
-| 4 | the ledger tells the truth | *this commit* |
-| 5 | the founder console — nothing executed | *this commit* |
+| 4 | the ledger tells the truth | `edb663e6` |
+| 5 | the founder console — nothing executed | `edb663e6` |
 
 **The single most useful thing you can do next** is founder console 5 (drop the two column defaults) —
 until then the ledger is honest only for rows that come through `logAICallSafe`, and the 175 WALL 1
@@ -297,7 +297,7 @@ own build / test / `check:live` activity.
 
 ## 3 · PHASES
 
-### PHASE 0 — WHERE THE MONEY ACTUALLY GOES · commit `pending`
+### PHASE 0 — WHERE THE MONEY ACTUALLY GOES · commit `7f6abdaf`
 
 **SCOPE** · no behaviour change. Five questions, answered above with file:line and counts.
 
@@ -333,7 +333,7 @@ began and nothing was touched.
 
 ---
 
-### PHASE 1 — A DEAD PROVIDER IS SKIPPED, NOT RETRIED · commit `pending`
+### PHASE 1 — A DEAD PROVIDER IS SKIPPED, NOT RETRIED · commit `175d579d`
 
 **SCOPE** · make the two hard faults stop a provider being dialled, with a configurable TTL.
 **NOT-SCOPE** · the fallback chain's order · 429/timeout behaviour · anything an owner reads.
@@ -478,7 +478,7 @@ valuable half of a phase.
 
 ---
 
-### PHASE 2 — THE OUTAGE LANE: MEASURED, NOT CHANGED · commit `pending`
+### PHASE 2 — THE OUTAGE LANE: MEASURED, NOT CHANGED · commit `18991138`
 
 **SCOPE** · report the condition verbatim, add logging only, count how many of the outages had a
 working provider available. **NOT-SCOPE** · the condition itself. The copy. Anything an owner reads.
@@ -636,7 +636,7 @@ test rather than by my word.
 
 ---
 
-### PHASE 3 — TESTS CANNOT SPEND MONEY (WALL 11) · commit `pending`
+### PHASE 3 — TESTS CANNOT SPEND MONEY (WALL 11) · commit `486ea5ec`
 
 **SCOPE** · convert the accident at the top of this log into a guarantee. **Lane D** (test config).
 **NOT-SCOPE** · `check:live`, which stays live by design.
@@ -802,7 +802,7 @@ clean · `BUILD_EXIT` in the commit line
 
 ---
 
-### PHASE 4 — THE LEDGER TELLS THE TRUTH · commit `pending`
+### PHASE 4 — THE LEDGER TELLS THE TRUTH · commit `edb663e6`
 
 **SCOPE** · the three items the brief lists: `model_provider` derived, `cost_usd_cents` NULL-not-0, no
 backfill. **NOT-SCOPE** · DDL (RULE 10a) · any new ledger row.
