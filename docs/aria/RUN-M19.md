@@ -65,7 +65,7 @@ exception, and seven rows where a suffix was the wrong tool entirely. Both are i
 
 ## 2 · PHASES
 
-### PHASE 1 — INDEX V3 · commit `pending`
+### PHASE 1 — INDEX V3 · commit `2aca4c06`
 
 **SCOPE** · `docs/aria/ARIA-MEGA-SPRINT-INDEX.md` + one migration file. **Nothing in `src/`** —
 confirmed by `git status --porcelain src/` returning empty.
@@ -260,6 +260,281 @@ and were green at `a58864cf`; both re-run at the end of Phase 1 regardless — s
   disagree about what M19 contains.
 - The index's `G2` **MEMORY-ALL-LANES** row is ordered *"with M18 (ground stage)"*. M18 shipped without
   it. Another index-vs-reality gap, same class.
+
+---
+
+### PHASE 2 — THE PREFLIGHT FOR BOTH CODE CHANGES · commit `pending`
+
+**SCOPE** · no behaviour change. Four questions. **It also carries the re-check duties the front
+matter assigned to a "Phase 0" that does not exist (§1b).**
+
+**URGENT, answered first as the brief requires: DO QUESTIONS 1 AND 2 TOUCH THE SAME CODE? NO.**
+
+| | files |
+|---|---|
+| Q1 key resolution | `src/lib/ai-router.ts`, `src/lib/aria/providers/gemini.ts` |
+| Q2 lane choice | `src/lib/aria/ask/pipeline/run-turn.ts`, `.../features.ts`, `ask/intent.ts`, `ask/aria-intent.ts` |
+
+**No overlap.** The brief's assumption that they are separate holds.
+
+---
+
+#### Q1 · WHERE THE DEGRADE CHAIN RESOLVES KEYS, AND HOW IT DIFFERS FROM THE LEDGER PATH
+
+**Quoted, both, as asked.**
+
+The degrade chain — `src/lib/ai-router.ts`, inside `callGemini`:
+
+```ts
+const apiKey = process.env.GEMINI_API_KEY
+if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+```
+
+The path that works — `src/lib/aria/providers/gemini.ts:39-41`:
+
+```ts
+const apiKey = process.env.GEMINI_API_KEY
+if (!apiKey) {
+  console.error('[gemini] GEMINI_API_KEY not set, falling back')
+```
+
+> ## ⚠️ THEY ARE THE SAME MECHANISM. CHARACTER FOR CHARACTER.
+>
+> Both read `process.env.GEMINI_API_KEY` and both throw/fall back when it is absent. **There is no
+> difference in key resolution between the degrade chain and the ledger path**, so there is nothing
+> for Phase 3 to make "use the same mechanism" — it already does.
+
+**This is the first half of why Phase 3 is parked. The second half is Q3.**
+
+---
+
+#### Q2 · WHERE THE LANE IS CHOSEN, AND EVERY INPUT THAT DECIDES IT
+
+`decide()` at `src/lib/aria/ask/pipeline/run-turn.ts:160`. **It is a pure function** — M17's own header
+says so and the code agrees: `const f = u.features; const fired = u.firedFeatures`, then a waterfall of
+booleans over `u.intent`, `u.ariaIntent`, `u.features` and `input.conversationId`. Nothing else.
+
+So the inputs are whatever `understand()` puts in `Understanding`:
+
+| input | source | deterministic? |
+|---|---|---|
+| `intent` | `classifyIntent(message, undefined, bid)` | **NO — a model call** |
+| `ariaIntent` | `classifyAriaIntent(message, bid)` | **NO — a model call** |
+| `features` | `extractFeatures(...)` — 25 regexes | yes, pure |
+| `outputFmt` | `detectOutputFormat(...)` | yes, pure |
+| `conversationId`, `attachments`, `clientMessages` | the request | yes |
+
+**The entire non-determinism is two LLM classifier calls.** That is the whole of Phase 4, and it
+matches M17B's observation exactly — *"Tidy up before the weekend"* → general, general, general,
+question, on identical code, because the classifier returned a different intent each time.
+
+**And the fix is already plumbed, which is the useful part of this preflight:**
+
+```
+src/lib/ai/gateway.ts:88            temperature?: number        ← the gateway ALREADY accepts it
+src/lib/ai/gateway.ts:207           temperature: req.temperature  ← and forwards it
+providers/anthropic.ts:225          ...(params.temperature !== undefined ? { temperature: … } : {})
+```
+
+Neither classifier passes one (`intent.ts:115-118`, `aria-intent.ts:133-136` set only `model: 'haiku'`
+and `maxTokens: 200`), so both run at the provider's **default sampling temperature**.
+
+One loose end found and carried into Phase 4: `providers/gemini.ts:70` hard-codes `temperature: 0.2`,
+so the Gemini fallback samples too — less, but not zero.
+
+---
+
+#### Q3 · IS M18B's OUTAGE LOGGING LIVE, AND WHAT HAS IT RECORDED?
+
+**Live, and it has already answered the question this sprint was written to ask.**
+
+```
+rows with request_summary like 'total_outage%'   43
+  in M18B's `tried=` format                      12   (5 Oct → 8 Oct)
+  older, pre-M18B writer                         31
+of the 12:
+  reporting `GEMINI_API_KEY not set`             12  ← every single one
+  that tried the Anthropic leg at all             0  ← phase 1's breaker working
+```
+
+A representative row, verbatim:
+
+```
+tried=gemini:GEMINI_API_KEY not set | openai:The OPENAI_API_KEY environment variable is missing or empty
+```
+
+**Two things follow, and the second stops Phase 3.**
+
+**First, the breaker works.** 0 of 12 dialled Anthropic. M18B Phase 1 is doing its job in production.
+
+**Second — and this is the sprint-stopping finding — EVERY ONE OF THOSE 12 ROWS IS ON A TEST FIXTURE.**
+All twelve carry `business_id = 00000000-0000-4000-a000-000000000001`, *"Sip (E2E Test)"*. So I checked
+all 169 outage conversations, by business:
+
+| business | conversations | ended in the outage reply | share |
+|---|---|---|---|
+| `…0101` **Smoke Test Café** | 351 | **91** | 25.9% |
+| `…0001` **Sip (E2E Test)** | 288 | **78** | 27.1% |
+| `e9fee069…` Global Liquor | 2 | 0 | 0.0% |
+| **`ff5055a0…` Sip Café — the real business** | **179** | **0** | **0.0%** |
+
+> ## ⚠️ ALL 169 OUTAGE REPLIES ARE TEST TRAFFIC. NO OWNER HAS EVER SEEN ONE.
+>
+> Across **179 real conversations on the real business, the outage reply has fired zero times.**
+
+**The cause is a test-config difference, not a code difference:**
+
+```
+playwright.check-live.config.ts    LOADS .env.local   (M18 phase 0 kept this)
+playwright.smoke.config.ts         does NOT
+playwright.config.ts   (e2e)       does NOT
+```
+
+The smoke and e2e suites spawn `npm run build && npm run start` **without `.env.local`**, so their
+servers hold no provider keys, every leg of the chain fails, and the outage reply fires — against
+`Smoke Test Café` and `Sip (E2E Test)` respectively. That is exactly the 91 + 78.
+
+**A hypothesis of mine that was wrong, recorded because I nearly acted on it:** I suspected my own M18
+Phase 0 change — adding `webServer.env = { NODE_OPTIONS }` to the check:live config — had *stripped* the
+spawned server's environment. It had not. `playwright/lib/plugins/webServerPlugin.js:89-93` builds the
+child env as `{ ...DEFAULT_ENVIRONMENT_VARIABLES, ...process.env, ...this._options.env }` — a **merge**,
+with `process.env` spread in first. Checked in `node_modules` rather than assumed from the docs, whose
+wording ("`process.env` by default") reads as if it replaces.
+
+---
+
+#### Q4 · `check:live` BASELINE
+
+See the Phase 5 section for the pasted line — the run takes ~22 minutes and is reported where it is
+compared, rather than quoted twice.
+
+---
+
+**VERIFY** · all four answered above with file:line or a number. Q1 and Q2 proven not to overlap.
+
+**gates** · no code changed in this phase. `tsc` 0 errors · `vitest` 1893 passed in 148 files.
+
+**NOT done, and why** · nothing built; Phase 2 is read-only by design.
+
+**discovered**
+
+- The 31 pre-M18B `total_outage` rows come from an **earlier writer using the same
+  `request_summary`**, which is why M18B's "12 rows" and a naive count of 43 disagree. Any future query
+  on this must filter `response_summary like 'tried=%'` to get M18B-format rows only.
+- `Smoke Test Café` (`…0101`) is a **third** test business, distinct from the seeded `…0001` fixture and
+  from live Sip. It carries 351 conversations and 91 outage replies, and nothing in the index or the
+  run logs mentions it.
+
+---
+
+### PHASE 3 — THE DEGRADE CHAIN · **PARKED**, and this is the reason · commit `pending`
+
+**The brief authorised exactly one owner-facing change this sprint, and that authorisation rested on
+two claims. Phase 2 disproved both.**
+
+> *"154 conversations ended in an apology that was wrong 155 times out of 156."*
+> *"It is authorised because the current behaviour is an apology issued while a provider was working."*
+
+#### CLAIM 1 — "make key resolution use the same mechanism that works everywhere else"
+
+There is no difference to fix. Both paths are, character for character:
+
+```ts
+const apiKey = process.env.GEMINI_API_KEY
+```
+
+`ai-router.ts` `callGemini` and `providers/gemini.ts:39`. Same variable, same check, same failure. The
+premise that the degrade chain resolves keys *differently* is false, so the instruction has no
+referent — there is no "mechanism that works everywhere else" to switch to.
+
+#### CLAIM 2 — "154 conversations ended in an apology"
+
+They did. **None of them belonged to an owner.**
+
+| business | conversations | outage replies |
+|---|---|---|
+| `…0101` Smoke Test Café | 351 | 91 |
+| `…0001` Sip (E2E Test) | 288 | 78 |
+| `e9fee069…` Global Liquor | 2 | 0 |
+| **`ff5055a0…` Sip Café — the real business** | **179** | **0** |
+
+**Zero of 179 real conversations have ever ended in the outage reply.** The 169 are the smoke suite and
+the e2e suite, whose Playwright configs do not load `.env.local`, so their servers hold no provider
+keys and every leg of the chain fails by construction.
+
+#### WHY THAT MEANS PARK, NOT "FIX IT ANYWAY"
+
+RULE 20's standing table: *"The sprint's premise is contradicted by the code or DB → the code wins. Log
+the contradiction, adjust scope to what is actually true, continue. **If the whole phase becomes
+meaningless, PARK it and move on.**"*
+
+Both halves of this phase are gone: there is no code difference to repair, and the owner-facing harm
+that authorised an owner-facing change does not exist. **Shipping a change to what a fifth of
+conversations say, on a justification that turns out to be test traffic, is the exact thing the hard
+rule in this brief exists to prevent.** The outage condition is also untouched — M18B proved it correct
+and the brief forbids changing it.
+
+**The brief's stop-trigger did NOT fire, and I want to be precise about that rather than claim cover I
+do not have.** It reads: *"If Phase 3's measurement does not match M18B's Phase 2 logging, stop the
+sprint and report."* My measurement **matches** M18B's logging exactly — both say *missing keys, on test
+fixtures*. There is no unexplained gap. What changed is the phase's justification, not the data.
+
+**So Phase 4 proceeds**, and the gate's purpose is better served than if Phase 3 had shipped: the gate
+exists so two behaviour changes do not land unproven in one sprint. With Phase 3 parked, **Phase 4 is
+the only behaviour change in M19.**
+
+#### ⚠️ THE FIX THAT IS ACTUALLY NEEDED — AND WHY I DID NOT MAKE IT EITHER
+
+The real fault is that two test suites run a full server with no provider keys. The obvious repair is
+to have `playwright.smoke.config.ts` and `playwright.config.ts` load `.env.local`, as check:live does.
+
+**That would make every CI push spend real money.** Those suites drive a real production build over
+HTTP, so the provider call happens in the *server* process — exactly the hole M18B Phase 3 could not
+close with WALL 11, and `e2e-local` runs on every push. Handing them live keys four days after
+shipping a sprint titled *"testing must never be able to spend Aria's money"* would undo it.
+
+The correct fix is a **stub provider** the test servers point at: deterministic responses, no spend, no
+bogus outage rows. That is a real piece of Lane D work, not a line in a parked phase. **Founder queue.**
+
+#### WHAT THIS PHASE DELIVERS INSTEAD: THE MEASUREMENT CORRECTION
+
+The `19.6%` figure has now been re-quoted forward three times — M18B's brief → M18B's run log → this
+brief, each time as a fact about Aria's owners. It is a fact about two test fixtures.
+
+**Any future measurement of owner experience must exclude the test businesses**:
+
+```sql
+where business_id not in (
+  '00000000-0000-4000-a000-000000000001',  -- Sip (E2E Test)
+  '00000000-0000-4000-a000-000000000101'   -- Smoke Test Café
+)
+```
+
+With that filter, the outage rate on real traffic is **0 of 179 = 0.0%**, and has been for the life of
+the table.
+
+**VERIFY** · the brief asks for *"the count from Phase 2.3 re-run after the fix, both numbers in the
+log"*. There is no fix, so there are no two numbers. The honest pair is **before: 0 of 179 real
+conversations · after: 0 of 179** — unchanged, because nothing was broken for an owner. The two tests
+the brief specifies (leg 1 unresolvable + leg 2 healthy; all legs down + byte-identical copy) were
+**not written**: the first asserts a code path that already behaves that way, and the second already
+exists from M18B Phase 2 (`src/lib/aria/outage-attempts.test.ts`, asserting the all-down reply `toBe`
+the literal string). Re-writing it here would be a second copy of a passing test.
+
+**gates** · no code changed. `tsc` 0 errors · `vitest` 1893 passed in 148 files.
+
+**NOT done, and why** · the whole phase, for the reasons above. Nothing was half-built.
+
+**discovered**
+
+- **`Smoke Test Café` (`…0101`) is a third test business nobody has written down.** 351 conversations,
+  91 outage replies, active 25 Jul → 10 Sep. It appears in no index row and no run log. Every
+  all-business query this project has run — including M18B's — has been averaging it in with real
+  traffic.
+- M18B's Phase 2 §"the number the brief says decides M18C" (155 of 156 with a working provider) is
+  **correct as arithmetic and misleading as a conclusion**, for the same reason: it measured fixtures.
+  M18C as described — *"the outage reply fires only when every provider is actually down"* — is **not
+  needed**. It already does, for every owner, today.
 
 ---
 
