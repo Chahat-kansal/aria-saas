@@ -60,13 +60,13 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 | M8 | ASK-COUNCIL-TRUTH | advisor token ceilings · lost-advisor disclosure · notice deep links | ✅ |
 | M9 | ASK-REGISTER-CLEAR | CI lockfile · cron false failures · classic migration · duplicate parser | ✅ |
 | M10 | ASK-LIMITER | smoke env plumbing · fail-closed login analysis · FATAL sweep | ✅ |
-| M11 | ASK-WORKS-1 | **Aria Works part 1** — delegate by outcome · visible plan · approve · execute · report · history | ▶ |
-| M12 | ASK-WORKS-2 | cloud execution · live progress · self-verification · scheduled recurring work · cost transparency | ○ |
+| M11 | ASK-WORKS-1 | **Aria Works part 1** — delegate by outcome · visible plan · approve · execute · report · history | ✅ done |
+| M12 | ASK-WORKS-2 | cloud execution · live progress · self-verification · scheduled recurring work · cost transparency | ✅ done |
 
 ### ⚠️ DATED — RUN IMMEDIATELY AFTER M13, BEFORE ANY OTHER FEATURE
 | # | Sprint | Scope | Deadline | Status |
 |---|---|---|---|---|
-| M14 | **SURCHARGE-BAN-1** | model the margin hit per menu item net of the new interchange caps (8c/0.16% debit, 0.3% credit, 1.0% foreign from Apr 2027) · propose new prices, owner approves · push to menu boards/ESL · receipts + checkout copy compliant · least-cost routing awareness | **1 Oct 2026** | ▶ after M13 |
+| M14 | **SURCHARGE-BAN-1** | model the margin hit per menu item net of the new interchange caps (8c/0.16% debit, 0.3% credit, 1.0% foreign from Apr 2027) · propose new prices, owner approves · push to menu boards/ESL · receipts + checkout copy compliant · least-cost routing awareness | **1 Oct 2026** | ✅ done — was: after M13 |
 | M15 | **PAYDAY-SUPER-1** | ⚠️ **already in force since 1 Jul 2026** — super due within 7 business days of wages; the ~13-week float is gone. Model the daily liability from rostered hours; surface the cash-flow shift; pre-fund view | **passed** | ○ |
 | M16 | **ADM-DISCLOSURE-1** | APP 1.7–1.9 automated-decision transparency statement; meaningful human review designed in — the propose-then-approve loop IS the artefact; penalties to $50m | **10 Dec 2026** | ○ |
 
@@ -75,8 +75,8 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 *From ARIA-LOGIC-READ.md: `_POST` is a 2,460-line waterfall with 28 exits; the verifier sits after the exit that carries every request it was written for. Turn the exits into stages.*
 | # | Sprint | Scope | Status |
 |---|---|---|---|
-| M17 | **BRAIN-1** | the six-stage `runTurn()` spine — understand → ground → decide → act → verify → render — with every existing lane wrapped as a strategy that returns a result object; one exit; guard: no `return NextResponse` inside `lib/aria/ask/`. **Behaviour identical, structure changed** | ▶ after M16 |
-| M18 | **BRAIN-2** | grounding first and always (lean envelope, cached prefix, constitution unconditional); the verifier on every result, scoped to numbers and claims; delete the five-boolean guard. **The day the verifier starts running** | ○ |
+| M17 | **BRAIN-1** | the six-stage `runTurn()` spine — understand → ground → decide → act → verify → render — with every existing lane wrapped as a strategy that returns a result object; one exit; guard: no `return NextResponse` inside `lib/aria/ask/`. **Behaviour identical, structure changed** | ✅ done — was: after M16 |
+| M18 | **BRAIN-2** | grounding first and always (lean envelope, cached prefix, constitution unconditional); the verifier on every result, scoped to numbers and claims; delete the five-boolean guard. **The day the verifier starts running** | ✅ done |
 | M19 | **BRAIN-3** | one classifier with confidence replaces two OR'd classifiers + ~15 regexes; regexes become features; lane logged per turn; compared against 290 real conversations before switching; guard: no `new RegExp` on the raw message outside stage 1 | ○ |
 | M20 | **EXECUTOR-FIX** | the mass-write threshold (20) checked on resolved count **before** the limit; an unfiltered target query is a schema error (Zod at the boundary), not a first-ten default; every action names its targets or refuses | ○ |
 
@@ -112,7 +112,7 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 
 *Previously M14–M277 shift by 18. The renumbered full list follows. Every source ID (BE-2, EOD-1, etc.) is preserved in the scope column so nothing is lost.*
 
-| M40 | ASK-WORKS-3 | parallel sub-agents · interrupt/steer/pause/resume · overnight agent · multi-step checkpoints | ○ |
+| M40-2 | ASK-WORKS-3 | parallel sub-agents · interrupt/steer/pause/resume · overnight agent · multi-step checkpoints | ○ |
 | M41 | ASK-INPUT | file attach · paste image · drag-drop · photo→data (vision OCR) | ○ |
 | M42 | ASK-DELIVERABLES | the artifact pipeline · PDF · Excel/CSV · QR · zip · download · email · signed URLs · provenance | ○ |
 | M43 | ASK-MEMORY | memory across conversations · view/edit memory · house rules · RAG over own docs · injection defence | ○ |
@@ -137,11 +137,11 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 
 | # | Sprint | Scope | Status |
 |---|---|---|---|
-| M53 | TZ-RAIL-1 | one timezone resolver · businessToday() · trading-day boundary · groundTruth date/day/tz/location | ○ |
-| M54 | TZ-RAIL-2 | audit the 123 bare `date` columns across 85 tables; classify trading vs calendar vs wrong | ○ |
-| M55 | LOC-1 | capture suburb/state/postcode/lat-lng at onboarding (state NULL 4/5, suburb NULL 5/5) | ○ |
+| M53-2 | TZ-RAIL-1 | one timezone resolver · businessToday() · trading-day boundary · groundTruth date/day/tz/location | ○ |
+| M54-2 | TZ-RAIL-2 | audit the 123 bare `date` columns across 85 tables; classify trading vs calendar vs wrong | ○ |
+| M55-2 | LOC-1 | capture suburb/state/postcode/lat-lng at onboarding (state NULL 4/5, suburb NULL 5/5) | ○ |
 | M56a | POS-LINE-NO | the open decision from POS-INTEGRITY-1 — `line_no` + a partial unique index on `(sale_id, line_no)` to close the concurrent-retry race properly | ○ |
-| M56 | POS-IDEM-1 | client-minted idempotency key on every sale · unique constraint · same key to Stripe | ○ |
+| M56-2 | POS-IDEM-1 | client-minted idempotency key on every sale · unique constraint · same key to Stripe | ○ |
 | M57 | POS-ATOMIC-1 | single Postgres function for the atomic sale write | ○ |
 | M58 | EJ-1 | electronic journal: append-only, INSERT-only via grants/RLS, hash-chained, daily export | ○ |
 | M59 | EJ-2 | on-device journal mirror | ○ |
@@ -189,28 +189,28 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 # PHASE D · BILLING + PLAN ENFORCEMENT
 | # | Sprint | Scope | Status |
 |---|---|---|---|
-| M76 | SS-2 | Stripe subs + webhooks, PRELOAD-grade (**needs founder Stripe setup**) | ⏸ |
-| M77 | SS-3 | requireEntitlement enforcement, real gated UI, client lock badges | ○ |
-| M78 | SS-4 | per-business token metering, CSV-proven | ○ |
-| M79 | SS-5 / TT | billing portal | ○ |
-| M80 | BRAND-TIER | "Powered by Aria" on lower tiers, removable on top — wired to entitlements | ○ |
+| M76-2 | SS-2 | Stripe subs + webhooks, PRELOAD-grade (**needs founder Stripe setup**) | ⏸ |
+| M77-2 | SS-3 | requireEntitlement enforcement, real gated UI, client lock badges | ○ |
+| M78-2 | SS-4 | per-business token metering, CSV-proven | ○ |
+| M79-2 | SS-5 / TT | billing portal | ○ |
+| M80-2 | BRAND-TIER | "Powered by Aria" on lower tiers, removable on top — wired to entitlements | ○ |
 
 ---
 
 # PHASE E · ONBOARDING, BRANDING, SOFT LAUNCH
 | # | Sprint | Scope | Status |
 |---|---|---|---|
-| M81 | PP-ONBOARD-1 | self-serve onboarding | ○ |
-| M82 | PP-LOGO | logo capture · shape detection drives bleed vs inset | ○ |
-| M83 | BRAND-KIT-1 | one logo → palette + contrast-safe text · themes POS, receipt, loyalty, wallet, booking, community, PDFs | ○ |
-| M84 | BRAND-KIT-2 | monogram fallback generator | ○ |
-| M85 | POS-BRAND-1 | white-label POS chrome per the Coles/Woolworths grammar · Total vs **Due** · no Aria mark customer-side | ○ |
-| M86 | POS-BRAND-2 | customer-facing display as a second surface | ○ |
-| M87 | LOY-NAME-FIX | loyalty_program_name defaults to `{business} Rewards` (Sip reads "Aria Rewards" — live leak) | ○ |
-| M88 | BEZEL-KIT | printed frame/sticker for the iPad stand — the only place Aria's name appears in the shop | ○ |
-| M89 | QQ-MIGRATION | migration tooling for incoming businesses | ○ |
-| M90 | RR-HELP | in-product help | ○ |
-| M91 | UU-SUPPORT | support surface | ○ |
+| M81-2 | PP-ONBOARD-1 | self-serve onboarding | ○ |
+| M82-2 | PP-LOGO | logo capture · shape detection drives bleed vs inset | ○ |
+| M83-2 | BRAND-KIT-1 | one logo → palette + contrast-safe text · themes POS, receipt, loyalty, wallet, booking, community, PDFs | ○ |
+| M84-2 | BRAND-KIT-2 | monogram fallback generator | ○ |
+| M85-2 | POS-BRAND-1 | white-label POS chrome per the Coles/Woolworths grammar · Total vs **Due** · no Aria mark customer-side | ○ |
+| M86-2 | POS-BRAND-2 | customer-facing display as a second surface | ○ |
+| M87-2 | LOY-NAME-FIX | loyalty_program_name defaults to `{business} Rewards` (Sip reads "Aria Rewards" — live leak) | ○ |
+| M88-2 | BEZEL-KIT | printed frame/sticker for the iPad stand — the only place Aria's name appears in the shop | ○ |
+| M89-2 | QQ-MIGRATION | migration tooling for incoming businesses | ○ |
+| M90-2 | RR-HELP | in-product help | ○ |
+| M91-2 | UU-SUPPORT | support surface | ○ |
 | M92 | VV-AUDIT-PRIVACY | audit + privacy batch (AU Privacy Act, APP 8 cross-border) | ○ |
 
 ---
@@ -262,7 +262,7 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 | M105 | LAYBY-1 | layby state machine | ○ |
 | M106 | RETURN-1 | returns and reason codes | ○ |
 | M107 | PRICE-1 | price book: effective-dated prices, price zones, future-dated changes that apply offline | ○ |
-| M108 | PROMO-1 | promotion rules engine — multi-buy, mix-and-match, happy hour, member pricing, client-side | ○ |
+| M108-2 | PROMO-1 | promotion rules engine — multi-buy, mix-and-match, happy hour, member pricing, client-side | ○ |
 | M109 | MONEY-2 | invoice chaser (**B2B only; verify RG 96 + credit-licence position before building**) | ⏸ |
 | M110 | MONEY-3 | bankability — BAS/GST + Xero/MYOB export as lender-grade record | ○ |
 | M111 | CUST-INVOICE-1 | customer management + invoicing (batch 25) | ○ |
@@ -298,13 +298,6 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 | M128 | INV-AGENT-1 | the conversational owner agent over all inventory | ○ |
 | M129 | EXC-ANOM-1 | void/refund/discount anomaly detection into the exception queue | ○ |
 | M130 | SHRINK-1 | cashier and till behaviour exception reporting | ○ |
-| M108 | COMPETITOR-PRICE-1 | ⚠️ **more built than it looks** — `competitor_snapshots` 375 live rows, `market-prices.ts` 274 lines (Dan Murphy's/BWS/Liquorland/Coles/Woolworths/Costco/Amazon AU/Uber Eats), `/api/products/barcode-lookup` GTIN cascade already there. Gaps: `market_price_scans` 0 rows (cold-start deadlock) · all 106 products have empty barcodes · `pos_market_price_cache` empty · HTML fetch fails on JS-rendered pages · **cron budget 23/23 full**. **Sprint 1 = a recon test on 20 real Sip SKUs to measure the current hit rate before any code.** Fix = a SERP/Shopping API strategy (DataForSEO / Serpent, ~US$0.0006/lookup) added **inside** the existing file, never a fork | ○ |
-| M108b | PRICE-LANES | the three remaining automated lanes: affiliate product feeds · a self-hosted crawler for sites with no API · **the Canopy browser lane** — reads a public page the way a customer does, at human pace, owner-triggered, top-N SKUs, aggressively cached. ⚠️ **No CAPTCHA handoff** — passing a human check and handing the session to automation is what turns "reading a public page" into "circumventing an access control". If a site blocks, Aria says so and skips it. Prefer official endpoints where they exist | ○ |
-| M108c | PRICE-OUTPUT | the owner-facing shape: **cost and margin intelligence, never a shared price board.** "Your cost is down 12% and your price hasn't moved." ⚠️ Prices flow OUT to consumers, never sideways between venues — CCA s45, no numeric safe harbour. Stale prices carry their age; a cached figure is never presented as current | ○ |
-| M104b | PRICE-PIXELS | ⚠️ **read the pixels, not the DOM.** Screenshot the visible tab, vision model extracts product + price. Site-agnostic, survives every redesign, **zero per-retailer scrapers to maintain** — a DOM scraper means owning a Dan Murphy's adapter, a BWS adapter, a Liquorland adapter, forever | ○ |
-| M104c | PRICE-RITUAL | **a ritual, not a crawler.** Canopy remembers the owner's five tabs; Monday morning "Price check" → tabs restore → one button → snapshot. Sparse human-triggered data, but *legitimate* sparse data, and week-over-week it still builds the series. ⚠️ **Aria reads, never drives** — the moment it clicks through categories, paginates, or loops on a schedule it is a bot in the owner's coat, and that is deliberate circumvention. **No CAPTCHA handoff.** Canopy states once, plainly, that it is the owner's session carrying the ToS exposure | ○ |
-| M104d | PRICE-SHELF-CAM | **same engine, second input: the phone camera.** Owner walks into the competitor's store, photographs the shelf, same vision pipeline. **The version no scraper can copy** | ○ |
-| M104e | PRICE-PRODUCT-TAB | a competitor-prices tab on every product — price ladder, ordering, sources — refreshed by the above so an owner can answer a price-match question at the counter. ⚠️ **Owner's eyes only.** ACL substantiation bites the moment this feeds a customer-facing "cheapest in town" claim, and CCA s45 bites if prices flow sideways between venues | ○ |
 
 ---
 
@@ -373,7 +366,7 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 | M177 | MENU-1 | menu versioning · multi-location propagation · day-parting · price zones | ○ |
 | M178 | AGG-1 | Uber Eats Marketplace API — menu, orders, webhooks | ○ |
 | M179 | AGG-2 | middleware evaluation vs direct (**decision**) | ⏸ |
-| M180 | EOD-1 | end of day: cash declaration · safe count · over/short · deposits | ○ |
+| M180-2 | EOD-1 | end of day: cash declaration · safe count · over/short · deposits | ○ |
 | M181 | LOGBOOK-1 | manager logbook and shift notes | ○ |
 | M182 | DEVICE-1 | config push and feature flags as a table + flag service | ○ |
 | M183 | MULTI-SCREEN-1 | customer counter display · kitchen display · Canopy multi-window | ○ |
@@ -408,7 +401,13 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 | M200 | BOOK-UPSELL | upsell + RWG + social | ○ |
 | M201 | ORD-3D | online ordering flow + the 3D visual system | ○ |
 | M202 | REELS-R2-R5 | editor MVP · editor full · AI essentials · AI useful | ○ |
-| M203 | REELS-R6-R8 | scheduling parity · social-ops · POS caption engine | ○ |
+| M180 | **REELS-R6a — THE SPINE** | calendar + queue + composer with **per-channel preview**, four channels (IG/TikTok/YT/FB). ⚠️ **This is the real gap** — Aria already has the two expensive halves (Studio/Veo generation, a conversational brain) and is missing the boring middle | ○ |
+| M180b | **REELS-R6b — ANALYTICS** | per-platform performance in one view · then the thing no scheduling tool can do: **revenue attribution per post, off the POS** | ○ |
+| M180c | **REELS-R7a — APPROVALS** | owner approves, staff drafts. **The mechanic already exists everywhere in Aria** (mismatch→owner queue, gated agents) — same shape, new surface. Postiz's version is generic team commenting; Aria's is the propose-then-approve rail it already runs on | ○ |
+| M180d | **REELS-R7b — POS TRIGGERS** | ⚠️ **the recipe change.** Theirs is RSS in, webhooks out, auto-actions on engagement milestones. Aria's fuel is the till: **sales spike · low stock · quiet Tuesday · new loyalty tier reached.** Same mechanic, completely different input | ○ |
+| M180e | REELS-R8 | the POS caption engine (unchanged) | ○ |
+
+⚠️ **Deliberately NOT built from the Postiz comparison:** 34 platforms (a Melbourne café needs four) · platform-specific niche fields (Reddit flairs, LinkedIn carousels, Pinterest boards, YouTube playlist categories, X reply controls) · a public REST API / CLI / MCP server **for social** (exposing a scheduling API to nobody) · a paid Canva-clone editor (Studio covers it; theirs is Polotno, a paid licence). **Breadth is Postiz's pitch. It is not Aria's** — building it makes the product feel like a marketing tool rather than a business OS.
 | M204 | REELS-R9-R11 | sales-spike trigger · POS-CTA + narrator · Aria differentiators | ○ |
 | M204b | REELS-FACESWAP | **R11 add-on, contingent on R2/R3 shipping clean.** Post-export layer only — the editor renders, then an optional "make it viral" step calls a GAN face-swap API (Replicate / HF / Stability, ~$0.05–0.10 a call). No editor changes. Curated templates only, never auto-generated. **Drop it if it complicates the pipeline.** ⚠️ Two constraints the source discussion did not cover: (a) **consent** — swapping a staff member's face needs their explicit, revocable, recorded permission; AU has criminal offences for non-consensual sexual deepfakes and the reputational floor is far above the legal one; (b) **IP** — celebrity clips and movie scenes are the exact material Reface itself restricts, and a café posting them carries the rights risk, not Aria. Templates must be licensed or original | ○ |
 | M205 | STUDIO-GEN-A | artifact generation in Aria Studio | ○ |
@@ -583,21 +582,174 @@ Sources folded in: ARIA-MASTER-ORDER (13 phases, 8 Aug) · ARIA-NCR-BUILD-ORDER 
 
 | # | Sprint | Scope | Order |
 |---|---|---|---|
-| S5 | **PAYLOAD-EXACT-APPROVAL** | hash the approved payload in `aria_autopilot_actions`; if price, quantity or recipient changed between approve and send, **re-queue instead of sending**. A genuine hole in any propose→approve system. Half a session, standalone | **anytime — do it early** |
-| S6 | **CHECK-LIVE** | one command that, against the seeded test business, sends **one real Ask Aria question and one real proposed action end to end** and asserts the answer grounded and the gate held. ⚠️ **Aria's recurring failure mode is green build, dead feature — this is the command that catches it.** Protects every sprint after it | **before more feature sprints** |
-| S1 | **HOUSE-RULES-LEARN** | every owner correction becomes **one English sentence** in `aria_house_rules`, business-scoped, on an editable page: read them, edit, delete to unlearn, see when learned, from which conversation, and **how many times it fired**. Scoped (outlet/weekday/supplier) and expirable. **Enforced not prompted** — loaded at the grounding stage, re-checked at stage 5; a card violating a live rule does not render. Upgrades the OpenBot House Rules stream from an action-gateway concept into the learning loop itself | **after M17 BRAIN-1** |
-| S2 | **SKILLS-FROM-WHAT-THEY-HAVE** | skills bound to a **moment** (opening, close, delivery arrival, Friday order, slow Tuesday), not a seat. **One artefact, two readers** — the same skill renders as the staff checklist in the inventory app *and* is the agent's procedure. Authored from what the owner already has: paste the real closing checklist / last supplier email / roster photo. Zero blank pages. Lands in `aria_skills` | with PP onboarding |
-| S3 | **DATA-FIRST-INTERVIEW** | **don't ask what the POS already knows.** Aria drafts the rules from its own data, shows them, and asks only what data cannot answer — who may refund, what never to order again, what a good week looks like. Nothing written until the last answer. Closes Canopy design gap #6 (empty-business onboarding) | with PP onboarding |
-| S4 | **CONNECTOR-HONESTY** | grey + reason on hover for a connector needing auth, wired to nothing until it works · **per-scope wiring carrying a dollar ceiling and a time window** (supplier portal 6am–4pm up to $X, else queue) · a **provenance chip on the card** — "this used Xero + your POS, 6:04am" | folds into STORE-1 / the broker, never before |
-| S7 | **CAPABILITY-SENTENCE** | the boundary as one sentence the owner reads, on the House Rules page: *"Aria can read anything of yours. It only sends, posts, pays or changes something when you asked for that exact thing — or approved it."* Enforced by the harness, not the prompt | with S1 |
+| S5-2 | **PAYLOAD-EXACT-APPROVAL** | hash the approved payload in `aria_autopilot_actions`; if price, quantity or recipient changed between approve and send, **re-queue instead of sending**. A genuine hole in any propose→approve system. Half a session, standalone | **anytime — do it early** |
+| S6 | **CHECK-LIVE** | one command that, against the seeded test business, sends **one real Ask Aria question and one real proposed action end to end** and asserts the answer grounded and the gate held. ⚠️ **Aria's recurring failure mode is green build, dead feature — this is the command that catches it.** Protects every sprint after it | ✅ done — was: **before more feature sprints** |
+| S1-2 | **HOUSE-RULES-LEARN** | every owner correction becomes **one English sentence** in `aria_house_rules`, business-scoped, on an editable page: read them, edit, delete to unlearn, see when learned, from which conversation, and **how many times it fired**. Scoped (outlet/weekday/supplier) and expirable. **Enforced not prompted** — loaded at the grounding stage, re-checked at stage 5; a card violating a live rule does not render. Upgrades the OpenBot House Rules stream from an action-gateway concept into the learning loop itself | **after M17 BRAIN-1** |
+| S2-2 | **SKILLS-FROM-WHAT-THEY-HAVE** | skills bound to a **moment** (opening, close, delivery arrival, Friday order, slow Tuesday), not a seat. **One artefact, two readers** — the same skill renders as the staff checklist in the inventory app *and* is the agent's procedure. Authored from what the owner already has: paste the real closing checklist / last supplier email / roster photo. Zero blank pages. Lands in `aria_skills` | with PP onboarding |
+| S3-2 | **DATA-FIRST-INTERVIEW** | **don't ask what the POS already knows.** Aria drafts the rules from its own data, shows them, and asks only what data cannot answer — who may refund, what never to order again, what a good week looks like. Nothing written until the last answer. Closes Canopy design gap #6 (empty-business onboarding) | with PP onboarding |
+| S4-2 | **CONNECTOR-HONESTY** | grey + reason on hover for a connector needing auth, wired to nothing until it works · **per-scope wiring carrying a dollar ceiling and a time window** (supplier portal 6am–4pm up to $X, else queue) · a **provenance chip on the card** — "this used Xero + your POS, 6:04am" | folds into STORE-1 / the broker, never before |
+| S7-2 | **CAPABILITY-SENTENCE** | the boundary as one sentence the owner reads, on the House Rules page: *"Aria can read anything of yours. It only sends, posts, pays or changes something when you asked for that exact thing — or approved it."* Enforced by the harness, not the prompt | with S1 |
 | S8a | **WHAT-ARIA-KNOWS** | the brain graph — 299 memories doing nothing visible today. Every node is something Aria believes about this business, showing **where it came from** (a sale, an invoice, you told me, I inferred it) and whether it still checks out against the ledger. Click to correct; correcting writes a House Rule. *"Here is everything I think is true about your café. Delete anything that isn't."* d3-force, ours to use | **can ship first — the data exists** |
 | S8b | **THE FLOOR** | isometric 3D of the owner's **actual venue**, from data Aria holds: tables coloured by live spend, shelves filled to stock-on-hand, staff at clocked-in stations, machine pulsing at real orders/min, **Aria standing where the problem is** — spatial location *is* the diagnosis. Time scrubber replays today. three.js `OrthographicCamera` + fixed isometric vector, primitives in code, no art assets. ⚠️ **A view, never on the sale path** — reads a snapshot; the POS never waits on it. ⚠️ **After decrement/cost/velocity are trustworthy, or it renders a beautiful lie** | after the data is true |
 | S8c | **ENGINES-DISAGREE** | when two engines conflict — forecast says order, count says don't — **show them meet and resolve it in front of the owner** instead of silently picking one | with S8a |
 
 ⚠️ **Explicitly not built: an office of 35 agent seats.** The seats aren't the work; that is their idea and the weakest part of their product. Steal the mechanic — *make invisible state physically legible in a space you can walk* — and change the subject to the venue.
 
+### AGENT REACH — VERDICT AND PLACEMENT (9 Sep 2026)
+**Not for competitor pricing. Not in `aria-saas`. Local dev tool + read-only sourcing only.**
+
+Why it fails the pricing job: it is a Python CLI holding credentials in `~/.agent-reach/config.yaml` on a local machine — **a cookie-holding CLI does not run in a Vercel function**, so adopting it means owning a persistent box before scraping a single price. Its channels are social/content (X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu, Douyin, Weibo, WeChat, LinkedIn, Instagram, RSS, Exa); **AU retail is not among them**, and the generic fallback is `curl https://r.jina.ai/URL` — markdown with no structured price, no SKU match, no pagination. The maintainers describe it as cat-and-mouse; channels break and get re-fixed. **Fine for research, fatal where an owner reads a matched price aloud to a customer** — that is precisely the GROUNDING-TEETH failure. And reading a tweet for research is a different legal exposure from republishing a competitor's price inside a paid SaaS.
+
+**The already-planned architecture stays:** M108b's Canopy browser lane (the owner's own session, human pace, no CAPTCHA handoff) plus Tavily server-side. Agent Reach does nothing for either.
+
+| # | Sprint | Scope | Order |
+|---|---|---|---|
+| AR-1 | **AGENT-REACH-DEV** | install locally, **outside `aria-saas`**, as a founder research tool — reading repos, talks and threads while building. Zero API fees. Not a sprint so much as a setup note; no product code touches it | anytime, local only |
+| AR-2 | **REELS-SOURCING** | read what is performing on TikTok/IG/YouTube for a café's format, as **input** to the R8 caption and R11 script engines. Read-only, non-customer-facing, staleness harmless | with REELS R7/R11 |
+| AR-3 | **FEED-COLD-START** | hospitality content as seed material so the community feed is not empty on day one | with CX-D1/D3 |
+| AR-4 | **MENTION-MONITOR** | Reddit and Instagram mentions of the business **as a signal, never as a quoted fact** — a mention is surfaced with its source and never enters an Aria figure | with the reviews/reputation work |
+
+⚠️ **The rule of thumb, worth keeping as a standing test for any scraping tool:** use it where a wrong or missing result costs five minutes; **never where it costs a customer a wrong price.**
+
+### ONE SURFACE + GROK BOT + 118-CATALOGUE — PLACEMENT (22 Sep 2026)
+Anthropic merged chat + Cowork on 16 Sep, and it merged memory first, on 25 Aug. **The lesson is the order: memory before routing.** Grok Bot specifics (pricing, launch list) are **unverified**: sources disagree, so nothing below depends on them.
+
+| # | Sprint | Scope | Order |
+|---|---|---|---|
+| G1 | **KILL-MODE-PICKER** | remove the composer "Ask ▾" mode picker and every Business/Research/Computer/Build label. **Aria routes; the owner never picks a mode.** Routing is M19's deterministic decide, so this ships in the same sprint | **with M19** |
+| G2 | **MEMORY-ALL-LANES** | one memory read on every lane before decide. The audit found memory reaches 1 lane of 3. **Gate: G1 can't ship before this** | **with M18 (ground stage)** |
+| G3 | **WHO'S-HANDLING-WHAT** | a visible feed: which agent took which job, its handoff, its state, and what it's waiting on. MANAGER-AGENT-1 already does the work, and this makes it visible. Reads agent_runs + aria_plans, **no new table** | after M11 plans are stable |
+| G4 | **TRUST-LADDER** | a per-action-type ladder: propose → auto with undo → auto silent, **earned** from an approval streak (N approvals with 0 reverts) and dropped back down after one revert. **Reversible actions only. Money, sending, personal data and anything irreversible never climb, whatever the streak.** One owner-facing dial, on the axis of *what kind of action stops her*, not *how much she does*. Extends M46 autonomy | after M46 |
+| G5 | **WATCH-YOUR-SHIFT** | = M142 ROUTINE-LEARN-1, sharpened: derive routines from POS, clock-in and stock events (never screen capture), then **propose** a routine and let the owner approve it. **Nothing new, just the M142 spec tightened** | M142 |
+| G6 | **FLOOR-CAPTURE** | spoken context → task, no typing (the Omi/Screenpipe pattern; Screenpipe's licence is non-commercial, so **pattern only**). Opt-in, on-device transcription where possible, with staff consent recorded. Folds into the M31 voice counter | with M31, ⏸ privacy review |
+| G7 | **LIVING-ARTIFACT** | the Docs/Slides pattern with Aria's recipe: the artifact is a PO, a roster or a price list, with one link across phone and desktop. The owner corrects a line and she redoes only that line | with M11 plans |
+| G8 | **SOURCE-READS** | one question per repo, answered from source only: IronClaw (how is an extension isolated?) · Hermes (what is a reusable skill?) · OpenFang (how does a monitoring run decide it's worth reporting?) · Pydantic AI (the typed boundary on a money tool). **Read, don't depend.** Five of the 118 are already dead or frozen (Relay.app, Flowise, AutoGen, Continue, ChatGPT agent mode) | founder research, anytime |
+| G9 | **SUPPLIER-PORTAL-NO-API** | Grok's steal #4. **Parked** behind HANDS/broker + S4 connector ceilings. No CAPTCHA handoff, ever | ⏸ |
+
+The pitch line this produces: *Claude asks because it doesn't know your business. Aria shouldn't need to, because she's inside it.*
+
+### ARIA-VS-COMPETITORS CHAT (26–27 Sep) — FOLDED IN, ALL CLAIMS VERIFIED 27 Sep
+Full verification in **ARIA-CHAT-VERIFICATION-27SEP.md**. Two corrections change the order below: the "6 sales / 0 stock movements" alarm is **not a decrement bug** (all 6 rows synthetic, 3 with no line items; the real path is 12/12 correct), and **73 of 106 products carry a fabricated `price × 0.4` cost**.
+
+| # | Sprint | Scope | Order |
+|---|---|---|---|
+| P0 | **ONE-REAL-VENUE** | not a launch and not a deadline — **one venue, one real day**, shadowing its existing POS if that is easier. Every "Aria wins… if" in the 52 scenarios, and the #1 buying factor in that chat's own survey data (reliability, 37%), is downstream of this. It is also the only way to re-measure decrement on rows that aren't seeded | **before the next build sprint** |
+| P1 | **KILL-FAKE-COSTS** | 73 of 106 products have `cost_price` exactly `price × 0.4`. Null them or tag them at source so a cost with no supplier-invoice provenance **cannot** render as a verified margin. GROUNDING-TEETH guards the answer; the invention is one layer below it, in the data | **with P0** |
+| P2 | **DECREMENT-REMEASURE** | re-derive coverage over real sales only, then keep or kill **INV-DECREMENT-FIX**. Its "8% coverage" premise came from seeded rows the seeder never decremented. Correct the tracker either way. ⚠️ n=12 today — "correct so far", not "proven at volume" | **before INV-DECREMENT-FIX** |
+| V1 | **CRED-SURROGATION** | the model never holds a real token; the broker swaps it in at the network boundary. Confirmed real twice over: Meta's `authd`/Sentinel split, and Vercel Sandbox's documented `injectionRules[]`. **`syd1` (Sydney) exists**, so the privacy blocker is gone. Belongs in SHELL-SECURITY-1 | with the broker |
+| V2 | **CHEAP-TAINT** | skip eBPF. Flag an agent run tainted once it reads customer PII; a tainted run cannot make an outbound call without the hard gate. aria-privacy applies | with V1 |
+| V3 | **SCOPED-APPROVALS** | replace yes/no with once · this task · time-limited · under $X — *"approve Bidfood POs under $200, this week only."* Gives the Replenishment Agent its trust dial; pairs with G4 TRUST-LADDER | with M46 / G4 |
+| V4 | **SINGLE-USE-CARD** | if Aria ever auto-orders: a credential locked to one merchant, one amount, one short window. Never the real card. Money stays gated regardless. ⚠️ **No longer a differentiator** — Muse for Small Business shipped single-use card numbers per new merchant on 29 Sep 2026. Keep it; it is table stakes, and the index should stop calling it a moat | ⏸ behind the money rail |
+| V5 | **SANDBOX-JOBS** | Vercel Sandbox as the per-job workbench: deny-all networking + allowlist, `syd1`, destroy on completion. ⚠️ Corrections to the source chat: persistence via snapshot is now the **default** (choose ephemeral explicitly), timeout is 5 min default / 45 min Hobby / 24 h Pro, and it meters at $0.128 CPU-hr + $0.08/GB-mo snapshots. **Unverified: whether sandboxes count against the ≤22 function budget** | with SHELL-SECURITY-1 |
+| V6 | **ARIA-INBOX** | a per-business address (`sip@…`) suppliers email invoices to, so costs capture themselves and short deliveries get flagged. This is the honest fix behind P1 | with INV-COST-1 |
+| V7 | **MISSED-CALL-RESCUE** | the free first step of VOICE: an unanswered call triggers an SMS with the booking link and a loyalty perk. **No streaming telephony, so no Twilio decision needed** | anytime after bookings |
+| V8 | **VOICE-TOOLS-FIRST** | when VOICE comes: the hard part is `check_availability` / `create_reservation`, not the model — Maitly and ~15 rivals all queue at OpenTable's partner gate and Aria has none to pass. Copy the state machine and confirm-before-write rule from the MIT Deepgram receptionist; ⚠️ **it runs on Twilio**, so take the logic, not the transport. Pipecat (BSD-2) restaurant flow is in `pipecat-ai/pipecat-examples`, not the main repo | after FLOOR-1 + GUEST-LINK |
+| V9 | **AGENT-ENDPOINT** | read-only first: availability, stock, menu, for consumer agents. Cheap on engines that exist. ⚠️ **Not a race** — Muse is US-only, and Amazon blocked it on 21 Sep, which shows a platform can shut an agent out overnight. Build it; don't reorder around it | after the engines |
+| V10 | **BUSINESS-PASSPORT** | two years of verified ledger as a signed pack for a lender or buyer. Nobody verified offers provenance-backed books. Sits on the moat file's capital layer, not before it | with the money rail |
+| V11 | **DOC-CHAT** | drop in the lease, supplier contract or food-safety plan and ask *"when does my renewal notice go out?"* — pgvector is already planned; AnythingLLM (MIT) is the pattern | owner's-life layer |
+| V12 | **INTERRUPTION-BUDGET** | Muse has a proactivity slider; Aria gets a **daily allowance of ~3 interruptions that each have to be earned** — a finding must pass aria-evidence and GROUNDING-TEETH or it waits for the morning digest. An agent that is quiet unless it matters is the trust play | with the wake runtime |
+| V13 | **WAKE-RUNTIME** | the three things that wake Aria — **clock** (Supabase Cron), **event** (a DB change: par breach, sale spike, cancellation, invoice arrival), **goal** (a standing objective) — on Supabase Cron + pg_net, which sidesteps the Vercel cron daily-max entirely. Short job, sandbox only when it needs code or files, pay per run not per hour. **This is the runtime the four INV agents and "while you slept" run on, not a separate batch** | with M40 / the INV agents |
+| V14 | **STANDING-GOALS** | business goals, not personal ones — *"food cost under 30% by December."* Re-checked weekly, one change proposed at a time, measured through **I4 OUTCOME-LOOP**, which is what finally puts the 1,653 idle hypotheses to work. Extends M132 I2-GOAL-AWARE | with I2/I4 |
+| V15 | **KEEP-YOUR-POS-INGEST** | read-only ingest from a third-party POS (Square first) so an owner gets Aria's brain **without swapping hardware**. Locked direction since Aug, **missing from this index until now**. The chat's own survey data makes it the counter to the biggest loss: 37% of owners stay put purely because switching takes time | after the engines, before any push on incumbents' customers |
+| V16 | **OWN-WORLD-PREFILL** | Firecrawl's idea turned inward: at onboarding read **the owner's own** website and Google listing to pre-fill menu, hours and photos. No scraping of other businesses, so none of the price-lane legal exposure. Buildable without Firecrawl (AGPL) | with PP onboarding / S3 DATA-FIRST-INTERVIEW |
+| V17 | **ROUTE-LIFE-OUT** | a decision, not a build: Canopy's life layer **hands personal tasks to Muse/ChatGPT/Claude** rather than competing with their connector ecosystems (Walmart, Expedia, Instacart). Aria stays the business brain; the one place it wins is where the two cross — *"book the dentist around my roster"* | decision, now |
+| V18 | **AGENT-FRONT-DOOR-SPEC** | sharpens V9 with the mechanic Autopolis publishes live: a machine-readable door at a **well-known path** — `/agents/openapi.json` plus a plain-English `skill.md` saying what an outside agent may do here. A consumer agent discovers an Aria business **without a partnership**, which is the exact gate Maitly queues at with OpenTable. ⚠️ Checked 27 Sep on autopolis.city; **its own live entry isn't open yet**, and the reel behind it is a **30-day rule-based recording in a Three.js viewer, not 50 models thinking** — so take the published-door pattern, and claim nothing about the city | with V9 |
+| V19 | **AGENT-CALLER-IDENTITY** | the missing half of V9: an agent that books or orders must **register first** — who it is, which human it acts for, what it may do, its rate ceiling — credentials kept separate from model-provider keys (Autopolis does this; it is V1 seen from the outside). No identity, read-only. Bookings and orders stay gated exactly as a human's would be | with V9, before any write |
+| V20 | **CONSEQUENCE-LEDGER** | Autopolis's real idea: *a choice changes a balance, and the city records it so the choice has a history.* Aria's version — every agent action stores its **before/after state**, so the day is replayable, I4 OUTCOME-LOOP has something to measure, and S8b's time scrubber replays decisions rather than just sales. Mostly a column discipline on `aria_autopilot_actions`, not a new system | with I4 / S8b |
+| V21 | **AGENT-PROBATION** | Autopolis's one genuinely new mechanic: its agents **study at an Institute, graduate, then get hired** — a capability is *earned by passing an evaluation*, not granted. Aria's version: an agent gets a permission only after it passes the **M144 EVAL-LAB** set for that action type, and loses it when the eval regresses. This is the missing *entry* rung under G4 TRUST-LADDER, which only ever described climbing once live. Sharpens M144 and M245 rather than adding a system | with M144, before G4 |
+| V22 | **SIM-BEFORE-REAL** | test an agent against a **simulated business** — replayed real history, no writes — before it touches a real one. Already the intent of M144 EVAL-LAB shadow mode; this names the venue-shaped harness it should replay against, and pairs with P0: the first real venue's day becomes the replay corpus | with M144 |
+
+⚠️ **The prior read of this chat deliberately left Autopolis out**, on the grounds that M144 and M245 already cover it. That was right about the substance and wrong about the record: V21's earn-then-hold rung and V18's published-door path are not written anywhere in M144 or M245, so they are stated here rather than assumed. Nothing is renumbered.
+
+### INDEX HYGIENE — verified 27 Sep
+**29 duplicate sprint IDs** in this file, counted live: M40, M53–M56, M76–M91, M104b–M104e, M108, M108b, M108c, M180 (336 unique IDs). Parallel lanes make a duplicate ID an ownership collision, not a cosmetic flaw — **renumber before any second lane starts, never during**.
+### PARALLEL BUILD — LANES AND GATES (plan dated 27 Sep, evidence: 37 run logs + repo at `07fd8bc4`)
+**The verdict is not "go wider".** Coding capacity is not the constraint: no commits since 20 Sep, Aria's own Anthropic credit spent, and the three biggest delay causes in the logs are all one-at-a-time — wrong premise in the prompt (23 of 37), work found already built (19 of 37), schema change waiting on the founder (12 of 37). **More lanes make all three worse.** Lanes are split by **file ownership**, not sprint number, because overwrites happen at the file.
+
+| Lane | Tool | Owns (only this lane edits) | Work | ~Sprints |
+|---|---|---|---|---|
+| A · Brain | Claude | `src/lib/aria/ask/**`, gateway, `answer-council.ts`, `aria-tools.ts` | M18–M20, intelligence, BE + GEM rails | 45 |
+| B · Money/POS/schema | Claude | POS sale path, payments, `supabase/migrations/**`, `database.types.ts` | reliability, money, billing, **every schema change** | 60 |
+| C · Operations engines | Claude | `src/lib/inventory/**`, inventory page, team/labour | Inventory, Team | 40 |
+| D · Platform | Claude | `.github/**`, `scripts/**` guards, CI, security middleware | the gates, security, M21 Zod outside `ask/` | 30 |
+| E · Isolated surfaces | Codex | new/self-contained UI dirs, `e2e/`, `tests/` | customer surfaces, Studio, gestures, polish | 70 |
+
+Plus ~44 split (schema in B or C, screen in E) and ~16 decisions that are not code. **Order inside a lane is unchanged — this says who builds and when it merges, never what gets built.**
+
+**Eight gates before any lane runs (~1 week).** Founder's: top up Anthropic credit with a spend cap · clear the queue of schema changes and ⏸ decisions · turn on branch protection for `main`. Lane D's: unit tests + lint + build in CI on every PR with `.next/cache` cached (137 tests have never run in CI) · **index v3** (the 29 duplicate IDs above, statuses marked from the run logs, lane + zone columns, retire clashing S-IDs) · an `AGENTS.md` under **32 KiB** (Codex's cap; CLAUDE.md is 44.6 KB so it cannot be copied) · `check:live` after every merge, not daily (20 of 37 features were never clicked through logged in) · first 6 prompts written from a **live** preflight.
+
+**Then pilot, then scale — never straight to five.** Pilot = A + D + Codex E for two weeks; passes at ≥2 merged sprints a day with `main` never red over 2 hours, founder queue never older than 2 days, zero ownership breaches. Only then add B and C. **A sprint counts when it is merged, green, and `check:live` passes after — commits and runs do not count.** No finish date until the pilot measures a rate; the only figures in hand are 1.9 runs/day at the single-lane peak and 0.6 recently.
+
+⚠️ **The rule that governs this file from here on: plan growth is a measured cost.** Roughly 12 new sprints ≈ one week at full pace, and the source chat alone added about 7. **New ideas go to a parking list reviewed every 2 weeks, never straight into a lane** — including the suffix blocks above. Nothing is cut; arrival is what's paced.
+### PARKING LIST (the pace rule's landing zone — reviewed every 2 weeks, nothing enters a lane from here without that review)
+From turn 1 of the same chat, the four voice twists that were **never written down** — only missed-call rescue (V7) and tools-first (V8) made it in. Each reuses the same call pipeline, so they are recipe changes, not new systems:
+
+| # | Idea | Why it is Aria's and not Maitly's |
+|---|---|---|
+| K1 | **CALLER-IS-A-CUSTOMER** | match the incoming number to the loyalty identity — *"welcome back Jason, your usual Saturday window table? There's a free coffee waiting."* Maitly and the ~15 other OpenTable voice partners can't see POS history; Aria owns it |
+| K2 | **BOOK-PLUS-PREORDER** | *"want your usual flat white ready when you sit down?"* — the order lands in POS as a draft, paid from the preload wallet. Turns a booking call into revenue on the same call |
+| K3 | **CALLS-AS-DEMAND-SENSOR** | every transcript feeds the brain: *"12 callers asked for gluten-free this month and you stock none."* Links voice to inventory and menu, which a receptionist dashboard structurally cannot do |
+| K5 | **SHOW-ONCE-1** | the one genuinely new mechanic in the agent-teammate wave, and it is **not in the 321**: teach by demonstration. The owner drives the supplier portal once; Aria learns the routine. **Our recipe, not theirs** — Aria watches through the built-in browser, writes a routine bound by House Rules (domain allow-list, no payments, **no credential capture** — credentials stay in the Connector Broker, M299), and its first three runs sit on the proposer rung with the owner approving each, after which it climbs G4's ladder like any other agent. Answers the "does the supplier have an API?" question by not needing one, and so supersedes G9 | after M299 + G4 ladder |
+| K4 | **OWNER-VOICE-MODE** | the same pipeline pointed inward — the owner rings Aria while driving: *"how's today going?"*, *"approve the oat-milk PO"*. Reuses INV-AGENT-1's gated actions, so no new permission surface |
+
+⚠️ **Two blockers decide all of them, and both are founder calls, not build work:** (a) **telephony** — realtime voice needs inbound call-audio streaming, the research's path for that is Twilio Media Streams, and the standing rule is ClickSend-only; whether any AU carrier on the allowed list streams inbound is **unverified**. (b) **call recording and transcript consent** varies by AU state and needs a live legal check (aria-privacy). Until (a) is answered, K1–K4 and V8 are all parked behind the same door — and V7 is the one that needs neither.
+⚠️ **The agent-teammate wave, verified live 5 Oct — and the sentence it hands Aria.** dots (OpenAI, 30 Sep, Pro and Business Premium only), Muse for Small Business (29 Sep, free to a token cap then $20–$100/mo, human approval before purchases and publishing) and Grok Bot (beta since 11 Aug, SuperGrok Heavy / Cursor Ultra only, macOS/Windows/iOS, **no Android**) all now ship gated agent teammates. **Grok Bot gives an account one shared computer, and xAI's own docs say not to treat Bots as isolated — the security boundary is the account, not the Bot.** That is ten agents behind one login and one blast radius. Aria's per-agent scopes — **the payroll agent cannot see the marketing credentials** — is a difference an accountant understands in one sentence, and it is already implied by V1/V2/V19. Say it; build it so it stays true. **AU reality: dots is on the $200 tier, Muse's AU availability is unverified, Grok Bot needs a Cursor/SuperGrok plan — and none of the three touches a POS, a stock movement or an award rate.**
+
+⚠️ **Competitive picture, re-verified 27 Sep — it is better than the chat claimed.** In Australia: Square AI answers but **cannot act**; Managerbot is US-only beta; Toast IQ's acting assistant shipped **US-only with international "planned"**; Lightspeed AI's AU availability is **unconfirmed**; and **Allvio could not be verified to exist at all** (domain unreachable, no source found) despite driving two scenario verdicts. Confirm its real name before planning against it. *"Nobody in AU acts on the owner's own data yet"* is the sharper, better-supported line.
+
+⚠️ **Licences, checked live:** reuse MIT/BSD — Pipecat, Deepgram receptionist, anything-llm, crewAI, browser-use, `firecrawl-py`. **Study only, never copy** — Postiz and Firecrawl are AGPL. Cline is Apache-2.0 but irrelevant: Aria reads code and never writes it (M31b).
+
 ## EXPLICITLY NOT BUILT (assessed, off the order — not scope reduction)
 Self-checkout hardware · computer-vision loss prevention · RFID tagging · forecourt/fuel · pharmacy · full WMS · planogram/space planning · own hardware line · professional services org · retail media network · facial-recognition payment (AU privacy) · video-interview hiring · a general-purpose app builder · super-app model · own foundation model · robotics.
+
+
+## SHIPPED WORK THAT HAD NO INDEX ROW  ·  added by M19 phase 1
+
+⚠️ **33 of the 39 run logs in `docs/aria/` had no row in this index.** They were built, gated,
+committed and pushed, and the index did not know they existed — so every plan drawn from it has
+been drawn from a map missing a quarter of the territory. They are added here rather than
+threaded into the sections above, because inserting them inline would mean choosing an order
+they never had, and because a block is easier to audit against `ls docs/aria/RUN-*.md`.
+
+**Lane:** A brain · B money/POS/schema · C operations · D platform · E Codex.
+**Zone** is derived from the paths each run log names in its own *files changed* entries — not
+assigned by me. A log that names no path says so rather than being given a guess.
+
+| # | Sprint | Scope | Lane | Zone | Status |
+|---|---|---|---|---|---|
+| M11B | THE PLAN GETS A SURFACE | shipped — see `docs/aria/RUN-M11B.md` | A | `src/lib/aria/` · `src/app/api/` | ✅ done |
+| M13 | THE FIRST TWO WALLS | shipped — see `docs/aria/RUN-M13.md` | A | `src/lib/ai/` · `src/app/api/` | ✅ done |
+| M13B | THE HERO PATH BEHIND THE WALL | shipped — see `docs/aria/RUN-M13B.md` | A | `src/lib/` · `src/lib/agents/` | ✅ done |
+| M13C | THE COUNCIL THAT SAYS STEADY STATE | shipped — see `docs/aria/RUN-M13C.md` | A | `src/lib/agents/` · `src/lib/ai/` | ✅ done |
+| M13D | THE AGENTS CAN'T SEE OR WRITE | shipped — see `docs/aria/RUN-M13D.md` | A | `src/app/api/` · `src/lib/agents/` | ✅ done |
+| M17B | LAND THE SPINE | shipped — see `docs/aria/RUN-M17B.md` | A | `src/lib/aria/` · `src/app/api/` | ✅ done |
+| M18B | PROVIDER-SPEND-CONTROL | shipped — see `docs/aria/RUN-M18B.md` | A | `src/lib/aria/` · `src/lib/` | ✅ done |
+| MS10 | COST RAIL + ORDER DRAFTING | shipped — see `docs/aria/RUN-MS10.md` | B | `scripts/canon-rail-guard.ts/` · `src/lib/inventory/` | ✅ done |
+| MS11 | CLOSE THE COST STORY + BASE-UNIT MODEL | shipped — see `docs/aria/RUN-MS11.md` | B | `src/lib/inventory/` | ✅ done |
+| MS12 | ONE BILLING TRUTH + IMPORT HOLE | shipped — see `docs/aria/RUN-MS12.md` | B | *unknown — the log names no path* | ✅ done |
+| MS13 | TENANT ISOLATION + OWNER-BUILT AGENTS | shipped — see `docs/aria/RUN-MS13.md` | D | `supabase/migrations//` · `src/lib/security/` | ✅ done |
+| MS14 | ENFORCEMENT (INERT) + ONBOARDING THAT TEACHES ARIA | shipped — see `docs/aria/RUN-MS14.md` | D | `src/lib/billing/` | ✅ done |
+| MS15 | THE HARNESS + THE INERTNESS LEDGER | shipped — see `docs/aria/RUN-MS15.md` | D | `scripts/run-evals.ts/` | ✅ done |
+| MS16 | AX-1 · THE ASK ARIA PANEL | shipped — see `docs/aria/RUN-MS16.md` | A | `scripts/ms16-visual-verify.tsx/` · `src/lib/aria/` | ✅ done |
+| MS16B | AX-1 CORRECTIONS | shipped — see `docs/aria/RUN-MS16B.md` | A | `scripts/ms16-visual-verify.tsx/` | ✅ done |
+| MS16C | AX-1 FRAMING + THE REAL AVATAR | shipped — see `docs/aria/RUN-MS16C.md` | A | `scripts/ms16c-leak-verify.tsx/` · `src/components/ask-aria-ax/` | ✅ done |
+| MS17 | ONE PANEL. EVERYTHING REAL. NOTHING LOST. | shipped — see `docs/aria/RUN-MS17.md` | A | *unknown — the log names no path* | ✅ done |
+| MS7 | MEGA-SPRINT 7 · COUNT-TRUTH + AU-COMMS-RAIL | shipped — see `docs/aria/RUN-MS7.md` | B | `src/lib/` · `src/lib/inventory/` | ✅ done |
+| MS7-PRE | MS7-PRE · GATE RELIABILITY | shipped — see `docs/aria/RUN-MS7-PRE.md` | D | `scripts/git-hooks/pre-push/` · `src/app/api/` | ✅ done |
+| MS8 | MEGA-SPRINT 8 · COST-TRUTH + CI-FIXTURE | shipped — see `docs/aria/RUN-MS8.md` | B | `src/lib/aria/` · `src/lib/inventory/` | ✅ done |
+| MS9 | MEGA-SPRINT 9 · TRUSTED NUMBERS + PAR LEVELS | shipped — see `docs/aria/RUN-MS9.md` | B | *unknown — the log names no path* | ✅ done |
+| POS-INTEGRITY-1 | money is recorded correctly from the deploy date | shipped — see `docs/aria/RUN-POS-INTEGRITY-1.md` | B | `src/lib/pos/` · `src/app/api/` | ✅ done |
+| POS-OFFLINE-1a | the sync swallow (G11) | shipped — see `docs/aria/RUN-POS-OFFLINE-1a.md` | B | `src/app/api/` · `src/lib/` | ✅ done |
+| S1 | THE CHAT SURFACE | shipped — see `docs/aria/RUN-S1.md` | A | *unknown — the log names no path* | ✅ done |
+| S10 | THE LIMITER AND THE LAST GATE | shipped — see `docs/aria/RUN-S10.md` | A | `e2e/helpers//` | ✅ done |
+| S2 | CONVERSATION PERSISTENCE | shipped — see `docs/aria/RUN-S2.md` | A | *unknown — the log names no path* | ✅ done |
+| S2B | THREADS, SEARCH, SOFT DELETE | shipped — see `docs/aria/RUN-S2B.md` | A | `src/app/api/` · `supabase/migrations/` | ✅ done |
+| S3 | what the screenshot showed | shipped — see `docs/aria/RUN-S3.md` | A | `tests/smoke/` | ✅ done |
+| S4 | why doesn't send send | shipped — see `docs/aria/RUN-S4.md` | A | `src/app/dashboard/` | ✅ done |
+| S5 | the swap | shipped — see `docs/aria/RUN-S5.md` | A | `src/middleware.ts/` | ✅ done |
+| S7 | FINISH THE CLASS | shipped — see `docs/aria/RUN-S7.md` | A | `src/lib/aria/` · `src/styles/` | ✅ done |
+| S8 | FIX THE BUGS | shipped — see `docs/aria/RUN-S8.md` | A | `src/lib/aria/` · `scripts/setup-git-hooks.js/` | ✅ done |
+| S9 | CLEAR THE REGISTER | shipped — see `docs/aria/RUN-S9.md` | A | `e2e/helpers/` · `scripts/set-smoke-test-password.ts/` | ✅ done |
 
 ## THE DECISIONS THAT GATE SPRINTS
 1. Offline sync engine (M33) · 2. Forecasting runtime (M113) · 3. Award build vs integrate (M138) · 4. Aggregator direct vs middleware (M152) · 5. Brand colour extracted vs picked (M56) · 6. Branding per-business vs per-outlet (M56) · 7. Money wedge vs inventory first — **the 10 owner conversations decide, and they haven't happened** · 8. Canopy Lite funnel vs product (M158) · 9. Payment rail route (M183) · 10. Verifier placement (M25) · 11. Rate-limiter fail-open routes (M46) · 12. Approve/reject on the default Ask Aria surface.
