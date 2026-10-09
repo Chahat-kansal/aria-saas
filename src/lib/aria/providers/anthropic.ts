@@ -146,6 +146,10 @@ async function tryGeminiFallback<T>(
     businessId: params.businessId,
     agentKey: params.agentKey,
     role: params.role,
+    // M19 PHASE 4 — forward the temperature. It was dropped here, so a caller asking for a
+    // deterministic answer silently got Gemini's sampled default the moment Anthropic was down
+    // — which, since 21 Sep, is always.
+    temperature: params.temperature,
   })
   if (!g.success) {
     return { data: fallback, raw: '', cost_cents: 0, latency_ms: g.latency_ms, success: false, provider: 'none', stop_reason: null, input_tokens: 0, output_tokens: 0 }

@@ -116,6 +116,20 @@ export async function classifyIntent(
         systemPrompt: SYSTEM,
         userPrompt,
         maxTokens: 200,
+        /**
+         * ⚠️ M19 PHASE 4 — LANE DETERMINISM IS THIS LINE, ON ALL FOUR CLASSIFIER CALL SITES.
+         *
+         * `decide()` is a PURE function of `Understanding` (run-turn.ts:160 — M17 proved it, the code
+         * agrees). Its only non-deterministic inputs are this classifier and its twin, which ran at
+         * the provider's DEFAULT SAMPLING TEMPERATURE. That is why M17B watched “Tidy up before the
+         * weekend” route general, general, general, question on identical code: the message never
+         * changed, the classification did.
+         *
+         * The gateway already accepted `temperature` (gateway.ts:88 → :207 → anthropic.ts:225) and
+         * neither classifier passed one. Nothing was rewritten — see the brief's warning that
+         * determinism must not become a new classifier.
+         */
+        temperature: 0,
         agentKey: 'intent_classifier',
         role: 'classify',
         businessId,
@@ -132,6 +146,10 @@ export async function classifyIntent(
           systemPrompt: SYSTEM,
           userPrompt,
           maxTokens: 200,
+          // M19 PHASE 4 — the SAME pinning on the direct-Gemini fallback. This path bypasses the
+          // gateway, so it would have kept sampling while the primary was pinned — and with
+          // Anthropic at 0 successes since 21 Sep, this is the path that actually runs.
+          temperature: 0,
           agentKey: 'intent_classifier',
           role: 'classify',
           businessId,

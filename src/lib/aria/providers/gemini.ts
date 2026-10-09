@@ -24,6 +24,15 @@ interface GeminiCallParams {
   role: AgentRole
   imageBase64?: string
   imageMimeType?: string
+  /**
+   * M19 PHASE 4 — OPTIONAL, AND IT DEFAULTS TO THE 0.2 THIS FILE HARD-CODED.
+   *
+   * Every existing caller omits it and gets exactly what it got before. The classifiers pass 0,
+   * because a sampled classification is what makes the same message take a different lane on
+   * identical code — and with Anthropic at 0 successes since 21 Sep, THIS is the path every
+   * classification actually runs through.
+   */
+  temperature?: number
 }
 
 export interface GeminiCallResult {
@@ -67,7 +76,9 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
       contents: [{ role: 'user', parts }],
       generationConfig: {
         maxOutputTokens: params.maxTokens ?? 1024,
-        temperature: 0.2,
+        // `??` not `||`: a deliberate 0 must survive. `0 || 0.2` is 0.2, which would have made
+        // this whole phase a no-op on the one path that matters.
+        temperature: params.temperature ?? 0.2,
       },
     }
 

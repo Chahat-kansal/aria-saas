@@ -538,3 +538,173 @@ the literal string). Re-writing it here would be a second copy of a passing test
 
 ---
 
+### PHASE 4 — LANE DETERMINISM · commit `pending`
+
+**SCOPE** · the same message with the same business state picks the same lane. **This is the only
+behaviour change in M19**, Phase 3 having been parked.
+
+**files changed**
+
+| path | +/− | what |
+|---|---|---|
+| `src/lib/aria/ask/intent.ts` | +30 | `temperature: 0` on both call sites |
+| `src/lib/aria/ask/aria-intent.ts` | +30 | `temperature: 0` on both call sites |
+| `src/lib/aria/providers/gemini.ts` | +13 / −1 | accepts a temperature, **defaulting to the 0.2 it hard-coded** |
+| `src/lib/aria/providers/anthropic.ts` | +4 | the Gemini fallback forwards it |
+| `src/lib/aria/ask/pipeline/lane-determinism.test.ts` | **new**, 150 | 8 tests |
+
+**FOUR LINES, AND NOTHING WAS REWRITTEN** — the brief's warning (*"determinism is not a new
+classifier; if the fix looks like rewriting lane selection, stop and report"*) is honoured by the shape
+of the diff: `decide()` is untouched, no lane was added or removed, no regex changed.
+
+**Why four and not one.** The gateway already accepted `temperature` (`gateway.ts:88` → `:207` →
+`anthropic.ts:225`) and neither classifier passed one. But pinning the classifiers alone would have
+been **a silent no-op on the only path that actually runs**:
+
+1. `tryGeminiFallback` forwarded six fields and **dropped `temperature`**;
+2. `providers/gemini.ts:70` **hard-coded `temperature: 0.2`**.
+
+With Anthropic at 0 successes since 21 September, every classification goes to Gemini — so without
+links 3 and 4 the classifiers would have asked for 0 and been sampled at 0.2 anyway. **The provider
+default is `?? 0.2`, never `|| 0.2`**: with `||` a deliberate 0 collapses back to 0.2, and that one
+character would have made the whole phase do nothing. There is a mutation for exactly it.
+
+**VERIFY — pasted**
+
+```
+ Test Files  149 passed (149)
+      Tests  1901 passed (1901)
+```
+
+The brief's three cases, each **20 runs of the real `understand()` + `decide()`**, asserting a Set of
+distinct outcomes with **size 1** (a count of 20 would pass even if every run differed):
+
+| case | message | distinct lane orders in 20 runs |
+|---|---|---|
+| M17B's own counter-example | *"Tidy up before the weekend"* | **1** |
+| a question | *"how are we doing this week?"* | **1** |
+| a general message | *"thanks, that helps"* | **1** |
+
+plus anti-vacuity: the **same** message with a different classification still routes differently
+(`general` vs `council`), so a `decide()` returning a constant could not pass.
+
+**THE 30-MESSAGE REPLAY — REAL MESSAGES, REAL CLASSIFIER CALLS, ON GEMINI**
+
+30 real owner messages from **Sip Café** (the real business), each classified twice through the real
+classifiers and run through the real `decide()`:
+
+```
+messages: 30 · lanes DIFFERING between two runs of identical code: 0
+M17B's noise floor, the OLD code against itself: 9 of 30
+```
+
+**0 of 30, against a noise floor of 9 of 30.** A sample of the lanes, which are also sane:
+
+```
+  Create a promo for 10% off on every iced coffee     action_planner>main    action_planner>main
+  Show me a chart of weekly revenue                   deliverable>main       deliverable>main
+  How am I doing this week?                           council>main           council>main
+  Just tell me how am I doing this week?              main                   main
+  What does she buy?                                  general>main           general>main
+```
+
+*(That last pair is worth noting as correct existing behaviour, not a bug: "Just tell me…" fires
+`isBrevityQuestion`, which excludes the council by design.)*
+
+**⚠️ BEFORE-vs-AFTER WAS NOT MEASURABLE, AND NEW-vs-NEW IS THE RIGHT QUESTION.** The brief asks for
+*"a diff of lane choices across the 30 replay messages, before and after"*. **The "before" lane was
+never a fixed value to diff against** — the old code was non-deterministic, which is the entire premise
+of the phase and precisely why M17B had to build a noise floor rather than a diff. Running the new code
+against itself asks the question the phase actually claims to answer. The honest comparison is
+**0 of 30 now against M17B's 9 of 30 then.**
+
+**⚠️ AND THE 0 IS NOT ENTIRELY CREDITED TO TEMPERATURE — I CHECKED, AND THE CHECK COMPLICATES IT.**
+
+The replay log carries this, 39 times:
+
+```
+[gemini] response truncated at maxOutputTokens=200 for agent aria_intent_classifier
+[ai-json] parse failed in aria-intent/classify: parse_failed_all_strategies
+```
+
+Counted over the 60 calls per classifier:
+
+| classifier | calls | truncated + parse-failed |
+|---|---|---|
+| `aria_intent_classifier` | 60 | **39 — 65%** |
+| `intent_classifier` | 60 | 4 — 7% |
+
+**So on roughly two thirds of calls, `ariaIntent` is not a model decision at all — it is
+`SAFE_DEFAULT`.** A constant is trivially deterministic, so part of the 0 is the default rather than
+the pinning.
+
+**And 39 is an odd number**, which is the detail that matters: if every failing message failed in both
+runs, the total would be even. It is odd, so **at least one message parsed in one run and failed in the
+other** — the classifications were *not* fully identical between runs, and the lane still did not move.
+That makes the lane-level determinism **stronger** than the classification-level determinism for that
+message, and it also means I cannot claim the 0 is purely temperature's doing. Both statements are
+true and the log says both.
+
+**MUTATION CHECK — 6 of 6 red, after one stayed green on a test of mine that read the wrong line**
+
+```
+mutation                                                   verdict
+----------------------------------------------------------------------------------
+the primary classifier stops pinning temperature           RED - 1 failed
+the direct-Gemini classifier fallback stops pinning it     RED - 1 failed
+aria-intent stops pinning temperature                      RED - 1 failed
+the gemini provider uses || so a deliberate 0 becomes 0.2  RED - 1 failed
+the gemini fallback stops forwarding the temperature       RED - 1 failed
+decide() becomes non-deterministic                         RED - 5 failed
+----------------------------------------------------------------------------------
+6 of 6 went red. All verified.
+```
+
+**`the gemini fallback stops forwarding the temperature` came back STILL GREEN first, and the test was
+at fault.** It matched `/temperature:\s*params\.temperature/` **anywhere** in `anthropic.ts` — which hit
+the **pre-existing** `...(params.temperature !== undefined ? { temperature: params.temperature } : {})`
+at line 225. So deleting the forwarding line I had just added changed nothing: the assertion was
+reading a line that had always been there. Now scoped to the body of `tryGeminiFallback`, and red.
+**Fourth sprint running that a test of mine needed proving before it could be trusted green.**
+
+Also caught before it mattered: my three source-scan tests first failed on a **path**, not on the code —
+`src/lib/aria/ask/pipeline` needs five `..` to reach the repo root and I wrote four.
+
+**OWNER-VISIBLE DIFF FROM THIS PHASE**
+
+**Routing is now stable, which is itself the change an owner could notice** — the brief authorises it
+and asks that what moved be recorded. What moved:
+
+- **Nothing in the 30-message replay.** Every lane matched across both runs, and the lanes are the ones
+  the old code picked on its *good* runs (`council` for "how am I doing this week?", `action_planner`
+  for the promo, `deliverable` for the chart).
+- **What stops happening** is the bad run: the same question taking `general` on one attempt and
+  `question` on the next. M17B watched that four times on one message. **No copy, no lane, no tool and
+  no prompt changed** — only the sampling that made the choice wobble.
+
+**SIBLING SWEEP**
+
+| searched for | hits | what was done |
+|---|---|---|
+| classifier call sites that reach a model | **4** (2 per classifier: gateway + direct-Gemini fallback) | all four pinned |
+| other non-deterministic inputs to `decide()` | **0** — `features`, `outputFmt` are pure regexes; `conversationId`/attachments come from the request | nothing else to seed |
+| other `temperature` hard-codes on a provider path | **1** — `providers/gemini.ts:70` | made overridable, default unchanged at 0.2 |
+| callers relying on Gemini's 0.2 | every existing caller omits `temperature` | **behaviour preserved** — `?? 0.2` |
+
+**gates** · `tsc` 0 errors · `vitest` 1901 passed in 149 files · canon rail clean · one-exit guard
+clean (38 files) · WALL 10 clean · `BUILD_EXIT=0` read from `build-m19p4.log`
+
+**NOT done, and why**
+
+- **⚠️ `aria_intent_classifier`'s 65% parse-failure rate was NOT fixed, and it is the biggest thing
+  this phase found.** `maxOutputTokens: 200` is too small for that classifier's JSON, so two thirds of
+  turns route on a hard-coded default. Raising it would make 65% of `ariaIntent` values *real* for the
+  first time — a far larger routing change than temperature 0, with its own before/after measurement
+  owed. The brief is explicit that determinism must not become a rewrite of lane selection, and this
+  would be one. **Founder queue, named with the number.**
+- **No caching of classifications.** Temperature 0 is the available lever, not a mathematical
+  guarantee — a provider at 0 is near-deterministic, not provably so. A per-message cache would make
+  repeats *certain*, at the cost of staleness and a new store. Not smuggled in.
+
+---
+
