@@ -59,7 +59,7 @@ before it could be trusted.**
 | 2 | the preflight — four answers, Q1/Q2 proven separate | `002a96a3` |
 | 3 | the degrade chain — **PARKED**, premise false | `002a96a3` |
 | 4 | lane determinism — 0 of 30 vs a floor of 9 | `7f4f9397` |
-| 5 | proof — `check:live` unchanged, the replay | *this commit* |
+| 5 | proof — `check:live` unchanged, the replay | `fab46fed` |
 
 **Also confirmed in production:** M18 Phase 5's worker-respawn fix. M18's baseline was
 `5 passed · 1 failed · 4 skipped`; both runs here are `7 passed · 1 failed · 2 skipped` — assertions 5
@@ -785,7 +785,7 @@ clean (38 files) · WALL 10 clean · `BUILD_EXIT=0` read from `build-m19p4.log`
 
 ---
 
-### PHASE 5 — PROVE THE WHOLE THING · commit `pending`
+### PHASE 5 — PROVE THE WHOLE THING · commit `fab46fed`
 
 #### `check:live` — BASELINE (Phase 2.4) AND FINAL, SIDE BY SIDE
 
