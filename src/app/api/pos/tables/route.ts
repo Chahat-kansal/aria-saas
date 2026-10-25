@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getRevenueSnapshot } from '@/lib/aria/revenue-snapshot'
+import { todayAEST } from '@/lib/date-au'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -27,7 +29,76 @@ async function _GET(req: Request) {
     .order('name', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ tables: data ?? [] });
+
+  const rows = data ?? [];
+
+  // VENUE-VIEW-1 — ?venue=1 ADDS two things and changes nothing else. Without the param this route
+  // returns byte-identical output to before, so every existing caller (FloorPlan.tsx, the layout
+  // editor) is untouched. Additive-only: no field removed, renamed, or re-typed.
+  const wantsVenue = new URL(req.url).searchParams.get('venue') === '1';
+  if (!wantsVenue) return NextResponse.json({ tables: rows });
+
+  type Row = Record<string, unknown>;
+  const venueRows: Row[] = rows as Row[];
+
+  // 1. sale_total per row — the OPEN tab on that table, not revenue. One `in` query, never N+1.
+  //    A voided sale is not a tab, so it reports null rather than its negative total.
+  const openIds = Array.from(new Set(
+    venueRows.map(r => r.current_sale_id).filter((v): v is string => typeof v === 'string' && v.length > 0),
+  ));
+  const totalById = new Map<string, number | null>();
+  if (openIds.length > 0) {
+    const { data: sales, error: salesErr } = await supabase
+      .from('pos_sales')
+      .select('id, total_amount, status')
+      .eq('business_id', bid)
+      .in('id', openIds);
+    // RULE 7 — the error is checked, not discarded. An unreadable tab reports unknown (null), which
+    // is what the card renders as "—". It never reports $0.00, which would be a claim.
+    if (salesErr) return NextResponse.json({ error: salesErr.message }, { status: 500 });
+    for (const s of sales ?? []) {
+      totalById.set(s.id as string, s.status === 'voided' ? null : Number(s.total_amount ?? 0));
+    }
+  }
+
+  const withTotals = venueRows.map(r => ({
+    ...r,
+    sale_total: typeof r.current_sale_id === 'string' ? totalById.get(r.current_sale_id) ?? null : null,
+  }));
+
+  // 2. summary — today's completed money comes from the ONE canonical AEST-day computation
+  //    (RULE 6: never re-query pos_sales for a day-boundary revenue figure). `bid` is derived from
+  //    the session above, so the business scope is still the caller's own.
+  const snap = await getRevenueSnapshot(bid, todayAEST());
+
+  // `open_tables` is counted from the rows already in hand — no second query, and it cannot
+  // disagree with what the view is drawing.
+  const BUSY = new Set(['occupied', 'reserved', 'seated', 'ordering', 'eating', 'check']);
+  const openTables = venueRows.filter(r => BUSY.has(String(r.status ?? '').toLowerCase())).length;
+
+  // `last_completed_at` has no canonical helper, so it is read here on the SAME session client as
+  // the table read above — the RLS path is unchanged. Noted as a seam: it is the one summary figure
+  // not sourced through getRevenueSnapshot, so a future divergence in pos_sales policy would show
+  // up here first.
+  const { data: lastSale, error: lastErr } = await supabase
+    .from('pos_sales')
+    .select('created_at')
+    .eq('business_id', bid)
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastErr) return NextResponse.json({ error: lastErr.message }, { status: 500 });
+
+  return NextResponse.json({
+    tables: withTotals,
+    summary: {
+      today_completed_total: snap.revenue,
+      today_completed_count: snap.transaction_count,
+      open_tables: openTables,
+      last_completed_at: lastSale?.created_at ?? null,
+    },
+  });
 }
 
 async function _POST(req: Request) {

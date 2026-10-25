@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 import { BookingCard } from './BookingCard'
 import { FloorPlan } from '@/components/pos/FloorPlan'
+import { VenueView3D } from '@/components/venue/VenueView3D'
 import type { Service, Booking, Availability, BusinessHours } from './types'
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: 'var(--text-secondary,#A8B5A8)', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', blue: '#60a5fa', border: 'rgba(127,184,151,0.15)' }
@@ -54,6 +55,9 @@ export default function BookingsPage() {
   const [tableMode, setTableMode] = useState<'auto' | 'area' | 'table'>('auto')
   const [tableModeSaving, setTableModeSaving] = useState(false)
   const [tableCounts, setTableCounts] = useState({ bookable: 0, guestSelectable: 0, areas: 0 })
+  // VENUE-VIEW-1 — which surface the tables tab shows. Defaults to 'edit', so the tab opens on the
+  // existing layout editor exactly as it did before this sprint.
+  const [floorSurface, setFloorSurface] = useState<'edit' | 'venue'>('edit')
 
   const load = useCallback(async (businessId: string) => {
     const [bkRes, svcRes] = await Promise.all([
@@ -608,9 +612,33 @@ export default function BookingsPage() {
             like the bar or entrance so the plan reads like the real space. Click a table to set its
             capacity, shape, seating area, and whether guests can pick it themselves.
           </p>
-          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.border, padding: 16, background: '#0a0f0c' }}>
-            {bid && <FloorPlan businessId={bid} onTableSelect={() => {}} layoutMode="canvas" />}
+          {/* VENUE-VIEW-1 — segmented switch. The editor below is unchanged; the 3D view is a
+              second way to look at the same pos_tables rows, never a replacement for it. */}
+          <div style={{ display: 'inline-flex', gap: 2, padding: 3, marginBottom: 10, borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border }}>
+            {([['edit', 'Edit layout'], ['venue', 'Venue view']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setFloorSurface(key)}
+                aria-pressed={floorSurface === key}
+                style={{
+                  border: 0, borderRadius: 8, cursor: 'pointer', padding: '7px 14px',
+                  fontSize: 12, fontWeight: 600,
+                  background: floorSurface === key ? C.green : 'transparent',
+                  color: floorSurface === key ? '#0a0f0c' : C.muted,
+                }}
+              >{label}</button>
+            ))}
           </div>
+
+          {floorSurface === 'edit' ? (
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.border, padding: 16, background: '#0a0f0c' }}>
+              {bid && <FloorPlan businessId={bid} onTableSelect={() => {}} layoutMode="canvas" />}
+            </div>
+          ) : (
+            <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid ' + C.border, background: '#0a0f0c', aspectRatio: '16 / 10', minHeight: 420 }}>
+              {bid && <VenueView3D businessId={bid} />}
+            </div>
+          )}
         </div>
       )}
 
